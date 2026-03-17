@@ -522,9 +522,11 @@ void Asset::update_scale_values() {
     last_scale_camera_input_ = camera_scale;
     last_scale_quality_cap_input_ = quality_cap;
 
-    float desired_variant_scale = current_scale / camera_scale;
+    // Select variants against the actual render scale so we prefer downscaling
+    // a larger source texture, and only upscale when no larger variant exists.
+    float desired_variant_scale = current_scale;
     if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
-        desired_variant_scale = current_scale;
+        desired_variant_scale = 1.0f;
     }
 
     const auto& steps = (info && !info->scale_variants.empty())
@@ -540,7 +542,7 @@ void Asset::update_scale_values() {
         desired_variant_scale,
         steps,
         hysteresis_state,
-        current_scale,
+        desired_variant_scale,
         render_pipeline::ScalingLogic::HysteresisOptions{});
 
     current_nearest_variant_scale = selection.stored_scale;

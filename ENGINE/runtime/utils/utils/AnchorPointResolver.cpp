@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
-#include <stdexcept>
 #include <utility>
 
 #include "animation/animation_update.hpp"
@@ -274,12 +273,6 @@ bool apply_depth_offset_along_camera_ray(const Assets* assets_owner,
            std::isfinite(final_anchor_point.z);
 }
 
-void assert_anchor_is_canonical_texture_pixel(const DisplacedAssetAnchorPoint& anchor) {
-    if (anchor.texture_x < 0 || anchor.texture_y < 0) {
-        throw std::runtime_error("Anchor resolver invariant failure: canonical texture pixel coordinates must be non-negative");
-    }
-}
-
 float safe_remainder_scale(const Asset& asset) {
     float remainder = asset.current_remaining_scale_adjustment;
     if (!std::isfinite(remainder) || remainder <= 0.0f) {
@@ -334,6 +327,7 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
 AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               const FrameDimensions& dims) {
+    (void)dims;
     // Anchors are authored in canonical texture space. Map to the active runtime variant first.
     const float variant_scale = (std::isfinite(asset.current_nearest_variant_scale) &&
                                  asset.current_nearest_variant_scale > 0.0f)
@@ -347,13 +341,6 @@ AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
         static_cast<int>(std::lround(scaled_x_f)),
         static_cast<int>(std::lround(scaled_y_f))
     };
-
-    if (dims.frame_w > 0) {
-        scaled_px.x = std::clamp(scaled_px.x, 0, dims.frame_w - 1);
-    }
-    if (dims.frame_h > 0) {
-        scaled_px.y = std::clamp(scaled_px.y, 0, dims.frame_h - 1);
-    }
 
     return AnchorFrameSample{scaled_px, SDL_Point{anchor.texture_x, anchor.texture_y}};
 }
@@ -486,8 +473,6 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.resolved.missing = true;
         return sample;
     }
-
-    assert_anchor_is_canonical_texture_pixel(anchor);
 
     const AnchorFrameSample anchor_sample = compute_anchor_frame_sample(asset, anchor, dims);
 

@@ -12,14 +12,12 @@
 #include "devtools/widgets.hpp"
 
 class DMCheckbox;
-class DMSlider;
 
 namespace animation_editor {
 
 class AnimationDocument;
 
 using DMCheckbox = ::DMCheckbox;
-using DMSlider = ::DMSlider;
 
 class PlaybackSettingsPanel {
   public:
@@ -88,7 +86,6 @@ class PlaybackSettingsPanel {
     std::unique_ptr<DMCheckbox> reverse_checkbox_;
     std::unique_ptr<DMCheckbox> locked_checkbox_;
     std::unique_ptr<DMCheckbox> random_start_checkbox_;
-    std::unique_ptr<DMSlider> speed_slider_;
 
     PlaybackState state_{};
     PlaybackState document_state_{};

@@ -37,6 +37,14 @@ const int kButtonHeight = DMButton::height();
 const int kButtonWidth = 160;
 constexpr std::size_t kModeButtonCount = 2;
 
+std::size_t mode_index(FrameEditorLaunchMode mode) {
+    switch (mode) {
+        case FrameEditorLaunchMode::Movement: return 0;
+        case FrameEditorLaunchMode::AnchorPoints: return 1;
+    }
+    return 0;
+}
+
 using animation_editor::strings::trim_copy;
 
 void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x, int y, SDL_Color color) {
@@ -210,14 +218,33 @@ void MovementSummaryWidget::set_bounds(const SDL_Rect& bounds) {
             const int y = bounds_.y + bounds_.h - padding - kButtonHeight;
             button_rect_ = SDL_Rect{x, y, width, kButtonHeight};
         } else {
+            int enabled_count = 0;
+            for (bool enabled : mode_enabled_) {
+                if (enabled) {
+                    ++enabled_count;
+                }
+            }
+            if (enabled_count <= 0) {
+                button_rect_ = SDL_Rect{0, 0, 0, 0};
+                for (auto& r : mode_button_rects_) {
+                    r = SDL_Rect{0, 0, 0, 0};
+                }
+                return;
+            }
             const int gap = DMSpacing::small_gap();
-            const int available = std::max(0, bounds_.w - padding * 2 - gap * static_cast<int>(kModeButtonCount - 1));
-            const int width = std::clamp(available / static_cast<int>(kModeButtonCount), 90, kButtonWidth);
+            const int available = std::max(0, bounds_.w - padding * 2 - gap * (enabled_count - 1));
+            const int width = std::clamp(available / enabled_count, 90, kButtonWidth);
             const int height = kButtonHeight;
             const int y = bounds_.y + bounds_.h - padding - height;
+            int slot = 0;
             for (std::size_t i = 0; i < kModeButtonCount; ++i) {
-                const int x = bounds_.x + padding + static_cast<int>(i) * (width + gap);
+                if (!mode_enabled_[i]) {
+                    mode_button_rects_[i] = SDL_Rect{0, 0, 0, 0};
+                    continue;
+                }
+                const int x = bounds_.x + padding + slot * (width + gap);
                 mode_button_rects_[i] = SDL_Rect{x, y, width, height};
+                ++slot;
             }
             button_rect_ = SDL_Rect{0, 0, 0, 0};
         }
@@ -239,6 +266,11 @@ void MovementSummaryWidget::set_edit_callback(EditCallback callback) {
 void MovementSummaryWidget::set_mode_launch_callback(ModeLaunchCallback callback) {
     mode_launch_callback_ = std::move(callback);
     refresh_totals();
+}
+
+void MovementSummaryWidget::set_mode_enabled(FrameEditorLaunchMode mode, bool enabled) {
+    mode_enabled_[mode_index(mode)] = enabled;
+    set_bounds(bounds_);
 }
 
 void MovementSummaryWidget::set_go_to_source_callback(GoToSourceCallback callback) {
@@ -322,6 +354,9 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
         } else {
             static const char* kLabels[2] = {"Movement", "Anchors"};
             for (std::size_t i = 0; i < kModeButtonCount; ++i) {
+                if (!mode_enabled_[i]) {
+                    continue;
+                }
                 const SDL_Rect rect = mode_button_rects_[i];
                 SDL_Color button_color = button_style.bg;
                 if (mode_button_pressed_[i]) {
@@ -353,6 +388,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
     }
     auto handle_mode_button_event = [&](FrameEditorLaunchMode mode, std::size_t idx, const SDL_Point& p, bool pressed_only) -> bool {
         if (idx >= mode_button_rects_.size()) return false;
+        if (!mode_enabled_[idx]) return false;
         const SDL_Rect& rect = mode_button_rects_[idx];
         if (rect.w <= 0 || rect.h <= 0) return false;
         const bool inside = SDL_PointInRect(&p, &rect) != 0;
@@ -377,7 +413,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             }
             bool handled = false;
             for (std::size_t i = 0; i < mode_button_rects_.size(); ++i) {
-                mode_button_hovered_[i] = SDL_PointInRect(&p, &mode_button_rects_[i]) != 0;
+                mode_button_hovered_[i] = mode_enabled_[i] && SDL_PointInRect(&p, &mode_button_rects_[i]) != 0;
                 handled = handled || mode_button_hovered_[i];
             }
             return handled;

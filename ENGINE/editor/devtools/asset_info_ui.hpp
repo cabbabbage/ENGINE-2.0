@@ -64,6 +64,8 @@ class AssetInfoUI {
     void set_target_asset(class Asset* a);
     class Asset* get_target_asset() const { return target_asset_; }
     bool is_point_inside(int x, int y) const;
+    void set_panel_bounds_override(const SDL_Rect& bounds);
+    void clear_panel_bounds_override();
     SDL_Renderer* get_last_renderer() const { return last_renderer_; }
     void refresh_target_asset_scale();
     void sync_target_tiling_state();
@@ -116,6 +118,8 @@ class AssetInfoUI {
     mutable SDL_Rect animation_editor_rect_{0,0,0,0};
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;
+    bool panel_bounds_override_active_ = false;
+    SDL_Rect panel_bounds_override_{0, 0, 0, 0};
 
     SlidingWindowContainer container_;
 

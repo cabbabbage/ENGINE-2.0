@@ -28,6 +28,7 @@ class MovementSummaryWidget {
     void set_bounds(const SDL_Rect& bounds);
     void set_edit_callback(EditCallback callback);
     void set_mode_launch_callback(ModeLaunchCallback callback);
+    void set_mode_enabled(FrameEditorLaunchMode mode, bool enabled);
     void set_go_to_source_callback(GoToSourceCallback callback);
 
     void update();
@@ -49,6 +50,7 @@ class MovementSummaryWidget {
     SDL_Rect bounds_{0, 0, 0, 0};
     SDL_Rect button_rect_{0, 0, 0, 0};
     std::array<SDL_Rect, 2> mode_button_rects_{};
+    std::array<bool, 2> mode_enabled_{{true, true}};
     bool button_hovered_ = false;
     bool button_pressed_ = false;
     std::array<bool, 2> mode_button_hovered_{{false, false}};

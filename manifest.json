@@ -680,6 +680,367 @@
       "tags": [],
       "update_radius": 0
     },
+    "spider": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "inherit_source_movement": false,
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        },
+        "down": {
+          "derived_modifiers": {
+            "flipMovementX": false,
+            "flipMovementY": true,
+            "flipX": false,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": false,
+          "inherit_source_movement": true,
+          "loop": true,
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up",
+            "path": ""
+          }
+        },
+        "down_left": {
+          "derived_modifiers": {
+            "flipMovementX": false,
+            "flipMovementY": true,
+            "flipX": false,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": false,
+          "inherit_source_movement": true,
+          "loop": true,
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up_left",
+            "path": ""
+          }
+        },
+        "down_right": {
+          "derived_modifiers": {
+            "flipMovementX": true,
+            "flipMovementY": true,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": true,
+          "inherit_source_movement": true,
+          "loop": true,
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up_left",
+            "path": ""
+          }
+        },
+        "left": {
+          "flipped_source": false,
+          "inherit_source_movement": false,
+          "locked": false,
+          "loop": true,
+          "movement": [
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": 0,
+              "dz": 0,
+              "x": -15,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": 0,
+              "dz": 0,
+              "x": -15,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": 0,
+              "dz": 0,
+              "x": -15,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": 0,
+              "dz": 0,
+              "x": -15,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": 0,
+              "dz": 0,
+              "x": -15,
+              "y": 0,
+              "z": 0
+            }
+          ],
+          "movement_total": {
+            "dx": -75,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "left"
+          }
+        },
+        "right": {
+          "derived_modifiers": {
+            "flipMovementX": true,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": true,
+          "inherit_source_movement": true,
+          "loop": true,
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          }
+        },
+        "up": {
+          "flipped_source": false,
+          "inherit_source_movement": false,
+          "locked": false,
+          "loop": true,
+          "movement": [
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "dx": 0,
+              "dy": -15,
+              "dz": 0,
+              "x": 0,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": 0,
+              "dy": -15,
+              "dz": 0,
+              "x": 0,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": 0,
+              "dy": -15,
+              "dz": 0,
+              "x": 0,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": 0,
+              "dy": -15,
+              "dz": 0,
+              "x": 0,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": 0,
+              "dy": -15,
+              "dz": 0,
+              "x": 0,
+              "y": -15,
+              "z": 0
+            }
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": -75,
+            "dz": 0
+          },
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "up"
+          }
+        },
+        "up_left": {
+          "flipped_source": false,
+          "inherit_source_movement": false,
+          "locked": false,
+          "loop": true,
+          "movement": [
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0,
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": -15,
+              "dz": 0,
+              "x": -15,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": -15,
+              "dz": 0,
+              "x": -15,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": -15,
+              "dz": 0,
+              "x": -15,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": -15,
+              "dz": 0,
+              "x": -15,
+              "y": -15,
+              "z": 0
+            },
+            {
+              "dx": -15,
+              "dy": -15,
+              "dz": 0,
+              "x": -15,
+              "y": -15,
+              "z": 0
+            }
+          ],
+          "movement_total": {
+            "dx": -75,
+            "dy": -75,
+            "dz": 0
+          },
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "up_left"
+          }
+        },
+        "up_right": {
+          "derived_modifiers": {
+            "flipMovementX": true,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": true,
+          "inherit_source_movement": true,
+          "loop": true,
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up_left",
+            "path": ""
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/spider",
+      "asset_name": "spider",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 26.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0
+    },
     "table": {
       "animations": {
         "default": {
@@ -856,10 +1217,10 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -130,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 478,
-                "texture_y": 266
+                "texture_x": 338,
+                "texture_y": 34
               }
             ]
           ],
@@ -892,8 +1253,7 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          },
-          "speed_multiplier": 1.0
+          }
         },
         "forward": {
           "anchor_points": [
@@ -1097,7 +1457,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 29.0
+        "scale_percentage": 42.0
       },
       "start": "default",
       "tags": [],
@@ -1371,8 +1731,10 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 775,
-          "camera_tilt_deg": 57.0,
+          "camera_center_dx": 101,
+          "camera_center_dz": 326,
+          "camera_height_px": 705,
+          "camera_tilt_deg": 58.00000762939453,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
@@ -2397,8 +2759,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -5,
-              "dz": 30,
+              "dx": -129,
+              "dz": -653,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2654,6 +3016,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-78890bce0226"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": 87,
+              "dz": 696,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 42,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-d7d346d3a7fd"
             }
           ]
         }

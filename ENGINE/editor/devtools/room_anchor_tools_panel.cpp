@@ -52,6 +52,18 @@ void RoomAnchorToolsPanel::set_screen_dimensions(int width, int height) {
     layout_dirty_ = true;
 }
 
+void RoomAnchorToolsPanel::set_panel_bounds_override(const SDL_Rect& bounds) {
+    panel_bounds_override_ = bounds;
+    panel_bounds_override_active_ = bounds.w > 0 && bounds.h > 0;
+    layout_dirty_ = true;
+}
+
+void RoomAnchorToolsPanel::clear_panel_bounds_override() {
+    panel_bounds_override_active_ = false;
+    panel_bounds_override_ = SDL_Rect{0, 0, 0, 0};
+    layout_dirty_ = true;
+}
+
 void RoomAnchorToolsPanel::set_anchor_names(const std::vector<std::string>& names) {
     if (anchor_names_ == names) {
         return;
@@ -295,7 +307,11 @@ void RoomAnchorToolsPanel::update_layout() const {
     const int panel_w = std::min(kPanelWidth, std::max(220, safe_w - kPanelMargin * 2));
     const int available_h = std::max(kPanelMinHeight, safe_h - kTopOffset - kPanelMargin);
     const int panel_h = std::clamp(available_h, kPanelMinHeight, kPanelMaxHeight);
-    panel_rect_ = SDL_Rect{kPanelMargin, kTopOffset, panel_w, panel_h};
+    if (panel_bounds_override_active_) {
+        panel_rect_ = panel_bounds_override_;
+    } else {
+        panel_rect_ = SDL_Rect{kPanelMargin, kTopOffset, panel_w, panel_h};
+    }
 
     header_rect_ = SDL_Rect{
         panel_rect_.x + kPanelPadding,

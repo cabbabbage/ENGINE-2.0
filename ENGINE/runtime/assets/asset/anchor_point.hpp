@@ -18,6 +18,7 @@ struct Vec2 {
 // Canonical anchor contract:
 // - texture_x/texture_y name an integer pixel in the un-flipped source texture.
 // - The anchor refers to the *center* of that pixel: (x + 0.5, y + 0.5).
+// - Coordinates may be outside frame bounds for off-sprite anchor placements.
 // - +X goes right, +Y goes down in texture space; Z is derived at runtime.
 // - Horizontal flips are applied after converting to UV: u = 1 - u when flipped.
 // - The same contract is consumed by runtime projection and the editor preview.
@@ -76,7 +77,8 @@ enum class GridMaterialization {
     Ensure
 };
 
-// Convert a canonical anchor pixel to normalized UV, applying optional horizontal flip.
+// Convert a canonical anchor pixel to UV, applying optional horizontal flip.
+// UV may fall outside [0, 1] when anchors are authored beyond frame bounds.
 inline SDL_FPoint anchor_pixel_to_uv(SDL_Point texture_px,
                                      int texture_w,
                                      int texture_h,
@@ -85,7 +87,7 @@ inline SDL_FPoint anchor_pixel_to_uv(SDL_Point texture_px,
         if (dimension <= 0) {
             return 0.5f;
         }
-        return std::clamp((static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension), 0.0f, 1.0f);
+        return (static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension);
     };
     const float frame_u = to_unit(texture_px.x, texture_w);
     const float frame_v = to_unit(texture_px.y, texture_h);

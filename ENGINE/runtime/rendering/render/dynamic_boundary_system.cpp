@@ -57,6 +57,7 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
                                                  const Assets* assets,
                                                  const SDL_FPoint& world_pos,
                                                  int world_z) {
+    (void)assets;
     if (!candidate.info) {
         return BoundaryScaleResult{};
     }
@@ -71,17 +72,11 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
         : 1.0f;
     const float current_scale = base_scale * perspective_scale;
 
-    float camera_scale = 1.0f;
-    if (assets) {
-        camera_scale = static_cast<float>(std::max(0.0001, assets->getView().get_scale()));
-        if (!std::isfinite(camera_scale) || camera_scale <= 0.0f) {
-            camera_scale = 1.0f;
-        }
-    }
-
-    float desired_variant_scale = current_scale / camera_scale;
+    // Match runtime assets: pick the nearest larger variant for this draw scale
+    // and only upscale if every variant is smaller than the target.
+    float desired_variant_scale = current_scale;
     if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
-        desired_variant_scale = current_scale;
+        desired_variant_scale = 1.0f;
     }
 
     const auto& steps = (!candidate.info->scale_variants.empty())
@@ -91,7 +86,7 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
     auto selection = render_pipeline::ScalingLogic::Choose(desired_variant_scale,
                                                            steps,
                                                            candidate.hysteresis_state,
-                                                           current_scale,
+                                                           desired_variant_scale,
                                                            render_pipeline::ScalingLogic::HysteresisOptions{});
     candidate.hysteresis_state.last_index = selection.index;
     candidate.hysteresis_state.min_scale = selection.hysteresis_min;

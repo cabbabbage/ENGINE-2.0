@@ -16,6 +16,7 @@
 #include <system_error>
 #include <cmath>
 #include <algorithm>
+#include <numeric>
 
 #include <nlohmann/json.hpp>
 
@@ -115,32 +116,6 @@ static inline bool file_missing_or_older(const fs::path& p,
 
 static inline int source_frame_count(const std::vector<fs::path>& frames) {
     return static_cast<int>(frames.size());
-}
-
-static inline float normalize_speed_multiplier(float raw) {
-    static constexpr float kSpeedMultipliers[] = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
-    if (!std::isfinite(raw) || raw <= 0.0f) return 1.0f;
-    float best = kSpeedMultipliers[0];
-    float best_diff = std::fabs(best - raw);
-    for (float c : kSpeedMultipliers) {
-        float d = std::fabs(c - raw);
-        if (d < best_diff) {
-            best_diff = d;
-            best = c;
-        }
-    }
-    return best;
-}
-
-static inline float get_speed_multiplier(const json& anim) {
-    if (!anim.is_object()) return 1.0f;
-    float raw = 1.0f;
-    if (anim.contains("speed_multiplier") && anim["speed_multiplier"].is_number()) {
-        raw = anim["speed_multiplier"].get<float>();
-    } else if (anim.contains("speed_factor") && anim["speed_factor"].is_number()) {
-        raw = anim["speed_factor"].get<float>();
-    }
-    return normalize_speed_multiplier(raw);
 }
 
 // Check if any expected output is missing or older than baseline
@@ -303,8 +278,8 @@ int main(int argc, char** argv) {
             EnsureFramesArray(*anim_entry, frame_count);
             auto& frames = (*anim_entry)["frames"];
 
-            const float speed_multiplier = get_speed_multiplier(anim_meta);
-            std::vector<int> frame_sequence = imgcache::ImageCacheGenerator::BuildSpeedFrameSequence(frame_count, speed_multiplier);
+            std::vector<int> frame_sequence(static_cast<size_t>(frame_count));
+            std::iota(frame_sequence.begin(), frame_sequence.end(), 0);
             if (frame_sequence.empty()) {
                 continue;
             }

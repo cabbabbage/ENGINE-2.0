@@ -9,10 +9,8 @@
 #include <fstream>
 #include <unordered_set>
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstring>
-#include <optional>
 
 namespace fs = std::filesystem;
 
@@ -124,6 +122,30 @@ std::vector<float> normalized_variant_steps(const AssetInfo& info) {
     return steps;
 }
 
+bool has_full_res_step(const std::vector<float>& steps) {
+    return std::find_if(steps.begin(), steps.end(), [](float step) {
+        return std::isfinite(step) && std::fabs(step - 1.0f) < 1e-4f;
+    }) != steps.end();
+}
+
+bool bundle_variant_layout_is_valid(const CacheManager::BundleData& bundle) {
+    for (const auto& animation : bundle.animations) {
+        if (animation.frames.empty()) {
+            continue;
+        }
+        if (animation.variant_steps.empty() || !has_full_res_step(animation.variant_steps)) {
+            return false;
+        }
+        const std::size_t expected_variant_count = animation.variant_steps.size();
+        for (const auto& frame : animation.frames) {
+            if (!frame.variants.empty() && frame.variants.size() != expected_variant_count) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 CacheManager::BundleFrameLayer scale_layer(const CacheManager::BundleFrameLayer& src, float scale) {
     if (src.empty() || !(scale > 0.0f)) {
         return CacheManager::BundleFrameLayer{};
@@ -140,180 +162,6 @@ CacheManager::BundleFrameLayer scale_layer(const CacheManager::BundleFrameLayer&
     auto layer = make_layer(scaled);
     SDL_DestroySurface(scaled);
     return layer;
-}
-
-struct UniformCropMargins {
-    int left = 0;
-    int top = 0;
-    int right = 0;
-    int bottom = 0;
-};
-
-bool compute_visible_margins(SDL_Surface* surface, UniformCropMargins& out) {
-    if (!surface || surface->w <= 0 || surface->h <= 0 || !surface->pixels) {
-        return false;
-    }
-
-    const bool locked = SDL_MUSTLOCK(surface);
-    if (locked && !SDL_LockSurface(surface)) {
-        return false;
-    }
-
-    const int width = surface->w;
-    const int height = surface->h;
-    const int pitch = surface->pitch;
-    const auto* pixels = static_cast<const std::uint8_t*>(surface->pixels);
-
-    int left = width;
-    int top = height;
-    int right = -1;
-    int bottom = -1;
-
-    for (int y = 0; y < height; ++y) {
-        const std::uint8_t* row = pixels + static_cast<std::size_t>(y) * static_cast<std::size_t>(pitch);
-        for (int x = 0; x < width; ++x) {
-            const std::uint8_t alpha = row[static_cast<std::size_t>(x) * 4u + 3u];
-            if (alpha == 0) {
-                continue;
-            }
-            if (x < left) left = x;
-            if (y < top) top = y;
-            if (x > right) right = x;
-            if (y > bottom) bottom = y;
-        }
-    }
-
-    if (locked) {
-        SDL_UnlockSurface(surface);
-    }
-
-    if (right < left || bottom < top) {
-        return false;
-    }
-
-    out.left = left;
-    out.top = top;
-    out.right = std::max(0, width - (right + 1));
-    out.bottom = std::max(0, height - (bottom + 1));
-    return true;
-}
-
-SDL_Surface* crop_surface_with_margins(SDL_Surface* surface, const UniformCropMargins& margins) {
-    if (!surface || surface->w <= 0 || surface->h <= 0) {
-        return surface;
-    }
-
-    const int src_w = surface->w;
-    const int src_h = surface->h;
-
-    const int left = std::clamp(margins.left, 0, std::max(0, src_w - 1));
-    const int top = std::clamp(margins.top, 0, std::max(0, src_h - 1));
-
-    const int max_right = std::max(0, src_w - left - 1);
-    const int max_bottom = std::max(0, src_h - top - 1);
-
-    const int right = std::clamp(margins.right, 0, max_right);
-    const int bottom = std::clamp(margins.bottom, 0, max_bottom);
-
-    const int crop_w = src_w - left - right;
-    const int crop_h = src_h - top - bottom;
-    if (crop_w <= 0 || crop_h <= 0) {
-        return surface;
-    }
-    if (left == 0 && top == 0 && crop_w == src_w && crop_h == src_h) {
-        return surface;
-    }
-
-    SDL_Surface* cropped = SDL_CreateSurface(crop_w, crop_h, SDL_PIXELFORMAT_RGBA8888);
-    if (!cropped) {
-        return surface;
-    }
-
-    SDL_Rect src_rect{left, top, crop_w, crop_h};
-    SDL_Rect dst_rect{0, 0, crop_w, crop_h};
-    if (!SDL_BlitSurface(surface, &src_rect, cropped, &dst_rect)) {
-        SDL_DestroySurface(cropped);
-        return surface;
-    }
-
-    SDL_DestroySurface(surface);
-    return cropped;
-}
-
-std::optional<UniformCropMargins> compute_uniform_crop_margins(const AssetInfo& info, const nlohmann::json& anims_json) {
-    if (!info.crop_frames || !anims_json.is_object()) {
-        return std::nullopt;
-    }
-
-    bool have_union = false;
-    UniformCropMargins union_margins{};
-
-    for (auto it = anims_json.begin(); it != anims_json.end(); ++it) {
-        if (!it.value().is_object()) {
-            continue;
-        }
-        const nlohmann::json& anim_json = it.value();
-        if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
-            continue;
-        }
-
-        const auto& source = anim_json["source"];
-        const std::string kind = source.value("kind", std::string{});
-        if (kind != "folder") {
-            continue;
-        }
-
-        const fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
-        const fs::path fg_folder = folder / "foreground";
-        const fs::path bg_folder = folder / "background";
-        const int frame_count = count_sequential_png(folder);
-        if (frame_count <= 0) {
-            continue;
-        }
-
-        for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
-            const std::string frame_name = std::to_string(frame_idx) + ".png";
-            const std::array<fs::path, 3> layer_paths = {
-                folder / frame_name,
-                fg_folder / frame_name,
-                bg_folder / frame_name
-            };
-
-            for (const fs::path& layer_path : layer_paths) {
-                std::error_code ec;
-                if (!fs::exists(layer_path, ec) || ec) {
-                    continue;
-                }
-
-                SDL_Surface* layer_surface = load_rgba_surface(layer_path);
-                if (!layer_surface) {
-                    continue;
-                }
-
-                UniformCropMargins local{};
-                const bool has_visible = compute_visible_margins(layer_surface, local);
-                SDL_DestroySurface(layer_surface);
-                if (!has_visible) {
-                    continue;
-                }
-
-                if (!have_union) {
-                    union_margins = local;
-                    have_union = true;
-                } else {
-                    union_margins.left = std::min(union_margins.left, local.left);
-                    union_margins.top = std::min(union_margins.top, local.top);
-                    union_margins.right = std::min(union_margins.right, local.right);
-                    union_margins.bottom = std::min(union_margins.bottom, local.bottom);
-                }
-            }
-        }
-    }
-
-    if (!have_union) {
-        return std::nullopt;
-    }
-    return union_margins;
 }
 
 } // namespace
@@ -433,8 +281,6 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
     out_data.metadata_snapshot = info.info_json_;
 
     std::vector<float> variant_steps = normalized_variant_steps(info);
-    const std::optional<UniformCropMargins> uniform_crop = compute_uniform_crop_margins(info, info.anims_json_);
-
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
             if (!it.value().is_object()) continue;
@@ -481,12 +327,6 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
                     bg_surface = load_rgba_surface(bg_folder / (std::to_string(frame_idx) + ".png"));
                 }
 
-                if (uniform_crop.has_value()) {
-                    base_surface = crop_surface_with_margins(base_surface, *uniform_crop);
-                    fg_surface = crop_surface_with_margins(fg_surface, *uniform_crop);
-                    bg_surface = crop_surface_with_margins(bg_surface, *uniform_crop);
-                }
-
                 CacheManager::BundleFrameLayer base_layer = make_layer(base_surface);
                 CacheManager::BundleFrameLayer fg_layer = make_layer(fg_surface);
                 CacheManager::BundleFrameLayer bg_layer = make_layer(bg_surface);
@@ -529,6 +369,13 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
     if (!renderer_) {
         return false;
     }
+    auto apply_texture_scale_mode = [&info](SDL_Texture* texture) {
+        if (!texture) {
+            return;
+        }
+        SDL_SetTextureScaleMode(texture, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+    };
+
     out_frames.clear();
     for (const auto& anim : bundle.animations) {
         if (anim.frames.empty()) {
@@ -553,6 +400,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                 if (!atlas_surface) continue;
                 SDL_Texture* atlas_tex = CacheManager::surface_to_texture(renderer_, atlas_surface);
                 if (atlas_tex) {
+                    apply_texture_scale_mode(atlas_tex);
                     atlas_by_variant[idx] = atlas_tex;
                     atlas_sizes[idx] = SDL_Point{atlas_surface->w, atlas_surface->h};
                 }
@@ -578,6 +426,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                 } else if (!variant.base.empty()) {
                     SDL_Surface* base_surface = surface_from_layer(variant.base);
                     SDL_Texture* tex = CacheManager::surface_to_texture(renderer_, base_surface);
+                    apply_texture_scale_mode(tex);
                     cache_entry.textures[variant_idx] = tex;
                     cache_entry.widths[variant_idx] = variant.base.width;
                     cache_entry.heights[variant_idx] = variant.base.height;
@@ -589,12 +438,14 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                 if (!variant.foreground.empty()) {
                     SDL_Surface* fg_surface = surface_from_layer(variant.foreground);
                     cache_entry.foreground_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, fg_surface);
+                    apply_texture_scale_mode(cache_entry.foreground_textures[variant_idx]);
                     SDL_DestroySurface(fg_surface);
                 }
 
                 if (!variant.background.empty()) {
                     SDL_Surface* bg_surface = surface_from_layer(variant.background);
                     cache_entry.background_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, bg_surface);
+                    apply_texture_scale_mode(cache_entry.background_textures[variant_idx]);
                     SDL_DestroySurface(bg_surface);
                 }
             }
@@ -626,15 +477,19 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
     CacheManager::BundleData bundle;
     const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
     if (bundle_loaded) {
-        const bool hash_matches = bundle.content_hash == expected_hash;
+        const bool variant_layout_ok = bundle_variant_layout_is_valid(bundle);
+        const bool hash_matches = (bundle.content_hash == expected_hash) && variant_layout_ok;
         const bool populated = try_populate(bundle);
         if (hash_matches && populated) {
             raw_bundle = bundle;
             return true;
         }
 
-        if (!hash_matches) {
-            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + ".");
+        if (bundle.content_hash != expected_hash) {
+            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + " (content hash mismatch).");
+        } else if (!variant_layout_ok) {
+            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
+                              " (missing full-resolution or inconsistent variant metadata).");
         } else {
             vibble::log::warn("[PrimaryAssetCache] Cached bundle for " + info.name +
                               " could not populate runtime frames; rebuilding from source.");

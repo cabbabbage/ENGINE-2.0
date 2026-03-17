@@ -17,7 +17,9 @@
 #include <vector>
 
 #include "devtools/dev_camera_controls.hpp"
+#include "devtools/animation_source_navigation.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/frame_editors/shared/FrameEditState.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "utils/input.hpp"
 
@@ -36,8 +38,9 @@ namespace vibble::grid {
 class Occupancy;
 class Grid;
 }
-class DMButton;
+class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
+class RoomMovementToolsPanel;
 class DevFooterBar;
 class DevControls;
 
@@ -69,6 +72,8 @@ public:
 
     void set_enabled(bool enabled, bool preserve_camera_state = false);
     bool is_enabled() const { return enabled_; }
+    bool is_anchor_edit_mode_active() const;
+    bool is_asset_stack_editor_active() const;
 
     void update(const Input& input);
     void update_ui(const Input& input);
@@ -133,6 +138,7 @@ protected:
     void handle_spawn_config_change(const nlohmann::json& entry);
 
 private:
+    enum class AssetEditorSubview;
 
     void begin_area_drag_session(const std::string& area_name, const SDL_Point& world_mouse);
     void update_area_drag_session(const SDL_Point& world_mouse);
@@ -209,6 +215,8 @@ private:
     Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
     bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
+    bool asset_anchor_screen_position(const WarpedScreenGrid& cam, const Asset* asset, SDL_Point& out_screen) const;
+    Asset* hit_test_asset_anchor(SDL_Point screen_point, int pick_radius_px) const;
     void update_hover_state(Asset* hit);
     void handle_click(const Input& input);
     std::optional<std::string> find_room_area_at_point(SDL_Point world_point);
@@ -322,23 +330,65 @@ private:
     void cycle_selection_filter();
     void reset_selection_filter();
     void ensure_anchor_editor_widgets();
-    void update_anchor_editor_layout();
-    bool should_show_anchor_mode_toggle() const;
+    void ensure_movement_editor_widgets();
+    void update_asset_editor_layout();
+    bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
+    bool movement_mode_active() const;
     Asset* selected_anchor_mode_asset() const;
+    AssetEditorSubview next_asset_editor_subview(AssetEditorSubview subview) const;
+    void cycle_asset_editor_subview();
+    void set_asset_editor_subview(AssetEditorSubview subview, bool animate);
+    void begin_asset_editor_transition(AssetEditorSubview from, AssetEditorSubview to);
+    void update_asset_editor_transition();
+    void apply_asset_editor_panel_overrides();
+    bool asset_editor_tab_scope_active() const;
     void toggle_anchor_edit_mode();
     bool enter_anchor_edit_mode();
     void exit_anchor_edit_mode(bool flush_immediately);
+    bool enter_movement_edit_mode();
+    void exit_movement_edit_mode(bool persist_changes);
     void validate_anchor_edit_target();
+    void validate_movement_edit_target();
     bool is_anchor_ui_blocking_point(int x, int y) const;
+    bool is_movement_ui_blocking_point(int x, int y) const;
     void navigate_anchor_animation(int delta);
     void navigate_anchor_frame(int delta);
+    void navigate_movement_animation(int delta);
+    void navigate_movement_frame(int delta);
     bool apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_movement_animation_and_frame(const std::string& animation_id, int frame_index);
     std::vector<std::string> anchor_mode_animation_names() const;
+    std::vector<std::string> movement_mode_animation_names() const;
     int resolve_anchor_mode_frame_index() const;
+    int resolve_movement_mode_frame_index() const;
     void refresh_anchor_mode_handles();
     void sync_anchor_tools_panel();
     void ensure_anchor_selection_valid();
+    void rebuild_movement_rel_positions();
+    void rebuild_movement_frames_from_positions();
+    void normalize_movement_frames_to_current_animation();
+    void refresh_movement_runtime_animation();
+    bool persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority priority);
+    void refresh_movement_editor_selection(bool reset_drag_state);
+    int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
+    bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;
+    bool handle_movement_mode_mouse_input(const Input& input);
+    void apply_movement_linear_smoothing(int adjusted_index,
+                                         std::vector<SDL_FPoint>& redistributed_xy,
+                                         std::vector<float>& redistributed_z,
+                                         int last_index) const;
+    void apply_movement_curved_smoothing(int adjusted_index,
+                                         const std::vector<SDL_FPoint>& original_xy,
+                                         const std::vector<float>& original_z,
+                                         std::vector<SDL_FPoint>& redistributed_xy,
+                                         std::vector<float>& redistributed_z,
+                                         int last_index) const;
+    void redistribute_movement_points_after_adjustment(int adjusted_index);
+    SDL_Point movement_asset_anchor_world() const;
+    float movement_base_world_z() const;
+    devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,
+                                                                                              const std::string& animation_id) const;
     int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px) const;
     bool handle_anchor_mode_mouse_input(const Input& input);
     bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
@@ -359,6 +409,7 @@ private:
     void render_asset_outline(SDL_Renderer* renderer, Asset* asset, const WarpedScreenGrid& cam, const SDL_Color& color, int outline_offset_px) const;
 
     void mark_spatial_index_dirty() const;
+    const std::vector<Asset*>* selection_asset_source() const;
     bool ensure_spatial_index(const WarpedScreenGrid& cam) const;
     bool camera_state_changed(const WarpedScreenGrid& cam) const;
       bool compute_asset_screen_bounds(const WarpedScreenGrid& cam, Asset* asset, SDL_Rect& out_rect, int& out_screen_y) const;
@@ -386,7 +437,8 @@ private:
     bool mouse_controls_enabled_last_frame_ = false;
 
     enum class SelectionFilter {
-        Normal,          // Normal assets only (not map, not boundary, not tiled, not anchored)
+        All,             // All selectable assets
+        Normal,          // Primary assets (excluding boundary, tiled, and anchored)
         Tiled,           // Tiled assets only
         MapWide,         // Map-wide assets only
         Boundary,        // Boundary assets only
@@ -396,6 +448,13 @@ private:
     enum class EditorMode {
         Normal,
         AnchorEdit,
+        MovementEdit,
+    };
+
+    enum class AssetEditorSubview {
+        AssetInfo,
+        Anchor,
+        Movement,
     };
 
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
@@ -406,11 +465,8 @@ private:
     std::unique_ptr<AssetLibraryUI> library_ui_;
     std::unique_ptr<AssetInfoUI> info_ui_;
     std::unique_ptr<RoomAnchorToolsPanel> anchor_tools_panel_;
-    std::unique_ptr<DMButton> anchor_mode_toggle_button_;
-    std::unique_ptr<DMButton> anchor_anim_prev_button_;
-    std::unique_ptr<DMButton> anchor_anim_next_button_;
-    std::unique_ptr<DMButton> anchor_frame_prev_button_;
-    std::unique_ptr<DMButton> anchor_frame_next_button_;
+    std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
+    std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
 
     struct AnchorHandleSample {
         std::string name;
@@ -438,6 +494,34 @@ private:
     };
     AnchorEditState anchor_edit_;
 
+    struct MovementEditState {
+        Asset* target_asset = nullptr;
+        std::string animation_id;
+        int frame_index = 0;
+        bool selected_point_active = false;
+        int hovered_point_index = -1;
+        bool dragging_point = false;
+        bool had_static_frame_before = false;
+        bool static_frame_before = false;
+        bool dirty_since_last_flush = false;
+        bool smooth_enabled = false;
+        bool curve_enabled = false;
+        std::vector<devmode::frame_editors::MovementFrame> frames;
+        std::vector<SDL_FPoint> rel_positions;
+        std::vector<float> rel_positions_z;
+    };
+    MovementEditState movement_edit_;
+
+    struct AssetEditorTransitionState {
+        bool active = false;
+        AssetEditorSubview from = AssetEditorSubview::AssetInfo;
+        AssetEditorSubview to = AssetEditorSubview::AssetInfo;
+        int frame = 0;
+        int duration_frames = 12;
+    };
+    AssetEditorSubview asset_editor_subview_ = AssetEditorSubview::AssetInfo;
+    AssetEditorTransitionState asset_editor_transition_{};
+
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
     SDL_Rect room_config_bounds_{0, 0, 0, 0};
     DevFooterBar* shared_footer_bar_ = nullptr;
@@ -454,6 +538,7 @@ private:
     std::array<bool, static_cast<size_t>(BlockingPanel::Count)> blocking_panel_visible_{};
 
     Asset* hovered_asset_ = nullptr;
+    Asset* hovered_anchor_asset_ = nullptr;
     bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;

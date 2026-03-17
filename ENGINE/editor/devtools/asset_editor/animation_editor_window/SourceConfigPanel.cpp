@@ -455,7 +455,10 @@ void SourceConfigPanel::clear_derived_fields() {
     payload_.erase("movement");
     payload_.erase("movement_total");
     payload_.erase("audio");
+    payload_.erase("speed");
     payload_.erase("speed_factor");
+    payload_.erase("speed_multiplier");
+    payload_.erase("fps");
     payload_.erase("rnd_start");
 }
 

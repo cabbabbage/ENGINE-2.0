@@ -41,24 +41,18 @@ SDL_FPoint ProjectedSpriteFrame::anchor_uv_from_texture_pixel(SDL_Point texture_
         if (dimension <= 0) {
             return 0.5f;
         }
-        return std::clamp((static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension), 0.0f, 1.0f);
+        return (static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension);
     };
 
     const int safe_w = std::max(1, frame_width_px);
     const int safe_h = std::max(1, frame_height_px);
-    const int clamped_x = std::clamp(texture_px.x, 0, safe_w - 1);
-    const int clamped_y = std::clamp(texture_px.y, 0, safe_h - 1);
-
-    const float u = to_unit(clamped_x, safe_w);
-    const float v = to_unit(clamped_y, safe_h);
+    const float u = to_unit(texture_px.x, safe_w);
+    const float v = to_unit(texture_px.y, safe_h);
     const bool flip_h = (flip & SDL_FLIP_HORIZONTAL) != 0;
     return SDL_FPoint{flip_h ? (1.0f - u) : u, v};
 }
 
 SDL_FPoint ProjectedSpriteFrame::sample_screen_from_uv(SDL_FPoint uv) const {
-    uv.x = std::clamp(uv.x, 0.0f, 1.0f);
-    uv.y = std::clamp(uv.y, 0.0f, 1.0f);
-
     const SDL_FPoint top{
         screen_tl.x + (screen_tr.x - screen_tl.x) * uv.x,
         screen_tl.y + (screen_tr.y - screen_tl.y) * uv.x};
@@ -253,4 +247,3 @@ bool project_world_to_screen(const WarpedScreenGrid& cam,
 }
 
 }  // namespace render_projection
-

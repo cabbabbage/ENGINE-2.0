@@ -20,6 +20,7 @@ class Assets;
 class AssetInfo;
 class Input;
 class DMButton;
+class DMTextBox;
 
 namespace animation_editor {
 
@@ -38,6 +39,7 @@ class AnimationListContextMenu;
 using DMButton = ::DMButton;
 using DMCheckbox = ::DMCheckbox;
 using DMDropdown = ::DMDropdown;
+using DMTextBox = ::DMTextBox;
 
 class AnimationEditorWindow {
   public:
@@ -92,7 +94,28 @@ class AnimationEditorWindow {
     void render_inspector(SDL_Renderer* renderer) const;
     void render_inspector_background(SDL_Renderer* renderer) const;
     bool handle_header_event(const SDL_Event& e);
+    bool handle_defaults_modal_event(const SDL_Event& e);
     void set_status_message(const std::string& message, int frames = 300);
+    void render_defaults_modal(SDL_Renderer* renderer) const;
+    void layout_defaults_modal();
+    void open_defaults_modal();
+    void close_defaults_modal();
+    void ensure_defaults_modal_widgets();
+    void handle_pick_defaults_base_frames();
+    void handle_create_defaults();
+    bool ensure_animation_exists(const std::string& animation_id);
+    bool create_or_replace_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
+    std::optional<int> parse_defaults_distance_per_frame() const;
+    bool copy_frames_to_animation_folder(const std::string& animation_id,
+                                         const std::vector<std::filesystem::path>& frames);
+    nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id, int frame_count, int dx, int depth_dy) const;
+    nlohmann::json build_derived_movement_payload(const std::string& animation_id,
+                                                  const std::string& source_animation_id,
+                                                  int frame_count,
+                                                  bool flip_x,
+                                                  bool flip_y,
+                                                  bool flip_movement_x,
+                                                  bool flip_movement_y) const;
     void open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode);
     Asset* resolve_frame_editor_asset();
     void create_animation_via_prompt();
@@ -120,9 +143,6 @@ class AnimationEditorWindow {
     void ensure_controller_factory_registration(const std::string& key, const std::string& class_name) const;
     void add_controller();
     void open_controller();
-    bool rebuild_animation_from_sources(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
-    bool rebuild_animation_via_pipeline(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
-    bool rebuild_all_animations_via_pipeline(const std::shared_ptr<AssetInfo>& info);
     void refresh_inspector_animation_callback();
     std::string normalize_animation_name(std::string_view raw) const;
 
@@ -139,8 +159,17 @@ class AnimationEditorWindow {
     std::unique_ptr<AnimationInspectorPanel> inspector_panel_;
     std::unique_ptr<AnimationListContextMenu> list_context_menu_;
     std::unique_ptr<DMButton> add_button_;
-    std::unique_ptr<DMButton> build_button_;
     std::unique_ptr<DMButton> controller_button_;
+    std::unique_ptr<DMButton> create_defaults_button_;
+    bool defaults_modal_visible_ = false;
+    std::unique_ptr<DMCheckbox> defaults_diagonals_checkbox_;
+    std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
+    std::unique_ptr<DMTextBox> defaults_distance_box_;
+    std::unique_ptr<DMButton> defaults_base_frames_button_;
+    std::unique_ptr<DMButton> defaults_create_button_;
+    std::unique_ptr<DMButton> defaults_cancel_button_;
+    std::vector<std::filesystem::path> defaults_base_frame_paths_;
+    SDL_Rect defaults_modal_rect_{0, 0, 0, 0};
     SDL_Rect header_rect_{0, 0, 0, 0};
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};

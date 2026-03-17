@@ -14,8 +14,11 @@
 #include "devtools/asset_info_ui.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
+#include "devtools/bottom_navigation_panel.hpp"
+#include "devtools/animation_runtime_refresh.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
+#include "devtools/room_movement_tools_panel.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_edit_transaction.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
@@ -48,6 +51,7 @@
 #include "utils/map_grid_settings.hpp"
 #include "utils/AnchorPointResolver.hpp"
 #include "utils/relative_room_position.hpp"
+#include "utils/rebuild_queue.hpp"
 
 #include <algorithm>
 #include <array>
@@ -77,6 +81,20 @@ constexpr int kSavedCameraZoomMaxPercent = 100;
 constexpr float kShiftEdgePanThresholdFraction = 0.008f;
 constexpr float kShiftEdgePanExponent = 1.5f;
 constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
+constexpr int kMovementPointPickRadiusPx = 16;
+
+SDL_FPoint sample_quadratic_point(const SDL_FPoint& p0,
+                                  const SDL_FPoint& p1,
+                                  const SDL_FPoint& p2,
+                                  float t) {
+    const float clamped_t = std::clamp(t, 0.0f, 1.0f);
+    auto lerp = [](const SDL_FPoint& a, const SDL_FPoint& b, float ratio) {
+        return SDL_FPoint{a.x + (b.x - a.x) * ratio, a.y + (b.y - a.y) * ratio};
+    };
+    const SDL_FPoint a = lerp(p0, p1, clamped_t);
+    const SDL_FPoint b = lerp(p1, p2, clamped_t);
+    return lerp(a, b, clamped_t);
+}
 constexpr float kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond = 1400.0f;
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
     MapGridSettings settings;
@@ -191,11 +209,8 @@ constexpr float kCameraPanPercentPerPixel = 0.2f;
 constexpr std::int64_t kMaxSpatialCellsPerAsset = 4096;
 constexpr int kMaxScreenCoordMagnitude = 1 << 20;
 constexpr int kAnchorHandlePickRadiusPx = 12;
-constexpr int kAnchorDragIterations = 3;
-constexpr int kAnchorUiTopMargin = 16;
-constexpr int kAnchorUiEdgeMargin = 16;
-constexpr int kAnchorNavButtonSize = 30;
-constexpr int kAnchorNavGap = 6;
+constexpr int kShiftAnchorHoverRadiusPx = 20;
+constexpr int kShiftAnchorSelectRadiusPx = 24;
 
 int floor_div(int value, int divisor) {
     if (divisor == 0) {
@@ -473,7 +488,7 @@ RoomEditor::RoomEditor(Assets* owner, int screen_w, int screen_h)
     update_room_config_bounds();
     rebuild_room_spawn_id_cache();
     ensure_anchor_editor_widgets();
-    update_anchor_editor_layout();
+    update_asset_editor_layout();
 }
 
 RoomEditor::~RoomEditor() {
@@ -1015,7 +1030,7 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
     }
-    update_anchor_editor_layout();
+    update_asset_editor_layout();
 
 }
 
@@ -1105,6 +1120,9 @@ void RoomEditor::set_current_room(Room* room) {
     if (room_changed && anchor_mode_active()) {
         exit_anchor_edit_mode(true);
     }
+    if (room_changed && movement_mode_active()) {
+        exit_movement_edit_mode(true);
+    }
 
     if (room != current_room_) {
         room_editor_trace("[RoomEditor] clearing active spawn group target");
@@ -1156,6 +1174,9 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     if (!enabled_) {
         if (anchor_mode_active()) {
             exit_anchor_edit_mode(true);
+        }
+        if (movement_mode_active()) {
+            exit_movement_edit_mode(true);
         }
         active_modal_ = ActiveModal::None;
         clear_geometry_selection();
@@ -1232,6 +1253,8 @@ void RoomEditor::update(const Input& input) {
     }
 
     validate_anchor_edit_target();
+    validate_movement_edit_target();
+    update_asset_editor_transition();
     handle_delete_shortcut(input);
 
     WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
@@ -1250,7 +1273,7 @@ void RoomEditor::update(const Input& input) {
 
     mouse_controls_enabled_last_frame_ = true;
 
-    if (anchor_mode_active()) {
+    if (anchor_mode_active() || movement_mode_active()) {
         handle_mouse_input(input);
     } else if (!ui_blocked || dragging_) {
         handle_mouse_input(input);
@@ -1415,7 +1438,13 @@ if (auto selected = library_ui_->consume_selection()) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active());
     }
-    update_anchor_editor_layout();
+    if (movement_tools_panel_) {
+        movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        movement_tools_panel_->set_visible(movement_mode_active());
+        movement_tools_panel_->set_smooth_enabled(movement_edit_.smooth_enabled);
+        movement_tools_panel_->set_curve_enabled(movement_edit_.curve_enabled);
+    }
+    update_asset_editor_layout();
 
     if (info_ui_ && info_ui_->is_visible()) {
         info_ui_->update(input, screen_w_, screen_h_);
@@ -1443,6 +1472,18 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
+
+    if (asset_editor_tab_scope_active() &&
+        event.type == SDL_EVENT_KEY_DOWN &&
+        event.key.key == SDLK_TAB &&
+        event.key.repeat == 0 &&
+        DMDropdown::active_dropdown() == nullptr) {
+        cycle_asset_editor_subview();
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return true;
+    }
 
     if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
         event.button.button == SDL_BUTTON_LEFT &&
@@ -1488,6 +1529,14 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     auto route_info_panel = [&]() -> RouteResult {
         RouteResult result;
         if (!info_ui_ || !info_ui_->is_visible()) {
+            return result;
+        }
+        const bool info_panel_active =
+            asset_editor_subview_ == AssetEditorSubview::AssetInfo ||
+            (asset_editor_transition_.active &&
+             (asset_editor_transition_.from == AssetEditorSubview::AssetInfo ||
+              asset_editor_transition_.to == AssetEditorSubview::AssetInfo));
+        if (!info_panel_active) {
             return result;
         }
         if (info_ui_->handle_event(event)) {
@@ -1557,28 +1606,7 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             return result;
         }
         ensure_anchor_editor_widgets();
-        update_anchor_editor_layout();
-
-        auto handle_button = [&](DMButton* button, const std::function<void()>& on_click) {
-            if (!button) {
-                return;
-            }
-            if (button->handle_event(event)) {
-                result.handled = true;
-                result.pointer_blocked = true;
-                if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-                    event.button.button == SDL_BUTTON_LEFT &&
-                    on_click) {
-                    on_click();
-                }
-            }
-            if (pointer_based) {
-                SDL_Point point{mx, my};
-                if (SDL_PointInRect(&point, &button->rect())) {
-                    result.pointer_blocked = true;
-                }
-            }
-        };
+        update_asset_editor_layout();
 
         if (anchor_tools_panel_ && anchor_tools_panel_->is_visible()) {
             if (anchor_tools_panel_->handle_event(event)) {
@@ -1589,15 +1617,32 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             }
         }
 
-        if (should_show_anchor_mode_toggle()) {
-            handle_button(anchor_mode_toggle_button_.get(), [this]() { toggle_anchor_edit_mode(); });
+        if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible()) {
+            if (anchor_navigation_panel_->handle_event(event)) {
+                result.handled = true;
+                result.pointer_blocked = true;
+            } else if (pointer_based && anchor_navigation_panel_->is_point_inside(mx, my)) {
+                result.pointer_blocked = true;
+            }
         }
+        return result;
+    };
 
-        if (anchor_mode_active()) {
-            handle_button(anchor_anim_prev_button_.get(), [this]() { navigate_anchor_animation(-1); });
-            handle_button(anchor_anim_next_button_.get(), [this]() { navigate_anchor_animation(1); });
-            handle_button(anchor_frame_prev_button_.get(), [this]() { navigate_anchor_frame(-1); });
-            handle_button(anchor_frame_next_button_.get(), [this]() { navigate_anchor_frame(1); });
+    auto route_movement_ui = [&]() -> RouteResult {
+        RouteResult result;
+        if (!enabled_) {
+            return result;
+        }
+        ensure_movement_editor_widgets();
+        if (movement_tools_panel_ && movement_tools_panel_->is_visible()) {
+            if (movement_tools_panel_->handle_event(event)) {
+                movement_edit_.smooth_enabled = movement_tools_panel_->smooth_enabled();
+                movement_edit_.curve_enabled = movement_tools_panel_->curve_enabled();
+                result.handled = true;
+                result.pointer_blocked = true;
+            } else if (pointer_based && movement_tools_panel_->is_point_inside(mx, my)) {
+                result.pointer_blocked = true;
+            }
         }
         return result;
     };
@@ -1615,6 +1660,9 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         return true;
     }
     if (apply_result(route_anchor_ui(), pointer_blocked)) {
+        return true;
+    }
+    if (apply_result(route_movement_ui(), pointer_blocked)) {
         return true;
     }
 
@@ -1647,6 +1695,9 @@ bool RoomEditor::is_room_panel_blocking_point(int x, int y) const {
     if (is_anchor_ui_blocking_point(x, y)) {
         return true;
     }
+    if (is_movement_ui_blocking_point(x, y)) {
+        return true;
+    }
     return false;
 }
 
@@ -1674,15 +1725,19 @@ bool RoomEditor::is_room_ui_blocking_point(int x, int y) const {
     if (is_anchor_ui_blocking_point(x, y)) {
         return true;
     }
+    if (is_movement_ui_blocking_point(x, y)) {
+        return true;
+    }
 
     return false;
 }
 
 bool RoomEditor::is_shift_key_down() const {
-    if (!input_) {
-        return false;
-    }
-    return input_->isScancodeDown(SDL_SCANCODE_LSHIFT) || input_->isScancodeDown(SDL_SCANCODE_RSHIFT);
+    const bool input_shift = input_ &&
+        (input_->isScancodeDown(SDL_SCANCODE_LSHIFT) || input_->isScancodeDown(SDL_SCANCODE_RSHIFT));
+    const SDL_Keymod mods = SDL_GetModState();
+    const bool mod_shift = (mods & SDL_KMOD_SHIFT) != 0;
+    return input_shift || mod_shift;
 }
 
 void RoomEditor::set_camera_settings_lock(bool active) {
@@ -2275,16 +2330,50 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
         const bool shift_now = is_shift_key_down();
 
-        if (shift_now && assets_ && active_assets_) {
-            SDL_Color point_color{70, 170, 255, 215};
+        if (shift_now && assets_) {
+            const std::vector<Asset*>* source_assets = selection_asset_source();
+            if (!source_assets) {
+                source_assets = &assets_->all;
+            }
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            for (Asset* asset : *active_assets_) {
+            for (Asset* asset : *source_assets) {
                 if (!asset || asset->dead) continue;
                 if (!asset_belongs_to_room(asset)) continue;
                 if (!asset_matches_selection_filter(asset)) continue;
-                if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) continue;
-                SDL_Point gp = grid_point_for_asset(asset);
-                render_grid_point_marker(renderer, cam, gp, point_color, 3);
+
+                const bool is_selected =
+                    std::find(selected_assets_.begin(), selected_assets_.end(), asset) != selected_assets_.end();
+                const bool is_hovered_anchor = (asset == hovered_anchor_asset_);
+                SDL_Color point_color{70, 170, 255, 235};
+                int point_radius = 6;
+                if (is_selected) {
+                    point_color = SDL_Color{255, 165, 0, 245};
+                    point_radius = 8;
+                }
+                if (is_hovered_anchor) {
+                    point_color = SDL_Color{255, 245, 120, 255};
+                    point_radius = 10;
+                }
+
+                SDL_Point anchor_px{0, 0};
+                if (!asset_anchor_screen_position(cam, asset, anchor_px)) {
+                    continue;
+                }
+                SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, point_color.a);
+                const SDL_FRect marker_box{
+                    static_cast<float>(anchor_px.x - point_radius / 2),
+                    static_cast<float>(anchor_px.y - point_radius / 2),
+                    static_cast<float>(std::max(1, point_radius)),
+                    static_cast<float>(std::max(1, point_radius))
+                };
+                SDL_RenderFillRect(renderer, &marker_box);
+                SDL_RenderPoint(renderer, anchor_px.x, anchor_px.y);
+                for (int dx = -point_radius; dx <= point_radius; ++dx) {
+                    SDL_RenderPoint(renderer, anchor_px.x + dx, anchor_px.y);
+                }
+                for (int dy = -point_radius; dy <= point_radius; ++dy) {
+                    SDL_RenderPoint(renderer, anchor_px.x, anchor_px.y + dy);
+                }
             }
         }
 
@@ -2321,7 +2410,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (anchor_mode_active()) {
             refresh_anchor_mode_handles();
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            const bool isolate_selected = !anchor_edit_.selected_anchor_name.empty();
             for (const AnchorHandleSample& handle : anchor_edit_.handles) {
+                if (isolate_selected && handle.name != anchor_edit_.selected_anchor_name) {
+                    continue;
+                }
                 if (!handle.has_final_screen_px) {
                     continue;
                 }
@@ -2347,14 +2440,61 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 SDL_Color color{240, 240, 240, 230};
                 if (selected) {
                     color = SDL_Color{255, 200, 60, 245};
-                } else if (hovered) {
-                    color = SDL_Color{120, 230, 255, 240};
                 }
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
                 SDL_Rect box{cx - 4, cy - 4, 9, 9};
                 sdl_render::FillRect(renderer, &box);
-                SDL_SetRenderDrawColor(renderer, 24, 24, 24, 255);
+                SDL_SetRenderDrawColor(renderer, 24, 24, 24, 235);
                 sdl_render::Rect(renderer, &box);
+
+                if (hovered || selected) {
+                    SDL_Rect outline{box.x - 1, box.y - 1, box.w + 2, box.h + 2};
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                    sdl_render::Rect(renderer, &outline);
+                }
+            }
+        }
+
+        if (movement_mode_active()) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            const int count = static_cast<int>(movement_edit_.rel_positions.size());
+            for (int i = 1; i < count; ++i) {
+                SDL_FPoint a{};
+                SDL_FPoint b{};
+                if (!project_movement_point(static_cast<std::size_t>(i - 1), a) ||
+                    !project_movement_point(static_cast<std::size_t>(i), b)) {
+                    continue;
+                }
+                SDL_SetRenderDrawColor(renderer, 92, 184, 255, 210);
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(a.x)),
+                               static_cast<int>(std::lround(a.y)),
+                               static_cast<int>(std::lround(b.x)),
+                               static_cast<int>(std::lround(b.y)));
+            }
+
+            for (int i = 0; i < count; ++i) {
+                SDL_FPoint screen{};
+                if (!project_movement_point(static_cast<std::size_t>(i), screen)) {
+                    continue;
+                }
+                const bool selected = movement_edit_.selected_point_active && i == movement_edit_.frame_index;
+                const bool hovered = i == movement_edit_.hovered_point_index;
+                const int cx = static_cast<int>(std::lround(screen.x));
+                const int cy = static_cast<int>(std::lround(screen.y));
+                const int radius = selected ? 7 : 5;
+                SDL_Color color{220, 235, 255, 235};
+                if (hovered) {
+                    color = SDL_Color{140, 220, 255, 245};
+                }
+                if (selected) {
+                    color = SDL_Color{255, 196, 64, 255};
+                }
+                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+                SDL_Rect point_rect{cx - radius, cy - radius, radius * 2 + 1, radius * 2 + 1};
+                sdl_render::FillRect(renderer, &point_rect);
+                SDL_SetRenderDrawColor(renderer, 24, 24, 24, 240);
+                sdl_render::Rect(renderer, &point_rect);
             }
         }
     }
@@ -2363,7 +2503,14 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         library_ui_->render(renderer, screen_w_, screen_h_);
     }
     if (info_ui_ && info_ui_->is_visible()) {
-        info_ui_->render_world_overlay(renderer, assets_->getView());
+        const bool info_panel_active =
+            asset_editor_subview_ == AssetEditorSubview::AssetInfo ||
+            (asset_editor_transition_.active &&
+             (asset_editor_transition_.from == AssetEditorSubview::AssetInfo ||
+              asset_editor_transition_.to == AssetEditorSubview::AssetInfo));
+        if (info_panel_active) {
+            info_ui_->render_world_overlay(renderer, assets_->getView());
+        }
         info_ui_->render(renderer, screen_w_, screen_h_);
     }
 
@@ -2421,18 +2568,15 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         spawn_group_panel_->render(renderer);
     }
     if (renderer && enabled_) {
-        update_anchor_editor_layout();
-        if (should_show_anchor_mode_toggle() && anchor_mode_toggle_button_) {
-            anchor_mode_toggle_button_->render(renderer);
+        update_asset_editor_layout();
+        if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible()) {
+            anchor_navigation_panel_->render(renderer);
         }
-        if (anchor_mode_active()) {
-            if (anchor_anim_prev_button_) anchor_anim_prev_button_->render(renderer);
-            if (anchor_anim_next_button_) anchor_anim_next_button_->render(renderer);
-            if (anchor_frame_prev_button_) anchor_frame_prev_button_->render(renderer);
-            if (anchor_frame_next_button_) anchor_frame_next_button_->render(renderer);
-            if (anchor_tools_panel_ && anchor_tools_panel_->is_visible()) {
-                anchor_tools_panel_->render(renderer);
-            }
+        if (anchor_mode_active() && anchor_tools_panel_ && anchor_tools_panel_->is_visible()) {
+            anchor_tools_panel_->render(renderer);
+        }
+        if (movement_mode_active() && movement_tools_panel_ && movement_tools_panel_->is_visible()) {
+            movement_tools_panel_->render(renderer);
         }
     }
     DMDropdown::render_active_options(renderer);
@@ -2507,8 +2651,14 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
         info_ui_->clear_info();
         info_ui_->set_info(info);
         info_ui_->set_target_asset(nullptr);
+        info_ui_->clear_panel_bounds_override();
         info_ui_->open();
     }
+    asset_editor_subview_ = AssetEditorSubview::AssetInfo;
+    asset_editor_transition_.active = false;
+    editor_mode_ = EditorMode::Normal;
+    anchor_edit_ = AnchorEditState{};
+    movement_edit_ = MovementEditState{};
     active_modal_ = ActiveModal::AssetInfo;
 }
 
@@ -2552,7 +2702,14 @@ void RoomEditor::set_save_manager(devmode::core::SaveManager* manager) {
 }
 
 void RoomEditor::close_asset_info_editor() {
+    if (anchor_mode_active()) {
+        exit_anchor_edit_mode(true);
+    }
+    if (movement_mode_active()) {
+        exit_movement_edit_mode(true);
+    }
     if (info_ui_) info_ui_->close();
+    if (info_ui_) info_ui_->clear_panel_bounds_override();
     if (asset_info_panel_visible_) {
         asset_info_panel_visible_ = false;
         if (header_visibility_callback_) {
@@ -2562,6 +2719,8 @@ void RoomEditor::close_asset_info_editor() {
     if (active_modal_ == ActiveModal::AssetInfo) {
         active_modal_ = ActiveModal::None;
     }
+    asset_editor_subview_ = AssetEditorSubview::AssetInfo;
+    asset_editor_transition_.active = false;
 }
 
 bool RoomEditor::is_asset_info_editor_open() const {
@@ -2772,20 +2931,26 @@ void RoomEditor::clear_selection() {
     if (anchor_mode_active()) {
         exit_anchor_edit_mode(true);
     }
+    if (movement_mode_active()) {
+        exit_movement_edit_mode(true);
+    }
     clear_geometry_selection();
     const bool had_selection = !selected_assets_.empty();
     const bool had_highlight = !highlighted_assets_.empty();
     const bool had_hover = hovered_asset_ != nullptr;
+    const bool had_anchor_hover = hovered_anchor_asset_ != nullptr;
     selected_assets_.clear();
     highlighted_assets_.clear();
     hovered_asset_ = nullptr;
+    hovered_anchor_asset_ = nullptr;
     reset_drag_state();
     sync_spawn_group_panel_with_selection();
-    if (had_selection || had_highlight || had_hover) {
+    if (had_selection || had_highlight || had_hover || had_anchor_hover) {
         mark_highlight_dirty();
     }
-    if (!active_assets_) return;
-    for (Asset* asset : *active_assets_) {
+    const std::vector<Asset*>* source_assets = selection_asset_source();
+    if (!source_assets) return;
+    for (Asset* asset : *source_assets) {
         if (!asset) continue;
         asset->set_selected(false);
         asset->set_highlighted(false);
@@ -2796,11 +2961,16 @@ void RoomEditor::clear_highlighted_assets() {
     const bool had_highlight = !highlighted_assets_.empty();
     const size_t prev_selection_size = selected_assets_.size();
     Asset* prev_hover = hovered_asset_;
+    Asset* prev_anchor_hover = hovered_anchor_asset_;
     highlighted_assets_.clear();
     if (!active_assets_) {
         selected_assets_.clear();
         hovered_asset_ = nullptr;
-        if (had_highlight || prev_selection_size != selected_assets_.size() || hovered_asset_ != prev_hover) {
+        hovered_anchor_asset_ = nullptr;
+        if (had_highlight ||
+            prev_selection_size != selected_assets_.size() ||
+            hovered_asset_ != prev_hover ||
+            hovered_anchor_asset_ != prev_anchor_hover) {
             mark_highlight_dirty();
         }
         return;
@@ -2822,6 +2992,9 @@ void RoomEditor::clear_highlighted_assets() {
         hovered_asset_ = nullptr;
         hover_miss_frames_ = 0;
     }
+    if (hovered_anchor_asset_ && erase_if_inactive(hovered_anchor_asset_)) {
+        hovered_anchor_asset_ = nullptr;
+    }
 
     for (Asset* asset : *active_assets_) {
         if (!asset) {
@@ -2832,7 +3005,10 @@ void RoomEditor::clear_highlighted_assets() {
         asset->set_selected(is_selected);
     }
     sync_spawn_group_panel_with_selection();
-    if (had_highlight || prev_selection_size != selected_assets_.size() || hovered_asset_ != prev_hover) {
+    if (had_highlight ||
+        prev_selection_size != selected_assets_.size() ||
+        hovered_asset_ != prev_hover ||
+        hovered_anchor_asset_ != prev_anchor_hover) {
         mark_highlight_dirty();
     }
 }
@@ -2842,10 +3018,17 @@ void RoomEditor::purge_asset(Asset* asset) {
     if (anchor_mode_active() && anchor_edit_.target_asset == asset) {
         exit_anchor_edit_mode(true);
     }
+    if (movement_mode_active() && movement_edit_.target_asset == asset) {
+        exit_movement_edit_mode(true);
+    }
     bool highlight_sources_changed = false;
     if (hovered_asset_ == asset) {
         hovered_asset_ = nullptr;
         hover_miss_frames_ = 0;
+        highlight_sources_changed = true;
+    }
+    if (hovered_anchor_asset_ == asset) {
+        hovered_anchor_asset_ = nullptr;
         highlight_sources_changed = true;
     }
     remove_asset_from_spatial_index(asset);
@@ -2882,6 +3065,7 @@ void RoomEditor::set_pointer_queries_suspended(bool suspended) {
     pointer_queries_suspended_ = suspended;
     if (suspended) {
         hovered_asset_ = nullptr;
+        hovered_anchor_asset_ = nullptr;
         hover_miss_frames_ = 3;
     }
     mark_highlight_dirty();
@@ -3084,7 +3268,9 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
     }
 
     const bool shift_down =
-        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+        is_shift_key_down() ||
+        input.isScancodeDown(SDL_SCANCODE_LSHIFT) ||
+        input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     bool consumed = false;
     RoomConfigurator::CameraAdjustment adjustment{};
 
@@ -3276,6 +3462,11 @@ bool RoomEditor::apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam)
 void RoomEditor::handle_mouse_input(const Input& input) {
     if (!input_) return;
 
+    if (movement_mode_active()) {
+        handle_movement_mode_mouse_input(input);
+        return;
+    }
+
     if (anchor_mode_active()) {
         handle_anchor_mode_mouse_input(input);
         return;
@@ -3290,6 +3481,13 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     shift_was_down_last_frame_ = shift_down;
     shift_space_was_down_last_frame_ = shift_space_down;
+
+    if (shift_down_just_pressed) {
+        reset_selection_filter();
+    }
+    if (shift_space_just_pressed) {
+        cycle_selection_filter();
+    }
 
     if (handle_camera_settings_mouse_controls(input)) {
         return;
@@ -3315,10 +3513,13 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool left_down                = input_->isDown(Input::LEFT);
     const bool left_pressed_this_frame  = input_->wasPressed(Input::LEFT);
     const bool left_released_this_frame = input_->wasReleased(Input::LEFT);
+    Asset* anchor_hit = shift_down ? hit_test_asset_anchor(screen_pt, kShiftAnchorHoverRadiusPx) : nullptr;
 
     Asset* hit_before_pan = hit_test_asset(screen_pt, nullptr);
     if (!selected_assets_.empty()) {
         hit_before_pan = selected_asset_within_interaction_radius(screen_pt);
+    } else if (shift_down && anchor_hit) {
+        hit_before_pan = anchor_hit;
     } else if (!shift_down) {
         hit_before_pan = nullptr;
     }
@@ -3329,13 +3530,6 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool pointer_blocks_pan = selection_blocks_camera_pan ||
                                     (!selection_interaction_active && dragging_) ||
                                     (selection_interaction_active && !dragging_ && hit_before_pan && (left_down || left_pressed_this_frame));
-
-    if (shift_down_just_pressed) {
-        reset_selection_filter();
-    }
-    if (shift_space_just_pressed) {
-        cycle_selection_filter();
-    }
 
     if (selection_blocks_camera_pan && camera_controls_.is_panning()) {
         // Stop any in-progress camera drag as soon as a selection exists so asset dragging has priority.
@@ -3438,6 +3632,8 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     Asset* hit = hit_test_asset(screen_pt, nullptr);
     if (!selected_assets_.empty()) {
         hit = selected_asset_within_interaction_radius(screen_pt);
+    } else if (shift_down && anchor_hit) {
+        hit = anchor_hit;
     } else if (!shift_down) {
         hit = nullptr;
     }
@@ -3466,6 +3662,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     if (!shift_down && selected_assets_.empty() && !left_down && !dragging_) {
         pressed_asset = nullptr;
         was_dragged = false;
+        hovered_anchor_asset_ = nullptr;
     }
 
     if (suppress_next_left_click_) {
@@ -3482,7 +3679,10 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         if (!selected_assets_.empty()) {
             selection_hit = selected_asset_within_interaction_radius(screen_pt);
         } else if (shift_down) {
-            selection_hit = hit_test_asset(screen_pt, nullptr);
+            selection_hit = hit_test_asset_anchor(screen_pt, kShiftAnchorSelectRadiusPx);
+            if (!selection_hit) {
+                selection_hit = hit_test_asset(screen_pt, nullptr);
+            }
         }
 
         if (!selection_hit && !selected_assets_.empty()) {
@@ -3562,12 +3762,19 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     }
 
     if (!dragging_ && selected_assets_.empty() && !selected_geometry_room_) {
-        Asset* hover_candidate = shift_down ? hit : nullptr;
+        Asset* hover_candidate = nullptr;
+        if (shift_down) {
+            hover_candidate = anchor_hit ? anchor_hit : hit;
+            hovered_anchor_asset_ = anchor_hit;
+        } else {
+            hovered_anchor_asset_ = nullptr;
+        }
         if (hovered_asset_ != hover_candidate) {
             hovered_asset_ = hover_candidate;
             rebuild_highlight();
         }
     } else if (!dragging_ && !selected_assets_.empty()) {
+        hovered_anchor_asset_ = nullptr;
         Asset* hover_candidate = selected_asset_within_interaction_radius(screen_pt);
         if (!hover_candidate) {
             hover_candidate = selected_assets_.front();
@@ -3576,6 +3783,8 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             hovered_asset_ = hover_candidate;
             rebuild_highlight();
         }
+    } else {
+        hovered_anchor_asset_ = nullptr;
     }
 
     const bool any_left_activity = left_pressed_this_frame || left_released_this_frame || left_down;
@@ -3592,13 +3801,111 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     prev_left_down = left_down;
 }
 
+bool RoomEditor::asset_anchor_screen_position(const WarpedScreenGrid& cam,
+                                              const Asset* asset,
+                                              SDL_Point& out_screen) const {
+    if (!asset) {
+        return false;
+    }
+
+    if (const auto* projected = cam.grid_point_for_asset(asset)) {
+        if (std::isfinite(projected->screen.x) && std::isfinite(projected->screen.y)) {
+            out_screen = SDL_Point{
+                static_cast<int>(std::lround(projected->screen.x)),
+                static_cast<int>(std::lround(projected->screen.y))
+            };
+            return true;
+        }
+    }
+
+    const SDL_Point world_anchor = grid_point_for_asset(asset);
+    const SDL_FPoint screen_f = cam.map_to_screen(world_anchor);
+    if (!std::isfinite(screen_f.x) || !std::isfinite(screen_f.y)) {
+        return false;
+    }
+
+    out_screen = SDL_Point{
+        static_cast<int>(std::lround(screen_f.x)),
+        static_cast<int>(std::lround(screen_f.y))
+    };
+    return true;
+}
+
+const std::vector<Asset*>* RoomEditor::selection_asset_source() const {
+    if (active_assets_ && !active_assets_->empty()) {
+        return active_assets_;
+    }
+    if (assets_) {
+        return &assets_->all;
+    }
+    return nullptr;
+}
+
+Asset* RoomEditor::hit_test_asset_anchor(SDL_Point screen_point, int pick_radius_px) const {
+    if (!assets_ || pick_radius_px <= 0) {
+        return nullptr;
+    }
+    const std::vector<Asset*>* source_assets = selection_asset_source();
+    if (!source_assets || source_assets->empty()) {
+        return nullptr;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    const int radius2 = pick_radius_px * pick_radius_px;
+
+    Asset* best = nullptr;
+    int best_dist2 = std::numeric_limits<int>::max();
+    int best_screen_y = std::numeric_limits<int>::max();
+
+    for (Asset* asset : *source_assets) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+        if (!asset_belongs_to_room(asset)) {
+            continue;
+        }
+        if (!asset_matches_selection_filter(asset)) {
+            continue;
+        }
+
+        SDL_Point anchor_px{0, 0};
+        if (!asset_anchor_screen_position(cam, asset, anchor_px)) {
+            continue;
+        }
+
+        const int dx = anchor_px.x - screen_point.x;
+        const int dy = anchor_px.y - screen_point.y;
+        const int dist2 = dx * dx + dy * dy;
+        if (dist2 > radius2) {
+            continue;
+        }
+
+        const bool is_better =
+            !best ||
+            dist2 < best_dist2 ||
+            (dist2 == best_dist2 && anchor_px.y < best_screen_y);
+        if (is_better) {
+            best = asset;
+            best_dist2 = dist2;
+            best_screen_y = anchor_px.y;
+        }
+    }
+
+    return best;
+}
+
 Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const {
-    if (!active_assets_ || !assets_) return nullptr;
+    if (!assets_) return nullptr;
+    const std::vector<Asset*>* source_assets = selection_asset_source();
+    if (!source_assets || source_assets->empty()) {
+        return nullptr;
+    }
 
     const WarpedScreenGrid& cam = assets_->getView();
     const SDL_Point cursor_grid = grid_point_for_screen(cam, screen_point);
 
-    if (!ensure_spatial_index(cam)) {
+    const bool can_use_spatial = (source_assets == active_assets_) && ensure_spatial_index(cam);
+    if (!can_use_spatial) {
 
         return hit_test_asset_fallback(cam, screen_point);
     }
@@ -3616,9 +3923,6 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
                                       const SDL_Rect& rect,
                                       int screen_y) {
             if (!asset) return;
-            if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
-                return;
-            }
             if (!asset_matches_selection_filter(asset)) {
                 return;
             }
@@ -4087,7 +4391,8 @@ std::vector<Asset*> RoomEditor::gather_candidate_assets_for_point(SDL_Point scre
 }
 
 Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Point screen_point) const {
-    if (!active_assets_) {
+    const std::vector<Asset*>* source_assets = selection_asset_source();
+    if (!source_assets || source_assets->empty()) {
         return nullptr;
     }
 
@@ -4103,9 +4408,6 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
                                   const SDL_Rect& rect,
                                   int screen_y) {
         if (!asset) return;
-        if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
-            return;
-        }
         if (!asset_matches_selection_filter(asset)) {
             return;
         }
@@ -4136,11 +4438,8 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
         }
 };
 
-    for (Asset* asset : *active_assets_) {
+    for (Asset* asset : *source_assets) {
         if (!asset) continue;
-        if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
-            continue;
-        }
         if (!asset_matches_selection_filter(asset)) {
             continue;
         }
@@ -4439,7 +4738,9 @@ void RoomEditor::handle_click(const Input& input) {
     }
 
     const bool shift_modifier =
-        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+        is_shift_key_down() ||
+        input.isScancodeDown(SDL_SCANCODE_LSHIFT) ||
+        input.isScancodeDown(SDL_SCANCODE_RSHIFT);
 
     if (input_->wasClicked(Input::RIGHT)) {
         if (rclick_buffer_frames_ > 0) {
@@ -4554,27 +4855,9 @@ void RoomEditor::handle_click(const Input& input) {
 
     Asset* clicked_asset = nullptr;
 
-    if (assets_ && active_assets_) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        constexpr int kPickRadiusPx = 8;
-        const int kPickRadius2 = kPickRadiusPx * kPickRadiusPx;
-        int best_dist2 = std::numeric_limits<int>::max();
-        for (Asset* asset : *active_assets_) {
-            if (!asset || asset->dead) continue;
-            if (!asset_belongs_to_room(asset)) continue;
-            if (!asset_matches_selection_filter(asset)) continue;
-            if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) continue;
-            SDL_Point gp = grid_point_for_asset(asset);
-            SDL_FPoint screen_f = cam.map_to_screen(gp);
-            if (!std::isfinite(screen_f.x) || !std::isfinite(screen_f.y)) continue;
-            int dx = static_cast<int>(std::lround(screen_f.x)) - screen_mouse.x;
-            int dy = static_cast<int>(std::lround(screen_f.y)) - screen_mouse.y;
-            int dist2 = dx * dx + dy * dy;
-            if (dist2 <= kPickRadius2 && dist2 < best_dist2) {
-                clicked_asset = asset;
-                best_dist2 = dist2;
-            }
-        }
+    clicked_asset = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
+    if (!clicked_asset) {
+        clicked_asset = hit_test_asset(screen_mouse, nullptr);
     }
 
     if (clicked_asset) {
@@ -4739,7 +5022,8 @@ void RoomEditor::update_highlighted_assets() {
         return;
     }
     highlight_dirty_ = false;
-    if (!active_assets_) return;
+    const std::vector<Asset*>* source_assets = selection_asset_source();
+    if (!source_assets) return;
 
     highlighted_assets_.clear();
 
@@ -4749,23 +5033,22 @@ void RoomEditor::update_highlighted_assets() {
     } else if (!selected_assets_.empty()) {
         // When something is selected, lock highlights to the selection.
         highlighted_assets_ = selected_assets_;
-    } else if (hovered_asset_ && asset_belongs_to_room(hovered_asset_) &&
-               (hovered_asset_->spawn_id.empty() || !spawn_group_locked(hovered_asset_->spawn_id))) {
+    } else if (hovered_asset_ && asset_belongs_to_room(hovered_asset_)) {
         // No selection: allow hover highlighting (plus its spawn group).
         highlighted_assets_.push_back(hovered_asset_);
         if (!hovered_asset_->spawn_id.empty()) {
-            for (Asset* asset : *active_assets_) {
+            for (Asset* asset : *source_assets) {
                 if (!asset_belongs_to_room(asset)) continue;
                 if (asset->spawn_id != hovered_asset_->spawn_id) continue;
-                if (spawn_group_locked(asset->spawn_id)) continue;
                 if (std::find(highlighted_assets_.begin(), highlighted_assets_.end(), asset) == highlighted_assets_.end()) {
                     highlighted_assets_.push_back(asset);
                 }
             }
         }
+
     }
 
-    for (Asset* asset : *active_assets_) {
+    for (Asset* asset : *source_assets) {
         if (!asset) continue;
         asset->set_highlighted(false);
         asset->set_selected(false);
@@ -4787,6 +5070,18 @@ bool RoomEditor::anchor_mode_active() const {
     return editor_mode_ == EditorMode::AnchorEdit;
 }
 
+bool RoomEditor::movement_mode_active() const {
+    return editor_mode_ == EditorMode::MovementEdit;
+}
+
+bool RoomEditor::is_anchor_edit_mode_active() const {
+    return anchor_mode_active();
+}
+
+bool RoomEditor::is_asset_stack_editor_active() const {
+    return anchor_mode_active() || movement_mode_active();
+}
+
 Asset* RoomEditor::selected_anchor_mode_asset() const {
     if (selected_assets_.size() != 1) {
         return nullptr;
@@ -4794,41 +5089,17 @@ Asset* RoomEditor::selected_anchor_mode_asset() const {
     return selected_assets_.front();
 }
 
+devmode::FileSourcedAnimationSelection RoomEditor::resolve_file_sourced_animation_selection_for_target(const Asset* target,
+                                                                                                       const std::string& animation_id) const {
+    if (!target || !target->info) {
+        return {};
+    }
+    return devmode::resolve_file_sourced_animation_selection(target->info.get(), animation_id);
+}
+
 void RoomEditor::ensure_anchor_editor_widgets() {
-    if (!anchor_mode_toggle_button_) {
-        anchor_mode_toggle_button_ = std::make_unique<DMButton>(
-            "Edit Anchors",
-            &DMStyles::AccentButton(),
-            140,
-            DMButton::height());
-    }
-    if (!anchor_anim_prev_button_) {
-        anchor_anim_prev_button_ = std::make_unique<DMButton>(
-            "^",
-            &DMStyles::HeaderButton(),
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize);
-    }
-    if (!anchor_anim_next_button_) {
-        anchor_anim_next_button_ = std::make_unique<DMButton>(
-            "v",
-            &DMStyles::HeaderButton(),
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize);
-    }
-    if (!anchor_frame_prev_button_) {
-        anchor_frame_prev_button_ = std::make_unique<DMButton>(
-            "<",
-            &DMStyles::HeaderButton(),
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize);
-    }
-    if (!anchor_frame_next_button_) {
-        anchor_frame_next_button_ = std::make_unique<DMButton>(
-            ">",
-            &DMStyles::HeaderButton(),
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize);
+    if (!anchor_navigation_panel_) {
+        anchor_navigation_panel_ = std::make_unique<BottomNavigationPanel>();
     }
     if (!anchor_tools_panel_) {
         anchor_tools_panel_ = std::make_unique<RoomAnchorToolsPanel>();
@@ -4853,69 +5124,264 @@ void RoomEditor::ensure_anchor_editor_widgets() {
     }
 }
 
-bool RoomEditor::should_show_anchor_mode_toggle() const {
+void RoomEditor::ensure_movement_editor_widgets() {
+    if (!movement_tools_panel_) {
+        movement_tools_panel_ = std::make_unique<RoomMovementToolsPanel>();
+    }
+    if (movement_tools_panel_) {
+        movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        movement_tools_panel_->set_visible(movement_mode_active());
+        movement_tools_panel_->set_smooth_enabled(movement_edit_.smooth_enabled);
+        movement_tools_panel_->set_curve_enabled(movement_edit_.curve_enabled);
+    }
+}
+
+bool RoomEditor::should_show_asset_editor_navigation() const {
     if (!enabled_) {
         return false;
     }
-    return anchor_mode_active() || (selected_anchor_mode_asset() != nullptr);
+    if (active_modal_ == ActiveModal::AssetInfo && info_ui_ && info_ui_->is_visible()) {
+        return true;
+    }
+    return is_asset_stack_editor_active();
 }
 
-void RoomEditor::update_anchor_editor_layout() {
-    ensure_anchor_editor_widgets();
-    if (!anchor_mode_toggle_button_) {
+RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditorSubview subview) const {
+    switch (subview) {
+        case AssetEditorSubview::AssetInfo: return AssetEditorSubview::Anchor;
+        case AssetEditorSubview::Anchor: return AssetEditorSubview::Movement;
+        case AssetEditorSubview::Movement: return AssetEditorSubview::AssetInfo;
+    }
+    return AssetEditorSubview::AssetInfo;
+}
+
+void RoomEditor::cycle_asset_editor_subview() {
+    if (!asset_editor_tab_scope_active()) {
+        return;
+    }
+    set_asset_editor_subview(next_asset_editor_subview(asset_editor_subview_), true);
+}
+
+void RoomEditor::begin_asset_editor_transition(AssetEditorSubview from, AssetEditorSubview to) {
+    asset_editor_transition_.active = (from != to);
+    asset_editor_transition_.from = from;
+    asset_editor_transition_.to = to;
+    asset_editor_transition_.frame = 0;
+    asset_editor_transition_.duration_frames = 12;
+}
+
+void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool animate) {
+    if (!info_ui_ || !info_ui_->is_visible()) {
         return;
     }
 
-    anchor_mode_toggle_button_->set_text(anchor_mode_active() ? "Done Anchors" : "Edit Anchors");
-    const int toggle_w = std::max(140, anchor_mode_toggle_button_->preferred_width());
-    anchor_mode_toggle_button_->set_rect(SDL_Rect{
-        std::max(0, kAnchorUiEdgeMargin),
-        kAnchorUiTopMargin,
-        toggle_w,
-        DMButton::height(),
-    });
+    const AssetEditorSubview previous = asset_editor_subview_;
+    if (previous == subview && !asset_editor_transition_.active) {
+        return;
+    }
 
-    const int center_x = screen_w_ / 2;
-    const int top_y = kAnchorUiTopMargin;
-    const int center_button_x = center_x - (kAnchorNavButtonSize / 2);
-    const int middle_row_y = top_y + kAnchorNavButtonSize + kAnchorNavGap;
+    if (previous == AssetEditorSubview::Anchor && subview != AssetEditorSubview::Anchor) {
+        exit_anchor_edit_mode(true);
+    }
+    if (previous == AssetEditorSubview::Movement && subview != AssetEditorSubview::Movement) {
+        exit_movement_edit_mode(true);
+    }
 
-    if (anchor_anim_prev_button_) {
-        anchor_anim_prev_button_->set_rect(SDL_Rect{
-            center_button_x,
-            top_y,
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize,
-        });
+    if (subview == AssetEditorSubview::Anchor) {
+        if (!enter_anchor_edit_mode()) {
+            return;
+        }
+    } else if (subview == AssetEditorSubview::Movement) {
+        if (!enter_movement_edit_mode()) {
+            return;
+        }
+    } else {
+        editor_mode_ = EditorMode::Normal;
     }
-    if (anchor_frame_prev_button_) {
-        anchor_frame_prev_button_->set_rect(SDL_Rect{
-            center_button_x - kAnchorNavButtonSize - kAnchorNavGap,
-            middle_row_y,
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize,
-        });
+
+    asset_editor_subview_ = subview;
+    if (animate) {
+        begin_asset_editor_transition(previous, subview);
+    } else {
+        asset_editor_transition_.active = false;
     }
-    if (anchor_frame_next_button_) {
-        anchor_frame_next_button_->set_rect(SDL_Rect{
-            center_button_x + kAnchorNavButtonSize + kAnchorNavGap,
-            middle_row_y,
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize,
-        });
+    update_asset_editor_layout();
+}
+
+void RoomEditor::update_asset_editor_transition() {
+    if (!asset_editor_transition_.active) {
+        return;
     }
-    if (anchor_anim_next_button_) {
-        anchor_anim_next_button_->set_rect(SDL_Rect{
-            center_button_x,
-            middle_row_y + kAnchorNavButtonSize + kAnchorNavGap,
-            kAnchorNavButtonSize,
-            kAnchorNavButtonSize,
-        });
+    ++asset_editor_transition_.frame;
+    if (asset_editor_transition_.frame >= asset_editor_transition_.duration_frames) {
+        asset_editor_transition_.active = false;
+    }
+}
+
+bool RoomEditor::asset_editor_tab_scope_active() const {
+    return enabled_ && info_ui_ && info_ui_->is_visible() && active_modal_ == ActiveModal::AssetInfo;
+}
+
+void RoomEditor::apply_asset_editor_panel_overrides() {
+    if (!info_ui_) {
+        return;
+    }
+
+    SDL_Rect usable = DockManager::instance().usableRect();
+    if (usable.w <= 0 || usable.h <= 0) {
+        usable = SDL_Rect{0, 0, screen_w_, screen_h_};
+    }
+
+    int info_panel_x = screen_w_ - std::max(screen_w_ / 3, 320);
+    info_panel_x = std::clamp(info_panel_x, 0, screen_w_);
+    const int info_panel_w = std::max(0, screen_w_ - info_panel_x);
+    SDL_Rect asset_info_rect{info_panel_x, usable.y, info_panel_w, usable.h};
+
+    const int left_panel_h = std::max(0, usable.h - 56);
+    SDL_Rect left_panel_rect{12, 56, 320, left_panel_h};
+
+    auto progress_for = [this]() -> float {
+        if (!asset_editor_transition_.active || asset_editor_transition_.duration_frames <= 0) {
+            return 1.0f;
+        }
+        return std::clamp(static_cast<float>(asset_editor_transition_.frame) /
+                              static_cast<float>(asset_editor_transition_.duration_frames),
+                          0.0f,
+                          1.0f);
+    };
+
+    auto lerp_int = [](int a, int b, float t) {
+        return static_cast<int>(std::lround(static_cast<double>(a) + (static_cast<double>(b - a) * t)));
+    };
+
+    auto place_rect = [&](AssetEditorSubview subject, const SDL_Rect& base_rect) {
+        SDL_Rect placed = base_rect;
+        if (!asset_editor_transition_.active) {
+            if (subject == asset_editor_subview_) {
+                return placed;
+            }
+            placed.x = screen_w_ + 24;
+            return placed;
+        }
+
+        const float t = progress_for();
+        const int off_left = -base_rect.w - 24;
+        const int off_right = screen_w_ + 24;
+        if (subject == asset_editor_transition_.from) {
+            placed.x = lerp_int(base_rect.x, off_right, t);
+            return placed;
+        }
+        if (subject == asset_editor_transition_.to) {
+            const int start_x = (subject == AssetEditorSubview::AssetInfo) ? off_right : off_left;
+            placed.x = lerp_int(start_x, base_rect.x, t);
+            return placed;
+        }
+        placed.x = screen_w_ + 24;
+        return placed;
+    };
+
+    info_ui_->set_panel_bounds_override(place_rect(AssetEditorSubview::AssetInfo, asset_info_rect));
+
+    ensure_anchor_editor_widgets();
+    ensure_movement_editor_widgets();
+    if (anchor_tools_panel_) {
+        if (anchor_mode_active() || asset_editor_transition_.active) {
+            anchor_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Anchor, left_panel_rect));
+        } else {
+            anchor_tools_panel_->clear_panel_bounds_override();
+        }
+    }
+    if (movement_tools_panel_) {
+        if (movement_mode_active() || asset_editor_transition_.active) {
+            movement_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Movement, left_panel_rect));
+        } else {
+            movement_tools_panel_->clear_panel_bounds_override();
+        }
+    }
+}
+
+void RoomEditor::update_asset_editor_layout() {
+    ensure_anchor_editor_widgets();
+    ensure_movement_editor_widgets();
+    if (!anchor_navigation_panel_) {
+        return;
+    }
+
+    apply_asset_editor_panel_overrides();
+    anchor_navigation_panel_->set_screen_dimensions(screen_w_, screen_h_);
+    anchor_navigation_panel_->set_visible(should_show_asset_editor_navigation());
+
+    if (asset_editor_tab_scope_active()) {
+        std::string next_label;
+        switch (next_asset_editor_subview(asset_editor_subview_)) {
+            case AssetEditorSubview::AssetInfo: next_label = "Asset Info"; break;
+            case AssetEditorSubview::Anchor: next_label = "Anchor Editor"; break;
+            case AssetEditorSubview::Movement: next_label = "Movement Editor"; break;
+        }
+        anchor_navigation_panel_->set_action(next_label, [this]() { cycle_asset_editor_subview(); }, true);
+    } else {
+        anchor_navigation_panel_->clear_action();
+    }
+
+    if (anchor_mode_active() && anchor_edit_.target_asset && anchor_edit_.target_asset->info) {
+        const std::string animation_label =
+            anchor_edit_.animation_id.empty() ? std::string("No Animation") : anchor_edit_.animation_id;
+
+        std::string frame_label = "Frame";
+        auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
+        if (anim_it != anchor_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+            const int total_frames = static_cast<int>(anim_it->second.frames.size());
+            const int shown_frame =
+                devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, total_frames) + 1;
+            frame_label = std::to_string(shown_frame) + " / " + std::to_string(total_frames);
+        }
+
+        anchor_navigation_panel_->set_primary_navigation(
+            "Animation",
+            animation_label,
+            [this]() { navigate_anchor_animation(-1); },
+            [this]() { navigate_anchor_animation(1); });
+        anchor_navigation_panel_->set_secondary_navigation(
+            "Frame",
+            frame_label,
+            [this]() { navigate_anchor_frame(-1); },
+            [this]() { navigate_anchor_frame(1); });
+    } else if (movement_mode_active() && movement_edit_.target_asset && movement_edit_.target_asset->info) {
+        const std::string animation_label =
+            movement_edit_.animation_id.empty() ? std::string("No Animation") : movement_edit_.animation_id;
+
+        std::string frame_label = "Frame";
+        auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
+        if (anim_it != movement_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+            const int total_frames = static_cast<int>(anim_it->second.frames.size());
+            const int shown_frame =
+                devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index, total_frames) + 1;
+            frame_label = std::to_string(shown_frame) + " / " + std::to_string(total_frames);
+        }
+
+        anchor_navigation_panel_->set_primary_navigation(
+            "Animation",
+            animation_label,
+            [this]() { navigate_movement_animation(-1); },
+            [this]() { navigate_movement_animation(1); });
+        anchor_navigation_panel_->set_secondary_navigation(
+            "Frame",
+            frame_label,
+            [this]() { navigate_movement_frame(-1); },
+            [this]() { navigate_movement_frame(1); });
+    } else {
+        anchor_navigation_panel_->clear_navigation();
     }
 
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active());
+    }
+    if (movement_tools_panel_) {
+        movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        movement_tools_panel_->set_visible(movement_mode_active());
+        movement_tools_panel_->set_smooth_enabled(movement_edit_.smooth_enabled);
+        movement_tools_panel_->set_curve_enabled(movement_edit_.curve_enabled);
     }
 }
 
@@ -4928,16 +5394,11 @@ void RoomEditor::toggle_anchor_edit_mode() {
 }
 
 std::vector<std::string> RoomEditor::anchor_mode_animation_names() const {
-    std::vector<std::string> names;
     if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
-        return names;
+        return {};
     }
-    for (const auto& [name, animation] : anchor_edit_.target_asset->info->animations) {
-        if (!animation.frames.empty()) {
-            names.push_back(name);
-        }
-    }
-    return names;
+    return resolve_file_sourced_animation_selection_for_target(anchor_edit_.target_asset,
+                                                               anchor_edit_.animation_id).navigable_animation_ids;
 }
 
 int RoomEditor::resolve_anchor_mode_frame_index() const {
@@ -4963,22 +5424,19 @@ bool RoomEditor::apply_anchor_animation_and_frame(const std::string& animation_i
     }
 
     Asset* target = anchor_edit_.target_asset;
-    auto anim_it = target->info->animations.find(animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, animation_id);
+    if (!selection.has_selection()) {
         return false;
     }
-
-    const int wrapped_index =
-        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
-
-    target->set_current_animation(animation_id);
-    anim_it = target->info->animations.find(animation_id);
+    auto anim_it = target->info->animations.find(selection.resolved_animation_id);
     if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
         return false;
     }
 
     const int resolved_index =
-        devmode::room_anchor_mode::wrap_index(wrapped_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+
+    target->set_current_animation(selection.resolved_animation_id);
     AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
     if (!frame) {
         return false;
@@ -4992,7 +5450,7 @@ bool RoomEditor::apply_anchor_animation_and_frame(const std::string& animation_i
         assets_->mark_active_assets_dirty();
     }
 
-    anchor_edit_.animation_id = animation_id;
+    anchor_edit_.animation_id = selection.resolved_animation_id;
     anchor_edit_.frame_index = resolved_index;
     return true;
 }
@@ -5017,7 +5475,7 @@ void RoomEditor::ensure_anchor_selection_valid() {
     };
 
     if (anchor_edit_.selected_anchor_name.empty() || !has_anchor(anchor_edit_.selected_anchor_name)) {
-        anchor_edit_.selected_anchor_name = anchor_edit_.handles.front().name;
+        anchor_edit_.selected_anchor_name.clear();
     }
     if (!anchor_edit_.hovered_anchor_name.empty() && !has_anchor(anchor_edit_.hovered_anchor_name)) {
         anchor_edit_.hovered_anchor_name.clear();
@@ -5109,11 +5567,15 @@ int RoomEditor::find_anchor_handle_at_point(SDL_Point screen_point, int radius_p
     if (!anchor_mode_active()) {
         return -1;
     }
+    const bool isolate_to_selected = !anchor_edit_.selected_anchor_name.empty();
     const float radius_sq = static_cast<float>(radius_px * radius_px);
     float best_dist_sq = radius_sq;
     int best_index = -1;
     for (std::size_t i = 0; i < anchor_edit_.handles.size(); ++i) {
         const AnchorHandleSample& handle = anchor_edit_.handles[i];
+        if (isolate_to_selected && handle.name != anchor_edit_.selected_anchor_name) {
+            continue;
+        }
         if (!handle.has_final_screen_px) {
             continue;
         }
@@ -5261,10 +5723,34 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
     if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
         return false;
     }
-    const int frame_index =
-        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
-    const SDL_Point frame_dims = resolve_anchor_editor_frame_dimensions(target, frame);
+    const SDL_FPoint screen_f{
+        static_cast<float>(screen_point.x),
+        static_cast<float>(screen_point.y)};
+
+    WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+    if (!cam) {
+        if (Assets* owner = target->get_assets()) {
+            cam = &owner->getView();
+        }
+    }
+    if (!cam) {
+        return false;
+    }
+
+    // Anchor drag target: camera ray through the current mouse-ground point.
+    render_projection::WorldPoint3 mouse_ground_point{};
+    render_projection::CameraRay mouse_ray{};
+    if (!cam->build_camera_ray_from_screen(screen_f, mouse_ray) ||
+        !cam->screen_to_world_on_depth_plane(
+            screen_f,
+            static_cast<float>(target->world_z()),
+            mouse_ground_point) ||
+        !mouse_ground_point.valid) {
+        return false;
+    }
+
+    const float desired_world_x = mouse_ground_point.x;
+    const float desired_world_y = mouse_ground_point.y;
 
     return mutate_anchor_current_frame(
         [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
@@ -5275,24 +5761,34 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
                 return false;
             }
 
-            int tex_x = std::clamp(it->texture_x, 0, frame_dims.x - 1);
-            int tex_y = std::clamp(it->texture_y, 0, frame_dims.y - 1);
+            int tex_x = it->texture_x;
+            int tex_y = it->texture_y;
 
-            auto sample_screen = [&](int x, int y) {
+            auto sample_flat_world = [&](int x, int y, anchor_points::AnchorWorldPoint3& out_flat_world) {
                 DisplacedAssetAnchorPoint sample_anchor = *it;
-                sample_anchor.texture_x = std::clamp(x, 0, frame_dims.x - 1);
-                sample_anchor.texture_y = std::clamp(y, 0, frame_dims.y - 1);
+                sample_anchor.texture_x = x;
+                sample_anchor.texture_y = y;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
                     anchor_points::GridMaterialization::None);
-                return sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
+                out_flat_world = sample.flat_relative_pixel_point;
+                return out_flat_world.valid &&
+                       std::isfinite(out_flat_world.x) &&
+                       std::isfinite(out_flat_world.y);
             };
 
-            for (int iter = 0; iter < kAnchorDragIterations; ++iter) {
-                const SDL_FPoint base = sample_screen(tex_x, tex_y);
-                const SDL_FPoint plus_x = sample_screen(std::min(frame_dims.x - 1, tex_x + 1), tex_y);
-                const SDL_FPoint plus_y = sample_screen(tex_x, std::min(frame_dims.y - 1, tex_y + 1));
+            constexpr int kSolveIterations = 8;
+            constexpr float kMaxSolveStepPixels = 256.0f;
+            for (int iter = 0; iter < kSolveIterations; ++iter) {
+                anchor_points::AnchorWorldPoint3 base{};
+                anchor_points::AnchorWorldPoint3 plus_x{};
+                anchor_points::AnchorWorldPoint3 plus_y{};
+                if (!sample_flat_world(tex_x, tex_y, base) ||
+                    !sample_flat_world(tex_x + 1, tex_y, plus_x) ||
+                    !sample_flat_world(tex_x, tex_y + 1, plus_y)) {
+                    break;
+                }
 
                 const float vx_x = plus_x.x - base.x;
                 const float vx_y = plus_x.y - base.y;
@@ -5303,17 +5799,18 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
                     break;
                 }
 
-                const float rx = static_cast<float>(screen_point.x) - base.x;
-                const float ry = static_cast<float>(screen_point.y) - base.y;
-                const float dx = (rx * vy_y - ry * vy_x) / det;
-                const float dy = (ry * vx_x - rx * vx_y) / det;
+                const float rx = desired_world_x - base.x;
+                const float ry = desired_world_y - base.y;
+                float dx = (rx * vy_y - ry * vy_x) / det;
+                float dy = (ry * vx_x - rx * vx_y) / det;
+                if (!std::isfinite(dx) || !std::isfinite(dy)) {
+                    break;
+                }
+                dx = std::clamp(dx, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+                dy = std::clamp(dy, -kMaxSolveStepPixels, kMaxSolveStepPixels);
 
-                const int next_x = std::clamp(static_cast<int>(std::lround(static_cast<float>(tex_x) + dx)),
-                                              0,
-                                              frame_dims.x - 1);
-                const int next_y = std::clamp(static_cast<int>(std::lround(static_cast<float>(tex_y) + dy)),
-                                              0,
-                                              frame_dims.y - 1);
+                const int next_x = static_cast<int>(std::lround(static_cast<float>(tex_x) + dx));
+                const int next_y = static_cast<int>(std::lround(static_cast<float>(tex_y) + dy));
                 if (next_x == tex_x && next_y == tex_y) {
                     break;
                 }
@@ -5325,11 +5822,12 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
             int best_y = tex_y;
             float best_dist_sq = std::numeric_limits<float>::max();
             auto consider_candidate = [&](int candidate_x, int candidate_y) {
-                candidate_x = std::clamp(candidate_x, 0, frame_dims.x - 1);
-                candidate_y = std::clamp(candidate_y, 0, frame_dims.y - 1);
-                const SDL_FPoint screen = sample_screen(candidate_x, candidate_y);
-                const float diff_x = screen.x - static_cast<float>(screen_point.x);
-                const float diff_y = screen.y - static_cast<float>(screen_point.y);
+                anchor_points::AnchorWorldPoint3 flat_world{};
+                if (!sample_flat_world(candidate_x, candidate_y, flat_world)) {
+                    return;
+                }
+                const float diff_x = flat_world.x - desired_world_x;
+                const float diff_y = flat_world.y - desired_world_y;
                 const float dist_sq = diff_x * diff_x + diff_y * diff_y;
                 if (dist_sq < best_dist_sq) {
                     best_dist_sq = dist_sq;
@@ -5338,42 +5836,10 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
                 }
             };
 
-            constexpr int kLocalSearchRadius = 6;
+            constexpr int kLocalSearchRadius = 3;
             for (int dy = -kLocalSearchRadius; dy <= kLocalSearchRadius; ++dy) {
                 for (int dx = -kLocalSearchRadius; dx <= kLocalSearchRadius; ++dx) {
                     consider_candidate(tex_x + dx, tex_y + dy);
-                }
-            }
-
-            // Keep the dragged point tightly linked to the cursor even when movement between
-            // frames is large by widening the texture-space search adaptively.
-            constexpr float kCursorSnapToleranceSq = 0.75f * 0.75f;
-            if (best_dist_sq > kCursorSnapToleranceSq) {
-                const SDL_FPoint base = sample_screen(tex_x, tex_y);
-                const SDL_FPoint plus_x = sample_screen(std::min(frame_dims.x - 1, tex_x + 1), tex_y);
-                const SDL_FPoint plus_y = sample_screen(tex_x, std::min(frame_dims.y - 1, tex_y + 1));
-                const float step_px_x = std::max(0.001f, std::hypot(plus_x.x - base.x, plus_x.y - base.y));
-                const float step_px_y = std::max(0.001f, std::hypot(plus_y.x - base.x, plus_y.y - base.y));
-                const float err_px_x = std::fabs(static_cast<float>(screen_point.x) - base.x);
-                const float err_px_y = std::fabs(static_cast<float>(screen_point.y) - base.y);
-                const int max_search_radius = std::max(frame_dims.x, frame_dims.y);
-                const int adaptive_radius = std::clamp(
-                    static_cast<int>(std::ceil(std::max(err_px_x / step_px_x, err_px_y / step_px_y))) + 2,
-                    kLocalSearchRadius,
-                    max_search_radius);
-
-                const int coarse_step = std::max(1, adaptive_radius / 12);
-                for (int dy = -adaptive_radius; dy <= adaptive_radius; dy += coarse_step) {
-                    for (int dx = -adaptive_radius; dx <= adaptive_radius; dx += coarse_step) {
-                        consider_candidate(tex_x + dx, tex_y + dy);
-                    }
-                }
-
-                const int refine_radius = std::max(kLocalSearchRadius, coarse_step * 2);
-                for (int dy = -refine_radius; dy <= refine_radius; ++dy) {
-                    for (int dx = -refine_radius; dx <= refine_radius; ++dx) {
-                        consider_candidate(best_x + dx, best_y + dy);
-                    }
                 }
             }
 
@@ -5501,6 +5967,11 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
             anchor_edit_.dragging_anchor_name = anchor_edit_.selected_anchor_name;
             anchor_edit_.dragging = true;
             sync_anchor_tools_panel();
+        } else {
+            anchor_edit_.selected_anchor_name.clear();
+            anchor_edit_.dragging_anchor_name.clear();
+            anchor_edit_.dragging = false;
+            sync_anchor_tools_panel();
         }
     }
 
@@ -5511,8 +5982,14 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
     }
 
     if (left_released) {
+        const bool was_dragging = anchor_edit_.dragging;
         anchor_edit_.dragging = false;
         anchor_edit_.dragging_anchor_name.clear();
+        if (was_dragging) {
+            // Click-drag editing is transient: clear selection when drag completes.
+            anchor_edit_.selected_anchor_name.clear();
+            sync_anchor_tools_panel();
+        }
     }
 
     if (!anchor_edit_.dragging) {
@@ -5594,13 +6071,8 @@ bool RoomEditor::enter_anchor_edit_mode() {
         return false;
     }
 
-    std::vector<std::string> animation_names;
-    for (const auto& [name, animation] : target->info->animations) {
-        if (!animation.frames.empty()) {
-            animation_names.push_back(name);
-        }
-    }
-    if (animation_names.empty()) {
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (selection.navigable_animation_ids.empty()) {
         return false;
     }
 
@@ -5610,16 +6082,7 @@ bool RoomEditor::enter_anchor_edit_mode() {
     anchor_edit_.static_frame_before = target->static_frame;
 
     editor_mode_ = EditorMode::AnchorEdit;
-    anchor_edit_.animation_id = target->current_animation;
-    bool animation_valid = false;
-    auto selected_anim_it = target->info->animations.find(anchor_edit_.animation_id);
-    if (selected_anim_it != target->info->animations.end() && !selected_anim_it->second.frames.empty()) {
-        animation_valid = true;
-    }
-    if (anchor_edit_.animation_id.empty() ||
-        !animation_valid) {
-        anchor_edit_.animation_id = animation_names.front();
-    }
+    anchor_edit_.animation_id = selection.resolved_animation_id;
     anchor_edit_.frame_index = 0;
 
     if (!apply_anchor_animation_and_frame(anchor_edit_.animation_id, resolve_anchor_mode_frame_index())) {
@@ -5631,7 +6094,7 @@ bool RoomEditor::enter_anchor_edit_mode() {
     refresh_anchor_mode_handles();
     ensure_anchor_selection_valid();
     sync_anchor_tools_panel();
-    update_anchor_editor_layout();
+    update_asset_editor_layout();
     return true;
 }
 
@@ -5651,7 +6114,685 @@ void RoomEditor::exit_anchor_edit_mode(bool flush_immediately) {
     editor_mode_ = EditorMode::Normal;
     anchor_edit_ = AnchorEditState{};
     sync_anchor_tools_panel();
-    update_anchor_editor_layout();
+    update_asset_editor_layout();
+}
+
+std::vector<std::string> RoomEditor::movement_mode_animation_names() const {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return {};
+    }
+    return resolve_file_sourced_animation_selection_for_target(movement_edit_.target_asset,
+                                                               movement_edit_.animation_id).navigable_animation_ids;
+}
+
+int RoomEditor::resolve_movement_mode_frame_index() const {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return 0;
+    }
+    auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
+    if (anim_it == movement_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return 0;
+    }
+    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
+        if (anim_it->second.frames[i] == movement_edit_.target_asset->current_frame) {
+            return static_cast<int>(i);
+        }
+    }
+    return devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index,
+                                                 static_cast<int>(anim_it->second.frames.size()));
+}
+
+SDL_Point RoomEditor::movement_asset_anchor_world() const {
+    if (!movement_edit_.target_asset) {
+        return SDL_Point{0, 0};
+    }
+    return animation_update::detail::bottom_middle_for(*movement_edit_.target_asset,
+                                                       movement_edit_.target_asset->world_xz_point());
+}
+
+float RoomEditor::movement_base_world_z() const {
+    return movement_edit_.target_asset ? movement_edit_.target_asset->world_z_offset() : 0.0f;
+}
+
+void RoomEditor::rebuild_movement_rel_positions() {
+    movement_edit_.rel_positions.assign(movement_edit_.frames.size(), SDL_FPoint{0.0f, 0.0f});
+    movement_edit_.rel_positions_z.assign(movement_edit_.frames.size(), 0.0f);
+    if (movement_edit_.frames.empty()) {
+        return;
+    }
+    movement_edit_.rel_positions_z[0] = movement_edit_.frames[0].dz;
+    for (std::size_t i = 1; i < movement_edit_.frames.size(); ++i) {
+        movement_edit_.rel_positions[i].x = movement_edit_.rel_positions[i - 1].x + movement_edit_.frames[i].dx;
+        movement_edit_.rel_positions[i].y = movement_edit_.rel_positions[i - 1].y + movement_edit_.frames[i].dy;
+        movement_edit_.rel_positions_z[i] = movement_edit_.frames[i].dz;
+    }
+}
+
+void RoomEditor::rebuild_movement_frames_from_positions() {
+    if (movement_edit_.frames.empty()) {
+        return;
+    }
+    movement_edit_.frames[0].dx = 0.0f;
+    movement_edit_.frames[0].dy = 0.0f;
+    movement_edit_.frames[0].dz = movement_edit_.rel_positions_z.empty() ? 0.0f : movement_edit_.rel_positions_z[0];
+    for (std::size_t i = 1; i < movement_edit_.frames.size(); ++i) {
+        const SDL_FPoint prev = movement_edit_.rel_positions[i - 1];
+        const SDL_FPoint curr = movement_edit_.rel_positions[i];
+        movement_edit_.frames[i].dx = std::round(curr.x - prev.x);
+        movement_edit_.frames[i].dy = std::round(curr.y - prev.y);
+        movement_edit_.frames[i].dz =
+            std::round(i < movement_edit_.rel_positions_z.size() ? movement_edit_.rel_positions_z[i] : 0.0f);
+    }
+}
+
+void RoomEditor::normalize_movement_frames_to_current_animation() {
+    if (!movement_edit_.target_asset || !movement_edit_.target_asset->info || movement_edit_.animation_id.empty()) {
+        return;
+    }
+
+    auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
+    if (anim_it == movement_edit_.target_asset->info->animations.end()) {
+        return;
+    }
+
+    const std::size_t desired_count = std::max<std::size_t>(1, anim_it->second.frames.size());
+    if (movement_edit_.frames.size() < desired_count) {
+        movement_edit_.frames.resize(desired_count);
+    } else if (movement_edit_.frames.size() > desired_count) {
+        movement_edit_.frames.resize(desired_count);
+    }
+}
+
+void RoomEditor::refresh_movement_runtime_animation() {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return;
+    }
+
+    auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
+    if (anim_it == movement_edit_.target_asset->info->animations.end()) {
+        return;
+    }
+
+    Animation& animation = anim_it->second;
+    if (animation.frames.size() != movement_edit_.frames.size()) {
+        return;
+    }
+
+    int total_dx = 0;
+    int total_dy = 0;
+    int total_dz = 0;
+    for (std::size_t i = 0; i < movement_edit_.frames.size(); ++i) {
+        AnimationFrame* frame = animation.frames[i];
+        if (!frame) {
+            continue;
+        }
+        const auto& movement_frame = movement_edit_.frames[i];
+        frame->dx = static_cast<int>(std::lround(movement_frame.dx));
+        frame->dy = static_cast<int>(std::lround(movement_frame.dy));
+        frame->dz = static_cast<int>(std::lround(movement_frame.dz));
+        frame->z_resort = movement_frame.resort_z;
+        if (i > 0) {
+            total_dx += frame->dx;
+            total_dy += frame->dy;
+            total_dz += frame->dz;
+        }
+    }
+    animation.total_dx = total_dx;
+    animation.total_dy = total_dy;
+    animation.total_dz = total_dz;
+    movement_edit_.target_asset->refresh_frame_texture_bindings();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+}
+
+bool RoomEditor::persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!movement_edit_.target_asset || !movement_edit_.target_asset->info || movement_edit_.animation_id.empty()) {
+        return false;
+    }
+
+    std::shared_ptr<AssetInfo> target_info = movement_edit_.target_asset->info;
+    if (!target_info) {
+        return false;
+    }
+
+    normalize_movement_frames_to_current_animation();
+    rebuild_movement_frames_from_positions();
+    refresh_movement_runtime_animation();
+
+    nlohmann::json manifest_payload = target_info->manifest_payload();
+    nlohmann::json existing_payload = nlohmann::json::object();
+    if (manifest_payload.contains("animations") && manifest_payload["animations"].is_object()) {
+        auto it = manifest_payload["animations"].find(movement_edit_.animation_id);
+        if (it != manifest_payload["animations"].end() && it->is_object()) {
+            existing_payload = *it;
+        }
+    }
+    nlohmann::json updated_payload =
+        devmode::frame_editors::build_payload_from_frames(movement_edit_.frames, existing_payload);
+    if (!target_info->update_animation_properties(movement_edit_.animation_id, updated_payload)) {
+        return false;
+    }
+
+    target_info->mark_dirty();
+    if (!target_info->name.empty()) {
+        vibble::RebuildQueueCoordinator coordinator;
+        coordinator.request_asset(target_info->name);
+    }
+
+    if (save_coordinator_) {
+        Assets* assets = assets_;
+        save_coordinator_->enqueue_manifest_asset(
+            target_info->name,
+            target_info->manifest_payload(),
+            priority,
+            "Movement editor",
+            [assets, target_info]() {
+                if (target_info) {
+                    devmode::refresh_loaded_animation_instances(assets, target_info);
+                }
+            });
+    } else if (manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = target_info->manifest_payload();
+        if (!session.commit()) {
+            return false;
+        }
+    }
+
+    movement_edit_.dirty_since_last_flush = false;
+    return true;
+}
+
+void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
+    if (!movement_mode_active()) {
+        return;
+    }
+    if (movement_edit_.frames.empty()) {
+        movement_edit_.selected_point_active = false;
+        movement_edit_.hovered_point_index = -1;
+        movement_edit_.dragging_point = false;
+        return;
+    }
+    movement_edit_.frame_index =
+        std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frames.size()) - 1);
+    movement_edit_.selected_point_active = true;
+    if (reset_drag_state) {
+        movement_edit_.dragging_point = false;
+    }
+}
+
+bool RoomEditor::project_movement_point(std::size_t index, SDL_FPoint& out_screen) const {
+    if (!movement_mode_active() || !assets_ || !movement_edit_.target_asset) {
+        return false;
+    }
+    if (index >= movement_edit_.rel_positions.size() || index >= movement_edit_.rel_positions_z.size()) {
+        return false;
+    }
+    const WarpedScreenGrid& cam = assets_->getView();
+    const SDL_Point anchor = movement_asset_anchor_world();
+    SDL_FPoint world{
+        movement_edit_.rel_positions[index].x + static_cast<float>(anchor.x),
+        movement_edit_.rel_positions[index].y + static_cast<float>(anchor.y)};
+    const float world_z = movement_base_world_z() + movement_edit_.rel_positions_z[index];
+    if (cam.project_world_point(world, world_z, out_screen)) {
+        return true;
+    }
+    out_screen = cam.map_to_screen_f(world);
+    return true;
+}
+
+int RoomEditor::find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const {
+    if (!movement_mode_active()) {
+        return -1;
+    }
+    const float radius_sq = static_cast<float>(radius_px * radius_px);
+    int best_index = -1;
+    float best_distance_sq = radius_sq;
+    for (std::size_t i = 0; i < movement_edit_.rel_positions.size(); ++i) {
+        SDL_FPoint projected{};
+        if (!project_movement_point(i, projected)) {
+            continue;
+        }
+        const float dx = projected.x - static_cast<float>(screen_point.x);
+        const float dy = projected.y - static_cast<float>(screen_point.y);
+        const float distance_sq = dx * dx + dy * dy;
+        if (distance_sq <= best_distance_sq) {
+            best_distance_sq = distance_sq;
+            best_index = static_cast<int>(i);
+        }
+    }
+    return best_index;
+}
+
+void RoomEditor::apply_movement_linear_smoothing(int adjusted_index,
+                                                 std::vector<SDL_FPoint>& redistributed_xy,
+                                                 std::vector<float>& redistributed_z,
+                                                 int last_index) const {
+    if (adjusted_index <= 0 || redistributed_xy.empty() || redistributed_z.size() != redistributed_xy.size()) {
+        return;
+    }
+
+    const SDL_FPoint start = redistributed_xy.front();
+    const SDL_FPoint end = redistributed_xy.back();
+    const float start_z = redistributed_z.front();
+    const float end_z = redistributed_z.back();
+
+    if (adjusted_index < last_index) {
+        const SDL_FPoint anchor = redistributed_xy[adjusted_index];
+        const float anchor_z = redistributed_z[adjusted_index];
+        const float pre_steps = static_cast<float>(adjusted_index);
+        for (int i = 1; i < adjusted_index; ++i) {
+            const float t = pre_steps > 0.0f ? static_cast<float>(i) / pre_steps : 0.0f;
+            redistributed_xy[i] = SDL_FPoint{
+                start.x + (anchor.x - start.x) * t,
+                start.y + (anchor.y - start.y) * t};
+            redistributed_z[i] = start_z + (anchor_z - start_z) * t;
+        }
+
+        const float post_steps = static_cast<float>(last_index - adjusted_index);
+        for (int i = adjusted_index + 1; i < last_index; ++i) {
+            const float t = post_steps > 0.0f ? static_cast<float>(i - adjusted_index) / post_steps : 0.0f;
+            redistributed_xy[i] = SDL_FPoint{
+                anchor.x + (end.x - anchor.x) * t,
+                anchor.y + (end.y - anchor.y) * t};
+            redistributed_z[i] = anchor_z + (end_z - anchor_z) * t;
+        }
+        return;
+    }
+
+    const float steps = static_cast<float>(last_index);
+    for (int i = 1; i < last_index; ++i) {
+        const float t = steps > 0.0f ? static_cast<float>(i) / steps : 0.0f;
+        redistributed_xy[i] = SDL_FPoint{
+            start.x + (end.x - start.x) * t,
+            start.y + (end.y - start.y) * t};
+        redistributed_z[i] = start_z + (end_z - start_z) * t;
+    }
+}
+
+void RoomEditor::apply_movement_curved_smoothing(int adjusted_index,
+                                                 const std::vector<SDL_FPoint>& original_xy,
+                                                 const std::vector<float>& original_z,
+                                                 std::vector<SDL_FPoint>& redistributed_xy,
+                                                 std::vector<float>& redistributed_z,
+                                                 int last_index) const {
+    if (adjusted_index <= 0 || original_xy.size() != redistributed_xy.size() || original_z.size() != redistributed_z.size()) {
+        return;
+    }
+
+    auto clamp_control = [](const SDL_FPoint& p0, const SDL_FPoint& p2, SDL_FPoint& control) {
+        const SDL_FPoint midpoint{(p0.x + p2.x) * 0.5f, (p0.y + p2.y) * 0.5f};
+        float dx = control.x - midpoint.x;
+        float dy = control.y - midpoint.y;
+        float dist = std::sqrt(dx * dx + dy * dy);
+        const float span = std::sqrt((p2.x - p0.x) * (p2.x - p0.x) + (p2.y - p0.y) * (p2.y - p0.y));
+        const float max_offset = std::clamp(span * 0.45f, 0.0f, 160.0f);
+        if (dist > max_offset && dist > 0.0f) {
+            const float scale = max_offset / dist;
+            control.x = midpoint.x + dx * scale;
+            control.y = midpoint.y + dy * scale;
+        }
+    };
+
+    auto place_half = [&](int first_idx, int second_idx) {
+        const int segment_count = second_idx - first_idx;
+        if (segment_count <= 1) {
+            return;
+        }
+        SDL_FPoint p0 = redistributed_xy[first_idx];
+        SDL_FPoint p2 = redistributed_xy[second_idx];
+        SDL_FPoint control = original_xy[std::clamp(first_idx + segment_count / 2, first_idx + 1, second_idx - 1)];
+        clamp_control(p0, p2, control);
+
+        const float z0 = redistributed_z[first_idx];
+        const float z1 = original_z[std::clamp(first_idx + segment_count / 2, first_idx + 1, second_idx - 1)];
+        const float z2 = redistributed_z[second_idx];
+        for (int i = first_idx + 1; i < second_idx; ++i) {
+            const float t = static_cast<float>(i - first_idx) / static_cast<float>(segment_count);
+            redistributed_xy[i] = sample_quadratic_point(p0, control, p2, t);
+            redistributed_z[i] = ((1.0f - t) * (1.0f - t) * z0) + (2.0f * (1.0f - t) * t * z1) + (t * t * z2);
+        }
+    };
+
+    place_half(0, std::min(adjusted_index, last_index));
+    if (adjusted_index < last_index) {
+        place_half(adjusted_index, last_index);
+    }
+}
+
+void RoomEditor::redistribute_movement_points_after_adjustment(int adjusted_index) {
+    const int count = static_cast<int>(movement_edit_.rel_positions.size());
+    if (!movement_edit_.smooth_enabled || count < 3 || adjusted_index <= 0) {
+        rebuild_movement_frames_from_positions();
+        refresh_movement_runtime_animation();
+        movement_edit_.dirty_since_last_flush = true;
+        return;
+    }
+
+    std::vector<SDL_FPoint> redistributed_xy = movement_edit_.rel_positions;
+    std::vector<float> redistributed_z = movement_edit_.rel_positions_z;
+    const std::vector<SDL_FPoint> original_xy = movement_edit_.rel_positions;
+    const std::vector<float> original_z = movement_edit_.rel_positions_z;
+    const int last_index = count - 1;
+
+    if (movement_edit_.curve_enabled) {
+        apply_movement_curved_smoothing(adjusted_index,
+                                        original_xy,
+                                        original_z,
+                                        redistributed_xy,
+                                        redistributed_z,
+                                        last_index);
+    } else {
+        apply_movement_linear_smoothing(adjusted_index, redistributed_xy, redistributed_z, last_index);
+    }
+
+    movement_edit_.rel_positions = std::move(redistributed_xy);
+    movement_edit_.rel_positions_z = std::move(redistributed_z);
+    rebuild_movement_frames_from_positions();
+    refresh_movement_runtime_animation();
+    movement_edit_.dirty_since_last_flush = true;
+}
+
+bool RoomEditor::apply_movement_animation_and_frame(const std::string& animation_id, int frame_index) {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = movement_edit_.target_asset;
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, animation_id);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto anim_it = target->info->animations.find(selection.resolved_animation_id);
+    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+        return false;
+    }
+
+    const int resolved_index =
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+    target->set_current_animation(selection.resolved_animation_id);
+    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    if (!frame) {
+        return false;
+    }
+
+    target->current_frame = frame;
+    target->set_frame_progress(0.0f);
+    target->static_frame = true;
+    target->refresh_frame_texture_bindings();
+
+    movement_edit_.animation_id = selection.resolved_animation_id;
+    movement_edit_.frame_index = resolved_index;
+    refresh_movement_editor_selection(true);
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+    return true;
+}
+
+void RoomEditor::navigate_movement_animation(int delta) {
+    if (!movement_mode_active() || delta == 0) {
+        return;
+    }
+    if (movement_edit_.dirty_since_last_flush) {
+        persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    }
+
+    std::vector<std::string> names = movement_mode_animation_names();
+    if (names.empty()) {
+        return;
+    }
+    int index = 0;
+    auto found = std::find(names.begin(), names.end(), movement_edit_.animation_id);
+    if (found != names.end()) {
+        index = static_cast<int>(std::distance(names.begin(), found));
+    }
+    const int next_index = devmode::room_anchor_mode::wrap_index(index + delta, static_cast<int>(names.size()));
+    const std::string& next_animation = names[static_cast<std::size_t>(next_index)];
+    int next_frame_index = movement_edit_.frame_index;
+    auto anim_it = movement_edit_.target_asset->info->animations.find(next_animation);
+    if (anim_it != movement_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+        next_frame_index =
+            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frames.size()));
+    } else {
+        next_frame_index = 0;
+    }
+    nlohmann::json payload = movement_edit_.target_asset->info->manifest_payload();
+    nlohmann::json existing = nlohmann::json::object();
+    if (payload.contains("animations") && payload["animations"].is_object()) {
+        auto it = payload["animations"].find(next_animation);
+        if (it != payload["animations"].end() && it->is_object()) {
+            existing = *it;
+        }
+    }
+    movement_edit_.frames = devmode::frame_editors::parse_frames_from_payload(existing);
+    if (movement_edit_.frames.empty()) {
+        movement_edit_.frames.push_back(devmode::frame_editors::MovementFrame{});
+    }
+    normalize_movement_frames_to_current_animation();
+    rebuild_movement_rel_positions();
+    if (apply_movement_animation_and_frame(next_animation, next_frame_index)) {
+        refresh_movement_editor_selection(true);
+    }
+}
+
+void RoomEditor::navigate_movement_frame(int delta) {
+    if (!movement_mode_active() || delta == 0 || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return;
+    }
+    if (movement_edit_.dirty_since_last_flush) {
+        persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    }
+    auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
+    if (anim_it == movement_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return;
+    }
+    const int next_frame =
+        devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index + delta, static_cast<int>(anim_it->second.frames.size()));
+    apply_movement_animation_and_frame(movement_edit_.animation_id, next_frame);
+}
+
+bool RoomEditor::enter_movement_edit_mode() {
+    if (movement_mode_active()) {
+        return true;
+    }
+
+    Asset* target = selected_anchor_mode_asset();
+    if (!target || !target->info) {
+        return false;
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+
+    movement_edit_ = MovementEditState{};
+    movement_edit_.target_asset = target;
+    movement_edit_.had_static_frame_before = true;
+    movement_edit_.static_frame_before = target->static_frame;
+    movement_edit_.animation_id = selection.resolved_animation_id;
+
+    nlohmann::json manifest_payload = target->info->manifest_payload();
+    nlohmann::json existing_payload = nlohmann::json::object();
+    if (manifest_payload.contains("animations") && manifest_payload["animations"].is_object()) {
+        auto it = manifest_payload["animations"].find(movement_edit_.animation_id);
+        if (it != manifest_payload["animations"].end() && it->is_object()) {
+            existing_payload = *it;
+        }
+    }
+    movement_edit_.frames = devmode::frame_editors::parse_frames_from_payload(existing_payload);
+    if (movement_edit_.frames.empty()) {
+        movement_edit_.frames.push_back(devmode::frame_editors::MovementFrame{});
+    }
+    normalize_movement_frames_to_current_animation();
+
+    editor_mode_ = EditorMode::MovementEdit;
+    rebuild_movement_rel_positions();
+    movement_edit_.frame_index = resolve_movement_mode_frame_index();
+    if (!apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index)) {
+        editor_mode_ = EditorMode::Normal;
+        movement_edit_ = MovementEditState{};
+        return false;
+    }
+    refresh_movement_editor_selection(true);
+    update_asset_editor_layout();
+    return true;
+}
+
+void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
+    if (!movement_mode_active()) {
+        return;
+    }
+
+    if (persist_changes && movement_edit_.dirty_since_last_flush) {
+        persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Immediate);
+    }
+
+    if (movement_edit_.target_asset && movement_edit_.had_static_frame_before) {
+        movement_edit_.target_asset->static_frame = movement_edit_.static_frame_before;
+    }
+
+    editor_mode_ = EditorMode::Normal;
+    movement_edit_ = MovementEditState{};
+    update_asset_editor_layout();
+}
+
+void RoomEditor::validate_movement_edit_target() {
+    if (!movement_mode_active()) {
+        return;
+    }
+
+    Asset* target = movement_edit_.target_asset;
+    if (!enabled_ || !target || !target->info || target->dead) {
+        exit_movement_edit_mode(true);
+        return;
+    }
+    if (selected_assets_.empty() || selected_assets_.front() != target) {
+        selected_assets_.clear();
+        selected_assets_.push_back(target);
+        hovered_asset_ = target;
+        sync_spawn_group_panel_with_selection();
+        mark_highlight_dirty();
+    }
+
+    const auto selection =
+        resolve_file_sourced_animation_selection_for_target(target, movement_edit_.animation_id);
+    if (!selection.has_selection()) {
+        exit_movement_edit_mode(true);
+        return;
+    }
+    if (selection.resolved_animation_id != movement_edit_.animation_id) {
+        movement_edit_.animation_id = selection.resolved_animation_id;
+        nlohmann::json payload = target->info->manifest_payload();
+        nlohmann::json existing = nlohmann::json::object();
+        if (payload.contains("animations") && payload["animations"].is_object()) {
+            auto it = payload["animations"].find(movement_edit_.animation_id);
+            if (it != payload["animations"].end() && it->is_object()) {
+                existing = *it;
+            }
+        }
+        movement_edit_.frames = devmode::frame_editors::parse_frames_from_payload(existing);
+        normalize_movement_frames_to_current_animation();
+        rebuild_movement_rel_positions();
+        apply_movement_animation_and_frame(movement_edit_.animation_id, 0);
+        return;
+    }
+
+    auto anim_it = target->info->animations.find(movement_edit_.animation_id);
+    if (anim_it != target->info->animations.end()) {
+        const std::size_t desired_count = std::max<std::size_t>(1, anim_it->second.frames.size());
+        if (movement_edit_.frames.size() != desired_count) {
+            normalize_movement_frames_to_current_animation();
+            rebuild_movement_rel_positions();
+            apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index);
+        }
+    }
+}
+
+bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
+    if (!enabled_) {
+        return false;
+    }
+    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
+        anchor_navigation_panel_->is_point_inside(x, y)) {
+        return true;
+    }
+    if (movement_mode_active() && movement_tools_panel_ && movement_tools_panel_->is_visible() &&
+        movement_tools_panel_->is_point_inside(x, y)) {
+        return true;
+    }
+    return false;
+}
+
+bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info || !assets_) {
+        return false;
+    }
+    if (movement_edit_.rel_positions.empty() || movement_edit_.rel_positions_z.empty()) {
+        return true;
+    }
+
+    if (movement_tools_panel_) {
+        movement_edit_.smooth_enabled = movement_tools_panel_->smooth_enabled();
+        movement_edit_.curve_enabled = movement_tools_panel_->curve_enabled();
+    }
+
+    const SDL_Point screen_pt{input.getX(), input.getY()};
+    const bool left_down = input.isDown(Input::LEFT);
+    const bool left_pressed = input.wasPressed(Input::LEFT);
+    const bool left_released = input.wasReleased(Input::LEFT);
+
+    if (!movement_edit_.dragging_point) {
+        movement_edit_.hovered_point_index = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
+    }
+
+    if (left_pressed && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
+        const int hit = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
+        if (hit >= 0) {
+            movement_edit_.frame_index = hit;
+            movement_edit_.selected_point_active = true;
+            movement_edit_.dragging_point = true;
+            apply_movement_animation_and_frame(movement_edit_.animation_id, hit);
+        } else {
+            movement_edit_.selected_point_active = false;
+        }
+    }
+
+    if (movement_edit_.dragging_point && left_down && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
+        SDL_FPoint world = assets_->getView().screen_to_map(screen_pt);
+        SDL_Point anchor = movement_asset_anchor_world();
+        SDL_Point world_px{static_cast<int>(std::lround(world.x)), static_cast<int>(std::lround(world.y))};
+        if (snap_to_grid_enabled_) {
+            const int resolution = current_grid_resolution();
+            world_px = vibble::grid::snap_world_to_vertex(world_px, resolution);
+        }
+        const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions.size()) - 1);
+        movement_edit_.rel_positions[static_cast<std::size_t>(index)] = SDL_FPoint{
+            static_cast<float>(world_px.x - anchor.x),
+            static_cast<float>(world_px.y - anchor.y)};
+        redistribute_movement_points_after_adjustment(index);
+    }
+
+    if (left_released) {
+        movement_edit_.dragging_point = false;
+    }
+
+    const int scroll_y = input.getScrollY();
+    if (scroll_y != 0 && movement_edit_.selected_point_active && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
+        const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions_z.size()) - 1);
+        movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] += static_cast<float>(scroll_y * 4);
+        redistribute_movement_points_after_adjustment(index);
+        if (input_) {
+            input_->consumeScroll();
+        }
+    }
+
+    return true;
 }
 
 void RoomEditor::validate_anchor_edit_target() {
@@ -5674,19 +6815,13 @@ void RoomEditor::validate_anchor_edit_target() {
         mark_highlight_dirty();
     }
 
-    auto anim_it = target->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
-        std::vector<std::string> names;
-        for (const auto& [name, animation] : target->info->animations) {
-            if (!animation.frames.empty()) {
-                names.push_back(name);
-            }
-        }
-        if (names.empty()) {
-            exit_anchor_edit_mode(true);
-            return;
-        }
-        apply_anchor_animation_and_frame(names.front(), 0);
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, anchor_edit_.animation_id);
+    if (!selection.has_selection()) {
+        exit_anchor_edit_mode(true);
+        return;
+    }
+    if (selection.resolved_animation_id != anchor_edit_.animation_id) {
+        apply_anchor_animation_and_frame(selection.resolved_animation_id, 0);
     }
 }
 
@@ -5695,17 +6830,12 @@ bool RoomEditor::is_anchor_ui_blocking_point(int x, int y) const {
         return false;
     }
 
-    SDL_Point point{x, y};
-    if (should_show_anchor_mode_toggle() && anchor_mode_toggle_button_ &&
-        SDL_PointInRect(&point, &anchor_mode_toggle_button_->rect())) {
+    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
+        anchor_navigation_panel_->is_point_inside(x, y)) {
         return true;
     }
 
     if (anchor_mode_active()) {
-        if (anchor_anim_prev_button_ && SDL_PointInRect(&point, &anchor_anim_prev_button_->rect())) return true;
-        if (anchor_anim_next_button_ && SDL_PointInRect(&point, &anchor_anim_next_button_->rect())) return true;
-        if (anchor_frame_prev_button_ && SDL_PointInRect(&point, &anchor_frame_prev_button_->rect())) return true;
-        if (anchor_frame_next_button_ && SDL_PointInRect(&point, &anchor_frame_next_button_->rect())) return true;
         if (anchor_tools_panel_ && anchor_tools_panel_->is_visible() && anchor_tools_panel_->is_point_inside(x, y)) {
             return true;
         }
@@ -5719,6 +6849,9 @@ bool RoomEditor::is_ui_blocking_input(int mx, int my) const {
         if (info_ui_->is_point_inside(mx, my)) {
             return true;
         }
+    }
+    if (is_anchor_ui_blocking_point(mx, my) || is_movement_ui_blocking_point(mx, my)) {
+        return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible()) {
         if (shared_footer_bar_->contains(mx, my)) {
@@ -6074,12 +7207,8 @@ void RoomEditor::handle_delete_shortcut(const Input& input) {
 
 void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier) {
 
-    if (!selected_assets_.empty()) {
-        Asset* primary = selected_assets_.front();
-        if (primary && !primary->spawn_id.empty() && spawn_group_locked(primary->spawn_id)) {
-            return;
-        }
-    }
+    // Dragging must remain available for all selected assets in dev mode,
+    // including groups previously marked locked.
 
     if (room_config_dock_open_) {
 
@@ -7986,8 +9115,16 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
 
 bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     if (!asset) return false;
+    const bool shift_down_now = is_shift_key_down();
+    const SelectionFilter effective_filter =
+        (shift_down_now && selection_filter_ == SelectionFilter::Normal)
+            ? SelectionFilter::All
+            : selection_filter_;
 
-    const bool is_anchored_asset = false;
+    const bool is_anchored_asset =
+        asset->info &&
+        asset->info->follower_binding.has_value() &&
+        asset->info->follower_binding->is_valid();
 
     // Check if asset is a map asset
     const bool is_map_asset = !asset->spawn_id.empty() && !is_room_spawn_id(asset->spawn_id);
@@ -7998,15 +9135,26 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     // Check if asset is a tiled asset
     const bool is_tiled_asset = asset->info && asset->info->tillable;
 
-    // Anchored assets are only selectable in anchored mode
-    if (selection_filter_ != SelectionFilter::Anchored && is_anchored_asset) {
+    // Anchored assets are only selectable in anchored/all mode.
+    if (effective_filter != SelectionFilter::Anchored &&
+        effective_filter != SelectionFilter::All &&
+        is_anchored_asset) {
         return false;
     }
 
-    switch (selection_filter_) {
+    switch (effective_filter) {
+        case SelectionFilter::All:
+            // All-mode is the Shift-entry selector: keep only hard exclusions handled elsewhere.
+            return true;
+
         case SelectionFilter::Normal:
-            // Normal assets: not map, not boundary, not tiled, not anchored
-            return !is_map_asset && !is_boundary_asset && !is_tiled_asset;
+            // Normal assets: not boundary/tiled/anchored.
+            // If the current room has no local spawn groups, allow map-wide assets in normal mode
+            // so hover/click selection still works on maps authored with global-only spawns.
+            return !is_boundary_asset &&
+                   !is_tiled_asset &&
+                   (!is_anchored_asset) &&
+                   (!is_map_asset || room_spawn_ids_.empty());
 
         case SelectionFilter::Tiled:
             // Tiled assets only
@@ -8031,6 +9179,10 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
 
 void RoomEditor::cycle_selection_filter() {
     switch (selection_filter_) {
+        case SelectionFilter::All:
+            selection_filter_ = SelectionFilter::Normal;
+            show_notice("Selecting normal assets");
+            break;
         case SelectionFilter::Normal:
             selection_filter_ = SelectionFilter::Tiled;
             show_notice("Selecting tiled assets");
@@ -8048,29 +9200,31 @@ void RoomEditor::cycle_selection_filter() {
             show_notice("Selecting anchored assets");
             break;
         case SelectionFilter::Anchored:
-            selection_filter_ = SelectionFilter::Normal;
-            show_notice("Selecting normal assets");
+            selection_filter_ = SelectionFilter::All;
+            show_notice("Selecting all assets");
             break;
         default:
-            selection_filter_ = SelectionFilter::Normal;
-            show_notice("Selecting normal assets");
+            selection_filter_ = SelectionFilter::All;
+            show_notice("Selecting all assets");
             break;
     }
 
     // Clear hover and selection since filter changed
     hovered_asset_ = nullptr;
+    hovered_anchor_asset_ = nullptr;
     hover_miss_frames_ = 3;
     mark_highlight_dirty();
 }
 
 void RoomEditor::reset_selection_filter() {
-    const bool changed = (selection_filter_ != SelectionFilter::Normal);
-    selection_filter_ = SelectionFilter::Normal;
-    show_notice("Selecting normal assets");
+    const bool changed = (selection_filter_ != SelectionFilter::All);
+    selection_filter_ = SelectionFilter::All;
+    show_notice("Selecting all assets");
 
     if (changed) {
         // Clear hover and selection since filter changed
         hovered_asset_ = nullptr;
+        hovered_anchor_asset_ = nullptr;
         hover_miss_frames_ = 3;
         mark_highlight_dirty();
     }

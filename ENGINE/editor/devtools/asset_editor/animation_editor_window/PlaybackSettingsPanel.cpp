@@ -550,7 +550,9 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
     }
     if (derived_from_animation_) {
         payload.erase("rnd_start");
+        payload.erase("speed");
         payload.erase("speed_factor");
+        payload.erase("speed_multiplier");
         payload.erase("fps");
         payload["inherit_source_movement"] = state.inherit_source_movement;
         nlohmann::json modifiers = nlohmann::json::object();
@@ -569,8 +571,10 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         payload["rnd_start"]    = state.random_start && !state.locked;
         payload.erase("derived_modifiers");
         payload.erase("inherit_source_movement");
+        payload.erase("speed");
         payload.erase("fps");
         payload.erase("speed_factor");
+        payload.erase("speed_multiplier");
     }
 }
 

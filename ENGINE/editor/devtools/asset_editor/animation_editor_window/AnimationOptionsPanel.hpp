@@ -32,7 +32,6 @@ class AnimationOptionsPanel {
     void layout_widgets() const;
     void sync_from_document();
     void apply_changes_from_controls();
-    float selected_speed() const;
 
   private:
     std::shared_ptr<AnimationDocument> document_;
@@ -40,8 +39,6 @@ class AnimationOptionsPanel {
     SDL_Rect bounds_{0, 0, 0, 0};
     mutable SDL_Rect label_rect_{0, 0, 0, 0};
     mutable bool layout_dirty_ = true;
-    std::unique_ptr<DMDropdown> speed_dropdown_;
-    float cached_speed_ = 1.0f;
     std::string payload_signature_;
     bool syncing_ = false;
     std::function<void(const std::string&, const nlohmann::json&)> on_animation_properties_changed_;

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <limits>
 #include <fstream>
 #include <optional>
 #include <nlohmann/json.hpp>
@@ -110,35 +109,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload["flipped_source"] = derived_flip_x;
 
     payload.erase("fps");
-    double raw_speed = 1.0;
-    try {
-        if (payload.contains("speed_multiplier") && payload["speed_multiplier"].is_number()) {
-            raw_speed = payload["speed_multiplier"].get<double>();
-        } else if (payload.contains("speed_factor") && payload["speed_factor"].is_number()) {
-            raw_speed = payload["speed_factor"].get<double>();
-        }
-    } catch (...) {
-        raw_speed = 1.0;
-    }
-    const double kSpeedOptions[] = {0.25, 0.5, 1.0, 2.0, 4.0};
-    double best_speed = 1.0;
-    double best_diff = std::numeric_limits<double>::max();
-    for (double opt : kSpeedOptions) {
-        double diff = std::abs(opt - raw_speed);
-        if (diff < best_diff) {
-            best_diff = diff;
-            best_speed = opt;
-        }
-    }
-    if (!std::isfinite(raw_speed) || raw_speed <= 0.0) {
-        best_speed = 1.0;
-    }
-    payload["speed_multiplier"] = best_speed;
+    payload.erase("speed");
     payload.erase("speed_factor");
-
-    // Crop is now an asset-level setting and should not be persisted per animation.
-    payload.erase("crop_frames");
-    payload.erase("crop_bounds");
+    payload.erase("speed_multiplier");
 
     int frames = read_int_like(payload.contains("number_of_frames") ? payload["number_of_frames"] : nlohmann::json(1), 1);
     if (frames < 1) frames = 1;

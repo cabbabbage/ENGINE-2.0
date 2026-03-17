@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/anchor_point.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "utils/AnchorPointResolver.hpp"
 
@@ -93,4 +94,16 @@ TEST_CASE("Extrusion endpoints are symmetric around flat anchor point") {
 
     CHECK(near_distance == doctest::Approx(extrusion).epsilon(1e-5));
     CHECK(far_distance == doctest::Approx(extrusion).epsilon(1e-5));
+}
+
+TEST_CASE("Anchor UV conversion preserves off-frame coordinates") {
+    const SDL_Point texture_px{-12, 132};
+    const SDL_FPoint uv = anchor_points::anchor_pixel_to_uv(texture_px, 100, 100, SDL_FLIP_NONE);
+    const SDL_FPoint flipped_uv =
+        anchor_points::anchor_pixel_to_uv(texture_px, 100, 100, SDL_FLIP_HORIZONTAL);
+
+    CHECK(uv.x < 0.0f);
+    CHECK(uv.y > 1.0f);
+    CHECK(flipped_uv.x == doctest::Approx(1.0f - uv.x).epsilon(1e-6));
+    CHECK(flipped_uv.y == doctest::Approx(uv.y).epsilon(1e-6));
 }

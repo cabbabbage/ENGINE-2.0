@@ -2772,16 +2772,19 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     if (layout_rect.w > 0 && layout_rect.h > 0) {
         sliding_rects.push_back(layout_rect);
     }
-    if (map_mode_ui_) {
-        DevFooterBar* footer = map_mode_ui_->get_footer_bar();
-        if (footer && footer->visible()) {
-            footer_rect = footer->rect();
-        }
-    }
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active || shift_block_headers_footers_;
+    const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
+    if (map_mode_ui_) {
+        DevFooterBar* footer = map_mode_ui_->get_footer_bar();
+        if (footer && footer->visible() && !asset_stack_editor_active) {
+            footer_rect = footer->rect();
+        }
+    }
+    const bool hide_headers_pre =
+        modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre ||
+        frame_editor_active || asset_stack_editor_active || shift_block_headers_footers_;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = DockManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
@@ -2805,7 +2808,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide = is_modal_blocking_panels();
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     modal_headers_hidden_ = modal_hide;
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active || shift_block_headers_footers_;
+    const bool hide_headers =
+        modal_hide || sliding_headers_hidden_ || layers_panel_open ||
+        frame_editor_active || asset_stack_editor_active || shift_block_headers_footers_;
     other_settings_.set_enabled(enabled_);
     other_settings_.set_header_suppressed(hide_headers);
     apply_header_suppression();
@@ -2874,8 +2879,10 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
     if (!other_settings_.header_suppressed()) {
         const bool pointer_inside_header = pointer_relevant && enabled_ && other_settings_.contains_point(pointer.x, pointer.y);
-        if (pointer_event && consume_if_handled(other_settings_.handle_event(event), pointer_inside_header)) {
-            return;
+        if (!asset_stack_editor_active) {
+            if (pointer_event && consume_if_handled(other_settings_.handle_event(event), pointer_inside_header)) {
+                return;
+            }
         }
         if (pointer_inside_header) {
             return;
@@ -2911,7 +2918,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
     if (map_mode_ui_) {
         if (DevFooterBar* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !frame_editor_active) {
+            if (footer->visible() && !frame_editor_active && !asset_stack_editor_active) {
                 const bool pointer_in_footer = pointer_relevant && footer->contains(pointer.x, pointer.y);
                 if (consume_if_handled(footer->handle_event(event), pointer_in_footer)) {
                     return;
@@ -3045,8 +3052,10 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
+    const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
 
-    const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
+    const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open ||
+                              frame_editor_active || asset_stack_editor_active;
     other_settings_.set_header_suppressed(hide_headers);
 
     if (!renderer) {
@@ -3953,12 +3962,13 @@ void DevControls::apply_header_suppression() {
     if (map_mode_ui_) {
 
         const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-        const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
+        const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
+        const bool modal_hide = is_modal_blocking_panels() || frame_editor_active || asset_stack_editor_active;
         const bool header_block = modal_hide || shift_block_headers_footers_;
         map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            const bool footer_enabled = !frame_editor_active && !shift_block_headers_footers_;
+            const bool footer_enabled = !frame_editor_active && !asset_stack_editor_active && !shift_block_headers_footers_;
             footer->set_visible(footer_enabled);
             footer->set_input_enabled(footer_enabled);
         }
@@ -3984,7 +3994,8 @@ void DevControls::mark_layout_dirty() {
 
 void DevControls::update_header_and_footer_bounds() {
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-    const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
+    const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
+    const bool modal_hide = is_modal_blocking_panels() || frame_editor_active || asset_stack_editor_active;
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || shift_block_headers_footers_;
@@ -3995,7 +4006,7 @@ void DevControls::update_header_and_footer_bounds() {
     }
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !shift_block_headers_footers_) {
+            if (footer->visible() && !asset_stack_editor_active && !shift_block_headers_footers_) {
                 last_footer_rect_ = footer->rect();
             } else {
                 last_footer_rect_ = SDL_Rect{0, 0, 0, 0};

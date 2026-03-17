@@ -7,9 +7,6 @@
 // - Asset src resolution: default <manifest_dir>/resources/assets/<asset>, or asset_directory override
 // - Animation discovery: subdirectories, else single "default"
 // - Frame enumeration: 0.png, 1.png, ... stop at first missing
-// - Speed multiplier expansion: closest of {0.25, 0.5, 1.0, 2.0, 4.0}
-// - Crop bounds: one asset-wide alpha-union crop bound computed from all frames of all animations
-// - Crop scaling: int(round(bounds * scale_factor))
 // - Rebuild selection: flagged needs_rebuild frames OR missing output file(s) OR force option
 // - Output layout:
 //   <cache_root>/<asset>/animations/<anim>/scale_<pct>/{normal,foreground,background}/{out_idx}.png
@@ -38,6 +35,7 @@
 #include <functional>
 #include <limits>
 #include <mutex>
+#include <numeric>
 #include <queue>
 #include <sstream>
 #include <thread>
@@ -68,8 +66,6 @@ namespace imgcache {
 namespace {
 
 using ordered_json = nlohmann::ordered_json;
-
-static constexpr float kSpeedMultipliers[] = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
 static constexpr float kPi = 3.14159265358979323846f;
 
 static inline float clampf(float v, float lo, float hi) {
@@ -78,38 +74,6 @@ static inline float clampf(float v, float lo, float hi) {
 
 static inline int clampi(int v, int lo, int hi) {
     return std::max(lo, std::min(hi, v));
-}
-
-static inline bool is_finite(float v) {
-    return std::isfinite(static_cast<double>(v)) != 0;
-}
-
-static inline float closest_speed_multiplier(float value) {
-    if (!is_finite(value) || value <= 0.0f) return 1.0f;
-    float best = kSpeedMultipliers[0];
-    float best_diff = std::fabs(best - value);
-    for (size_t i = 1; i < sizeof(kSpeedMultipliers) / sizeof(kSpeedMultipliers[0]); ++i) {
-        float c = kSpeedMultipliers[i];
-        float d = std::fabs(c - value);
-        if (d < best_diff) {
-            best_diff = d;
-            best = c;
-        }
-    }
-    return best;
-}
-
-static inline bool parse_bool_like(const ordered_json& v, bool fallback) {
-    if (v.is_boolean()) return v.get<bool>();
-    if (v.is_number_integer()) return v.get<int>() != 0;
-    if (v.is_number_float()) return std::fabs(v.get<double>()) > 0.0;
-    if (v.is_string()) {
-        std::string s = v.get<std::string>();
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-        if (s == "true" || s == "1" || s == "yes" || s == "on") return true;
-        if (s == "false" || s == "0" || s == "no" || s == "off") return false;
-    }
-    return fallback;
 }
 
 static inline float parse_float_like(const ordered_json& v, float fallback) {
@@ -368,32 +332,6 @@ static std::optional<ImageRGBA> resize_lanczos_rgba(const ImageRGBA& src, int ds
         }
     }
 
-    return out;
-}
-
-static ImageRGBA crop_rgba_margins(const ImageRGBA& src, int left, int top, int right, int bottom) {
-    int crop_left = std::max(0, left);
-    int crop_top = std::max(0, top);
-    int crop_right = std::max(0, right);
-    int crop_bottom = std::max(0, bottom);
-
-    int crop_w = std::max(1, src.w - crop_left - crop_right);
-    int crop_h = std::max(1, src.h - crop_top - crop_bottom);
-
-    const int x0 = clampi(crop_left, 0, src.w - 1);
-    const int y0 = clampi(crop_top, 0, src.h - 1);
-
-    ImageRGBA out;
-    out.w = crop_w;
-    out.h = crop_h;
-    out.pixels.resize(static_cast<size_t>(crop_w) * static_cast<size_t>(crop_h) * 4u);
-
-    for (int y = 0; y < crop_h; ++y) {
-        int sy = clampi(y0 + y, 0, src.h - 1);
-        const std::uint8_t* sp = &src.pixels[(static_cast<size_t>(sy) * src.w + x0) * 4u];
-        std::uint8_t* dp = &out.pixels[(static_cast<size_t>(y) * crop_w) * 4u];
-        std::memcpy(dp, sp, static_cast<size_t>(crop_w) * 4u);
-    }
     return out;
 }
 
@@ -728,26 +666,6 @@ static ImageRGBA apply_color_effects_like_python(const ImageRGBA& src, const Eff
     return out;
 }
 
-// -----------------------------
-// Animation metadata helpers
-// -----------------------------
-
-static inline float read_speed_multiplier(const ordered_json& anim_meta) {
-    if (!anim_meta.is_object()) return 1.0f;
-    float raw = 1.0f;
-    if (anim_meta.contains("speed_multiplier")) raw = parse_float_like(anim_meta["speed_multiplier"], 1.0f);
-    else if (anim_meta.contains("speed_factor")) raw = parse_float_like(anim_meta["speed_factor"], 1.0f);
-    return closest_speed_multiplier(raw);
-}
-
-static inline bool read_asset_crop_frames(const ordered_json& asset_meta) {
-    if (!asset_meta.is_object()) return true;
-    if (asset_meta.contains("crop_frames")) {
-        return parse_bool_like(asset_meta["crop_frames"], true);
-    }
-    return true;
-}
-
 static EffectsParams parse_effects_block(const ordered_json& manifest, const char* block_name) {
     EffectsParams fx;
     // Defaults 0.0 already
@@ -956,31 +874,6 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         const bool asset_meta_changed = !current_meta_hash.empty() && current_meta_hash != cached_meta_hash;
 
         const ordered_json* anim_payloads = AnimationsObject(asset.meta);
-        const bool crop_frames = read_asset_crop_frames(asset.meta);
-        std::optional<CropBounds> asset_crop_bounds;
-        if (crop_frames) {
-            std::vector<fs::path> asset_crop_probe_frames;
-            for (const auto& crop_anim_name : asset.anim_names) {
-                ordered_json crop_anim_meta = ordered_json::object();
-                if (anim_payloads && anim_payloads->is_object() &&
-                    anim_payloads->contains(crop_anim_name) && (*anim_payloads)[crop_anim_name].is_object()) {
-                    crop_anim_meta = (*anim_payloads)[crop_anim_name];
-                }
-
-                const fs::path crop_anim_dir =
-                    ResolveAnimDir(asset.source_dir, crop_anim_name, crop_anim_meta, asset.discovered_anims);
-                auto crop_frame_paths = EnumerateSourceFrames(crop_anim_dir);
-                if (crop_frame_paths.empty()) {
-                    continue;
-                }
-                asset_crop_probe_frames.insert(asset_crop_probe_frames.end(),
-                                               crop_frame_paths.begin(),
-                                               crop_frame_paths.end());
-            }
-            if (!asset_crop_probe_frames.empty()) {
-                asset_crop_bounds = ComputeCropBoundsForFrames(asset_crop_probe_frames, log);
-            }
-        }
 
         for (const auto& anim_name : asset.anim_names) {
             if (!opt.filters.matches_anim(anim_name)) continue;
@@ -1006,8 +899,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             std::vector<int> flagged = queue_anim_entry ? FlaggedFrames(*queue_anim_entry) : std::vector<int>{};
             std::unordered_set<int> flagged_set(flagged.begin(), flagged.end());
 
-            float speed_mult = read_speed_multiplier(anim_meta);
-            std::vector<int> frame_sequence = BuildSpeedFrameSequence(static_cast<int>(frame_paths.size()), speed_mult);
+            std::vector<int> frame_sequence(frame_paths.size());
+            std::iota(frame_sequence.begin(), frame_sequence.end(), 0);
 
             // For each scale, build output groups like python
             for (int pct : scale_pcts) {
@@ -1067,12 +960,6 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     fs::create_directories(bg_dir, ec);
                 }
 
-                std::optional<CropBounds> scaled_crop;
-                if (asset_crop_bounds) {
-                    CropBounds sc = ScaleCropBounds(*asset_crop_bounds, scale_factor);
-                    scaled_crop = sc;
-                }
-
                 for (auto& kv : output_groups) {
                     int src_idx = kv.first;
                     WorkItem w;
@@ -1082,7 +969,6 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     w.out_indices = std::move(kv.second);
                     w.scale_pct = pct;
                     w.scale_factor = scale_factor;
-                    w.crop_bounds_scaled = scaled_crop;
                     w.src_png_path = frame_paths[src_idx];
                     w.out_normal_dir = normal_dir;
                     w.out_foreground_dir = fg_dir;
@@ -1169,11 +1055,6 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 }
 
                 ImageRGBA img = *resized_opt;
-
-                if (w.crop_bounds_scaled) {
-                    const CropBounds& cb = *w.crop_bounds_scaled;
-                    img = crop_rgba_margins(img, cb.left, cb.top, cb.right_margin, cb.bottom_margin);
-                }
 
                 // Apply effects once
                 ImageRGBA fg_img = apply_color_effects_like_python(img, w.fx_foreground, true);
@@ -1393,121 +1274,6 @@ void ImageCacheGenerator::EnsureFrameMetadata(std::vector<FrameMeta>& frames_met
     }
 }
 
-std::vector<int> ImageCacheGenerator::BuildSpeedFrameSequence(int source_frame_count, float speed_multiplier) {
-    if (source_frame_count <= 0) return {};
-    float m = closest_speed_multiplier(speed_multiplier);
-
-    if (m < 1.0f) {
-        int repeat = static_cast<int>(std::lround(1.0f / m));
-        repeat = std::max(1, repeat);
-        std::vector<int> seq;
-        seq.reserve(static_cast<size_t>(source_frame_count) * static_cast<size_t>(repeat));
-        for (int i = 0; i < source_frame_count; ++i) {
-            for (int r = 0; r < repeat; ++r) seq.push_back(i);
-        }
-        return seq;
-    }
-
-    if (m > 1.0f) {
-        int step = static_cast<int>(std::lround(m));
-        step = std::max(1, step);
-        std::vector<int> seq;
-        for (int i = 0; i < source_frame_count; i += step) seq.push_back(i);
-        if (seq.empty()) seq.push_back(0);
-        int last = source_frame_count - 1;
-        if (seq.back() != last) seq.push_back(last);
-        return seq;
-    }
-
-    std::vector<int> seq(source_frame_count);
-    for (int i = 0; i < source_frame_count; ++i) seq[i] = i;
-    return seq;
-}
-
-std::optional<CropBounds> ImageCacheGenerator::ComputeCropBoundsForFrames(const std::vector<fs::path>& src_frames,
-                                                                          ILogger& log) {
-    if (src_frames.empty()) return std::nullopt;
-
-    bool have_union = false;
-    int union_left = 0;
-    int union_top = 0;
-    int union_right_margin = 0;
-    int union_bottom_margin = 0;
-    int first_w = 0;
-    int first_h = 0;
-
-    for (const auto& p : src_frames) {
-        std::string err;
-        auto img_opt = LoadPngRGBA(p, err);
-        if (!img_opt) {
-            log.warn("Failed computing crop bounds for " + p.string() + ": " + err);
-            return std::nullopt;
-        }
-        const ImageRGBA& img = *img_opt;
-        if (first_w <= 0 || first_h <= 0) {
-            first_w = img.w;
-            first_h = img.h;
-        }
-
-        int left = img.w, top = img.h, right = -1, bottom = -1;
-        for (int y = 0; y < img.h; ++y) {
-            for (int x = 0; x < img.w; ++x) {
-                std::uint8_t a = img.pixels[(static_cast<size_t>(y) * img.w + x) * 4u + 3];
-                if (a == 0) continue;
-                if (x < left) left = x;
-                if (y < top) top = y;
-                if (x > right) right = x;
-                if (y > bottom) bottom = y;
-            }
-        }
-
-        if (right < left || bottom < top) {
-            // bbox is empty, skip (python continues)
-            continue;
-        }
-
-        const int right_margin = std::max(0, img.w - (right + 1));
-        const int bottom_margin = std::max(0, img.h - (bottom + 1));
-
-        if (!have_union) {
-            have_union = true;
-            union_left = left;
-            union_top = top;
-            union_right_margin = right_margin;
-            union_bottom_margin = bottom_margin;
-        } else {
-            union_left = std::min(union_left, left);
-            union_top = std::min(union_top, top);
-            union_right_margin = std::min(union_right_margin, right_margin);
-            union_bottom_margin = std::min(union_bottom_margin, bottom_margin);
-        }
-    }
-
-    if (!have_union || first_w <= 0 || first_h <= 0) {
-        return std::nullopt;
-    }
-
-    CropBounds b;
-    b.left = union_left;
-    b.top = union_top;
-    b.right_margin = union_right_margin;
-    b.bottom_margin = union_bottom_margin;
-    b.src_w = first_w;
-    b.src_h = first_h;
-    return b;
-}
-
-CropBounds ImageCacheGenerator::ScaleCropBounds(const CropBounds& b, float scale_factor) {
-    CropBounds out = b;
-    out.left = static_cast<int>(std::lround(static_cast<float>(b.left) * scale_factor));
-    out.top = static_cast<int>(std::lround(static_cast<float>(b.top) * scale_factor));
-    out.right_margin = static_cast<int>(std::lround(static_cast<float>(b.right_margin) * scale_factor));
-    out.bottom_margin = static_cast<int>(std::lround(static_cast<float>(b.bottom_margin) * scale_factor));
-    out.src_w = static_cast<int>(std::lround(static_cast<float>(b.src_w) * scale_factor));
-    out.src_h = static_cast<int>(std::lround(static_cast<float>(b.src_h) * scale_factor));
-    return out;
-}
-
 bool ImageCacheGenerator::OutputMissingAnyVariant(const fs::path& cache_root,
                                                  const std::string& asset_name,
                                                  const std::string& anim_name,
@@ -1582,16 +1348,6 @@ std::optional<ImageRGBA> ImageCacheGenerator::ResizeRGBA(const ImageRGBA& src, i
     // Not used directly in this .cpp because we call the local Lanczos implementation,
     // but keep it implemented for completeness.
     return resize_lanczos_rgba(src, dst_w, dst_h, err);
-}
-
-std::optional<ImageRGBA> ImageCacheGenerator::ApplyCrop(const ImageRGBA& src, const CropBounds& b, std::string& err) {
-    err.clear();
-    if (!src.valid()) {
-        err = "ApplyCrop: invalid src image";
-        return std::nullopt;
-    }
-    ImageRGBA out = crop_rgba_margins(src, b.left, b.top, b.right_margin, b.bottom_margin);
-    return out;
 }
 
 std::optional<ImageRGBA> ImageCacheGenerator::ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, std::string& err) {

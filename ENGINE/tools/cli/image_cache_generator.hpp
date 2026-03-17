@@ -14,7 +14,7 @@
 //   cache_root default: <repo_root>/cache
 //   variant in: normal, foreground, background
 //   pct is integer like 75, 50, 25, 10
-//   out_index is integer frame index of the speed-expanded output sequence
+//   out_index is integer frame index of the source sequence
 //
 // This tool will live next to the existing Python scripts, so it must follow the same
 // manifest discovery and default path resolution rules (repo root search for manifest.json).
@@ -43,19 +43,6 @@ enum class Variant : std::uint8_t {
     Normal = 0,
     Foreground,
     Background
-};
-
-struct CropBounds {
-    // Mirrors Python compute_crop_bounds storage:
-    // margins plus original dimensions.
-    int left = 0;
-    int top = 0;
-    int right_margin = 0;
-    int bottom_margin = 0;
-    int src_w = 0;
-    int src_h = 0;
-
-    bool valid() const { return src_w > 0 && src_h > 0; }
 };
 
 struct FrameMeta {
@@ -158,7 +145,7 @@ struct GeneratorFilters {
     std::unordered_set<std::string> assets;
     std::unordered_set<std::string> animations;
 
-    // If non-empty: only rebuild these source frame indices (pre speed expansion).
+    // If non-empty: only rebuild these source frame indices.
     std::set<int> source_frames;
 
     bool matches_asset(const std::string& a) const {
@@ -207,9 +194,6 @@ struct AnimPayload {
 
     std::vector<FrameMeta> frames_meta;
 
-    float speed_multiplier = 1.0f;
-    std::vector<int> out_to_src; // output index -> source index mapping
-
     EffectsParams fx_foreground;
     EffectsParams fx_background;
 };
@@ -223,8 +207,6 @@ struct WorkItem {
 
     int scale_pct = 100;
     float scale_factor = 1.0f;
-
-    std::optional<CropBounds> crop_bounds_scaled;
 
     fs::path src_png_path;
 
@@ -269,8 +251,6 @@ public:
     // - Manifest parsing (for global effects) and asset iteration
     // - Animation discovery (subdirs vs default)
     // - Source frame enumeration: 0.png..N.png stopping at first missing
-    // - Speed multiplier expansion mapping output frames to source frames
-    // - Crop bounds union behavior when enabled
     // - Rebuild decision: needs_rebuild true OR output missing, plus force option
     // - Write output PNGs into the exact cache structure
     // - Clear rebuild queue flags only after full successful generation
@@ -307,18 +287,6 @@ public:
     // Ensure frames_meta is at least source_frame_count long (default needs_rebuild=false).
     static void EnsureFrameMetadata(std::vector<FrameMeta>& frames_meta, int source_frame_count);
 
-    // Build output mapping for speed multiplier:
-    // returns out_to_src where index is output frame index and value is source frame index.
-    static std::vector<int> BuildSpeedFrameSequence(int source_frame_count, float speed_multiplier);
-
-    // Crop bounds:
-    // Compute a single shared crop bound from all provided frames (asset-wide when crop is enabled).
-    static std::optional<CropBounds> ComputeCropBoundsForFrames(const std::vector<fs::path>& src_frames,
-                                                                ILogger& log);
-
-    // Scale bounds using Python rounding rules.
-    static CropBounds ScaleCropBounds(const CropBounds& b, float scale_factor);
-
     // Decide whether output should be built:
     // - if force_rebuild -> true
     // - else if any expected output file is missing -> true
@@ -336,9 +304,8 @@ public:
     static bool SavePngRGBA(const fs::path& path, const ImageRGBA& img, std::string& err);
 
     static std::optional<ImageRGBA> ResizeRGBA(const ImageRGBA& src, int dst_w, int dst_h, std::string& err);
-    static std::optional<ImageRGBA> ApplyCrop(const ImageRGBA& src, const CropBounds& b, std::string& err);
 
-    // Normal variant is unchanged (just scaled/cropped).
+    // Normal variant is unchanged (just scaled).
     // Foreground/background apply effects.
     static std::optional<ImageRGBA> ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, std::string& err);
 

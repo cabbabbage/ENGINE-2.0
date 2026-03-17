@@ -24,6 +24,8 @@ public:
     bool is_visible() const { return visible_; }
 
     void set_screen_dimensions(int width, int height);
+    void set_panel_bounds_override(const SDL_Rect& bounds);
+    void clear_panel_bounds_override();
     void set_anchor_names(const std::vector<std::string>& names);
     void set_selected_anchor(const std::string& name);
     const std::string& selected_anchor() const { return selected_anchor_name_; }
@@ -51,6 +53,8 @@ private:
     int screen_h_ = 0;
 
     mutable bool layout_dirty_ = true;
+    bool panel_bounds_override_active_ = false;
+    SDL_Rect panel_bounds_override_{0, 0, 0, 0};
     mutable SDL_Rect panel_rect_{12, 56, 300, 420};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
@@ -72,4 +76,3 @@ private:
     RenameCallback on_rename_;
     DeleteCallback on_delete_;
 };
-

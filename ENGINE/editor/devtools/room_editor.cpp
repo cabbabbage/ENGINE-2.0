@@ -18,7 +18,6 @@
 #include "devtools/animation_runtime_refresh.hpp"
 #include "devtools/room_box_payload_utils.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
-#include "devtools/room_editor_drag_solver.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_movement_tools_panel.hpp"
@@ -85,8 +84,51 @@ constexpr float kShiftEdgePanThresholdFraction = 0.008f;
 constexpr float kShiftEdgePanExponent = 1.5f;
 constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr int kMovementPointPickRadiusPx = 16;
-constexpr int kBoxCornerPickRadiusPx = 14;
+constexpr int kBoxCornerPickRadiusPx = 18;
 constexpr int kBoxExtrusionScrollStep = 4;
+constexpr int kAssetEditorTransitionDurationFrames = 6;
+struct BoxCornerPickResult {
+    int box_index = -1;
+    int corner_index = -1;
+    int point_index = -1;
+};
+
+std::optional<BoxCornerPickResult> find_box_corner_at_screen_point(const std::vector<Asset::RuntimeBoxVolume>& volumes,
+                                                                    const WarpedScreenGrid& cam,
+                                                                    SDL_Point screen_point,
+                                                                    int radius_px) {
+    if (volumes.empty()) {
+        return std::nullopt;
+    }
+    const float radius_sq = static_cast<float>(radius_px * radius_px);
+    float best_dist_sq = radius_sq;
+    std::optional<BoxCornerPickResult> best;
+    for (std::size_t box_index = 0; box_index < volumes.size(); ++box_index) {
+        const auto& volume = volumes[box_index];
+        if (!volume.valid) {
+            continue;
+        }
+        for (int point_index = 0; point_index < 8; ++point_index) {
+            const Asset::RuntimeBoxPoint3& world_point = volume.world_points[static_cast<std::size_t>(point_index)];
+            SDL_FPoint projected{};
+            SDL_FPoint world_xy{world_point.x, world_point.y};
+            if (!cam.project_world_point(world_xy, world_point.z, projected)) {
+                projected = cam.map_to_screen_f(world_xy);
+            }
+            const float dx = projected.x - static_cast<float>(screen_point.x);
+            const float dy = projected.y - static_cast<float>(screen_point.y);
+            const float dist_sq = dx * dx + dy * dy;
+            if (dist_sq <= best_dist_sq) {
+                best_dist_sq = dist_sq;
+                best = BoxCornerPickResult{
+                    static_cast<int>(box_index),
+                    point_index % 4,
+                    point_index};
+            }
+        }
+    }
+    return best;
+}
 
 SDL_FPoint sample_quadratic_point(const SDL_FPoint& p0,
                                   const SDL_FPoint& p1,
@@ -145,6 +187,123 @@ SDL_Point grid_point_for_screen(const WarpedScreenGrid& cam, SDL_Point screen_po
         static_cast<int>(std::lround(world_f.x)),
         static_cast<int>(std::lround(world_f.y))
     };
+}
+
+bool solve_texture_point_for_screen_target(
+    int initial_texture_x,
+    int initial_texture_y,
+    const SDL_FPoint& desired_screen_px,
+    const std::function<bool(int, int, SDL_FPoint&)>& sample_screen_for_texture,
+    int& out_texture_x,
+    int& out_texture_y) {
+    if (!sample_screen_for_texture ||
+        !std::isfinite(desired_screen_px.x) ||
+        !std::isfinite(desired_screen_px.y)) {
+        return false;
+    }
+
+    int tex_x = std::max(0, initial_texture_x);
+    int tex_y = std::max(0, initial_texture_y);
+
+    auto distance_sq = [&](int x, int y, float& out_dist_sq) {
+        SDL_FPoint projected{};
+        if (!sample_screen_for_texture(std::max(0, x), std::max(0, y), projected)) {
+            return false;
+        }
+        const float dx = projected.x - desired_screen_px.x;
+        const float dy = projected.y - desired_screen_px.y;
+        out_dist_sq = dx * dx + dy * dy;
+        return std::isfinite(out_dist_sq);
+    };
+
+    constexpr int kSolveIterations = 14;
+    constexpr float kMaxSolveStepPixels = 192.0f;
+    for (int iter = 0; iter < kSolveIterations; ++iter) {
+        SDL_FPoint base{};
+        SDL_FPoint plus_x{};
+        SDL_FPoint plus_y{};
+        if (!sample_screen_for_texture(tex_x, tex_y, base) ||
+            !sample_screen_for_texture(tex_x + 1, tex_y, plus_x) ||
+            !sample_screen_for_texture(tex_x, tex_y + 1, plus_y)) {
+            break;
+        }
+
+        const float j00 = plus_x.x - base.x;
+        const float j01 = plus_y.x - base.x;
+        const float j10 = plus_x.y - base.y;
+        const float j11 = plus_y.y - base.y;
+        const float det = j00 * j11 - j01 * j10;
+        if (std::fabs(det) < 1e-6f) {
+            break;
+        }
+
+        const float rx = desired_screen_px.x - base.x;
+        const float ry = desired_screen_px.y - base.y;
+        float dx = (rx * j11 - ry * j01) / det;
+        float dy = (ry * j00 - rx * j10) / det;
+        if (!std::isfinite(dx) || !std::isfinite(dy)) {
+            break;
+        }
+
+        dx = std::clamp(dx, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+        dy = std::clamp(dy, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+
+        const int next_x = std::max(0, static_cast<int>(std::lround(static_cast<float>(tex_x) + dx)));
+        const int next_y = std::max(0, static_cast<int>(std::lround(static_cast<float>(tex_y) + dy)));
+        if (next_x == tex_x && next_y == tex_y) {
+            break;
+        }
+        tex_x = next_x;
+        tex_y = next_y;
+    }
+
+    int best_x = tex_x;
+    int best_y = tex_y;
+    float best_dist_sq = std::numeric_limits<float>::max();
+    auto consider = [&](int x, int y) {
+        float dist_sq = 0.0f;
+        if (!distance_sq(x, y, dist_sq)) {
+            return;
+        }
+        if (dist_sq < best_dist_sq) {
+            best_dist_sq = dist_sq;
+            best_x = std::max(0, x);
+            best_y = std::max(0, y);
+        }
+    };
+
+    consider(tex_x, tex_y);
+    for (int radius : {10, 6, 3, 1}) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                consider(tex_x + dx, tex_y + dy);
+            }
+        }
+        tex_x = best_x;
+        tex_y = best_y;
+    }
+
+    // Aggressive fallback sweep when local Jacobian solve gets stuck.
+    if (!std::isfinite(best_dist_sq) || best_dist_sq > 9.0f) {
+        for (int radius : {16, 32, 64}) {
+            const int step = std::max(1, radius / 6);
+            for (int dy = -radius; dy <= radius; dy += step) {
+                for (int dx = -radius; dx <= radius; dx += step) {
+                    consider(tex_x + dx, tex_y + dy);
+                }
+            }
+            tex_x = best_x;
+            tex_y = best_y;
+        }
+    }
+
+    if (!std::isfinite(best_dist_sq)) {
+        return false;
+    }
+
+    out_texture_x = best_x;
+    out_texture_y = best_y;
+    return true;
 }
 
 bool build_render_object_projection(const WarpedScreenGrid& cam,
@@ -1286,7 +1445,7 @@ void RoomEditor::update(const Input& input) {
 
     mouse_controls_enabled_last_frame_ = true;
 
-    if (anchor_mode_active() || movement_mode_active()) {
+    if (anchor_mode_active() || movement_mode_active() || hitbox_mode_active() || attack_box_mode_active()) {
         handle_mouse_input(input);
     } else if (!ui_blocked || dragging_) {
         handle_mouse_input(input);
@@ -2582,9 +2741,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
         auto render_box_editor = [&](const std::vector<Asset::RuntimeBoxVolume>& volumes,
                                      int selected_box,
-                                     int selected_corner,
+                                     int selected_point,
                                      int hovered_box,
-                                     int hovered_corner,
+                                     int hovered_point,
                                      const SDL_Color& line_color,
                                      const SDL_Color& point_color) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
@@ -2619,11 +2778,10 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     if (!project_volume_point(volume.world_points[static_cast<std::size_t>(point_index)], screen)) {
                         continue;
                     }
-                    const int corner_index = point_index % 4;
                     const bool selected_corner_point =
-                        box_selected && corner_index == selected_corner;
+                        box_selected && point_index == selected_point;
                     const bool hovered_corner_point =
-                        static_cast<int>(box_index) == hovered_box && corner_index == hovered_corner;
+                        static_cast<int>(box_index) == hovered_box && point_index == hovered_point;
                     SDL_Color draw_color = point_color;
                     if (hovered_corner_point) {
                         draw_color = SDL_Color{170, 230, 255, 255};
@@ -2646,9 +2804,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (hitbox_mode_active() && hitbox_edit_.target_asset) {
             render_box_editor(hitbox_edit_.target_asset->current_hit_box_volumes(),
                               hitbox_edit_.selected_box_index,
-                              hitbox_edit_.selected_corner_index,
+                              hitbox_edit_.selected_point_index,
                               hitbox_edit_.hovered_box_index,
-                              hitbox_edit_.hovered_corner_index,
+                              hitbox_edit_.hovered_point_index,
                               SDL_Color{90, 195, 255, 210},
                               SDL_Color{210, 235, 255, 235});
         }
@@ -2656,9 +2814,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (attack_box_mode_active() && attack_box_edit_.target_asset) {
             render_box_editor(attack_box_edit_.target_asset->current_attack_box_volumes(),
                               attack_box_edit_.selected_box_index,
-                              attack_box_edit_.selected_corner_index,
+                              attack_box_edit_.selected_point_index,
                               attack_box_edit_.hovered_box_index,
-                              attack_box_edit_.hovered_corner_index,
+                              attack_box_edit_.hovered_point_index,
                               SDL_Color{255, 120, 120, 215},
                               SDL_Color{255, 220, 220, 240});
         }
@@ -5339,6 +5497,10 @@ void RoomEditor::ensure_hitbox_editor_widgets() {
         hitbox_tools_panel_->set_on_select([this](int index) {
             hitbox_edit_.selected_box_index = index;
             hitbox_edit_.selected_corner_index = 0;
+            hitbox_edit_.selected_point_index = 0;
+            hitbox_edit_.hovered_box_index = -1;
+            hitbox_edit_.hovered_corner_index = -1;
+            hitbox_edit_.hovered_point_index = -1;
             sync_hitbox_tools_panel();
         });
         hitbox_tools_panel_->set_on_add([this]() {
@@ -5363,6 +5525,10 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
         attack_box_tools_panel_->set_on_select([this](int index) {
             attack_box_edit_.selected_box_index = index;
             attack_box_edit_.selected_corner_index = 0;
+            attack_box_edit_.selected_point_index = 0;
+            attack_box_edit_.hovered_box_index = -1;
+            attack_box_edit_.hovered_corner_index = -1;
+            attack_box_edit_.hovered_point_index = -1;
             sync_attack_box_tools_panel();
         });
         attack_box_tools_panel_->set_on_add([this]() {
@@ -5381,11 +5547,255 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
     }
 }
 
+void RoomEditor::sync_hitbox_tools_panel() {
+    if (!hitbox_tools_panel_) {
+        return;
+    }
+    std::vector<std::string> names;
+    AnimationFrame* frame = hitbox_edit_.target_asset ? hitbox_edit_.target_asset->current_frame : nullptr;
+    if (frame) {
+        const auto& boxes = frame->hit_boxes.boxes;
+        names.reserve(boxes.size());
+        for (std::size_t i = 0; i < boxes.size(); ++i) {
+            const auto& box = boxes[i];
+            if (!box.name.empty()) {
+                names.push_back(box.name);
+            } else {
+                names.push_back("Hit Box " + std::to_string(static_cast<int>(i + 1)));
+            }
+        }
+    }
+
+    hitbox_tools_panel_->set_box_names(names);
+    int selected_box = hitbox_edit_.selected_box_index;
+    if (selected_box >= static_cast<int>(names.size())) {
+        selected_box = static_cast<int>(names.size()) - 1;
+    }
+    if (selected_box < 0) {
+        selected_box = -1;
+    }
+    hitbox_edit_.selected_box_index = selected_box;
+    hitbox_edit_.selected_corner_index = std::clamp(hitbox_edit_.selected_corner_index, 0, 3);
+    const int selected_side = (hitbox_edit_.selected_point_index >= 4) ? 4 : 0;
+    hitbox_edit_.selected_point_index = selected_side + hitbox_edit_.selected_corner_index;
+    hitbox_tools_panel_->set_selection(selected_box, hitbox_edit_.selected_corner_index);
+
+    RoomBoxToolsPanel::DetailValues values;
+    if (frame && selected_box >= 0 && selected_box < static_cast<int>(frame->hit_boxes.boxes.size())) {
+        const auto& box = frame->hit_boxes.boxes[static_cast<std::size_t>(selected_box)];
+        values.name = box.name;
+        const int corner_idx = hitbox_edit_.selected_corner_index;
+        if (corner_idx >= 0 && corner_idx < 4) {
+            values.corner_x = box.corners[static_cast<std::size_t>(corner_idx)].texture_x;
+            values.corner_y = box.corners[static_cast<std::size_t>(corner_idx)].texture_y;
+        }
+        values.extrusion = box.extrusion_amount;
+    }
+    hitbox_tools_panel_->set_detail_values(values);
+}
+
+void RoomEditor::sync_attack_box_tools_panel() {
+    if (!attack_box_tools_panel_) {
+        return;
+    }
+    std::vector<std::string> names;
+    AnimationFrame* frame = attack_box_edit_.target_asset ? attack_box_edit_.target_asset->current_frame : nullptr;
+    if (frame) {
+        const auto& boxes = frame->attack_boxes.boxes;
+        names.reserve(boxes.size());
+        for (std::size_t i = 0; i < boxes.size(); ++i) {
+            const auto& box = boxes[i];
+            if (!box.name.empty()) {
+                names.push_back(box.name);
+            } else {
+                names.push_back("Attack Box " + std::to_string(static_cast<int>(i + 1)));
+            }
+        }
+    }
+
+    attack_box_tools_panel_->set_box_names(names);
+    int selected_box = attack_box_edit_.selected_box_index;
+    if (selected_box >= static_cast<int>(names.size())) {
+        selected_box = static_cast<int>(names.size()) - 1;
+    }
+    if (selected_box < 0) {
+        selected_box = -1;
+    }
+    attack_box_edit_.selected_box_index = selected_box;
+    attack_box_edit_.selected_corner_index = std::clamp(attack_box_edit_.selected_corner_index, 0, 3);
+    const int selected_side = (attack_box_edit_.selected_point_index >= 4) ? 4 : 0;
+    attack_box_edit_.selected_point_index = selected_side + attack_box_edit_.selected_corner_index;
+    attack_box_tools_panel_->set_selection(selected_box, attack_box_edit_.selected_corner_index);
+
+    RoomBoxToolsPanel::DetailValues values;
+    if (frame && selected_box >= 0 && selected_box < static_cast<int>(frame->attack_boxes.boxes.size())) {
+        const auto& box = frame->attack_boxes.boxes[static_cast<std::size_t>(selected_box)];
+        values.name = box.name;
+        const int corner_idx = attack_box_edit_.selected_corner_index;
+        if (corner_idx >= 0 && corner_idx < 4) {
+            values.corner_x = box.corners[static_cast<std::size_t>(corner_idx)].texture_x;
+            values.corner_y = box.corners[static_cast<std::size_t>(corner_idx)].texture_y;
+        }
+        values.extrusion = box.extrusion_amount;
+        values.damage = box.damage_amount;
+    }
+    attack_box_tools_panel_->set_detail_values(values);
+}
+
+bool RoomEditor::add_hitbox_in_current_frame() {
+    return mutate_hitbox_current_frame(
+        [this](std::vector<animation_update::FrameHitBox>& boxes) {
+            std::vector<std::string> names;
+            names.reserve(boxes.size());
+            for (const auto& box : boxes) {
+                names.push_back(box.name);
+            }
+            boxes.push_back(devmode::room_box_payload::make_default_hit_box(names));
+            hitbox_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
+            hitbox_edit_.selected_corner_index = 0;
+            hitbox_edit_.selected_point_index = 0;
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::delete_selected_hitbox_in_current_frame() {
+    const int selected = hitbox_edit_.selected_box_index;
+    if (selected < 0) {
+        return false;
+    }
+    return mutate_hitbox_current_frame(
+        [this, selected](std::vector<animation_update::FrameHitBox>& boxes) {
+            if (selected >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            boxes.erase(boxes.begin() + static_cast<std::size_t>(selected));
+            if (boxes.empty()) {
+                hitbox_edit_.selected_box_index = -1;
+            } else if (selected >= static_cast<int>(boxes.size())) {
+                hitbox_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
+            } else {
+                hitbox_edit_.selected_box_index = selected;
+            }
+            hitbox_edit_.selected_corner_index = 0;
+            hitbox_edit_.selected_point_index = 0;
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::add_attack_box_in_current_frame() {
+    return mutate_attack_box_current_frame(
+        [this](std::vector<animation_update::FrameAttackBox>& boxes) {
+            std::vector<std::string> names;
+            names.reserve(boxes.size());
+            for (const auto& box : boxes) {
+                names.push_back(box.name);
+            }
+            boxes.push_back(devmode::room_box_payload::make_default_attack_box(names));
+            attack_box_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
+            attack_box_edit_.selected_corner_index = 0;
+            attack_box_edit_.selected_point_index = 0;
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::delete_selected_attack_box_in_current_frame() {
+    const int selected = attack_box_edit_.selected_box_index;
+    if (selected < 0) {
+        return false;
+    }
+    return mutate_attack_box_current_frame(
+        [this, selected](std::vector<animation_update::FrameAttackBox>& boxes) {
+            if (selected >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            boxes.erase(boxes.begin() + static_cast<std::size_t>(selected));
+            if (boxes.empty()) {
+                attack_box_edit_.selected_box_index = -1;
+            } else if (selected >= static_cast<int>(boxes.size())) {
+                attack_box_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
+            } else {
+                attack_box_edit_.selected_box_index = selected;
+            }
+            attack_box_edit_.selected_corner_index = 0;
+            attack_box_edit_.selected_point_index = 0;
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values) {
+    const int selected = hitbox_edit_.selected_box_index;
+    if (selected < 0) {
+        return false;
+    }
+    return mutate_hitbox_current_frame(
+        [this, values, selected](std::vector<animation_update::FrameHitBox>& boxes) {
+            if (selected >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            auto& box = boxes[static_cast<std::size_t>(selected)];
+            if (!values.name.empty()) {
+                std::vector<std::string> names;
+                names.reserve(boxes.size());
+                for (const auto& candidate : boxes) {
+                    names.push_back(candidate.name);
+                }
+                const std::string normalized =
+                    devmode::room_box_payload::make_unique_box_name(values.name, names, "hit_box", box.name);
+                if (!normalized.empty()) {
+                    box.name = normalized;
+                }
+            }
+            const int corner_idx = std::clamp(hitbox_edit_.selected_corner_index, 0, 3);
+            box.corners[static_cast<std::size_t>(corner_idx)].texture_x = std::max(0, values.corner_x);
+            box.corners[static_cast<std::size_t>(corner_idx)].texture_y = std::max(0, values.corner_y);
+            box.extrusion_amount = std::max(0, values.extrusion);
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values) {
+    const int selected = attack_box_edit_.selected_box_index;
+    if (selected < 0) {
+        return false;
+    }
+    return mutate_attack_box_current_frame(
+        [this, values, selected](std::vector<animation_update::FrameAttackBox>& boxes) {
+            if (selected >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            auto& box = boxes[static_cast<std::size_t>(selected)];
+            if (!values.name.empty()) {
+                std::vector<std::string> names;
+                names.reserve(boxes.size());
+                for (const auto& candidate : boxes) {
+                    names.push_back(candidate.name);
+                }
+                const std::string normalized =
+                    devmode::room_box_payload::make_unique_box_name(values.name, names, "attack_box", box.name);
+                if (!normalized.empty()) {
+                    box.name = normalized;
+                }
+            }
+            const int corner_idx = std::clamp(attack_box_edit_.selected_corner_index, 0, 3);
+            box.corners[static_cast<std::size_t>(corner_idx)].texture_x = std::max(0, values.corner_x);
+            box.corners[static_cast<std::size_t>(corner_idx)].texture_y = std::max(0, values.corner_y);
+            box.extrusion_amount = std::max(0, values.extrusion);
+            box.damage_amount = values.damage;
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
 bool RoomEditor::should_show_asset_editor_navigation() const {
     if (!enabled_) {
         return false;
     }
-    if (active_modal_ == ActiveModal::AssetInfo && info_ui_ && info_ui_->is_visible()) {
+    if (active_modal_ == ActiveModal::AssetInfo && info_ui_) {
         return true;
     }
     return is_asset_stack_editor_active();
@@ -5414,12 +5824,19 @@ void RoomEditor::begin_asset_editor_transition(AssetEditorSubview from, AssetEdi
     asset_editor_transition_.from = from;
     asset_editor_transition_.to = to;
     asset_editor_transition_.frame = 0;
-    asset_editor_transition_.duration_frames = 12;
+    asset_editor_transition_.duration_frames = kAssetEditorTransitionDurationFrames;
 }
 
 void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool animate) {
-    if (!info_ui_ || !info_ui_->is_visible()) {
+    if (!info_ui_) {
         return;
+    }
+
+    if (subview == AssetEditorSubview::AssetInfo) {
+        if (!info_ui_->is_visible()) {
+            info_ui_->open();
+        }
+        active_modal_ = ActiveModal::AssetInfo;
     }
 
     const AssetEditorSubview previous = asset_editor_subview_;
@@ -5480,7 +5897,8 @@ void RoomEditor::update_asset_editor_transition() {
 }
 
 bool RoomEditor::asset_editor_tab_scope_active() const {
-    return enabled_ && info_ui_ && info_ui_->is_visible() && active_modal_ == ActiveModal::AssetInfo;
+    return enabled_ && info_ui_ &&
+           (active_modal_ == ActiveModal::AssetInfo || is_asset_stack_editor_active());
 }
 
 void RoomEditor::apply_asset_editor_panel_overrides() {
@@ -6026,6 +6444,216 @@ bool RoomEditor::mutate_anchor_current_frame(
     return true;
 }
 
+bool RoomEditor::persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = hitbox_edit_.target_asset;
+    auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
+    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+        return false;
+    }
+
+    const std::size_t frame_count = anim_it->second.frames.size();
+    const std::size_t frame_index = static_cast<std::size_t>(
+        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, static_cast<int>(frame_count)));
+    AnimationFrame* frame = anim_it->second.frames[frame_index];
+    if (!frame) {
+        return false;
+    }
+
+    nlohmann::json payload = target->info->animation_payload(hitbox_edit_.animation_id);
+    if (!devmode::room_box_payload::write_hit_box_frame_to_payload(payload,
+                                                                  frame_count,
+                                                                  frame_index,
+                                                                  frame->hit_boxes.boxes)) {
+        return false;
+    }
+    if (!target->info->upsert_animation(hitbox_edit_.animation_id, payload)) {
+        return false;
+    }
+    target->info->mark_dirty();
+
+    nlohmann::json manifest_payload = target->info->manifest_payload();
+    if (save_coordinator_ && manifest_store_) {
+        save_coordinator_->enqueue_manifest_asset(
+            target->info->name,
+            std::move(manifest_payload),
+            priority,
+            "Hitbox Edit",
+            [this]() {
+                if (assets_) {
+                    assets_->mark_active_assets_dirty();
+                }
+            });
+        if (flush_now) {
+            save_coordinator_->flush_now("room-hitbox-edit-exit");
+            hitbox_edit_.dirty_since_last_flush = false;
+        }
+        return true;
+    }
+
+    if (manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target->info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = std::move(manifest_payload);
+        if (!session.commit()) {
+            return false;
+        }
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
+        hitbox_edit_.dirty_since_last_flush = false;
+        return true;
+    }
+
+    return false;
+}
+
+bool RoomEditor::mutate_hitbox_current_frame(
+    const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
+    devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return false;
+    }
+    auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
+    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return false;
+    }
+    const int frame_index =
+        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
+
+    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+    if (!frame) {
+        return false;
+    }
+
+    std::vector<animation_update::FrameHitBox> updated = frame->hit_boxes.boxes;
+    if (!mutator(updated)) {
+        return false;
+    }
+
+    frame->set_hit_boxes(std::move(updated));
+
+    hitbox_edit_.target_asset->refresh_runtime_box_cache_from_frame();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    hitbox_edit_.dirty_since_last_flush = true;
+    sync_hitbox_tools_panel();
+    persist_hitbox_current_frame(priority, false);
+    return true;
+}
+
+bool RoomEditor::persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = attack_box_edit_.target_asset;
+    auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
+    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+        return false;
+    }
+
+    const std::size_t frame_count = anim_it->second.frames.size();
+    const std::size_t frame_index = static_cast<std::size_t>(
+        devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, static_cast<int>(frame_count)));
+    AnimationFrame* frame = anim_it->second.frames[frame_index];
+    if (!frame) {
+        return false;
+    }
+
+    nlohmann::json payload = target->info->animation_payload(attack_box_edit_.animation_id);
+    if (!devmode::room_box_payload::write_attack_box_frame_to_payload(payload,
+                                                                     frame_count,
+                                                                     frame_index,
+                                                                     frame->attack_boxes.boxes)) {
+        return false;
+    }
+    if (!target->info->upsert_animation(attack_box_edit_.animation_id, payload)) {
+        return false;
+    }
+    target->info->mark_dirty();
+
+    nlohmann::json manifest_payload = target->info->manifest_payload();
+    if (save_coordinator_ && manifest_store_) {
+        save_coordinator_->enqueue_manifest_asset(
+            target->info->name,
+            std::move(manifest_payload),
+            priority,
+            "Attack Box Edit",
+            [this]() {
+                if (assets_) {
+                    assets_->mark_active_assets_dirty();
+                }
+            });
+        if (flush_now) {
+            save_coordinator_->flush_now("room-attackbox-edit-exit");
+            attack_box_edit_.dirty_since_last_flush = false;
+        }
+        return true;
+    }
+
+    if (manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target->info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = std::move(manifest_payload);
+        if (!session.commit()) {
+            return false;
+        }
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
+        attack_box_edit_.dirty_since_last_flush = false;
+        return true;
+    }
+
+    return false;
+}
+
+bool RoomEditor::mutate_attack_box_current_frame(
+    const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
+    devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+    auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
+    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return false;
+    }
+    const int frame_index =
+        devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
+
+    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+    if (!frame) {
+        return false;
+    }
+
+    std::vector<animation_update::FrameAttackBox> updated = frame->attack_boxes.boxes;
+    if (!mutator(updated)) {
+        return false;
+    }
+
+    frame->set_attack_boxes(std::move(updated));
+
+    attack_box_edit_.target_asset->refresh_runtime_box_cache_from_frame();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    attack_box_edit_.dirty_since_last_flush = true;
+    sync_attack_box_tools_panel();
+    persist_attack_box_current_frame(priority, false);
+    return true;
+}
+
 bool RoomEditor::update_anchor_depth(const std::string& anchor_name, int delta) {
     if (anchor_name.empty() || delta == 0) {
         return false;
@@ -6054,37 +6682,12 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
     if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
         return false;
     }
-    const SDL_FPoint screen_f{
+    const SDL_FPoint desired_screen{
         static_cast<float>(screen_point.x),
         static_cast<float>(screen_point.y)};
 
-    WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
-    if (!cam) {
-        if (Assets* owner = target->get_assets()) {
-            cam = &owner->getView();
-        }
-    }
-    if (!cam) {
-        return false;
-    }
-
-    // Anchor drag target: camera ray through the current mouse-ground point.
-    render_projection::WorldPoint3 mouse_ground_point{};
-    render_projection::CameraRay mouse_ray{};
-    if (!cam->build_camera_ray_from_screen(screen_f, mouse_ray) ||
-        !cam->screen_to_world_on_depth_plane(
-            screen_f,
-            static_cast<float>(target->world_z()),
-            mouse_ground_point) ||
-        !mouse_ground_point.valid) {
-        return false;
-    }
-
-    const float desired_world_x = mouse_ground_point.x;
-    const float desired_world_y = mouse_ground_point.y;
-
     return mutate_anchor_current_frame(
-        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
+        [&, desired_screen](std::vector<DisplacedAssetAnchorPoint>& anchors) {
             auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
                 return anchor.name == anchor_name;
             });
@@ -6092,86 +6695,37 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
                 return false;
             }
 
-            int tex_x = it->texture_x;
-            int tex_y = it->texture_y;
-
-            auto sample_flat_world = [&](int x, int y, anchor_points::AnchorWorldPoint3& out_flat_world) {
+            auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = *it;
-                sample_anchor.texture_x = x;
-                sample_anchor.texture_y = y;
+                sample_anchor.texture_x = std::max(0, texture_x);
+                sample_anchor.texture_y = std::max(0, texture_y);
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
                     anchor_points::GridMaterialization::None);
-                out_flat_world = sample.flat_relative_pixel_point;
-                return out_flat_world.valid &&
-                       std::isfinite(out_flat_world.x) &&
-                       std::isfinite(out_flat_world.y);
+                if (sample.resolved.missing) {
+                    return false;
+                }
+                const SDL_FPoint projected = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
+                if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
+                    return false;
+                }
+                out_screen = projected;
+                return true;
             };
 
-            constexpr int kSolveIterations = 8;
-            constexpr float kMaxSolveStepPixels = 256.0f;
-            for (int iter = 0; iter < kSolveIterations; ++iter) {
-                anchor_points::AnchorWorldPoint3 base{};
-                anchor_points::AnchorWorldPoint3 plus_x{};
-                anchor_points::AnchorWorldPoint3 plus_y{};
-                if (!sample_flat_world(tex_x, tex_y, base) ||
-                    !sample_flat_world(tex_x + 1, tex_y, plus_x) ||
-                    !sample_flat_world(tex_x, tex_y + 1, plus_y)) {
-                    break;
-                }
-
-                const float vx_x = plus_x.x - base.x;
-                const float vx_y = plus_x.y - base.y;
-                const float vy_x = plus_y.x - base.x;
-                const float vy_y = plus_y.y - base.y;
-                const float det = vx_x * vy_y - vx_y * vy_x;
-                if (std::fabs(det) < 1e-5f) {
-                    break;
-                }
-
-                const float rx = desired_world_x - base.x;
-                const float ry = desired_world_y - base.y;
-                float dx = (rx * vy_y - ry * vy_x) / det;
-                float dy = (ry * vx_x - rx * vx_y) / det;
-                if (!std::isfinite(dx) || !std::isfinite(dy)) {
-                    break;
-                }
-                dx = std::clamp(dx, -kMaxSolveStepPixels, kMaxSolveStepPixels);
-                dy = std::clamp(dy, -kMaxSolveStepPixels, kMaxSolveStepPixels);
-
-                const int next_x = static_cast<int>(std::lround(static_cast<float>(tex_x) + dx));
-                const int next_y = static_cast<int>(std::lround(static_cast<float>(tex_y) + dy));
-                if (next_x == tex_x && next_y == tex_y) {
-                    break;
-                }
-                tex_x = next_x;
-                tex_y = next_y;
-            }
-
-            int best_x = tex_x;
-            int best_y = tex_y;
-            float best_dist_sq = std::numeric_limits<float>::max();
-            auto consider_candidate = [&](int candidate_x, int candidate_y) {
-                anchor_points::AnchorWorldPoint3 flat_world{};
-                if (!sample_flat_world(candidate_x, candidate_y, flat_world)) {
-                    return;
-                }
-                const float diff_x = flat_world.x - desired_world_x;
-                const float diff_y = flat_world.y - desired_world_y;
-                const float dist_sq = diff_x * diff_x + diff_y * diff_y;
-                if (dist_sq < best_dist_sq) {
-                    best_dist_sq = dist_sq;
-                    best_x = candidate_x;
-                    best_y = candidate_y;
-                }
-            };
-
-            constexpr int kLocalSearchRadius = 3;
-            for (int dy = -kLocalSearchRadius; dy <= kLocalSearchRadius; ++dy) {
-                for (int dx = -kLocalSearchRadius; dx <= kLocalSearchRadius; ++dx) {
-                    consider_candidate(tex_x + dx, tex_y + dy);
-                }
+            const int base_x = it->texture_x;
+            const int base_y = it->texture_y;
+            int best_x = base_x;
+            int best_y = base_y;
+            if (!solve_texture_point_for_screen_target(
+                    base_x,
+                    base_y,
+                    desired_screen,
+                    sample_screen,
+                    best_x,
+                    best_y)) {
+                return false;
             }
 
             if (it->texture_x == best_x && it->texture_y == best_y) {
@@ -6290,13 +6844,15 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
     const bool left_down = input_->isDown(Input::LEFT);
     const bool left_pressed = input_->wasPressed(Input::LEFT);
     const bool left_released = input_->wasReleased(Input::LEFT);
+    const bool pointer_blocked = is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y);
 
-    if (left_pressed && !is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y)) {
+    if (left_pressed && !pointer_blocked) {
         const int hit = find_anchor_handle_at_point(screen_pt, kAnchorHandlePickRadiusPx);
         if (hit >= 0 && static_cast<std::size_t>(hit) < anchor_edit_.handles.size()) {
             anchor_edit_.selected_anchor_name = anchor_edit_.handles[static_cast<std::size_t>(hit)].name;
             anchor_edit_.dragging_anchor_name = anchor_edit_.selected_anchor_name;
             anchor_edit_.dragging = true;
+            drag_anchor_to_screen(anchor_edit_.dragging_anchor_name, screen_pt);
             sync_anchor_tools_panel();
         } else {
             anchor_edit_.selected_anchor_name.clear();
@@ -6307,9 +6863,7 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
     }
 
     if (anchor_edit_.dragging && left_down) {
-        if (!is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y)) {
-            drag_anchor_to_screen(anchor_edit_.dragging_anchor_name, screen_pt);
-        }
+        drag_anchor_to_screen(anchor_edit_.dragging_anchor_name, screen_pt);
     }
 
     if (left_released) {
@@ -6323,17 +6877,19 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
         }
     }
 
-    if (!anchor_edit_.dragging) {
+    if (!anchor_edit_.dragging && !pointer_blocked) {
         const int hover = find_anchor_handle_at_point(screen_pt, kAnchorHandlePickRadiusPx);
         if (hover >= 0 && static_cast<std::size_t>(hover) < anchor_edit_.handles.size()) {
             anchor_edit_.hovered_anchor_name = anchor_edit_.handles[static_cast<std::size_t>(hover)].name;
         } else {
             anchor_edit_.hovered_anchor_name.clear();
         }
+    } else if (pointer_blocked) {
+        anchor_edit_.hovered_anchor_name.clear();
     }
 
     const int scroll_y = input.getScrollY();
-    if (scroll_y != 0 && !is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y)) {
+    if (scroll_y != 0 && !pointer_blocked) {
         ensure_anchor_selection_valid();
         if (!anchor_edit_.selected_anchor_name.empty() &&
             update_anchor_depth(anchor_edit_.selected_anchor_name, scroll_y) &&
@@ -6470,6 +7026,56 @@ int RoomEditor::resolve_movement_mode_frame_index() const {
         }
     }
     return devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index,
+                                                 static_cast<int>(anim_it->second.frames.size()));
+}
+
+std::vector<std::string> RoomEditor::hitbox_mode_animation_names() const {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return {};
+    }
+    return resolve_file_sourced_animation_selection_for_target(hitbox_edit_.target_asset,
+                                                               hitbox_edit_.animation_id).navigable_animation_ids;
+}
+
+std::vector<std::string> RoomEditor::attack_box_mode_animation_names() const {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return {};
+    }
+    return resolve_file_sourced_animation_selection_for_target(attack_box_edit_.target_asset,
+                                                               attack_box_edit_.animation_id).navigable_animation_ids;
+}
+
+int RoomEditor::resolve_hitbox_mode_frame_index() const {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return 0;
+    }
+    auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
+    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return 0;
+    }
+    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
+        if (anim_it->second.frames[i] == hitbox_edit_.target_asset->current_frame) {
+            return static_cast<int>(i);
+        }
+    }
+    return devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index,
+                                                 static_cast<int>(anim_it->second.frames.size()));
+}
+
+int RoomEditor::resolve_attack_box_mode_frame_index() const {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return 0;
+    }
+    auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
+    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return 0;
+    }
+    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
+        if (anim_it->second.frames[i] == attack_box_edit_.target_asset->current_frame) {
+            return static_cast<int>(i);
+        }
+    }
+    return devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index,
                                                  static_cast<int>(anim_it->second.frames.size()));
 }
 
@@ -6867,6 +7473,82 @@ bool RoomEditor::apply_movement_animation_and_frame(const std::string& animation
     return true;
 }
 
+bool RoomEditor::apply_hitbox_animation_and_frame(const std::string& animation_id, int frame_index) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = hitbox_edit_.target_asset;
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, animation_id);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto anim_it = target->info->animations.find(selection.resolved_animation_id);
+    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+        return false;
+    }
+
+    const int resolved_index =
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+
+    target->set_current_animation(selection.resolved_animation_id);
+    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    if (!frame) {
+        return false;
+    }
+
+    target->current_frame = frame;
+    target->set_frame_progress(0.0f);
+    target->static_frame = true;
+    target->refresh_frame_texture_bindings();
+    target->refresh_runtime_box_cache_from_frame();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    hitbox_edit_.animation_id = selection.resolved_animation_id;
+    hitbox_edit_.frame_index = resolved_index;
+    return true;
+}
+
+bool RoomEditor::apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = attack_box_edit_.target_asset;
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, animation_id);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto anim_it = target->info->animations.find(selection.resolved_animation_id);
+    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+        return false;
+    }
+
+    const int resolved_index =
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+
+    target->set_current_animation(selection.resolved_animation_id);
+    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    if (!frame) {
+        return false;
+    }
+
+    target->current_frame = frame;
+    target->set_frame_progress(0.0f);
+    target->static_frame = true;
+    target->refresh_frame_texture_bindings();
+    target->refresh_runtime_box_cache_from_frame();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    attack_box_edit_.animation_id = selection.resolved_animation_id;
+    attack_box_edit_.frame_index = resolved_index;
+    return true;
+}
+
 void RoomEditor::navigate_movement_animation(int delta) {
     if (!movement_mode_active() || delta == 0) {
         return;
@@ -6929,6 +7611,110 @@ void RoomEditor::navigate_movement_frame(int delta) {
     apply_movement_animation_and_frame(movement_edit_.animation_id, next_frame);
 }
 
+void RoomEditor::navigate_hitbox_animation(int delta) {
+    if (!hitbox_mode_active() || delta == 0 || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return;
+    }
+    if (hitbox_edit_.dirty_since_last_flush) {
+        persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority::Debounced, false);
+    }
+
+    std::vector<std::string> names = hitbox_mode_animation_names();
+    if (names.empty()) {
+        return;
+    }
+    int index = 0;
+    auto found = std::find(names.begin(), names.end(), hitbox_edit_.animation_id);
+    if (found != names.end()) {
+        index = static_cast<int>(std::distance(names.begin(), found));
+    }
+    const int next_index = devmode::room_anchor_mode::wrap_index(index + delta, static_cast<int>(names.size()));
+    const std::string& next_animation = names[static_cast<std::size_t>(next_index)];
+
+    int next_frame_index = hitbox_edit_.frame_index;
+    auto anim_it = hitbox_edit_.target_asset->info->animations.find(next_animation);
+    if (anim_it != hitbox_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+        next_frame_index =
+            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frames.size()));
+    } else {
+        next_frame_index = 0;
+    }
+
+    if (apply_hitbox_animation_and_frame(next_animation, next_frame_index)) {
+        sync_hitbox_tools_panel();
+    }
+}
+
+void RoomEditor::navigate_hitbox_frame(int delta) {
+    if (!hitbox_mode_active() || delta == 0 || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return;
+    }
+    if (hitbox_edit_.dirty_since_last_flush) {
+        persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority::Debounced, false);
+    }
+    auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
+    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return;
+    }
+    const int next_frame =
+        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index + delta, static_cast<int>(anim_it->second.frames.size()));
+    if (apply_hitbox_animation_and_frame(hitbox_edit_.animation_id, next_frame)) {
+        sync_hitbox_tools_panel();
+    }
+}
+
+void RoomEditor::navigate_attack_box_animation(int delta) {
+    if (!attack_box_mode_active() || delta == 0 || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return;
+    }
+    if (attack_box_edit_.dirty_since_last_flush) {
+        persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority::Debounced, false);
+    }
+    std::vector<std::string> names = attack_box_mode_animation_names();
+    if (names.empty()) {
+        return;
+    }
+    int index = 0;
+    auto found = std::find(names.begin(), names.end(), attack_box_edit_.animation_id);
+    if (found != names.end()) {
+        index = static_cast<int>(std::distance(names.begin(), found));
+    }
+    const int next_index = devmode::room_anchor_mode::wrap_index(index + delta, static_cast<int>(names.size()));
+    const std::string& next_animation = names[static_cast<std::size_t>(next_index)];
+
+    int next_frame_index = attack_box_edit_.frame_index;
+    auto anim_it = attack_box_edit_.target_asset->info->animations.find(next_animation);
+    if (anim_it != attack_box_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+        next_frame_index =
+            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frames.size()));
+    } else {
+        next_frame_index = 0;
+    }
+
+    if (apply_attack_box_animation_and_frame(next_animation, next_frame_index)) {
+        sync_attack_box_tools_panel();
+    }
+}
+
+void RoomEditor::navigate_attack_box_frame(int delta) {
+    if (!attack_box_mode_active() || delta == 0 || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return;
+    }
+    if (attack_box_edit_.dirty_since_last_flush) {
+        persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority::Debounced, false);
+    }
+    auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
+    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+        return;
+    }
+    const int next_frame =
+        devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index + delta,
+                                              static_cast<int>(anim_it->second.frames.size()));
+    if (apply_attack_box_animation_and_frame(attack_box_edit_.animation_id, next_frame)) {
+        sync_attack_box_tools_panel();
+    }
+}
+
 bool RoomEditor::enter_movement_edit_mode() {
     if (movement_mode_active()) {
         return true;
@@ -6977,6 +7763,76 @@ bool RoomEditor::enter_movement_edit_mode() {
     return true;
 }
 
+bool RoomEditor::enter_hitbox_edit_mode() {
+    if (hitbox_mode_active()) {
+        return true;
+    }
+
+    Asset* target = selected_anchor_mode_asset();
+    if (!target || !target->info) {
+        return false;
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+
+    hitbox_edit_ = BoxEditState{};
+    hitbox_edit_.target_asset = target;
+    hitbox_edit_.had_static_frame_before = true;
+    hitbox_edit_.static_frame_before = target->static_frame;
+
+    editor_mode_ = EditorMode::HitBoxEdit;
+    hitbox_edit_.animation_id = selection.resolved_animation_id;
+    hitbox_edit_.frame_index = 0;
+
+    if (!apply_hitbox_animation_and_frame(hitbox_edit_.animation_id, resolve_hitbox_mode_frame_index())) {
+        editor_mode_ = EditorMode::Normal;
+        hitbox_edit_ = BoxEditState{};
+        return false;
+    }
+
+    sync_hitbox_tools_panel();
+    update_asset_editor_layout();
+    return true;
+}
+
+bool RoomEditor::enter_attack_box_edit_mode() {
+    if (attack_box_mode_active()) {
+        return true;
+    }
+
+    Asset* target = selected_anchor_mode_asset();
+    if (!target || !target->info) {
+        return false;
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+
+    attack_box_edit_ = BoxEditState{};
+    attack_box_edit_.target_asset = target;
+    attack_box_edit_.had_static_frame_before = true;
+    attack_box_edit_.static_frame_before = target->static_frame;
+
+    editor_mode_ = EditorMode::AttackBoxEdit;
+    attack_box_edit_.animation_id = selection.resolved_animation_id;
+    attack_box_edit_.frame_index = 0;
+
+    if (!apply_attack_box_animation_and_frame(attack_box_edit_.animation_id, resolve_attack_box_mode_frame_index())) {
+        editor_mode_ = EditorMode::Normal;
+        attack_box_edit_ = BoxEditState{};
+        return false;
+    }
+
+    sync_attack_box_tools_panel();
+    update_asset_editor_layout();
+    return true;
+}
+
 void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
     if (!movement_mode_active()) {
         return;
@@ -6992,6 +7848,44 @@ void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
 
     editor_mode_ = EditorMode::Normal;
     movement_edit_ = MovementEditState{};
+    update_asset_editor_layout();
+}
+
+void RoomEditor::exit_hitbox_edit_mode(bool persist_changes) {
+    if (!hitbox_mode_active()) {
+        return;
+    }
+
+    if (persist_changes && hitbox_edit_.dirty_since_last_flush) {
+        persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority::Immediate, true);
+    }
+
+    if (hitbox_edit_.target_asset && hitbox_edit_.had_static_frame_before) {
+        hitbox_edit_.target_asset->static_frame = hitbox_edit_.static_frame_before;
+    }
+
+    editor_mode_ = EditorMode::Normal;
+    hitbox_edit_ = BoxEditState{};
+    sync_hitbox_tools_panel();
+    update_asset_editor_layout();
+}
+
+void RoomEditor::exit_attack_box_edit_mode(bool persist_changes) {
+    if (!attack_box_mode_active()) {
+        return;
+    }
+
+    if (persist_changes && attack_box_edit_.dirty_since_last_flush) {
+        persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority::Immediate, true);
+    }
+
+    if (attack_box_edit_.target_asset && attack_box_edit_.had_static_frame_before) {
+        attack_box_edit_.target_asset->static_frame = attack_box_edit_.static_frame_before;
+    }
+
+    editor_mode_ = EditorMode::Normal;
+    attack_box_edit_ = BoxEditState{};
+    sync_attack_box_tools_panel();
     update_asset_editor_layout();
 }
 
@@ -7092,6 +7986,404 @@ bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
     return false;
 }
 
+int RoomEditor::find_hitbox_corner_at_screen_point(SDL_Point screen_point,
+                                                   int radius_px,
+                                                   int& out_corner_index,
+                                                   int& out_point_index) const {
+    if (!hitbox_edit_.target_asset || !assets_) {
+        out_corner_index = 0;
+        out_point_index = 0;
+        return -1;
+    }
+    const WarpedScreenGrid& cam = assets_->getView();
+    const auto hit = find_box_corner_at_screen_point(hitbox_edit_.target_asset->current_hit_box_volumes(),
+                                                     cam,
+                                                     screen_point,
+                                                     radius_px);
+    if (!hit) {
+        out_corner_index = 0;
+        out_point_index = 0;
+        return -1;
+    }
+    out_corner_index = hit->corner_index;
+    out_point_index = hit->point_index;
+    return hit->box_index;
+}
+
+int RoomEditor::find_attack_box_corner_at_screen_point(SDL_Point screen_point,
+                                                       int radius_px,
+                                                       int& out_corner_index,
+                                                       int& out_point_index) const {
+    if (!attack_box_edit_.target_asset || !assets_) {
+        out_corner_index = 0;
+        out_point_index = 0;
+        return -1;
+    }
+    const WarpedScreenGrid& cam = assets_->getView();
+    const auto hit = find_box_corner_at_screen_point(attack_box_edit_.target_asset->current_attack_box_volumes(),
+                                                     cam,
+                                                     screen_point,
+                                                     radius_px);
+    if (!hit) {
+        out_corner_index = 0;
+        out_point_index = 0;
+        return -1;
+    }
+    out_corner_index = hit->corner_index;
+    out_point_index = hit->point_index;
+    return hit->box_index;
+}
+
+bool RoomEditor::drag_hitbox_corner_to_screen(int box_index, int point_index, SDL_Point screen_point) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !assets_) {
+        return false;
+    }
+    Asset* target = hitbox_edit_.target_asset;
+    WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+    if (!cam) {
+        if (Assets* owner = target->get_assets()) {
+            cam = &owner->getView();
+        }
+    }
+    if (!cam) {
+        return false;
+    }
+    const SDL_FPoint desired_screen{
+        static_cast<float>(screen_point.x),
+        static_cast<float>(screen_point.y)};
+    return mutate_hitbox_current_frame(
+        [this, target, cam, desired_screen, box_index, point_index](std::vector<animation_update::FrameHitBox>& boxes) {
+            if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            auto& box = boxes[static_cast<std::size_t>(box_index)];
+            const int clamped_point = std::clamp(point_index, 0, 7);
+            const int clamped_corner = clamped_point % 4;
+            int base_x = box.corners[static_cast<std::size_t>(clamped_corner)].texture_x;
+            int base_y = box.corners[static_cast<std::size_t>(clamped_corner)].texture_y;
+            DisplacedAssetAnchorPoint anchor_template{};
+            anchor_template.name = "__box_corner";
+            anchor_template.texture_x = base_x;
+            anchor_template.texture_y = base_y;
+            anchor_template.depth_offset = 0;
+
+            const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
+            auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
+                DisplacedAssetAnchorPoint sample_anchor = anchor_template;
+                sample_anchor.texture_x = std::max(0, texture_x);
+                sample_anchor.texture_y = std::max(0, texture_y);
+                const auto sample = anchor_points::resolve_frame_anchor_sample(
+                    *target,
+                    sample_anchor,
+                    anchor_points::GridMaterialization::None);
+                if (sample.resolved.missing || !sample.flat_relative_pixel_point.valid) {
+                    return false;
+                }
+
+                anchor_points::AnchorWorldPoint3 near_point{};
+                anchor_points::AnchorWorldPoint3 far_point{};
+                if (!anchor_points::build_symmetric_camera_ray_extrusion(
+                        *target,
+                        sample.flat_relative_pixel_point,
+                        extrusion,
+                        near_point,
+                        far_point)) {
+                    return false;
+                }
+                const anchor_points::AnchorWorldPoint3 selected = (clamped_point < 4) ? near_point : far_point;
+                if (!selected.valid || !std::isfinite(selected.x) || !std::isfinite(selected.y) || !std::isfinite(selected.z)) {
+                    return false;
+                }
+
+                render_projection::WorldPoint3 world_point{
+                    selected.x,
+                    selected.y,
+                    selected.z,
+                    true};
+                SDL_FPoint projected{};
+                if (render_projection::project_world_to_screen(*cam, world_point, projected) &&
+                    std::isfinite(projected.x) &&
+                    std::isfinite(projected.y)) {
+                    out_screen = projected;
+                    return true;
+                }
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
+                    return false;
+                }
+                out_screen = projected;
+                return true;
+            };
+
+            int solved_x = base_x;
+            int solved_y = base_y;
+            if (!solve_texture_point_for_screen_target(
+                    base_x,
+                    base_y,
+                    desired_screen,
+                    sample_screen,
+                    solved_x,
+                    solved_y)) {
+                return false;
+            }
+
+            box.corners[static_cast<std::size_t>(clamped_corner)].texture_x = std::max(0, solved_x);
+            box.corners[static_cast<std::size_t>(clamped_corner)].texture_y = std::max(0, solved_y);
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !assets_) {
+        return false;
+    }
+    Asset* target = attack_box_edit_.target_asset;
+    WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+    if (!cam) {
+        if (Assets* owner = target->get_assets()) {
+            cam = &owner->getView();
+        }
+    }
+    if (!cam) {
+        return false;
+    }
+    const SDL_FPoint desired_screen{
+        static_cast<float>(screen_point.x),
+        static_cast<float>(screen_point.y)};
+    return mutate_attack_box_current_frame(
+        [this, target, cam, desired_screen, box_index, point_index](std::vector<animation_update::FrameAttackBox>& boxes) {
+            if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            auto& box = boxes[static_cast<std::size_t>(box_index)];
+            const int clamped_point = std::clamp(point_index, 0, 7);
+            const int clamped_corner = clamped_point % 4;
+            int base_x = box.corners[static_cast<std::size_t>(clamped_corner)].texture_x;
+            int base_y = box.corners[static_cast<std::size_t>(clamped_corner)].texture_y;
+            DisplacedAssetAnchorPoint anchor_template{};
+            anchor_template.name = "__box_corner";
+            anchor_template.texture_x = base_x;
+            anchor_template.texture_y = base_y;
+            anchor_template.depth_offset = 0;
+
+            const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
+            auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
+                DisplacedAssetAnchorPoint sample_anchor = anchor_template;
+                sample_anchor.texture_x = std::max(0, texture_x);
+                sample_anchor.texture_y = std::max(0, texture_y);
+                const auto sample = anchor_points::resolve_frame_anchor_sample(
+                    *target,
+                    sample_anchor,
+                    anchor_points::GridMaterialization::None);
+                if (sample.resolved.missing || !sample.flat_relative_pixel_point.valid) {
+                    return false;
+                }
+
+                anchor_points::AnchorWorldPoint3 near_point{};
+                anchor_points::AnchorWorldPoint3 far_point{};
+                if (!anchor_points::build_symmetric_camera_ray_extrusion(
+                        *target,
+                        sample.flat_relative_pixel_point,
+                        extrusion,
+                        near_point,
+                        far_point)) {
+                    return false;
+                }
+                const anchor_points::AnchorWorldPoint3 selected = (clamped_point < 4) ? near_point : far_point;
+                if (!selected.valid || !std::isfinite(selected.x) || !std::isfinite(selected.y) || !std::isfinite(selected.z)) {
+                    return false;
+                }
+
+                render_projection::WorldPoint3 world_point{
+                    selected.x,
+                    selected.y,
+                    selected.z,
+                    true};
+                SDL_FPoint projected{};
+                if (render_projection::project_world_to_screen(*cam, world_point, projected) &&
+                    std::isfinite(projected.x) &&
+                    std::isfinite(projected.y)) {
+                    out_screen = projected;
+                    return true;
+                }
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
+                    return false;
+                }
+                out_screen = projected;
+                return true;
+            };
+
+            int solved_x = base_x;
+            int solved_y = base_y;
+            if (!solve_texture_point_for_screen_target(
+                    base_x,
+                    base_y,
+                    desired_screen,
+                    sample_screen,
+                    solved_x,
+                    solved_y)) {
+                return false;
+            }
+
+            box.corners[static_cast<std::size_t>(clamped_corner)].texture_x = std::max(0, solved_x);
+            box.corners[static_cast<std::size_t>(clamped_corner)].texture_y = std::max(0, solved_y);
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !assets_ || !input_) {
+        return false;
+    }
+    const SDL_Point screen_pt{input_->getX(), input_->getY()};
+    const bool left_down = input_->isDown(Input::LEFT);
+    const bool left_pressed = input_->wasPressed(Input::LEFT);
+    const bool left_released = input_->wasReleased(Input::LEFT);
+    const bool pointer_blocked = is_hitbox_ui_blocking_point(screen_pt.x, screen_pt.y);
+
+    if (left_pressed && !pointer_blocked) {
+        int corner_idx = -1;
+        int point_idx = -1;
+        const int box_idx = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
+        hitbox_edit_.selected_box_index = box_idx;
+        if (box_idx >= 0) {
+            hitbox_edit_.selected_corner_index = std::clamp(corner_idx, 0, 3);
+            hitbox_edit_.selected_point_index = std::clamp(point_idx, 0, 7);
+            hitbox_edit_.dragging_corner = true;
+            drag_hitbox_corner_to_screen(box_idx, hitbox_edit_.selected_point_index, screen_pt);
+        } else {
+            hitbox_edit_.selected_corner_index = 0;
+            hitbox_edit_.selected_point_index = 0;
+            hitbox_edit_.dragging_corner = false;
+        }
+        sync_hitbox_tools_panel();
+    }
+
+    if (hitbox_edit_.dragging_corner && left_down) {
+        drag_hitbox_corner_to_screen(hitbox_edit_.selected_box_index, hitbox_edit_.selected_point_index, screen_pt);
+    }
+
+    if (left_released) {
+        hitbox_edit_.dragging_corner = false;
+    }
+
+    if (!hitbox_edit_.dragging_corner && !pointer_blocked) {
+        int hover_corner = -1;
+        int hover_point = -1;
+        const int hover_box = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+        hitbox_edit_.hovered_box_index = hover_box;
+        hitbox_edit_.hovered_corner_index = hover_corner;
+        hitbox_edit_.hovered_point_index = hover_point;
+    } else if (pointer_blocked) {
+        hitbox_edit_.hovered_box_index = -1;
+        hitbox_edit_.hovered_corner_index = -1;
+        hitbox_edit_.hovered_point_index = -1;
+    }
+
+    const int scroll_y = input_->getScrollY();
+    const int selected_box = hitbox_edit_.selected_box_index;
+    if (scroll_y != 0 && selected_box >= 0 && !pointer_blocked) {
+        const int clamped_selected = selected_box;
+        if (mutate_hitbox_current_frame(
+                [this, scroll_y, clamped_selected](std::vector<animation_update::FrameHitBox>& boxes) {
+                    if (clamped_selected >= static_cast<int>(boxes.size())) {
+                        return false;
+                    }
+                    auto& box = boxes[static_cast<std::size_t>(clamped_selected)];
+                    const int delta = scroll_y * kBoxExtrusionScrollStep;
+                    const int next_value = std::max(0, box.extrusion_amount + delta);
+                    if (next_value == box.extrusion_amount) {
+                        return false;
+                    }
+                    box.extrusion_amount = next_value;
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced)) {
+            input_->consumeScroll();
+        }
+    }
+
+    return true;
+}
+
+bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !assets_ || !input_) {
+        return false;
+    }
+    const SDL_Point screen_pt{input_->getX(), input_->getY()};
+    const bool left_down = input_->isDown(Input::LEFT);
+    const bool left_pressed = input_->wasPressed(Input::LEFT);
+    const bool left_released = input_->wasReleased(Input::LEFT);
+    const bool pointer_blocked = is_attack_box_ui_blocking_point(screen_pt.x, screen_pt.y);
+
+    if (left_pressed && !pointer_blocked) {
+        int corner_idx = -1;
+        int point_idx = -1;
+        const int box_idx = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
+        attack_box_edit_.selected_box_index = box_idx;
+        if (box_idx >= 0) {
+            attack_box_edit_.selected_corner_index = std::clamp(corner_idx, 0, 3);
+            attack_box_edit_.selected_point_index = std::clamp(point_idx, 0, 7);
+            attack_box_edit_.dragging_corner = true;
+            drag_attack_box_corner_to_screen(box_idx, attack_box_edit_.selected_point_index, screen_pt);
+        } else {
+            attack_box_edit_.selected_corner_index = 0;
+            attack_box_edit_.selected_point_index = 0;
+            attack_box_edit_.dragging_corner = false;
+        }
+        sync_attack_box_tools_panel();
+    }
+
+    if (attack_box_edit_.dragging_corner && left_down) {
+        drag_attack_box_corner_to_screen(attack_box_edit_.selected_box_index, attack_box_edit_.selected_point_index, screen_pt);
+    }
+
+    if (left_released) {
+        attack_box_edit_.dragging_corner = false;
+    }
+
+    if (!attack_box_edit_.dragging_corner && !pointer_blocked) {
+        int hover_corner = -1;
+        int hover_point = -1;
+        const int hover_box = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+        attack_box_edit_.hovered_box_index = hover_box;
+        attack_box_edit_.hovered_corner_index = hover_corner;
+        attack_box_edit_.hovered_point_index = hover_point;
+    } else if (pointer_blocked) {
+        attack_box_edit_.hovered_box_index = -1;
+        attack_box_edit_.hovered_corner_index = -1;
+        attack_box_edit_.hovered_point_index = -1;
+    }
+
+    const int scroll_y = input_->getScrollY();
+    const int selected_box = attack_box_edit_.selected_box_index;
+    if (scroll_y != 0 && selected_box >= 0 && !pointer_blocked) {
+        const int clamped_selected = selected_box;
+        if (mutate_attack_box_current_frame(
+                [this, scroll_y, clamped_selected](std::vector<animation_update::FrameAttackBox>& boxes) {
+                    if (clamped_selected >= static_cast<int>(boxes.size())) {
+                        return false;
+                    }
+                    auto& box = boxes[static_cast<std::size_t>(clamped_selected)];
+                    const int delta = scroll_y * kBoxExtrusionScrollStep;
+                    const int next_value = std::max(0, box.extrusion_amount + delta);
+                    if (next_value == box.extrusion_amount) {
+                        return false;
+                    }
+                    box.extrusion_amount = next_value;
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced)) {
+            input_->consumeScroll();
+        }
+    }
+
+    return true;
+}
+
 bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info || !assets_) {
         return false;
@@ -7185,6 +8477,62 @@ void RoomEditor::validate_anchor_edit_target() {
     }
     if (selection.resolved_animation_id != anchor_edit_.animation_id) {
         apply_anchor_animation_and_frame(selection.resolved_animation_id, 0);
+    }
+}
+
+void RoomEditor::validate_hitbox_edit_target() {
+    if (!hitbox_mode_active()) {
+        return;
+    }
+
+    Asset* target = hitbox_edit_.target_asset;
+    if (!enabled_ || !target || !target->info || target->dead) {
+        exit_hitbox_edit_mode(true);
+        return;
+    }
+    if (selected_assets_.empty() || selected_assets_.front() != target) {
+        selected_assets_.clear();
+        selected_assets_.push_back(target);
+        hovered_asset_ = target;
+        sync_spawn_group_panel_with_selection();
+        mark_highlight_dirty();
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, hitbox_edit_.animation_id);
+    if (!selection.has_selection()) {
+        exit_hitbox_edit_mode(true);
+        return;
+    }
+    if (selection.resolved_animation_id != hitbox_edit_.animation_id) {
+        apply_hitbox_animation_and_frame(selection.resolved_animation_id, 0);
+    }
+}
+
+void RoomEditor::validate_attack_box_edit_target() {
+    if (!attack_box_mode_active()) {
+        return;
+    }
+
+    Asset* target = attack_box_edit_.target_asset;
+    if (!enabled_ || !target || !target->info || target->dead) {
+        exit_attack_box_edit_mode(true);
+        return;
+    }
+    if (selected_assets_.empty() || selected_assets_.front() != target) {
+        selected_assets_.clear();
+        selected_assets_.push_back(target);
+        hovered_asset_ = target;
+        sync_spawn_group_panel_with_selection();
+        mark_highlight_dirty();
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, attack_box_edit_.animation_id);
+    if (!selection.has_selection()) {
+        exit_attack_box_edit_mode(true);
+        return;
+    }
+    if (selection.resolved_animation_id != attack_box_edit_.animation_id) {
+        apply_attack_box_animation_and_frame(selection.resolved_animation_id, 0);
     }
 }
 

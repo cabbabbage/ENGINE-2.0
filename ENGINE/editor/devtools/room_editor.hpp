@@ -425,8 +425,14 @@ private:
     bool add_anchor_in_current_frame();
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
     bool delete_selected_anchor_in_current_frame();
-    int find_hitbox_corner_at_screen_point(SDL_Point screen_point, int radius_px, int& out_corner_index) const;
-    int find_attack_box_corner_at_screen_point(SDL_Point screen_point, int radius_px, int& out_corner_index) const;
+    int find_hitbox_corner_at_screen_point(SDL_Point screen_point,
+                                           int radius_px,
+                                           int& out_corner_index,
+                                           int& out_point_index) const;
+    int find_attack_box_corner_at_screen_point(SDL_Point screen_point,
+                                               int radius_px,
+                                               int& out_corner_index,
+                                               int& out_point_index) const;
     bool handle_hitbox_mode_mouse_input(const Input& input);
     bool handle_attack_box_mode_mouse_input(const Input& input);
     bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
@@ -435,8 +441,8 @@ private:
                                          devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
-    bool drag_hitbox_corner_to_screen(int box_index, int corner_index, SDL_Point screen_point);
-    bool drag_attack_box_corner_to_screen(int box_index, int corner_index, SDL_Point screen_point);
+    bool drag_hitbox_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
+    bool drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool add_hitbox_in_current_frame();
     bool add_attack_box_in_current_frame();
     bool delete_selected_hitbox_in_current_frame();
@@ -568,8 +574,10 @@ private:
         int frame_index = 0;
         int selected_box_index = -1;
         int selected_corner_index = 0;
+        int selected_point_index = 0;
         int hovered_box_index = -1;
         int hovered_corner_index = -1;
+        int hovered_point_index = -1;
         bool dragging_corner = false;
         bool had_static_frame_before = false;
         bool static_frame_before = false;

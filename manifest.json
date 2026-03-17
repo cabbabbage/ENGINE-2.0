@@ -26,7 +26,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 71.0
+        "scale_percentage": 4.0
       },
       "start": "default",
       "tags": [],
@@ -123,10 +123,11 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 3.0
       },
       "start": "default",
       "tags": [],
+      "tillable": false,
       "update_radius": 0
     },
     "booze_1": {
@@ -933,6 +934,14 @@
           }
         },
         "up_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -1132,7 +1141,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 58.999996185302734
+        "scale_percentage": 96.0
       },
       "start": "default",
       "tags": [
@@ -1219,8 +1228,8 @@
               {
                 "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 338,
-                "texture_y": 34
+                "texture_x": 865,
+                "texture_y": 475
               }
             ]
           ],
@@ -1261,8 +1270,8 @@
               {
                 "depth_offset": 1,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 735,
+                "texture_y": 325
               }
             ],
             [
@@ -1457,7 +1466,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 42.0
+        "scale_percentage": 24.0
       },
       "start": "default",
       "tags": [],
@@ -1731,10 +1740,10 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": 101,
-          "camera_center_dz": 326,
-          "camera_height_px": 705,
-          "camera_tilt_deg": 58.00000762939453,
+          "camera_center_dx": 168,
+          "camera_center_dz": 211,
+          "camera_height_px": 299,
+          "camera_tilt_deg": 28.00000762939453,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
@@ -1799,8 +1808,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": 893,
-              "dz": 797,
+              "dx": 496,
+              "dz": 322,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2249,8 +2258,8 @@
                 }
               ],
               "display_name": "grave_4 (Copy 11)",
-              "dx": -324,
-              "dz": -108,
+              "dx": -995,
+              "dz": 487,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2849,8 +2858,8 @@
                 }
               ],
               "display_name": "tree_2",
-              "dx": -444,
-              "dz": 249,
+              "dx": -1290,
+              "dz": 207,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

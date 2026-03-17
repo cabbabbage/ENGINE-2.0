@@ -15,14 +15,12 @@ namespace {
 
 constexpr int kBottomMargin = 18;
 constexpr int kPanelPadding = 12;
-constexpr int kPanelGap = 12;
-constexpr int kPanelHeight = 88;
-constexpr int kCompactPanelHeight = 58;
-constexpr int kActionButtonMinWidth = 150;
-constexpr int kAxisWidth = 226;
-constexpr int kAxisButtonWidth = 68;
-constexpr int kAxisButtonGap = 8;
-constexpr int kAxisCardCornerRadius = 8;
+constexpr int kPanelGap = 8;
+constexpr int kPanelCornerRadius = 8;
+constexpr int kDpadButtonWidth = 72;
+constexpr int kDpadCenterMinWidth = 164;
+constexpr int kDpadCenterMaxWidth = 300;
+constexpr int kDpadCenterHeight = 46;
 constexpr int kTitleFontSize = 12;
 constexpr int kValueFontSize = 15;
 
@@ -88,72 +86,30 @@ void BottomNavigationPanel::set_screen_dimensions(int width, int height) {
     layout_dirty_ = true;
 }
 
-void BottomNavigationPanel::set_action(const std::string& label,
-                                       std::function<void()> callback,
-                                       bool emphasized) {
-    ensure_widgets();
-    action_visible_ = !label.empty();
-    if (action_label_ != label) {
-        action_label_ = label;
-        if (action_button_) {
-            action_button_->set_text(action_label_);
-        }
+void BottomNavigationPanel::set_dpad_navigation(const std::string& center_value,
+                                                std::function<void()> on_up,
+                                                std::function<void()> on_down,
+                                                std::function<void()> on_left,
+                                                std::function<void()> on_right,
+                                                bool visible) {
+    dpad_.center_value = center_value;
+    dpad_.on_up = std::move(on_up);
+    dpad_.on_down = std::move(on_down);
+    dpad_.on_left = std::move(on_left);
+    dpad_.on_right = std::move(on_right);
+    if (dpad_.visible != visible) {
+        dpad_.visible = visible;
         layout_dirty_ = true;
-    }
-    on_action_ = std::move(callback);
-    if (action_emphasized_ != emphasized) {
-        action_emphasized_ = emphasized;
-        set_action_style();
-    }
-}
-
-void BottomNavigationPanel::clear_action() {
-    action_label_.clear();
-    action_visible_ = false;
-    on_action_ = {};
-    layout_dirty_ = true;
-}
-
-void BottomNavigationPanel::set_primary_navigation(const std::string& label,
-                                                   const std::string& value,
-                                                   std::function<void()> on_prev,
-                                                   std::function<void()> on_next,
-                                                   bool visible) {
-    primary_axis_.label = label;
-    primary_axis_.value = value;
-    primary_axis_.on_prev = std::move(on_prev);
-    primary_axis_.on_next = std::move(on_next);
-    if (primary_axis_.visible != visible) {
-        primary_axis_.visible = visible;
-        layout_dirty_ = true;
-    }
-}
-
-void BottomNavigationPanel::set_secondary_navigation(const std::string& label,
-                                                     const std::string& value,
-                                                     std::function<void()> on_prev,
-                                                     std::function<void()> on_next,
-                                                     bool visible) {
-    secondary_axis_.label = label;
-    secondary_axis_.value = value;
-    secondary_axis_.on_prev = std::move(on_prev);
-    secondary_axis_.on_next = std::move(on_next);
-    if (secondary_axis_.visible != visible) {
-        secondary_axis_.visible = visible;
+    } else {
         layout_dirty_ = true;
     }
 }
 
 void BottomNavigationPanel::clear_navigation() {
-    if (!primary_axis_.visible && !secondary_axis_.visible) {
-        primary_axis_.label.clear();
-        primary_axis_.value.clear();
-        secondary_axis_.label.clear();
-        secondary_axis_.value.clear();
+    if (!dpad_.visible && dpad_.center_value.empty()) {
         return;
     }
-    primary_axis_ = {};
-    secondary_axis_ = {};
+    dpad_ = {};
     layout_dirty_ = true;
 }
 
@@ -181,16 +137,11 @@ bool BottomNavigationPanel::handle_event(const SDL_Event& event) {
     };
 
     bool handled = false;
-    if (action_visible_) {
-        handled = handle_button(action_button_.get(), on_action_) || handled;
-    }
-    if (primary_axis_.visible) {
-        handled = handle_button(primary_prev_button_.get(), primary_axis_.on_prev) || handled;
-        handled = handle_button(primary_next_button_.get(), primary_axis_.on_next) || handled;
-    }
-    if (secondary_axis_.visible) {
-        handled = handle_button(secondary_prev_button_.get(), secondary_axis_.on_prev) || handled;
-        handled = handle_button(secondary_next_button_.get(), secondary_axis_.on_next) || handled;
+    if (dpad_.visible) {
+        handled = handle_button(dpad_up_button_.get(), dpad_.on_up) || handled;
+        handled = handle_button(dpad_down_button_.get(), dpad_.on_down) || handled;
+        handled = handle_button(dpad_left_button_.get(), dpad_.on_left) || handled;
+        handled = handle_button(dpad_right_button_.get(), dpad_.on_right) || handled;
     }
     if (handled) {
         return true;
@@ -239,15 +190,11 @@ void BottomNavigationPanel::render(SDL_Renderer* renderer) const {
                    panel_rect_.x + panel_rect_.w - 2,
                    panel_rect_.y + 1);
 
-    auto render_axis = [&](const NavigationAxis& axis, const SDL_Rect& value_rect) {
-        if (!axis.visible || value_rect.w <= 0 || value_rect.h <= 0) {
-            return;
-        }
-
+    if (dpad_.visible && dpad_.center_rect.w > 0 && dpad_.center_rect.h > 0) {
         const SDL_Color card_fill = dm_draw::DarkenColor(DMStyles::PanelBG(), 0.08f);
         dm_draw::DrawBeveledRect(renderer,
-                                 value_rect,
-                                 kAxisCardCornerRadius,
+                                 dpad_.center_rect,
+                                 kPanelCornerRadius,
                                  1,
                                  card_fill,
                                  DMStyles::HighlightColor(),
@@ -255,7 +202,7 @@ void BottomNavigationPanel::render(SDL_Renderer* renderer) const {
                                  false,
                                  DMStyles::HighlightIntensity() * 0.85f,
                                  DMStyles::ShadowIntensity() * 0.9f);
-        dm_draw::DrawRoundedOutline(renderer, value_rect, kAxisCardCornerRadius, 1, DMStyles::Border());
+        dm_draw::DrawRoundedOutline(renderer, dpad_.center_rect, kPanelCornerRadius, 1, DMStyles::Border());
 
         DMLabelStyle title_style = DMStyles::Label();
         title_style.font_size = kTitleFontSize;
@@ -265,24 +212,17 @@ void BottomNavigationPanel::render(SDL_Renderer* renderer) const {
         value_style.font_size = kValueFontSize;
         value_style.color = DMStyles::ButtonFocusOutline();
 
-        SDL_Rect title_rect{value_rect.x + 6, value_rect.y + 6, value_rect.w - 12, 14};
-        SDL_Rect text_rect{value_rect.x + 6, value_rect.y + 24, value_rect.w - 12, value_rect.h - 30};
-        draw_centered_text(renderer, title_style, axis.label, title_rect);
-        draw_centered_text(renderer, value_style, axis.value, text_rect);
-    };
+        SDL_Rect title_rect{dpad_.center_rect.x + 6, dpad_.center_rect.y + 5, dpad_.center_rect.w - 12, 14};
+        SDL_Rect text_rect{dpad_.center_rect.x + 6, dpad_.center_rect.y + 21, dpad_.center_rect.w - 12, dpad_.center_rect.h - 25};
+        draw_centered_text(renderer, title_style, "Animation / Frame", title_rect);
+        draw_centered_text(renderer, value_style, dpad_.center_value, text_rect);
+    }
 
-    if (action_visible_ && action_button_) {
-        action_button_->render(renderer);
-    }
-    if (primary_axis_.visible) {
-        render_axis(primary_axis_, primary_axis_.value_rect);
-        if (primary_prev_button_) primary_prev_button_->render(renderer);
-        if (primary_next_button_) primary_next_button_->render(renderer);
-    }
-    if (secondary_axis_.visible) {
-        render_axis(secondary_axis_, secondary_axis_.value_rect);
-        if (secondary_prev_button_) secondary_prev_button_->render(renderer);
-        if (secondary_next_button_) secondary_next_button_->render(renderer);
+    if (dpad_.visible) {
+        if (dpad_up_button_) dpad_up_button_->render(renderer);
+        if (dpad_down_button_) dpad_down_button_->render(renderer);
+        if (dpad_left_button_) dpad_left_button_->render(renderer);
+        if (dpad_right_button_) dpad_right_button_->render(renderer);
     }
 }
 
@@ -300,22 +240,18 @@ const SDL_Rect& BottomNavigationPanel::rect() const {
 }
 
 void BottomNavigationPanel::ensure_widgets() {
-    if (!action_button_) {
-        action_button_ = std::make_unique<DMButton>("Action", &DMStyles::PrimaryButton(), kActionButtonMinWidth, DMButton::height());
+    if (!dpad_up_button_) {
+        dpad_up_button_ = std::make_unique<DMButton>("Up", &DMStyles::SecondaryButton(), kDpadButtonWidth, DMButton::height());
     }
-    if (!primary_prev_button_) {
-        primary_prev_button_ = std::make_unique<DMButton>("Prev", &DMStyles::SecondaryButton(), kAxisButtonWidth, DMButton::height());
+    if (!dpad_down_button_) {
+        dpad_down_button_ = std::make_unique<DMButton>("Down", &DMStyles::SecondaryButton(), kDpadButtonWidth, DMButton::height());
     }
-    if (!primary_next_button_) {
-        primary_next_button_ = std::make_unique<DMButton>("Next", &DMStyles::SecondaryButton(), kAxisButtonWidth, DMButton::height());
+    if (!dpad_left_button_) {
+        dpad_left_button_ = std::make_unique<DMButton>("Left", &DMStyles::SecondaryButton(), kDpadButtonWidth, DMButton::height());
     }
-    if (!secondary_prev_button_) {
-        secondary_prev_button_ = std::make_unique<DMButton>("Prev", &DMStyles::SecondaryButton(), kAxisButtonWidth, DMButton::height());
+    if (!dpad_right_button_) {
+        dpad_right_button_ = std::make_unique<DMButton>("Right", &DMStyles::SecondaryButton(), kDpadButtonWidth, DMButton::height());
     }
-    if (!secondary_next_button_) {
-        secondary_next_button_ = std::make_unique<DMButton>("Next", &DMStyles::SecondaryButton(), kAxisButtonWidth, DMButton::height());
-    }
-    set_action_style();
 }
 
 void BottomNavigationPanel::update_layout() const {
@@ -325,91 +261,65 @@ void BottomNavigationPanel::update_layout() const {
 
     const_cast<BottomNavigationPanel*>(this)->ensure_widgets();
 
-    const bool show_primary = primary_axis_.visible;
-    const bool show_secondary = secondary_axis_.visible;
-    const int visible_axes = (show_primary ? 1 : 0) + (show_secondary ? 1 : 0);
-    const int panel_height = visible_axes > 0 ? kPanelHeight : kCompactPanelHeight;
-
-    int action_width = 0;
-    if (action_visible_ && action_button_) {
-        action_width = kActionButtonMinWidth;
-        action_width = std::max(kActionButtonMinWidth, action_button_->preferred_width());
-    }
-    const int nav_width = visible_axes > 0
-        ? (visible_axes * kAxisWidth) + (std::max(0, visible_axes - 1) * kPanelGap)
-        : 0;
-    const int content_width = (action_visible_ ? action_width : 0) +
-        ((action_visible_ && nav_width > 0) ? kPanelGap : 0) + nav_width;
-    const int panel_width = std::min(std::max(content_width + (kPanelPadding * 2),
-                                              (action_visible_ ? action_width : nav_width) + (kPanelPadding * 2)),
-                                     std::max(0, screen_w_ - (kBottomMargin * 2)));
-
-    panel_rect_.w = panel_width;
-    panel_rect_.h = panel_height;
-    panel_rect_.x = std::max(0, (screen_w_ - panel_rect_.w) / 2);
-    panel_rect_.y = std::max(0, screen_h_ - panel_rect_.h - kBottomMargin);
-
-    const int action_x = panel_rect_.x + kPanelPadding;
-    const int action_y = panel_rect_.y + (panel_rect_.h - DMButton::height()) / 2;
-    if (visible_axes == 0) {
-        const int centered_x = panel_rect_.x + (panel_rect_.w - action_width) / 2;
-        if (action_visible_ && action_button_) {
-            action_button_->set_rect(SDL_Rect{centered_x, action_y, action_width, DMButton::height()});
-        } else if (action_button_) {
-            action_button_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
-        primary_axis_.bounds = SDL_Rect{0, 0, 0, 0};
-        primary_axis_.value_rect = SDL_Rect{0, 0, 0, 0};
-        secondary_axis_.bounds = SDL_Rect{0, 0, 0, 0};
-        secondary_axis_.value_rect = SDL_Rect{0, 0, 0, 0};
+    if (!visible_ || !dpad_.visible || screen_w_ <= 0 || screen_h_ <= 0) {
+        panel_rect_ = SDL_Rect{0, 0, 0, 0};
+        const_cast<DpadNavigation&>(dpad_).bounds = SDL_Rect{0, 0, 0, 0};
+        const_cast<DpadNavigation&>(dpad_).center_rect = SDL_Rect{0, 0, 0, 0};
+        if (dpad_up_button_) dpad_up_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (dpad_down_button_) dpad_down_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (dpad_left_button_) dpad_left_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (dpad_right_button_) dpad_right_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         layout_dirty_ = false;
         return;
     }
 
-    if (action_visible_ && action_button_) {
-        action_button_->set_rect(SDL_Rect{action_x, action_y, action_width, DMButton::height()});
-    } else if (action_button_) {
-        action_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+    const int button_height = DMButton::height();
+    const int max_panel_inner_width = std::max(0, screen_w_ - ((kBottomMargin + kPanelPadding) * 2));
+    const int fixed_width = (kDpadButtonWidth * 2) + (kPanelGap * 2);
+    int center_width = std::clamp(max_panel_inner_width - fixed_width, kDpadCenterMinWidth, kDpadCenterMaxWidth);
+    if (fixed_width + center_width > max_panel_inner_width) {
+        center_width = std::max(120, max_panel_inner_width - fixed_width);
     }
+    const int content_width = std::max(0, fixed_width + center_width);
+    const int content_height = button_height + kPanelGap + kDpadCenterHeight + kPanelGap + button_height;
 
-    int axis_x = action_x + (action_visible_ ? (action_width + kPanelGap) : 0);
-    const int axis_y = panel_rect_.y + (panel_rect_.h - 54) / 2;
-    const auto layout_axis = [&](NavigationAxis& axis, DMButton* prev_button, DMButton* next_button) {
-        if (!axis.visible) {
-            axis.bounds = SDL_Rect{0, 0, 0, 0};
-            axis.value_rect = SDL_Rect{0, 0, 0, 0};
-            return;
-        }
-        axis.bounds = SDL_Rect{axis_x, axis_y, kAxisWidth, 54};
-        const int button_y = axis_y + (54 - DMButton::height()) / 2;
-        const SDL_Rect prev_rect{axis_x, button_y, kAxisButtonWidth, DMButton::height()};
-        const SDL_Rect next_rect{axis_x + kAxisWidth - kAxisButtonWidth, button_y, kAxisButtonWidth, DMButton::height()};
-        const SDL_Rect value_rect{
-            prev_rect.x + prev_rect.w + kAxisButtonGap,
-            axis_y,
-            kAxisWidth - (2 * kAxisButtonWidth) - (2 * kAxisButtonGap),
-            54};
-        axis.value_rect = value_rect;
-        if (prev_button) {
-            prev_button->set_rect(prev_rect);
-        }
-        if (next_button) {
-            next_button->set_rect(next_rect);
-        }
-        axis_x += kAxisWidth + kPanelGap;
-    };
+    panel_rect_.w = std::max(0, content_width + (kPanelPadding * 2));
+    panel_rect_.h = std::max(0, content_height + (kPanelPadding * 2));
+    panel_rect_.x = std::max(0, (screen_w_ - panel_rect_.w) / 2);
+    panel_rect_.y = std::max(0, screen_h_ - panel_rect_.h - kBottomMargin);
 
-    layout_axis(const_cast<NavigationAxis&>(primary_axis_), primary_prev_button_.get(), primary_next_button_.get());
-    layout_axis(const_cast<NavigationAxis&>(secondary_axis_), secondary_prev_button_.get(), secondary_next_button_.get());
+    const int content_x = panel_rect_.x + kPanelPadding;
+    const int content_y = panel_rect_.y + kPanelPadding;
+    const int center_x = content_x + kDpadButtonWidth + kPanelGap;
+    const int center_y = content_y + button_height + kPanelGap;
+    const int left_button_y = center_y + (kDpadCenterHeight - button_height) / 2;
 
+    const SDL_Rect center_rect{center_x, center_y, center_width, kDpadCenterHeight};
+    const SDL_Rect up_rect{
+        center_x + std::max(0, (center_width - kDpadButtonWidth) / 2),
+        content_y,
+        kDpadButtonWidth,
+        button_height};
+    const SDL_Rect down_rect{
+        center_x + std::max(0, (center_width - kDpadButtonWidth) / 2),
+        center_y + kDpadCenterHeight + kPanelGap,
+        kDpadButtonWidth,
+        button_height};
+    const SDL_Rect left_rect{content_x, left_button_y, kDpadButtonWidth, button_height};
+    const SDL_Rect right_rect{
+        center_x + center_width + kPanelGap,
+        left_button_y,
+        kDpadButtonWidth,
+        button_height};
+
+    if (dpad_up_button_) dpad_up_button_->set_rect(up_rect);
+    if (dpad_down_button_) dpad_down_button_->set_rect(down_rect);
+    if (dpad_left_button_) dpad_left_button_->set_rect(left_rect);
+    if (dpad_right_button_) dpad_right_button_->set_rect(right_rect);
+
+    const_cast<DpadNavigation&>(dpad_).center_rect = center_rect;
+    const_cast<DpadNavigation&>(dpad_).bounds = SDL_Rect{content_x, content_y, content_width, content_height};
     layout_dirty_ = false;
-}
-
-void BottomNavigationPanel::set_action_style() {
-    if (!action_button_) {
-        return;
-    }
-    action_button_->set_style(action_emphasized_ ? &DMStyles::AccentButton() : &DMStyles::PrimaryButton());
 }
 
 bool BottomNavigationPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {

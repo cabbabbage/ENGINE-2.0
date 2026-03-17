@@ -366,6 +366,7 @@ private:
     bool is_movement_ui_blocking_point(int x, int y) const;
     bool is_hitbox_ui_blocking_point(int x, int y) const;
     bool is_attack_box_ui_blocking_point(int x, int y) const;
+    bool any_editor_point_selected() const;
     void navigate_anchor_animation(int delta);
     void navigate_anchor_frame(int delta);
     void navigate_movement_animation(int delta);
@@ -374,10 +375,13 @@ private:
     void navigate_hitbox_frame(int delta);
     void navigate_attack_box_animation(int delta);
     void navigate_attack_box_frame(int delta);
+    void navigate_asset_info_preview_animation(int delta);
+    void navigate_asset_info_preview_frame(int delta);
     bool apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_movement_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_hitbox_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_asset_preview_animation_and_frame(Asset* target, const std::string& animation_id, int frame_index);
     std::vector<std::string> anchor_mode_animation_names() const;
     std::vector<std::string> movement_mode_animation_names() const;
     std::vector<std::string> hitbox_mode_animation_names() const;
@@ -542,6 +546,7 @@ private:
         std::string selected_anchor_name;
         std::string hovered_anchor_name;
         std::string dragging_anchor_name;
+        bool point_selected = false;
         bool dragging = false;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
@@ -554,6 +559,7 @@ private:
         Asset* target_asset = nullptr;
         std::string animation_id;
         int frame_index = 0;
+        bool point_selected = false;
         bool selected_point_active = false;
         int hovered_point_index = -1;
         bool dragging_point = false;
@@ -578,6 +584,7 @@ private:
         int hovered_box_index = -1;
         int hovered_corner_index = -1;
         int hovered_point_index = -1;
+        bool point_selected = false;
         bool dragging_corner = false;
         bool had_static_frame_before = false;
         bool static_frame_before = false;

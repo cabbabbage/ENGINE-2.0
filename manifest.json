@@ -1244,8 +1244,8 @@
               {
                 "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 865,
-                "texture_y": 475
+                "texture_x": 883,
+                "texture_y": 298
               }
             ]
           ],
@@ -1254,7 +1254,30 @@
           ],
           "flipped_source": false,
           "hit_boxes": [
-            []
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 663,
+                    "texture_y": 133
+                  },
+                  {
+                    "texture_x": 1033,
+                    "texture_y": 163
+                  },
+                  {
+                    "texture_x": 1028,
+                    "texture_y": 643
+                  },
+                  {
+                    "texture_x": 683,
+                    "texture_y": 693
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ]
           ],
           "inherit_source_movement": false,
           "locked": false,
@@ -1453,7 +1476,30 @@
             []
           ],
           "hit_boxes": [
-            [],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 693,
+                    "texture_y": 303
+                  },
+                  {
+                    "texture_x": 668,
+                    "texture_y": 1183
+                  },
+                  {
+                    "texture_x": 38,
+                    "texture_y": 998
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              }
+            ],
             [],
             [],
             [],
@@ -1767,9 +1813,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -2788,8 +2834,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -129,
-              "dz": -653,
+              "dx": -620,
+              "dz": 292,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

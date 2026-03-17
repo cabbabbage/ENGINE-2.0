@@ -105,19 +105,13 @@ SDL_Surface* surface_from_layer(const CacheManager::BundleFrameLayer& layer) {
                                  layer.pitch);
 }
 
-std::vector<float> normalized_variant_steps(const AssetInfo& info) {
-    std::vector<float> steps = info.scale_variants;
-    if (steps.empty()) {
-        render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
-    }
-    if (std::find_if(steps.begin(), steps.end(), [](float v) { return std::fabs(v - 1.0f) < 1e-4f; }) == steps.end()) {
-        steps.insert(steps.begin(), 1.0f);
-    }
+std::vector<float> normalized_variant_steps(const AssetInfo& /*info*/) {
+    std::vector<float> steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
     steps.erase(std::remove_if(steps.begin(), steps.end(), [](float v) { return !(v > 0.0f) || !std::isfinite(v); }), steps.end());
     std::sort(steps.begin(), steps.end(), std::greater<float>());
     steps.erase(std::unique(steps.begin(), steps.end(), [](float a, float b) { return std::fabs(a - b) < 1e-4f; }), steps.end());
     if (steps.empty()) {
-        steps.push_back(1.0f);
+        steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
     }
     return steps;
 }

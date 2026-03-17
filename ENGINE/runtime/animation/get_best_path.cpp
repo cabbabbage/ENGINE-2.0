@@ -96,7 +96,7 @@ std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
 
             bool has_motion = false;
             for (const auto& frame : frames) {
-                if (frame.dx != 0 || frame.dy != 0) {
+                if (frame.dx != 0 || frame.dz != 0) {
                     has_motion = true;
                     break;
                 }

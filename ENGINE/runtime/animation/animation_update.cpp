@@ -175,7 +175,7 @@ SDL_Point frame_world_delta(const AnimationFrame& frame,
     (void)asset;
     (void)grid;
 
-    return SDL_Point{ frame.dx, frame.dy };
+    return SDL_Point{ frame.dx, frame.dz };
 }
 
 bool bottom_point_inside_playable_area(const Assets* assets, const world::GridPoint& bottom_point) {

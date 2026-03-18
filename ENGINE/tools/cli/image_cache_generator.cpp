@@ -389,7 +389,8 @@ static inline float sat_factor(float sat_val) {
 }
 
 // -----------------------------
-// Gaussian blur (separable), Unsharp mask (RGB only), alpha preserved
+// Gaussian blur (separable), Unsharp mask (RGB), and alpha is processed too
+// for blur paths so FG/BG halos are not clipped to the original alpha mask.
 // -----------------------------
 static std::vector<float> build_gaussian_kernel(float sigma) {
     sigma = std::max(0.01f, sigma);
@@ -408,7 +409,7 @@ static std::vector<float> build_gaussian_kernel(float sigma) {
     return k;
 }
 
-static ImageRGBA gaussian_blur_rgb_preserve_alpha(const ImageRGBA& src, float sigma) {
+static ImageRGBA gaussian_blur_rgba(const ImageRGBA& src, float sigma) {
     ImageRGBA out = src;
     if (!src.valid()) return out;
 
@@ -416,10 +417,10 @@ static ImageRGBA gaussian_blur_rgb_preserve_alpha(const ImageRGBA& src, float si
     int radius = static_cast<int>(k.size() / 2);
 
     // Horizontal
-    std::vector<float> tmp(static_cast<size_t>(src.w) * static_cast<size_t>(src.h) * 3u, 0.0f);
+    std::vector<float> tmp(static_cast<size_t>(src.w) * static_cast<size_t>(src.h) * 4u, 0.0f);
     for (int y = 0; y < src.h; ++y) {
         for (int x = 0; x < src.w; ++x) {
-            float acc[3] = {0, 0, 0};
+            float acc[4] = {0, 0, 0, 0};
             for (int t = -radius; t <= radius; ++t) {
                 int sx = clampi(x + t, 0, src.w - 1);
                 const std::uint8_t* sp = &src.pixels[(static_cast<size_t>(y) * src.w + sx) * 4u];
@@ -427,31 +428,34 @@ static ImageRGBA gaussian_blur_rgb_preserve_alpha(const ImageRGBA& src, float si
                 acc[0] += u82f(sp[0]) * w;
                 acc[1] += u82f(sp[1]) * w;
                 acc[2] += u82f(sp[2]) * w;
+                acc[3] += u82f(sp[3]) * w;
             }
-            float* dp = &tmp[(static_cast<size_t>(y) * src.w + x) * 3u];
+            float* dp = &tmp[(static_cast<size_t>(y) * src.w + x) * 4u];
             dp[0] = acc[0];
             dp[1] = acc[1];
             dp[2] = acc[2];
+            dp[3] = acc[3];
         }
     }
 
     // Vertical
     for (int y = 0; y < src.h; ++y) {
         for (int x = 0; x < src.w; ++x) {
-            float acc[3] = {0, 0, 0};
+            float acc[4] = {0, 0, 0, 0};
             for (int t = -radius; t <= radius; ++t) {
                 int sy = clampi(y + t, 0, src.h - 1);
-                const float* sp = &tmp[(static_cast<size_t>(sy) * src.w + x) * 3u];
+                const float* sp = &tmp[(static_cast<size_t>(sy) * src.w + x) * 4u];
                 float w = k[t + radius];
                 acc[0] += sp[0] * w;
                 acc[1] += sp[1] * w;
                 acc[2] += sp[2] * w;
+                acc[3] += sp[3] * w;
             }
             std::uint8_t* dp = &out.pixels[(static_cast<size_t>(y) * src.w + x) * 4u];
             dp[0] = f2u8(acc[0]);
             dp[1] = f2u8(acc[1]);
             dp[2] = f2u8(acc[2]);
-            // alpha preserved already in out
+            dp[3] = f2u8(acc[3]);
         }
     }
 
@@ -462,7 +466,7 @@ static ImageRGBA unsharp_mask_rgb_preserve_alpha(const ImageRGBA& src, float rad
     ImageRGBA out = src;
     if (!src.valid()) return out;
 
-    ImageRGBA blurred = gaussian_blur_rgb_preserve_alpha(src, std::max(0.01f, radius));
+    ImageRGBA blurred = gaussian_blur_rgba(src, std::max(0.01f, radius));
     float scale = std::max(0.0f, percent) / 100.0f;
     float thresh = static_cast<float>(threshold_u8) / 255.0f;
 
@@ -489,6 +493,30 @@ static ImageRGBA unsharp_mask_rgb_preserve_alpha(const ImageRGBA& src, float rad
     return out;
 }
 
+static ImageRGBA make_centered_transparent_2x_canvas(const ImageRGBA& src) {
+    ImageRGBA out;
+    if (!src.valid()) {
+        return out;
+    }
+
+    out.w = std::max(1, src.w * 2);
+    out.h = std::max(1, src.h * 2);
+    out.pixels.assign(static_cast<size_t>(out.w) * static_cast<size_t>(out.h) * 4u, 0);
+
+    const int offset_x = (out.w - src.w) / 2;
+    const int offset_y = (out.h - src.h) / 2;
+    const size_t src_row_bytes = static_cast<size_t>(src.w) * 4u;
+
+    for (int y = 0; y < src.h; ++y) {
+        const size_t src_off = static_cast<size_t>(y) * src_row_bytes;
+        const size_t dst_off = (static_cast<size_t>(y + offset_y) * static_cast<size_t>(out.w)
+            + static_cast<size_t>(offset_x)) * 4u;
+        std::memcpy(out.pixels.data() + dst_off, src.pixels.data() + src_off, src_row_bytes);
+    }
+
+    return out;
+}
+
 static ImageRGBA apply_blur_or_sharpen_like_python(const ImageRGBA& src, float blur_val, bool is_foreground) {
     float v = clampf(blur_val, -1.0f, 1.0f);
     if (std::fabs(v) < 1e-3f) return src;
@@ -500,7 +528,7 @@ static ImageRGBA apply_blur_or_sharpen_like_python(const ImageRGBA& src, float b
 
         if (is_foreground) {
             float radius = base_radius * 2.0f;
-            ImageRGBA blurred = gaussian_blur_rgb_preserve_alpha(src, radius);
+            ImageRGBA blurred = gaussian_blur_rgba(src, radius);
             float ring_radius = std::max(1.0f, radius * 0.5f);
             int ring_percent = 80;
             int ring_threshold = 3;
@@ -508,7 +536,7 @@ static ImageRGBA apply_blur_or_sharpen_like_python(const ImageRGBA& src, float b
             return ring;
         } else {
             float radius = base_radius * 1.3f;
-            ImageRGBA blurred = gaussian_blur_rgb_preserve_alpha(src, radius);
+            ImageRGBA blurred = gaussian_blur_rgba(src, radius);
 
             // luminance from src (already color-adjusted), build mask
             ImageRGBA mask_img;
@@ -535,7 +563,7 @@ static ImageRGBA apply_blur_or_sharpen_like_python(const ImageRGBA& src, float b
             }
 
             float mask_sigma = std::max(1.0f, radius * 0.8f);
-            ImageRGBA mask_blur = gaussian_blur_rgb_preserve_alpha(mask_img, mask_sigma);
+            ImageRGBA mask_blur = gaussian_blur_rgba(mask_img, mask_sigma);
 
             // bright_blurred_rgb = blurred * 1.4
             ImageRGBA bright = blurred;
@@ -557,7 +585,9 @@ static ImageRGBA apply_blur_or_sharpen_like_python(const ImageRGBA& src, float b
                         float b = u82f(blurred.pixels[idx + c]);
                         out.pixels[idx + c] = f2u8(a * m + b * (1.0f - m));
                     }
-                    out.pixels[idx + 3] = src.pixels[idx + 3]; // preserve alpha
+                    float aa = u82f(bright.pixels[idx + 3]);
+                    float bb = u82f(blurred.pixels[idx + 3]);
+                    out.pixels[idx + 3] = f2u8(aa * m + bb * (1.0f - m));
                 }
             }
 
@@ -1056,9 +1086,28 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
                 ImageRGBA img = *resized_opt;
 
-                // Apply effects once
-                ImageRGBA fg_img = apply_color_effects_like_python(img, w.fx_foreground, true);
-                ImageRGBA bg_img = apply_color_effects_like_python(img, w.fx_background, false);
+                // Keep normal output at scaled source size; build FG/BG via the shared
+                // ApplyEffects path so preview and cache generation stay bit-for-bit aligned.
+                auto fg_opt = ImageCacheGenerator::ApplyEffects(img, w.fx_foreground, EffectLayerMode::Foreground, err);
+                if (!fg_opt) {
+                    tasks_fail.fetch_add(1);
+                    any_fail.store(true);
+                    std::lock_guard<std::mutex> lk(err_mu);
+                    if (first_error.empty()) first_error = "Foreground effects failed: " + w.src_png_path.string() + " : " + err;
+                    log.error("Foreground effects failed: " + w.src_png_path.string() + " : " + err);
+                    return;
+                }
+                auto bg_opt = ImageCacheGenerator::ApplyEffects(img, w.fx_background, EffectLayerMode::Background, err);
+                if (!bg_opt) {
+                    tasks_fail.fetch_add(1);
+                    any_fail.store(true);
+                    std::lock_guard<std::mutex> lk(err_mu);
+                    if (first_error.empty()) first_error = "Background effects failed: " + w.src_png_path.string() + " : " + err;
+                    log.error("Background effects failed: " + w.src_png_path.string() + " : " + err);
+                    return;
+                }
+                const ImageRGBA& fg_img = *fg_opt;
+                const ImageRGBA& bg_img = *bg_opt;
 
                 // Save all requested output indices
                 for (int out_idx : w.out_indices) {
@@ -1350,11 +1399,29 @@ std::optional<ImageRGBA> ImageCacheGenerator::ResizeRGBA(const ImageRGBA& src, i
     return resize_lanczos_rgba(src, dst_w, dst_h, err);
 }
 
-std::optional<ImageRGBA> ImageCacheGenerator::ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, std::string& err) {
+std::optional<ImageRGBA> ImageCacheGenerator::ApplyEffects(const ImageRGBA& src,
+                                                           const EffectsParams& fx,
+                                                           EffectLayerMode mode,
+                                                           std::string& err) {
     err.clear();
-    // You must decide foreground/background at call site for the blur behavior.
-    // This wrapper assumes "foreground-like" when saturation_r/g/b are used, but the caller should not use this directly.
-    ImageRGBA out = apply_color_effects_like_python(src, fx, false);
+    if (!src.valid()) {
+        err = "ApplyEffects: invalid input image";
+        return std::nullopt;
+    }
+
+    ImageRGBA expanded = make_centered_transparent_2x_canvas(src);
+    if (!expanded.valid()) {
+        err = "ApplyEffects: failed to create centered transparent 2x canvas";
+        return std::nullopt;
+    }
+
+    const bool is_foreground = (mode == EffectLayerMode::Foreground);
+    ImageRGBA out = apply_color_effects_like_python(expanded, fx, is_foreground);
+    if (!out.valid()) {
+        err = "ApplyEffects: effect pipeline produced invalid output";
+        return std::nullopt;
+    }
+
     return out;
 }
 

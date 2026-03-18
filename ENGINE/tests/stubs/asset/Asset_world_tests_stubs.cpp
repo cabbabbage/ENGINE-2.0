@@ -1,6 +1,8 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <new>
 #include <utility>
 
@@ -93,6 +95,42 @@ float Asset::smoothed_scale() const {
 
 float Asset::runtime_height_px() const {
     return (cached_h > 0) ? static_cast<float>(cached_h) : 0.0f;
+}
+
+Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
+    PerspectiveSample sample{};
+    sample.scale = 1.0f;
+    sample.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    sample.source = PerspectiveSource::Default;
+
+    if (pos_ && std::isfinite(pos_->perspective_scale) && pos_->perspective_scale > 0.0001f) {
+        sample.scale = std::max(0.0001f, pos_->perspective_scale);
+        sample.resolution_layer = pos_->resolution_layer();
+        sample.source = PerspectiveSource::AssetGridPoint;
+        return sample;
+    }
+
+    if (std::isfinite(last_scale_perspective_input_) && last_scale_perspective_input_ > 0.0001f) {
+        sample.scale = std::max(0.0001f, last_scale_perspective_input_);
+        sample.source = PerspectiveSource::CachedLastFrame;
+        return sample;
+    }
+
+    return sample;
+}
+
+const char* Asset::perspective_source_label(PerspectiveSource source) {
+    switch (source) {
+    case PerspectiveSource::CameraTraversal:
+        return "camera-traversal";
+    case PerspectiveSource::AssetGridPoint:
+        return "asset-grid-point";
+    case PerspectiveSource::CachedLastFrame:
+        return "cached-last-frame";
+    case PerspectiveSource::Default:
+    default:
+        return "default";
+    }
 }
 
 void Asset::set_assets(Assets* a) { assets_ = a; }

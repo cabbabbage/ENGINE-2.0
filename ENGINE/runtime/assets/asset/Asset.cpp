@@ -70,6 +70,53 @@ static std::mutex& asset_rng_mutex()
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
 
+namespace {
+
+bool vibble_scale_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_SCALE_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" ||
+               value == "true" ||
+               value == "TRUE" ||
+               value == "on" ||
+               value == "ON";
+    }();
+    return enabled;
+}
+
+bool is_traced_asset_name(const std::string& name) {
+    if (name.empty()) {
+        return false;
+    }
+    std::string lowered = name;
+    for (char& ch : lowered) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return lowered.find("vibble") != std::string::npos;
+}
+
+bool should_trace_asset_scale(const Asset& asset) {
+    return vibble_scale_trace_enabled() &&
+           asset.info &&
+           is_traced_asset_name(asset.info->name);
+}
+
+bool should_emit_scale_trace_for_frame(const Asset& asset, std::uint32_t frame_id) {
+    static std::unordered_map<const Asset*, std::uint32_t> last_logged_frame;
+    auto it = last_logged_frame.find(&asset);
+    if (it != last_logged_frame.end() && it->second == frame_id) {
+        return false;
+    }
+    last_logged_frame[&asset] = frame_id;
+    return true;
+}
+
+}
+
 Asset::Asset(std::shared_ptr<AssetInfo> info_,
              const Area& spawn_area,
              SDL_Point start_pos,
@@ -466,37 +513,12 @@ void Asset::finalize_setup() {
 
         finalized_ = true;
 }
-
-
-
 void Asset::update_scale_values() {
+    const PerspectiveSample perspective_sample = runtime_perspective_sample();
     const float base_scale =
         (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
-
-    float perspective_scale = 1.0f;
-    const char* perspective_source = "default";
-    // Prefer the live camera grid sample used by rendering to avoid stale per-asset
-    // grid-point values during movement/camera transitions.
-    if (window) {
-        if (auto* gp = window->grid_point_for_asset(this)) {
-            perspective_scale = std::max(0.0001f, gp->perspective_scale);
-            perspective_source = "window-grid";
-        } else if (pos_ && pos_->perspective_scale > 0.0001f) {
-            perspective_scale = pos_->perspective_scale;
-            perspective_source = "grid-point";
-        } else if (last_scale_perspective_input_ > 0.0001f) {
-            // Use cached value from last frame during movement transition.
-            perspective_scale = last_scale_perspective_input_;
-            perspective_source = "cached-last-frame";
-        }
-    } else if (pos_ && pos_->perspective_scale > 0.0001f) {
-        perspective_scale = pos_->perspective_scale;
-        perspective_source = "grid-point";
-    } else if (last_scale_perspective_input_ > 0.0001f) {
-        // Absolute fallback: use last known value.
-        perspective_scale = last_scale_perspective_input_;
-        perspective_source = "cached-last-frame";
-    }
+    const float perspective_scale = perspective_sample.scale;
+    const char* perspective_source = perspective_source_label(perspective_sample.source);
 
     float camera_scale = 1.0f;
     if (assets_) {
@@ -511,6 +533,21 @@ void Asset::update_scale_values() {
 
     const float prospective_scale = base_scale * perspective_scale;
     constexpr float kScaleEpsilon = 1e-4f;
+    const float scale_delta = prospective_scale - current_scale;
+    const std::uint32_t frame_id = assets_ ? assets_->frame_id() : 0;
+    const bool trace_scale = should_trace_asset_scale(*this) &&
+                             should_emit_scale_trace_for_frame(*this, frame_id);
+    if (trace_scale) {
+        vibble::log::debug(std::string("[ScaleTrace][Asset] asset='") +
+                           (info ? info->name : std::string{"<unknown>"}) +
+                           "' frame=" + std::to_string(frame_id) +
+                           " source=" + perspective_source +
+                           " perspective=" + std::to_string(perspective_scale) +
+                           " base=" + std::to_string(base_scale) +
+                           " scale=" + std::to_string(prospective_scale) +
+                           " delta=" + std::to_string(scale_delta));
+    }
+
     if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&
         std::fabs(base_scale - last_scale_base_input_) < kScaleEpsilon &&
         std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon &&
@@ -570,6 +607,61 @@ void Asset::update_scale_values() {
     mark_composite_dirty();
     mark_anchors_dirty();
     mark_mesh_dirty();
+}
+
+const char* Asset::perspective_source_label(PerspectiveSource source) {
+    switch (source) {
+    case PerspectiveSource::CameraTraversal:
+        return "camera-traversal";
+    case PerspectiveSource::AssetGridPoint:
+        return "asset-grid-point";
+    case PerspectiveSource::CachedLastFrame:
+        return "cached-last-frame";
+    case PerspectiveSource::Default:
+    default:
+        return "default";
+    }
+}
+
+Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
+    PerspectiveSample sample{};
+    sample.scale = 1.0f;
+    sample.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    sample.source = PerspectiveSource::Default;
+
+    const world::GridPoint* traversal_gp = nullptr;
+    if (assets_) {
+        traversal_gp = assets_->getView().grid_point_for_asset(this);
+    } else if (window) {
+        traversal_gp = window->grid_point_for_asset(this);
+    }
+
+    if (traversal_gp &&
+        std::isfinite(traversal_gp->perspective_scale) &&
+        traversal_gp->perspective_scale > 0.0001f) {
+        sample.scale = std::max(0.0001f, traversal_gp->perspective_scale);
+        sample.resolution_layer = traversal_gp->resolution_layer();
+        sample.source = PerspectiveSource::CameraTraversal;
+        return sample;
+    }
+
+    if (pos_ &&
+        std::isfinite(pos_->perspective_scale) &&
+        pos_->perspective_scale > 0.0001f) {
+        sample.scale = std::max(0.0001f, pos_->perspective_scale);
+        sample.resolution_layer = pos_->resolution_layer();
+        sample.source = PerspectiveSource::AssetGridPoint;
+        return sample;
+    }
+
+    if (std::isfinite(last_scale_perspective_input_) &&
+        last_scale_perspective_input_ > 0.0001f) {
+        sample.scale = std::max(0.0001f, last_scale_perspective_input_);
+        sample.source = PerspectiveSource::CachedLastFrame;
+        return sample;
+    }
+
+    return sample;
 }
 
 SDL_Texture* Asset::get_current_variant_texture() const {
@@ -1290,14 +1382,11 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         }
         sig.remainder_scale = remainder;
 
-        const bool has_pos = (grid_point() != nullptr);
-        const float perspective = (has_pos && grid_point()->perspective_scale > 0.0001f)
-                ? grid_point()->perspective_scale
-                : (last_scale_perspective_input_ > 0.0001f ? last_scale_perspective_input_ : 1.0f);
-        sig.perspective_scale = perspective;
+        const PerspectiveSample perspective_sample = runtime_perspective_sample();
+        sig.perspective_scale = perspective_sample.scale;
 
         sig.world_z_offset = world_z_offset_;
-        sig.resolution_layer = has_pos ? grid_point()->resolution_layer() : grid_resolution;
+        sig.resolution_layer = perspective_sample.resolution_layer;
         sig.camera_state_version = (assets_ ? assets_->getView().camera_state_version() : 0);
         return sig;
 }

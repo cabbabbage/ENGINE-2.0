@@ -108,17 +108,10 @@ void MenuUI::game_loop() {
                         if (game_assets_) game_assets_->handle_sdl_event(e);
                 }
 
-                // Compute dev idle condition: skip update+render when in dev mode with no interaction or pending work
-                const bool dev_idle = dev_mode_
-                    && !menu_active_
-                    && game_assets_ && input_
-                    && !game_assets_->should_step_dev_frame(*input_);
-                const bool should_update = !menu_active_ && !dev_idle && game_assets_ && input_;
+                const bool should_update = !menu_active_ && game_assets_ && input_;
 
                 if (should_update) {
                         game_assets_->update(*input_);
-                } else if (!menu_active_ && dev_idle && game_assets_) {
-                        game_assets_->touch_last_frame_counter();
                 }
 
                 if (menu_active_) {
@@ -132,9 +125,7 @@ void MenuUI::game_loop() {
                         }
                 }
 
-                if (!dev_idle) {
-                        SDL_RenderPresent(renderer);
-                }
+                SDL_RenderPresent(renderer);
 
                 if (input_) input_->update();
 

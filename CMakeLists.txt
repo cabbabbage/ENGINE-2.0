@@ -276,11 +276,13 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/cache_manager.cpp
     ENGINE/runtime/utils/utils/map_grid_settings.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
+    ENGINE/runtime/utils/utils/input.cpp
     ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/world_grid.cpp
     ENGINE/runtime/gameplay/world/chunk.cpp
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/runtime/rendering/render/camera_controller.cpp
     ENGINE/runtime/rendering/render/projected_sprite_frame.cpp
     ENGINE/runtime/rendering/render/render_object_projection.cpp
     ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
@@ -295,6 +297,9 @@ add_executable(engine_tests
     ENGINE/tests/test_room_anchor_mode_utils.cpp
     ENGINE/tests/test_spawn_group_codec.cpp
     ENGINE/tests/test_world_grid.cpp
+    ENGINE/tests/test_input_activity.cpp
+    ENGINE/tests/test_camera_controller.cpp
+    ENGINE/tests/test_asset_perspective_sample.cpp
   )
 
 target_include_directories(engine_tests

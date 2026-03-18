@@ -75,6 +75,9 @@ int main(int argc, char** argv) {
         std::cerr << "Error: layer_type must be 'foreground' or 'background', got: " << layer_type << "\n";
         return 2;
     }
+    const imgcache::EffectLayerMode layer_mode =
+        is_foreground ? imgcache::EffectLayerMode::Foreground
+                      : imgcache::EffectLayerMode::Background;
 
     // Check input file exists
     if (!fs::exists(input_path)) {
@@ -105,7 +108,7 @@ int main(int argc, char** argv) {
               << " (" << img_opt->w << "x" << img_opt->h << ")\n";
 
     // Apply effects
-    auto result_opt = imgcache::ImageCacheGenerator::ApplyEffects(*img_opt, fx, err);
+    auto result_opt = imgcache::ImageCacheGenerator::ApplyEffects(*img_opt, fx, layer_mode, err);
     if (!result_opt) {
         std::cerr << "Error: failed to apply effects: " << err << "\n";
         return 1;

@@ -1405,6 +1405,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         if (!asset || !asset->info) {
             return std::nullopt;
         }
+        (void)gp;
         if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
             return Bounds2D{
                 static_cast<double>(tiling->coverage.x),
@@ -1414,25 +1415,17 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             };
         }
 
-        float scale = asset->smoothed_scale();
-        if (!std::isfinite(scale) || scale <= 0.0f) {
-            if (asset->info && std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
-                scale = asset->info->scale_factor;
-            } else {
-                scale = 1.0f;
-            }
+        float authored_scale = 1.0f;
+        if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
+            authored_scale = asset->info->scale_factor;
         }
-
-        float perspective_scale = 1.0f;
-        if (gp) {
-            perspective_scale = std::max(0.0001f, gp->perspective_scale);
-        }
-        const float world_scale = scale / perspective_scale;
+        constexpr float kCullBoundsSafetyInflation = 1.15f;
+        authored_scale *= kCullBoundsSafetyInflation;
 
         const float fw = static_cast<float>(std::max(1, asset->info->original_canvas_width));
         const float fh = static_cast<float>(std::max(1, asset->info->original_canvas_height));
-        const float width = fw * world_scale;
-        const float height = fh * world_scale;
+        const float width = fw * authored_scale;
+        const float height = fh * authored_scale;
         const float half_w = width * 0.5f;
 
         float center_x = asset->smoothed_translation_x();
@@ -1534,16 +1527,20 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             return project_screen_point(world_x, world_y, base_world_z + world_z_offset, out);
         };
 
-        float base_scale = primary_asset->smoothed_scale();
-        if (!std::isfinite(base_scale) || base_scale <= 0.0f) {
-            base_scale = 1.0f;
+        float authored_scale = 1.0f;
+        if (primary_asset && primary_asset->info &&
+            std::isfinite(primary_asset->info->scale_factor) &&
+            primary_asset->info->scale_factor > 0.0f) {
+            authored_scale = primary_asset->info->scale_factor;
         }
+        constexpr float kProjectedBoundsSafetyInflation = 1.15f;
+        authored_scale *= kProjectedBoundsSafetyInflation;
 
         const int fw = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_width) : 1;
         const int fh = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_height) : 1;
 
-        const float world_width = static_cast<float>(fw) * base_scale;
-        const float world_height = static_cast<float>(fh) * base_scale;
+        const float world_width = static_cast<float>(fw) * authored_scale;
+        const float world_height = static_cast<float>(fh) * authored_scale;
         const float half_width = 0.5f * world_width;
 
         bool have_projected_bounds = false;

@@ -302,6 +302,24 @@ bool has_any_extension_ci(const std::filesystem::path& path, std::initializer_li
     return false;
 }
 
+bool is_supported_image_file(const std::filesystem::path& path) {
+    return has_any_extension_ci(path, {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"});
+}
+
+std::vector<std::filesystem::path> collect_existing_drop_items(const std::vector<std::filesystem::path>& raw_items) {
+    std::vector<std::filesystem::path> items;
+    items.reserve(raw_items.size());
+    for (const auto& path : raw_items) {
+        try {
+            if (std::filesystem::exists(path)) {
+                items.push_back(path);
+            }
+        } catch (...) {
+        }
+    }
+    return items;
+}
+
 std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) {
     std::vector<std::filesystem::path> normalized = files;
 
@@ -340,6 +358,73 @@ std::string sanitize_asset_name_local(const std::string& name) {
     return devmode::utils::normalize_asset_name(name);
 }
 
+std::vector<std::filesystem::path> collect_images_from_directory(const std::filesystem::path& directory) {
+    std::vector<std::filesystem::path> images;
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+            if (!entry.is_regular_file()) continue;
+            if (is_supported_image_file(entry.path())) {
+                images.push_back(entry.path());
+            }
+        }
+    } catch (...) {
+    }
+    return images;
+}
+
+std::filesystem::path find_frames_subfolder(const std::filesystem::path& folder) {
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(folder)) {
+            if (!entry.is_directory()) continue;
+            const std::string name = vibble::strings::to_lower_copy(entry.path().filename().string());
+            if (name == "frames") {
+                return entry.path();
+            }
+        }
+    } catch (...) {
+    }
+    return {};
+}
+
+DropValidationResult validate_dropped_folder(const std::filesystem::path& folder) {
+    DropValidationResult result;
+    result.kind = DropKind::PngFolder;
+    result.folder = folder;
+
+    const std::filesystem::path frames_dir = find_frames_subfolder(folder);
+    const bool has_frames_subfolder = !frames_dir.empty();
+    const std::filesystem::path image_source_dir = has_frames_subfolder ? frames_dir : folder;
+    std::vector<std::filesystem::path> images = collect_images_from_directory(image_source_dir);
+
+    if (images.empty()) {
+        const std::string folder_name = folder.filename().string();
+        if (has_frames_subfolder) {
+            result.reason = "Folder '" + folder_name + "' has a 'frames' folder but it contains no images.";
+        } else {
+            result.reason = "Folder '" + folder_name + "' has no images and no 'frames' folder.";
+        }
+        return result;
+    }
+
+    result.files = normalize_sequence(images);
+    result.valid = true;
+    return result;
+}
+
+bool is_multi_folder_drop(const std::vector<std::filesystem::path>& raw_items) {
+    std::vector<std::filesystem::path> items = collect_existing_drop_items(raw_items);
+    if (items.size() < 2) {
+        return false;
+    }
+    for (const auto& item : items) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(item, ec) || ec) {
+            return false;
+        }
+    }
+    return true;
+}
+
 DropValidationResult validate_drop_items(const std::vector<std::filesystem::path>& raw_items) {
     DropValidationResult result;
     if (raw_items.empty()) {
@@ -347,49 +432,18 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
         return result;
     }
 
-    std::vector<std::filesystem::path> items;
-    items.reserve(raw_items.size());
-    for (const auto& path : raw_items) {
-        try {
-            if (std::filesystem::exists(path)) {
-                items.push_back(path);
-            }
-        } catch (...) {
-        }
-    }
+    std::vector<std::filesystem::path> items = collect_existing_drop_items(raw_items);
     if (items.empty()) {
         result.reason = "Dropped items missing";
         return result;
     }
-
-    auto is_image = [](const std::filesystem::path& p) {
-        return has_any_extension_ci(p, {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"});
-    };
 
     if (items.size() == 1) {
         const auto& only = items.front();
         std::error_code ec;
         const bool is_dir = std::filesystem::is_directory(only, ec);
         if (is_dir && !ec) {
-            std::vector<std::filesystem::path> pngs;
-            try {
-                for (const auto& entry : std::filesystem::directory_iterator(only)) {
-                    if (!entry.is_regular_file()) continue;
-                    if (has_extension_ci(entry.path(), ".png")) {
-                        pngs.push_back(entry.path());
-                    }
-                }
-            } catch (...) {
-            }
-            if (pngs.empty()) {
-                result.reason = "Folder contains no PNG images";
-                return result;
-            }
-            result.kind = DropKind::PngFolder;
-            result.folder = only;
-            result.files = normalize_sequence(pngs);
-            result.valid = true;
-            return result;
+            return validate_dropped_folder(only);
         }
 
         if (has_extension_ci(only, ".gif")) {
@@ -404,7 +458,7 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
             result.valid = true;
             return result;
         }
-        if (is_image(only)) {
+        if (is_supported_image_file(only)) {
             result.reason = "Only PNG or GIF files are accepted";
             return result;
         }
@@ -414,7 +468,7 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
 
     for (const auto& item : items) {
         std::error_code ec;
-        if (!std::filesystem::is_regular_file(item, ec) || !is_image(item)) {
+        if (!std::filesystem::is_regular_file(item, ec) || !is_supported_image_file(item)) {
             result.reason = "All dropped items must be image files";
             return result;
         }
@@ -870,9 +924,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     image_effect_panel_ = std::make_unique<ForegroundBackgroundEffectPanel>(assets_, 96, 160);
     if (image_effect_panel_) {
         image_effect_panel_->close();
-    }
-    if (camera_panel_) {
-        camera_panel_->set_image_effects_panel_callback([this]() { this->toggle_image_effect_panel(); });
+        image_effect_panel_->set_close_callback([this]() { this->sync_header_button_states(); });
     }
     if (map_editor_) {
         map_editor_->set_ui_blocker([this](int x, int y) { return is_pointer_over_dev_ui(x, y); });
@@ -1665,7 +1717,11 @@ void DevControls::set_enabled(bool enabled) {
             room_editor_->set_enabled(false);
         }
         if (camera_ptr) {
+            camera_ptr->set_manual_height_override(false);
+            camera_ptr->set_manual_zoom_override(false);
+            camera_ptr->clear_focus_override();
             camera_ptr->clear_tilt_override();
+            camera_ptr->update();
         }
         close_camera_panel();
         restore_filter_hidden_assets();
@@ -2032,11 +2088,76 @@ void DevControls::open_drop_modal(const DropImportRequest& request) {
 void DevControls::begin_multi_asset_import(const DropImportRequest& request) {
     multi_asset_import_ = MultiAssetImportState{};
     multi_asset_import_.active = true;
-    multi_asset_import_.request = request;
-    multi_asset_import_.files = request.files;
     multi_asset_import_.index = 0;
     multi_asset_import_.waiting_for_rename = false;
+    multi_asset_import_.imported_count = 0;
+
+    multi_asset_import_.items.reserve(request.files.size());
+    for (const auto& file : request.files) {
+        MultiAssetImportState::Item item;
+        item.request = request;
+        item.request.kind = DropContentKind::SinglePng;
+        item.request.files = {file};
+        item.request.folder.clear();
+        item.suggested_name = sanitize_asset_name_local(vibble::strings::to_lower_copy(file.stem().string()));
+        if (item.suggested_name.empty()) {
+            item.error_message = "Invalid filename for asset: " + file.filename().string();
+        }
+        multi_asset_import_.items.push_back(std::move(item));
+    }
+
     process_next_multi_asset_item();
+}
+
+void DevControls::begin_multi_folder_import(const std::vector<std::filesystem::path>& folders, SDL_Point drop_screen) {
+    multi_asset_import_ = MultiAssetImportState{};
+    multi_asset_import_.active = true;
+    multi_asset_import_.index = 0;
+    multi_asset_import_.waiting_for_rename = false;
+    multi_asset_import_.imported_count = 0;
+
+    for (const auto& folder : folders) {
+        std::error_code ec;
+        if (!std::filesystem::exists(folder, ec) || ec || !std::filesystem::is_directory(folder, ec) || ec) {
+            continue;
+        }
+
+        MultiAssetImportState::Item item;
+        DropValidationResult validation = validate_drop_items({folder});
+        if (!validation.valid) {
+            item.error_message = validation.reason.empty()
+                                     ? "Failed to import folder '" + folder.filename().string() + "'."
+                                     : validation.reason;
+            multi_asset_import_.items.push_back(std::move(item));
+            continue;
+        }
+
+        DropImportRequest request;
+        request.kind = validation.kind;
+        request.files = validation.files;
+        request.folder = validation.folder;
+        request.drop_screen = drop_screen;
+        item.request = std::move(request);
+        item.suggested_name = sanitize_asset_name_local(folder.filename().string());
+        if (item.suggested_name.empty()) {
+            item.error_message = "Invalid folder name for asset: " + folder.filename().string();
+        }
+        multi_asset_import_.items.push_back(std::move(item));
+    }
+
+    if (multi_asset_import_.items.empty()) {
+        reset_multi_asset_import();
+        return;
+    }
+
+    process_next_multi_asset_item();
+}
+
+const DevControls::MultiAssetImportState::Item* DevControls::current_multi_asset_import_item() const {
+    if (!multi_asset_import_.active || multi_asset_import_.index >= multi_asset_import_.items.size()) {
+        return nullptr;
+    }
+    return &multi_asset_import_.items[multi_asset_import_.index];
 }
 
 void DevControls::process_next_multi_asset_item() {
@@ -2050,11 +2171,20 @@ void DevControls::process_next_multi_asset_item() {
             SDL_RenderPresent(r);
         }
     }
-    while (multi_asset_import_.index < multi_asset_import_.files.size()) {
-        const std::filesystem::path file = multi_asset_import_.files[multi_asset_import_.index];
-        std::string candidate = sanitize_asset_name_local(vibble::strings::to_lower_copy(file.stem().string()));
+    while (multi_asset_import_.index < multi_asset_import_.items.size()) {
+        const MultiAssetImportState::Item& item = multi_asset_import_.items[multi_asset_import_.index];
+        if (!item.error_message.empty()) {
+            open_drop_error_popup(item.error_message);
+            ++multi_asset_import_.index;
+            return;
+        }
+
+        const std::filesystem::path source_file =
+            !item.request.files.empty() ? item.request.files.front() : std::filesystem::path{};
+        std::string candidate = sanitize_asset_name_local(item.suggested_name);
         if (candidate.empty()) {
-            open_drop_error_popup("Invalid filename for asset: " + file.filename().string());
+            const std::string fallback_name = !source_file.empty() ? source_file.filename().string() : std::string{"(unknown)"};
+            open_drop_error_popup("Invalid name for dropped asset: " + fallback_name);
             ++multi_asset_import_.index;
             return;
         }
@@ -2066,20 +2196,22 @@ void DevControls::process_next_multi_asset_item() {
         }
 
         std::string error;
-        DropImportRequest single_request = multi_asset_import_.request;
-        single_request.kind = DropContentKind::SinglePng;
-        single_request.files = {file};
-        single_request.folder.clear();
-        if (!create_drop_asset(candidate, {file}, single_request, false, error)) {
-            open_drop_error_popup(error.empty() ? "Import failed for " + file.filename().string() : error);
+        if (!create_drop_asset(candidate, item.request.files, item.request, false, error)) {
+            const std::string fallback_error =
+                !source_file.empty()
+                    ? "Import failed for " + source_file.filename().string()
+                    : "Import failed for dropped item.";
+            open_drop_error_popup(error.empty() ? fallback_error : error);
             ++multi_asset_import_.index;
             return;
         }
+        ++multi_asset_import_.imported_count;
         ++multi_asset_import_.index;
     }
 
-    if (assets_) {
-        assets_->show_dev_notice("Imported dropped PNG assets", 1800);
+    if (assets_ && multi_asset_import_.imported_count > 0) {
+        const std::string notice = "Imported " + std::to_string(multi_asset_import_.imported_count) + " dropped assets";
+        assets_->show_dev_notice(notice, 1800);
     }
     reset_multi_asset_import();
 }
@@ -2119,17 +2251,23 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
             drop_state_.items.push_back(path);
         }
         DropValidationResult validation = validate_drop_items(drop_state_.items);
-        drop_state_.valid = validation.valid;
+        drop_state_.valid = validation.valid || is_multi_folder_drop(drop_state_.items);
         return true;
     }
     case SDL_EVENT_DROP_COMPLETE: {
+        if (is_multi_folder_drop(drop_state_.items)) {
+            begin_multi_folder_import(collect_existing_drop_items(drop_state_.items), drop_point_from_event(event));
+            reset_drop_preview();
+            return true;
+        }
+
         DropValidationResult validation = validate_drop_items(drop_state_.items);
         if (validation.valid) {
-    DropImportRequest req;
-    req.kind = validation.kind;
-    req.files = validation.files;
-    req.folder = validation.folder;
-    req.drop_screen = drop_point_from_event(event);
+            DropImportRequest req;
+            req.kind = validation.kind;
+            req.files = validation.files;
+            req.folder = validation.folder;
+            req.drop_screen = drop_point_from_event(event);
             if (req.kind == DropContentKind::MultiImages) {
                 bool all_png = !req.files.empty();
                 for (const auto& p : req.files) {
@@ -2191,12 +2329,22 @@ bool DevControls::handle_drop_modal_event(const SDL_Event& event) {
         consumed = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
             reset_drop_modal();
+            if (multi_asset_import_.active) {
+                multi_asset_import_.waiting_for_rename = false;
+                ++multi_asset_import_.index;
+                process_next_multi_asset_item();
+            }
         }
     }
 
     if (event.type == SDL_EVENT_KEY_DOWN) {
         if (event.key.key == SDLK_ESCAPE) {
             reset_drop_modal();
+            if (multi_asset_import_.active) {
+                multi_asset_import_.waiting_for_rename = false;
+                ++multi_asset_import_.index;
+                process_next_multi_asset_item();
+            }
             consumed = true;
         } else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
             const std::string desired = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
@@ -2292,13 +2440,16 @@ bool DevControls::handle_drop_conflict_modal_event(const SDL_Event& event) {
     if (drop_conflict_modal_.rename_button && drop_conflict_modal_.rename_button->handle_event(event)) {
         consumed = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
-            DropImportRequest request = multi_asset_import_.request;
-            if (multi_asset_import_.index < multi_asset_import_.files.size()) {
-                const auto& file = multi_asset_import_.files[multi_asset_import_.index];
-                request.kind = DropContentKind::SinglePng;
-                request.files = {file};
-                request.folder.clear();
+            DropImportRequest request;
+            const MultiAssetImportState::Item* item = current_multi_asset_import_item();
+            if (!item) {
+                reset_drop_conflict_modal();
+                multi_asset_import_.waiting_for_rename = false;
+                ++multi_asset_import_.index;
+                process_next_multi_asset_item();
+                return true;
             }
+            request = item->request;
             reset_drop_conflict_modal();
             multi_asset_import_.waiting_for_rename = false;
             open_drop_modal(request);
@@ -2567,8 +2718,29 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         for (size_t i = 0; i < seq_files.size(); ++i) {
             std::filesystem::path dst = default_dir / (std::to_string(i) + ".png");
             try {
-                std::filesystem::copy_file(seq_files[i], dst, std::filesystem::copy_options::overwrite_existing);
-                ++frames_written;
+                const std::filesystem::path& src = seq_files[i];
+                bool wrote = false;
+                if (has_extension_ci(src, ".png")) {
+                    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing);
+                    wrote = true;
+                } else {
+                    int w = 0;
+                    int h = 0;
+                    int comp = 0;
+                    stbi_uc* pixels = stbi_load(src.string().c_str(), &w, &h, &comp, STBI_rgb_alpha);
+                    if (pixels && w > 0 && h > 0) {
+                        wrote = stbi_write_png(dst.string().c_str(), w, h, STBI_rgb_alpha, pixels, w * STBI_rgb_alpha) != 0;
+                    }
+                    if (pixels) {
+                        stbi_image_free(pixels);
+                    }
+                }
+                if (wrote) {
+                    ++frames_written;
+                } else {
+                    SDL_Log("[DevControls] Failed to convert/copy frame %s -> %s",
+                            src.string().c_str(), dst.string().c_str());
+                }
             } catch (const std::exception& ex) {
                 SDL_Log("[DevControls] Failed to copy %s -> %s: %s",
                         seq_files[i].string().c_str(), dst.string().c_str(), ex.what());
@@ -3327,61 +3499,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             frame_editor_session_->render(renderer);
         }
     }
-    if (renderer && camera_panel_ && camera_panel_->is_blur_section_visible() && assets_ && screen_w_ > 0 && screen_h_ > 0) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        const WarpedScreenGrid::RealismSettings& settings = cam.realism_settings();
-        SDL_FPoint center_world_f = cam.get_view_center_f();
-        SDL_FPoint center_screen_f = cam.map_to_screen_f(center_world_f);
-        float center_y = std::isfinite(center_screen_f.y) ? std::clamp(center_screen_f.y, 0.0f, static_cast<float>(screen_h_)) : static_cast<float>(screen_h_) * 0.5f;
-        auto clamp_line = [&](float value) {
-            if (!std::isfinite(value)) {
-                return center_y;
-            }
-            return std::clamp(value, 0.0f, static_cast<float>(screen_h_));
-};
-
-
-        SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
-        SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
-        Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
-        SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-        const SDL_Color accent = DMStyles::AccentButton().hover_bg;
-        SDL_Color fg_color = dm_draw::LightenColor(accent, 0.2f);
-        fg_color.a = 220;
-        SDL_Color bg_color = dm_draw::LightenColor(accent, 0.05f);
-        bg_color.a = 220;
-        SDL_Color center_color = DMStyles::AccentButton().text;
-        center_color.a = 230;
-
-        DMLabelStyle base_label = DMStyles::Label();
-        base_label.font_size = std::max(12, base_label.font_size - 2);
-
-        auto draw_line = [&](float y, const SDL_Color& color, bool is_hover_or_drag = false) {
-            const int yi = static_cast<int>(std::lround(y));
-            SDL_Color actual_color = is_hover_or_drag ? SDL_Color{255, 255, 255, 220} : color;
-            SDL_SetRenderDrawColor(renderer, actual_color.r, actual_color.g, actual_color.b, actual_color.a);
-            SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
-};
-        auto draw_label = [&](float line_y, const SDL_Color& color, const std::string& text) {
-            DMLabelStyle style = base_label;
-            style.color = color;
-            const int yi = static_cast<int>(std::lround(line_y));
-            int text_y = yi - style.font_size - DMSpacing::small_gap();
-            if (text_y < 0) {
-                text_y = yi + DMSpacing::small_gap();
-            }
-            DrawLabelText(renderer, text, DMSpacing::panel_padding(), text_y, style);
-};
-        auto make_depthcue_label = [](const char* prefix, int opacity_max) {
-            char buffer[160];
-            std::snprintf(buffer, sizeof(buffer), "%s Max Opacity: %d / 255", prefix, opacity_max);
-            return std::string(buffer);
-};
-
-}
-
     if (renderer && camera_panel_ && camera_panel_->is_visible() && assets_) {
         const WarpedScreenGrid& cam = assets_->getView();
         SDL_FPoint center_world_f = cam.get_view_center_f();
@@ -3763,12 +3880,36 @@ void DevControls::configure_header_button_sets() {
             sync_header_button_states();
 };
         return layers_btn;
-};
+    };
+
+    auto make_depth_cue_fx_button = [this]() {
+        MapModeUI::HeaderButtonConfig depth_cue_btn;
+        depth_cue_btn.id = "depth_cue_fx";
+        depth_cue_btn.label = "Depth Cue FX";
+        depth_cue_btn.active = image_effect_panel_ && image_effect_panel_->is_visible();
+        depth_cue_btn.group = FooterButtonGroup::Primary;
+        depth_cue_btn.style_override = &DMStyles::HeaderButton();
+        depth_cue_btn.active_style_override = &DMStyles::AccentButton();
+        depth_cue_btn.on_toggle = [this](bool active) {
+            if (!image_effect_panel_) {
+                sync_header_button_states();
+                return;
+            }
+            image_effect_panel_->set_assets(assets_);
+            if (image_effect_panel_->is_visible() != active) {
+                toggle_image_effect_panel();
+            } else {
+                sync_header_button_states();
+            }
+        };
+        return depth_cue_btn;
+    };
 
     std::vector<MapModeUI::HeaderButtonConfig> room_buttons;
 
     room_buttons.push_back(make_camera_button());
     room_buttons.push_back(make_layers_button());
+    room_buttons.push_back(make_depth_cue_fx_button());
 
     {
         MapModeUI::HeaderButtonConfig map_assets_btn;
@@ -3908,6 +4049,8 @@ void DevControls::sync_header_button_states() {
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "camera", camera_open);
     const bool layers_open = map_mode_ui_->is_layers_panel_visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "layers", layers_open);
+    const bool depth_cue_fx_open = image_effect_panel_ && image_effect_panel_->is_visible();
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "depth_cue_fx", depth_cue_fx_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "regenerate", false);
 
     const bool map_assets_open = map_assets_modal_ && map_assets_modal_->visible();
@@ -4666,9 +4809,9 @@ void DevControls::toggle_image_effect_panel() {
     if (!image_effect_panel_) {
         image_effect_panel_ = std::make_unique<ForegroundBackgroundEffectPanel>(assets_, 96, 160);
         image_effect_panel_->close();
+        image_effect_panel_->set_close_callback([this]() { this->sync_header_button_states(); });
     }
     if (image_effect_panel_->is_visible()) {
-        image_effect_panel_->set_close_callback({});
         image_effect_panel_->close();
     } else {
         if (is_modal_blocking_panels()) {
@@ -4676,17 +4819,7 @@ void DevControls::toggle_image_effect_panel() {
             sync_header_button_states();
             return;
         }
-
-        if (camera_panel_ && camera_panel_->is_visible()) {
-            camera_panel_->close();
-        }
         image_effect_panel_->set_assets(assets_);
-
-        image_effect_panel_->set_close_callback([this]() {
-            if (camera_panel_) {
-                camera_panel_->open();
-            }
-        });
         image_effect_panel_->open();
     }
     sync_header_button_states();

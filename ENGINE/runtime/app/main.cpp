@@ -344,15 +344,8 @@ void MainApp::game_loop() {
                         }
                 }
 
-                // Pause updates while in dev mode unless something actually needs a tick.
-                const bool dev_idle = dev_mode_
-                        && game_assets_ && input_
-                        && !game_assets_->should_step_dev_frame(*input_);
-
-                if (!dev_idle && game_assets_ && input_) {
+                if (game_assets_ && input_) {
                         game_assets_->update(*input_);
-                } else if (dev_idle && game_assets_) {
-                        game_assets_->touch_last_frame_counter();
                 }
                 if (input_) {
                         input_->update();

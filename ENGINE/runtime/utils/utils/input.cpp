@@ -243,11 +243,27 @@ void Input::refresh_button_transition_active() {
 }
 
 bool Input::has_activity() const {
-    return mouse_motion_dirty_
-        || button_state_dirty_
-        || scroll_dirty_
-        || click_buffer_active_
-        || button_transition_active_
-        || !dirty_scancodes_.empty();
+    if (mouse_motion_dirty_ ||
+        button_state_dirty_ ||
+        scroll_dirty_ ||
+        click_buffer_active_ ||
+        button_transition_active_ ||
+        !dirty_scancodes_.empty()) {
+        return true;
+    }
+
+    for (int i = 0; i < COUNT; ++i) {
+        if (buttons_[i]) {
+            return true;
+        }
+    }
+
+    for (bool down : keys_down_) {
+        if (down) {
+            return true;
+        }
+    }
+
+    return false;
 }
 

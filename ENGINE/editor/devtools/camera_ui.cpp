@@ -2,7 +2,6 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -432,20 +431,14 @@ void CameraUIPanel::set_assets(Assets* assets) {
     sync_from_camera();
 }
 
-void CameraUIPanel::set_image_effects_panel_callback(std::function<void()> cb) {
-    open_image_effects_cb_ = std::move(cb);
-}
-
 void CameraUIPanel::open() {
     set_visible(true);
     suppress_apply_once_ = true;
 
     visibility_section_expanded_ = false;
     depth_section_expanded_ = false;
-    depthcue_section_expanded_ = false;
     if (visibility_section_header_) visibility_section_header_->set_expanded(false);
     if (depth_section_header_)      depth_section_header_->set_expanded(false);
-    if (depthcue_section_header_)   depthcue_section_header_->set_expanded(false);
     rebuild_rows();
     sync_from_camera();
 }
@@ -478,10 +471,8 @@ void CameraUIPanel::update(const Input& input, int screen_w, int screen_h) {
 
         visibility_section_expanded_ = false;
         depth_section_expanded_ = false;
-        depthcue_section_expanded_ = false;
         if (visibility_section_header_) visibility_section_header_->set_expanded(false);
         if (depth_section_header_)      depth_section_header_->set_expanded(false);
-        if (depthcue_section_header_)   depthcue_section_header_->set_expanded(false);
         rebuild_rows();
         sync_from_camera();
     }
@@ -529,7 +520,6 @@ void CameraUIPanel::sync_from_camera() {
     if (meters_slider_) meters_slider_->set_value(settings.meters_per_100_world_px);
     if (perspective_cap_slider_) perspective_cap_slider_->set_value(settings.near_camera_max_perspective_scale);
     if (offscreen_fade_slider_) offscreen_fade_slider_->set_value(settings.offscreen_fade_amount_px);
-    if (depthcue_checkbox_) depthcue_checkbox_->set_value(assets_->depth_effects_enabled());
 }
 
 void CameraUIPanel::build_ui() {
@@ -543,13 +533,6 @@ void CameraUIPanel::build_ui() {
     header_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::header_gap());
 
     controls_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::small_gap());
-
-    depthcue_checkbox_ = std::make_unique<DMCheckbox>("Enable Depth Cue", false);
-    depthcue_widget_ = std::make_unique<CheckboxWidget>(depthcue_checkbox_.get());
-    depthcue_widget_->set_tooltip("Toggle depth cue texture compositing.\nDoes not affect parallax or perspective scaling.");
-    if (depthcue_checkbox_ && assets_) {
-        depthcue_checkbox_->set_value(assets_->depth_effects_enabled());
-    }
 
     WarpedScreenGrid::RealismSettings defaults;
     if (assets_) {
@@ -575,7 +558,6 @@ void CameraUIPanel::build_ui() {
 
     configure_section(visibility_section_header_, "Visibility & Performance", &visibility_section_expanded_);
     configure_section(depth_section_header_,      "Depth & Perspective",      &depth_section_expanded_);
-    configure_section(depthcue_section_header_,   "Depth Cue",               &depthcue_section_expanded_);
     if (depth_section_header_) {
         depth_section_header_->set_on_toggle([this](bool expanded) {
             depth_section_expanded_ = expanded;
@@ -606,16 +588,6 @@ void CameraUIPanel::build_ui() {
     offscreen_fade_slider_ = std::make_unique<FloatSliderWidget>("Offscreen Fade Distance (px)", 0.0f, 800.0f, 5.0f, defaults.offscreen_fade_amount_px, 0);
     offscreen_fade_slider_->set_tooltip("How far below the viewport sprites continue to fade before they are fully hidden.");
     offscreen_fade_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    image_effect_button_ = std::make_unique<DMButton>("Configure Image Effects", &DMStyles::AccentButton(), DockableCollapsible::kDefaultFloatingContentWidth, DMButton::height());
-    image_effect_widget_ = std::make_unique<ButtonWidget>(image_effect_button_.get(), [this]() {
-        if (open_image_effects_cb_) {
-            open_image_effects_cb_();
-        }
-    });
-    if (image_effect_widget_) {
-        image_effect_widget_->set_tooltip("Open the global image effect editor to regenerate depth cue textures.");
-    }
     rebuild_rows();
 }
 
@@ -632,7 +604,6 @@ void CameraUIPanel::rebuild_rows() {
     Rows rows;
     if (header_spacer_) rows.push_back({ header_spacer_.get() });
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    if (depthcue_widget_) rows.push_back({ depthcue_widget_.get() });
 
     if (visibility_section_header_) rows.push_back({ visibility_section_header_.get() });
     if (visibility_section_expanded_) {
@@ -646,11 +617,6 @@ void CameraUIPanel::rebuild_rows() {
         if (meters_slider_) rows.push_back({ meters_slider_.get() });
         if (perspective_cap_slider_) rows.push_back({ perspective_cap_slider_.get() });
         if (offscreen_fade_slider_) rows.push_back({ offscreen_fade_slider_.get() });
-    }
-
-    if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
-    if (depthcue_section_expanded_) {
-        if (image_effect_widget_) rows.push_back({ image_effect_widget_.get() });
     }
 
     set_rows(rows);
@@ -698,14 +664,6 @@ void CameraUIPanel::apply_settings_if_needed() {
         devmode::camera_prefs::save_near_camera_max_perspective_scale(updated.near_camera_max_perspective_scale);
         devmode::camera_prefs::save_offscreen_fade_amount_px(updated.offscreen_fade_amount_px);
         assets_->on_camera_settings_changed();
-    }
-
-    if (depthcue_checkbox_) {
-        const bool desired_depth_effects = depthcue_checkbox_->value();
-        const bool current_depth_effects = assets_->depth_effects_enabled();
-        if (desired_depth_effects != current_depth_effects) {
-            assets_->set_depth_effects_enabled(desired_depth_effects);
-        }
     }
 }
 

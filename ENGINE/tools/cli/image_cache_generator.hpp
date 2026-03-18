@@ -45,6 +45,11 @@ enum class Variant : std::uint8_t {
     Background
 };
 
+enum class EffectLayerMode : std::uint8_t {
+    Foreground = 0,
+    Background
+};
+
 struct FrameMeta {
     // Mirrors manifest frames[*].needs_rebuild
     bool needs_rebuild = false;
@@ -307,7 +312,7 @@ public:
 
     // Normal variant is unchanged (just scaled).
     // Foreground/background apply effects.
-    static std::optional<ImageRGBA> ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, std::string& err);
+    static std::optional<ImageRGBA> ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, EffectLayerMode mode, std::string& err);
 
 private:
     ImageCacheGenerator() = delete;

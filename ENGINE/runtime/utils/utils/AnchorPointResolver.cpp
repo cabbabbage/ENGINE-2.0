@@ -2,7 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <optional>
+#include <unordered_map>
+#include <string>
+#include <cctype>
 #include <utility>
 
 #include "animation/animation_update.hpp"
@@ -11,6 +15,7 @@
 #include "gameplay/world/world_grid.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "utils/log.hpp"
 
 namespace {
 
@@ -274,6 +279,57 @@ bool apply_depth_offset_along_camera_ray(const Assets* assets_owner,
            std::isfinite(final_anchor_point.z);
 }
 
+bool vibble_scale_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_SCALE_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" ||
+               value == "true" ||
+               value == "TRUE" ||
+               value == "on" ||
+               value == "ON";
+    }();
+    return enabled;
+}
+
+bool is_vibble_trace_asset(const Asset& asset) {
+    if (!asset.info) {
+        return false;
+    }
+    std::string lowered = asset.info->name;
+    for (char& ch : lowered) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return lowered.find("vibble") != std::string::npos;
+}
+
+bool should_trace_anchor_resolver(const Asset& asset) {
+    return vibble_scale_trace_enabled() && is_vibble_trace_asset(asset);
+}
+
+bool should_emit_anchor_trace_for_camera_state(const Asset& asset, std::uint64_t camera_state_version) {
+    static std::unordered_map<const Asset*, std::uint64_t> last_logged_state;
+    auto it = last_logged_state.find(&asset);
+    if (it != last_logged_state.end() && it->second == camera_state_version) {
+        return false;
+    }
+    last_logged_state[&asset] = camera_state_version;
+    return true;
+}
+
+bool should_warn_perspective_divergence(const Asset& asset, std::uint64_t camera_state_version) {
+    static std::unordered_map<const Asset*, std::uint64_t> last_warn_state;
+    auto it = last_warn_state.find(&asset);
+    if (it != last_warn_state.end() && it->second == camera_state_version) {
+        return false;
+    }
+    last_warn_state[&asset] = camera_state_version;
+    return true;
+}
+
 float safe_remainder_scale(const Asset& asset) {
     float remainder = asset.current_remaining_scale_adjustment;
     if (!std::isfinite(remainder) || remainder <= 0.0f) {
@@ -477,11 +533,42 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     const AnchorFrameSample anchor_sample = compute_anchor_frame_sample(asset, anchor, dims);
 
-    const world::GridPoint* owner_gp = asset.grid_point();
-    const float perspective_scale = owner_gp ? std::max(0.0001f, owner_gp->perspective_scale) : 1.0f;
-    const int resolution_layer = owner_gp ? owner_gp->resolution_layer() : asset.grid_resolution;
-
     const WarpedScreenGrid& cam = assets_owner->getView();
+    const Asset::PerspectiveSample perspective_sample = asset.runtime_perspective_sample();
+    const float perspective_scale = perspective_sample.scale;
+    const int resolution_layer = perspective_sample.resolution_layer;
+
+    const world::GridPoint* render_gp = cam.grid_point_for_asset(&asset);
+    const bool has_render_perspective =
+        render_gp &&
+        std::isfinite(render_gp->perspective_scale) &&
+        render_gp->perspective_scale > 0.0f;
+    const float render_perspective = has_render_perspective
+        ? std::max(0.0001f, render_gp->perspective_scale)
+        : perspective_scale;
+    const float perspective_delta = std::fabs(render_perspective - perspective_scale);
+    const std::uint64_t camera_state_version = cam.camera_state_version();
+    if (has_render_perspective &&
+        perspective_delta > 1e-3f &&
+        should_warn_perspective_divergence(asset, camera_state_version)) {
+        vibble::log::warn(std::string("[AnchorResolver] perspective mismatch for asset '") +
+                          (asset.info ? asset.info->name : std::string{"<unknown>"}) +
+                          "' resolver=" + std::to_string(perspective_scale) +
+                          " render=" + std::to_string(render_perspective) +
+                          " delta=" + std::to_string(perspective_delta) +
+                          " source=" + Asset::perspective_source_label(perspective_sample.source));
+    }
+    if (should_trace_anchor_resolver(asset) &&
+        should_emit_anchor_trace_for_camera_state(asset, camera_state_version)) {
+        vibble::log::debug(std::string("[ScaleTrace][Anchor] asset='") +
+                           (asset.info ? asset.info->name : std::string{"<unknown>"}) +
+                           "' camera_state=" + std::to_string(camera_state_version) +
+                           " source=" + Asset::perspective_source_label(perspective_sample.source) +
+                           " resolver=" + std::to_string(perspective_scale) +
+                           " render=" + std::to_string(render_perspective) +
+                           " delta=" + std::to_string(perspective_delta));
+    }
+
     render_projection::SpriteProjectionInput projection_input{};
     projection_input.world_x = asset.smoothed_translation_x();
     projection_input.world_y = asset.smoothed_translation_y();

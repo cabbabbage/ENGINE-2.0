@@ -97,6 +97,102 @@
       "tags": [],
       "update_radius": 0
     },
+    "barrel": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/barrel",
+      "asset_name": "barrel",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "bench": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bench",
+      "asset_name": "bench",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "big_rock": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/big_rock",
+      "asset_name": "big_rock",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
     "blue_flower": {
       "animations": {
         "default": {
@@ -128,6 +224,230 @@
       "start": "default",
       "tags": [],
       "tillable": false,
+      "update_radius": 0
+    },
+    "bone": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bone",
+      "asset_name": "bone",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "bone_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bone_1",
+      "asset_name": "bone_1",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "bone_pile": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bone_pile",
+      "asset_name": "bone_pile",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "book": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/book",
+      "asset_name": "book",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "book_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/book_1",
+      "asset_name": "book_1",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "book_pile": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/book_pile",
+      "asset_name": "book_pile",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "book_pile_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/book_pile_1",
+      "asset_name": "book_pile_1",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
       "update_radius": 0
     },
     "booze_1": {
@@ -229,6 +549,134 @@
       "tillable": false,
       "update_radius": 0
     },
+    "box": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/box",
+      "asset_name": "box",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "bush_1_fps_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bush_1_fps_2",
+      "asset_name": "bush_1_fps_2",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "bush_fps_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bush_fps_2",
+      "asset_name": "bush_fps_2",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "candle_fps_12": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/candle_fps_12",
+      "asset_name": "candle_fps_12",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
     "car": {
       "animations": {
         "default": {
@@ -248,6 +696,198 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/car",
       "asset_name": "car",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "chest_opening": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 6,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/chest_opening",
+      "asset_name": "chest_opening",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "curse_circle": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/curse_circle",
+      "asset_name": "curse_circle",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "flame_fps_12": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/flame_fps_12",
+      "asset_name": "flame_fps_12",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "fountain": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/fountain",
+      "asset_name": "fountain",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "grass_1_fps_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/grass_1_fps_2",
+      "asset_name": "grass_1_fps_2",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "grass_fps_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/grass_fps_2",
+      "asset_name": "grass_fps_2",
       "asset_type": "Object",
       "can_invert": false,
       "min_distance_all": 0,
@@ -454,6 +1094,70 @@
       "tags": [],
       "update_radius": 0
     },
+    "key": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/key",
+      "asset_name": "key",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "large_rock": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/large_rock",
+      "asset_name": "large_rock",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 63.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0
+    },
     "mana": {
       "animations": {
         "default": {
@@ -537,6 +1241,134 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/movement_speed",
       "asset_name": "movement_speed",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "mushroom": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/mushroom",
+      "asset_name": "mushroom",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "mushroom_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/mushroom_1",
+      "asset_name": "mushroom_1",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "mushroom_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/mushroom_2",
+      "asset_name": "mushroom_2",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "mushroom_3": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/mushroom_3",
+      "asset_name": "mushroom_3",
       "asset_type": "Object",
       "can_invert": false,
       "min_distance_all": 0,
@@ -668,6 +1500,262 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/red_flower",
       "asset_name": "red_flower",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "rock": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/rock",
+      "asset_name": "rock",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "sigil_of_fortune": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/sigil_of_fortune",
+      "asset_name": "sigil_of_fortune",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "skull": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/skull",
+      "asset_name": "skull",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "skull_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/skull_1",
+      "asset_name": "skull_1",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "skull_pile": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/skull_pile",
+      "asset_name": "skull_pile",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "skull_pile_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/skull_pile_1",
+      "asset_name": "skull_pile_1",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "small_rock": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/small_rock",
+      "asset_name": "small_rock",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "small_rock_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/small_rock_1",
+      "asset_name": "small_rock_1",
       "asset_type": "Object",
       "can_invert": false,
       "min_distance_all": 0,
@@ -3327,6 +4415,38 @@
       "tillable": false,
       "update_radius": 0
     },
+    "stump": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/stump",
+      "asset_name": "stump",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
     "table": {
       "animations": {
         "default": {
@@ -3462,6 +4582,38 @@
       "tillable": false,
       "update_radius": 0
     },
+    "tree_dark": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree_dark",
+      "asset_name": "tree_dark",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
     "tree_darker": {
       "animations": {
         "default": {
@@ -3495,6 +4647,70 @@
         "tree"
       ],
       "tillable": false,
+      "update_radius": 0
+    },
+    "tree_eyes_fps_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 24,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree_eyes_fps_2",
+      "asset_name": "tree_eyes_fps_2",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "tree_fps_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 24,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree_fps_2",
+      "asset_name": "tree_fps_2",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
       "update_radius": 0
     },
     "vibble": {
@@ -4229,6 +5445,26 @@
       "update_radius": 0
     }
   },
+  "image_effects": {
+    "background": {
+      "blur": 0.0,
+      "brightness": 0.0,
+      "contrast": 0.0,
+      "hue": 0.0,
+      "saturation_blue": 0.0,
+      "saturation_green": 0.0,
+      "saturation_red": 0.0
+    },
+    "foreground": {
+      "blur": 0.9599999189376831,
+      "brightness": 0.019999980926513672,
+      "contrast": 0.0,
+      "hue": 0.0,
+      "saturation_blue": 0.0,
+      "saturation_green": 0.0,
+      "saturation_red": 0.0
+    }
+  },
   "maps": {
     "Forrest": {
       "_save_manager_version": 4,
@@ -4316,7 +5552,11 @@
           {
             "candidates": [
               {
-                "chance": 0,
+                "chance": 5,
+                "name": "large_rock"
+              },
+              {
+                "chance": 7,
                 "name": "null"
               }
             ],
@@ -4324,8 +5564,8 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 5,
-            "jitter": 0,
+            "grid_resolution": 6,
+            "jitter": 12,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -4419,9 +5659,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -5757,6 +6997,66 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-0db31203d0cb"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "large_rock"
+                }
+              ],
+              "display_name": "large_rock",
+              "dx": -268,
+              "dz": -348,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 44,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-4427d006988e"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -2540,
+              "dz": -1082,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 45,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-7639726f4126"
             }
           ]
         }

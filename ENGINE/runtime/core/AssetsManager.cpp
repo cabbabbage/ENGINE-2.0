@@ -96,6 +96,22 @@ bool compute_asset_world_bounds(const Asset* asset,
     return true;
 }
 
+bool vibble_scale_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_SCALE_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" ||
+               value == "true" ||
+               value == "TRUE" ||
+               value == "on" ||
+               value == "ON";
+    }();
+    return enabled;
+}
+
 }
 
 Assets::Assets(AssetLibrary& library,
@@ -1009,15 +1025,59 @@ void Assets::set_input(Input* m) {
 void Assets::update(const Input& input)
 {
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
-    if (!should_step_dev_frame(input)) {
+    const bool should_step_frame = should_step_dev_frame(input);
+
+    ++frame_id_;
+    reset_frame_rebuild_stage();
+
+    if (!should_step_frame) {
         refresh_visible_asset_scaling_only();
+        run_frame_rebuild_stage();
+        refresh_visible_asset_scaling_only();
+        run_active_runtime_single_pass(false);
+
+        if (dev_controls_ && dev_controls_->is_enabled()) {
+            sync_dev_controls_current_room(current_room_);
+            dev_controls_->update(input);
+            dev_controls_->update_ui(input);
+        }
+
+        bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
+        const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+        std::uint64_t dev_filter_version = 0;
+        if (dev_controls_enabled) {
+            dev_filter_version = dev_controls_->other_settings_state_version();
+            if (!last_dev_controls_enabled_ || dev_filter_version != last_dev_filter_state_version_) {
+                needs_filtered_active_refresh = true;
+            }
+        } else if (last_dev_controls_enabled_) {
+            needs_filtered_active_refresh = true;
+        }
+        last_dev_controls_enabled_ = dev_controls_enabled;
+        last_dev_filter_state_version_ = dev_controls_enabled ? dev_filter_version : 0;
+
+        if (needs_filtered_active_refresh) {
+            needs_filtered_active_refresh_ = false;
+            update_filtered_active_assets();
+            if (dev_controls_enabled) {
+                dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
+                sync_dev_controls_current_room(current_room_);
+            }
+        }
+
+        if (!suppress_render_ && scene) {
+            scene->render();
+        }
+        render_overlays(renderer());
+
+        last_camera_state_version_for_dev_ = camera_.camera_state_version();
+        last_dev_active_state_version_snapshot_ = dev_active_state_version_;
+        dev_frame_initialized_ = true;
         last_frame_dt_seconds_ = 0.0f;
         last_frame_counter_    = now_counter;
         return;
     }
 
-    ++frame_id_;
-    reset_frame_rebuild_stage();
     float dt = 1.0f / 60.0f;
     if (last_frame_counter_ != 0 && perf_counter_frequency_ > 0.0) {
         const double elapsed = static_cast<double>(now_counter - last_frame_counter_) / perf_counter_frequency_;
@@ -1223,6 +1283,7 @@ void Assets::update(const Input& input)
 
     // Pass 2: rebuild traversal after attachment movement, then refresh anchors/runtime caches once.
     run_frame_rebuild_stage();
+    refresh_visible_asset_scaling_only();
     run_active_runtime_single_pass();
 
     bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
@@ -1591,6 +1652,20 @@ void Assets::set_dev_mode(bool mode) {
     }
 
     apply_camera_runtime_settings();
+    try {
+        force_camera_view_refresh();
+        if (vibble_scale_trace_enabled()) {
+            vibble::log::debug(std::string("[ScaleTrace][ModeToggle] mode=") +
+                               (dev_mode ? "dev" : "normal") +
+                               " camera_state=" + std::to_string(camera_.camera_state_version()) +
+                               " active_generation=" + std::to_string(active_assets_generation_));
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "[Assets] force_camera_view_refresh failed after mode toggle: "
+                  << ex.what() << "\n";
+    } catch (...) {
+        std::cerr << "[Assets] force_camera_view_refresh failed after mode toggle: unknown error\n";
+    }
     log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
 }
 

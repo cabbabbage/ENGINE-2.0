@@ -1,18 +1,11 @@
 #pragma once
 
-#include <functional>
 #include <memory>
 #include "DockableCollapsible.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 class Assets;
-class DMCheckbox;
-class DMButton;
 class Widget;
-class ButtonWidget;
-class CheckboxWidget;
-class DMDropdown;
-class DropdownWidget;
 class Input;
 class FloatSliderWidget;
 class SectionToggleWidget;
@@ -26,13 +19,11 @@ public:
     ~CameraUIPanel() override;
 
     void set_assets(Assets* assets);
-    void set_image_effects_panel_callback(std::function<void()> cb);
 
     void open();
     void close();
     void toggle();
     bool is_point_inside(int x, int y) const;
-    bool is_blur_section_visible() const { return is_visible() && depthcue_section_expanded_; }
     bool is_depth_section_visible() const { return is_visible() && depth_section_expanded_; }
 
     void update(const Input& input, int screen_w, int screen_h);
@@ -59,11 +50,8 @@ private:
 
     std::unique_ptr<Widget> header_spacer_;
     std::unique_ptr<Widget> controls_spacer_;
-    std::unique_ptr<DMCheckbox> depthcue_checkbox_;
-    std::unique_ptr<CheckboxWidget> depthcue_widget_;
     std::unique_ptr<SectionToggleWidget> visibility_section_header_;
     std::unique_ptr<SectionToggleWidget> depth_section_header_;
-    std::unique_ptr<SectionToggleWidget> depthcue_section_header_;
 
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
@@ -71,17 +59,10 @@ private:
     std::unique_ptr<FloatSliderWidget> perspective_cap_slider_;
     std::unique_ptr<FloatSliderWidget> offscreen_fade_slider_;
 
-    std::unique_ptr<DMButton> image_effect_button_;
-    std::unique_ptr<ButtonWidget> image_effect_widget_;
-
     std::unique_ptr<DiscreteSliderWidget> render_quality_slider_;
     bool visibility_section_expanded_ = true;
     bool depth_section_expanded_ = true;
-    bool depthcue_section_expanded_ = false;
     bool applying_settings_ = false;
-
-
-    std::function<void()> open_image_effects_cb_;
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;
 

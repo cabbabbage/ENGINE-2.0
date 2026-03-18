@@ -210,11 +210,17 @@ public:
     };
 
     struct MultiAssetImportState {
+        struct Item {
+            DropImportRequest request;
+            std::string suggested_name;
+            std::string error_message;
+        };
+
         bool active = false;
-        DropImportRequest request;
-        std::vector<std::filesystem::path> files;
+        std::vector<Item> items;
         std::size_t index = 0;
         bool waiting_for_rename = false;
+        std::size_t imported_count = 0;
     };
 
     bool can_use_room_editor_ui() const;
@@ -293,7 +299,9 @@ public:
                            std::string& error_out);
     void open_drop_choice_modal(const DropImportRequest& request);
     void begin_multi_asset_import(const DropImportRequest& request);
+    void begin_multi_folder_import(const std::vector<std::filesystem::path>& folders, SDL_Point drop_screen);
     void process_next_multi_asset_item();
+    const MultiAssetImportState::Item* current_multi_asset_import_item() const;
     void open_drop_conflict_modal(const std::string& asset_name);
     void open_drop_error_popup(const std::string& message);
     void reset_drop_choice_modal();

@@ -9,8 +9,118 @@
 #include "rendering/render/warped_screen_grid.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
+#include <limits>
 #include <optional>
+
+namespace {
+
+enum class DepthCueLayer {
+    None,
+    Foreground,
+    Background
+};
+
+struct DepthCueOverlayDecision {
+    SDL_Texture* texture = nullptr;
+    float opacity = 0.0f;
+};
+
+int safe_double_dimension(int value) {
+    const int safe_value = std::max(1, value);
+    const std::int64_t doubled = static_cast<std::int64_t>(safe_value) * 2;
+    const std::int64_t max_value = static_cast<std::int64_t>(std::numeric_limits<int>::max());
+    return static_cast<int>(std::min(doubled, max_value));
+}
+
+SDL_Rect build_overlay_dest_rect_from_base(const RenderObject& base_object) {
+    const int base_w = std::max(1, base_object.screen_rect.w);
+    const int base_h = std::max(1, base_object.screen_rect.h);
+
+    SDL_Rect overlay_rect{};
+    overlay_rect.x = base_object.screen_rect.x;
+    // Foreground/background textures are authored on centered 2x canvases.
+    // Shift the doubled rect down by half the base height to keep the
+    // original silhouette aligned to the base sprite's bottom-center anchor.
+    overlay_rect.y = base_object.screen_rect.y +
+        static_cast<int>(std::lround(static_cast<float>(base_h) * 0.5f));
+    overlay_rect.w = safe_double_dimension(base_w);
+    overlay_rect.h = safe_double_dimension(base_h);
+    return overlay_rect;
+}
+
+DepthCueOverlayDecision decide_depth_cue_overlay(const world::GridPoint* gp,
+                                                 float viewport_center_y,
+                                                 const WarpedScreenGrid::RealismSettings& settings,
+                                                 bool depth_effects_enabled,
+                                                 SDL_Texture* foreground_texture,
+                                                 SDL_Texture* background_texture,
+                                                 float center_deadzone_px,
+                                                 float min_depth_range_meters) {
+    if (!depth_effects_enabled || !gp) {
+        return {};
+    }
+    if (!std::isfinite(gp->screen.y) || !std::isfinite(viewport_center_y) ||
+        !std::isfinite(gp->distance_to_camera) || gp->distance_to_camera < 0.0f) {
+        return {};
+    }
+
+    const float signed_vertical_distance = gp->screen.y - viewport_center_y;
+    if (!std::isfinite(signed_vertical_distance) ||
+        std::abs(signed_vertical_distance) <= center_deadzone_px) {
+        return {};
+    }
+
+    const DepthCueLayer layer =
+        (signed_vertical_distance < 0.0f) ? DepthCueLayer::Background : DepthCueLayer::Foreground;
+    SDL_Texture* chosen_texture = nullptr;
+    if (layer == DepthCueLayer::Background) {
+        chosen_texture = background_texture;
+    } else if (layer == DepthCueLayer::Foreground) {
+        chosen_texture = foreground_texture;
+    }
+    if (!chosen_texture) {
+        return {};
+    }
+
+    const float meters_per_world_unit =
+        std::max(1.0e-6f, settings.meters_per_100_world_px * 0.01f);
+    float near_world = std::isfinite(settings.depth_near_world) ? settings.depth_near_world : 0.0f;
+    float far_world = std::isfinite(settings.depth_far_world) ? settings.depth_far_world : near_world;
+
+    float near_meters = near_world * meters_per_world_unit;
+    float far_meters = far_world * meters_per_world_unit;
+    if (!std::isfinite(near_meters)) {
+        near_meters = 0.0f;
+    }
+    if (!std::isfinite(far_meters)) {
+        far_meters = near_meters;
+    }
+
+    if (far_meters < near_meters) {
+        std::swap(far_meters, near_meters);
+    }
+    const float safe_min_range = std::max(1.0e-6f, min_depth_range_meters);
+    if ((far_meters - near_meters) < safe_min_range) {
+        far_meters = near_meters + safe_min_range;
+    }
+
+    const float t = std::clamp((gp->distance_to_camera - near_meters) / (far_meters - near_meters), 0.0f, 1.0f);
+    float opacity = 0.0f;
+    if (layer == DepthCueLayer::Background) {
+        opacity = t;
+    } else if (layer == DepthCueLayer::Foreground) {
+        opacity = 1.0f - t;
+    }
+    if (!std::isfinite(opacity) || opacity <= 0.0f) {
+        return {};
+    }
+
+    return DepthCueOverlayDecision{chosen_texture, opacity};
+}
+
+} // namespace
 
 CompositeAssetRenderer::CompositeAssetRenderer(SDL_Renderer* renderer, Assets* assets)
     : renderer_(renderer), assets_(assets) {}
@@ -187,52 +297,47 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           asset->world_z_offset(),
                           has_src_rect ? std::optional<SDL_Rect>(src_rect) : std::nullopt);
 
-        bool have_vertical_distance = false;
-        float vertical_distance_from_center = 0.0f;
-        bool is_above_center = false;
-        if (assets_ && renderer_) {
+        const RenderObject* const base_render_object =
+            asset->render_package.empty() ? nullptr : &asset->render_package.back();
+        if (base_render_object && assets_ && renderer_) {
             const WarpedScreenGrid& cam = assets_->getView();
-            if (const auto* gp = cam.grid_point_for_asset(asset)) {
-                int screen_width = 0, screen_height = 0;
-                SDL_GetCurrentRenderOutputSize(renderer_, &screen_width, &screen_height);
-                const float center_y = static_cast<float>(screen_height) * 0.5f;
-                vertical_distance_from_center = std::abs(gp->screen.y - center_y);
-                is_above_center = gp->screen.y < center_y;
-                have_vertical_distance = std::isfinite(vertical_distance_from_center);
-            }
-        }
+            const world::GridPoint* gp = cam.grid_point_for_asset(asset);
 
-        SDL_Texture* overlay_texture = nullptr;
-        float overlay_opacity = 0.0f;
-        const float fg_distance = kDepthCueForegroundFullOpacityDistance;
-        const float bg_distance = kDepthCueBackgroundFullOpacityDistance;
-        if (have_vertical_distance && vertical_distance_from_center > 0.0f) {
-            if (is_above_center) {
-                // Above center: use background texture, interpolate from center to bg_distance
-                overlay_texture = depth_cue_background;
-                overlay_opacity = std::clamp(vertical_distance_from_center / bg_distance, 0.0f, 1.0f);
-            } else {
-                // Below center: use foreground texture, interpolate from center to fg_distance
-                overlay_texture = depth_cue_foreground;
-                overlay_opacity = std::clamp(vertical_distance_from_center / fg_distance, 0.0f, 1.0f);
-            }
-        }
+            int screen_height = 0;
+            int screen_width_unused = 0;
+            SDL_GetCurrentRenderOutputSize(renderer_, &screen_width_unused, &screen_height);
+            const float center_y = static_cast<float>(screen_height) * 0.5f;
 
-        if (overlay_texture != nullptr && overlay_opacity > 0.0f) {
+            const DepthCueOverlayDecision overlay_decision = decide_depth_cue_overlay(
+                gp,
+                center_y,
+                cam.realism_settings(),
+                assets_->depth_effects_enabled(),
+                depth_cue_foreground,
+                depth_cue_background,
+                kDepthCueCenterDeadzonePx,
+                kDepthCueMinDepthRangeMeters);
+
+            const float overlay_opacity = std::clamp(
+                overlay_decision.opacity * (static_cast<float>(asset_alpha) / 255.0f),
+                0.0f,
+                1.0f);
             const Uint8 overlay_alpha = static_cast<Uint8>(std::lround(overlay_opacity * 255.0f));
-            if (overlay_alpha > 0) {
+            if (overlay_decision.texture && overlay_alpha > 0) {
                 int overlay_tex_w = 0;
                 int overlay_tex_h = 0;
                 float overlay_tex_wf = 0.0f;
                 float overlay_tex_hf = 0.0f;
-                if (SDL_GetTextureSize(overlay_texture, &overlay_tex_wf, &overlay_tex_hf)) {
+                if (SDL_GetTextureSize(overlay_decision.texture, &overlay_tex_wf, &overlay_tex_hf)) {
                     overlay_tex_w = static_cast<int>(std::lround(overlay_tex_wf));
                     overlay_tex_h = static_cast<int>(std::lround(overlay_tex_hf));
                 }
                 overlay_tex_w = std::max(1, overlay_tex_w);
                 overlay_tex_h = std::max(1, overlay_tex_h);
-                add_render_object(overlay_texture,
-                                  dest_rect,
+
+                const SDL_Rect overlay_rect = build_overlay_dest_rect_from_base(*base_render_object);
+                add_render_object(overlay_decision.texture,
+                                  overlay_rect,
                                   SDL_Color{255, 255, 255, overlay_alpha},
                                   SDL_BLENDMODE_BLEND,
                                   false,
@@ -241,7 +346,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   base_flip,
                                   SDL_Point{overlay_tex_w, overlay_tex_h},
                                   SDL_Point{overlay_tex_w, overlay_tex_h},
-                                  asset->world_z_offset());
+                                  base_render_object->world_z_offset);
             }
         }
     }

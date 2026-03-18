@@ -8,7 +8,6 @@
 #include "devtools/dm_styles.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/widgets.hpp"
-#include "rendering/render/warped_screen_grid.hpp"
 #include "utils/rebuild_queue.hpp"
 
 #include <SDL3_image/SDL_image.h>
@@ -207,10 +206,14 @@ PreviewTextureSelection pick_cached_variant(Animation& animation, int preferred_
     return selection;
 }
 
+fs::path project_cache_root() {
+    return fs::path(PROJECT_ROOT) / "cache";
+}
+
 }
 
 ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets, int x, int y)
-    : DockableCollapsible("Image Effects", true, x, y),
+    : DockableCollapsible("Depth Cue Effects", true, x, y),
       assets_(assets) {
     set_padding(DMSpacing::panel_padding());
     set_row_gap(DMSpacing::item_gap());
@@ -220,9 +223,8 @@ ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets,
     set_header_button_style(&DMStyles::AccentButton());
     header_spacer_ = std::make_unique<LocalSpacerWidget>(DMSpacing::header_gap());
     build_ui();
-    refresh_from_camera();
     rebuild_asset_options();
-    load_depth_cue_settings_from_manifest();
+    refresh_from_camera();
 }
 
 ForegroundBackgroundEffectPanel::~ForegroundBackgroundEffectPanel() {
@@ -239,6 +241,9 @@ void ForegroundBackgroundEffectPanel::set_assets(Assets* assets) {
 void ForegroundBackgroundEffectPanel::open() {
     set_visible(true);
     DockableCollapsible::open();
+    if (!camera_effects::ImageEffectSettingsIsIdentity(current_settings_)) {
+        update_preview_and_manifest();
+    }
     request_preview_rebuild();
 }
 
@@ -313,7 +318,7 @@ void ForegroundBackgroundEffectPanel::build_ui() {
     configure_slider(saturation_b_, "Blue Saturation", -1.0f, 1.0f, 0.02f, 2);
     configure_slider(hue_, "Hue Shift (deg)", -180.0f, 180.0f, 1.0f, 0);
 
-    apply_button_ = std::make_unique<DMButton>("Create Effects", &DMStyles::AccentButton(), 0, DMButton::height());
+    apply_button_ = std::make_unique<DMButton>("Apply", &DMStyles::AccentButton(), 0, DMButton::height());
     apply_button_widget_ = std::make_unique<ButtonWidget>(apply_button_.get(), [this]() { apply_and_regenerate(); });
 
     restore_defaults_button_ = std::make_unique<DMButton>("Restore Defaults", &DMStyles::WarnButton(), 0, DMButton::height());
@@ -461,6 +466,10 @@ void ForegroundBackgroundEffectPanel::handle_asset_selection(int index) {
 
     destroy_preview_textures();
     preview_dirty_ = true;
+    if (!camera_effects::ImageEffectSettingsIsIdentity(current_settings_)) {
+        update_preview_and_manifest();
+    }
+    request_preview_rebuild();
 }
 
 void ForegroundBackgroundEffectPanel::update_controls_from_settings(const camera_effects::ImageEffectSettings& settings) {
@@ -559,7 +568,7 @@ void ForegroundBackgroundEffectPanel::update_preview_and_manifest() {
         return;
     }
 
-    const std::string asset_cache_path = "cache/" + selected_asset_ + "/animations";
+    const fs::path asset_cache_path = project_cache_root() / selected_asset_ / "animations";
     std::error_code ec;
 
     std::string image_to_use;
@@ -683,12 +692,13 @@ void ForegroundBackgroundEffectPanel::generate_preview_with_cli(
         return;
     }
 
-    std::string output_path = "cache/preview_image.png";
+    const char* mode_suffix = (current_mode_ == EffectMode::Foreground) ? "foreground" : "background";
+    const fs::path output_path = project_cache_root() / ("preview_image_" + std::string(mode_suffix) + ".png");
 
     std::error_code ec;
-    std::filesystem::create_directories("cache", ec);
+    std::filesystem::create_directories(output_path.parent_path(), ec);
     if (ec) {
-        std::cerr << "[DepthCuePanel] Failed to create cache directory: " << ec.message() << "\n";
+        std::cerr << "[DepthCuePanel] Failed to create preview output directory: " << ec.message() << "\n";
         return;
     }
 
@@ -699,7 +709,7 @@ void ForegroundBackgroundEffectPanel::generate_preview_with_cli(
     std::ostringstream cmd;
     cmd << "\"" << tool_path.string() << "\" "
         << "\"" << image_path << "\" "
-        << "\"" << output_path << "\" "
+        << "\"" << output_path.string() << "\" "
         << layer_type << " "
         << settings.contrast << " "
         << settings.brightness << " "
@@ -720,10 +730,13 @@ void ForegroundBackgroundEffectPanel::generate_preview_with_cli(
         last_preview_mode_ = current_mode_;
         last_preview_asset_ = selected_asset_;
         last_preview_source_path_ = image_path;
-        load_preview_texture(output_path);
+        load_preview_texture(output_path.string());
         preview_dirty_ = true;
+        request_preview_rebuild();
     } else {
         std::cerr << "[DepthCuePanel] Failed to generate preview, exit code: " << result << "\n";
+        preview_dirty_ = true;
+        request_preview_rebuild();
     }
 }
 
@@ -773,6 +786,9 @@ bool ForegroundBackgroundEffectPanel::should_skip_preview(
     const std::string& source_path,
     EffectMode mode,
     const camera_effects::ImageEffectSettings& settings) const {
+    if (!current_preview_texture_) {
+        return false;
+    }
     if (mode != last_preview_mode_) {
         return false;
     }
@@ -810,32 +826,26 @@ void ForegroundBackgroundEffectPanel::set_mode(EffectMode mode) {
 
     save_depth_cue_settings_to_manifest();
 
+    destroy_preview_textures();
+    if (!camera_effects::ImageEffectSettingsIsIdentity(current_settings_)) {
+        update_preview_and_manifest();
+    }
     preview_dirty_ = true;
+    request_preview_rebuild();
 }
 
 void ForegroundBackgroundEffectPanel::on_slider_changed() {
     save_current_mode_settings();
     has_unsaved_changes_ = true;
     update_preview_and_manifest();
+    request_preview_rebuild();
 }
 
 void ForegroundBackgroundEffectPanel::refresh_from_camera() {
-    if (!assets_) {
-        fg_settings_ = camera_effects::ImageEffectSettings{};
-        bg_settings_ = camera_effects::ImageEffectSettings{};
-        saved_fg_ = fg_settings_;
-        saved_bg_ = bg_settings_;
-        load_current_mode_settings();
-        return;
-    }
-    // Depth cue functionality removed - will be reimplemented later
-    fg_settings_ = camera_effects::ImageEffectSettings{};
-    bg_settings_ = camera_effects::ImageEffectSettings{};
-    saved_fg_ = fg_settings_;
-    saved_bg_ = bg_settings_;
-    load_current_mode_settings();
+    load_depth_cue_settings_from_manifest();
     has_unsaved_changes_ = false;
     preview_dirty_ = true;
+    request_preview_rebuild();
 }
 
 bool ForegroundBackgroundEffectPanel::ensure_preview_source() {
@@ -964,24 +974,11 @@ void ForegroundBackgroundEffectPanel::apply_and_regenerate() {
     }
 
     save_depth_cue_settings_to_manifest();
-    // Depth cue functionality removed - will be reimplemented later
-    // WarpedScreenGrid& cam = assets_->getView();
-    // WarpedScreenGrid::RealismSettings settings = cam.realism_settings();
-    // settings.foreground_effects = fg_settings_;
-    // settings.background_effects = bg_settings_;
-    // cam.set_realism_settings(settings);
-    // assets_->on_camera_settings_changed();
 
     vibble::RebuildQueueCoordinator coordinator;
-    if (selected_asset_.empty()) {
-        coordinator.request_full_asset_rebuild();
-    } else {
-        coordinator.request_asset(selected_asset_);
-    }
+    coordinator.request_full_asset_rebuild();
 
-    std::cout << "[DepthCuePanel] Marked "
-              << (selected_asset_.empty() ? std::string{"all assets"} : selected_asset_)
-              << " for regeneration. Run Rebuild Assets to process queued work.\n";
+    std::cout << "[DepthCuePanel] Queued full asset rebuild. Rebuild processing runs in the existing save/exit pipeline.\n";
 
     saved_fg_ = fg_settings_;
     saved_bg_ = bg_settings_;

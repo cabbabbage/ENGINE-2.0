@@ -152,6 +152,19 @@ class Asset {
     float runtime_resolved_scale() const;
     float runtime_width_px() const;
     float runtime_height_px() const;
+    enum class PerspectiveSource {
+        CameraTraversal,
+        AssetGridPoint,
+        CachedLastFrame,
+        Default
+    };
+    struct PerspectiveSample {
+        float scale = 1.0f;
+        int resolution_layer = 0;
+        PerspectiveSource source = PerspectiveSource::Default;
+    };
+    PerspectiveSample runtime_perspective_sample() const;
+    static const char* perspective_source_label(PerspectiveSource source);
     void move_to_world_position(int world_x, int world_y, int world_z = 0,
                                 std::optional<int> resolution_layer_override = std::nullopt);
     void set_world_z(int world_z);

@@ -64,6 +64,43 @@ namespace asset_paths = devmode::asset_paths;
 
 namespace {
 
+nlohmann::json animation_manifest_snapshot(const AssetInfo& info) {
+    nlohmann::json snapshot = nlohmann::json::object();
+    snapshot["animations"] = nlohmann::json::object();
+    snapshot["start"] = std::string{};
+
+    nlohmann::json payload = info.manifest_payload();
+    if (!payload.is_object()) {
+        return snapshot;
+    }
+
+    bool has_start = false;
+    const auto animations_it = payload.find("animations");
+    if (animations_it != payload.end() && animations_it->is_object()) {
+        const auto nested_animations_it = animations_it->find("animations");
+        if (nested_animations_it != animations_it->end() && nested_animations_it->is_object()) {
+            snapshot["animations"] = *nested_animations_it;
+        } else {
+            snapshot["animations"] = *animations_it;
+        }
+
+        const auto nested_start_it = animations_it->find("start");
+        if (nested_start_it != animations_it->end()) {
+            snapshot["start"] = *nested_start_it;
+            has_start = true;
+        }
+    }
+
+    if (!has_start) {
+        const auto root_start_it = payload.find("start");
+        if (root_start_it != payload.end()) {
+            snapshot["start"] = *root_start_it;
+        }
+    }
+
+    return snapshot;
+}
+
 class Section_BasicInfo : public DockableCollapsible {
   public:
     Section_BasicInfo();
@@ -2227,15 +2264,19 @@ void AssetInfoUI::on_animation_document_saved() {
         return;
     }
 
+    const nlohmann::json before_snapshot = animation_manifest_snapshot(*info_);
     const bool reloaded = info_->reload_animations_from_disk();
     if (!reloaded) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
     }
+    const nlohmann::json after_snapshot = animation_manifest_snapshot(*info_);
+    const bool animation_data_changed = reloaded && before_snapshot != after_snapshot;
 
-    // Ensure both bundle-cache save and image-cache rebuild have work queued after any
-    // animation document mutation (add/remove/rename/source edits).
-    info_->mark_dirty();
-    if (!info_->name.empty()) {
+    if (animation_data_changed) {
+        // Queue cache work only when animation manifest data actually changed.
+        info_->mark_dirty();
+    }
+    if (animation_data_changed && !info_->name.empty()) {
         vibble::RebuildQueueCoordinator coordinator;
         coordinator.request_asset(info_->name);
     }

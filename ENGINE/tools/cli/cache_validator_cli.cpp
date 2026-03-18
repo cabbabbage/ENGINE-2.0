@@ -225,7 +225,9 @@ int main(int argc, char** argv) {
         if (!manifest_json || !effects_cache_json) {
             effects_mismatch = true;
         } else {
-            effects_mismatch = (build_effects_snippet(*manifest_json) != *effects_cache_json);
+            const nlohmann::json expected_effects = CacheHelper::Normalize(build_effects_snippet(*manifest_json));
+            const nlohmann::json cached_effects = CacheHelper::Normalize(*effects_cache_json);
+            effects_mismatch = (expected_effects != cached_effects);
         }
     }
 

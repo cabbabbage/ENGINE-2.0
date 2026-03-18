@@ -787,53 +787,17 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
     if (bundle_loaded) {
         const bool variant_layout_ok = bundle_variant_layout_is_valid(bundle);
         const bool populated = try_populate(bundle);
-        const bool selected_inputs_newer = inputs_newer_than_bundle(info, bundle_path, animation_filter);
-        if (populated && variant_layout_ok && !selected_inputs_newer) {
+        if (populated && variant_layout_ok) {
             raw_bundle = bundle;
             return true;
         }
 
-        if (!has_animation_filter) {
-            const std::uint64_t current_expected_hash = get_expected_hash();
-            const bool hash_matches = (bundle.content_hash == current_expected_hash) && variant_layout_ok;
-            if (hash_matches && populated) {
-                raw_bundle = bundle;
-                return true;
-            }
-
-            // Compatibility path: if runtime frames can be populated and no cache/source input
-            // is newer than the existing bundle, keep using the bundle and just migrate the
-            // header hash marker. This avoids expensive one-time rebuild stalls after hash
-            // algorithm updates while preserving stale-input rebuild behavior.
-            if (populated && variant_layout_ok && bundle.content_hash != current_expected_hash &&
-                !selected_inputs_newer) {
-                if (!CacheManager::update_bundle_content_hash(bundle_path.generic_string(), current_expected_hash)) {
-                    vibble::log::warn("[PrimaryAssetCache] Using cached bundle for " + info.name +
-                                      " but failed to update migrated hash marker.");
-                }
-                bundle.content_hash = current_expected_hash;
-                raw_bundle = bundle;
-                return true;
-            }
-
-            if (bundle.content_hash != current_expected_hash) {
-                vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + " (content hash mismatch).");
-            } else if (!variant_layout_ok) {
-                vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
-                                  " (missing full-resolution or inconsistent variant metadata).");
-            } else {
-                vibble::log::warn("[PrimaryAssetCache] Cached bundle for " + info.name +
-                                  " could not populate runtime frames; rebuilding from source.");
-            }
-        } else if (selected_inputs_newer) {
-            vibble::log::info("[PrimaryAssetCache] Rebuilding selected animation bundle data for " + info.name +
-                              " (selected cache inputs newer than bundle).");
-        } else if (!variant_layout_ok) {
+        if (!variant_layout_ok) {
             vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
                               " (missing full-resolution or inconsistent variant metadata).");
         } else {
             vibble::log::warn("[PrimaryAssetCache] Cached bundle for " + info.name +
-                              " could not populate runtime frames; rebuilding from source.");
+                              " could not populate requested runtime frames; rebuilding from source.");
         }
     } else {
         vibble::log::info("[PrimaryAssetCache] Missing cached bundle for " + info.name +
@@ -846,8 +810,9 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
         return false;
     }
 
-    if (!has_animation_filter) {
-        rebuilt.content_hash = get_expected_hash();
+    rebuilt.content_hash = get_expected_hash();
+    const bool should_persist_rebuilt_bundle = !has_animation_filter || !bundle_loaded;
+    if (should_persist_rebuilt_bundle) {
         if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
             vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");
         }

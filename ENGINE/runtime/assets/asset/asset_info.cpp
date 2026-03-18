@@ -1381,19 +1381,39 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
     }
 
     try {
-
         if (!anims_json_.is_object()) {
             anims_json_ = nlohmann::json::object();
         }
 
-        nlohmann::json updated_animation = normalize_animation_payload(properties);
+        nlohmann::json existing_animation = nlohmann::json::object();
+        bool has_existing_animation = false;
         if (anims_json_.contains(animation_name) && anims_json_[animation_name].is_object()) {
+            existing_animation = normalize_animation_payload(anims_json_[animation_name]);
+            has_existing_animation = true;
+        } else if (info_json_.is_object() &&
+                   info_json_.contains("animations") &&
+                   info_json_["animations"].is_object() &&
+                   info_json_["animations"].contains(animation_name) &&
+                   info_json_["animations"][animation_name].is_object()) {
+            existing_animation = normalize_animation_payload(info_json_["animations"][animation_name]);
+            has_existing_animation = true;
+        }
 
-            for (auto& [key, value] : anims_json_[animation_name].items()) {
+        nlohmann::json updated_animation = normalize_animation_payload(properties);
+        if (has_existing_animation) {
+            for (auto& [key, value] : existing_animation.items()) {
                 if (!updated_animation.contains(key)) {
                     updated_animation[key] = value;
                 }
             }
+        }
+
+        const bool should_set_start =
+            properties.contains("start") && properties["start"].is_boolean() && properties["start"].get<bool>();
+        const bool animation_changed = !has_existing_animation || existing_animation != updated_animation;
+        const bool start_changed = should_set_start && start_animation != animation_name;
+        if (!animation_changed && !start_changed) {
+            return false;
         }
 
         anims_json_[animation_name] = updated_animation;
@@ -1406,7 +1426,7 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
         }
         info_json_["animations"][animation_name] = updated_animation;
 
-        if (properties.contains("start") && properties["start"].is_boolean() && properties["start"].get<bool>()) {
+        if (should_set_start) {
             start_animation = animation_name;
             info_json_["start"] = start_animation;
         }

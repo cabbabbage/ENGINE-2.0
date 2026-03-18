@@ -22,15 +22,13 @@ public:
     AnchorBoundAssetHelper(Assets* assets_owner, Asset* controller = nullptr);
     ~AnchorBoundAssetHelper();
 
-    // API used by custom controllers (stable).
+    // API used by custom controllers (stable/minimal).
     bool tick_for_frame();
-    bool bind_child_to_anchor_names(Asset& parent,
-                                    Asset& child,
-                                    const std::string& parent_anchor_name,
-                                    const std::string& child_anchor_name,
-                                    std::optional<std::string> depth_policy = std::nullopt,
-                                    std::optional<std::string> layer_policy = std::nullopt,
-                                    int ticks = -1);
+    bool bind_child_to_anchor_name(Asset& parent,
+                                   Asset& child,
+                                   const std::string& parent_anchor_name,
+                                   const std::string& child_anchor_name = std::string{},
+                                   int ticks = -1);
     bool bind_child_to_anchor(Asset& parent,
                               Asset& child,
                               const AnchorPoint& anchor,
@@ -72,6 +70,7 @@ private:
         bool registered_with_parent = false;
         int last_anchor_depth_offset = 0;
         std::string child_anchor_name;
+        bool child_anchor_fallback_logged = false;
         DepthPolicy depth_policy = DepthPolicy::AnchorDerived;
         LayerPolicy layer_policy = LayerPolicy::AnchorDerived;
     };
@@ -82,6 +81,13 @@ private:
     bool resolve_binding_entities(BindingRecord& record);
     std::uintptr_t binding_key_for_child(const Asset& child) const;
     std::string asset_stable_id(const Asset* asset) const;
+    bool bind_child_to_anchor_names(Asset& parent,
+                                    Asset& child,
+                                    const std::string& parent_anchor_name,
+                                    const std::string& child_anchor_name,
+                                    std::optional<std::string> depth_policy = std::nullopt,
+                                    std::optional<std::string> layer_policy = std::nullopt,
+                                    int ticks = -1);
     std::optional<AnchorPoint> resolve_anchor(BindingRecord& record) const;
     std::optional<AnchorPoint> resolve_child_anchor(BindingRecord& record) const;
     void teardown_binding(BindingRecord& state);

@@ -1901,8 +1901,7 @@ void Assets::reconcile_manifest_follower_bindings() {
 
         const auto& spec = *child->info->follower_binding;
         const bool has_required_parent_anchor = !spec.anchor_name.empty();
-        const bool has_required_child_anchor = !spec.follower_anchor_name.empty();
-        if (!has_required_parent_anchor || !has_required_child_anchor) {
+        if (!has_required_parent_anchor) {
             follower_binding_helper_->unbind_child(*child);
             set_follower_hidden(child, true);
             continue;

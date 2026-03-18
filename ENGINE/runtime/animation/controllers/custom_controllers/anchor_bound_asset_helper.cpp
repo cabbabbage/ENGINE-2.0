@@ -171,6 +171,7 @@ void AnchorBoundAssetHelper::teardown_binding(BindingRecord& state) {
     state.anchor_index = std::nullopt;
     state.anchor_name.clear();
     state.child_anchor_name.clear();
+    state.child_anchor_fallback_logged = false;
     state.depth_policy = DepthPolicy::AnchorDerived;
     state.layer_policy = LayerPolicy::AnchorDerived;
     state.registered_with_parent = false;
@@ -204,13 +205,7 @@ bool AnchorBoundAssetHelper::bind_child_to_anchor(Asset& parent,
                                                    Asset& child,
                                                    const AnchorPoint& anchor,
                                                    const std::string& child_anchor_name) {
-    return bind_child_to_anchor_names(parent,
-                                      child,
-                                      anchor.name,
-                                      child_anchor_name,
-                                      std::nullopt,
-                                      std::nullopt,
-                                      -1);
+    return bind_child_to_anchor_name(parent, child, anchor.name, child_anchor_name, -1);
 }
 
 bool AnchorBoundAssetHelper::bind_child_for_ticks(Asset& parent,
@@ -218,9 +213,17 @@ bool AnchorBoundAssetHelper::bind_child_for_ticks(Asset& parent,
                                                   const AnchorPoint& anchor,
                                                   int ticks,
                                                   const std::string& child_anchor_name) {
+    return bind_child_to_anchor_name(parent, child, anchor.name, child_anchor_name, ticks);
+}
+
+bool AnchorBoundAssetHelper::bind_child_to_anchor_name(Asset& parent,
+                                                       Asset& child,
+                                                       const std::string& parent_anchor_name,
+                                                       const std::string& child_anchor_name,
+                                                       int ticks) {
     return bind_child_to_anchor_names(parent,
                                       child,
-                                      anchor.name,
+                                      parent_anchor_name,
                                       child_anchor_name,
                                       std::nullopt,
                                       std::nullopt,
@@ -268,6 +271,7 @@ bool AnchorBoundAssetHelper::bind_child_to_anchor_names(Asset& parent,
     state.bound = true;
     if (!same_binding) {
         state.currently_active = false;
+        state.child_anchor_fallback_logged = false;
     }
     state.child_anchor_name = desired_child_anchor_name;
     state.depth_policy = desired_depth_policy;
@@ -493,26 +497,6 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
         return changed;
     }
 
-    if (state.child_anchor_name.empty()) {
-        changed = set_child_hidden_state(state.child, true) || changed;
-        if (state.child->render_depth_bias() != 0.0) {
-            state.child->set_render_depth_bias(0.0);
-            changed = true;
-        }
-        if (state.currently_active) {
-            changed = true;
-        }
-        state.currently_active = false;
-
-        log_binding_tick(state,
-                         false,
-                         state.parent->world_x(),
-                         state.parent->world_y(),
-                         state.child->world_x(),
-                         state.child->world_y());
-        return changed;
-    }
-
     const AnchorPoint& anchor = *resolved;
     state.last_anchor_depth_offset = anchor.depth_offset;
     const int anchor_world_x = static_cast<int>(std::lround(anchor.world_pos_2d.x));
@@ -528,34 +512,28 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
 
     auto child_anchor = resolve_child_anchor(state);
     const bool child_anchor_available = child_anchor.has_value() && child_anchor->is_active();
-    if (!child_anchor_available) {
-        changed = set_child_hidden_state(state.child, true) || changed;
-        if (state.child->render_depth_bias() != 0.0) {
-            state.child->set_render_depth_bias(0.0);
-            changed = true;
-        }
-        if (state.currently_active) {
-            changed = true;
-        }
-        state.currently_active = false;
-
-        log_binding_tick(state,
-                         false,
-                         anchor_world_x,
-                         anchor_world_y,
-                         state.child->world_x(),
-                         state.child->world_y());
-        return changed;
+    const bool use_child_origin_as_anchor = !child_anchor_available;
+    if (use_child_origin_as_anchor && !state.child_anchor_name.empty() && !state.child_anchor_fallback_logged) {
+        vibble::log::warn("[AnchorBinder] child anchor '" + state.child_anchor_name +
+                          "' missing for " + asset_label(state.child) +
+                          "; falling back to child origin for binding");
+        state.child_anchor_fallback_logged = true;
+    } else if (child_anchor_available) {
+        state.child_anchor_fallback_logged = false;
     }
 
-    const int child_anchor_world_x = static_cast<int>(std::lround(child_anchor->world_pos_2d.x));
-    const int child_anchor_world_y = static_cast<int>(std::lround(child_anchor->world_pos_2d.y));
-    const int child_anchor_world_z = child_anchor->world_z;
-    const int child_anchor_layer = child_anchor->resolution_layer;
     const int child_origin_world_x = state.child->world_x();
     const int child_origin_world_y = state.child->world_y();
     const int child_origin_world_z = state.child->world_z();
     const int child_origin_layer = asset_resolution_layer(state.child);
+    const int child_anchor_world_x = use_child_origin_as_anchor
+        ? child_origin_world_x
+        : static_cast<int>(std::lround(child_anchor->world_pos_2d.x));
+    const int child_anchor_world_y = use_child_origin_as_anchor
+        ? child_origin_world_y
+        : static_cast<int>(std::lround(child_anchor->world_pos_2d.y));
+    const int child_anchor_world_z = use_child_origin_as_anchor ? child_origin_world_z : child_anchor->world_z;
+    const int child_anchor_layer = use_child_origin_as_anchor ? child_origin_layer : child_anchor->resolution_layer;
     const int child_anchor_offset_x = child_anchor_world_x - child_origin_world_x;
     const int child_anchor_offset_y = child_anchor_world_y - child_origin_world_y;
     const int child_anchor_offset_z = child_anchor_world_z - child_origin_world_z;

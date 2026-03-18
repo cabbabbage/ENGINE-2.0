@@ -1734,6 +1734,7 @@ void DevControls::set_enabled(bool enabled) {
         other_settings_.ensure_layout();
     }
     mark_layout_dirty();
+    update_movement_debug_visibility();
     {
         std::ostringstream oss;
         oss << "[DevControls] set_enabled(" << (enabled ? "true" : "false") << ") done";

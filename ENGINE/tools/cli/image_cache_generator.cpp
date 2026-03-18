@@ -1134,7 +1134,19 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     w.out_background_dir = bg_dir;
                     w.fx_foreground = fx_fg;
                     w.fx_background = fx_bg;
-                    tasks.push_back(std::move(w));
+
+                    const std::string batch_key = asset_name + '\x1f' + anim_name + '\x1f' + std::to_string(src_idx);
+                    auto [it, inserted] = source_batch_index.emplace(batch_key, source_batches.size());
+                    if (inserted) {
+                        SourceFrameBatch batch;
+                        batch.asset_name = asset_name;
+                        batch.anim_name = anim_name;
+                        batch.src_frame_index = src_idx;
+                        batch.src_png_path = frame_paths[src_idx];
+                        source_batches.push_back(std::move(batch));
+                    }
+                    source_batches[it->second].scale_items.push_back(std::move(w));
+                    ++planned_scale_tasks;
                 }
 
                 assets_touched.insert(asset_name);
@@ -1149,14 +1161,14 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         }
     }
 
-    result.stats.tasks_total = tasks.size();
+    result.stats.tasks_total = planned_scale_tasks;
     result.stats.assets_touched = assets_touched.size();
     result.stats.animations_touched = anims_touched.size();
 
     // Dry run: report and exit
     if (opt.dry_run) {
         std::ostringstream ss;
-        ss << "Dry run: " << tasks.size() << " tasks";
+        ss << "Dry run: " << planned_scale_tasks << " scale tasks in " << source_batches.size() << " source-frame batches";
         log.info(ss.str());
         result.ok = true;
         return result;
@@ -1171,112 +1183,164 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     std::atomic<std::uint64_t> tasks_ok{0};
     std::atomic<std::uint64_t> tasks_fail{0};
 
-    if (!tasks.empty()) {
-        // Execute tasks in thread pool
+    if (!source_batches.empty()) {
+        const std::uint64_t total_scale_tasks = planned_scale_tasks;
+        std::atomic<std::uint64_t> scales_progress{0};
+        const std::uint64_t progress_interval = 50;
+
+        // Execute source-frame batches in thread pool. Each batch decodes source PNG once and fans out to all scales.
         ThreadPool pool(workers);
 
-        for (const WorkItem& w : tasks) {
-            pool.enqueue([&log, &w, &any_fail, &err_mu, &first_error, &pngs_written, &pngs_skipped, &tasks_ok, &tasks_fail]() {
+        for (const SourceFrameBatch& batch : source_batches) {
+            pool.enqueue([&log,
+                          &batch,
+                          use_d3d11_effects,
+                          quiet_task_logs = opt.quiet_task_logs,
+                          total_scale_tasks,
+                          progress_interval,
+                          &scales_progress,
+                          &any_fail,
+                          &err_mu,
+                          &first_error,
+                          &pngs_written,
+                          &pngs_skipped,
+                          &tasks_ok,
+                          &tasks_fail]() {
                 if (any_fail.load(std::memory_order_relaxed)) {
                     // We still allow other tasks to finish, but no need to do extra work.
                 }
 
-                std::ostringstream hdr;
-                hdr << "[" << w.asset_name << "/" << w.anim_name
-                    << " src=" << w.src_frame_index
-                    << " scale=" << w.scale_pct
-                    << " outs=" << w.out_indices.size() << "]";
-                log.info(hdr.str());
+                if (!quiet_task_logs) {
+                    std::ostringstream hdr;
+                    hdr << "[batch " << batch.asset_name << "/" << batch.anim_name
+                        << " src=" << batch.src_frame_index
+                        << " scales=" << batch.scale_items.size() << "]";
+                    log.info(hdr.str());
+                }
 
                 std::string err;
-                auto src_img_opt = ImageCacheGenerator::LoadPngRGBA(w.src_png_path, err);
+                auto src_img_opt = ImageCacheGenerator::LoadPngRGBA(batch.src_png_path, err);
                 if (!src_img_opt) {
-                    tasks_fail.fetch_add(1);
+                    tasks_fail.fetch_add(batch.scale_items.size());
                     any_fail.store(true);
                     std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Load failed: " + w.src_png_path.string() + " : " + err;
-                    log.error("Load failed: " + w.src_png_path.string() + " : " + err);
+                    if (first_error.empty()) first_error = "Load failed: " + batch.src_png_path.string() + " : " + err;
+                    log.error("Load failed: " + batch.src_png_path.string() + " : " + err);
                     return;
                 }
                 ImageRGBA src_img = *src_img_opt;
 
-                auto resized_opt = resize_lanczos_rgba(src_img,
-                                                      std::max(1, static_cast<int>(std::lround(src_img.w * w.scale_factor))),
-                                                      std::max(1, static_cast<int>(std::lround(src_img.h * w.scale_factor))),
-                                                      err);
-                if (!resized_opt) {
-                    tasks_fail.fetch_add(1);
-                    any_fail.store(true);
-                    std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Resize failed: " + w.src_png_path.string() + " : " + err;
-                    log.error("Resize failed: " + w.src_png_path.string() + " : " + err);
-                    return;
-                }
+                for (std::size_t scale_idx = 0; scale_idx < batch.scale_items.size(); ++scale_idx) {
+                    const WorkItem& w = batch.scale_items[scale_idx];
+                    const std::size_t remaining_scales = batch.scale_items.size() - scale_idx;
 
-                ImageRGBA img = *resized_opt;
-
-                // Keep normal output at scaled source size; build FG/BG via the shared
-                // ApplyEffects path so preview and cache generation stay bit-for-bit aligned.
-                auto fg_opt = ImageCacheGenerator::ApplyEffects(img, w.fx_foreground, EffectLayerMode::Foreground, err);
-                if (!fg_opt) {
-                    tasks_fail.fetch_add(1);
-                    any_fail.store(true);
-                    std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Foreground effects failed: " + w.src_png_path.string() + " : " + err;
-                    log.error("Foreground effects failed: " + w.src_png_path.string() + " : " + err);
-                    return;
-                }
-                auto bg_opt = ImageCacheGenerator::ApplyEffects(img, w.fx_background, EffectLayerMode::Background, err);
-                if (!bg_opt) {
-                    tasks_fail.fetch_add(1);
-                    any_fail.store(true);
-                    std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Background effects failed: " + w.src_png_path.string() + " : " + err;
-                    log.error("Background effects failed: " + w.src_png_path.string() + " : " + err);
-                    return;
-                }
-                const ImageRGBA& fg_img = *fg_opt;
-                const ImageRGBA& bg_img = *bg_opt;
-
-                // Save all requested output indices
-                for (int out_idx : w.out_indices) {
-                    fs::path npath = w.out_normal_dir / (std::to_string(out_idx) + ".png");
-                    fs::path fpath = w.out_foreground_dir / (std::to_string(out_idx) + ".png");
-                    fs::path bpath = w.out_background_dir / (std::to_string(out_idx) + ".png");
-
-                    // Python overwrites files for scheduled outputs, so we always write.
-                    std::string e1;
-                    if (!ImageCacheGenerator::SavePngRGBA(npath, img, e1)) {
-                        tasks_fail.fetch_add(1);
-                        any_fail.store(true);
-                        std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Save failed: " + npath.string() + " : " + e1;
-                        log.error("Save failed: " + npath.string() + " : " + e1);
-                        return;
+                    if (!quiet_task_logs) {
+                        std::ostringstream hdr;
+                        hdr << "[" << w.asset_name << "/" << w.anim_name
+                            << " src=" << w.src_frame_index
+                            << " scale=" << w.scale_pct
+                            << " outs=" << w.out_indices.size() << "]";
+                        log.info(hdr.str());
                     }
-                    std::string e2;
-                    if (!ImageCacheGenerator::SavePngRGBA(fpath, fg_img, e2)) {
-                        tasks_fail.fetch_add(1);
+
+                    auto resized_opt = resize_lanczos_rgba(src_img,
+                                                          std::max(1, static_cast<int>(std::lround(src_img.w * w.scale_factor))),
+                                                          std::max(1, static_cast<int>(std::lround(src_img.h * w.scale_factor))),
+                                                          err);
+                    if (!resized_opt) {
+                        tasks_fail.fetch_add(remaining_scales);
                         any_fail.store(true);
                         std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Save failed: " + fpath.string() + " : " + e2;
-                        log.error("Save failed: " + fpath.string() + " : " + e2);
-                        return;
-                    }
-                    std::string e3;
-                    if (!ImageCacheGenerator::SavePngRGBA(bpath, bg_img, e3)) {
-                        tasks_fail.fetch_add(1);
-                        any_fail.store(true);
-                        std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Save failed: " + bpath.string() + " : " + e3;
-                        log.error("Save failed: " + bpath.string() + " : " + e3);
+                        if (first_error.empty()) first_error = "Resize failed: " + batch.src_png_path.string() + " : " + err;
+                        log.error("Resize failed: " + batch.src_png_path.string() + " : " + err);
                         return;
                     }
 
-                    pngs_written.fetch_add(3);
-                }
+                    ImageRGBA img = *resized_opt;
+                    ImageRGBA expanded = make_centered_transparent_2x_canvas(img);
+                    if (!expanded.valid()) {
+                        tasks_fail.fetch_add(remaining_scales);
+                        any_fail.store(true);
+                        std::lock_guard<std::mutex> lk(err_mu);
+                        if (first_error.empty()) first_error = "Expand canvas failed: " + batch.src_png_path.string();
+                        log.error("Expand canvas failed: " + batch.src_png_path.string());
+                        return;
+                    }
 
-                tasks_ok.fetch_add(1);
+                    ImageRGBA fg_img;
+                    if (!apply_effects_on_expanded_canvas(expanded,
+                                                          w.fx_foreground,
+                                                          EffectLayerMode::Foreground,
+                                                          use_d3d11_effects,
+                                                          fg_img,
+                                                          err)) {
+                        tasks_fail.fetch_add(remaining_scales);
+                        any_fail.store(true);
+                        std::lock_guard<std::mutex> lk(err_mu);
+                        if (first_error.empty()) first_error = "Foreground effects failed: " + batch.src_png_path.string() + " : " + err;
+                        log.error("Foreground effects failed: " + batch.src_png_path.string() + " : " + err);
+                        return;
+                    }
+
+                    ImageRGBA bg_img;
+                    if (!apply_effects_on_expanded_canvas(expanded,
+                                                          w.fx_background,
+                                                          EffectLayerMode::Background,
+                                                          use_d3d11_effects,
+                                                          bg_img,
+                                                          err)) {
+                        tasks_fail.fetch_add(remaining_scales);
+                        any_fail.store(true);
+                        std::lock_guard<std::mutex> lk(err_mu);
+                        if (first_error.empty()) first_error = "Background effects failed: " + batch.src_png_path.string() + " : " + err;
+                        log.error("Background effects failed: " + batch.src_png_path.string() + " : " + err);
+                        return;
+                    }
+
+                    // Save all requested output indices
+                    for (int out_idx : w.out_indices) {
+                        fs::path npath = w.out_normal_dir / (std::to_string(out_idx) + ".png");
+                        fs::path fpath = w.out_foreground_dir / (std::to_string(out_idx) + ".png");
+                        fs::path bpath = w.out_background_dir / (std::to_string(out_idx) + ".png");
+
+                        // Python overwrites files for scheduled outputs, so we always write.
+                        std::string e1;
+                        if (!ImageCacheGenerator::SavePngRGBA(npath, img, e1)) {
+                            tasks_fail.fetch_add(remaining_scales);
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Save failed: " + npath.string() + " : " + e1;
+                            log.error("Save failed: " + npath.string() + " : " + e1);
+                            return;
+                        }
+                        std::string e2;
+                        if (!ImageCacheGenerator::SavePngRGBA(fpath, fg_img, e2)) {
+                            tasks_fail.fetch_add(remaining_scales);
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Save failed: " + fpath.string() + " : " + e2;
+                            log.error("Save failed: " + fpath.string() + " : " + e2);
+                            return;
+                        }
+                        std::string e3;
+                        if (!ImageCacheGenerator::SavePngRGBA(bpath, bg_img, e3)) {
+                            tasks_fail.fetch_add(remaining_scales);
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Save failed: " + bpath.string() + " : " + e3;
+                            log.error("Save failed: " + bpath.string() + " : " + e3);
+                            return;
+                        }
+
+                        pngs_written.fetch_add(3);
+                    }
+
+                    tasks_ok.fetch_add(1);
+                    const std::uint64_t done = scales_progress.fetch_add(1) + 1;
+                    if (quiet_task_logs && (done == total_scale_tasks || (done % progress_interval) == 0)) {
+                        log.info("Cache generation progress: " + std::to_string(done) + "/" + std::to_string(total_scale_tasks) + " scale tasks");
+                    }
+                }
             });
         }
 
@@ -1488,6 +1552,13 @@ bool ImageCacheGenerator::SavePngRGBA(const fs::path& path, const ImageRGBA& img
         err = "SavePngRGBA: invalid image";
         return false;
     }
+
+    static std::once_flag png_write_tuning_once;
+    std::call_once(png_write_tuning_once, []() {
+        // Cache artifacts are regenerated as needed; favor encode throughput over max compression.
+        stbi_write_png_compression_level = 3;
+        stbi_write_force_png_filter = 0;
+    });
 
     try {
         fs::create_directories(path.parent_path());

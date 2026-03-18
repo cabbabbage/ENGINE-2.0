@@ -9,6 +9,7 @@
 #include <fstream>
 #include <unordered_set>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <initializer_list>
@@ -37,17 +38,39 @@ void hash_file_signature(const fs::path& path, std::uint64_t& hash) {
         return;
     }
 
+    // Keep path in the signature to preserve differentiation for similarly-sized files.
     hash = fnv1a64(path.generic_string(), hash);
+
+    const auto size = fs::file_size(path, ec);
+    if (!ec) {
+        hash = fnv1a64(&size, sizeof(size), hash);
+    }
+
+    // Use file bytes instead of mtime so cache rewrites with identical content
+    // do not invalidate bundle hashes and trigger unnecessary rebuilds.
+    std::ifstream in(path, std::ios::binary);
+    if (in) {
+        std::array<char, 64 * 1024> buffer{};
+        std::uint64_t file_hash = 14695981039346656037ull;
+        while (in.good()) {
+            in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+            const std::streamsize read_count = in.gcount();
+            if (read_count > 0) {
+                file_hash = fnv1a64(buffer.data(), static_cast<std::size_t>(read_count), file_hash);
+            }
+        }
+        if (!in.bad()) {
+            hash = fnv1a64(&file_hash, sizeof(file_hash), hash);
+            return;
+        }
+    }
+
+    // Fallback only if content read failed.
+    ec.clear();
     const auto ftime = fs::last_write_time(path, ec);
     if (!ec) {
         const auto stamp = ftime.time_since_epoch().count();
         hash = fnv1a64(&stamp, sizeof(stamp), hash);
-    }
-
-    ec.clear();
-    const auto size = fs::file_size(path, ec);
-    if (!ec) {
-        hash = fnv1a64(&size, sizeof(size), hash);
     }
 }
 

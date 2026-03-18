@@ -527,9 +527,9 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    SDL_Color fill{42, 52, 64, pressed_ ? 210 : (hovered_ ? 195 : 178)};
-    SDL_Color border_outer{255, 255, 255, hovered_ ? 96 : 72};
-    SDL_Color border_inner{255, 255, 255, hovered_ ? 54 : 36};
+    SDL_Color fill{42, 52, 64, static_cast<Uint8>(pressed_ ? 210 : (hovered_ ? 195 : 178))};
+    SDL_Color border_outer{255, 255, 255, static_cast<Uint8>(hovered_ ? 96 : 72)};
+    SDL_Color border_inner{255, 255, 255, static_cast<Uint8>(hovered_ ? 54 : 36)};
 
     SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
     sdl_render::FillRect(renderer, &r);

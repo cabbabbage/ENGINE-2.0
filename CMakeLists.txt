@@ -300,6 +300,7 @@ add_executable(engine_tests
     ENGINE/tests/test_input_activity.cpp
     ENGINE/tests/test_camera_controller.cpp
     ENGINE/tests/test_asset_perspective_sample.cpp
+    ENGINE/tests/test_scaling_logic_variants.cpp
   )
 
 target_include_directories(engine_tests

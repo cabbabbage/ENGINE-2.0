@@ -13,7 +13,7 @@
 // Where:
 //   cache_root default: <repo_root>/cache
 //   variant in: normal, foreground, background
-//   pct is integer like 75, 50, 25, 10
+//   pct is one of 100, 90, 80, 70, 60, 50, 40, 30, 20, 10
 //   out_index is integer frame index of the source sequence
 //
 // This tool will live next to the existing Python scripts, so it must follow the same
@@ -177,8 +177,8 @@ struct GeneratorOptions {
     // Must remain true for safety unless you intentionally diverge from Python.
     bool clear_needs_rebuild_on_success_only = true;
 
-    // Default scales (Python parity): 75, 50, 25, 10
-    // If empty: use defaults
+    // Legacy compatibility option. Runtime generation enforces canonical
+    // scales: 100, 90, 80, 70, 60, 50, 40, 30, 20, 10.
     std::vector<int> scale_percents;
 
     // If 0: generator chooses (hardware_concurrency - 1, minimum 1)

@@ -40,6 +40,7 @@
 #include <sstream>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 
 // ---- stb ----
 // You can move these defines into a single translation unit in your tools project if you prefer.
@@ -123,6 +124,45 @@ static inline bool file_missing_or_stale(const fs::path& p, fs::file_time_type b
     uintmax_t sz = fs::file_size(p, ec);
     if (ec) return true;
     return sz < 32;
+}
+
+static const std::vector<int>& canonical_scale_percents() {
+    static const std::vector<int> kCanonicalScalePercents{100, 90, 80, 70, 60, 50, 40, 30, 20, 10};
+    return kCanonicalScalePercents;
+}
+
+static bool scale_dir_is_canonical(const std::string& dir_name) {
+    static const std::unordered_set<std::string> kCanonicalScaleDirs{
+        "scale_100", "scale_90", "scale_80", "scale_70", "scale_60",
+        "scale_50", "scale_40", "scale_30", "scale_20", "scale_10"};
+    return kCanonicalScaleDirs.find(dir_name) != kCanonicalScaleDirs.end();
+}
+
+static void prune_non_canonical_scale_dirs(const fs::path& animation_cache_root, ILogger& log) {
+    std::error_code ec;
+    if (!fs::exists(animation_cache_root, ec) || !fs::is_directory(animation_cache_root, ec)) {
+        return;
+    }
+    for (const auto& entry : fs::directory_iterator(animation_cache_root, ec)) {
+        if (ec) break;
+        if (!entry.is_directory()) continue;
+        const std::string dir_name = entry.path().filename().string();
+        const std::string prefix = "scale_";
+        if (dir_name.rfind(prefix, 0) != 0) {
+            continue;
+        }
+        if (scale_dir_is_canonical(dir_name)) {
+            continue;
+        }
+        std::error_code remove_ec;
+        const auto removed = fs::remove_all(entry.path(), remove_ec);
+        if (remove_ec) {
+            log.warn("Failed to prune non-canonical scale directory: " + entry.path().string() +
+                     " (" + remove_ec.message() + ")");
+        } else if (removed > 0) {
+            log.info("Pruned non-canonical scale directory: " + entry.path().string());
+        }
+    }
 }
 
 // -----------------------------
@@ -838,12 +878,11 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     const fs::path effects_cache_path = cache_root / "effects_cache.json";
     const fs::file_time_type effects_cache_mtime = safe_last_write_time(effects_cache_path);
 
-    // Scales: python normalize_variant_steps returns [0.75, 0.5, 0.25, 0.1]
-    std::vector<int> scale_pcts = opt.scale_percents;
-    if (scale_pcts.empty()) scale_pcts = {75, 50, 25, 10};
-    std::sort(scale_pcts.begin(), scale_pcts.end());
-    scale_pcts.erase(std::unique(scale_pcts.begin(), scale_pcts.end()), scale_pcts.end());
-    std::sort(scale_pcts.begin(), scale_pcts.end(), std::greater<int>());
+    // Canonical scales are always enforced engine-wide.
+    std::vector<int> scale_pcts = canonical_scale_percents();
+    if (!opt.scale_percents.empty() && opt.scale_percents != scale_pcts) {
+        log.warn("Ignoring custom scale percentages; generator enforces canonical 100..10 variants.");
+    }
 
     // Worker count
     std::uint32_t workers = opt.worker_count_override;
@@ -921,6 +960,11 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             if (frame_paths.empty()) {
                 log.warn("No frames found for asset '" + asset_name + "' animation '" + anim_name + "' in " + anim_dir.string());
                 continue;
+            }
+
+            if (!opt.dry_run) {
+                const fs::path anim_cache_root = cache_root / asset_name / "animations" / anim_name;
+                prune_non_canonical_scale_dirs(anim_cache_root, log);
             }
             std::vector<fs::file_time_type> frame_mtimes(frame_paths.size(), fs::file_time_type::min());
             for (size_t i = 0; i < frame_paths.size(); ++i) frame_mtimes[i] = safe_last_write_time(frame_paths[i]);

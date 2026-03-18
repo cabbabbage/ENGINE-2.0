@@ -24,7 +24,7 @@ namespace fs = std::filesystem;
 using json = nlohmann::ordered_json;
 using namespace imgcache;
 
-constexpr int ANIMATION_SCALE_PCTS[] = {75, 50, 25, 10};
+constexpr int ANIMATION_SCALE_PCTS[] = {100, 90, 80, 70, 60, 50, 40, 30, 20, 10};
 constexpr const char* VARIANTS[] = {"normal", "foreground", "background"};
 
 static inline fs::file_time_type safe_last_write_time(const fs::path& p) {

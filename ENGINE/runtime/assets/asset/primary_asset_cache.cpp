@@ -116,23 +116,33 @@ std::vector<float> normalized_variant_steps(const AssetInfo& /*info*/) {
     return steps;
 }
 
-bool has_full_res_step(const std::vector<float>& steps) {
-    return std::find_if(steps.begin(), steps.end(), [](float step) {
-        return std::isfinite(step) && std::fabs(step - 1.0f) < 1e-4f;
-    }) != steps.end();
+bool steps_match_canonical(const std::vector<float>& steps) {
+    const auto& canonical = render_pipeline::ScalingLogic::DefaultScaleSteps();
+    if (steps.size() != canonical.size()) {
+        return false;
+    }
+    for (std::size_t idx = 0; idx < canonical.size(); ++idx) {
+        if (!std::isfinite(steps[idx])) {
+            return false;
+        }
+        if (std::fabs(steps[idx] - canonical[idx]) > 1e-4f) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool bundle_variant_layout_is_valid(const CacheManager::BundleData& bundle) {
+    const std::size_t expected_variant_count = render_pipeline::ScalingLogic::DefaultScaleSteps().size();
     for (const auto& animation : bundle.animations) {
         if (animation.frames.empty()) {
             continue;
         }
-        if (animation.variant_steps.empty() || !has_full_res_step(animation.variant_steps)) {
+        if (!steps_match_canonical(animation.variant_steps)) {
             return false;
         }
-        const std::size_t expected_variant_count = animation.variant_steps.size();
         for (const auto& frame : animation.frames) {
-            if (!frame.variants.empty() && frame.variants.size() != expected_variant_count) {
+            if (frame.variants.size() != expected_variant_count) {
                 return false;
             }
         }

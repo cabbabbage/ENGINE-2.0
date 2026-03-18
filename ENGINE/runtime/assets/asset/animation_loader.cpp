@@ -566,6 +566,24 @@ void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
 void apply_scale_mode(SDL_Texture*, const AssetInfo&) {}
 #endif
 
+void enforce_canonical_variant_layout(std::vector<float>& steps,
+                                      std::vector<Animation::FrameCache>* frame_cache = nullptr) {
+        render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
+        const std::size_t canonical_variant_count = steps.size();
+        if (!frame_cache) {
+                return;
+        }
+        for (auto& cache : *frame_cache) {
+                cache.textures.resize(canonical_variant_count, nullptr);
+                cache.widths.resize(canonical_variant_count, 0);
+                cache.heights.resize(canonical_variant_count, 0);
+                cache.foreground_textures.resize(canonical_variant_count, nullptr);
+                cache.background_textures.resize(canonical_variant_count, nullptr);
+                cache.source_rects.resize(canonical_variant_count, SDL_Rect{0, 0, 0, 0});
+                cache.uses_atlas.resize(canonical_variant_count, false);
+        }
+}
+
 }
 
 void AnimationLoader::load(Animation& animation,
@@ -597,12 +615,9 @@ void AnimationLoader::load(Animation& animation,
         const double safe_scale = sanitize_scale_factor(scale_factor);
         const Animation* source_animation_ptr = nullptr;
         animation.clear_texture_cache();
-        animation.variant_steps_ = info.scale_variants;
+        animation.variant_steps_.clear();
+        enforce_canonical_variant_layout(animation.variant_steps_);
         (void)root_cache;
-
-        if (animation.variant_steps_.empty()) {
-                render_pipeline::ScalingLogic::NormalizeVariantSteps(animation.variant_steps_);
-        }
 
         if (anim_json.contains("source")) {
                 const auto& s = anim_json["source"];
@@ -621,17 +636,7 @@ void AnimationLoader::load(Animation& animation,
                 auto it = info.animations.find(animation.source.name);
                 if (it != info.animations.end()) {
                         source_animation_ptr = &it->second;
-                        const Animation& src_anim = it->second;
-                        if (!src_anim.variant_steps_.empty()) {
-                                animation.variant_steps_ = src_anim.variant_steps_;
-                        }
                 }
-        }
-
-        const std::size_t initial_variant_count = animation.variant_steps_.size();
-
-        if (info.scale_variants.empty() && !animation.variant_steps_.empty()) {
-                info.scale_variants = animation.variant_steps_;
         }
 
         animation.flipped_source = read_bool_field_like(anim_json, "flipped_source", false);
@@ -847,7 +852,7 @@ void AnimationLoader::load(Animation& animation,
                 if (prebuilt_frames && !prebuilt_frames->frames.empty()) {
                         animation.variant_steps_ = prebuilt_frames->variant_steps;
                         animation.frame_cache_ = std::move(prebuilt_frames->frames);
-                        info.scale_variants = animation.variant_steps_;
+                        enforce_canonical_variant_layout(animation.variant_steps_, &animation.frame_cache_);
                         original_canvas_width = prebuilt_frames->canvas_width;
                         original_canvas_height = prebuilt_frames->canvas_height;
                         scaled_sprite_w = prebuilt_frames->canvas_width;
@@ -861,6 +866,8 @@ void AnimationLoader::load(Animation& animation,
                         return;
                 }
         }
+
+        enforce_canonical_variant_layout(animation.variant_steps_, &animation.frame_cache_);
 
         if (animation.frame_cache_.empty() &&
             animation.source.kind == "animation" &&

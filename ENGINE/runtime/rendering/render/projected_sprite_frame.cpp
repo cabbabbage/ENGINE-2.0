@@ -32,6 +32,15 @@ std::pair<double, double> screen_to_ndc_point(const world::CameraProjectionParam
     return std::pair<double, double>{ndc_x_scaled * inv_zoom, ndc_y_scaled * inv_zoom};
 }
 
+SDL_FPoint sanitize_anchor_uv(SDL_FPoint uv) {
+    if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
+        return SDL_FPoint{0.5f, 1.0f};
+    }
+    return SDL_FPoint{
+        std::clamp(uv.x, 0.0f, 1.0f),
+        std::clamp(uv.y, 0.0f, 1.0f)};
+}
+
 }  // namespace
 
 namespace render_projection {
@@ -138,6 +147,32 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
     } else {
         screen_tl = cand_tl_b;
         screen_tr = cand_tr_b;
+    }
+
+    // Re-anchor the projected quad so caller-specified UV maps to the same
+    // world anchor point used by the default bottom-center projection.
+    ProjectedSpriteFrame anchor_sample_frame{};
+    anchor_sample_frame.screen_tl = screen_tl;
+    anchor_sample_frame.screen_tr = screen_tr;
+    anchor_sample_frame.screen_br = screen_br;
+    anchor_sample_frame.screen_bl = screen_bl;
+
+    const SDL_FPoint desired_anchor{
+        0.5f * (screen_bl.x + screen_br.x),
+        0.5f * (screen_bl.y + screen_br.y)};
+    const SDL_FPoint current_anchor =
+        anchor_sample_frame.sample_screen_from_uv(sanitize_anchor_uv(input.anchor_uv));
+    if (std::isfinite(current_anchor.x) && std::isfinite(current_anchor.y)) {
+        const float offset_x = desired_anchor.x - current_anchor.x;
+        const float offset_y = desired_anchor.y - current_anchor.y;
+        screen_tl.x += offset_x;
+        screen_tl.y += offset_y;
+        screen_tr.x += offset_x;
+        screen_tr.y += offset_y;
+        screen_br.x += offset_x;
+        screen_br.y += offset_y;
+        screen_bl.x += offset_x;
+        screen_bl.y += offset_y;
     }
 
     out.screen_tl = screen_tl;

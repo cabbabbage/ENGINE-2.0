@@ -516,7 +516,15 @@ void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordere
         auto it = info_by_name_.find(name);
         if (it != info_by_name_.end() && it->second) {
             try {
-                it->second->loadAnimations(renderer);
+                const auto load_begin = std::chrono::steady_clock::now();
+                // Map startup only needs essential animations immediately (default/start).
+                // Missing non-essential animations are hydrated on demand.
+                it->second->loadAnimations(renderer, false);
+                const auto load_end = std::chrono::steady_clock::now();
+                const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count();
+                if (load_ms > 250) {
+                        vibble::log::info(std::string("[AssetLibrary] Preload '") + name + "' took " + std::to_string(load_ms) + "ms");
+                }
             } catch (const std::exception& ex) {
                 vibble::log::error(std::string("[AssetLibrary] Exception while loading animations for '") + name + "': " + ex.what());
                 throw;

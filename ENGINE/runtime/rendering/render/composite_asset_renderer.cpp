@@ -27,6 +27,10 @@ struct DepthCueOverlayDecision {
     float opacity = 0.0f;
 };
 
+// Overlay textures are generated on centered 2x canvases, so their
+// bottom-center anchor sits at v=0.75 in texture UV space.
+constexpr SDL_FPoint kOverlayAnchorUv{0.5f, 0.75f};
+
 int safe_double_dimension(int value) {
     const int safe_value = std::max(1, value);
     const std::int64_t doubled = static_cast<std::int64_t>(safe_value) * 2;
@@ -36,17 +40,12 @@ int safe_double_dimension(int value) {
 
 SDL_Rect build_overlay_dest_rect_from_base(const RenderObject& base_object) {
     const int base_w = std::max(1, base_object.screen_rect.w);
-    const int base_h = std::max(1, base_object.screen_rect.h);
 
     SDL_Rect overlay_rect{};
     overlay_rect.x = base_object.screen_rect.x;
-    // Foreground/background textures are authored on centered 2x canvases.
-    // Shift the doubled rect down by half the base height to keep the
-    // original silhouette aligned to the base sprite's bottom-center anchor.
-    overlay_rect.y = base_object.screen_rect.y +
-        static_cast<int>(std::lround(static_cast<float>(base_h) * 0.5f));
+    overlay_rect.y = base_object.screen_rect.y;
     overlay_rect.w = safe_double_dimension(base_w);
-    overlay_rect.h = safe_double_dimension(base_h);
+    overlay_rect.h = safe_double_dimension(std::max(1, base_object.screen_rect.h));
     return overlay_rect;
 }
 
@@ -169,7 +168,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   std::optional<SDL_Point> texture_size = std::nullopt,
                                   std::optional<SDL_Point> atlas_size = std::nullopt,
                                   float world_z_offset = 0.0f,
-                                  std::optional<SDL_Rect> src_rect = std::nullopt) {
+                                  std::optional<SDL_Rect> src_rect = std::nullopt,
+                                  std::optional<SDL_FPoint> projection_anchor_uv = std::nullopt) {
         if (!tex) return;
         if (apply_scale) {
             rect.w = static_cast<int>(std::lround(static_cast<float>(rect.w) * package_scale));
@@ -213,6 +213,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             obj.has_src_rect = true;
             obj.src_rect = src_rect.value();
         }
+        obj.projection_anchor_uv = projection_anchor_uv.value_or(SDL_FPoint{0.5f, 1.0f});
         asset->render_package.push_back(obj);
     };
 
@@ -346,7 +347,9 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   base_flip,
                                   SDL_Point{overlay_tex_w, overlay_tex_h},
                                   SDL_Point{overlay_tex_w, overlay_tex_h},
-                                  base_render_object->world_z_offset);
+                                  base_render_object->world_z_offset,
+                                  std::nullopt,
+                                  kOverlayAnchorUv);
             }
         }
     }

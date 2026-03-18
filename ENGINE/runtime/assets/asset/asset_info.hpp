@@ -102,7 +102,7 @@ class AssetInfo {
     std::optional<FollowerBindingSpec> follower_binding;
 
 	public:
-    void loadAnimations(SDL_Renderer* renderer);
+    void loadAnimations(SDL_Renderer* renderer, bool include_all_animations = true);
     bool commit_manifest();
     void mark_dirty();
     bool is_dirty() const;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -17,18 +18,26 @@ public:
 
     bool load_or_build(class AssetInfo& info,
                        std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
-                       CacheManager::BundleData& raw_bundle);
+                       CacheManager::BundleData& raw_bundle,
+                       const std::unordered_set<std::string>* animation_filter = nullptr);
 
     bool save_current(const class AssetInfo& info);
 
 private:
     SDL_Renderer* renderer_ = nullptr;
 
-    std::uint64_t compute_hash(const AssetInfo& info) const;
-    bool build_bundle_from_sources(const AssetInfo& info, CacheManager::BundleData& out_data);
+    std::uint64_t compute_hash(const AssetInfo& info,
+                               const std::unordered_set<std::string>* animation_filter = nullptr) const;
+    bool inputs_newer_than_bundle(const AssetInfo& info,
+                                  const std::filesystem::path& bundle_path,
+                                  const std::unordered_set<std::string>* animation_filter = nullptr) const;
+    bool build_bundle_from_sources(const AssetInfo& info,
+                                   CacheManager::BundleData& out_data,
+                                   const std::unordered_set<std::string>* animation_filter = nullptr);
     bool populate_runtime_frames(const AssetInfo& info,
                                  const CacheManager::BundleData& bundle,
-                                 std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames);
+                                 std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
+                                 const std::unordered_set<std::string>* animation_filter);
     bool build_variant_atlases(CacheManager::BundleAnimation& animation,
                                const std::filesystem::path& cache_root) const;
 };

@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <initializer_list>
+#include <limits>
 
 namespace fs = std::filesystem;
 
@@ -46,21 +47,95 @@ void hash_file_signature(const fs::path& path, std::uint64_t& hash) {
         hash = fnv1a64(&size, sizeof(size), hash);
     }
 
-    // Use file bytes instead of mtime so cache rewrites with identical content
-    // do not invalidate bundle hashes and trigger unnecessary rebuilds.
-    std::ifstream in(path, std::ios::binary);
-    if (in) {
-        std::array<char, 64 * 1024> buffer{};
-        std::uint64_t file_hash = 14695981039346656037ull;
-        while (in.good()) {
-            in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-            const std::streamsize read_count = in.gcount();
-            if (read_count > 0) {
-                file_hash = fnv1a64(buffer.data(), static_cast<std::size_t>(read_count), file_hash);
+    auto hash_window = [&](std::ifstream& in,
+                           std::uintmax_t offset,
+                           std::size_t byte_count,
+                           std::uint64_t& target_hash) -> bool {
+        if (byte_count == 0) {
+            return false;
+        }
+        in.clear();
+        in.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+        if (!in.good()) {
+            return false;
+        }
+
+        std::array<char, 4096> buffer{};
+        std::size_t remaining = byte_count;
+        bool hashed_any = false;
+        while (remaining > 0 && in.good()) {
+            const std::size_t want = std::min(buffer.size(), remaining);
+            in.read(buffer.data(), static_cast<std::streamsize>(want));
+            const std::streamsize got = in.gcount();
+            if (got <= 0) {
+                break;
+            }
+            target_hash = fnv1a64(buffer.data(), static_cast<std::size_t>(got), target_hash);
+            remaining -= static_cast<std::size_t>(got);
+            hashed_any = true;
+            if (static_cast<std::size_t>(got) < want) {
+                break;
             }
         }
-        if (!in.bad()) {
-            hash = fnv1a64(&file_hash, sizeof(file_hash), hash);
+        return hashed_any;
+    };
+
+    // Use sampled content signatures instead of full-byte scans so
+    // cache rewrites with identical bytes keep the same hash without
+    // forcing large synchronous disk reads during map load.
+    std::ifstream in(path, std::ios::binary);
+    if (in) {
+        constexpr std::uintmax_t kFullReadLimitBytes = 32 * 1024;
+        constexpr std::uintmax_t kWindowBytes = 4 * 1024;
+
+        bool hashed = false;
+        if (!ec && size <= kFullReadLimitBytes) {
+            const std::size_t bytes_to_hash =
+                static_cast<std::size_t>(std::min<std::uintmax_t>(size, std::numeric_limits<std::size_t>::max()));
+            hashed = hash_window(in, 0, bytes_to_hash, hash);
+        } else if (!ec) {
+            const std::uintmax_t head_offset = 0;
+            const std::uintmax_t mid_center = size / 2;
+            const std::uintmax_t mid_offset =
+                (mid_center > (kWindowBytes / 2)) ? (mid_center - (kWindowBytes / 2)) : 0;
+            const std::uintmax_t tail_offset = (size > kWindowBytes) ? (size - kWindowBytes) : 0;
+
+            const std::array<std::uintmax_t, 3> offsets{head_offset, mid_offset, tail_offset};
+            std::array<std::uintmax_t, 3> lengths{
+                std::min<std::uintmax_t>(kWindowBytes, size),
+                0,
+                0,
+            };
+            lengths[1] = (mid_offset < size) ? std::min<std::uintmax_t>(kWindowBytes, size - mid_offset) : 0;
+            lengths[2] = (tail_offset < size) ? std::min<std::uintmax_t>(kWindowBytes, size - tail_offset) : 0;
+
+            std::array<std::uintmax_t, 3> seen_offsets{std::numeric_limits<std::uintmax_t>::max(),
+                                                       std::numeric_limits<std::uintmax_t>::max(),
+                                                       std::numeric_limits<std::uintmax_t>::max()};
+            std::size_t seen_count = 0;
+            for (std::size_t idx = 0; idx < offsets.size(); ++idx) {
+                const std::uintmax_t off = offsets[idx];
+                if (lengths[idx] == 0 || off >= size) {
+                    continue;
+                }
+                bool duplicate = false;
+                for (std::size_t s = 0; s < seen_count; ++s) {
+                    if (seen_offsets[s] == off) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) {
+                    continue;
+                }
+                seen_offsets[seen_count++] = off;
+
+                const std::size_t bytes_to_hash = static_cast<std::size_t>(
+                    std::min<std::uintmax_t>(lengths[idx], std::numeric_limits<std::size_t>::max()));
+                hashed = hash_window(in, off, bytes_to_hash, hash) || hashed;
+            }
+        }
+        if (hashed && !in.bad()) {
             return;
         }
     }
@@ -72,6 +147,18 @@ void hash_file_signature(const fs::path& path, std::uint64_t& hash) {
         const auto stamp = ftime.time_since_epoch().count();
         hash = fnv1a64(&stamp, sizeof(stamp), hash);
     }
+}
+
+bool path_newer_than(const fs::path& path, fs::file_time_type baseline) {
+    std::error_code ec;
+    if (!fs::exists(path, ec) || ec) {
+        return false;
+    }
+    const auto t = fs::last_write_time(path, ec);
+    if (ec) {
+        return false;
+    }
+    return t > baseline;
 }
 
 int count_sequential_png(const fs::path& folder) {
@@ -243,17 +330,27 @@ fs::path cache_variant_root(const fs::path& animation_cache_root,
         variant_idx));
 }
 
+bool animation_is_selected(const std::string& animation_name,
+                           const std::unordered_set<std::string>* animation_filter) {
+    if (!animation_filter || animation_filter->empty()) {
+        return true;
+    }
+    return animation_filter->find(animation_name) != animation_filter->end();
+}
+
 } // namespace
 
 PrimaryAssetCache::PrimaryAssetCache(SDL_Renderer* renderer) : renderer_(renderer) {}
 
-std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info) const {
+std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info,
+                                              const std::unordered_set<std::string>* animation_filter) const {
     std::uint64_t hash = fnv1a64(info.info_json_.dump());
     const auto canonical_steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
 
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
             if (!it.value().is_object()) continue;
+            if (!animation_is_selected(it.key(), animation_filter)) continue;
             const nlohmann::json& anim_json = it.value();
             if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
                 continue;
@@ -294,6 +391,65 @@ std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info) const {
         }
     }
     return hash;
+}
+
+bool PrimaryAssetCache::inputs_newer_than_bundle(const AssetInfo& info,
+                                                 const fs::path& bundle_path,
+                                                 const std::unordered_set<std::string>* animation_filter) const {
+    std::error_code ec;
+    const auto bundle_time = fs::last_write_time(bundle_path, ec);
+    if (ec) {
+        return true;
+    }
+
+    const auto canonical_steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
+    if (!info.anims_json_.is_object()) {
+        return false;
+    }
+
+    for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
+        if (!it.value().is_object()) continue;
+        if (!animation_is_selected(it.key(), animation_filter)) continue;
+        const nlohmann::json& anim_json = it.value();
+        if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
+            continue;
+        }
+        const auto& source = anim_json["source"];
+        if (source.value("kind", std::string{}) != "folder") {
+            continue;
+        }
+
+        const fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
+        const fs::path cache_anim_root = fs::path("cache") / info.name / "animations" / it.key();
+        const fs::path cache_scale_100 = cache_anim_root / "scale_100";
+        const fs::path cache_normal_100 = cache_scale_100 / "normal";
+        const fs::path cache_foreground_100 = cache_scale_100 / "foreground";
+        const fs::path cache_background_100 = cache_scale_100 / "background";
+
+        const int source_frame_count = count_sequential_png(folder);
+        const int cached_frame_count = count_sequential_png(cache_normal_100);
+        const int frame_count = std::max(source_frame_count, cached_frame_count);
+        for (int i = 0; i < frame_count; ++i) {
+            const std::string frame_name = std::to_string(i) + ".png";
+            if (path_newer_than(folder / frame_name, bundle_time)) return true;
+            if (path_newer_than(folder / "foreground" / frame_name, bundle_time)) return true;
+            if (path_newer_than(folder / "background" / frame_name, bundle_time)) return true;
+            if (path_newer_than(cache_normal_100 / frame_name, bundle_time)) return true;
+            if (path_newer_than(cache_foreground_100 / frame_name, bundle_time)) return true;
+            if (path_newer_than(cache_background_100 / frame_name, bundle_time)) return true;
+
+            for (std::size_t variant_idx = 0; variant_idx < canonical_steps.size(); ++variant_idx) {
+                const fs::path variant_root = cache_variant_root(cache_anim_root,
+                                                                 canonical_steps,
+                                                                 variant_idx);
+                if (path_newer_than(variant_root / "normal" / frame_name, bundle_time)) return true;
+                if (path_newer_than(variant_root / "foreground" / frame_name, bundle_time)) return true;
+                if (path_newer_than(variant_root / "background" / frame_name, bundle_time)) return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& animation,
@@ -374,7 +530,9 @@ bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& ani
     return animation.uses_atlas;
 }
 
-bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheManager::BundleData& out_data) {
+bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
+                                                  CacheManager::BundleData& out_data,
+                                                  const std::unordered_set<std::string>* animation_filter) {
     out_data = CacheManager::BundleData{};
     out_data.version = 1;
     out_data.metadata_snapshot = info.info_json_;
@@ -383,6 +541,7 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
             if (!it.value().is_object()) continue;
+            if (!animation_is_selected(it.key(), animation_filter)) continue;
             const nlohmann::json& anim_json = it.value();
             if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
                 continue;
@@ -499,7 +658,8 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
 
 bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                                                 const CacheManager::BundleData& bundle,
-                                                std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames) {
+                                                std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
+                                                const std::unordered_set<std::string>* animation_filter) {
     if (!renderer_) {
         return false;
     }
@@ -512,6 +672,10 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
 
     out_frames.clear();
     for (const auto& anim : bundle.animations) {
+        if (animation_filter && !animation_filter->empty() &&
+            animation_filter->find(anim.name) == animation_filter->end()) {
+            continue;
+        }
         if (anim.frames.empty()) {
             continue;
         }
@@ -599,28 +763,71 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
 
 bool PrimaryAssetCache::load_or_build(AssetInfo& info,
                                       std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
-                                      CacheManager::BundleData& raw_bundle) {
+                                      CacheManager::BundleData& raw_bundle,
+                                      const std::unordered_set<std::string>* animation_filter) {
     const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
-    const std::uint64_t expected_hash = compute_hash(info);
+    const bool has_animation_filter = animation_filter && !animation_filter->empty();
+    bool has_expected_hash = false;
+    std::uint64_t expected_hash = 0;
+    auto get_expected_hash = [&]() -> std::uint64_t {
+        if (!has_expected_hash) {
+            expected_hash = compute_hash(info, animation_filter);
+            has_expected_hash = true;
+        }
+        return expected_hash;
+    };
 
     auto try_populate = [&](const CacheManager::BundleData& bundle) {
         out_frames.clear();
-        return populate_runtime_frames(info, bundle, out_frames);
+        return populate_runtime_frames(info, bundle, out_frames, animation_filter);
     };
 
     CacheManager::BundleData bundle;
     const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
     if (bundle_loaded) {
         const bool variant_layout_ok = bundle_variant_layout_is_valid(bundle);
-        const bool hash_matches = (bundle.content_hash == expected_hash) && variant_layout_ok;
         const bool populated = try_populate(bundle);
-        if (hash_matches && populated) {
+        const bool selected_inputs_newer = inputs_newer_than_bundle(info, bundle_path, animation_filter);
+        if (populated && variant_layout_ok && !selected_inputs_newer) {
             raw_bundle = bundle;
             return true;
         }
 
-        if (bundle.content_hash != expected_hash) {
-            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + " (content hash mismatch).");
+        if (!has_animation_filter) {
+            const std::uint64_t current_expected_hash = get_expected_hash();
+            const bool hash_matches = (bundle.content_hash == current_expected_hash) && variant_layout_ok;
+            if (hash_matches && populated) {
+                raw_bundle = bundle;
+                return true;
+            }
+
+            // Compatibility path: if runtime frames can be populated and no cache/source input
+            // is newer than the existing bundle, keep using the bundle and just migrate the
+            // header hash marker. This avoids expensive one-time rebuild stalls after hash
+            // algorithm updates while preserving stale-input rebuild behavior.
+            if (populated && variant_layout_ok && bundle.content_hash != current_expected_hash &&
+                !selected_inputs_newer) {
+                if (!CacheManager::update_bundle_content_hash(bundle_path.generic_string(), current_expected_hash)) {
+                    vibble::log::warn("[PrimaryAssetCache] Using cached bundle for " + info.name +
+                                      " but failed to update migrated hash marker.");
+                }
+                bundle.content_hash = current_expected_hash;
+                raw_bundle = bundle;
+                return true;
+            }
+
+            if (bundle.content_hash != current_expected_hash) {
+                vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + " (content hash mismatch).");
+            } else if (!variant_layout_ok) {
+                vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
+                                  " (missing full-resolution or inconsistent variant metadata).");
+            } else {
+                vibble::log::warn("[PrimaryAssetCache] Cached bundle for " + info.name +
+                                  " could not populate runtime frames; rebuilding from source.");
+            }
+        } else if (selected_inputs_newer) {
+            vibble::log::info("[PrimaryAssetCache] Rebuilding selected animation bundle data for " + info.name +
+                              " (selected cache inputs newer than bundle).");
         } else if (!variant_layout_ok) {
             vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
                               " (missing full-resolution or inconsistent variant metadata).");
@@ -634,14 +841,16 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
     }
 
     CacheManager::BundleData rebuilt;
-    if (!build_bundle_from_sources(info, rebuilt)) {
+    if (!build_bundle_from_sources(info, rebuilt, animation_filter)) {
         vibble::log::warn("[PrimaryAssetCache] Failed to build bundle cache from source for " + info.name + ".");
         return false;
     }
 
-    rebuilt.content_hash = expected_hash;
-    if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
-        vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");
+    if (!has_animation_filter) {
+        rebuilt.content_hash = get_expected_hash();
+        if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
+            vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");
+        }
     }
 
     const bool populated = try_populate(rebuilt);

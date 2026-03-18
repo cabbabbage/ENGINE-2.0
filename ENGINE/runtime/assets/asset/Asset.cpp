@@ -690,6 +690,12 @@ void Asset::set_current_animation(const std::string& name)
 	}
 
 	auto it = info->animations.find(name);
+        if (it == info->animations.end() && assets_) {
+                if (SDL_Renderer* renderer = assets_->renderer()) {
+                        info->loadAnimations(renderer, true);
+                        it = info->animations.find(name);
+                }
+        }
 	if (it != info->animations.end()) {
 		current_animation = name;
 		Animation& anim = it->second;

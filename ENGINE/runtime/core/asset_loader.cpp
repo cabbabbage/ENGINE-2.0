@@ -101,39 +101,35 @@ manifest_store_(manifest_store)
     {
         const auto preload_begin = std::chrono::steady_clock::now();
 
-        if (asset_library_ && !using_shared_asset_library_) {
+        if (asset_library_ && renderer_) {
                 std::unordered_set<std::string> used;
                 for (Room* room : rooms_) {
+                        if (!room) continue;
                         for (const auto& aup : room->assets) {
-                                if (const Asset* a = aup.get()) {
-                                        if (a->info) used.insert(a->info->name);
-                                }
+                                const Asset* a = aup.get();
+                                if (!a || !a->info) continue;
+                                used.insert(a->info->name);
                         }
                 }
+
                 const std::size_t preload_count = used.size();
-                vibble::log::info(std::string("[AssetLoader] Preloading animations for used assets (") + std::to_string(preload_count) + ")...");
-                asset_library_->loadAnimationsFor(renderer_, used);
+                if (preload_count > 0) {
+                        vibble::log::info(std::string("[AssetLoader] Preloading animations for referenced map assets (") +
+                                         std::to_string(preload_count) + ")...");
+                        asset_library_->loadAnimationsFor(renderer_, used);
 
-                const auto preload_end = std::chrono::steady_clock::now();
-                const double preload_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - preload_begin).count();
-                vibble::log::info(std::string("[AssetLoader] Preloaded animations for ") + std::to_string(preload_count) + " referenced assets in " + std::to_string(preload_ms) + "ms");
-        } else {
-                vibble::log::info("[AssetLoader] Using shared asset library cache; skipping per-map preload.");
-        }
-    }
-
-    if (asset_library_) {
-        if (renderer_) {
-                try {
-                        asset_library_->ensureAllAnimationsLoaded(renderer_);
-                        vibble::log::info("[AssetLoader] Asset library warmup complete; animations cached in renderer.");
-                } catch (const std::exception& ex) {
-                        vibble::log::error(std::string("[AssetLoader] Asset library warmup failed: ") + ex.what());
-                } catch (...) {
-                        vibble::log::error("[AssetLoader] Asset library warmup failed with unknown error.");
+                        const auto preload_end = std::chrono::steady_clock::now();
+                        const double preload_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - preload_begin).count();
+                        vibble::log::info(std::string("[AssetLoader] Preloaded animations for ") +
+                                          std::to_string(preload_count) + " referenced assets in " +
+                                          std::to_string(preload_ms) + "ms");
+                } else {
+                        vibble::log::info("[AssetLoader] No referenced assets discovered for animation preload.");
                 }
+        } else if (!renderer_) {
+                vibble::log::warn("[AssetLoader] Renderer unavailable; skipping animation preload.");
         } else {
-                vibble::log::warn("[AssetLoader] Renderer unavailable; skipping asset library cache warmup.");
+                vibble::log::warn("[AssetLoader] Asset library unavailable; skipping animation preload.");
         }
     }
 

@@ -4721,8 +4721,8 @@
               {
                 "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 898,
-                "texture_y": 458
+                "texture_x": 448,
+                "texture_y": 228
               }
             ]
           ],
@@ -5447,22 +5447,22 @@
   },
   "image_effects": {
     "background": {
-      "blur": 0.0,
+      "blur": 0.7799999713897705,
       "brightness": 0.0,
-      "contrast": 0.0,
+      "contrast": -0.14000004529953003,
       "hue": 0.0,
       "saturation_blue": 0.0,
       "saturation_green": 0.0,
-      "saturation_red": 0.0
+      "saturation_red": -0.36000001430511475
     },
     "foreground": {
-      "blur": 0.9599999189376831,
-      "brightness": 0.019999980926513672,
-      "contrast": 0.0,
+      "blur": 0.5399999618530273,
+      "brightness": 0.15999996662139893,
+      "contrast": 0.1799999475479126,
       "hue": 0.0,
       "saturation_blue": 0.0,
       "saturation_green": 0.0,
-      "saturation_red": 0.0
+      "saturation_red": 0.25999999046325684
     }
   },
   "maps": {
@@ -5720,8 +5720,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": 496,
-              "dz": 322,
+              "dx": 52,
+              "dz": 212,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -5733,7 +5733,7 @@
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
-              "resolution": 3,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-61e4c02a6dc9"
@@ -6680,8 +6680,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -684,
-              "dz": 52,
+              "dx": -634,
+              "dz": 20,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

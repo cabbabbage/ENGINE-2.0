@@ -1418,18 +1418,8 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
     }
 }
 
-void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
+void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations) {
     if (!anims_json_.is_object()) return;
-
-    SDL_Texture* dummy_base_sprite = nullptr;
-    int dummy_w = 0;
-    int dummy_h = 0;
-    std::unordered_map<std::string, PrebuiltAnimationFrames> prebuilt_frames;
-    CacheManager::BundleData bundle_data;
-    if (renderer) {
-        PrimaryAssetCache primary_cache(renderer);
-        primary_cache.load_or_build(*this, prebuilt_frames, bundle_data);
-    }
 
     auto parse_source_animation = [](const nlohmann::json& payload) -> std::optional<std::string> {
         if (!payload.contains("source") || !payload["source"].is_object()) {
@@ -1449,7 +1439,62 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
         } catch (...) {
             return std::nullopt;
         }
-};
+    };
+
+    std::unordered_set<std::string> selected_animation_names;
+    if (include_all_animations) {
+        for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+            selected_animation_names.insert(it.key());
+        }
+    } else {
+        if (!start_animation.empty() && anims_json_.contains(start_animation)) {
+            selected_animation_names.insert(start_animation);
+        }
+        if (anims_json_.contains("default")) {
+            selected_animation_names.insert("default");
+        }
+        if (selected_animation_names.empty() && !anims_json_.empty()) {
+            selected_animation_names.insert(anims_json_.begin().key());
+        }
+
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            std::vector<std::string> snapshot(selected_animation_names.begin(),
+                                              selected_animation_names.end());
+            for (const auto& anim_name : snapshot) {
+                auto it = anims_json_.find(anim_name);
+                if (it == anims_json_.end() || !it->is_object()) {
+                    continue;
+                }
+                auto source_name = parse_source_animation(*it);
+                if (source_name && !source_name->empty()) {
+                    if (selected_animation_names.insert(*source_name).second) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    auto should_include_animation = [&](const std::string& anim_name) {
+        if (include_all_animations) {
+            return true;
+        }
+        return selected_animation_names.find(anim_name) != selected_animation_names.end();
+    };
+
+    SDL_Texture* dummy_base_sprite = nullptr;
+    int dummy_w = 0;
+    int dummy_h = 0;
+    std::unordered_map<std::string, PrebuiltAnimationFrames> prebuilt_frames;
+    CacheManager::BundleData bundle_data;
+    if (renderer) {
+        PrimaryAssetCache primary_cache(renderer);
+        const std::unordered_set<std::string>* filter =
+            include_all_animations ? nullptr : &selected_animation_names;
+        primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+    }
 
     auto animation_ready = [this](const std::string& name) {
         auto it = animations.find(name);
@@ -1461,6 +1506,9 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
 };
 
     for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+        if (!should_include_animation(it.key())) {
+            continue;
+        }
         animations[it.key()];
     }
 
@@ -1480,6 +1528,9 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
     for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
         const std::string name = it.key();
         const auto& json       = it.value();
+        if (!should_include_animation(name)) {
+            continue;
+        }
 
         auto source_name = parse_source_animation(json);
         const bool needs_source = source_name.has_value() && *source_name != name;

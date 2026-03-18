@@ -37,6 +37,15 @@ bool resolve_frame_dimensions(const RenderObject& obj, int& frame_w, int& frame_
     frame_h = std::max(1, static_cast<int>(std::lround(tex_h)));
     return true;
 }
+
+SDL_FPoint sanitize_anchor_uv(SDL_FPoint uv) {
+    if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
+        return SDL_FPoint{0.5f, 1.0f};
+    }
+    return SDL_FPoint{
+        std::clamp(uv.x, 0.0f, 1.0f),
+        std::clamp(uv.y, 0.0f, 1.0f)};
+}
 } // namespace
 
 float sanitize_perspective_scale(float perspective_scale) {
@@ -74,6 +83,7 @@ bool assemble_render_object_projection_input(const RenderObject& obj,
     out_input.final_width_px = std::max(1, static_cast<int>(std::lround(final_width_px)));
     out_input.final_height_px = std::max(1, static_cast<int>(std::lround(final_height_px)));
     out_input.flip = obj.flip;
+    out_input.anchor_uv = sanitize_anchor_uv(obj.projection_anchor_uv);
     return true;
 }
 

@@ -56,5 +56,6 @@ namespace CacheManager {
 
     bool save_bundle(const std::string& bundle_path, const BundleData& data);
     bool load_bundle(const std::string& bundle_path, BundleData& out_data);
+    bool update_bundle_content_hash(const std::string& bundle_path, std::uint64_t content_hash);
 
 }

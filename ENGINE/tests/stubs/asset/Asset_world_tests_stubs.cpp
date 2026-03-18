@@ -49,7 +49,7 @@ std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& ass
 }
 
 bool AssetInfo::has_tag(const std::string&) const { return false; }
-void AssetInfo::loadAnimations(SDL_Renderer*) {}
+void AssetInfo::loadAnimations(SDL_Renderer*, bool) {}
 bool AssetInfo::commit_manifest() { return false; }
 nlohmann::json AssetInfo::manifest_payload() const { return nlohmann::json::object(); }
 void AssetInfo::set_asset_type(const std::string& t) { type = t; }

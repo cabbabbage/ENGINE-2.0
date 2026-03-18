@@ -69,6 +69,7 @@ struct RenderObject {
     SDL_Texture* cached_mesh_texture = nullptr;
     bool has_cached_mesh = false;
     bool mesh_dirty = true;
+    SDL_FPoint projection_anchor_uv{0.5f, 1.0f};
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;

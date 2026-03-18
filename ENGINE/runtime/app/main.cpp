@@ -16,7 +16,6 @@
 #include "audio/audio_engine.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "utils/loading_status_notifier.hpp"
-#include "utils/rebuild_queue.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
@@ -637,21 +636,6 @@ void run(SDL_Window* window,
     } catch (const std::exception& ex) {
         vibble::log::error(std::string("[Main] Failed to load manifest: ") + ex.what());
         return;
-    }
-
-    {
-        vibble::RebuildQueueCoordinator cache_rebuild;
-        if (!cache_rebuild.validate_manifest_cache()) {
-            vibble::log::warn("[Main] Cache validation reported issues; attempting cache rebuild from source images.");
-        }
-        if (cache_rebuild.has_pending_asset_work()) {
-            vibble::log::info("[Main] Rebuilding cached asset images (normal/foreground/background variants)...");
-            if (!cache_rebuild.run_asset_tool()) {
-                vibble::log::warn("[Main] Cache rebuild tool failed; runtime will continue with available cache data.");
-            } else {
-                vibble::log::info("[Main] Cached asset images rebuilt.");
-            }
-        }
     }
 
     std::shared_ptr<AssetLibrary> shared_asset_library =

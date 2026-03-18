@@ -38,9 +38,9 @@ protected:
     int           screen_w_   = 0;
     int           screen_h_   = 0;
     std::unique_ptr<AssetLoader> loader_;
-    Assets*        game_assets_      = nullptr;
+    std::unique_ptr<Assets> game_assets_;
     SceneRenderer* scene_            = nullptr;
-    Input*         input_            = nullptr;
+    std::unique_ptr<Input> input_;
     SDL_Texture* overlay_texture_    = nullptr;
     bool dev_mode_ = false;
     LoadingScreen* loading_screen_   = nullptr;

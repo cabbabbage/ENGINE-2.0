@@ -18,7 +18,7 @@
                 "exact": true,
                 "exact_position": false,
                 "percent": false,
-                "perimeter": false,
+                "perimeter": true,
                 "random": true
             },
             "render_dark_mask": false,

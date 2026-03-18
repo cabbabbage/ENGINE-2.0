@@ -4,7 +4,6 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 #include <optional>
 #include <cmath>
 #include <cctype>
@@ -102,29 +101,19 @@ manifest_store_(manifest_store)
         const auto preload_begin = std::chrono::steady_clock::now();
 
         if (asset_library_ && renderer_) {
-                std::unordered_set<std::string> used;
-                for (Room* room : rooms_) {
-                        if (!room) continue;
-                        for (const auto& aup : room->assets) {
-                                const Asset* a = aup.get();
-                                if (!a || !a->info) continue;
-                                used.insert(a->info->name);
-                        }
-                }
-
-                const std::size_t preload_count = used.size();
-                if (preload_count > 0) {
-                        vibble::log::info(std::string("[AssetLoader] Preloading animations for referenced map assets (") +
-                                         std::to_string(preload_count) + ")...");
-                        asset_library_->loadAnimationsFor(renderer_, used);
+                const std::size_t known_assets = asset_library_->all().size();
+                if (known_assets > 0) {
+                        vibble::log::info(std::string("[AssetLoader] Preloading animations for all known assets (") +
+                                         std::to_string(known_assets) + ")...");
+                        asset_library_->ensureAllAnimationsLoaded(renderer_);
 
                         const auto preload_end = std::chrono::steady_clock::now();
                         const double preload_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - preload_begin).count();
-                        vibble::log::info(std::string("[AssetLoader] Preloaded animations for ") +
-                                          std::to_string(preload_count) + " referenced assets in " +
+                        vibble::log::info(std::string("[AssetLoader] Animation preload pass completed for ") +
+                                          std::to_string(known_assets) + " assets in " +
                                           std::to_string(preload_ms) + "ms");
                 } else {
-                        vibble::log::info("[AssetLoader] No referenced assets discovered for animation preload.");
+                        vibble::log::info("[AssetLoader] No assets available in the library for animation preload.");
                 }
         } else if (!renderer_) {
                 vibble::log::warn("[AssetLoader] Renderer unavailable; skipping animation preload.");

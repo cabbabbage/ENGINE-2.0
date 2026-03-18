@@ -3064,7 +3064,7 @@ bool Assets::should_step_dev_frame(const Input& input) const {
         return true;
     }
 
-    if (has_pending_dev_work(false)) {
+    if (has_pending_dev_work(movement_debug_enabled_)) {
         return true;
     }
 
@@ -3103,6 +3103,9 @@ bool Assets::is_frame_editor_target_active(const Asset* asset) const {
 
 bool Assets::should_run_runtime_updates() const {
     if (!dev_mode) {
+        return true;
+    }
+    if (movement_debug_enabled_ && movement_debug_visible_) {
         return true;
     }
     if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {

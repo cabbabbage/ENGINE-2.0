@@ -22,6 +22,7 @@
 #include "image_cache_generator.hpp"
 
 #include "asset_metadata.hpp"
+#include "d3d11_effects_backend.hpp"
 #include "rebuild_queue.hpp"
 
 #include <algorithm>
@@ -319,7 +320,9 @@ static std::optional<ImageRGBA> resize_lanczos_rgba(const ImageRGBA& src, int ds
     std::vector<ResampleContrib> cx;
     build_lanczos_contribs(src.w, dst_w, a, cx);
 
-    std::vector<float> tmp(static_cast<size_t>(dst_w) * static_cast<size_t>(src.h) * 4u, 0.0f);
+    thread_local std::vector<float> tmp;
+    const size_t tmp_size = static_cast<size_t>(dst_w) * static_cast<size_t>(src.h) * 4u;
+    tmp.assign(tmp_size, 0.0f);
 
     for (int y = 0; y < src.h; ++y) {
         for (int x = 0; x < dst_w; ++x) {
@@ -434,6 +437,17 @@ static inline float sat_factor(float sat_val) {
 // -----------------------------
 static std::vector<float> build_gaussian_kernel(float sigma) {
     sigma = std::max(0.01f, sigma);
+    const int key = static_cast<int>(std::lround(sigma * 1000.0f));
+    static std::mutex kernel_cache_mu;
+    static std::unordered_map<int, std::vector<float>> kernel_cache;
+    {
+        std::lock_guard<std::mutex> lk(kernel_cache_mu);
+        auto it = kernel_cache.find(key);
+        if (it != kernel_cache.end()) {
+            return it->second;
+        }
+    }
+
     int radius = static_cast<int>(std::ceil(3.0f * sigma));
     int size = radius * 2 + 1;
     std::vector<float> k(size);
@@ -446,6 +460,11 @@ static std::vector<float> build_gaussian_kernel(float sigma) {
     }
     if (sum < 1e-8f) sum = 1.0f;
     for (float& v : k) v /= sum;
+
+    {
+        std::lock_guard<std::mutex> lk(kernel_cache_mu);
+        kernel_cache[key] = k;
+    }
     return k;
 }
 
@@ -457,7 +476,9 @@ static ImageRGBA gaussian_blur_rgba(const ImageRGBA& src, float sigma) {
     int radius = static_cast<int>(k.size() / 2);
 
     // Horizontal
-    std::vector<float> tmp(static_cast<size_t>(src.w) * static_cast<size_t>(src.h) * 4u, 0.0f);
+    thread_local std::vector<float> tmp;
+    const size_t tmp_size = static_cast<size_t>(src.w) * static_cast<size_t>(src.h) * 4u;
+    tmp.assign(tmp_size, 0.0f);
     for (int y = 0; y < src.h; ++y) {
         for (int x = 0; x < src.w; ++x) {
             float acc[4] = {0, 0, 0, 0};
@@ -821,6 +842,51 @@ static inline std::string to_string_variant(Variant v) {
     }
     return "normal";
 }
+
+static inline const char* to_string_effects_backend(EffectsBackend backend) {
+    switch (backend) {
+        case EffectsBackend::Auto: return "auto";
+        case EffectsBackend::Cpu: return "cpu";
+        case EffectsBackend::D3D11: return "d3d11";
+    }
+    return "auto";
+}
+
+static bool apply_effects_on_expanded_canvas(const ImageRGBA& expanded,
+                                             const EffectsParams& fx,
+                                             EffectLayerMode mode,
+                                             bool use_d3d11_backend,
+                                             ImageRGBA& out,
+                                             std::string& err) {
+    if (!expanded.valid()) {
+        err = "Effects pipeline received invalid expanded source image.";
+        return false;
+    }
+
+    if (use_d3d11_backend) {
+        if (D3D11EffectsBackend::Instance().ApplyEffects(expanded, fx, mode, out, err) && out.valid()) {
+            return true;
+        }
+        // Fall back to CPU per-call to keep generation robust even if D3D11 hits a transient runtime issue.
+        err.clear();
+    }
+
+    const bool is_foreground = (mode == EffectLayerMode::Foreground);
+    out = apply_color_effects_like_python(expanded, fx, is_foreground);
+    if (!out.valid()) {
+        err = "CPU effect pipeline produced invalid output";
+        return false;
+    }
+    return true;
+}
+
+struct SourceFrameBatch {
+    std::string asset_name;
+    std::string anim_name;
+    int src_frame_index = 0;
+    fs::path src_png_path;
+    std::vector<WorkItem> scale_items;
+};
 
 } // namespace
 

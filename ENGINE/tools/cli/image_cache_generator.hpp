@@ -50,6 +50,12 @@ enum class EffectLayerMode : std::uint8_t {
     Background
 };
 
+enum class EffectsBackend : std::uint8_t {
+    Auto = 0,
+    Cpu,
+    D3D11
+};
+
 struct FrameMeta {
     // Mirrors manifest frames[*].needs_rebuild
     bool needs_rebuild = false;
@@ -183,6 +189,15 @@ struct GeneratorOptions {
 
     // If 0: generator chooses (hardware_concurrency - 1, minimum 1)
     std::uint32_t worker_count_override = 0;
+
+    // Preferred effects backend.
+    // - Auto: attempt D3D11 on Windows and fall back to CPU.
+    // - Cpu: force CPU effects path.
+    // - D3D11: prefer D3D11; falls back to CPU if unavailable.
+    EffectsBackend effects_backend = EffectsBackend::Auto;
+
+    // Reduce per-task logging noise/IO overhead by default.
+    bool quiet_task_logs = true;
 
     GeneratorFilters filters;
 };

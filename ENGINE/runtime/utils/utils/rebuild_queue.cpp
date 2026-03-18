@@ -6,6 +6,8 @@
 #include <sstream>
 #include <vector>
 #include <cerrno>
+#include <algorithm>
+#include <cctype>
 
 #ifdef _WIN32
 #include <process.h>
@@ -102,9 +104,50 @@ bool RebuildQueueCoordinator::has_pending_asset_work() const {
 
 bool RebuildQueueCoordinator::run_asset_tool(const std::string& command_prefix) const {
     const fs::path tool = tool_path(repo_root_, "asset_tool_cli");
-    return run_cpp_tool(tool,
-                        {"--manifest", manifest_path_.string(), "--cache-root", cache_root_.string()},
-                        command_prefix);
+    std::vector<std::string> args{
+        "--manifest", manifest_path_.string(),
+        "--cache-root", cache_root_.string()
+    };
+
+    if (const char* backend_env = std::getenv("VIBBLE_ASSET_TOOL_EFFECTS_BACKEND")) {
+        std::string backend = backend_env;
+        std::transform(backend.begin(), backend.end(), backend.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (backend == "auto" || backend == "cpu" || backend == "d3d11") {
+            args.push_back("--effects-backend");
+            args.push_back(backend);
+        } else if (!backend.empty()) {
+            vibble::log::warn(std::string{"[RebuildQueue] Ignoring invalid VIBBLE_ASSET_TOOL_EFFECTS_BACKEND='"} +
+                              backend + "' (expected auto|cpu|d3d11).");
+        }
+    }
+
+    if (const char* workers_env = std::getenv("VIBBLE_ASSET_TOOL_WORKERS")) {
+        try {
+            int workers = std::stoi(workers_env);
+            if (workers > 0) {
+                args.push_back("--workers");
+                args.push_back(std::to_string(workers));
+            } else {
+                vibble::log::warn(std::string{"[RebuildQueue] Ignoring non-positive VIBBLE_ASSET_TOOL_WORKERS='"} +
+                                  workers_env + "'.");
+            }
+        } catch (...) {
+            vibble::log::warn(std::string{"[RebuildQueue] Ignoring invalid VIBBLE_ASSET_TOOL_WORKERS='"} +
+                              workers_env + "'.");
+        }
+    }
+
+    if (const char* verbose_env = std::getenv("VIBBLE_ASSET_TOOL_VERBOSE_TASKS")) {
+        std::string v = verbose_env;
+        std::transform(v.begin(), v.end(), v.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (v == "1" || v == "true" || v == "yes" || v == "on") {
+            args.push_back("--verbose-tasks");
+        }
+    }
+
+    return run_cpp_tool(tool, args, command_prefix);
 }
 
 void RebuildQueueCoordinator::mark_all_frames_for_rebuild() const {

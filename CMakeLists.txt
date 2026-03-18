@@ -357,6 +357,7 @@ function(add_cli_tool target_name entry_point)
     add_executable(${target_name}
         ENGINE/tools/cli/${entry_point}
         ENGINE/tools/cli/image_cache_generator.cpp
+        ENGINE/tools/cli/d3d11_effects_backend.cpp
     )
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
@@ -370,6 +371,9 @@ function(add_cli_tool target_name entry_point)
     target_link_libraries(${target_name} PRIVATE
         nlohmann_json::nlohmann_json
     )
+    if (WIN32)
+        target_link_libraries(${target_name} PRIVATE d3d11 d3dcompiler)
+    endif()
 endfunction()
 
 # Asset Tool CLI - main cache generator

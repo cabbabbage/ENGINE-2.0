@@ -16,6 +16,7 @@
 #include "audio/audio_engine.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "utils/loading_status_notifier.hpp"
+#include "utils/rebuild_queue.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
@@ -78,6 +79,29 @@ WindowedPlacement compute_windowed_fallback(SDL_Window* window) {
         }
 
         return placement;
+}
+
+bool env_flag_enabled(const char* name, bool default_value) {
+        if (!name || !*name) {
+                return default_value;
+        }
+        const char* raw = std::getenv(name);
+        if (!raw || !*raw) {
+                return default_value;
+        }
+
+        std::string value(raw);
+        std::transform(value.begin(),
+                       value.end(),
+                       value.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (value == "1" || value == "true" || value == "yes" || value == "on" || value == "y" || value == "t") {
+                return true;
+        }
+        if (value == "0" || value == "false" || value == "no" || value == "off" || value == "n" || value == "f") {
+                return false;
+        }
+        return default_value;
 }
 
 }
@@ -615,16 +639,36 @@ void run(SDL_Window* window,
         return;
     }
 
+    {
+        vibble::RebuildQueueCoordinator cache_rebuild;
+        if (!cache_rebuild.validate_manifest_cache()) {
+            vibble::log::warn("[Main] Cache validation reported issues; attempting cache rebuild from source images.");
+        }
+        if (cache_rebuild.has_pending_asset_work()) {
+            vibble::log::info("[Main] Rebuilding cached asset images (normal/foreground/background variants)...");
+            if (!cache_rebuild.run_asset_tool()) {
+                vibble::log::warn("[Main] Cache rebuild tool failed; runtime will continue with available cache data.");
+            } else {
+                vibble::log::info("[Main] Cached asset images rebuilt.");
+            }
+        }
+    }
+
     std::shared_ptr<AssetLibrary> shared_asset_library =
         std::make_shared<AssetLibrary>(false);
     vibble::log::info("[Main] Preparing asset metadata cache...");
                 shared_asset_library->load_all_from_resources();
     { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
     vibble::log::info(std::string("[Main] Asset metadata cache ready for ") + std::to_string(shared_asset_library->all().size()) + " asset(s).");
-    vibble::log::info("[Main] Loading cached asset resources...");
-    shared_asset_library->loadAllAnimations(renderer);
-    { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
-    vibble::log::info("[Main] Cached asset resources loaded.");
+    const bool safe_loading_enabled = env_flag_enabled("VIBBLE_SAFE_LOADING", true);
+    if (!safe_loading_enabled) {
+        vibble::log::info("[Main] Loading cached asset resources...");
+        shared_asset_library->loadAllAnimations(renderer);
+        { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
+        vibble::log::info("[Main] Cached asset resources loaded.");
+    } else {
+        vibble::log::info("[Main] SAFE loading is enabled; deferring full animation preload until runtime requests it.");
+    }
 
     std::optional<MapDescriptor> autostart_map;
     if (const char* env = std::getenv("VIBBLE_AUTOSTART_MAP")) {

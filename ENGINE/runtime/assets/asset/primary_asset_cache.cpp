@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <initializer_list>
 
 namespace fs = std::filesystem;
 
@@ -81,6 +82,9 @@ CacheManager::BundleFrameLayer make_layer(SDL_Surface* surface) {
         rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
         SDL_DestroySurface(surface);
     }
+    if (!rgba) {
+        return layer;
+    }
     layer.width = rgba->w;
     layer.height = rgba->h;
     layer.pitch = rgba->pitch;
@@ -92,6 +96,30 @@ CacheManager::BundleFrameLayer make_layer(SDL_Surface* surface) {
         SDL_DestroySurface(rgba);
     }
     return layer;
+}
+
+CacheManager::BundleFrameLayer make_transparent_layer(int width, int height) {
+    CacheManager::BundleFrameLayer layer;
+    layer.width = std::max(1, width);
+    layer.height = std::max(1, height);
+    layer.format = SDL_PIXELFORMAT_RGBA8888;
+    layer.pitch = layer.width * 4;
+    const std::size_t byte_count =
+        static_cast<std::size_t>(layer.pitch) * static_cast<std::size_t>(layer.height);
+    layer.pixels.assign(byte_count, static_cast<std::uint8_t>(0));
+    return layer;
+}
+
+CacheManager::BundleFrame make_placeholder_frame(const std::vector<float>& variant_steps) {
+    CacheManager::BundleFrame frame;
+    frame.variants.reserve(variant_steps.empty() ? 1u : variant_steps.size());
+    const std::size_t variant_count = variant_steps.empty() ? 1u : variant_steps.size();
+    for (std::size_t idx = 0; idx < variant_count; ++idx) {
+        CacheManager::BundleFrameVariant variant;
+        variant.base = make_transparent_layer(1, 1);
+        frame.variants.push_back(std::move(variant));
+    }
+    return frame;
 }
 
 SDL_Surface* surface_from_layer(const CacheManager::BundleFrameLayer& layer) {
@@ -168,12 +196,37 @@ CacheManager::BundleFrameLayer scale_layer(const CacheManager::BundleFrameLayer&
     return layer;
 }
 
+CacheManager::BundleFrameLayer load_layer_from_candidates(std::initializer_list<fs::path> candidates) {
+    for (const auto& candidate : candidates) {
+        std::error_code ec;
+        if (!fs::exists(candidate, ec) || ec) {
+            continue;
+        }
+        if (SDL_Surface* surface = load_rgba_surface(candidate)) {
+            auto layer = make_layer(surface);
+            SDL_DestroySurface(surface);
+            return layer;
+        }
+    }
+    return CacheManager::BundleFrameLayer{};
+}
+
+fs::path cache_variant_root(const fs::path& animation_cache_root,
+                            const std::vector<float>& variant_steps,
+                            std::size_t variant_idx) {
+    return fs::path(render_pipeline::ScalingLogic::VariantFolder(
+        animation_cache_root.string(),
+        variant_steps,
+        variant_idx));
+}
+
 } // namespace
 
 PrimaryAssetCache::PrimaryAssetCache(SDL_Renderer* renderer) : renderer_(renderer) {}
 
 std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info) const {
     std::uint64_t hash = fnv1a64(info.info_json_.dump());
+    const auto canonical_steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
 
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
@@ -187,7 +240,14 @@ std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info) const {
                 continue;
             }
             fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
-            const int frame_count = count_sequential_png(folder);
+            const fs::path cache_anim_root = fs::path("cache") / info.name / "animations" / it.key();
+            const fs::path cache_scale_100 = cache_anim_root / "scale_100";
+            const fs::path cache_normal_100 = cache_scale_100 / "normal";
+            const fs::path cache_foreground_100 = cache_scale_100 / "foreground";
+            const fs::path cache_background_100 = cache_scale_100 / "background";
+            const int source_frame_count = count_sequential_png(folder);
+            const int cached_frame_count = count_sequential_png(cache_normal_100);
+            const int frame_count = std::max(source_frame_count, cached_frame_count);
             for (int i = 0; i < frame_count; ++i) {
                 fs::path frame_path = folder / (std::to_string(i) + ".png");
                 hash_file_signature(frame_path, hash);
@@ -195,6 +255,18 @@ std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info) const {
                 const std::string frame_name = std::to_string(i) + ".png";
                 hash_file_signature(folder / "foreground" / frame_name, hash);
                 hash_file_signature(folder / "background" / frame_name, hash);
+                hash_file_signature(cache_normal_100 / frame_name, hash);
+                hash_file_signature(cache_foreground_100 / frame_name, hash);
+                hash_file_signature(cache_background_100 / frame_name, hash);
+
+                for (std::size_t variant_idx = 0; variant_idx < canonical_steps.size(); ++variant_idx) {
+                    const fs::path variant_root = cache_variant_root(cache_anim_root,
+                                                                     canonical_steps,
+                                                                     variant_idx);
+                    hash_file_signature(variant_root / "normal" / frame_name, hash);
+                    hash_file_signature(variant_root / "foreground" / frame_name, hash);
+                    hash_file_signature(variant_root / "background" / frame_name, hash);
+                }
             }
         }
     }
@@ -304,8 +376,19 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
             }
 
             const fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
-            const int frame_count = count_sequential_png(folder);
+            const fs::path cache_anim_root = fs::path("cache") / info.name / "animations" / bundle_anim.name;
+            const fs::path cache_scale_100 = cache_anim_root / "scale_100";
+            const fs::path cache_normal_100 = cache_scale_100 / "normal";
+            const fs::path cache_foreground_100 = cache_scale_100 / "foreground";
+            const fs::path cache_background_100 = cache_scale_100 / "background";
+            const int source_frame_count = count_sequential_png(folder);
+            const int cached_frame_count = count_sequential_png(cache_normal_100);
+            const int frame_count = std::max(source_frame_count, cached_frame_count);
             if (frame_count <= 0) {
+                vibble::log::warn("[PrimaryAssetCache] No source frames found for " + info.name +
+                                  "::" + bundle_anim.name + " in '" + folder.generic_string() +
+                                  "'; injecting a transparent placeholder frame.");
+                bundle_anim.frames.push_back(make_placeholder_frame(bundle_anim.variant_steps));
                 out_data.animations.push_back(std::move(bundle_anim));
                 continue;
             }
@@ -314,42 +397,66 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
             const fs::path bg_folder = folder / "background";
 
             bundle_anim.frames.reserve(static_cast<std::size_t>(frame_count));
+            bool warned_missing_base_frame = false;
 
             for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
                 CacheManager::BundleFrame frame;
                 frame.variants.reserve(bundle_anim.variant_steps.size());
+                const std::string frame_name = std::to_string(frame_idx) + ".png";
 
-                const fs::path base_path = folder / (std::to_string(frame_idx) + ".png");
-                SDL_Surface* base_surface = load_rgba_surface(base_path);
-
-                SDL_Surface* fg_surface = nullptr;
-                SDL_Surface* bg_surface = nullptr;
-                if (fs::exists(fg_folder / (std::to_string(frame_idx) + ".png"))) {
-                    fg_surface = load_rgba_surface(fg_folder / (std::to_string(frame_idx) + ".png"));
+                CacheManager::BundleFrameLayer base_layer = load_layer_from_candidates({
+                    cache_normal_100 / frame_name,
+                    folder / frame_name,
+                });
+                if (base_layer.empty()) {
+                    if (!warned_missing_base_frame) {
+                        vibble::log::warn("[PrimaryAssetCache] Missing base frame data for " + info.name +
+                                          "::" + bundle_anim.name +
+                                          "; injecting transparent fallback for unavailable frame(s).");
+                        warned_missing_base_frame = true;
+                    }
+                    base_layer = make_transparent_layer(1, 1);
                 }
-                if (fs::exists(bg_folder / (std::to_string(frame_idx) + ".png"))) {
-                    bg_surface = load_rgba_surface(bg_folder / (std::to_string(frame_idx) + ".png"));
-                }
+                CacheManager::BundleFrameLayer fg_layer = load_layer_from_candidates({
+                    cache_foreground_100 / frame_name,
+                    fg_folder / frame_name,
+                });
+                CacheManager::BundleFrameLayer bg_layer = load_layer_from_candidates({
+                    cache_background_100 / frame_name,
+                    bg_folder / frame_name,
+                });
 
-                CacheManager::BundleFrameLayer base_layer = make_layer(base_surface);
-                CacheManager::BundleFrameLayer fg_layer = make_layer(fg_surface);
-                CacheManager::BundleFrameLayer bg_layer = make_layer(bg_surface);
-
-                for (float step : bundle_anim.variant_steps) {
+                for (std::size_t variant_idx = 0; variant_idx < bundle_anim.variant_steps.size(); ++variant_idx) {
+                    const float step = bundle_anim.variant_steps[variant_idx];
                     CacheManager::BundleFrameVariant variant;
-                    variant.base = scale_layer(base_layer, step);
-                    if (!fg_layer.empty()) {
+                    const fs::path variant_root = cache_variant_root(cache_anim_root,
+                                                                     bundle_anim.variant_steps,
+                                                                     variant_idx);
+                    variant.base = load_layer_from_candidates({
+                        variant_root / "normal" / frame_name,
+                    });
+                    if (variant.base.empty()) {
+                        variant.base = scale_layer(base_layer, step);
+                    }
+                    if (variant.base.empty()) {
+                        variant.base = make_transparent_layer(1, 1);
+                    }
+
+                    variant.foreground = load_layer_from_candidates({
+                        variant_root / "foreground" / frame_name,
+                    });
+                    if (variant.foreground.empty() && !fg_layer.empty()) {
                         variant.foreground = scale_layer(fg_layer, step);
                     }
-                    if (!bg_layer.empty()) {
+
+                    variant.background = load_layer_from_candidates({
+                        variant_root / "background" / frame_name,
+                    });
+                    if (variant.background.empty() && !bg_layer.empty()) {
                         variant.background = scale_layer(bg_layer, step);
                     }
                     frame.variants.push_back(std::move(variant));
                 }
-
-                if (base_surface) SDL_DestroySurface(base_surface);
-                if (fg_surface) SDL_DestroySurface(fg_surface);
-                if (bg_surface) SDL_DestroySurface(bg_surface);
 
                 bundle_anim.frames.push_back(std::move(frame));
             }

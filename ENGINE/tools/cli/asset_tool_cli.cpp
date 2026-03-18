@@ -9,6 +9,8 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
 
 // Simple console logger implementation
 class ConsoleLogger : public imgcache::ILogger {
@@ -40,6 +42,8 @@ void print_usage(const char* prog_name) {
     std::cout << "  --animation <name>      Only process specified animation (requires --asset)\n";
     std::cout << "  --frame <idx>           Only process specified frame index (requires --asset and --animation)\n";
     std::cout << "  --workers <N>           Number of worker threads (default: CPU count - 1)\n";
+    std::cout << "  --effects-backend <B>   Effects backend: auto|cpu|d3d11 (default: auto)\n";
+    std::cout << "  --verbose-tasks         Enable per-task progress logs (default: quiet aggregate logs)\n";
     std::cout << "  --help                  Show this help message\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << prog_name << "                                  # Process all flagged frames\n";
@@ -128,6 +132,29 @@ int main(int argc, char** argv) {
                 std::cerr << "Error: invalid worker count: " << e.what() << "\n";
                 return 2;
             }
+        }
+        else if (arg == "--effects-backend") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --effects-backend requires an argument: auto|cpu|d3d11\n";
+                return 2;
+            }
+            std::string value = argv[++i];
+            std::transform(value.begin(), value.end(), value.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (value == "auto") {
+                opts.effects_backend = imgcache::EffectsBackend::Auto;
+            } else if (value == "cpu") {
+                opts.effects_backend = imgcache::EffectsBackend::Cpu;
+            } else if (value == "d3d11") {
+                opts.effects_backend = imgcache::EffectsBackend::D3D11;
+            } else {
+                std::cerr << "Error: invalid --effects-backend value '" << value
+                          << "' (expected auto|cpu|d3d11)\n";
+                return 2;
+            }
+        }
+        else if (arg == "--verbose-tasks") {
+            opts.quiet_task_logs = false;
         }
         else {
             std::cerr << "Error: unknown argument: " << arg << "\n";

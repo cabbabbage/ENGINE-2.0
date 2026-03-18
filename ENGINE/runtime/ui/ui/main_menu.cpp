@@ -212,13 +212,13 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
 
         // Clamp aggressively and retry smaller sizes to avoid D3D OUTOFVIDEOMEMORY errors.
         const int max_dim = std::clamp(
-                static_cast<int>(std::max(screen_w_, screen_h_) * 1.0),
-                512,
-                1280);
+                static_cast<int>(std::max(screen_w_, screen_h_) * 0.8),
+                256,
+                1024);
         const int src_w = loaded->w;
         const int src_h = loaded->h;
         int attempt_dim = std::min(max_dim, std::max(src_w, src_h));
-        while (attempt_dim >= 256 && !tex) {
+        while (attempt_dim >= 32 && !tex) {
                 const double scale = std::min(1.0, static_cast<double>(attempt_dim) /
                                                      static_cast<double>(std::max(src_w, src_h)));
                 const int target_w = std::max(1, static_cast<int>(std::round(static_cast<double>(src_w) * scale)));
@@ -256,6 +256,10 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
                 }
 
                 attempt_dim /= 2;
+        }
+        if (!tex) {
+                std::cerr << "[MainMenu] Failed to upload background texture after aggressive downscale retries: "
+                          << abs_utf8_path << "\n";
         }
         SDL_DestroySurface(loaded);
         return tex;

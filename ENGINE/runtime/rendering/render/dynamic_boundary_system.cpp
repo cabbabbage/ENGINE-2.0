@@ -366,6 +366,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         SDL_Texture* texture = frame_variant->texture;
         BoundarySprite sprite;
         sprite.texture = texture;
+        sprite.spawn_id = btype.spawn_id;
         sprite.world_pos = assignment.world_pos;
         sprite.screen_pos = screen_pos;
         sprite.world_z = assignment.world_z;

@@ -260,15 +260,19 @@ void parse_box_corners(TBox& box, const nlohmann::json& node) {
         const nlohmann::json& corners = (node.contains("corners") && node["corners"].is_array())
                                             ? node["corners"]
                                             : nlohmann::json::array();
-        for (std::size_t idx = 0; idx < box.corners.size(); ++idx) {
-                animation_update::FrameBoxCorner corner{};
-                if (idx < corners.size() && corners[idx].is_object()) {
-                        const auto& corner_node = corners[idx];
-                        corner.texture_x = std::max(0, read_int_field_like(corner_node, "texture_x", 0));
-                        corner.texture_y = std::max(0, read_int_field_like(corner_node, "texture_y", 0));
+        std::vector<animation_update::FrameBoxCorner> parsed_corners;
+        parsed_corners.reserve(corners.size());
+        for (std::size_t idx = 0; idx < corners.size(); ++idx) {
+                if (!corners[idx].is_object()) {
+                        continue;
                 }
-                box.corners[idx] = corner;
+                const auto& corner_node = corners[idx];
+                parsed_corners.push_back(animation_update::FrameBoxCorner{
+                    std::max(0, read_int_field_like(corner_node, "texture_x", 0)),
+                    std::max(0, read_int_field_like(corner_node, "texture_y", 0)),
+                });
         }
+        box.set_rect(animation_update::FrameBoxRect::from_points(parsed_corners));
 }
 
 animation_update::FrameHitBox parse_hit_box(const nlohmann::json& node, std::size_t ordinal) {
@@ -417,14 +421,20 @@ void apply_box_transforms(std::vector<std::vector<TBox>>& boxes,
                         }
                 }
                 for (auto& box : boxes[frame_index]) {
-                        for (auto& corner : box.corners) {
-                                if (flip_horizontal && frame_w > 0) {
-                                        corner.texture_x = frame_w - 1 - corner.texture_x;
-                                }
-                                if (flip_vertical && frame_h > 0) {
-                                        corner.texture_y = frame_h - 1 - corner.texture_y;
-                                }
+                        animation_update::FrameBoxRect flipped = box.rect;
+                        if (flip_horizontal && frame_w > 0) {
+                                const int next_left = frame_w - 1 - box.rect.right;
+                                const int next_right = frame_w - 1 - box.rect.left;
+                                flipped.left = next_left;
+                                flipped.right = next_right;
                         }
+                        if (flip_vertical && frame_h > 0) {
+                                const int next_top = frame_h - 1 - box.rect.bottom;
+                                const int next_bottom = frame_h - 1 - box.rect.top;
+                                flipped.top = next_top;
+                                flipped.bottom = next_bottom;
+                        }
+                        box.set_rect(flipped);
                 }
         }
 }

@@ -15,8 +15,8 @@ namespace {
 constexpr int kPanelMargin = 12;
 constexpr int kTopOffset = 56;
 constexpr int kPanelWidth = 300;
-constexpr int kPanelMinHeight = 260;
-constexpr int kPanelMaxHeight = 560;
+constexpr int kPanelMinHeight = 340;
+constexpr int kPanelMaxHeight = 720;
 constexpr int kPanelPadding = 10;
 constexpr int kSectionGap = 8;
 constexpr int kHeaderHeight = 24;
@@ -28,6 +28,9 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     rename_textbox_ = std::make_unique<DMTextBox>("Rename", "");
     rename_button_ = std::make_unique<DMButton>("Rename", &DMStyles::PrimaryButton(), 120, DMButton::height());
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
+    apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
+    apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
+    apply_asset_button_ = std::make_unique<DMButton>("Copy To Asset", &DMStyles::PrimaryButton(), 170, DMButton::height());
 }
 
 RoomAnchorToolsPanel::~RoomAnchorToolsPanel() = default;
@@ -118,6 +121,10 @@ void RoomAnchorToolsPanel::set_on_rename(RenameCallback callback) {
 
 void RoomAnchorToolsPanel::set_on_delete(DeleteCallback callback) {
     on_delete_ = std::move(callback);
+}
+
+void RoomAnchorToolsPanel::set_on_propagate(PropagateCallback callback) {
+    on_propagate_ = std::move(callback);
 }
 
 bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
@@ -216,6 +223,41 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
+    if (apply_next_frame_button_ && apply_next_frame_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_) {
+            on_propagate_(PropagationScope::NextFrame);
+        }
+    }
+
+    if (apply_animation_button_ && apply_animation_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_) {
+            on_propagate_(PropagationScope::Animation);
+        }
+    }
+
+    if (apply_asset_button_ && apply_asset_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_) {
+            on_propagate_(PropagationScope::Asset);
+        }
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN &&
+        rename_textbox_ && rename_textbox_->is_editing() &&
+        (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) &&
+        on_rename_) {
+        on_rename_(rename_textbox_->value());
+        handled = true;
+    }
+
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) &&
         rename_textbox_ && rename_textbox_->is_editing()) {
         handled = true;
@@ -286,6 +328,15 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
     if (delete_button_) {
         delete_button_->render(renderer);
     }
+    if (apply_next_frame_button_) {
+        apply_next_frame_button_->render(renderer);
+    }
+    if (apply_animation_button_) {
+        apply_animation_button_->render(renderer);
+    }
+    if (apply_asset_button_) {
+        apply_asset_button_->render(renderer);
+    }
 }
 
 bool RoomAnchorToolsPanel::is_point_inside(int x, int y) const {
@@ -319,20 +370,26 @@ void RoomAnchorToolsPanel::update_layout() const {
         std::max(0, panel_rect_.w - kPanelPadding * 2),
         kHeaderHeight};
 
-    const int controls_height =
-        DMButton::height() +
-        kSectionGap +
-        DMTextBox::height() +
-        kSectionGap +
-        DMButton::height();
-
     const int list_top = header_rect_.y + header_rect_.h + kSectionGap;
-    const int bottom_padding = kPanelPadding;
-    const int list_height = std::max(72,
+    const int row_gap = 2;
+    int controls_height = 0;
+    controls_height += DMButton::height();                          // add
+    controls_height += kSectionGap;
+    controls_height += DMTextBox::height();                         // rename text
+    controls_height += kSectionGap;
+    controls_height += DMButton::height();                          // rename/delete row
+    controls_height += kSectionGap;
+    controls_height += DMButton::height();                          // copy next
+    controls_height += row_gap;
+    controls_height += DMButton::height();                          // copy animation
+    controls_height += row_gap;
+    controls_height += DMButton::height();                          // copy asset
+
+    const int list_height = std::max(0,
                                      panel_rect_.y + panel_rect_.h -
-                                         bottom_padding -
+                                         kPanelPadding -
                                          controls_height -
-                                         (kSectionGap * 2) -
+                                         kSectionGap -
                                          list_top);
 
     list_clip_rect_ = SDL_Rect{
@@ -353,16 +410,29 @@ void RoomAnchorToolsPanel::update_layout() const {
     if (rename_textbox_) {
         rename_textbox_->set_rect(SDL_Rect{controls_x, rename_y, controls_width, DMTextBox::height()});
     }
-    const int row_gap = kSectionGap;
-    const int half_width = std::max(64, (controls_width - row_gap) / 2);
+    const int button_row_gap = kSectionGap;
+    const int half_width = std::max(64, (controls_width - button_row_gap) / 2);
     if (rename_button_) {
         rename_button_->set_rect(SDL_Rect{controls_x, row_y, half_width, DMButton::height()});
     }
     if (delete_button_) {
-        delete_button_->set_rect(SDL_Rect{controls_x + half_width + row_gap,
+        delete_button_->set_rect(SDL_Rect{controls_x + half_width + button_row_gap,
                                           row_y,
-                                          std::max(64, controls_width - half_width - row_gap),
+                                          std::max(64, controls_width - half_width - button_row_gap),
                                           DMButton::height()});
+    }
+
+    int copy_y = row_y + DMButton::height() + kSectionGap;
+    if (apply_next_frame_button_) {
+        apply_next_frame_button_->set_rect(SDL_Rect{controls_x, copy_y, controls_width, DMButton::height()});
+    }
+    copy_y += DMButton::height() + row_gap;
+    if (apply_animation_button_) {
+        apply_animation_button_->set_rect(SDL_Rect{controls_x, copy_y, controls_width, DMButton::height()});
+    }
+    copy_y += DMButton::height() + row_gap;
+    if (apply_asset_button_) {
+        apply_asset_button_->set_rect(SDL_Rect{controls_x, copy_y, controls_width, DMButton::height()});
     }
 
     content_height_ = 0;

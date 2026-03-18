@@ -3581,6 +3581,17 @@ void DevControls::close_asset_info_editor() {
     end_frame_editor_session();
 }
 
+bool DevControls::consume_escape_for_asset_editor_stack() {
+    if (!can_use_room_editor_ui() || !room_editor_) {
+        return false;
+    }
+    const bool consumed = room_editor_->consume_escape_for_asset_editor_stack();
+    if (consumed) {
+        end_frame_editor_session();
+    }
+    return consumed;
+}
+
 bool DevControls::is_asset_info_editor_open() const {
     if (!room_editor_) return false;
     return room_editor_->is_asset_info_editor_open();
@@ -4808,6 +4819,7 @@ void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
         if (!still_active || !should_hide) {
             if (asset && still_active) {
                 asset->set_hidden(it->second);
+                asset->active = true;
             }
             it = filter_hidden_assets_.erase(it);
         } else {
@@ -4822,6 +4834,7 @@ void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
         }
         auto [entry, inserted] = filter_hidden_assets_.emplace(asset, asset->is_hidden());
         asset->set_hidden(true);
+        asset->active = false;
         asset->set_highlighted(false);
         asset->set_selected(false);
         (void)inserted;

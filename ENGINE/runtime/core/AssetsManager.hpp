@@ -141,6 +141,7 @@ public:
     void open_asset_info_editor_for_asset(Asset* a);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void close_asset_info_editor();
+    bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;
 
     void clear_editor_selection();
@@ -244,6 +245,11 @@ public:
     bool is_dev_mode() const { return dev_mode; }
     bool is_frame_editor_target_active(const Asset* asset) const;
     bool should_advance_animation_for(const Asset* asset) const;
+    void set_focus_filter(Asset* asset, const std::string& spawn_id);
+    void clear_focus_filter();
+    bool focus_filter_active() const { return focus_filter_active_; }
+    bool is_asset_in_focus_filter(const Asset* asset) const;
+    bool is_spawn_id_in_focus_filter(const std::string& spawn_id) const;
 
 
     std::vector<Asset*> all;
@@ -276,6 +282,7 @@ private:
     bool apply_world_mutation_batch(WorldMutationBatch& batch);
     void addAsset(const std::string& name, SDL_Point g);
     void update_filtered_active_assets();
+    bool asset_matches_focus_filter(const Asset* asset) const;
     void ensure_dev_controls();
     void update_scene_render_quality();
     int  saved_render_quality_percent() const;
@@ -470,4 +477,8 @@ private:
     std::uint64_t last_camera_state_version_for_dev_ = 0;
     std::uint64_t last_dev_active_state_version_snapshot_ = 0;
     bool dev_frame_initialized_ = false;
+    bool focus_filter_active_ = false;
+    Asset* focus_filter_asset_ = nullptr;
+    std::string focus_filter_spawn_id_;
+    std::uint64_t focus_filter_version_ = 0;
 };

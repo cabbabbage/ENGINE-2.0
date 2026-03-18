@@ -101,6 +101,7 @@ public:
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void open_asset_info_editor_for_asset(Asset* asset, bool focus_camera = true);
     void close_asset_info_editor();
+    bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;
     bool has_active_modal() const;
     void pulse_active_modal_header();
@@ -227,6 +228,12 @@ private:
     bool should_enable_mouse_controls() const;
     void handle_shortcuts(const Input& input);
     void handle_delete_shortcut(const Input& input);
+    void set_focus_asset(Asset* asset, bool from_asset_info);
+    void set_focus_spawn_group(const std::string& spawn_id);
+    void clear_focus();
+    void validate_focus_state();
+    void apply_focus_filter();
+    bool focus_selection_matches_snapshot() const;
     void ensure_room_configurator();
     void ensure_spawn_group_config_ui();
     void update_room_config_bounds();
@@ -367,6 +374,11 @@ private:
     bool is_hitbox_ui_blocking_point(int x, int y) const;
     bool is_attack_box_ui_blocking_point(int x, int y) const;
     bool any_editor_point_selected() const;
+    enum class EditorFramePropagationScope {
+        NextFrame,
+        Animation,
+        Asset,
+    };
     void navigate_anchor_animation(int delta);
     void navigate_anchor_frame(int delta);
     void navigate_movement_animation(int delta);
@@ -429,6 +441,7 @@ private:
     bool add_anchor_in_current_frame();
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
     bool delete_selected_anchor_in_current_frame();
+    bool apply_anchor_current_frame_to_scope(EditorFramePropagationScope scope);
     int find_hitbox_corner_at_screen_point(SDL_Point screen_point,
                                            int radius_px,
                                            int& out_corner_index,
@@ -437,6 +450,8 @@ private:
                                                int radius_px,
                                                int& out_corner_index,
                                                int& out_point_index) const;
+    int find_hitbox_body_at_screen_point(SDL_Point screen_point) const;
+    int find_attack_box_body_at_screen_point(SDL_Point screen_point) const;
     bool handle_hitbox_mode_mouse_input(const Input& input);
     bool handle_attack_box_mode_mouse_input(const Input& input);
     bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
@@ -447,10 +462,16 @@ private:
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool drag_hitbox_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
+    bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);
+    bool begin_attack_box_drag(int box_index, SDL_Point screen_point);
+    bool drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_attack_box_to_screen(int box_index, SDL_Point screen_point);
     bool add_hitbox_in_current_frame();
     bool add_attack_box_in_current_frame();
     bool delete_selected_hitbox_in_current_frame();
     bool delete_selected_attack_box_in_current_frame();
+    bool apply_hitbox_current_frame_to_scope(EditorFramePropagationScope scope);
+    bool apply_attack_box_current_frame_to_scope(EditorFramePropagationScope scope);
     bool apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
     bool apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
 
@@ -586,6 +607,11 @@ private:
         int hovered_point_index = -1;
         bool point_selected = false;
         bool dragging_corner = false;
+        bool dragging_box = false;
+        int drag_reference_point_index = -1;
+        int drag_reference_corner_index = -1;
+        SDL_FPoint drag_reference_screen_offset{0.0f, 0.0f};
+        animation_update::FrameBoxRect drag_start_rect{};
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
@@ -623,6 +649,12 @@ private:
     bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
+    std::vector<Asset*> focus_selection_snapshot_;
+    std::optional<std::string> focus_spawn_group_snapshot_{};
+    Asset* focused_asset_ = nullptr;
+    std::optional<std::string> focused_spawn_id_{};
+    bool focus_active_ = false;
+    bool focus_from_asset_info_ = false;
     bool highlight_dirty_ = true;
 
     bool snap_to_grid_enabled_ = true;

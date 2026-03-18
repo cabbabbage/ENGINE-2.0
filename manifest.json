@@ -692,7 +692,52 @@
           ],
           "flipped_source": false,
           "hit_boxes": [
-            []
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
           ],
           "inherit_source_movement": false,
           "locked": false,
@@ -728,6 +773,284 @@
             "reverse": false
           },
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
+          ],
           "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 6,
@@ -749,6 +1072,284 @@
             "reverse": false
           },
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
+          ],
           "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 6,
@@ -770,6 +1371,284 @@
             "reverse": false
           },
           "flipped_source": true,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
+          ],
           "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 6,
@@ -784,6 +1663,284 @@
         },
         "left": {
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
@@ -861,6 +2018,284 @@
             "reverse": false
           },
           "flipped_source": true,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
+          ],
           "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 6,
@@ -892,12 +2327,282 @@
           ],
           "flipped_source": false,
           "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
           ],
           "inherit_source_movement": false,
           "locked": false,
@@ -959,6 +2664,284 @@
             []
           ],
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
@@ -1036,6 +3019,284 @@
             "reverse": false
           },
           "flipped_source": true,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 529,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 422
+                  },
+                  {
+                    "texture_x": 1435,
+                    "texture_y": 999
+                  },
+                  {
+                    "texture_x": 529,
+                    "texture_y": 999
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box"
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 575,
+                    "texture_y": 323
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 323
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "hit_box_2"
+              }
+            ]
+          ],
           "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 6,
@@ -1244,8 +3505,8 @@
               {
                 "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 883,
-                "texture_y": 298
+                "texture_x": 898,
+                "texture_y": 458
               }
             ]
           ],
@@ -1258,20 +3519,20 @@
               {
                 "corners": [
                   {
-                    "texture_x": 663,
-                    "texture_y": 133
+                    "texture_x": 752,
+                    "texture_y": 408
                   },
                   {
-                    "texture_x": 1033,
-                    "texture_y": 163
+                    "texture_x": 1003,
+                    "texture_y": 408
                   },
                   {
-                    "texture_x": 1028,
-                    "texture_y": 643
+                    "texture_x": 1003,
+                    "texture_y": 748
                   },
                   {
-                    "texture_x": 683,
-                    "texture_y": 693
+                    "texture_x": 752,
+                    "texture_y": 748
                   }
                 ],
                 "extrusion_amount": 24,
@@ -1307,161 +3568,66 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 735,
-                "texture_y": 325
+                "texture_x": 898,
+                "texture_y": 458
               }
             ],
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 898,
+                "texture_y": 458
               }
             ],
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 898,
+                "texture_y": 458
               }
             ],
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 898,
+                "texture_y": 458
               }
             ],
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 898,
+                "texture_y": 458
               }
             ],
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 898,
+                "texture_y": 458
               }
             ],
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 898,
+                "texture_y": 458
               }
             ],
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -120,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ]
-          ],
-          "attack_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 8,
-          "source": {
-            "kind": "folder",
-            "path": "forward"
-          }
-        },
-        "left": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ],
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ],
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ],
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ],
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ],
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ],
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
-              }
-            ],
-            [
-              {
-                "depth_offset": 1,
-                "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 898,
+                "texture_y": 458
               }
             ]
           ],
@@ -1480,26 +3646,272 @@
               {
                 "corners": [
                   {
-                    "texture_x": 0,
-                    "texture_y": 0
+                    "texture_x": 752,
+                    "texture_y": 408
                   },
                   {
-                    "texture_x": 693,
-                    "texture_y": 303
+                    "texture_x": 1003,
+                    "texture_y": 408
                   },
                   {
-                    "texture_x": 668,
-                    "texture_y": 1183
+                    "texture_x": 1003,
+                    "texture_y": 748
                   },
                   {
-                    "texture_x": 38,
-                    "texture_y": 998
+                    "texture_x": 752,
+                    "texture_y": 748
                   }
                 ],
-                "extrusion_amount": 0,
+                "extrusion_amount": 24,
                 "name": "hit_box"
               }
             ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ]
+          ],
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 8,
+          "source": {
+            "kind": "folder",
+            "path": "forward"
+          }
+        },
+        "left": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ],
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ],
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ],
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ],
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ],
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ],
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ],
+            [
+              {
+                "depth_offset": -120,
+                "name": "eyes",
+                "texture_x": 898,
+                "texture_y": 458
+              }
+            ]
+          ],
+          "attack_boxes": [
+            [],
             [],
             [],
             [],
@@ -1507,6 +3919,200 @@
             [],
             [],
             []
+          ],
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ],
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 752,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 408
+                  },
+                  {
+                    "texture_x": 1003,
+                    "texture_y": 748
+                  },
+                  {
+                    "texture_x": 752,
+                    "texture_y": 748
+                  }
+                ],
+                "extrusion_amount": 24,
+                "name": "hit_box"
+              }
+            ]
           ],
           "locked": false,
           "loop": true,
@@ -1813,9 +4419,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,
@@ -2624,8 +5230,8 @@
                 }
               ],
               "display_name": "grave_4 (Copy 21)",
-              "dx": -324,
-              "dz": -108,
+              "dx": -588,
+              "dz": 532,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2637,7 +5243,7 @@
               "position": "Exact",
               "priority": 26,
               "quantity": 1,
-              "resolution": 3,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-f5d6a98ce63d"
@@ -2834,8 +5440,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -620,
-              "dz": 292,
+              "dx": -684,
+              "dz": 52,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2847,7 +5453,7 @@
               "position": "Exact",
               "priority": 33,
               "quantity": 1,
-              "resolution": 3,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-58ad1e3d3405"
@@ -3087,7 +5693,7 @@
               "position": "Exact",
               "priority": 41,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-78890bce0226"
@@ -3147,7 +5753,7 @@
               "position": "Exact",
               "priority": 43,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-0db31203d0cb"

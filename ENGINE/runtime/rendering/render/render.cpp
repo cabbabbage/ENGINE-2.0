@@ -1064,6 +1064,9 @@ void SceneRenderer::render() {
             sprite.world_width <= 0.0f || sprite.world_height <= 0.0f) {
             return;
         }
+        if (!assets_->is_spawn_id_in_focus_filter(sprite.spawn_id)) {
+            return;
+        }
 
         const float world_x = sprite.world_pos.x;
         const float world_y = sprite.world_pos.y;
@@ -1146,6 +1149,9 @@ void SceneRenderer::render() {
             const Assets::ActiveTraversalEntry& traversal_entry = active_traversal[traversal_index++];
             Asset* asset = traversal_entry.asset;
             if (!asset || asset->dead) {
+                continue;
+            }
+            if (!assets_->is_asset_in_focus_filter(asset)) {
                 continue;
             }
 

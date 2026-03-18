@@ -15,11 +15,12 @@ namespace {
 constexpr int kPanelMargin = 12;
 constexpr int kTopOffset = 56;
 constexpr int kPanelWidth = 320;
-constexpr int kPanelMinHeight = 340;
-constexpr int kPanelMaxHeight = 620;
-constexpr int kPanelPadding = 10;
-constexpr int kSectionGap = 8;
+constexpr int kPanelMinHeight = 420;
+constexpr int kPanelMaxHeight = 760;
+constexpr int kPanelPadding = 12;
+constexpr int kSectionGap = 10;
 constexpr int kHeaderHeight = 24;
+constexpr int kLineHeight = 18;
 
 int parse_int_or(const std::string& text, int fallback) {
     try {
@@ -27,6 +28,12 @@ int parse_int_or(const std::string& text, int fallback) {
     } catch (...) {
         return fallback;
     }
+}
+
+const char* corner_label_for_index(int index) {
+    static constexpr const char* kLabels[4] = {"TL", "TR", "BL", "BR"};
+    const int clamped = std::clamp(index, 0, 3);
+    return kLabels[clamped];
 }
 
 }  // namespace
@@ -38,10 +45,11 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
                                              180,
                                              DMButton::height());
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
-    apply_button_ = std::make_unique<DMButton>("Apply Fields", &DMStyles::AccentButton(), 150, DMButton::height());
+    apply_button_ = std::make_unique<DMButton>("Apply Name/Stats", &DMStyles::AccentButton(), 160, DMButton::height());
+    apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
+    apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
+    apply_asset_button_ = std::make_unique<DMButton>("Copy To Asset", &DMStyles::PrimaryButton(), 170, DMButton::height());
     name_textbox_ = std::make_unique<DMTextBox>("Name", "");
-    corner_x_textbox_ = std::make_unique<DMTextBox>("Corner X", "0");
-    corner_y_textbox_ = std::make_unique<DMTextBox>("Corner Y", "0");
     extrusion_textbox_ = std::make_unique<DMTextBox>("Extrusion", "0");
     damage_textbox_ = std::make_unique<DMTextBox>("Damage", "0");
 }
@@ -111,19 +119,13 @@ void RoomBoxToolsPanel::clear_selection() {
 }
 
 void RoomBoxToolsPanel::set_detail_values(const DetailValues& values) {
-    if (name_textbox_) {
+    if (name_textbox_ && !name_textbox_->is_editing()) {
         name_textbox_->set_value(values.name);
     }
-    if (corner_x_textbox_) {
-        corner_x_textbox_->set_value(std::to_string(values.corner_x));
-    }
-    if (corner_y_textbox_) {
-        corner_y_textbox_->set_value(std::to_string(values.corner_y));
-    }
-    if (extrusion_textbox_) {
+    if (extrusion_textbox_ && !extrusion_textbox_->is_editing()) {
         extrusion_textbox_->set_value(std::to_string(values.extrusion));
     }
-    if (damage_textbox_) {
+    if (damage_textbox_ && !damage_textbox_->is_editing()) {
         damage_textbox_->set_value(std::to_string(values.damage));
     }
 }
@@ -144,11 +146,13 @@ void RoomBoxToolsPanel::set_on_apply(ApplyCallback callback) {
     on_apply_ = std::move(callback);
 }
 
+void RoomBoxToolsPanel::set_on_propagate(PropagateCallback callback) {
+    on_propagate_ = std::move(callback);
+}
+
 RoomBoxToolsPanel::DetailValues RoomBoxToolsPanel::collect_detail_values() const {
     DetailValues values;
     values.name = name_textbox_ ? name_textbox_->value() : std::string{};
-    values.corner_x = parse_int_or(corner_x_textbox_ ? corner_x_textbox_->value() : std::string{}, 0);
-    values.corner_y = parse_int_or(corner_y_textbox_ ? corner_y_textbox_->value() : std::string{}, 0);
     values.extrusion = parse_int_or(extrusion_textbox_ ? extrusion_textbox_->value() : std::string{}, 0);
     values.damage = parse_int_or(damage_textbox_ ? damage_textbox_->value() : std::string{}, 0);
     return values;
@@ -242,19 +246,51 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
+    if (apply_next_frame_button_ && apply_next_frame_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_) {
+            on_propagate_(PropagationScope::NextFrame);
+        }
+    }
+
+    if (apply_animation_button_ && apply_animation_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_) {
+            on_propagate_(PropagationScope::Animation);
+        }
+    }
+
+    if (apply_asset_button_ && apply_asset_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_) {
+            on_propagate_(PropagationScope::Asset);
+        }
+    }
+
     if (name_textbox_ && name_textbox_->handle_event(event)) {
-        handled = true;
-    }
-    if (corner_x_textbox_ && corner_x_textbox_->handle_event(event)) {
-        handled = true;
-    }
-    if (corner_y_textbox_ && corner_y_textbox_->handle_event(event)) {
         handled = true;
     }
     if (extrusion_textbox_ && extrusion_textbox_->handle_event(event)) {
         handled = true;
     }
     if (kind_ == Kind::AttackBox && damage_textbox_ && damage_textbox_->handle_event(event)) {
+        handled = true;
+    }
+
+    const bool name_editing = name_textbox_ && name_textbox_->is_editing();
+    const bool extrusion_editing = extrusion_textbox_ && extrusion_textbox_->is_editing();
+    const bool damage_editing = kind_ == Kind::AttackBox && damage_textbox_ && damage_textbox_->is_editing();
+    if (event.type == SDL_EVENT_KEY_DOWN &&
+        (name_editing || extrusion_editing || damage_editing) &&
+        (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) &&
+        on_apply_) {
+        on_apply_(collect_detail_values());
         handled = true;
     }
 
@@ -288,12 +324,12 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     const DMLabelStyle& label_style = DMStyles::Label();
     DMFontCache::instance().draw_text(renderer,
                                       label_style,
-                                      kind_ == Kind::HitBox ? "Hitbox Editor" : "Attack Box Editor",
+                                      kind_ == Kind::HitBox ? "Hit Box Editor" : "Attack Box Editor",
                                       header_rect_.x,
                                       header_rect_.y);
-    const std::string subtitle = selected_box_index_ >= 0
-                                     ? ("Corner " + std::to_string(selected_corner_index_ + 1))
-                                     : "No selection";
+    const std::string subtitle = selected_box_index_ >= 0 && selected_box_index_ < static_cast<int>(box_names_.size())
+                                     ? box_names_[static_cast<std::size_t>(selected_box_index_)]
+                                     : "No box selected";
     DMFontCache::instance().draw_text(renderer, label_style, subtitle, subtitle_rect_.x, subtitle_rect_.y);
 
     SDL_SetRenderDrawColor(renderer, 20, 24, 30, 180);
@@ -321,14 +357,15 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     if (delete_button_) {
         delete_button_->render(renderer);
     }
+    DMFontCache::instance().draw_text(renderer, label_style, "Box Properties", detail_title_rect_.x, detail_title_rect_.y);
+    DMFontCache::instance().draw_text(renderer,
+                                      label_style,
+                                      selected_box_index_ >= 0 ? ("Selected Corner: " + std::string(corner_label_for_index(selected_corner_index_)))
+                                                               : "Selected Corner: None",
+                                      corner_label_rect_.x,
+                                      corner_label_rect_.y);
     if (name_textbox_) {
         name_textbox_->render(renderer);
-    }
-    if (corner_x_textbox_) {
-        corner_x_textbox_->render(renderer);
-    }
-    if (corner_y_textbox_) {
-        corner_y_textbox_->render(renderer);
     }
     if (extrusion_textbox_) {
         extrusion_textbox_->render(renderer);
@@ -338,6 +375,15 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     }
     if (apply_button_) {
         apply_button_->render(renderer);
+    }
+    if (apply_next_frame_button_) {
+        apply_next_frame_button_->render(renderer);
+    }
+    if (apply_animation_button_) {
+        apply_animation_button_->render(renderer);
+    }
+    if (apply_asset_button_) {
+        apply_asset_button_->render(renderer);
     }
 }
 
@@ -360,9 +406,10 @@ void RoomBoxToolsPanel::update_layout() const {
         const int available_h = std::max(0, screen_h_ - (kTopOffset + 48));
         const int panel_h = std::clamp(available_h, kPanelMinHeight, kPanelMaxHeight);
         panel_rect_ = SDL_Rect{kPanelMargin, kTopOffset, kPanelWidth, panel_h};
+        panel_rect_.h = std::max(panel_rect_.h, kPanelMinHeight);
     }
     panel_rect_.w = std::max(panel_rect_.w, 240);
-    panel_rect_.h = std::max(panel_rect_.h, kPanelMinHeight);
+    panel_rect_.h = std::max(panel_rect_.h, 220);
 
     header_rect_ = SDL_Rect{
         panel_rect_.x + kPanelPadding,
@@ -375,44 +422,85 @@ void RoomBoxToolsPanel::update_layout() const {
         header_rect_.w,
         20};
 
-    int y = subtitle_rect_.y + 22;
-    add_button_->set_rect(SDL_Rect{panel_rect_.x + kPanelPadding, y, panel_rect_.w - (kPanelPadding * 2), DMButton::height()});
+    const int controls_x = panel_rect_.x + kPanelPadding;
+    const int controls_w = std::max(0, panel_rect_.w - (kPanelPadding * 2));
+    const int row_gap = 6;
+    const int name_h = name_textbox_ ? name_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int extrusion_h = extrusion_textbox_ ? extrusion_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int damage_h = damage_textbox_ ? damage_textbox_->preferred_height(controls_w) : DMTextBox::height();
+
+    int controls_height = 0;
+    controls_height += DMButton::height();                               // add
+    controls_height += kSectionGap;
+    controls_height += DMButton::height();                               // delete
+    controls_height += kSectionGap;
+    controls_height += kLineHeight;                                      // details title
+    controls_height += row_gap;
+    controls_height += kLineHeight;                                      // corner label
+    controls_height += row_gap;
+    controls_height += name_h;                                            // name
+    controls_height += row_gap;
+    controls_height += extrusion_h;                                       // extrusion
+    controls_height += row_gap;
+    if (kind_ == Kind::AttackBox) {
+        controls_height += damage_h;                                      // damage
+        controls_height += row_gap;
+    }
+    controls_height += DMButton::height();                               // apply fields
+    controls_height += kSectionGap;
+    controls_height += DMButton::height();                               // copy next
+    controls_height += row_gap;
+    controls_height += DMButton::height();                               // copy animation
+    controls_height += row_gap;
+    controls_height += DMButton::height();                               // copy asset
+
+    const int list_top = subtitle_rect_.y + 22;
+    const int available_list_height =
+        (panel_rect_.y + panel_rect_.h) - kPanelPadding - controls_height - kSectionGap - list_top;
+    const int list_height = std::max(0, available_list_height);
+    list_clip_rect_ = SDL_Rect{controls_x, list_top, controls_w, list_height};
+
+    int y = list_clip_rect_.y + list_clip_rect_.h + kSectionGap;
+    if (add_button_) {
+        add_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+    }
+    y += DMButton::height() + kSectionGap;
+    if (delete_button_) {
+        delete_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+    }
     y += DMButton::height() + kSectionGap;
 
-    list_clip_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, y, panel_rect_.w - (kPanelPadding * 2), 144};
-    y += list_clip_rect_.h + kSectionGap;
+    detail_title_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};
+    y += kLineHeight + row_gap;
+    corner_label_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};
+    y += kLineHeight + row_gap;
 
-    delete_button_->set_rect(SDL_Rect{panel_rect_.x + kPanelPadding, y, panel_rect_.w - (kPanelPadding * 2), DMButton::height()});
-    y += DMButton::height() + kSectionGap;
-
-    detail_title_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, y, panel_rect_.w - (kPanelPadding * 2), 18};
-    y += detail_title_rect_.h + 2;
-    corner_label_rect_ = SDL_Rect{detail_title_rect_.x, y, detail_title_rect_.w, 16};
-    y += corner_label_rect_.h + 2;
-
-    const SDL_Rect row_rect{panel_rect_.x + kPanelPadding, y, panel_rect_.w - (kPanelPadding * 2), DMTextBox::height()};
     if (name_textbox_) {
-        name_textbox_->set_rect(row_rect);
+        name_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, name_h});
     }
-    y += DMTextBox::height() + 2;
-    if (corner_x_textbox_) {
-        corner_x_textbox_->set_rect(SDL_Rect{row_rect.x, y, row_rect.w, DMTextBox::height()});
-    }
-    y += DMTextBox::height() + 2;
-    if (corner_y_textbox_) {
-        corner_y_textbox_->set_rect(SDL_Rect{row_rect.x, y, row_rect.w, DMTextBox::height()});
-    }
-    y += DMTextBox::height() + 2;
+    y += name_h + row_gap;
     if (extrusion_textbox_) {
-        extrusion_textbox_->set_rect(SDL_Rect{row_rect.x, y, row_rect.w, DMTextBox::height()});
+        extrusion_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, extrusion_h});
     }
-    y += DMTextBox::height() + 2;
+    y += extrusion_h + row_gap;
     if (kind_ == Kind::AttackBox && damage_textbox_) {
-        damage_textbox_->set_rect(SDL_Rect{row_rect.x, y, row_rect.w, DMTextBox::height()});
-        y += DMTextBox::height() + 2;
+        damage_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, damage_h});
+        y += damage_h + row_gap;
     }
     if (apply_button_) {
-        apply_button_->set_rect(SDL_Rect{row_rect.x, y, row_rect.w, DMButton::height()});
+        apply_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+    }
+    y += DMButton::height() + kSectionGap;
+    if (apply_next_frame_button_) {
+        apply_next_frame_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+    }
+    y += DMButton::height() + row_gap;
+    if (apply_animation_button_) {
+        apply_animation_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+    }
+    y += DMButton::height() + row_gap;
+    if (apply_asset_button_) {
+        apply_asset_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
     }
 
     layout_box_buttons();
@@ -454,4 +542,3 @@ bool RoomBoxToolsPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {
     SDL_Point point{x, y};
     return SDL_PointInRect(&point, &rect);
 }
-

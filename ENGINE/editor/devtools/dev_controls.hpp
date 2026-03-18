@@ -98,6 +98,7 @@ public:
     void open_asset_info_editor_for_asset(Asset* asset);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void close_asset_info_editor();
+    bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;
     std::uint64_t other_settings_state_version() const;
 

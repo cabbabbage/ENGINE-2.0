@@ -17,10 +17,14 @@ public:
         AttackBox,
     };
 
+    enum class PropagationScope {
+        NextFrame,
+        Animation,
+        Asset,
+    };
+
     struct DetailValues {
         std::string name;
-        int corner_x = 0;
-        int corner_y = 0;
         int extrusion = 0;
         int damage = 0;
     };
@@ -29,6 +33,7 @@ public:
     using AddCallback = std::function<void()>;
     using DeleteCallback = std::function<void()>;
     using ApplyCallback = std::function<void(const DetailValues&)>;
+    using PropagateCallback = std::function<void(PropagationScope)>;
 
     explicit RoomBoxToolsPanel(Kind kind);
     ~RoomBoxToolsPanel();
@@ -49,6 +54,7 @@ public:
     void set_on_add(AddCallback callback);
     void set_on_delete(DeleteCallback callback);
     void set_on_apply(ApplyCallback callback);
+    void set_on_propagate(PropagateCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -88,9 +94,10 @@ private:
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_button_;
+    std::unique_ptr<DMButton> apply_next_frame_button_;
+    std::unique_ptr<DMButton> apply_animation_button_;
+    std::unique_ptr<DMButton> apply_asset_button_;
     std::unique_ptr<DMTextBox> name_textbox_;
-    std::unique_ptr<DMTextBox> corner_x_textbox_;
-    std::unique_ptr<DMTextBox> corner_y_textbox_;
     std::unique_ptr<DMTextBox> extrusion_textbox_;
     std::unique_ptr<DMTextBox> damage_textbox_;
 
@@ -98,5 +105,5 @@ private:
     AddCallback on_add_;
     DeleteCallback on_delete_;
     ApplyCallback on_apply_;
+    PropagateCallback on_propagate_;
 };
-

@@ -822,7 +822,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
             continue;
         }
         RuntimeBoxVolume volume{};
-        if (!build_volume(box.name, box.extrusion_amount, 0, box.corners, volume)) {
+        const auto runtime_corners = box.to_runtime_clockwise_points();
+        if (!build_volume(box.name, box.extrusion_amount, 0, runtime_corners, volume)) {
             continue;
         }
         runtime_hit_box_lookup_.emplace(volume.name, current_hit_box_volumes_.size());
@@ -835,7 +836,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
             continue;
         }
         RuntimeBoxVolume volume{};
-        if (!build_volume(box.name, box.extrusion_amount, box.damage_amount, box.corners, volume)) {
+        const auto runtime_corners = box.to_runtime_clockwise_points();
+        if (!build_volume(box.name, box.extrusion_amount, box.damage_amount, runtime_corners, volume)) {
             continue;
         }
         runtime_attack_box_lookup_.emplace(volume.name, current_attack_box_volumes_.size());

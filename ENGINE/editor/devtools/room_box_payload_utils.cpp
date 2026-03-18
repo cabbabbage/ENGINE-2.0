@@ -62,8 +62,9 @@ nlohmann::json serialize_hit_boxes(const std::vector<animation_update::FrameHitB
         node["name"] = box.name;
         node["extrusion_amount"] = std::max(0, box.extrusion_amount);
         nlohmann::json corners = nlohmann::json::array();
-        for (std::size_t corner_index = 0; corner_index < 4; ++corner_index) {
-            const auto& corner = box.corners[corner_index];
+        const auto runtime_corners = box.to_runtime_clockwise_points();
+        for (std::size_t corner_index = 0; corner_index < runtime_corners.size(); ++corner_index) {
+            const auto& corner = runtime_corners[corner_index];
             corners.push_back(nlohmann::json::object({
                 {"texture_x", std::max(0, corner.texture_x)},
                 {"texture_y", std::max(0, corner.texture_y)},
@@ -83,8 +84,9 @@ nlohmann::json serialize_attack_boxes(const std::vector<animation_update::FrameA
         node["extrusion_amount"] = std::max(0, box.extrusion_amount);
         node["damage_amount"] = box.damage_amount;
         nlohmann::json corners = nlohmann::json::array();
-        for (std::size_t corner_index = 0; corner_index < 4; ++corner_index) {
-            const auto& corner = box.corners[corner_index];
+        const auto runtime_corners = box.to_runtime_clockwise_points();
+        for (std::size_t corner_index = 0; corner_index < runtime_corners.size(); ++corner_index) {
+            const auto& corner = runtime_corners[corner_index];
             corners.push_back(nlohmann::json::object({
                 {"texture_x", std::max(0, corner.texture_x)},
                 {"texture_y", std::max(0, corner.texture_y)},
@@ -128,18 +130,13 @@ std::vector<std::string> existing_names_from(const std::vector<std::string>& exi
 }
 
 template <typename TBox>
-TBox make_default_box_with_name(const std::string& name) {
+TBox make_default_box_with_name(const std::string& name, int frame_width, int frame_height) {
     TBox box{};
     box.name = name;
     box.extrusion_amount = 0;
-    box.corners[0].texture_x = 0;
-    box.corners[0].texture_y = 0;
-    box.corners[1].texture_x = 16;
-    box.corners[1].texture_y = 0;
-    box.corners[2].texture_x = 16;
-    box.corners[2].texture_y = 16;
-    box.corners[3].texture_x = 0;
-    box.corners[3].texture_y = 16;
+    const int max_x = std::max(0, frame_width - 1);
+    const int max_y = std::max(0, frame_height - 1);
+    box.set_rect(animation_update::FrameBoxRect{0, 0, max_x, max_y});
     return box;
 }
 
@@ -174,15 +171,21 @@ std::string make_unique_box_name(const std::string& desired_name,
     }
 }
 
-animation_update::FrameHitBox make_default_hit_box(const std::vector<std::string>& existing_names) {
+animation_update::FrameHitBox make_default_hit_box(const std::vector<std::string>& existing_names,
+                                                   int frame_width,
+                                                   int frame_height) {
     const std::string name = make_unique_box_name({}, existing_names, "hit_box");
-    return make_default_box_with_name<animation_update::FrameHitBox>(name);
+    return make_default_box_with_name<animation_update::FrameHitBox>(name, frame_width, frame_height);
 }
 
-animation_update::FrameAttackBox make_default_attack_box(const std::vector<std::string>& existing_names) {
+animation_update::FrameAttackBox make_default_attack_box(const std::vector<std::string>& existing_names,
+                                                         int frame_width,
+                                                         int frame_height) {
     animation_update::FrameAttackBox box =
         make_default_box_with_name<animation_update::FrameAttackBox>(
-            make_unique_box_name({}, existing_names, "attack_box"));
+            make_unique_box_name({}, existing_names, "attack_box"),
+            frame_width,
+            frame_height);
     box.damage_amount = 0;
     return box;
 }

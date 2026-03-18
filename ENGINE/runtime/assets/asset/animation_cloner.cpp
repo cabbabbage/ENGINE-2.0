@@ -81,14 +81,20 @@ TBox transform_box_corners(TBox box,
                            bool flip_vertical,
                            int frame_w,
                            int frame_h) {
-    for (auto& corner : box.corners) {
-        if (flip_horizontal && frame_w > 0) {
-            corner.texture_x = frame_w - 1 - corner.texture_x;
-        }
-        if (flip_vertical && frame_h > 0) {
-            corner.texture_y = frame_h - 1 - corner.texture_y;
-        }
+    animation_update::FrameBoxRect flipped = box.rect;
+    if (flip_horizontal && frame_w > 0) {
+        const int next_left = frame_w - 1 - box.rect.right;
+        const int next_right = frame_w - 1 - box.rect.left;
+        flipped.left = next_left;
+        flipped.right = next_right;
     }
+    if (flip_vertical && frame_h > 0) {
+        const int next_top = frame_h - 1 - box.rect.bottom;
+        const int next_bottom = frame_h - 1 - box.rect.top;
+        flipped.top = next_top;
+        flipped.bottom = next_bottom;
+    }
+    box.set_rect(flipped);
     return box;
 }
 

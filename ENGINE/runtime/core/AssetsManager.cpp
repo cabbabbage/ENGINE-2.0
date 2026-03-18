@@ -634,9 +634,14 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const SDL_Point camera_focus = camera_.get_screen_center();
     const std::uint64_t camera_state_version = camera_.camera_state_version();
 
-    run_active_runtime_single_pass_for_asset(player, camera_focus, camera_state_version);
+    if (asset_matches_focus_filter(player)) {
+        run_active_runtime_single_pass_for_asset(player, camera_focus, camera_state_version);
+    }
     for (Asset* asset : active_assets) {
         if (asset == player) {
+            continue;
+        }
+        if (!asset_matches_focus_filter(asset)) {
             continue;
         }
         run_active_runtime_single_pass_for_asset(asset, camera_focus, camera_state_version);
@@ -770,10 +775,71 @@ void Assets::refresh_filtered_active_assets() {
     update_filtered_active_assets();
 }
 
+bool Assets::asset_matches_focus_filter(const Asset* asset) const {
+    if (!focus_filter_active_) {
+        return true;
+    }
+    if (!asset || asset->dead) {
+        return false;
+    }
+    if (focus_filter_asset_) {
+        return asset == focus_filter_asset_;
+    }
+    if (!focus_filter_spawn_id_.empty()) {
+        return asset->spawn_id == focus_filter_spawn_id_;
+    }
+    return true;
+}
+
+void Assets::set_focus_filter(Asset* asset, const std::string& spawn_id) {
+    const bool next_active = (asset != nullptr) || !spawn_id.empty();
+    const bool same_state =
+        focus_filter_active_ == next_active &&
+        focus_filter_asset_ == asset &&
+        focus_filter_spawn_id_ == (asset ? std::string{} : spawn_id);
+    if (same_state) {
+        return;
+    }
+
+    focus_filter_active_ = next_active;
+    focus_filter_asset_ = asset;
+    focus_filter_spawn_id_ = asset ? std::string{} : spawn_id;
+    ++focus_filter_version_;
+    if (focus_filter_version_ == 0) {
+        ++focus_filter_version_;
+    }
+
+    needs_filtered_active_refresh_ = true;
+    touch_dev_active_state_version();
+    note_frame_rebuild_request();
+}
+
+void Assets::clear_focus_filter() {
+    set_focus_filter(nullptr, std::string{});
+}
+
+bool Assets::is_asset_in_focus_filter(const Asset* asset) const {
+    return asset_matches_focus_filter(asset);
+}
+
+bool Assets::is_spawn_id_in_focus_filter(const std::string& spawn_id) const {
+    if (!focus_filter_active_) {
+        return true;
+    }
+    if (focus_filter_asset_) {
+        return false;
+    }
+    if (focus_filter_spawn_id_.empty()) {
+        return true;
+    }
+    return spawn_id == focus_filter_spawn_id_;
+}
+
 void Assets::update_filtered_active_assets() {
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
     const std::uint64_t current_generation = active_assets_generation_;
-    const std::uint64_t filter_version = dev_controls_enabled ? dev_controls_->other_settings_state_version() : 0;
+    const std::uint64_t base_filter_version = dev_controls_enabled ? dev_controls_->other_settings_state_version() : 0;
+    const std::uint64_t filter_version = base_filter_version ^ (focus_filter_version_ * 1099511628211ULL);
 
     if (dev_controls_enabled) {
         if (filtered_active_assets_source_generation_ == current_generation &&
@@ -792,6 +858,9 @@ void Assets::update_filtered_active_assets() {
                 continue;
             }
             if (!dev_controls_->passes_asset_filters(asset)) {
+                continue;
+            }
+            if (!asset_matches_focus_filter(asset)) {
                 continue;
             }
             filtered_active_assets.push_back(asset);
@@ -1004,11 +1073,14 @@ void Assets::update(const Input& input)
 
     // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
     const bool runtime_updates_enabled = should_run_runtime_updates();
+    const auto should_process_asset = [this](const Asset* asset) {
+        return asset_matches_focus_filter(asset);
+    };
 
     int start_px = player ? player->world_x() : 0;
     int start_pz = player ? player->world_z() : 0;
 
-    if (player) {
+    if (player && should_process_asset(player)) {
         player->active = true;
         if (runtime_updates_enabled) {
 
@@ -1053,6 +1125,10 @@ void Assets::update(const Input& input)
 
     for (Asset* asset : non_player_update_buffer_) {
         if (!asset) continue;
+        if (!should_process_asset(asset)) {
+            asset->active = false;
+            continue;
+        }
         world::GridPoint previous_pos = world::GridPoint::make_virtual(asset->world_x(),
                                                                        asset->world_y(),
                                                                        asset->world_z(),
@@ -1184,14 +1260,14 @@ void Assets::update(const Input& input)
 }
 
 void Assets::refresh_visible_asset_scaling_only() {
-    if (player && player->info) {
+    if (player && player->info && asset_matches_focus_filter(player)) {
         player->update_scale_values();
     }
 
     rebuild_non_player_update_buffer_if_needed();
 
     for (Asset* asset : non_player_update_buffer_) {
-        if (!asset || !asset->info) {
+        if (!asset || !asset->info || !asset_matches_focus_filter(asset)) {
             continue;
         }
         asset->update_scale_values();
@@ -1492,6 +1568,7 @@ void Assets::set_dev_mode(bool mode) {
         } else {
 
             dev_mode = false;
+            clear_focus_filter();
             if (dev_controls_) {
                 try { dev_controls_->set_enabled(false); } catch (...) {}
             }
@@ -1505,6 +1582,7 @@ void Assets::set_dev_mode(bool mode) {
             }
         } catch (...) {
         }
+        clear_focus_filter();
         dev_mode = false;
         dev_frame_initialized_ = false;
         last_camera_state_version_for_dev_ = camera_.camera_state_version();
@@ -2605,6 +2683,11 @@ void Assets::close_asset_info_editor() {
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->close_asset_info_editor();
     }
+}
+
+bool Assets::consume_escape_for_asset_editor_stack() {
+    return dev_controls_ && dev_controls_->is_enabled() &&
+           dev_controls_->consume_escape_for_asset_editor_stack();
 }
 
 bool Assets::is_asset_info_editor_open() const {

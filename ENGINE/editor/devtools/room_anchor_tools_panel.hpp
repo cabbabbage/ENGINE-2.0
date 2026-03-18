@@ -12,10 +12,17 @@ class DMTextBox;
 
 class RoomAnchorToolsPanel {
 public:
+    enum class PropagationScope {
+        NextFrame,
+        Animation,
+        Asset,
+    };
+
     using SelectCallback = std::function<void(const std::string&)>;
     using AddCallback = std::function<void()>;
     using RenameCallback = std::function<void(const std::string&)>;
     using DeleteCallback = std::function<void()>;
+    using PropagateCallback = std::function<void(PropagationScope)>;
 
     RoomAnchorToolsPanel();
     ~RoomAnchorToolsPanel();
@@ -36,6 +43,7 @@ public:
     void set_on_add(AddCallback callback);
     void set_on_rename(RenameCallback callback);
     void set_on_delete(DeleteCallback callback);
+    void set_on_propagate(PropagateCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -70,9 +78,13 @@ private:
     std::unique_ptr<DMTextBox> rename_textbox_;
     std::unique_ptr<DMButton> rename_button_;
     std::unique_ptr<DMButton> delete_button_;
+    std::unique_ptr<DMButton> apply_next_frame_button_;
+    std::unique_ptr<DMButton> apply_animation_button_;
+    std::unique_ptr<DMButton> apply_asset_button_;
 
     SelectCallback on_select_;
     AddCallback on_add_;
     RenameCallback on_rename_;
     DeleteCallback on_delete_;
+    PropagateCallback on_propagate_;
 };

@@ -84,10 +84,7 @@ void MenuUI::game_loop() {
                         if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && e.key.repeat == 0) {
                                 bool esc_consumed = false;
                                 if (game_assets_) {
-                                        if (game_assets_->is_asset_info_editor_open()) {
-                                                game_assets_->close_asset_info_editor();
-                                                esc_consumed = true;
-                                        }
+                                        esc_consumed = game_assets_->consume_escape_for_asset_editor_stack();
                                 }
                                 if (!esc_consumed) {
                                         toggleMenu();

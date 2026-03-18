@@ -161,7 +161,6 @@ void MenuUI::toggleMenu() {
 void MenuUI::openMenu() {
         exitDevModeForPause();
         menu_active_ = true;
-        if (menu_active_) Button::refresh_glass_overlay();
         if (game_assets_) game_assets_->set_render_suppressed(menu_active_);
 }
 
@@ -214,7 +213,6 @@ MenuUI::MenuAction MenuUI::consumeAction() {
 
 void MenuUI::rebuildButtons() {
         buttons_.clear();
-        Button::refresh_glass_overlay();
         const int btn_w = Button::width();
         const int btn_h = Button::height();
         const int gap   = 16;

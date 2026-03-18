@@ -569,9 +569,7 @@ void Asset::update_scale_values() {
         desired_variant_scale = 1.0f;
     }
 
-    const auto& steps = (info && !info->scale_variants.empty())
-        ? static_cast<const std::vector<float>&>(info->scale_variants)
-        : render_pipeline::ScalingLogic::DefaultScaleSteps();
+    const auto& steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
 
     render_pipeline::ScalingLogic::HysteresisState hysteresis_state{};
     hysteresis_state.last_index = scale_variant_state_.last_variant_index;

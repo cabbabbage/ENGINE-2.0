@@ -79,9 +79,7 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
         desired_variant_scale = 1.0f;
     }
 
-    const auto& steps = (!candidate.info->scale_variants.empty())
-        ? candidate.info->scale_variants
-        : render_pipeline::ScalingLogic::DefaultScaleSteps();
+    const auto& steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
 
     auto selection = render_pipeline::ScalingLogic::Choose(desired_variant_scale,
                                                            steps,

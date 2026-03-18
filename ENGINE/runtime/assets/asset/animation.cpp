@@ -135,12 +135,7 @@ bool Animation::rebuild_frame(int frame_index,
     }
 
     std::vector<float> variant_steps = variant_steps_;
-    if (variant_steps.empty()) {
-        variant_steps = info.scale_variants;
-    }
-    if (variant_steps.empty()) {
-        variant_steps.push_back(1.0f);
-    }
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps);
 
     Animation::FrameCache& cache_entry = frame_cache_[idx];
     cache_entry.resize(variant_steps.size());
@@ -263,6 +258,19 @@ void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
     clear_texture_cache();
     frame_cache_   = std::move(caches);
     variant_steps_ = std::move(variant_steps);
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps_);
+
+    const std::size_t canonical_variant_count = variant_steps_.size();
+    for (auto& cache : frame_cache_) {
+        cache.textures.resize(canonical_variant_count, nullptr);
+        cache.widths.resize(canonical_variant_count, 0);
+        cache.heights.resize(canonical_variant_count, 0);
+        cache.foreground_textures.resize(canonical_variant_count, nullptr);
+        cache.background_textures.resize(canonical_variant_count, nullptr);
+        cache.source_rects.resize(canonical_variant_count, SDL_Rect{0, 0, 0, 0});
+        cache.uses_atlas.resize(canonical_variant_count, false);
+    }
+
     number_of_frames = static_cast<int>(frame_cache_.size());
 
     movement_paths_.clear();
@@ -381,6 +389,7 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     clear_texture_cache();
 
     variant_steps_ = source.variant_steps_;
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps_);
     locked = source.locked;
     inherit_source_movement = source.inherit_source_movement;
     const std::size_t frame_count = source.frame_cache_.size();

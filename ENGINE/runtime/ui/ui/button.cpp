@@ -506,17 +506,7 @@ const GlassButtonStyle& Button::default_glass_style() {
 }
 
 void Button::refresh_glass_overlay() {
-    ensure_overlays_loaded();
-    auto& res = glass_resources();
-    if (res.overlays.empty()) {
-        res.generation = 0;
-        return;
-    }
-    std::mt19937 rng{ std::random_device{}() };
-    std::uniform_int_distribution<size_t> dist(0, res.overlays.size() - 1);
-    res.current_index = dist(rng);
-    ++res.generation;
-    if (res.generation == 0) ++res.generation;
+    // Glass rendering is intentionally lightweight now; no dynamic overlay refresh required.
 }
 
 void Button::enable_glass_style(bool enabled) { glass_enabled_ = enabled; }
@@ -532,263 +522,30 @@ const GlassButtonStyle& Button::current_glass_style() const {
 }
 
 void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
-    const GlassButtonStyle& style = current_glass_style();
+    (void)current_glass_style();
     SDL_Rect r = adjusted_for_state(rect, hovered_, pressed_);
 
-    SDL_Rect cap{ r.x - kCaptureBleed, r.y - kCaptureBleed, r.w + kCaptureBleed * 2, r.h + kCaptureBleed * 2 };
-    cap = clamp_to_view(renderer, cap);
-
-    SurfacePtr bg = capture(renderer, cap);
-    if (!bg) return;
-
-    SurfacePtr comp = make_surface_ptr(SDL_CreateSurface(r.w, r.h, SDL_PIXELFORMAT_RGBA32));
-    if (!comp) return;
-
-    if (!SDL_LockSurface(comp.get())) return;
-    const SDL_PixelFormatDetails* fmt = SDL_GetPixelFormatDetails(comp->format);
-    SDL_Palette* comp_palette = SDL_GetSurfacePalette(comp.get());
-    if (!fmt) {
-        SDL_UnlockSurface(comp.get());
-        return;
-    }
-    Uint32* dst = static_cast<Uint32*>(comp->pixels);
-    const int dpitch = comp->pitch / 4;
-
-    if (!SDL_LockSurface(bg.get())) {
-        SDL_UnlockSurface(comp.get());
-        return;
-    }
-    Uint32* src = static_cast<Uint32*>(bg->pixels);
-    const int spitch = bg->pitch / 4;
-
-    const int w = r.w;
-    const int h = r.h;
-    const int ox = r.x - cap.x;
-    const int oy = r.y - cap.y;
-    const float cx = (w - 1) * 0.5f;
-    const float cy = (h - 1) * 0.5f;
-    const float inv_cx = (cx > 0.0f) ? 1.0f / cx : 0.0f;
-    const float inv_cy = (cy > 0.0f) ? 1.0f / cy : 0.0f;
-
-    const float ref_base = style.refraction_strength * (hovered_ ? 1.18f : 1.0f) * (pressed_ ? 0.90f : 1.0f);
-    const float chroma   = style.chroma_strength * (pressed_ ? 0.85f : 1.0f);
-    const float mix_state = pressed_ ? style.mix_pressed
-                                     : (hovered_ ? style.mix_hover : style.mix_normal);
-    const float brightness_boost = pressed_ ? 0.94f : (hovered_ ? 1.05f : 1.0f);
-    float blur_mix = style.motion_blur_mix * (hovered_ ? 1.10f : (pressed_ ? 0.85f : 1.0f));
-    blur_mix = std::clamp(blur_mix, 0.0f, 0.9f);
-    const int blur_radius = std::max(1, style.motion_blur_radius);
-    const float ray_threshold = std::clamp(style.ray_threshold, 0.0f, 0.99f);
-    float ray_intensity = style.ray_intensity * (hovered_ ? 1.15f : (pressed_ ? 0.85f : 1.0f));
-    ray_intensity = std::max(0.0f, ray_intensity);
-    const int ray_steps = std::max(1, style.ray_steps);
-    const float ray_length = std::max(0.0f, style.ray_length) * static_cast<float>(std::min(w, h));
-    const float rough_scale = style.rough_scale * 120.0f;
-    const float rough_px = style.rough_ampl_px * (hovered_ ? 1.08f : (pressed_ ? 0.82f : 1.0f));
-    const float diff_radius = style.diffusion_radius * (hovered_ ? 1.10f : (pressed_ ? 0.90f : 1.0f));
-
-    const size_t stride = static_cast<size_t>(w);
-    const size_t total = stride * static_cast<size_t>(h);
-    std::vector<Float3> processed(total);
-    std::vector<Float3> rays(total);
-    std::vector<Float3> blurred(total);
-
-    const std::vector<Float4>& overlay_pixels = scaled_overlay_pixels(style, w, h);
-    const bool have_overlay = !overlay_pixels.empty();
-
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            const size_t idx = static_cast<size_t>(y) * stride + static_cast<size_t>(x);
-            SDL_Color base = unpack(src[(oy + y) * spitch + (ox + x)]);
-            Float3 col = make_float3(base.r / 255.0f, base.g / 255.0f, base.b / 255.0f);
-            if (have_overlay) {
-                const Float4& ov = overlay_pixels[idx];
-                float oa = std::clamp(ov.a, 0.0f, 1.0f);
-                if (oa > 0.0f) {
-                    Float3 ov_col = make_float3(ov.r, ov.g, ov.b);
-                    col = add(mul(col, 1.0f - oa), mul(ov_col, oa));
-                }
-            }
-            processed[idx] = clamp01(col);
-        }
-    }
-
-    if (ray_intensity > 0.0f && ray_length > 0.0f) {
-        for (int y = 0; y < h; ++y) {
-            for (int x = 0; x < w; ++x) {
-                const size_t idx = static_cast<size_t>(y) * stride + static_cast<size_t>(x);
-                float lum = luminance(processed[idx]);
-                float energy = std::max(0.0f, (lum - ray_threshold) / std::max(1e-3f, 1.0f - ray_threshold));
-                if (energy <= 0.0f) continue;
-                energy = std::min(energy, 1.0f) * ray_intensity;
-
-                float dirx = static_cast<float>(x) - cx;
-                float diry = static_cast<float>(y) - cy;
-                float len = std::sqrt(dirx * dirx + diry * diry);
-                if (len > 1e-4f) { dirx /= len; diry /= len; }
-                else { dirx = 0.0f; diry = 0.0f; }
-
-                const Float3 base_col = processed[idx];
-                for (int step = 1; step <= ray_steps; ++step) {
-                    float t = static_cast<float>(step) / static_cast<float>(ray_steps);
-                    float reach = ray_length * t;
-                    float px = static_cast<float>(x) + dirx * reach;
-                    float py = static_cast<float>(y) + diry * reach;
-                    int ix = std::clamp(static_cast<int>(std::round(px)), 0, w - 1);
-                    int iy = std::clamp(static_cast<int>(std::round(py)), 0, h - 1);
-                    float falloff = energy * (1.0f - t) / static_cast<float>(ray_steps);
-                    Float3& dest = rays[static_cast<size_t>(iy) * stride + static_cast<size_t>(ix)];
-                    dest.r += base_col.r * falloff;
-                    dest.g += base_col.g * falloff;
-                    dest.b += base_col.b * falloff;
-                }
-            }
-        }
-    }
-
-    for (size_t i = 0; i < total; ++i) {
-        processed[i] = clamp01(add(processed[i], rays[i]));
-    }
-
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            Float3 acc{0.0f, 0.0f, 0.0f};
-            int count = 0;
-            for (int dx = -blur_radius; dx <= blur_radius; ++dx) {
-                int ix = std::clamp(x + dx, 0, w - 1);
-                acc = add(acc, processed[static_cast<size_t>(y) * stride + static_cast<size_t>(ix)]);
-                ++count;
-            }
-            blurred[static_cast<size_t>(y) * stride + static_cast<size_t>(x)] = mul(acc, 1.0f / static_cast<float>(count));
-        }
-    }
-
-    for (size_t i = 0; i < total; ++i) {
-        processed[i] = clamp01(lerp(processed[i], blurred[i], blur_mix));
-    }
-
-    if (std::abs(brightness_boost - 1.0f) > 1e-3f) {
-        for (size_t i = 0; i < total; ++i) {
-            processed[i] = clamp01(mul(processed[i], brightness_boost));
-        }
-    }
-
-    const int taps = std::max(3, style.diffusion_taps);
-    std::vector<std::array<float,2>> kernel;
-    kernel.reserve(taps);
-    for (int i = 0; i < taps; ++i) {
-        float t = (static_cast<float>(i) + 0.5f) / static_cast<float>(taps);
-        float ang = t * 6.2831853f;
-        kernel.push_back({ std::cos(ang), std::sin(ang) });
-    }
-
-    auto sample_processed = [&](float fx, float fy) -> Float3 {
-        if (processed.empty()) return Float3{};
-        fx = std::clamp(fx, 0.0f, static_cast<float>(w - 1));
-        fy = std::clamp(fy, 0.0f, static_cast<float>(h - 1));
-        int x0 = static_cast<int>(std::floor(fx));
-        int y0 = static_cast<int>(std::floor(fy));
-        int x1 = std::min(x0 + 1, w - 1);
-        int y1 = std::min(y0 + 1, h - 1);
-        float tx = fx - static_cast<float>(x0);
-        float ty = fy - static_cast<float>(y0);
-        const Float3& c00 = processed[static_cast<size_t>(y0) * stride + static_cast<size_t>(x0)];
-        const Float3& c10 = processed[static_cast<size_t>(y0) * stride + static_cast<size_t>(x1)];
-        const Float3& c01 = processed[static_cast<size_t>(y1) * stride + static_cast<size_t>(x0)];
-        const Float3& c11 = processed[static_cast<size_t>(y1) * stride + static_cast<size_t>(x1)];
-        Float3 cx0 = lerp(c00, c10, tx);
-        Float3 cx1 = lerp(c01, c11, tx);
-        return clamp01(lerp(cx0, cx1, ty));
-};
-
-    double Lacc = 0.0;
-    int Lcount = 0;
-
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-                float cov = rr_coverage_px(x, y, w, h, style.radius);
-            if (cov <= 0.001f) {
-                dst[y * dpitch + x] = 0;
-                continue;
-            }
-
-            const float ndx = (x - cx) * inv_cx;
-            const float ndy = (y - cy) * inv_cy;
-            const float r1 = std::sqrt(std::min(1.0f, ndx * ndx + ndy * ndy));
-            const float lens = std::max(0.0f, 1.0f - r1 * r1);
-            const float warp = ref_base * static_cast<float>(std::min(w, h)) * 0.95f * lens;
-            const float wx = ndx * warp + ndy * 0.06f * warp;
-            const float wy = ndy * warp - ndx * 0.06f * warp;
-
-            int sx_o = ox + x;
-            int sy_o = oy + y;
-            clamp_sample(sx_o, sy_o, cap.w, cap.h);
-
-            auto g = fbm_grad((r.x + x) * rough_scale, (r.y + y) * rough_scale);
-            const float ax = ndx * chroma;
-            const float ay = ndy * chroma;
-
-            Float3 accum{0.0f, 0.0f, 0.0f};
-            float weight = 0.0f;
-
-            Float3 center = sample_processed(static_cast<float>(x) + wx + g[0] * rough_px, static_cast<float>(y) + wy + g[1] * rough_px);
-            accum = add(accum, mul(center, 2.0f));
-            weight += 2.0f;
-
-            for (const auto& v : kernel) {
-                float jx = v[0] + g[0] * 0.5f;
-                float jy = v[1] + g[1] * 0.5f;
-                float sample_x = static_cast<float>(x) + wx + g[0] * rough_px + jx * diff_radius;
-                float sample_y = static_cast<float>(y) + wy + g[1] * rough_px + jy * diff_radius;
-                Float3 cg = sample_processed(sample_x, sample_y);
-                Float3 cr = sample_processed(sample_x + ax, sample_y + ay);
-                Float3 cb = sample_processed(sample_x - ax, sample_y - ay);
-                Float3 prism;
-                prism.r = (cg.r + cr.r) * 0.5f;
-                prism.g = cg.g;
-                prism.b = (cg.b + cb.b) * 0.5f;
-                accum = add(accum, prism);
-                weight += 1.0f;
-            }
-
-            Float3 refr = (weight > 0.0f) ? mul(accum, 1.0f / weight) : center;
-            SDL_Color orig = unpack(src[sy_o * spitch + sx_o]);
-            Float3 origF = make_float3(orig.r / 255.0f, orig.g / 255.0f, orig.b / 255.0f);
-
-            const float fres = std::pow(std::clamp(r1, 0.0f, 1.0f), style.fresnel_power) * style.fresnel_intensity;
-            float mix_w = std::clamp(mix_state + fres, 0.0f, 1.0f);
-
-            Float3 final_col = lerp(origF, refr, mix_w);
-            final_col = clamp01(mul(final_col, brightness_boost));
-
-            SDL_Color out{};
-            out.r = clamp8(static_cast<int>(std::round(final_col.r * 255.0f)));
-            out.g = clamp8(static_cast<int>(std::round(final_col.g * 255.0f)));
-            out.b = clamp8(static_cast<int>(std::round(final_col.b * 255.0f)));
-            out.a = clamp8(static_cast<int>(std::round(cov * 255.0f)));
-
-            Lacc += luminance(final_col);
-            ++Lcount;
-
-            dst[y * dpitch + x] = pack(fmt, comp_palette, out);
-        }
-    }
-
-    SDL_UnlockSurface(bg.get());
-    SDL_UnlockSurface(comp.get());
-
-    if (Lcount > 0) {
-        glass_luminance_ = static_cast<float>(Lacc / static_cast<double>(Lcount));
-        glass_has_luminance_ = true;
-    } else {
-        glass_has_luminance_ = false;
-    }
-
-    SDL_Texture* tex = to_texture(renderer, comp.get());
-    if (!tex) return;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    sdl_render::Texture(renderer, tex, nullptr, &r);
-    SDL_DestroyTexture(tex);
+
+    SDL_Color fill{42, 52, 64, pressed_ ? 210 : (hovered_ ? 195 : 178)};
+    SDL_Color border_outer{255, 255, 255, hovered_ ? 96 : 72};
+    SDL_Color border_inner{255, 255, 255, hovered_ ? 54 : 36};
+
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    sdl_render::FillRect(renderer, &r);
+    SDL_SetRenderDrawColor(renderer, border_outer.r, border_outer.g, border_outer.b, border_outer.a);
+    sdl_render::Rect(renderer, &r);
+
+    SDL_Rect inner{r.x + 1, r.y + 1, std::max(0, r.w - 2), std::max(0, r.h - 2)};
+    SDL_SetRenderDrawColor(renderer, border_inner.r, border_inner.g, border_inner.b, border_inner.a);
+    sdl_render::Rect(renderer, &inner);
+
+    SDL_Rect sheen{r.x + 2, r.y + 2, std::max(0, r.w - 4), std::max(0, (r.h / 2) - 2)};
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, hovered_ ? 42 : 30);
+    sdl_render::FillRect(renderer, &sheen);
+
+    glass_luminance_ = 0.35f;
+    glass_has_luminance_ = true;
 }
 
 void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const {

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "asset_info.hpp"
+#include "rendering/render/scaling_logic.hpp"
 
 namespace {
 
@@ -112,6 +113,7 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.clear_texture_cache();
 
     dest.variant_steps_   = source.variant_steps_;
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(dest.variant_steps_);
     dest.locked           = source.locked;
     dest.on_end_animation = source.on_end_animation;
     dest.randomize        = source.randomize;

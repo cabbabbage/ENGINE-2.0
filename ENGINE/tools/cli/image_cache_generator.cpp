@@ -958,6 +958,22 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         workers = (hc > 1) ? (hc - 1) : 1;
     }
 
+    // Resolve effects backend once per run.
+    bool use_d3d11_effects = false;
+    std::string d3d11_reason;
+    if (opt.effects_backend == EffectsBackend::Auto || opt.effects_backend == EffectsBackend::D3D11) {
+        use_d3d11_effects = D3D11EffectsBackend::Instance().IsAvailable(d3d11_reason);
+        if (use_d3d11_effects) {
+            log.info(std::string("Effects backend: d3d11 (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
+        } else {
+            log.warn(std::string("D3D11 effects backend unavailable; falling back to CPU. Reason: ") +
+                     (d3d11_reason.empty() ? std::string("unknown") : d3d11_reason));
+        }
+    }
+    if (!use_d3d11_effects) {
+        log.info(std::string("Effects backend: cpu (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
+    }
+
     // Load rebuild queue
     const fs::path rebuild_queue_path = ResolveRebuildQueuePath(cache_root);
     ordered_json rebuild_queue = LoadRebuildQueue(rebuild_queue_path);
@@ -966,9 +982,12 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     ordered_json metadata_cache = LoadAssetMetadataCache(cache_root);
     bool metadata_cache_dirty = false;
 
-    // Collect tasks
-    std::vector<WorkItem> tasks;
-    tasks.reserve(2048);
+    // Collect work grouped by source frame so PNG decode happens once per source.
+    std::vector<SourceFrameBatch> source_batches;
+    source_batches.reserve(1024);
+    std::unordered_map<std::string, std::size_t> source_batch_index;
+    source_batch_index.reserve(1024);
+    std::uint64_t planned_scale_tasks = 0;
 
     // Track per-animation flagged indices to clear if everything succeeds
     struct FlagClear {

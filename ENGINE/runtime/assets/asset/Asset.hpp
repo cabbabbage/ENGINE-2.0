@@ -35,7 +35,6 @@ class AnimationFrame;
 class Animation;
 class AssetInfoUI;
 class RenderAsset;
-class AssetList;
 
 namespace world { class WorldGrid; }
 
@@ -218,10 +217,6 @@ class Asset {
     const std::optional<TilingInfo>& tiling_info() const { return tiling_info_; }
     const std::string& owning_room_name() const { return owning_room_name_; }
     void set_owning_room_name(std::string name);
-    AssetList* get_neighbors_list();
-    const AssetList* get_neighbors_list() const;
-    AssetList* get_impassable_naighbors();
-    const AssetList* get_impassable_naighbors() const;
     void deactivate();
     int NeighborSearchRadius;
     void set_hidden(bool state);
@@ -439,15 +434,10 @@ private:
     Assets* assets_ = nullptr;
     std::unique_ptr<AssetController>   controller_;
     std::vector<Asset*> children_;
-    std::unique_ptr<AssetList> neighbors;
-    std::unique_ptr<AssetList> impassable_naighbors;
 
 
 
     std::optional<TilingInfo> tiling_info_{};
-    SDL_Point last_neighbor_origin_{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
-    bool neighbor_lists_initialized_ = false;
-    void update_neighbor_lists(bool force_update);
     void ensure_animation_runtime(bool force_recreate);
 
     void clear_downscale_cache();

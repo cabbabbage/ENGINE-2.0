@@ -10,7 +10,6 @@
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
-#include "rendering/render/TextureLoadQueue.hpp"
 #include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
@@ -100,7 +99,6 @@ public:
 
     void render();
     SDL_Renderer* get_renderer() const;
-    texture_loading::TextureLoadQueue* get_texture_load_queue() const;
 
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return debug_auto_paths_; }
@@ -128,7 +126,6 @@ private:
 
     std::unique_ptr<GridTileRenderer> tile_renderer_;
     std::unique_ptr<GeometryBatcher> geometry_batcher_;
-    std::unique_ptr<texture_loading::TextureLoadQueue> texture_load_queue_;
 
     bool           debugging = false;
     bool           low_quality_rendering_ = false;

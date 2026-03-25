@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <filesystem>
+#include <memory>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -33,6 +35,18 @@ manifest::ManifestData make_manifest_data_from(const nlohmann::json& snapshot) {
     manifest_data.assets = manifest_data.raw["assets"];
     manifest_data.maps = manifest_data.raw["maps"];
     return manifest_data;
+}
+
+std::unique_ptr<Asset> make_world_grid_test_asset(int world_x, int world_z, int grid_resolution = 0) {
+    auto info = std::make_shared<AssetInfo>("world_grid_test_asset");
+    Area spawn_area("world_grid_test_area", 0);
+    return std::make_unique<Asset>(info,
+                                   spawn_area,
+                                   SDL_Point{world_x, world_z},
+                                   0,
+                                   std::string{},
+                                   std::string{},
+                                   grid_resolution);
 }
 
 } // namespace
@@ -139,6 +153,63 @@ TEST_CASE("WorldGrid keeps depth distinct from height for sibling points") {
     CHECK(far_point.world_y() == world_y);
     CHECK(near_point.id != far_point.id);
     CHECK(near_point.hash_key() != far_point.hash_key());
+}
+
+TEST_CASE("WorldGrid move_asset preserves unique ownership and mapping") {
+    world::WorldGrid grid;
+    std::unique_ptr<Asset> owned = make_world_grid_test_asset(64, 96);
+    Asset* raw = grid.create_asset_at_point(std::move(owned));
+    REQUIRE(raw != nullptr);
+
+    const world::GridPoint* start = grid.point_for_asset(raw);
+    REQUIRE(start != nullptr);
+
+    const world::GridPoint old_pos =
+        world::GridPoint::make_virtual(start->world_x(), start->world_y(), start->world_z(), start->resolution_layer());
+    const world::GridPoint new_pos =
+        world::GridPoint::make_virtual(start->world_x() + 48, start->world_y(), start->world_z() + 72, start->resolution_layer());
+
+    Asset* moved = grid.move_asset(raw, old_pos, new_pos);
+    REQUIRE(moved == raw);
+
+    const world::GridPoint* moved_point = grid.point_for_asset(raw);
+    REQUIRE(moved_point != nullptr);
+    CHECK(moved_point->world_x() == new_pos.world_x());
+    CHECK(moved_point->world_y() == new_pos.world_y());
+    CHECK(moved_point->world_z() == new_pos.world_z());
+
+    const std::vector<Asset*> listed = grid.all_assets();
+    CHECK(std::count(listed.begin(), listed.end(), raw) == 1);
+
+    std::unique_ptr<Asset> extracted = grid.extract_asset(raw);
+    REQUIRE(extracted != nullptr);
+    CHECK(extracted.get() == raw);
+    CHECK(grid.point_for_asset(raw) == nullptr);
+}
+
+TEST_CASE("WorldGrid move_asset aborts when source ownership is missing") {
+    world::WorldGrid grid;
+    std::unique_ptr<Asset> owned = make_world_grid_test_asset(140, 180);
+    Asset* raw = grid.create_asset_at_point(std::move(owned));
+    REQUIRE(raw != nullptr);
+
+    const world::GridPoint* start = grid.point_for_asset(raw);
+    REQUIRE(start != nullptr);
+    const world::GridPoint old_pos =
+        world::GridPoint::make_virtual(start->world_x(), start->world_y(), start->world_z(), start->resolution_layer());
+    const world::GridPoint new_pos =
+        world::GridPoint::make_virtual(start->world_x() + 32, start->world_y(), start->world_z() + 64, start->resolution_layer());
+
+    std::unique_ptr<Asset> extracted = grid.extract_asset(raw);
+    REQUIRE(extracted != nullptr);
+    CHECK(grid.point_for_asset(raw) == nullptr);
+
+    CHECK(grid.move_asset(raw, old_pos, new_pos) == nullptr);
+    CHECK(grid.point_for_asset(raw) == nullptr);
+
+    Asset* reattached = grid.attach_asset(std::move(extracted), old_pos.world_z(), old_pos.resolution_layer());
+    REQUIRE(reattached == raw);
+    REQUIRE(grid.point_for_asset(raw) != nullptr);
 }
 
 TEST_CASE("ManifestStore map entry round-trip honors writes") {

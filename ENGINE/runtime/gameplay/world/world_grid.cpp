@@ -309,17 +309,13 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     return owned;
 }
 
-void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* raw, GridPoint& point) {
-    Asset* target = raw ? raw : owned.get();
-    if (!target && !owned) {
+void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, GridPoint& point) {
+    Asset* target = owned.get();
+    if (!target) {
         return;
     }
     const bool had_assets_before = point.has_assets_or_active_children();
-    if (owned) {
-        point.occupants.push_back(std::move(owned));
-    } else {
-        point.occupants.push_back(std::unique_ptr<Asset>(target));
-    }
+    point.occupants.push_back(std::move(owned));
     bind_asset_to_point(target, point);
     point.invalidate_screen_data();
     SDL_assert(!point.occupants.empty());
@@ -717,7 +713,7 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     ensure_asset_in_chunk();
 
     GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.y, new_key.layer);
-    attach_asset_to_grid_point(std::move(a), raw, point);
+    attach_asset_to_grid_point(std::move(a), point);
     return raw;
 }
 
@@ -760,7 +756,6 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         return nullptr;
     }
     const int resolved_layer = new_pos.resolution_layer();
-    const GridCoord old_index = grid_index_from_world(old_pos, old_pos.resolution_layer());
     const GridCoord new_index = grid_index_from_world(new_pos, resolved_layer);
     const int chunk_step = 1 << r_chunk_;
     if (chunk_step <= 0) {
@@ -781,16 +776,6 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     }
     Chunk& target = chunks_.ensure(new_i, new_k, r_chunk_, origin_);
 
-    if (previous != &target) {
-        if (previous) {
-            remove_from_chunk(a, previous);
-        }
-        if (std::find(target.assets.begin(), target.assets.end(), a) == target.assets.end()) {
-            target.assets.push_back(a);
-        }
-        residency_[a] = &target;
-    }
-
     // PRESERVE perspective scale before detaching from old point
     float preserved_perspective = 1.0f;
     if (a->pos_ && a->pos_->perspective_scale > 0.0001f) {
@@ -803,8 +788,17 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
                                (old_pos.world_y() != new_pos.world_y()) ||
                                (old_pos.resolution_layer() != new_pos.resolution_layer());
     if (point_changed) {
-        if (GridPoint* existing_point = point_for_asset(a)) {
-            owned = detach_asset_from_grid_point(a, *existing_point, true);
+        GridPoint* existing_point = point_for_asset(a);
+        if (!existing_point) {
+            vibble::log::error("[WorldGrid] move_asset invariant violated: source point missing during ownership transfer.");
+            SDL_assert(false && "WorldGrid::move_asset requires source point ownership when point_changed.");
+            return nullptr;
+        }
+        owned = detach_asset_from_grid_point(a, *existing_point, true);
+        if (!owned) {
+            vibble::log::error("[WorldGrid] move_asset invariant violated: detach did not yield owned asset during transfer.");
+            SDL_assert(false && "WorldGrid::move_asset requires detach_asset_from_grid_point to return ownership.");
+            return nullptr;
         }
     }
 
@@ -812,11 +806,7 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.y, new_key.layer);
 
     if (point_changed) {
-        if (owned) {
-            attach_asset_to_grid_point(std::move(owned), nullptr, point);
-        } else {
-            attach_asset_to_grid_point(nullptr, a, point);
-        }
+        attach_asset_to_grid_point(std::move(owned), point);
         // Initialize new point's perspective_scale if not yet calculated
         // This prevents a single frame of wrong scaling during movement
         if (point.perspective_scale <= 0.0001f || !point.screen_data_valid) {
@@ -824,6 +814,15 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         }
     } else {
         point.invalidate_screen_data();
+    }
+    if (previous != &target) {
+        if (previous) {
+            remove_from_chunk(a, previous);
+        }
+        if (std::find(target.assets.begin(), target.assets.end(), a) == target.assets.end()) {
+            target.assets.push_back(a);
+        }
+        residency_[a] = &target;
     }
     prune_empty_points();
 

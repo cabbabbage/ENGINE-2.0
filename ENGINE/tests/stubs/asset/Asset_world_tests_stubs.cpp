@@ -8,13 +8,6 @@
 
 #if defined(ENGINE_WORLD_TESTS)
 
-// Minimal stand-in to satisfy unique_ptr destructors used by Asset during world grid tests.
-class AssetList {
-public:
-    AssetList() = default;
-    ~AssetList() = default;
-};
-
 class AnimationRuntime {
 public:
     AnimationRuntime() = default;

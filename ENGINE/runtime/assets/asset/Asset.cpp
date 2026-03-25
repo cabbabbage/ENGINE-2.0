@@ -10,7 +10,6 @@
 #include "controller_factory.hpp"
 #include "animation.hpp"
 #include "core/AssetsManager.hpp"
-#include "core/asset_list.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render.hpp"
 #include "animation/animation_runtime.hpp"
@@ -328,10 +327,6 @@ Asset& Asset::operator=(const Asset& o) {
         controller_.reset();
         children_.clear();
         anim_.reset();
-        neighbors.reset();
-        impassable_naighbors.reset();
-        neighbor_lists_initialized_ = false;
-        last_neighbor_origin_ = SDL_Point{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
         tiling_info_         = o.tiling_info_;
         last_scaled_texture_      = nullptr;
         last_scaled_source_       = nullptr;
@@ -991,10 +986,6 @@ void Asset::set_assets(Assets* a) {
             ControllerFactory cf(assets_);
             controller_ = cf.create_for_asset(this);
     }
-    neighbors.reset();
-    impassable_naighbors.reset();
-    neighbor_lists_initialized_ = false;
-    last_neighbor_origin_ = SDL_Point{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
 
 }
 
@@ -1036,91 +1027,6 @@ void Asset::ensure_animation_runtime(bool force_recreate) {
     anim_ = std::make_unique<AnimationUpdate>(this, assets_);
     if (anim_runtime_) anim_runtime_->set_planner(anim_.get());
     if (anim_) anim_->set_runtime(anim_runtime_.get());
-}
-
-AssetList* Asset::get_neighbors_list() { return neighbors.get(); }
-const AssetList* Asset::get_neighbors_list() const { return neighbors.get(); }
-AssetList* Asset::get_impassable_naighbors() { return impassable_naighbors.get(); }
-const AssetList* Asset::get_impassable_naighbors() const { return impassable_naighbors.get(); }
-
-void Asset::update_neighbor_lists(bool force_update) {
-    if (!assets_ || !info || !info->moving_asset) {
-        return;
-    }
-
-    auto base_filter = [this](const Asset* candidate) {
-        if (!candidate || candidate == this || !candidate->info) {
-            return false;
-        }
-        if (candidate->info->type == asset_types::texture) {
-            return false;
-        }
-        return true;
-};
-
-    auto impassable_filter = [this](const Asset* candidate) {
-        if (!candidate || candidate == this || !candidate->info) {
-            return false;
-        }
-        if (candidate->info->type == asset_types::texture) {
-            return false;
-        }
-        const std::string canonical_type = asset_types::canonicalize(candidate->info->type);
-        if (canonical_type == asset_types::player) {
-            return false;
-        }
-        if (canonical_type == asset_types::boundary) {
-            return true;
-        }
-        if (canonical_type == asset_types::enemy || canonical_type == asset_types::npc) {
-            return true;
-        }
-        if (candidate->info->moving_asset) {
-            return true;
-        }
-        return !candidate->info->passable;
-};
-
-    const auto& candidates = assets_->getActiveRaw();
-    if (candidates.empty()) {
-        neighbors.reset();
-        impassable_naighbors.reset();
-        neighbor_lists_initialized_ = false;
-        return;
-    }
-
-    const bool needs_rebuild = force_update || !neighbors || !neighbor_lists_initialized_ ||
-                               last_neighbor_origin_.x != world_x() ||
-                               last_neighbor_origin_.y != world_y();
-    if (!needs_rebuild) {
-        return;
-    }
-
-    impassable_naighbors.reset();
-    neighbors = std::make_unique<AssetList>(
-        candidates,
-        this,
-        info->NeighborSearchRadius,
-        std::vector<std::string>{},
-        std::vector<std::string>{},
-        std::vector<std::string>{},
-        base_filter);
-
-    if (neighbors) {
-        auto imp_child = std::make_unique<AssetList>(
-            *neighbors,
-            this,
-            info->NeighborSearchRadius,
-            std::vector<std::string>{},
-            std::vector<std::string>{},
-            std::vector<std::string>{},
-            impassable_filter,
-            true);
-        impassable_naighbors = std::move(imp_child);
-    }
-
-    last_neighbor_origin_ = SDL_Point{world_x(), world_y()};
-    neighbor_lists_initialized_ = true;
 }
 
 void Asset::set_flip() {

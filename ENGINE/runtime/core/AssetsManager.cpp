@@ -207,14 +207,14 @@ Assets::Assets(AssetLibrary& library,
     } else {
         vibble::log::info("[Assets] Constructor: Creating SceneRenderer");
         try {
-            scene = new SceneRenderer(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
+            scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
             vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
         } catch (const std::exception& ex) {
             vibble::log::error(std::string{"[Assets] SceneRenderer initialization failed: "} + ex.what());
-            scene = nullptr;
+            scene.reset();
         } catch (...) {
             vibble::log::error("[Assets] SceneRenderer initialization failed with unknown exception");
-            scene = nullptr;
+            scene.reset();
         }
     }
     if (scene) {
@@ -558,8 +558,6 @@ Assets::~Assets() {
     if (input) {
         input->clear_screen_to_world_mapper();
     }
-    delete scene;
-    scene = nullptr;
     delete finder_;
     delete dev_controls_;
 
@@ -592,7 +590,6 @@ const std::vector<Room*>& Assets::rooms() const {
 
 void Assets::notify_rooms_changed() {
     ++rooms_generation_;
-    clear_region_classification_cache();
     if (finder_) {
         finder_->setRooms(rooms_);
     }
@@ -632,10 +629,6 @@ void Assets::mark_anchor_bases_dirty_for_active_assets() {
         }
         mark_with_version(asset);
     }
-}
-
-void Assets::clear_region_classification_cache() {
-    region_classification_cache_.clear();
 }
 
 std::uint64_t Assets::next_anchor_invalidation_version() {
@@ -1341,14 +1334,15 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     }
 
     constexpr std::size_t kMaxBufferEntries = 250000;
+    const auto& active_traversal = camera_.visible_traversal_entries();
 
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(
         std::min<std::size_t>(kMaxBufferEntries,
-                              std::max(active_traversal_.size(), active_assets.size())));
+                              std::max(active_traversal.size(), active_assets.size())));
     std::unordered_set<const Asset*> buffer_set;
     buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries,
-                                             std::max(active_traversal_.size(), active_assets.size())));
+                                             std::max(active_traversal.size(), active_assets.size())));
 
     const auto append_unique_assets = [&](const std::vector<Asset*>& source) {
         for (Asset* asset : source) {
@@ -1378,14 +1372,14 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         }
     };
 
-    if (active_traversal_.empty()) {
+    if (active_traversal.empty()) {
         append_unique_assets(active_assets);
-    } else if (active_traversal_.size() > kMaxBufferEntries) {
+    } else if (active_traversal.size() > kMaxBufferEntries) {
         std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
-                  << active_traversal_.size() << "); falling back to active_assets\n";
+                  << active_traversal.size() << "); falling back to active_assets\n";
         append_unique_assets(active_assets);
     } else {
-        append_unique_traversal(active_traversal_);
+        append_unique_traversal(active_traversal);
         if (non_player_update_buffer_.empty() && !active_assets.empty()) {
             append_unique_assets(active_assets);
         }
@@ -2399,7 +2393,6 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     filtered_active_assets.clear();
     moving_assets_for_grid_.clear();
     pending_static_grid_registration_.clear();
-    active_points_.clear();
     runtime_traversal_state_.clear();
     mark_grid_dirty();
     mark_active_assets_dirty();
@@ -2868,70 +2861,6 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
     }
 }
 
-namespace {
-inline bool is_trail_string(const std::string& text) {
-    if (text.size() != 5) return false;
-    return std::tolower(static_cast<unsigned char>(text[0])) == 't' &&
-           std::tolower(static_cast<unsigned char>(text[1])) == 'r' &&
-           std::tolower(static_cast<unsigned char>(text[2])) == 'a' &&
-           std::tolower(static_cast<unsigned char>(text[3])) == 'i' &&
-           std::tolower(static_cast<unsigned char>(text[4])) == 'l';
-}
-}
-
-void Assets::classify_region(world::GridPoint& point) {
-    const world::GridKey point_key = point.key();
-    auto cached_it = region_classification_cache_.find(point_key);
-    if (cached_it != region_classification_cache_.end() &&
-        cached_it->second.rooms_generation == rooms_generation_) {
-        point.region_kind = cached_it->second.kind;
-        point.region_owner = cached_it->second.owner;
-        return;
-    }
-
-    point.region_kind = world::GridPoint::RegionKind::Boundary;
-    point.region_owner = nullptr;
-
-    const SDL_Point pt{point.world_x(), point.world_z()};
-    for (Room* room : rooms_) {
-        if (!room) continue;
-        const bool room_is_trail = is_trail_string(room->type);
-        if (room->room_area && room->room_area->contains_point(pt)) {
-            point.region_kind = room_is_trail ? world::GridPoint::RegionKind::Trail
-                                              : world::GridPoint::RegionKind::Room;
-            point.region_owner = room;
-            region_classification_cache_[point_key] = RegionClassificationCacheEntry{
-                point.region_kind,
-                point.region_owner,
-                rooms_generation_};
-            return;
-        }
-        // Named areas that are marked as trail
-        for (const auto& named : room->areas) {
-            if (!named.area) continue;
-            if (!(is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name))) {
-                continue;
-            }
-            try {
-                if (named.area->contains_point(pt)) {
-                    point.region_kind = world::GridPoint::RegionKind::Trail;
-                    point.region_owner = room;
-                    region_classification_cache_[point_key] = RegionClassificationCacheEntry{
-                        point.region_kind,
-                        point.region_owner,
-                        rooms_generation_};
-                    return;
-                }
-            } catch (...) {
-            }
-        }
-    }
-
-    region_classification_cache_[point_key] = RegionClassificationCacheEntry{
-        point.region_kind,
-        point.region_owner,
-        rooms_generation_};
-}
 void Assets::rebuild_active_from_screen_grid() {
     const std::uint32_t current_frame_id = frame_id_;
     if (current_frame_id == last_active_rebuild_frame_id_) {
@@ -2941,28 +2870,17 @@ void Assets::rebuild_active_from_screen_grid() {
     bool active_changed = false;
     std::vector<Asset*> previous_active = std::move(active_assets);
 
-    active_points_.clear();
-    active_traversal_.clear();
     active_assets.clear();
 
     const auto& visible_traversal = camera_.visible_traversal_entries();
     active_assets.reserve(visible_traversal.size());
-    active_traversal_.reserve(visible_traversal.size());
     visible_candidate_buffer_.clear();
     visible_candidate_buffer_.reserve(visible_traversal.size());
 
     std::unordered_set<Asset*> seen_assets;
     seen_assets.reserve(visible_traversal.size() * 2);
-    std::unordered_set<world::GridPoint*> seen_points;
-    seen_points.reserve(visible_traversal.size());
 
     for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : visible_traversal) {
-        world::GridPoint* point = source_entry.grid_point;
-        if (point && point->on_screen && seen_points.insert(point).second) {
-            classify_region(*point);
-            active_points_.push_back(point);
-        }
-
         Asset* asset = source_entry.asset;
         if (!asset || asset->dead) {
             continue;
@@ -2982,11 +2900,6 @@ void Assets::rebuild_active_from_screen_grid() {
 
         active_assets.push_back(asset);
         mark_anchor_basis_dirty(asset);
-        active_traversal_.push_back(ActiveTraversalEntry{
-            asset,
-            point,
-            source_entry.depth_from_anchor
-        });
     }
 
     // Deactivate assets no longer visible this frame.

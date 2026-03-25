@@ -1283,6 +1283,67 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 }
                 ImageRGBA src_img = *src_img_opt;
 
+                bool batch_needs_fg = false;
+                bool batch_needs_bg = false;
+                for (const WorkItem& item : batch.scale_items) {
+                    batch_needs_fg = batch_needs_fg || item.write_foreground;
+                    batch_needs_bg = batch_needs_bg || item.write_background;
+                }
+
+                ImageRGBA fg_base;
+                ImageRGBA bg_base;
+                if (batch_needs_fg || batch_needs_bg) {
+                    ImageRGBA expanded_src = make_centered_transparent_2x_canvas(src_img);
+                    if (!expanded_src.valid()) {
+                        tasks_fail.fetch_add(batch.scale_items.size());
+                        any_fail.store(true);
+                        std::lock_guard<std::mutex> lk(err_mu);
+                        if (first_error.empty()) first_error = "Expand canvas failed: " + batch.src_png_path.string();
+                        log.error("Expand canvas failed: " + batch.src_png_path.string());
+                        return;
+                    }
+
+                    const WorkItem& fx_ref = batch.scale_items.front();
+                    if (batch_needs_fg) {
+                        if (!apply_effects_on_expanded_canvas(expanded_src,
+                                                              fx_ref.fx_foreground,
+                                                              EffectLayerMode::Foreground,
+                                                              use_d3d11_effects,
+                                                              fg_base,
+                                                              err)) {
+                            tasks_fail.fetch_add(batch.scale_items.size());
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Foreground effects failed: " + batch.src_png_path.string() + " : " + err;
+                            log.error("Foreground effects failed: " + batch.src_png_path.string() + " : " + err);
+                            return;
+                        }
+                    }
+
+                    if (batch_needs_bg) {
+                        if (!apply_effects_on_expanded_canvas(expanded_src,
+                                                              fx_ref.fx_background,
+                                                              EffectLayerMode::Background,
+                                                              use_d3d11_effects,
+                                                              bg_base,
+                                                              err)) {
+                            tasks_fail.fetch_add(batch.scale_items.size());
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Background effects failed: " + batch.src_png_path.string() + " : " + err;
+                            log.error("Background effects failed: " + batch.src_png_path.string() + " : " + err);
+                            return;
+                        }
+                    }
+                }
+
+                std::unordered_map<int, ImageRGBA> normal_scale_cache;
+                std::unordered_map<int, ImageRGBA> fg_scale_cache;
+                std::unordered_map<int, ImageRGBA> bg_scale_cache;
+                normal_scale_cache.reserve(batch.scale_items.size());
+                fg_scale_cache.reserve(batch.scale_items.size());
+                bg_scale_cache.reserve(batch.scale_items.size());
+
                 for (std::size_t scale_idx = 0; scale_idx < batch.scale_items.size(); ++scale_idx) {
                     const WorkItem& w = batch.scale_items[scale_idx];
                     const std::size_t remaining_scales = batch.scale_items.size() - scale_idx;
@@ -1292,71 +1353,77 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                         hdr << "[" << w.asset_name << "/" << w.anim_name
                             << " src=" << w.src_frame_index
                             << " scale=" << w.scale_pct
-                            << " outs=" << w.out_indices.size() << "]";
+                            << " outs=" << w.out_indices.size()
+                            << " write(n=" << (w.write_normal ? "y" : "n")
+                            << ",fg=" << (w.write_foreground ? "y" : "n")
+                            << ",bg=" << (w.write_background ? "y" : "n") << ")]";
                         log.info(hdr.str());
                     }
 
-                    auto resized_opt = resize_lanczos_rgba(src_img,
-                                                          std::max(1, static_cast<int>(std::lround(src_img.w * w.scale_factor))),
-                                                          std::max(1, static_cast<int>(std::lround(src_img.h * w.scale_factor))),
-                                                          err);
-                    if (!resized_opt) {
-                        tasks_fail.fetch_add(remaining_scales);
-                        any_fail.store(true);
-                        std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Resize failed: " + batch.src_png_path.string() + " : " + err;
-                        log.error("Resize failed: " + batch.src_png_path.string() + " : " + err);
-                        return;
+                    const int normal_w = std::max(1, static_cast<int>(std::lround(src_img.w * w.scale_factor)));
+                    const int normal_h = std::max(1, static_cast<int>(std::lround(src_img.h * w.scale_factor)));
+                    const int effect_w = std::max(1, normal_w * 2);
+                    const int effect_h = std::max(1, normal_h * 2);
+
+                    const ImageRGBA* normal_img = nullptr;
+                    if (w.write_normal) {
+                        auto normal_it = normal_scale_cache.find(w.scale_pct);
+                        if (normal_it == normal_scale_cache.end()) {
+                            auto resized_opt = resize_lanczos_rgba(src_img, normal_w, normal_h, err);
+                            if (!resized_opt) {
+                                tasks_fail.fetch_add(remaining_scales);
+                                any_fail.store(true);
+                                std::lock_guard<std::mutex> lk(err_mu);
+                                if (first_error.empty()) first_error = "Normal resize failed: " + batch.src_png_path.string() + " : " + err;
+                                log.error("Normal resize failed: " + batch.src_png_path.string() + " : " + err);
+                                return;
+                            }
+                            normal_it = normal_scale_cache.emplace(w.scale_pct, std::move(*resized_opt)).first;
+                        }
+                        normal_img = &normal_it->second;
                     }
 
-                    ImageRGBA img = *resized_opt;
-                    const bool need_fg = w.write_foreground;
-                    const bool need_bg = w.write_background;
-
-                    ImageRGBA expanded;
-                    if (need_fg || need_bg) {
-                        expanded = make_centered_transparent_2x_canvas(img);
-                        if (!expanded.valid()) {
-                            tasks_fail.fetch_add(remaining_scales);
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Expand canvas failed: " + batch.src_png_path.string();
-                            log.error("Expand canvas failed: " + batch.src_png_path.string());
-                            return;
+                    const ImageRGBA* fg_img = nullptr;
+                    if (w.write_foreground) {
+                        if (w.scale_pct == 100) {
+                            fg_img = &fg_base;
+                        } else {
+                            auto fg_it = fg_scale_cache.find(w.scale_pct);
+                            if (fg_it == fg_scale_cache.end()) {
+                                auto resized_opt = resize_lanczos_rgba(fg_base, effect_w, effect_h, err);
+                                if (!resized_opt) {
+                                    tasks_fail.fetch_add(remaining_scales);
+                                    any_fail.store(true);
+                                    std::lock_guard<std::mutex> lk(err_mu);
+                                    if (first_error.empty()) first_error = "Foreground downscale failed: " + batch.src_png_path.string() + " : " + err;
+                                    log.error("Foreground downscale failed: " + batch.src_png_path.string() + " : " + err);
+                                    return;
+                                }
+                                fg_it = fg_scale_cache.emplace(w.scale_pct, std::move(*resized_opt)).first;
+                            }
+                            fg_img = &fg_it->second;
                         }
                     }
 
-                    ImageRGBA fg_img;
-                    if (need_fg) {
-                        if (!apply_effects_on_expanded_canvas(expanded,
-                                                              w.fx_foreground,
-                                                              EffectLayerMode::Foreground,
-                                                              use_d3d11_effects,
-                                                              fg_img,
-                                                              err)) {
-                            tasks_fail.fetch_add(remaining_scales);
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Foreground effects failed: " + batch.src_png_path.string() + " : " + err;
-                            log.error("Foreground effects failed: " + batch.src_png_path.string() + " : " + err);
-                            return;
-                        }
-                    }
-
-                    ImageRGBA bg_img;
-                    if (need_bg) {
-                        if (!apply_effects_on_expanded_canvas(expanded,
-                                                              w.fx_background,
-                                                              EffectLayerMode::Background,
-                                                              use_d3d11_effects,
-                                                              bg_img,
-                                                              err)) {
-                            tasks_fail.fetch_add(remaining_scales);
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Background effects failed: " + batch.src_png_path.string() + " : " + err;
-                            log.error("Background effects failed: " + batch.src_png_path.string() + " : " + err);
-                            return;
+                    const ImageRGBA* bg_img = nullptr;
+                    if (w.write_background) {
+                        if (w.scale_pct == 100) {
+                            bg_img = &bg_base;
+                        } else {
+                            auto bg_it = bg_scale_cache.find(w.scale_pct);
+                            if (bg_it == bg_scale_cache.end()) {
+                                auto resized_opt = resize_lanczos_rgba(bg_base, effect_w, effect_h, err);
+                                if (!resized_opt) {
+                                    tasks_fail.fetch_add(remaining_scales);
+                                    any_fail.store(true);
+                                    std::lock_guard<std::mutex> lk(err_mu);
+                                    if (first_error.empty()) first_error = "Background downscale failed: " + batch.src_png_path.string() + " : " + err;
+                                    log.error("Background downscale failed: " + batch.src_png_path.string() + " : " + err);
+                                    return;
+                                }
+                                bg_it = bg_scale_cache.emplace(w.scale_pct, std::move(*resized_opt)).first;
+                            }
+                            bg_img = &bg_it->second;
                         }
                     }
 
@@ -1367,9 +1434,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                         fs::path bpath = w.out_background_dir / (std::to_string(out_idx) + ".png");
 
                         // Python overwrites files for scheduled outputs, so we always write.
-                        if (w.write_normal) {
+                        if (w.write_normal && normal_img) {
                             std::string e1;
-                            if (!ImageCacheGenerator::SavePngRGBA(npath, img, e1)) {
+                            if (!ImageCacheGenerator::SavePngRGBA(npath, *normal_img, e1)) {
                                 tasks_fail.fetch_add(remaining_scales);
                                 any_fail.store(true);
                                 std::lock_guard<std::mutex> lk(err_mu);
@@ -1380,9 +1447,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                             pngs_written.fetch_add(1);
                         }
 
-                        if (w.write_foreground) {
+                        if (w.write_foreground && fg_img) {
                             std::string e2;
-                            if (!ImageCacheGenerator::SavePngRGBA(fpath, fg_img, e2)) {
+                            if (!ImageCacheGenerator::SavePngRGBA(fpath, *fg_img, e2)) {
                                 tasks_fail.fetch_add(remaining_scales);
                                 any_fail.store(true);
                                 std::lock_guard<std::mutex> lk(err_mu);
@@ -1393,9 +1460,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                             pngs_written.fetch_add(1);
                         }
 
-                        if (w.write_background) {
+                        if (w.write_background && bg_img) {
                             std::string e3;
-                            if (!ImageCacheGenerator::SavePngRGBA(bpath, bg_img, e3)) {
+                            if (!ImageCacheGenerator::SavePngRGBA(bpath, *bg_img, e3)) {
                                 tasks_fail.fetch_add(remaining_scales);
                                 any_fail.store(true);
                                 std::lock_guard<std::mutex> lk(err_mu);

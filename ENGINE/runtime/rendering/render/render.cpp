@@ -848,7 +848,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   screen_height_(screen_height),
   tile_renderer_(std::make_unique<GridTileRenderer>(assets)),
   geometry_batcher_(std::make_unique<GeometryBatcher>(renderer)),
-  texture_load_queue_(std::make_unique<texture_loading::TextureLoadQueue>(renderer)),
   sky_texture_path_(std::filesystem::path("resources") / "misc_content" / "sky.png"),
   composite_renderer_(renderer, assets),
   dynamic_fog_system_(std::make_unique<DynamicFogSystem>()),
@@ -987,10 +986,6 @@ void SceneRenderer::destroy_sky_texture() {
 
 SDL_Renderer* SceneRenderer::get_renderer() const {
     return renderer_;
-}
-
-texture_loading::TextureLoadQueue* SceneRenderer::get_texture_load_queue() const {
-    return texture_load_queue_.get();
 }
 
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {

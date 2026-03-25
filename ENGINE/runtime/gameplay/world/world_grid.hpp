@@ -115,7 +115,7 @@ private:
     GridId make_point_id(int grid_x, int grid_depth, int world_y, int resolution_layer, std::uint32_t salt = 0) const;
     void remove_asset_from_point(Asset* a, GridPoint& point);
     std::unique_ptr<Asset> detach_asset_from_grid_point(Asset* a, GridPoint& point, bool clear_mapping);
-    void attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* raw, GridPoint& point);
+    void attach_asset_to_grid_point(std::unique_ptr<Asset> owned, GridPoint& point);
     GridPoint& ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent = nullptr, int world_y = 0, int resolution_layer = -1);
     void bind_asset_to_point(Asset* a, GridPoint& point);
     void propagate_branch_active(GridPoint* node);

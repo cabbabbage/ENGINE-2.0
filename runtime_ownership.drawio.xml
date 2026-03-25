@@ -13,7 +13,7 @@
         <mxCell id="4" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#1f3f72;strokeColor=#062d62;fontColor=#ffffff;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=13;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;AssetLoader&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Owns Room graph and bootstrap spawning pipeline. Moves room asset ownership into WorldGrid.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="560" y="170" width="560" height="150" as="geometry" />
         </mxCell>
-        <mxCell id="5" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#1f3f72;strokeColor=#062d62;fontColor=#ffffff;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=13;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:27px;font-weight:700;'&gt;Assets&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Primary runtime manager. Owns world_grid_, camera, render bridge, and runtime traversal buffers.&lt;/div&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="5" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#1f3f72;strokeColor=#062d62;fontColor=#ffffff;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=13;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:27px;font-weight:700;'&gt;Assets&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Primary runtime manager. Owns world_grid_, camera (WarpedScreenGrid), scene renderer, and active/filter runtime views.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1160" y="170" width="620" height="160" as="geometry" />
         </mxCell>
         <mxCell id="6" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#115e59;strokeColor=#0f766e;fontColor=#ffffff;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=13;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:30px;font-weight:700;'&gt;WorldGrid (World Map Root)&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Canonical owner of live GridPoint nodes and Asset lifetimes through GridPoint occupants unique_ptr.&lt;/div&gt;&lt;/div&gt;" vertex="1">
@@ -70,11 +70,8 @@
         <mxCell id="23" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;WarpedScreenGrid internals&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;CameraController and visible_points or visible_assets or asset_to_point non-owning pointer caches.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1160" y="900" width="360" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="24" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;SceneRenderer internals&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;GridTileRenderer, GeometryBatcher, CompositeAssetRenderer and draw pipeline state.&lt;/div&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="24" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;SceneRenderer internals&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;GridTileRenderer, GeometryBatcher, CompositeAssetRenderer, DynamicFogSystem, DynamicBoundarySystem, and scene draw pipeline textures.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1160" y="1050" width="360" height="130" as="geometry" />
-        </mxCell>
-        <mxCell id="25" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;TextureLoadQueue&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Worker thread, pending or ready queues, callback pipeline, and placeholder texture.&lt;/div&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry x="1160" y="1200" width="360" height="120" as="geometry" />
         </mxCell>
         <mxCell id="26" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;DynamicFogSystem&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Owns fog textures, assignment map, and active fog sprites.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="3300" y="580" width="360" height="120" as="geometry" />
@@ -85,14 +82,11 @@
         <mxCell id="28" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;Scene GPU textures&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;scene_composite_tex, postprocess_tex, blur_tex, sky_texture and dimensions.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="3300" y="890" width="360" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="29" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;Asset refs and queues&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;children Asset* refs, neighbor and impassable list handles, pending attack queue, and mutex.&lt;/div&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="29" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;Asset refs and queues&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;children Asset* refs, pending attack queue, and queue mutex.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="2790" y="1080" width="470" height="130" as="geometry" />
         </mxCell>
         <mxCell id="30" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#e5e7eb;strokeColor=#6b7280;fontColor=#111827;rounded=1;align=left;verticalAlign=top;spacing=8;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;Legend&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Blue = core runtime owners&lt;br/&gt;Teal = world map ownership layer&lt;br/&gt;Green = asset runtime layer&lt;br/&gt;Purple = metadata ownership layer&lt;br/&gt;Orange = renderer/GPU resources&lt;br/&gt;Gray = non-owning indices or references&lt;br/&gt;Edges: owns (solid), shared_ptr (diamond dashed), ref/index (dashed), moved (teal dashed).&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="3680" y="40" width="560" height="500" as="geometry" />
-        </mxCell>
-        <mxCell id="31" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;AssetList&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Owned neighbor and impassable views with non-owning candidate pointers and membership maps.&lt;/div&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry x="2620" y="1620" width="260" height="120" as="geometry" />
         </mxCell>
         <mxCell id="32" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#166534;strokeColor=#14532d;fontColor=#ffffff;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=13;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;AnimationUpdate&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1540" y="1620" width="180" height="90" as="geometry" />
@@ -106,7 +100,7 @@
         <mxCell id="35" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#e5e7eb;strokeColor=#6b7280;fontColor=#111827;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;WorldGrid indexes&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;residency map Asset* to Chunk*, key or id maps, and root node id list.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1820" y="840" width="330" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="36" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;Assets active lists&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;all, active, filtered, traversal and collision lists hold non-owning Asset* views.&lt;/div&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="36" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;Assets active lists&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;all, active, filtered, and collision lists hold non-owning Asset* views. Traversal view is borrowed from WarpedScreenGrid.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1160" y="340" width="620" height="120" as="geometry" />
         </mxCell>
         <mxCell id="37" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ccfbf1;strokeColor=#0f766e;fontColor=#134e4a;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:22px;font-weight:700;'&gt;Room staging assets&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Room::assets unique_ptr entries are transferred to WorldGrid ownership at bootstrap.&lt;/div&gt;&lt;/div&gt;" vertex="1">
@@ -134,12 +128,6 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e8" parent="1" source="5" target="6" value="owns world_grid_" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e9" parent="1" source="5" target="13" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e10" parent="1" source="5" target="14" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e11" parent="1" source="5" target="15" value="Room* refs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
@@ -205,12 +193,6 @@
         <mxCell id="e31" parent="1" source="15" target="29" value="owns refs and queue state" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e32" parent="1" source="15" target="31" value="owns neighbor lists" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e33" parent="1" source="31" target="15" value="non-owning candidate pointers" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
         <mxCell id="e34" parent="1" source="29" target="15" value="child Asset* refs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -229,25 +211,22 @@
         <mxCell id="e39" parent="1" source="18" target="22" value="owns metadata maps" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e40" parent="1" source="13" target="23" value="owns camera internals" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
+        <mxCell id="e40" parent="1" source="5" target="23" value="owns camera_" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e41" parent="1" source="23" target="13" value="cached GridPoint* views" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e42" parent="1" source="14" target="24" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
+        <mxCell id="e42" parent="1" source="5" target="24" value="owns unique_ptr scene" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e43" parent="1" source="14" target="25" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
+        <mxCell id="e44" parent="1" source="24" target="26" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e44" parent="1" source="14" target="26" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
+        <mxCell id="e45" parent="1" source="24" target="27" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e45" parent="1" source="14" target="27" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e46" parent="1" source="14" target="28" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
+        <mxCell id="e46" parent="1" source="24" target="28" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e47" parent="1" source="27" target="6" value="samples world and region data" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
@@ -266,9 +245,6 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e52" parent="1" source="24" target="15" value="self Asset* non-owning" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e53" parent="1" source="25" target="15" value="self Asset* non-owning" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e54" parent="1" source="26" target="15" value="controls Asset non-owning" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">

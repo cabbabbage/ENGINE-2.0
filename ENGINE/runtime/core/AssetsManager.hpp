@@ -101,18 +101,13 @@ public:
     const std::vector<Asset*>& getActive() const;
     const std::vector<Asset*>& getFilteredActiveAssets() const;
     const std::unordered_set<Asset*>& filtered_active_asset_membership() const { return filtered_active_asset_membership_; }
-    const std::vector<world::GridPoint*>& active_points() const { return active_points_; }
-    struct ActiveTraversalEntry {
-        Asset* asset = nullptr;
-        world::GridPoint* grid_point = nullptr;
-        double depth_from_anchor = 0.0;
-    };
+    using ActiveTraversalEntry = WarpedScreenGrid::VisibleTraversalEntry;
     struct FrameCollisionEntry {
         const Asset* asset = nullptr;
         Area area{"impassable"};
         world::GridPoint bottom_middle = world::GridPoint::make_virtual(0, 0, 0, 0);
     };
-    const std::vector<ActiveTraversalEntry>& active_traversal() const { return active_traversal_; }
+    const std::vector<ActiveTraversalEntry>& active_traversal() const { return camera_.visible_traversal_entries(); }
     const std::vector<FrameCollisionEntry>& frame_collision_entries() const { return frame_collision_entries_; }
     const std::vector<Asset*>& getActiveRaw() const { return active_assets; }
     std::vector<Asset*>& mutable_filtered_active_assets() { return filtered_active_assets; }
@@ -231,10 +226,6 @@ public:
     void initialize_active_assets(const world::GridPoint& center);
     std::uint64_t dev_active_state_version() const { return dev_active_state_version_; }
 
-    // Region tagging
-    void classify_region(world::GridPoint& point);
-    void clear_region_classification_cache();
-
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }
@@ -301,7 +292,7 @@ private:
     std::unique_ptr<QuickTaskPopup> quick_task_popup_;
     PopupManager popup_manager_;
     WarpedScreenGrid camera_;
-    SceneRenderer* scene = nullptr;
+    std::unique_ptr<SceneRenderer> scene;
     int screen_width;
     int screen_height;
     int delta_x_ = 0;
@@ -324,14 +315,6 @@ private:
     bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
-    std::vector<world::GridPoint*> active_points_;
-    std::vector<ActiveTraversalEntry> active_traversal_;
-    struct RegionClassificationCacheEntry {
-        world::GridPoint::RegionKind kind = world::GridPoint::RegionKind::Boundary;
-        const Room* owner = nullptr;
-        std::size_t rooms_generation = 0;
-    };
-    std::unordered_map<world::GridKey, RegionClassificationCacheEntry, world::GridKeyHash> region_classification_cache_;
     mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
     mutable std::uint32_t frame_collision_context_frame_id_ = 0;
     mutable bool frame_collision_context_dirty_ = true;

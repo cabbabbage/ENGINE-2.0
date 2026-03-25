@@ -2232,10 +2232,10 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0,
+                "depth_offset": -13,
                 "name": "eyes",
-                "texture_x": 872,
-                "texture_y": 519
+                "texture_x": 191,
+                "texture_y": 170
               }
             ]
           ],
@@ -2265,6 +2265,72 @@
           }
         },
         "down": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": true,
@@ -2286,6 +2352,72 @@
           }
         },
         "down_left": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": true,
@@ -2307,6 +2439,72 @@
           }
         },
         "down_right": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "derived_modifiers": {
             "flipMovementX": true,
             "flipMovementY": true,
@@ -2328,6 +2526,72 @@
           }
         },
         "left": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -2414,6 +2678,72 @@
           }
         },
         "right": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "derived_modifiers": {
             "flipMovementX": true,
             "flipMovementY": false,
@@ -2435,6 +2765,72 @@
           }
         },
         "up": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -2521,6 +2917,72 @@
           }
         },
         "up_left": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -2607,6 +3069,72 @@
           }
         },
         "up_right": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ],
+            [
+              {
+                "depth_offset": -13,
+                "name": "eyes",
+                "texture_x": 191,
+                "texture_y": 170
+              }
+            ]
+          ],
           "derived_modifiers": {
             "flipMovementX": true,
             "flipMovementY": false,
@@ -2638,7 +3166,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 55.0
+        "scale_percentage": 62.0
       },
       "start": "default",
       "tags": [],
@@ -2708,6 +3236,26 @@
       "start": "default",
       "tags": [],
       "update_radius": 0
+    }
+  },
+  "image_effects": {
+    "background": {
+      "blur": 1.0,
+      "brightness": 0.0,
+      "contrast": -0.14000004529953003,
+      "hue": 0.0,
+      "saturation_blue": 0.12000000476837158,
+      "saturation_green": 0.07999992370605469,
+      "saturation_red": -0.3400000333786011
+    },
+    "foreground": {
+      "blur": 0.2200000286102295,
+      "brightness": 0.0,
+      "contrast": 0.19999992847442627,
+      "hue": 0.0,
+      "saturation_blue": -0.20000004768371582,
+      "saturation_green": 0.0,
+      "saturation_red": 0.15999996662139893
     }
   },
   "maps": {
@@ -2890,9 +3438,9 @@
           ],
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -2951,16 +3499,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 122,
-              "dz": 387,
+              "dx": -184,
+              "dz": -524,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3008,
-              "origional_width": 3536,
+              "origional_height": 3080,
+              "origional_width": 3120,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -3231,9 +3779,9 @@
           ],
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,

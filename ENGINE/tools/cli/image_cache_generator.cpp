@@ -32,6 +32,7 @@
 #include <deque>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <numeric>
@@ -1031,21 +1032,22 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         if (hc == 0) hc = 4;
         workers = (hc > 1) ? (hc - 1) : 1;
     }
-    (void)workers;
 
     bool use_d3d11_effects = false;
     std::string d3d11_reason;
-    if (opt.effects_backend == EffectsBackend::Auto || opt.effects_backend == EffectsBackend::D3D11) {
-        use_d3d11_effects = D3D11EffectsBackend::Instance().IsAvailable(d3d11_reason);
-        if (use_d3d11_effects) {
-            log.info(std::string("Effects backend: d3d11 (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
-        } else {
-            log.warn(std::string("D3D11 effects backend unavailable; falling back to CPU. Reason: ") +
-                     (d3d11_reason.empty() ? std::string("unknown") : d3d11_reason));
+    if (!opt.dry_run) {
+        if (opt.effects_backend == EffectsBackend::Auto || opt.effects_backend == EffectsBackend::D3D11) {
+            use_d3d11_effects = D3D11EffectsBackend::Instance().IsAvailable(d3d11_reason);
+            if (use_d3d11_effects) {
+                log.info(std::string("Effects backend: d3d11 (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
+            } else {
+                log.warn(std::string("D3D11 effects backend unavailable; falling back to CPU. Reason: ") +
+                         (d3d11_reason.empty() ? std::string("unknown") : d3d11_reason));
+            }
         }
-    }
-    if (!use_d3d11_effects) {
-        log.info(std::string("Effects backend: cpu (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
+        if (!use_d3d11_effects) {
+            log.info(std::string("Effects backend: cpu (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
+        }
     }
 
     std::unordered_map<std::string, std::unordered_map<std::string, ExplicitAnimRequest>> explicit_requests;
@@ -1107,6 +1109,32 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         return result;
     };
 
+    struct AnimationTask {
+        std::string asset_name;
+        std::string anim_name;
+        std::vector<fs::path> frame_paths;
+        ExplicitAnimRequest explicit_request;
+        bool has_explicit_request = false;
+    };
+    struct AnimationTaskResult {
+        bool ok = true;
+        std::string error;
+        GenStats stats;
+        bool touched_animation = false;
+        std::string asset_name;
+        std::string anim_name;
+        std::vector<fs::path> written_files;
+    };
+
+    auto add_stats = [](GenStats& target, const GenStats& src) {
+        target.tasks_total += src.tasks_total;
+        target.tasks_succeeded += src.tasks_succeeded;
+        target.tasks_failed += src.tasks_failed;
+        target.pngs_written += src.pngs_written;
+        target.pngs_skipped_existing += src.pngs_skipped_existing;
+    };
+
+    std::vector<AnimationTask> tasks;
     for (const auto& asset_name : asset_names) {
         if (!opt.filters.matches_asset(asset_name)) {
             continue;
@@ -1180,187 +1208,279 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 continue;
             }
 
-            if (!opt.dry_run) {
-                prune_non_canonical_scale_dirs(cache_root / asset_name / "animations" / anim_name, log);
+            AnimationTask task;
+            task.asset_name = asset_name;
+            task.anim_name = anim_name;
+            task.frame_paths = frame_paths;
+            task.has_explicit_request = has_explicit_request;
+            if (has_explicit_request) {
+                task.explicit_request = explicit_anim_it->second;
+            }
+            tasks.push_back(std::move(task));
+        }
+    }
+
+    std::atomic<bool> abort_requested{false};
+    std::vector<AnimationTaskResult> task_results(tasks.size());
+    auto process_animation = [&](const AnimationTask& task) -> AnimationTaskResult {
+        AnimationTaskResult task_result;
+        task_result.asset_name = task.asset_name;
+        task_result.anim_name = task.anim_name;
+        if (abort_requested.load(std::memory_order_relaxed)) {
+            return task_result;
+        }
+
+        std::string task_err;
+        if (!opt.dry_run) {
+            prune_non_canonical_scale_dirs(cache_root / task.asset_name / "animations" / task.anim_name, log);
+        }
+
+        for (int frame_idx = 0; frame_idx < static_cast<int>(task.frame_paths.size()); ++frame_idx) {
+            if (!opt.filters.matches_source_frame(frame_idx) ||
+                abort_requested.load(std::memory_order_relaxed)) {
+                continue;
             }
 
-            bool touched_animation = false;
-            for (int frame_idx = 0; frame_idx < static_cast<int>(frame_paths.size()); ++frame_idx) {
-                if (!opt.filters.matches_source_frame(frame_idx)) {
+            bool source_loaded = false;
+            ImageRGBA source_image;
+            bool expanded_loaded = false;
+            ImageRGBA expanded_source;
+            bool fg_ready = false;
+            ImageRGBA fg_base;
+            bool bg_ready = false;
+            ImageRGBA bg_base;
+
+            for (int pct : scale_pcts) {
+                if (abort_requested.load(std::memory_order_relaxed)) {
+                    break;
+                }
+
+                const int out_idx = frame_idx;
+                std::uint8_t write_mask = kTextureVariantMaskNone;
+
+                if (opt.force_rebuild) {
+                    write_mask = kTextureVariantMaskAll;
+                }
+                if (task.has_explicit_request) {
+                    merge_mask(write_mask, task.explicit_request.all_frames_mask);
+                    auto frame_it = task.explicit_request.frame_masks.find(frame_idx);
+                    if (frame_it != task.explicit_request.frame_masks.end()) {
+                        merge_mask(write_mask, frame_it->second);
+                    }
+                }
+                if (missing_only_mode) {
+                    merge_mask(write_mask,
+                               output_missing_mask(cache_root, task.asset_name, task.anim_name, pct, out_idx));
+                }
+
+                write_mask = sanitize_mask(write_mask);
+                if (write_mask == kTextureVariantMaskNone) {
                     continue;
                 }
 
-                bool source_loaded = false;
-                ImageRGBA source_image;
-                bool expanded_loaded = false;
-                ImageRGBA expanded_source;
-                bool fg_ready = false;
-                ImageRGBA fg_base;
-                bool bg_ready = false;
-                ImageRGBA bg_base;
+                task_result.touched_animation = true;
+                ++task_result.stats.tasks_total;
 
-                for (int pct : scale_pcts) {
-                    const int out_idx = frame_idx;
-                    std::uint8_t write_mask = kTextureVariantMaskNone;
-
-                    if (opt.force_rebuild) {
-                        write_mask = kTextureVariantMaskAll;
-                    }
-                    if (has_explicit_request) {
-                        merge_mask(write_mask, explicit_anim_it->second.all_frames_mask);
-                        auto frame_it = explicit_anim_it->second.frame_masks.find(frame_idx);
-                        if (frame_it != explicit_anim_it->second.frame_masks.end()) {
-                            merge_mask(write_mask, frame_it->second);
-                        }
-                    }
-                    if (missing_only_mode) {
-                        merge_mask(write_mask,
-                                   output_missing_mask(cache_root, asset_name, anim_name, pct, out_idx));
-                    }
-
-                    write_mask = sanitize_mask(write_mask);
-                    if (write_mask == kTextureVariantMaskNone) {
-                        continue;
-                    }
-
-                    touched_animation = true;
-                    ++result.stats.tasks_total;
-
-                    if (opt.dry_run) {
-                        ++result.stats.tasks_succeeded;
-                        continue;
-                    }
-
-                    if (!source_loaded) {
-                        auto source_opt = LoadPngRGBA(frame_paths[frame_idx], err);
-                        if (!source_opt) {
-                            ++result.stats.tasks_failed;
-                            return finalize_fail("Load failed: " + frame_paths[frame_idx].string() + " : " + err);
-                        }
-                        source_image = std::move(*source_opt);
-                        source_loaded = true;
-                    }
-
-                    const fs::path normal_dir =
-                        CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Normal);
-                    const fs::path fg_dir =
-                        CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Foreground);
-                    const fs::path bg_dir =
-                        CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Background);
-                    std::error_code ec;
-                    fs::create_directories(normal_dir, ec);
-                    fs::create_directories(fg_dir, ec);
-                    fs::create_directories(bg_dir, ec);
-
-                    const fs::path normal_path = normal_dir / (std::to_string(out_idx) + ".png");
-                    const fs::path fg_path = fg_dir / (std::to_string(out_idx) + ".png");
-                    const fs::path bg_path = bg_dir / (std::to_string(out_idx) + ".png");
-
-                    const float scale_factor = static_cast<float>(pct) / 100.0f;
-                    const int normal_w = std::max(1, static_cast<int>(std::lround(source_image.w * scale_factor)));
-                    const int normal_h = std::max(1, static_cast<int>(std::lround(source_image.h * scale_factor)));
-                    const int effects_w = std::max(1, normal_w * 2);
-                    const int effects_h = std::max(1, normal_h * 2);
-
-                    if ((write_mask & kTextureVariantMaskNormal) != 0u) {
-                        auto normal_opt = resize_lanczos_rgba(source_image, normal_w, normal_h, err);
-                        if (!normal_opt) {
-                            ++result.stats.tasks_failed;
-                            return finalize_fail("Normal resize failed: " + frame_paths[frame_idx].string() + " : " + err);
-                        }
-                        if (!SavePngRGBA(normal_path, *normal_opt, err)) {
-                            ++result.stats.tasks_failed;
-                            return finalize_fail("Save failed: " + normal_path.string() + " : " + err);
-                        }
-                        written_files.push_back(normal_path);
-                        ++result.stats.pngs_written;
-                    }
-
-                    if ((write_mask & kTextureVariantMaskForeground) != 0u) {
-                        if (!fg_ready) {
-                            if (!expanded_loaded) {
-                                expanded_source = make_centered_transparent_2x_canvas(source_image);
-                                if (!expanded_source.valid()) {
-                                    ++result.stats.tasks_failed;
-                                    return finalize_fail("Expand canvas failed: " + frame_paths[frame_idx].string());
-                                }
-                                expanded_loaded = true;
-                            }
-                            if (!apply_effects_on_expanded_canvas(expanded_source,
-                                                                  fx_fg,
-                                                                  EffectLayerMode::Foreground,
-                                                                  use_d3d11_effects,
-                                                                  fg_base,
-                                                                  err)) {
-                                ++result.stats.tasks_failed;
-                                return finalize_fail("Foreground effects failed: " + frame_paths[frame_idx].string() + " : " + err);
-                            }
-                            fg_ready = true;
-                        }
-                        ImageRGBA fg_scaled = fg_base;
-                        if (pct != 100) {
-                            auto fg_opt = resize_lanczos_rgba(fg_base, effects_w, effects_h, err);
-                            if (!fg_opt) {
-                                ++result.stats.tasks_failed;
-                                return finalize_fail("Foreground downscale failed: " + frame_paths[frame_idx].string() + " : " + err);
-                            }
-                            fg_scaled = std::move(*fg_opt);
-                        }
-                        if (!SavePngRGBA(fg_path, fg_scaled, err)) {
-                            ++result.stats.tasks_failed;
-                            return finalize_fail("Save failed: " + fg_path.string() + " : " + err);
-                        }
-                        written_files.push_back(fg_path);
-                        ++result.stats.pngs_written;
-                    }
-
-                    if ((write_mask & kTextureVariantMaskBackground) != 0u) {
-                        if (!bg_ready) {
-                            if (!expanded_loaded) {
-                                expanded_source = make_centered_transparent_2x_canvas(source_image);
-                                if (!expanded_source.valid()) {
-                                    ++result.stats.tasks_failed;
-                                    return finalize_fail("Expand canvas failed: " + frame_paths[frame_idx].string());
-                                }
-                                expanded_loaded = true;
-                            }
-                            if (!apply_effects_on_expanded_canvas(expanded_source,
-                                                                  fx_bg,
-                                                                  EffectLayerMode::Background,
-                                                                  use_d3d11_effects,
-                                                                  bg_base,
-                                                                  err)) {
-                                ++result.stats.tasks_failed;
-                                return finalize_fail("Background effects failed: " + frame_paths[frame_idx].string() + " : " + err);
-                            }
-                            bg_ready = true;
-                        }
-                        ImageRGBA bg_scaled = bg_base;
-                        if (pct != 100) {
-                            auto bg_opt = resize_lanczos_rgba(bg_base, effects_w, effects_h, err);
-                            if (!bg_opt) {
-                                ++result.stats.tasks_failed;
-                                return finalize_fail("Background downscale failed: " + frame_paths[frame_idx].string() + " : " + err);
-                            }
-                            bg_scaled = std::move(*bg_opt);
-                        }
-                        if (!SavePngRGBA(bg_path, bg_scaled, err)) {
-                            ++result.stats.tasks_failed;
-                            return finalize_fail("Save failed: " + bg_path.string() + " : " + err);
-                        }
-                        written_files.push_back(bg_path);
-                        ++result.stats.pngs_written;
-                    }
-
-                    ++result.stats.tasks_succeeded;
+                if (opt.dry_run) {
+                    ++task_result.stats.tasks_succeeded;
+                    continue;
                 }
-            }
 
-            if (touched_animation) {
-                touched_assets_set.insert(asset_name);
-                touched_anims_set.insert(asset_name + "::" + anim_name);
+                if (!source_loaded) {
+                    auto source_opt = LoadPngRGBA(task.frame_paths[frame_idx], task_err);
+                    if (!source_opt) {
+                        ++task_result.stats.tasks_failed;
+                        task_result.ok = false;
+                        task_result.error = "Load failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
+                        abort_requested.store(true, std::memory_order_relaxed);
+                        return task_result;
+                    }
+                    source_image = std::move(*source_opt);
+                    source_loaded = true;
+                }
+
+                const fs::path normal_dir =
+                    CachePaths::variant_dir(cache_root, task.asset_name, task.anim_name, pct, Variant::Normal);
+                const fs::path fg_dir =
+                    CachePaths::variant_dir(cache_root, task.asset_name, task.anim_name, pct, Variant::Foreground);
+                const fs::path bg_dir =
+                    CachePaths::variant_dir(cache_root, task.asset_name, task.anim_name, pct, Variant::Background);
+                std::error_code ec;
+                fs::create_directories(normal_dir, ec);
+                fs::create_directories(fg_dir, ec);
+                fs::create_directories(bg_dir, ec);
+
+                const fs::path normal_path = normal_dir / (std::to_string(out_idx) + ".png");
+                const fs::path fg_path = fg_dir / (std::to_string(out_idx) + ".png");
+                const fs::path bg_path = bg_dir / (std::to_string(out_idx) + ".png");
+
+                const float scale_factor = static_cast<float>(pct) / 100.0f;
+                const int normal_w = std::max(1, static_cast<int>(std::lround(source_image.w * scale_factor)));
+                const int normal_h = std::max(1, static_cast<int>(std::lround(source_image.h * scale_factor)));
+                const int effects_w = std::max(1, normal_w * 2);
+                const int effects_h = std::max(1, normal_h * 2);
+
+                if ((write_mask & kTextureVariantMaskNormal) != 0u) {
+                    auto normal_opt = resize_lanczos_rgba(source_image, normal_w, normal_h, task_err);
+                    if (!normal_opt) {
+                        ++task_result.stats.tasks_failed;
+                        task_result.ok = false;
+                        task_result.error = "Normal resize failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
+                        abort_requested.store(true, std::memory_order_relaxed);
+                        return task_result;
+                    }
+                    if (!SavePngRGBA(normal_path, *normal_opt, task_err)) {
+                        ++task_result.stats.tasks_failed;
+                        task_result.ok = false;
+                        task_result.error = "Save failed: " + normal_path.string() + " : " + task_err;
+                        abort_requested.store(true, std::memory_order_relaxed);
+                        return task_result;
+                    }
+                    task_result.written_files.push_back(normal_path);
+                    ++task_result.stats.pngs_written;
+                }
+
+                if ((write_mask & kTextureVariantMaskForeground) != 0u) {
+                    if (!fg_ready) {
+                        if (!expanded_loaded) {
+                            expanded_source = make_centered_transparent_2x_canvas(source_image);
+                            if (!expanded_source.valid()) {
+                                ++task_result.stats.tasks_failed;
+                                task_result.ok = false;
+                                task_result.error = "Expand canvas failed: " + task.frame_paths[frame_idx].string();
+                                abort_requested.store(true, std::memory_order_relaxed);
+                                return task_result;
+                            }
+                            expanded_loaded = true;
+                        }
+                        if (!apply_effects_on_expanded_canvas(expanded_source,
+                                                              fx_fg,
+                                                              EffectLayerMode::Foreground,
+                                                              use_d3d11_effects,
+                                                              fg_base,
+                                                              task_err)) {
+                            ++task_result.stats.tasks_failed;
+                            task_result.ok = false;
+                            task_result.error = "Foreground effects failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
+                            abort_requested.store(true, std::memory_order_relaxed);
+                            return task_result;
+                        }
+                        fg_ready = true;
+                    }
+                    ImageRGBA fg_scaled = fg_base;
+                    if (pct != 100) {
+                        auto fg_opt = resize_lanczos_rgba(fg_base, effects_w, effects_h, task_err);
+                        if (!fg_opt) {
+                            ++task_result.stats.tasks_failed;
+                            task_result.ok = false;
+                            task_result.error = "Foreground downscale failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
+                            abort_requested.store(true, std::memory_order_relaxed);
+                            return task_result;
+                        }
+                        fg_scaled = std::move(*fg_opt);
+                    }
+                    if (!SavePngRGBA(fg_path, fg_scaled, task_err)) {
+                        ++task_result.stats.tasks_failed;
+                        task_result.ok = false;
+                        task_result.error = "Save failed: " + fg_path.string() + " : " + task_err;
+                        abort_requested.store(true, std::memory_order_relaxed);
+                        return task_result;
+                    }
+                    task_result.written_files.push_back(fg_path);
+                    ++task_result.stats.pngs_written;
+                }
+
+                if ((write_mask & kTextureVariantMaskBackground) != 0u) {
+                    if (!bg_ready) {
+                        if (!expanded_loaded) {
+                            expanded_source = make_centered_transparent_2x_canvas(source_image);
+                            if (!expanded_source.valid()) {
+                                ++task_result.stats.tasks_failed;
+                                task_result.ok = false;
+                                task_result.error = "Expand canvas failed: " + task.frame_paths[frame_idx].string();
+                                abort_requested.store(true, std::memory_order_relaxed);
+                                return task_result;
+                            }
+                            expanded_loaded = true;
+                        }
+                        if (!apply_effects_on_expanded_canvas(expanded_source,
+                                                              fx_bg,
+                                                              EffectLayerMode::Background,
+                                                              use_d3d11_effects,
+                                                              bg_base,
+                                                              task_err)) {
+                            ++task_result.stats.tasks_failed;
+                            task_result.ok = false;
+                            task_result.error = "Background effects failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
+                            abort_requested.store(true, std::memory_order_relaxed);
+                            return task_result;
+                        }
+                        bg_ready = true;
+                    }
+                    ImageRGBA bg_scaled = bg_base;
+                    if (pct != 100) {
+                        auto bg_opt = resize_lanczos_rgba(bg_base, effects_w, effects_h, task_err);
+                        if (!bg_opt) {
+                            ++task_result.stats.tasks_failed;
+                            task_result.ok = false;
+                            task_result.error = "Background downscale failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
+                            abort_requested.store(true, std::memory_order_relaxed);
+                            return task_result;
+                        }
+                        bg_scaled = std::move(*bg_opt);
+                    }
+                    if (!SavePngRGBA(bg_path, bg_scaled, task_err)) {
+                        ++task_result.stats.tasks_failed;
+                        task_result.ok = false;
+                        task_result.error = "Save failed: " + bg_path.string() + " : " + task_err;
+                        abort_requested.store(true, std::memory_order_relaxed);
+                        return task_result;
+                    }
+                    task_result.written_files.push_back(bg_path);
+                    ++task_result.stats.pngs_written;
+                }
+
+                ++task_result.stats.tasks_succeeded;
             }
         }
+
+        return task_result;
+    };
+
+    if (tasks.size() <= 1 || workers <= 1) {
+        for (std::size_t idx = 0; idx < tasks.size(); ++idx) {
+            task_results[idx] = process_animation(tasks[idx]);
+        }
+    } else {
+        const std::uint32_t worker_count = std::max<std::uint32_t>(
+            1u,
+            std::min<std::uint32_t>(workers, static_cast<std::uint32_t>(tasks.size())));
+        ThreadPool pool(worker_count);
+        for (std::size_t idx = 0; idx < tasks.size(); ++idx) {
+            pool.enqueue([&, idx]() {
+                task_results[idx] = process_animation(tasks[idx]);
+            });
+        }
+        pool.wait_idle();
+    }
+
+    std::string first_error;
+    for (auto& task_result : task_results) {
+        add_stats(result.stats, task_result.stats);
+        written_files.insert(written_files.end(),
+                             std::make_move_iterator(task_result.written_files.begin()),
+                             std::make_move_iterator(task_result.written_files.end()));
+        if (task_result.touched_animation) {
+            touched_assets_set.insert(task_result.asset_name);
+            touched_anims_set.insert(task_result.asset_name + "::" + task_result.anim_name);
+        }
+        if (!task_result.ok && first_error.empty()) {
+            first_error = task_result.error;
+        }
+    }
+
+    if (!first_error.empty()) {
+        return finalize_fail(first_error);
     }
 
     result.stats.assets_touched = touched_assets_set.size();

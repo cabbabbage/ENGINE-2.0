@@ -2391,9 +2391,9 @@ bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {
         }
 
         if (assets_) {
-            assets_->library().load_all_from_resources();
+            assets_->library().add_asset(name, manifest_entry);
             if (SDL_Renderer* renderer = assets_->renderer()) {
-                assets_->library().ensureAllAnimationsLoaded(renderer);
+                assets_->library().ensureAnimationsLoadedFor(renderer, std::unordered_set<std::string>{name});
             }
             assets_->show_dev_notice(std::string("Duplicated asset as '") + name + "'");
         }

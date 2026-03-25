@@ -460,21 +460,6 @@ SDL_Texture* AssetListView::preview_texture_for(const Entry& entry) const {
         tex = default_frame_texture(*entry.info);
     }
 
-    if (!tex) {
-        AssetLibrary& lib = assets_->library();
-        auto info = lib.get(key);
-        if (!info && !entry.value.empty() && entry.value != key) {
-            info = lib.get(entry.value);
-        }
-        if (info) {
-            if (SDL_Renderer* renderer = assets_->renderer()) {
-                std::unordered_set<std::string> names{key};
-                lib.loadAnimationsFor(renderer, names);
-            }
-            tex = default_frame_texture(*info);
-        }
-    }
-
     preview_cache_[key] = tex;
     return tex;
 }

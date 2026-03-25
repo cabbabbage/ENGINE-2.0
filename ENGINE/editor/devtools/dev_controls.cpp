@@ -2972,7 +2972,7 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         auto& lib = assets_->library();
         lib.add_asset(sanitized, manifest_entry);
         if (SDL_Renderer* r = assets_->renderer()) {
-            lib.loadAnimationsFor(r, std::unordered_set<std::string>{sanitized});
+            lib.ensureAnimationsLoadedFor(r, std::unordered_set<std::string>{sanitized});
         }
         info = lib.get(sanitized);
     }

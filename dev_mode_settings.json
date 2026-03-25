@@ -10,7 +10,7 @@
             "filters_expanded": false,
             "fog": false,
             "initialized": true,
-            "map_assets": false,
+            "map_assets": true,
             "methods": {
                 "center": true,
                 "childrandom": false,
@@ -24,7 +24,7 @@
             "render_dark_mask": false,
             "types": {
                 "area": false,
-                "boundary": false,
+                "boundary": true,
                 "enemy": false,
                 "npc": false,
                 "object": true,

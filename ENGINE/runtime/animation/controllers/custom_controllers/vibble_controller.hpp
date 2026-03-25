@@ -1,3 +1,11 @@
+// CONTROLLER_META_BEGIN
+// Controller: vibble_controller
+// Asset: vibble (type: object)
+// Available animations [1]:
+//   - default
+// Generated: 2026-03-17 23:48:57
+// CONTROLLER_META_END
+
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 

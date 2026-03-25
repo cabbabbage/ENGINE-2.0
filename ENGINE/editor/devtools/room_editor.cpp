@@ -5982,8 +5982,9 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
     if (selected < 0) {
         return false;
     }
-    return mutate_hitbox_current_frame(
-        [values, selected](std::vector<animation_update::FrameHitBox>& boxes) {
+    std::string normalized_name;
+    const bool changed = mutate_hitbox_current_frame(
+        [values, selected, &normalized_name](std::vector<animation_update::FrameHitBox>& boxes) {
             if (selected >= static_cast<int>(boxes.size())) {
                 return false;
             }
@@ -6000,6 +6001,7 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
                 if (!normalized.empty()) {
                     changed |= (box.name != normalized);
                     box.name = normalized;
+                    normalized_name = normalized;
                 }
             }
             const int next_extrusion = std::max(0, values.extrusion);
@@ -6010,6 +6012,10 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
             return changed;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (changed && !normalized_name.empty() && hitbox_tools_panel_) {
+        hitbox_tools_panel_->set_name_text(normalized_name);
+    }
+    return changed;
 }
 
 bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values) {
@@ -6017,8 +6023,9 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
     if (selected < 0) {
         return false;
     }
-    return mutate_attack_box_current_frame(
-        [values, selected](std::vector<animation_update::FrameAttackBox>& boxes) {
+    std::string normalized_name;
+    const bool changed = mutate_attack_box_current_frame(
+        [values, selected, &normalized_name](std::vector<animation_update::FrameAttackBox>& boxes) {
             if (selected >= static_cast<int>(boxes.size())) {
                 return false;
             }
@@ -6035,6 +6042,7 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
                 if (!normalized.empty()) {
                     changed |= (box.name != normalized);
                     box.name = normalized;
+                    normalized_name = normalized;
                 }
             }
             const int next_extrusion = std::max(0, values.extrusion);
@@ -6049,6 +6057,10 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
             return changed;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (changed && !normalized_name.empty() && attack_box_tools_panel_) {
+        attack_box_tools_panel_->set_name_text(normalized_name);
+    }
+    return changed;
 }
 
 bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope scope) {
@@ -7323,7 +7335,7 @@ bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desi
         return false;
     }
 
-    return mutate_anchor_current_frame(
+    const bool changed = mutate_anchor_current_frame(
         [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
             auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
                 return anchor.name == anchor_edit_.selected_anchor_name;
@@ -7351,6 +7363,10 @@ bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desi
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (changed && anchor_tools_panel_) {
+        anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
+    }
+    return changed;
 }
 
 bool RoomEditor::delete_selected_anchor_in_current_frame() {

@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <vector>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -131,4 +132,11 @@ TEST_CASE("Attack box payload writes canonical corners and preserves damage") {
     CHECK(corners[2]["texture_y"] == 15);
     CHECK(corners[3]["texture_x"] == 4);   // BL
     CHECK(corners[3]["texture_y"] == 15);
+}
+
+TEST_CASE("make_unique_box_name ignores excluded sanitized name") {
+    const std::vector<std::string> names{"hit box"};
+    const std::string result =
+        devmode::room_box_payload::make_unique_box_name("hit box", names, "hit_box", "hit box");
+    CHECK(result == "hit_box");
 }

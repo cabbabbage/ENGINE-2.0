@@ -48,6 +48,7 @@ public:
     void set_box_names(const std::vector<std::string>& names);
     void set_selection(int box_index, int corner_index);
     void clear_selection();
+    void set_name_text(const std::string& value);
     void set_detail_values(const DetailValues& values);
 
     void set_on_select(SelectCallback callback);
@@ -93,7 +94,6 @@ private:
 
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMButton> delete_button_;
-    std::unique_ptr<DMButton> apply_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;
     std::unique_ptr<DMButton> apply_asset_button_;

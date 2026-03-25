@@ -117,6 +117,8 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
 
                 // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
                 // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
+                if (matches("vibble_controller"))
+                        return std::make_unique<vibble_controller>(self);
 
         } catch (...) {
         }

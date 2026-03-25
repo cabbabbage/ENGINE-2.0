@@ -588,8 +588,9 @@ void configure_panel_for_container(DockableCollapsible* panel) {
     panel->reset_scroll();
     panel->set_visible(true);
     panel->force_pointer_ready();
+    panel->setLocked(false);
     panel->set_embedded_focus_state(false);
-    panel->set_embedded_interaction_enabled(false);
+    panel->set_embedded_interaction_enabled(true);
 }
 
 bool read_pixel(SDL_Renderer* renderer, const SDL_Rect& rect, Uint32 format, Uint32& out_pixel) {
@@ -784,6 +785,7 @@ AssetInfoUI::AssetInfoUI() {
             int measured = section->embedded_height(ctx.content_width, embed_screen_h);
             SDL_Rect rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, measured};
             section_bounds_[i] = rect;
+            section->set_rect(rect); // keep event hit-testing aligned with current scroll/layout
             y += measured + ctx.gap;
         }
         if (configure_btn_widget_) {
@@ -867,11 +869,31 @@ AssetInfoUI::AssetInfoUI() {
     });
 
     container_.set_event_function([this](const SDL_Event& e) {
-        if (handle_section_focus_event(e)) {
+        (void)handle_section_focus_event(e);
+        auto handle_section_event = [this, &e](DockableCollapsible* section) -> bool {
+            if (!section) {
+                return false;
+            }
+            if (section->handle_event(e)) {
+                container_.request_layout();
+                if (focused_section_ != section) {
+                    focus_section(section);
+                }
+                return true;
+            }
+            return false;
+        };
+        if (focused_section_ && handle_section_event(focused_section_)) {
             return true;
         }
-        if (focused_section_ && focused_section_->handle_event(e)) {
-            return true;
+        for (auto& section : sections_) {
+            DockableCollapsible* candidate = section.get();
+            if (!candidate || candidate == focused_section_) {
+                continue;
+            }
+            if (handle_section_event(candidate)) {
+                return true;
+            }
         }
         if (configure_btn_widget_ && configure_btn_widget_->handle_event(e)) {
             return true;
@@ -1760,7 +1782,7 @@ void AssetInfoUI::apply_section_focus_states() {
         }
         const bool focused = (section.get() == focused_section_);
         section->set_embedded_focus_state(focused);
-        section->set_embedded_interaction_enabled(focused);
+        section->set_embedded_interaction_enabled(true);
     }
 }
 
@@ -1822,7 +1844,9 @@ bool AssetInfoUI::handle_section_focus_event(const SDL_Event& e) {
         return false;
     }
     focus_section(target);
-    return true;
+    // Keep processing this same event through the newly focused section so
+    // controls react on first click instead of requiring a second click.
+    return false;
 }
 
 void AssetInfoUI::sync_target_tiling_state() {

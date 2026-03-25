@@ -147,8 +147,9 @@ std::string make_unique_box_name(const std::string& desired_name,
                                  const std::string& fallback_base,
                                  const std::string& excluded_name) {
     std::unordered_set<std::string> used;
+    const std::string sanitized_excluded = sanitize_box_name(excluded_name);
     for (const auto& name : existing_names_from(existing_names)) {
-        if (!excluded_name.empty() && name == excluded_name) {
+        if (!sanitized_excluded.empty() && name == sanitized_excluded) {
             continue;
         }
         used.insert(name);

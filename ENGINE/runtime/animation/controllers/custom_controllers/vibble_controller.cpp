@@ -1,3 +1,11 @@
+// CONTROLLER_META_BEGIN
+// Controller: vibble_controller
+// Asset: vibble (type: object)
+// Available animations [1]:
+//   - default
+// Generated: 2026-03-17 23:48:57
+// CONTROLLER_META_END
+
 #include "vibble_controller.hpp"
 
 #include "animation/animation_update.hpp"
@@ -183,8 +191,8 @@ std::string vibble_controller::animation_for_direction(int screen_x, int screen_
         return animations.find(name) != animations.end();
     };
 
-    const std::string forward_anim   = "forward";
-    const std::string backward_anim  = "backward";
+    const std::string forward_anim   = "down";
+    const std::string backward_anim  = "up";
     const std::string left_anim      = "left";
     const std::string right_anim     = "right";
 

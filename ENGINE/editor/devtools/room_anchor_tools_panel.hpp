@@ -76,7 +76,6 @@ private:
 
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMTextBox> rename_textbox_;
-    std::unique_ptr<DMButton> rename_button_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;

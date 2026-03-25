@@ -776,23 +776,102 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
         }
         return expected_hash;
     };
+    bool has_full_expected_hash = false;
+    std::uint64_t full_expected_hash = 0;
+    auto get_full_expected_hash = [&]() -> std::uint64_t {
+        if (!has_full_expected_hash) {
+            full_expected_hash = compute_hash(info, nullptr);
+            has_full_expected_hash = true;
+        }
+        return full_expected_hash;
+    };
 
     auto try_populate = [&](const CacheManager::BundleData& bundle) {
         out_frames.clear();
         return populate_runtime_frames(info, bundle, out_frames, animation_filter);
     };
+    auto bundle_contains_required_folder_animations = [&](const CacheManager::BundleData& bundle) {
+        if (!info.anims_json_.is_object()) {
+            return true;
+        }
+
+        std::unordered_set<std::string> bundle_animation_names;
+        bundle_animation_names.reserve(bundle.animations.size());
+        for (const auto& anim : bundle.animations) {
+            if (anim.name.empty() || anim.frames.empty()) {
+                continue;
+            }
+            bundle_animation_names.insert(anim.name);
+        }
+
+        for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
+            if (!it.value().is_object()) continue;
+            if (!animation_is_selected(it.key(), animation_filter)) continue;
+
+            const nlohmann::json& anim_json = it.value();
+            if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
+                continue;
+            }
+            const auto& source = anim_json["source"];
+            if (source.value("kind", std::string{}) != "folder") {
+                continue;
+            }
+            if (bundle_animation_names.find(it.key()) == bundle_animation_names.end()) {
+                return false;
+            }
+        }
+
+        return true;
+    };
 
     CacheManager::BundleData bundle;
     const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
     if (bundle_loaded) {
+        const bool covers_required_animations =
+            bundle_contains_required_folder_animations(bundle);
         const bool variant_layout_ok = bundle_variant_layout_is_valid(bundle);
         const bool populated = try_populate(bundle);
-        if (populated && variant_layout_ok) {
+        const bool reusable_bundle = populated && variant_layout_ok && covers_required_animations;
+        bool hash_ok = false;
+        if (bundle.content_hash != 0) {
+            const std::uint64_t expected = get_expected_hash();
+            hash_ok = (bundle.content_hash == expected);
+            if (!hash_ok && has_animation_filter) {
+                // A filtered request can reuse a fully-baked bundle.
+                hash_ok = (bundle.content_hash == get_full_expected_hash());
+            }
+        }
+
+        if (reusable_bundle && hash_ok) {
             raw_bundle = bundle;
             return true;
         }
 
-        if (!variant_layout_ok) {
+        if (reusable_bundle && !hash_ok) {
+            const bool inputs_are_newer = inputs_newer_than_bundle(info, bundle_path, animation_filter);
+            if (!inputs_are_newer) {
+                if (!has_animation_filter) {
+                    const std::uint64_t canonical_hash = get_expected_hash();
+                    if (bundle.content_hash != canonical_hash) {
+                        if (!CacheManager::update_bundle_content_hash(bundle_path.generic_string(), canonical_hash)) {
+                            vibble::log::warn("[PrimaryAssetCache] Failed to refresh bundle hash for " + info.name + ".");
+                        } else {
+                            bundle.content_hash = canonical_hash;
+                        }
+                    }
+                }
+                raw_bundle = bundle;
+                return true;
+            }
+        }
+
+        if (!covers_required_animations) {
+            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
+                              " (missing required folder animation entries).");
+        } else if (!hash_ok) {
+            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
+                              " (content hash mismatch).");
+        } else if (!variant_layout_ok) {
             vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name +
                               " (missing full-resolution or inconsistent variant metadata).");
         } else {
@@ -811,7 +890,8 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
     }
 
     rebuilt.content_hash = get_expected_hash();
-    const bool should_persist_rebuilt_bundle = !has_animation_filter || !bundle_loaded;
+    // Never persist filtered bundle builds; they contain only a subset of animations.
+    const bool should_persist_rebuilt_bundle = !has_animation_filter;
     if (should_persist_rebuilt_bundle) {
         if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
             vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");

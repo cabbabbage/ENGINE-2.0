@@ -26,7 +26,6 @@ constexpr int kHeaderHeight = 24;
 RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     add_button_ = std::make_unique<DMButton>("Add Anchor", &DMStyles::CreateButton(), 180, DMButton::height());
     rename_textbox_ = std::make_unique<DMTextBox>("Rename", "");
-    rename_button_ = std::make_unique<DMButton>("Rename", &DMStyles::PrimaryButton(), 120, DMButton::height());
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
     apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
     apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
@@ -164,6 +163,7 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
     }
 
     layout_anchor_buttons();
+    const bool has_selected_anchor = !selected_anchor_name_.empty();
 
     for (std::size_t i = 0; i < anchor_buttons_.size(); ++i) {
         DMButton* button = anchor_buttons_[i].get();
@@ -201,17 +201,14 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    if (rename_textbox_ && rename_textbox_->handle_event(event)) {
+    bool rename_changed = false;
+    if (has_selected_anchor && rename_textbox_ && rename_textbox_->handle_event(event)) {
         handled = true;
+        rename_changed = true;
     }
-
-    if (rename_button_ && rename_button_->handle_event(event)) {
+    if (rename_changed && on_rename_) {
+        on_rename_(rename_textbox_->value());
         handled = true;
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            event.button.button == SDL_BUTTON_LEFT &&
-            on_rename_) {
-            on_rename_(rename_textbox_->value());
-        }
     }
 
     if (delete_button_ && delete_button_->handle_event(event)) {
@@ -248,14 +245,6 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
             on_propagate_) {
             on_propagate_(PropagationScope::Asset);
         }
-    }
-
-    if (event.type == SDL_EVENT_KEY_DOWN &&
-        rename_textbox_ && rename_textbox_->is_editing() &&
-        (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) &&
-        on_rename_) {
-        on_rename_(rename_textbox_->value());
-        handled = true;
     }
 
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) &&
@@ -319,11 +308,9 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
     if (add_button_) {
         add_button_->render(renderer);
     }
-    if (rename_textbox_) {
+    const bool has_selected_anchor = !selected_anchor_name_.empty();
+    if (has_selected_anchor && rename_textbox_) {
         rename_textbox_->render(renderer);
-    }
-    if (rename_button_) {
-        rename_button_->render(renderer);
     }
     if (delete_button_) {
         delete_button_->render(renderer);
@@ -372,12 +359,17 @@ void RoomAnchorToolsPanel::update_layout() const {
 
     const int list_top = header_rect_.y + header_rect_.h + kSectionGap;
     const int row_gap = 2;
+    const bool has_selected_anchor = !selected_anchor_name_.empty();
+    const int controls_width = std::max(0, panel_rect_.w - kPanelPadding * 2);
+    const int rename_h = rename_textbox_ ? rename_textbox_->preferred_height(controls_width) : DMTextBox::height();
     int controls_height = 0;
     controls_height += DMButton::height();                          // add
     controls_height += kSectionGap;
-    controls_height += DMTextBox::height();                         // rename text
-    controls_height += kSectionGap;
-    controls_height += DMButton::height();                          // rename/delete row
+    if (has_selected_anchor) {
+        controls_height += rename_h;                                // rename text
+        controls_height += kSectionGap;
+    }
+    controls_height += DMButton::height();                          // delete
     controls_height += kSectionGap;
     controls_height += DMButton::height();                          // copy next
     controls_height += row_gap;
@@ -398,28 +390,23 @@ void RoomAnchorToolsPanel::update_layout() const {
         std::max(0, panel_rect_.w - kPanelPadding * 2),
         list_height};
 
-    const int controls_width = std::max(0, panel_rect_.w - kPanelPadding * 2);
     const int controls_x = panel_rect_.x + kPanelPadding;
     const int add_y = list_clip_rect_.y + list_clip_rect_.h + kSectionGap;
-    const int rename_y = add_y + DMButton::height() + kSectionGap;
-    const int row_y = rename_y + DMTextBox::height() + kSectionGap;
+    int row_y = add_y + DMButton::height() + kSectionGap;
 
     if (add_button_) {
         add_button_->set_rect(SDL_Rect{controls_x, add_y, controls_width, DMButton::height()});
     }
     if (rename_textbox_) {
-        rename_textbox_->set_rect(SDL_Rect{controls_x, rename_y, controls_width, DMTextBox::height()});
-    }
-    const int button_row_gap = kSectionGap;
-    const int half_width = std::max(64, (controls_width - button_row_gap) / 2);
-    if (rename_button_) {
-        rename_button_->set_rect(SDL_Rect{controls_x, row_y, half_width, DMButton::height()});
+        if (has_selected_anchor) {
+            rename_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, rename_h});
+            row_y += rename_h + kSectionGap;
+        } else {
+            rename_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
     }
     if (delete_button_) {
-        delete_button_->set_rect(SDL_Rect{controls_x + half_width + button_row_gap,
-                                          row_y,
-                                          std::max(64, controls_width - half_width - button_row_gap),
-                                          DMButton::height()});
+        delete_button_->set_rect(SDL_Rect{controls_x, row_y, controls_width, DMButton::height()});
     }
 
     int copy_y = row_y + DMButton::height() + kSectionGap;

@@ -1204,7 +1204,10 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
     if (!method.empty() && !method_filter_enabled(method)) {
         return false;
     }
-    const bool is_map_asset = !asset.spawn_id.empty() && map_spawn_ids_.find(asset.spawn_id) != map_spawn_ids_.end();
+    const bool is_map_wide_method = (method == "mapwide");
+    const bool is_map_asset = is_map_wide_method ||
+                              (!asset.spawn_id.empty() &&
+                               map_spawn_ids_.find(asset.spawn_id) != map_spawn_ids_.end());
     const FilterState& state_ref = state();
     if (is_map_asset && !state_ref.map_assets) {
         return false;

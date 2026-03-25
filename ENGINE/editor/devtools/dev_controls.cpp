@@ -1546,6 +1546,9 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
 }
 
 bool DevControls::is_pointer_over_dev_ui(int x, int y) const {
+    if (image_effect_panel_ && image_effect_panel_->is_visible()) {
+        return true;
+    }
     if (camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_point_inside(x, y)) {
         return true;
     }
@@ -1818,8 +1821,10 @@ void DevControls::update(const Input& input) {
 
         const bool frame_editing = frame_editor_session_ && frame_editor_session_->is_active();
         if (!frame_editing) {
-            const bool camera_panel_blocking = camera_panel_ && camera_panel_->is_visible() && (pointer_over_camera_panel_ || pointer_over_image_effect_panel_);
-            if (!camera_panel_blocking) {
+            const bool image_effect_modal_open = image_effect_panel_ && image_effect_panel_->is_visible();
+            const bool camera_panel_blocking =
+                camera_panel_ && camera_panel_->is_visible() && (pointer_over_camera_panel_ || pointer_over_image_effect_panel_);
+            if (!image_effect_modal_open && !camera_panel_blocking) {
                 room_editor_->update(input);
             }
         } else {
@@ -1899,6 +1904,9 @@ void DevControls::update(const Input& input) {
 void DevControls::update_ui(const Input& input) {
     if (!enabled_) return;
     if (!room_editor_) return;
+    if (image_effect_panel_ && image_effect_panel_->is_visible()) {
+        return;
+    }
 
     const bool room_editor_active = (mode_ == Mode::RoomEditor) && room_editor_->is_enabled();
     const bool spawn_panel_visible = room_editor_->is_spawn_group_panel_visible();
@@ -3187,10 +3195,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
         return;
     }
-    const bool block_image_effect = pointer_event_inside_image_effect_panel ||
-        (keyboard_like_event && pointer_over_image_effect_panel_);
-    if (block_image_effect) {
-        if (!pointer_relevant && input_) {
+    const bool image_effect_modal_open = image_effect_panel_ && image_effect_panel_->is_visible();
+    if (image_effect_modal_open) {
+        if (input_) {
             input_->consumeEvent(event);
         }
         return;
@@ -4104,7 +4111,9 @@ void DevControls::close_all_floating_panels() {
 void DevControls::maybe_update_mode_from_height() {}
 
 bool DevControls::is_modal_blocking_panels() const {
-    return room_editor_ && room_editor_->has_active_modal();
+    const bool room_modal = room_editor_ && room_editor_->has_active_modal();
+    const bool image_effect_modal = image_effect_panel_ && image_effect_panel_->is_visible();
+    return room_modal || image_effect_modal;
 }
 
 void DevControls::pulse_modal_header() {

@@ -937,7 +937,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     // Cache root
     fs::path cache_root = ResolveCacheRoot(repo_root, opt);
 
-    // Update effects cache like python (does not influence rebuild selection in current python)
+    // Update effects cache like python. FG/BG freshness checks compare against this timestamp.
     if (!opt.dry_run) {
         update_effects_cache_like_python(cache_root, manifest, log);
     }
@@ -989,11 +989,15 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     source_batch_index.reserve(1024);
     std::uint64_t planned_scale_tasks = 0;
 
-    // Track per-animation flagged indices to clear if everything succeeds
+    // Track per-animation flagged variants to clear if everything succeeds.
+    struct FlagClearFrame {
+        int frame_idx = -1;
+        std::uint8_t variants = kVariantAll;
+    };
     struct FlagClear {
         std::string asset_name;
         std::string anim_name;
-        std::vector<int> flagged;
+        std::vector<FlagClearFrame> flagged;
     };
     std::vector<FlagClear> to_clear;
 
@@ -1055,8 +1059,22 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             for (size_t i = 0; i < frame_paths.size(); ++i) frame_mtimes[i] = safe_last_write_time(frame_paths[i]);
 
             const ordered_json* queue_anim_entry = FindAnimEntry(rebuild_queue, asset_name, anim_name, false);
-            std::vector<int> flagged = queue_anim_entry ? FlaggedFrames(*queue_anim_entry) : std::vector<int>{};
-            std::unordered_set<int> flagged_set(flagged.begin(), flagged.end());
+            std::vector<FlaggedFrame> flagged_entries =
+                queue_anim_entry ? FlaggedFramesDetailed(*queue_anim_entry) : std::vector<FlaggedFrame>{};
+
+            std::unordered_map<int, std::uint8_t> flagged_masks_by_frame;
+            flagged_masks_by_frame.reserve(flagged_entries.size());
+            for (const FlaggedFrame& flagged_entry : flagged_entries) {
+                const int frame_idx = flagged_entry.index;
+                if (frame_idx < 0) {
+                    continue;
+                }
+                const std::uint8_t mask = flagged_entry.has_variant_mask ? flagged_entry.variants : kVariantAll;
+                auto [it, inserted] = flagged_masks_by_frame.emplace(frame_idx, mask);
+                if (!inserted) {
+                    it->second = static_cast<std::uint8_t>(it->second | mask);
+                }
+            }
 
             std::vector<int> frame_sequence(frame_paths.size());
             std::iota(frame_sequence.begin(), frame_sequence.end(), 0);
@@ -1065,8 +1083,12 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             for (int pct : scale_pcts) {
                 float scale_factor = static_cast<float>(pct) / 100.0f;
 
-                // Group output indices by source idx where rebuild needed
-                std::unordered_map<int, std::vector<int>> output_groups;
+                struct OutputGroup {
+                    int src_idx = 0;
+                    std::uint8_t write_mask = 0;
+                    std::vector<int> out_indices;
+                };
+                std::unordered_map<std::string, OutputGroup> output_groups;
                 output_groups.reserve(frame_paths.size());
 
                 for (int out_idx = 0; out_idx < static_cast<int>(frame_sequence.size()); ++out_idx) {
@@ -1074,35 +1096,55 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (src_idx < 0 || src_idx >= static_cast<int>(frame_paths.size())) continue;
                     if (!opt.filters.matches_source_frame(src_idx)) continue;
 
-                    bool flagged = flagged_set.count(src_idx) > 0;
-                    bool needs = opt.force_rebuild || flagged;
-                    fs::file_time_type baseline = effects_cache_mtime;
+                    const auto flagged_it = flagged_masks_by_frame.find(src_idx);
+                    const std::uint8_t flagged_mask = flagged_it != flagged_masks_by_frame.end() ? flagged_it->second : 0u;
+                    const bool flagged_normal = (flagged_mask & kVariantNormal) != 0u;
+                    const bool flagged_foreground = (flagged_mask & kVariantForeground) != 0u;
+                    const bool flagged_background = (flagged_mask & kVariantBackground) != 0u;
+
+                    fs::file_time_type normal_baseline = fs::file_time_type::min();
                     if (src_idx >= 0 && src_idx < static_cast<int>(frame_mtimes.size())) {
-                        baseline = std::max(baseline, frame_mtimes[static_cast<size_t>(src_idx)]);
+                        normal_baseline = frame_mtimes[static_cast<size_t>(src_idx)];
                     }
+                    fs::file_time_type effects_baseline = std::max(normal_baseline, effects_cache_mtime);
 
                     fs::path npath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Normal, out_idx);
                     fs::path fpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Foreground, out_idx);
                     fs::path bpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Background, out_idx);
 
-                    bool outputs_stale =
-                        asset_meta_changed ||
-                        file_missing_or_stale(npath, baseline) ||
-                        file_missing_or_stale(fpath, baseline) ||
-                        file_missing_or_stale(bpath, baseline);
+                    const bool stale_normal =
+                        asset_meta_changed || file_missing_or_stale(npath, normal_baseline);
+                    const bool stale_foreground =
+                        asset_meta_changed || file_missing_or_stale(fpath, effects_baseline);
+                    const bool stale_background =
+                        asset_meta_changed || file_missing_or_stale(bpath, effects_baseline);
 
-                    // If this frame was flagged but every expected output is already fresh relative
-                    // to the latest inputs, skip the work and just clear the flag later.
-                    if (flagged && !opt.force_rebuild && !outputs_stale) {
+                    const bool write_normal = opt.force_rebuild || flagged_normal || stale_normal;
+                    const bool write_foreground = opt.force_rebuild || flagged_foreground || stale_foreground;
+                    const bool write_background = opt.force_rebuild || flagged_background || stale_background;
+
+                    std::uint8_t write_mask = 0u;
+                    if (write_normal) {
+                        write_mask = static_cast<std::uint8_t>(write_mask | kVariantNormal);
+                    }
+                    if (write_foreground) {
+                        write_mask = static_cast<std::uint8_t>(write_mask | kVariantForeground);
+                    }
+                    if (write_background) {
+                        write_mask = static_cast<std::uint8_t>(write_mask | kVariantBackground);
+                    }
+
+                    if (write_mask == 0u) {
                         continue;
                     }
 
-                    if (!needs) {
-                        needs = outputs_stale;
+                    const std::string group_key = std::to_string(src_idx) + ":" + std::to_string(static_cast<int>(write_mask));
+                    auto [group_it, inserted] = output_groups.emplace(group_key, OutputGroup{});
+                    if (inserted) {
+                        group_it->second.src_idx = src_idx;
+                        group_it->second.write_mask = write_mask;
                     }
-                    if (needs) {
-                        output_groups[src_idx].push_back(out_idx);
-                    }
+                    group_it->second.out_indices.push_back(out_idx);
                 }
 
                 if (output_groups.empty()) continue;
@@ -1120,18 +1162,22 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 }
 
                 for (auto& kv : output_groups) {
-                    int src_idx = kv.first;
+                    OutputGroup& group = kv.second;
+                    const int src_idx = group.src_idx;
                     WorkItem w;
                     w.asset_name = asset_name;
                     w.anim_name = anim_name;
                     w.src_frame_index = src_idx;
-                    w.out_indices = std::move(kv.second);
+                    w.out_indices = std::move(group.out_indices);
                     w.scale_pct = pct;
                     w.scale_factor = scale_factor;
                     w.src_png_path = frame_paths[src_idx];
                     w.out_normal_dir = normal_dir;
                     w.out_foreground_dir = fg_dir;
                     w.out_background_dir = bg_dir;
+                    w.write_normal = (group.write_mask & kVariantNormal) != 0u;
+                    w.write_foreground = (group.write_mask & kVariantForeground) != 0u;
+                    w.write_background = (group.write_mask & kVariantBackground) != 0u;
                     w.fx_foreground = fx_fg;
                     w.fx_background = fx_bg;
 
@@ -1155,8 +1201,15 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
             // Only clear the frames that were flagged at the start, and only after full success.
             // This matches Python: it clears only flagged_frames, not missing-output rebuilds.
-            if (!flagged.empty()) {
-                to_clear.push_back(FlagClear{asset_name, anim_name, flagged});
+            if (!flagged_entries.empty()) {
+                FlagClear clear_entry;
+                clear_entry.asset_name = asset_name;
+                clear_entry.anim_name = anim_name;
+                clear_entry.flagged.reserve(flagged_masks_by_frame.size());
+                for (const auto& flagged_pair : flagged_masks_by_frame) {
+                    clear_entry.flagged.push_back(FlagClearFrame{flagged_pair.first, flagged_pair.second});
+                }
+                to_clear.push_back(std::move(clear_entry));
             }
         }
     }
@@ -1257,44 +1310,54 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     }
 
                     ImageRGBA img = *resized_opt;
-                    ImageRGBA expanded = make_centered_transparent_2x_canvas(img);
-                    if (!expanded.valid()) {
-                        tasks_fail.fetch_add(remaining_scales);
-                        any_fail.store(true);
-                        std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Expand canvas failed: " + batch.src_png_path.string();
-                        log.error("Expand canvas failed: " + batch.src_png_path.string());
-                        return;
+                    const bool need_fg = w.write_foreground;
+                    const bool need_bg = w.write_background;
+
+                    ImageRGBA expanded;
+                    if (need_fg || need_bg) {
+                        expanded = make_centered_transparent_2x_canvas(img);
+                        if (!expanded.valid()) {
+                            tasks_fail.fetch_add(remaining_scales);
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Expand canvas failed: " + batch.src_png_path.string();
+                            log.error("Expand canvas failed: " + batch.src_png_path.string());
+                            return;
+                        }
                     }
 
                     ImageRGBA fg_img;
-                    if (!apply_effects_on_expanded_canvas(expanded,
-                                                          w.fx_foreground,
-                                                          EffectLayerMode::Foreground,
-                                                          use_d3d11_effects,
-                                                          fg_img,
-                                                          err)) {
-                        tasks_fail.fetch_add(remaining_scales);
-                        any_fail.store(true);
-                        std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Foreground effects failed: " + batch.src_png_path.string() + " : " + err;
-                        log.error("Foreground effects failed: " + batch.src_png_path.string() + " : " + err);
-                        return;
+                    if (need_fg) {
+                        if (!apply_effects_on_expanded_canvas(expanded,
+                                                              w.fx_foreground,
+                                                              EffectLayerMode::Foreground,
+                                                              use_d3d11_effects,
+                                                              fg_img,
+                                                              err)) {
+                            tasks_fail.fetch_add(remaining_scales);
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Foreground effects failed: " + batch.src_png_path.string() + " : " + err;
+                            log.error("Foreground effects failed: " + batch.src_png_path.string() + " : " + err);
+                            return;
+                        }
                     }
 
                     ImageRGBA bg_img;
-                    if (!apply_effects_on_expanded_canvas(expanded,
-                                                          w.fx_background,
-                                                          EffectLayerMode::Background,
-                                                          use_d3d11_effects,
-                                                          bg_img,
-                                                          err)) {
-                        tasks_fail.fetch_add(remaining_scales);
-                        any_fail.store(true);
-                        std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Background effects failed: " + batch.src_png_path.string() + " : " + err;
-                        log.error("Background effects failed: " + batch.src_png_path.string() + " : " + err);
-                        return;
+                    if (need_bg) {
+                        if (!apply_effects_on_expanded_canvas(expanded,
+                                                              w.fx_background,
+                                                              EffectLayerMode::Background,
+                                                              use_d3d11_effects,
+                                                              bg_img,
+                                                              err)) {
+                            tasks_fail.fetch_add(remaining_scales);
+                            any_fail.store(true);
+                            std::lock_guard<std::mutex> lk(err_mu);
+                            if (first_error.empty()) first_error = "Background effects failed: " + batch.src_png_path.string() + " : " + err;
+                            log.error("Background effects failed: " + batch.src_png_path.string() + " : " + err);
+                            return;
+                        }
                     }
 
                     // Save all requested output indices
@@ -1304,35 +1367,44 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                         fs::path bpath = w.out_background_dir / (std::to_string(out_idx) + ".png");
 
                         // Python overwrites files for scheduled outputs, so we always write.
-                        std::string e1;
-                        if (!ImageCacheGenerator::SavePngRGBA(npath, img, e1)) {
-                            tasks_fail.fetch_add(remaining_scales);
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Save failed: " + npath.string() + " : " + e1;
-                            log.error("Save failed: " + npath.string() + " : " + e1);
-                            return;
-                        }
-                        std::string e2;
-                        if (!ImageCacheGenerator::SavePngRGBA(fpath, fg_img, e2)) {
-                            tasks_fail.fetch_add(remaining_scales);
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Save failed: " + fpath.string() + " : " + e2;
-                            log.error("Save failed: " + fpath.string() + " : " + e2);
-                            return;
-                        }
-                        std::string e3;
-                        if (!ImageCacheGenerator::SavePngRGBA(bpath, bg_img, e3)) {
-                            tasks_fail.fetch_add(remaining_scales);
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Save failed: " + bpath.string() + " : " + e3;
-                            log.error("Save failed: " + bpath.string() + " : " + e3);
-                            return;
+                        if (w.write_normal) {
+                            std::string e1;
+                            if (!ImageCacheGenerator::SavePngRGBA(npath, img, e1)) {
+                                tasks_fail.fetch_add(remaining_scales);
+                                any_fail.store(true);
+                                std::lock_guard<std::mutex> lk(err_mu);
+                                if (first_error.empty()) first_error = "Save failed: " + npath.string() + " : " + e1;
+                                log.error("Save failed: " + npath.string() + " : " + e1);
+                                return;
+                            }
+                            pngs_written.fetch_add(1);
                         }
 
-                        pngs_written.fetch_add(3);
+                        if (w.write_foreground) {
+                            std::string e2;
+                            if (!ImageCacheGenerator::SavePngRGBA(fpath, fg_img, e2)) {
+                                tasks_fail.fetch_add(remaining_scales);
+                                any_fail.store(true);
+                                std::lock_guard<std::mutex> lk(err_mu);
+                                if (first_error.empty()) first_error = "Save failed: " + fpath.string() + " : " + e2;
+                                log.error("Save failed: " + fpath.string() + " : " + e2);
+                                return;
+                            }
+                            pngs_written.fetch_add(1);
+                        }
+
+                        if (w.write_background) {
+                            std::string e3;
+                            if (!ImageCacheGenerator::SavePngRGBA(bpath, bg_img, e3)) {
+                                tasks_fail.fetch_add(remaining_scales);
+                                any_fail.store(true);
+                                std::lock_guard<std::mutex> lk(err_mu);
+                                if (first_error.empty()) first_error = "Save failed: " + bpath.string() + " : " + e3;
+                                log.error("Save failed: " + bpath.string() + " : " + e3);
+                                return;
+                            }
+                            pngs_written.fetch_add(1);
+                        }
                     }
 
                     tasks_ok.fetch_add(1);
@@ -1363,20 +1435,23 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
     result.ok = true;
 
-    // Clear only originally-flagged frames (python behavior), after full success
+    // Clear originally-flagged frame variants after full success.
     for (auto& c : to_clear) {
         ordered_json* anim_entry = FindAnimEntry(rebuild_queue, c.asset_name, c.anim_name, true);
         if (!anim_entry) {
             continue;
         }
-        EnsureFramesArray(*anim_entry,
-                          c.flagged.empty() ? 0 : (*std::max_element(c.flagged.begin(), c.flagged.end()) + 1));
-        auto& frames = (*anim_entry)["frames"];
-        for (int idx : c.flagged) {
-            if (idx < 0 || idx >= static_cast<int>(frames.size())) continue;
-            auto& entry = frames[idx];
-            if (!entry.is_object()) entry = ordered_json::object();
-            entry["needs_rebuild"] = false;
+        int max_frame_idx = -1;
+        for (const auto& flagged_frame : c.flagged) {
+            max_frame_idx = std::max(max_frame_idx, flagged_frame.frame_idx);
+        }
+        EnsureFramesArray(*anim_entry, std::max(0, max_frame_idx + 1));
+
+        for (const auto& flagged_frame : c.flagged) {
+            if (flagged_frame.frame_idx < 0) {
+                continue;
+            }
+            ClearFrameFlag(*anim_entry, flagged_frame.frame_idx, flagged_frame.variants);
             rebuild_queue_dirty = true;
         }
     }

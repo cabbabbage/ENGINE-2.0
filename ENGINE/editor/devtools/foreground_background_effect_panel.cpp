@@ -320,10 +320,6 @@ fs::path project_cache_root() {
     return fs::path(PROJECT_ROOT) / "cache";
 }
 
-const char* variant_label(ForegroundBackgroundEffectPanel::PreviewSide side) {
-    return side == ForegroundBackgroundEffectPanel::PreviewSide::Foreground ? "foreground" : "background";
-}
-
 } // namespace
 
 ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets, int x, int y)
@@ -954,6 +950,7 @@ bool ForegroundBackgroundEffectPanel::generate_preview_with_cli(PreviewSide side
     const std::string asset_key = selected_asset_.empty()
                                       ? std::string("default")
                                       : std::to_string(std::hash<std::string>{}(selected_asset_));
+    const char* layer_name = (side == PreviewSide::Foreground) ? "foreground" : "background";
 
     std::error_code ec;
     const fs::path asset_preview_dir = preview_temp_root_ / asset_key;
@@ -963,13 +960,13 @@ bool ForegroundBackgroundEffectPanel::generate_preview_with_cli(PreviewSide side
         return false;
     }
 
-    const fs::path output_path = asset_preview_dir / (std::string("preview_") + variant_label(side) + ".png");
+    const fs::path output_path = asset_preview_dir / (std::string("preview_") + layer_name + ".png");
 
     std::ostringstream cmd;
     cmd << '"' << tool_path.string() << '"' << ' '
         << '"' << input_copy_path << '"' << ' '
         << '"' << output_path.string() << '"' << ' '
-        << variant_label(side) << ' '
+        << layer_name << ' '
         << settings.contrast << ' '
         << settings.brightness << ' '
         << settings.blur << ' '

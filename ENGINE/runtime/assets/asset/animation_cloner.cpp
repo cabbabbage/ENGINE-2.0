@@ -172,7 +172,6 @@ bool AnimationCloner::Clone(const Animation& source,
     }
 
     dest.movement_paths_.clear();
-    dest.frames.clear();
     dest.movement_paths_.resize(source.movement_paths_.size());
 
     for (std::size_t path_idx = 0; path_idx < dest.movement_paths_.size(); ++path_idx) {
@@ -202,19 +201,6 @@ bool AnimationCloner::Clone(const Animation& source,
             dst_frame.is_last     = (dst_idx + 1 == frame_count);
             dst_frame.prev        = (dst_idx > 0) ? &dst_path[dst_idx - 1] : nullptr;
             dst_frame.next        = (dst_idx + 1 < frame_count) ? &dst_path[dst_idx + 1] : nullptr;
-
-            dst_frame.variants.clear();
-            dst_frame.variants.reserve(variant_count);
-
-            const Animation::FrameCache& dst_cache = dest.frame_cache_[dst_idx];
-            for (std::size_t v = 0; v < variant_count; ++v) {
-                FrameVariant var;
-                var.varient                     = static_cast<int>(v);
-                var.base_texture                = (v < dst_cache.textures.size()) ? dst_cache.textures[v] : nullptr;
-                var.foreground_texture          = (v < dst_cache.foreground_textures.size()) ? dst_cache.foreground_textures[v] : nullptr;
-                var.background_texture          = (v < dst_cache.background_textures.size()) ? dst_cache.background_textures[v] : nullptr;
-                dst_frame.variants.push_back(var);
-            }
 
             if (src_frame) {
                 dst_frame.anchor_points.clear();
@@ -258,9 +244,6 @@ bool AnimationCloner::Clone(const Animation& source,
                 dst_frame.rebuild_attack_box_lookup();
             }
 
-            if (path_idx == 0) {
-                dest.frames.push_back(&dst_frame);
-            }
         }
     }
 
@@ -280,8 +263,7 @@ bool AnimationCloner::Clone(const Animation& source,
         }
     }
 
-    dest.number_of_frames = static_cast<int>(frame_count);
-    dest.preview_texture = (!dest.frame_cache_.empty() && !dest.frame_cache_[0].textures.empty()) ? dest.frame_cache_[0].textures[0] : nullptr;
+    dest.synchronize_runtime_frames();
 
     return !dest.frame_cache_.empty();
 }

@@ -1155,8 +1155,8 @@ void SceneRenderer::render() {
             const world::GridPoint* gp = traversal_entry.grid_point ? traversal_entry.grid_point
                                                                     : cam.grid_point_for_asset(asset);
             const float perspective_scale =
-                (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
-                    ? gp->perspective_scale
+                (gp && std::isfinite(gp->projection.perspective_scale) && gp->projection.perspective_scale > 0.0f)
+                    ? gp->projection.perspective_scale
                     : 1.0f;
             const float base_world_z = static_cast<float>(asset->world_z());
             const double depth_bias = asset->render_depth_bias();

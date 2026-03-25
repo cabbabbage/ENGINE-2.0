@@ -4346,10 +4346,10 @@ bool RoomEditor::asset_anchor_screen_position(const WarpedScreenGrid& cam,
     }
 
     if (const auto* projected = cam.grid_point_for_asset(asset)) {
-        if (std::isfinite(projected->screen.x) && std::isfinite(projected->screen.y)) {
+        if (std::isfinite(projected->projection.screen.x) && std::isfinite(projected->projection.screen.y)) {
             out_screen = SDL_Point{
-                static_cast<int>(std::lround(projected->screen.x)),
-                static_cast<int>(std::lround(projected->screen.y))
+                static_cast<int>(std::lround(projected->projection.screen.x)),
+                static_cast<int>(std::lround(projected->projection.screen.y))
             };
             return true;
         }
@@ -4577,8 +4577,8 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
     const float base_depth = static_cast<float>(asset->world_z());
     const auto* gp = cam.grid_point_for_asset(asset);
     const float perspective_scale =
-        (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
-            ? gp->perspective_scale
+        (gp && std::isfinite(gp->projection.perspective_scale) && gp->projection.perspective_scale > 0.0f)
+            ? gp->projection.perspective_scale
             : 1.0f;
 
     for (const auto& obj : asset->render_package) {
@@ -4664,16 +4664,16 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     }
 
     auto* gp = cam.grid_point_for_asset(asset);
-    if (!gp || !gp->on_screen) {
+    if (!gp || !gp->projection.on_screen) {
         return false;
     }
 
-    if (gp->perspective_scale <= 0.0f || gp->vertical_scale <= 0.0f) {
+    if (gp->projection.perspective_scale <= 0.0f || gp->projection.vertical_scale <= 0.0f) {
         return false;
     }
 
     if (compute_asset_render_package_bounds(cam, asset, out_rect)) {
-        out_screen_y = static_cast<int>(std::lround(gp->screen.y));
+        out_screen_y = static_cast<int>(std::lround(gp->projection.screen.y));
         return true;
     }
 
@@ -4710,8 +4710,8 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
         scaled_fh = static_cast<float>(fh) * fallback_runtime_scale;
     }
 
-    const float screen_width = scaled_fw * gp->perspective_scale;
-    const float screen_height = scaled_fh * gp->perspective_scale * gp->vertical_scale;
+    const float screen_width = scaled_fw * gp->projection.perspective_scale;
+    const float screen_height = scaled_fh * gp->projection.perspective_scale * gp->projection.vertical_scale;
     if (!std::isfinite(screen_width) || !std::isfinite(screen_height) ||
         screen_width <= 0.0f || screen_height <= 0.0f) {
         return false;
@@ -4720,8 +4720,8 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     const int sw = std::max(1, static_cast<int>(std::lround(static_cast<double>(screen_width))));
     const int sh = std::max(1, static_cast<int>(std::lround(static_cast<double>(screen_height))));
 
-    const float center_x = gp->screen.x;
-    const float center_y = gp->screen.y;
+    const float center_x = gp->projection.screen.x;
+    const float center_y = gp->projection.screen.y;
     const int   left     = static_cast<int>(std::lround(center_x - static_cast<float>(sw) * 0.5f));
     const int   top      = static_cast<int>(std::lround(center_y)) - sh;
     out_rect             = SDL_Rect{left, top, sw, sh};
@@ -6070,14 +6070,14 @@ bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope
     Asset* target = hitbox_edit_.target_asset;
     std::shared_ptr<AssetInfo> target_info = target->info;
     auto current_anim_it = target_info->animations.find(hitbox_edit_.animation_id);
-    if (current_anim_it == target_info->animations.end() || current_anim_it->second.frames.empty()) {
+    if (current_anim_it == target_info->animations.end() || !current_anim_it->second.has_frames()) {
         return false;
     }
 
-    const std::size_t source_frame_count = current_anim_it->second.frames.size();
+    const std::size_t source_frame_count = current_anim_it->second.frame_count();
     const std::size_t source_frame_index = static_cast<std::size_t>(
         devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, static_cast<int>(source_frame_count)));
-    AnimationFrame* source_frame = current_anim_it->second.frames[source_frame_index];
+    AnimationFrame* source_frame = current_anim_it->second.primary_frame_at(source_frame_index);
     if (!source_frame) {
         return false;
     }
@@ -6086,7 +6086,7 @@ bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope
     std::unordered_map<std::string, std::vector<std::size_t>> apply_indices;
     if (scope == EditorFramePropagationScope::Asset) {
         for (const auto& pair : target_info->animations) {
-            const auto& frames = pair.second.frames;
+            const auto& frames = pair.second.primary_frames();
             if (frames.empty()) {
                 continue;
             }
@@ -6116,7 +6116,7 @@ bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope
     bool updated_any = false;
     for (auto& pair : apply_indices) {
         auto anim_it = target_info->animations.find(pair.first);
-        if (anim_it == target_info->animations.end() || anim_it->second.frames.empty()) {
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
             continue;
         }
 
@@ -6125,13 +6125,13 @@ bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope
         indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
 
         nlohmann::json payload = target_info->animation_payload(pair.first);
-        const std::size_t frame_count = anim_it->second.frames.size();
+        const std::size_t frame_count = anim_it->second.frame_count();
         bool payload_changed = false;
         for (std::size_t frame_index : indices) {
             if (frame_index >= frame_count) {
                 continue;
             }
-            AnimationFrame* frame = anim_it->second.frames[frame_index];
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
             if (!frame) {
                 continue;
             }
@@ -6203,14 +6203,14 @@ bool RoomEditor::apply_attack_box_current_frame_to_scope(EditorFramePropagationS
     Asset* target = attack_box_edit_.target_asset;
     std::shared_ptr<AssetInfo> target_info = target->info;
     auto current_anim_it = target_info->animations.find(attack_box_edit_.animation_id);
-    if (current_anim_it == target_info->animations.end() || current_anim_it->second.frames.empty()) {
+    if (current_anim_it == target_info->animations.end() || !current_anim_it->second.has_frames()) {
         return false;
     }
 
-    const std::size_t source_frame_count = current_anim_it->second.frames.size();
+    const std::size_t source_frame_count = current_anim_it->second.frame_count();
     const std::size_t source_frame_index = static_cast<std::size_t>(
         devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, static_cast<int>(source_frame_count)));
-    AnimationFrame* source_frame = current_anim_it->second.frames[source_frame_index];
+    AnimationFrame* source_frame = current_anim_it->second.primary_frame_at(source_frame_index);
     if (!source_frame) {
         return false;
     }
@@ -6219,7 +6219,7 @@ bool RoomEditor::apply_attack_box_current_frame_to_scope(EditorFramePropagationS
     std::unordered_map<std::string, std::vector<std::size_t>> apply_indices;
     if (scope == EditorFramePropagationScope::Asset) {
         for (const auto& pair : target_info->animations) {
-            const auto& frames = pair.second.frames;
+            const auto& frames = pair.second.primary_frames();
             if (frames.empty()) {
                 continue;
             }
@@ -6249,7 +6249,7 @@ bool RoomEditor::apply_attack_box_current_frame_to_scope(EditorFramePropagationS
     bool updated_any = false;
     for (auto& pair : apply_indices) {
         auto anim_it = target_info->animations.find(pair.first);
-        if (anim_it == target_info->animations.end() || anim_it->second.frames.empty()) {
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
             continue;
         }
 
@@ -6258,13 +6258,13 @@ bool RoomEditor::apply_attack_box_current_frame_to_scope(EditorFramePropagationS
         indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
 
         nlohmann::json payload = target_info->animation_payload(pair.first);
-        const std::size_t frame_count = anim_it->second.frames.size();
+        const std::size_t frame_count = anim_it->second.frame_count();
         bool payload_changed = false;
         for (std::size_t frame_index : indices) {
             if (frame_index >= frame_count) {
                 continue;
             }
-            AnimationFrame* frame = anim_it->second.frames[frame_index];
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
             if (!frame) {
                 continue;
             }
@@ -6566,8 +6566,8 @@ void RoomEditor::update_asset_editor_layout() {
 
             std::string frame_label = "Frame";
             auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-            if (anim_it != anchor_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
-                const int total_frames = static_cast<int>(anim_it->second.frames.size());
+            if (anim_it != anchor_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
+                const int total_frames = static_cast<int>(anim_it->second.frame_count());
                 const int shown_frame =
                     devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, total_frames) + 1;
                 frame_label = std::to_string(shown_frame) + " / " + std::to_string(total_frames);
@@ -6583,8 +6583,8 @@ void RoomEditor::update_asset_editor_layout() {
 
             std::string frame_label = "Frame";
             auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
-            if (anim_it != movement_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
-                const int total_frames = static_cast<int>(anim_it->second.frames.size());
+            if (anim_it != movement_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
+                const int total_frames = static_cast<int>(anim_it->second.frame_count());
                 const int shown_frame =
                     devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index, total_frames) + 1;
                 frame_label = std::to_string(shown_frame) + " / " + std::to_string(total_frames);
@@ -6599,8 +6599,8 @@ void RoomEditor::update_asset_editor_layout() {
                 hitbox_edit_.animation_id.empty() ? std::string("No Animation") : hitbox_edit_.animation_id;
             std::string frame_label = "Frame";
             auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
-            if (anim_it != hitbox_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
-                const int total_frames = static_cast<int>(anim_it->second.frames.size());
+            if (anim_it != hitbox_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
+                const int total_frames = static_cast<int>(anim_it->second.frame_count());
                 const int shown_frame =
                     devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, total_frames) + 1;
                 frame_label = std::to_string(shown_frame) + " / " + std::to_string(total_frames);
@@ -6615,8 +6615,8 @@ void RoomEditor::update_asset_editor_layout() {
                 attack_box_edit_.animation_id.empty() ? std::string("No Animation") : attack_box_edit_.animation_id;
             std::string frame_label = "Frame";
             auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
-            if (anim_it != attack_box_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
-                const int total_frames = static_cast<int>(anim_it->second.frames.size());
+            if (anim_it != attack_box_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
+                const int total_frames = static_cast<int>(anim_it->second.frame_count());
                 const int shown_frame =
                     devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, total_frames) + 1;
                 frame_label = std::to_string(shown_frame) + " / " + std::to_string(total_frames);
@@ -6639,15 +6639,15 @@ void RoomEditor::update_asset_editor_layout() {
                     : selection.resolved_animation_id;
                 std::string frame_label = "Frame";
                 auto anim_it = target->info->animations.find(selection.resolved_animation_id);
-                if (anim_it != target->info->animations.end() && !anim_it->second.frames.empty()) {
+                if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
                     int frame_index = 0;
-                    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
-                        if (anim_it->second.frames[i] == target->current_frame) {
+                    for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+                        if (anim_it->second.primary_frame_at(i) == target->current_frame) {
                             frame_index = static_cast<int>(i);
                             break;
                         }
                     }
-                    frame_label = std::to_string(frame_index + 1) + " / " + std::to_string(anim_it->second.frames.size());
+                    frame_label = std::to_string(frame_index + 1) + " / " + std::to_string(anim_it->second.frame_count());
                 }
                 center_value = animation_label + " | " + frame_label;
             } else {
@@ -6709,16 +6709,16 @@ int RoomEditor::resolve_anchor_mode_frame_index() const {
         return 0;
     }
     auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == anchor_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == anchor_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return 0;
     }
-    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
-        if (anim_it->second.frames[i] == anchor_edit_.target_asset->current_frame) {
+    for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+        if (anim_it->second.primary_frame_at(i) == anchor_edit_.target_asset->current_frame) {
             return static_cast<int>(i);
         }
     }
     return devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index,
-                                                  static_cast<int>(anim_it->second.frames.size()));
+                                                  static_cast<int>(anim_it->second.frame_count()));
 }
 
 bool RoomEditor::apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index) {
@@ -6732,15 +6732,15 @@ bool RoomEditor::apply_anchor_animation_and_frame(const std::string& animation_i
         return false;
     }
     auto anim_it = target->info->animations.find(selection.resolved_animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
     const int resolved_index =
-        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frame_count()));
 
     target->set_current_animation(selection.resolved_animation_id);
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(resolved_index));
     if (!frame) {
         return false;
     }
@@ -6809,10 +6809,10 @@ void RoomEditor::sync_anchor_tools_panel() {
     std::vector<std::string> names;
     if (anchor_edit_.target_asset && anchor_edit_.target_asset->info) {
         auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-        if (anim_it != anchor_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+        if (anim_it != anchor_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
             const int frame_index =
-                devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
-            AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+                devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
+            AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
             names = anchor_names_for_frame(frame);
         }
     }
@@ -6831,14 +6831,14 @@ void RoomEditor::refresh_anchor_mode_handles() {
     }
 
     auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == anchor_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == anchor_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         sync_anchor_tools_panel();
         return;
     }
 
     const int frame_index =
-        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
     if (!frame) {
         sync_anchor_tools_panel();
         return;
@@ -6900,14 +6900,14 @@ bool RoomEditor::persist_anchor_current_frame(devmode::core::DevSaveCoordinator:
 
     Asset* target = anchor_edit_.target_asset;
     auto anim_it = target->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
-    const std::size_t frame_count = anim_it->second.frames.size();
+    const std::size_t frame_count = anim_it->second.frame_count();
     const std::size_t frame_index = static_cast<std::size_t>(
         devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(frame_count)));
-    AnimationFrame* frame = anim_it->second.frames[frame_index];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
     if (!frame) {
         return false;
     }
@@ -6969,13 +6969,13 @@ bool RoomEditor::mutate_anchor_current_frame(
         return false;
     }
     auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == anchor_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == anchor_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
     const int frame_index =
-        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
 
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
     if (!frame) {
         return false;
     }
@@ -7005,14 +7005,14 @@ bool RoomEditor::persist_hitbox_current_frame(devmode::core::DevSaveCoordinator:
 
     Asset* target = hitbox_edit_.target_asset;
     auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
-    const std::size_t frame_count = anim_it->second.frames.size();
+    const std::size_t frame_count = anim_it->second.frame_count();
     const std::size_t frame_index = static_cast<std::size_t>(
         devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, static_cast<int>(frame_count)));
-    AnimationFrame* frame = anim_it->second.frames[frame_index];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
     if (!frame) {
         return false;
     }
@@ -7074,13 +7074,13 @@ bool RoomEditor::mutate_hitbox_current_frame(
         return false;
     }
     auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
-    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
     const int frame_index =
-        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
 
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
     if (!frame) {
         return false;
     }
@@ -7110,14 +7110,14 @@ bool RoomEditor::persist_attack_box_current_frame(devmode::core::DevSaveCoordina
 
     Asset* target = attack_box_edit_.target_asset;
     auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
-    const std::size_t frame_count = anim_it->second.frames.size();
+    const std::size_t frame_count = anim_it->second.frame_count();
     const std::size_t frame_index = static_cast<std::size_t>(
         devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, static_cast<int>(frame_count)));
-    AnimationFrame* frame = anim_it->second.frames[frame_index];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
     if (!frame) {
         return false;
     }
@@ -7179,13 +7179,13 @@ bool RoomEditor::mutate_attack_box_current_frame(
         return false;
     }
     auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
-    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
     const int frame_index =
-        devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
 
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
     if (!frame) {
         return false;
     }
@@ -7233,7 +7233,7 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
 
     Asset* target = anchor_edit_.target_asset;
     auto anim_it = target->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
     const SDL_FPoint desired_screen{
@@ -7298,12 +7298,12 @@ bool RoomEditor::add_anchor_in_current_frame() {
     }
 
     auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == anchor_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == anchor_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
     const int frame_index =
-        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frames.size()));
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(frame_index)];
+        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
     const SDL_Point dims = resolve_anchor_editor_frame_dimensions(anchor_edit_.target_asset, frame);
 
     std::string new_anchor_name;
@@ -7404,14 +7404,14 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
     Asset* target = anchor_edit_.target_asset;
     std::shared_ptr<AssetInfo> target_info = target->info;
     auto current_anim_it = target_info->animations.find(anchor_edit_.animation_id);
-    if (current_anim_it == target_info->animations.end() || current_anim_it->second.frames.empty()) {
+    if (current_anim_it == target_info->animations.end() || !current_anim_it->second.has_frames()) {
         return false;
     }
 
-    const std::size_t source_frame_count = current_anim_it->second.frames.size();
+    const std::size_t source_frame_count = current_anim_it->second.frame_count();
     const std::size_t source_frame_index = static_cast<std::size_t>(
         devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(source_frame_count)));
-    AnimationFrame* source_frame = current_anim_it->second.frames[source_frame_index];
+    AnimationFrame* source_frame = current_anim_it->second.primary_frame_at(source_frame_index);
     if (!source_frame) {
         return false;
     }
@@ -7420,7 +7420,7 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
     std::unordered_map<std::string, std::vector<std::size_t>> apply_indices;
     if (scope == EditorFramePropagationScope::Asset) {
         for (const auto& pair : target_info->animations) {
-            const auto& frames = pair.second.frames;
+            const auto& frames = pair.second.primary_frames();
             if (frames.empty()) {
                 continue;
             }
@@ -7450,7 +7450,7 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
     bool updated_any = false;
     for (auto& pair : apply_indices) {
         auto anim_it = target_info->animations.find(pair.first);
-        if (anim_it == target_info->animations.end() || anim_it->second.frames.empty()) {
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
             continue;
         }
 
@@ -7459,13 +7459,13 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
         indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
 
         nlohmann::json payload = target_info->animation_payload(pair.first);
-        const std::size_t frame_count = anim_it->second.frames.size();
+        const std::size_t frame_count = anim_it->second.frame_count();
         bool payload_changed = false;
         for (std::size_t frame_index : indices) {
             if (frame_index >= frame_count) {
                 continue;
             }
-            AnimationFrame* frame = anim_it->second.frames[frame_index];
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
             if (!frame) {
                 continue;
             }
@@ -7611,9 +7611,9 @@ void RoomEditor::navigate_anchor_animation(int delta) {
     int next_frame_index = anchor_edit_.frame_index;
     if (anchor_edit_.target_asset && anchor_edit_.target_asset->info) {
         auto anim_it = anchor_edit_.target_asset->info->animations.find(next_animation);
-        if (anim_it != anchor_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+        if (anim_it != anchor_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
             next_frame_index =
-                devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frames.size()));
+                devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frame_count()));
         } else {
             next_frame_index = 0;
         }
@@ -7629,11 +7629,11 @@ void RoomEditor::navigate_anchor_frame(int delta) {
         return;
     }
     auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == anchor_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == anchor_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return;
     }
     const int next_frame =
-        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index + delta, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index + delta, static_cast<int>(anim_it->second.frame_count()));
     if (apply_anchor_animation_and_frame(anchor_edit_.animation_id, next_frame)) {
         refresh_anchor_mode_handles();
     }
@@ -7711,16 +7711,16 @@ int RoomEditor::resolve_movement_mode_frame_index() const {
         return 0;
     }
     auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
-    if (anim_it == movement_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == movement_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return 0;
     }
-    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
-        if (anim_it->second.frames[i] == movement_edit_.target_asset->current_frame) {
+    for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+        if (anim_it->second.primary_frame_at(i) == movement_edit_.target_asset->current_frame) {
             return static_cast<int>(i);
         }
     }
     return devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index,
-                                                 static_cast<int>(anim_it->second.frames.size()));
+                                                 static_cast<int>(anim_it->second.frame_count()));
 }
 
 std::vector<std::string> RoomEditor::hitbox_mode_animation_names() const {
@@ -7744,16 +7744,16 @@ int RoomEditor::resolve_hitbox_mode_frame_index() const {
         return 0;
     }
     auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
-    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return 0;
     }
-    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
-        if (anim_it->second.frames[i] == hitbox_edit_.target_asset->current_frame) {
+    for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+        if (anim_it->second.primary_frame_at(i) == hitbox_edit_.target_asset->current_frame) {
             return static_cast<int>(i);
         }
     }
     return devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index,
-                                                 static_cast<int>(anim_it->second.frames.size()));
+                                                 static_cast<int>(anim_it->second.frame_count()));
 }
 
 int RoomEditor::resolve_attack_box_mode_frame_index() const {
@@ -7761,16 +7761,16 @@ int RoomEditor::resolve_attack_box_mode_frame_index() const {
         return 0;
     }
     auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
-    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return 0;
     }
-    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
-        if (anim_it->second.frames[i] == attack_box_edit_.target_asset->current_frame) {
+    for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+        if (anim_it->second.primary_frame_at(i) == attack_box_edit_.target_asset->current_frame) {
             return static_cast<int>(i);
         }
     }
     return devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index,
-                                                 static_cast<int>(anim_it->second.frames.size()));
+                                                 static_cast<int>(anim_it->second.frame_count()));
 }
 
 SDL_Point RoomEditor::movement_asset_anchor_world() const {
@@ -7786,13 +7786,13 @@ float RoomEditor::movement_base_world_z() const {
 }
 
 void RoomEditor::rebuild_movement_rel_positions() {
-    movement_edit_.rel_positions.assign(movement_edit_.frames.size(), SDL_FPoint{0.0f, 0.0f});
-    movement_edit_.rel_positions_z.assign(movement_edit_.frames.size(), 0.0f);
-    if (movement_edit_.frames.empty()) {
+    movement_edit_.rel_positions.assign(movement_edit_.frame_count(), SDL_FPoint{0.0f, 0.0f});
+    movement_edit_.rel_positions_z.assign(movement_edit_.frame_count(), 0.0f);
+    if (!movement_edit_.has_frames()) {
         return;
     }
     movement_edit_.rel_positions_z[0] = movement_edit_.frames[0].dy;
-    for (std::size_t i = 1; i < movement_edit_.frames.size(); ++i) {
+    for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
         movement_edit_.rel_positions[i].x = movement_edit_.rel_positions[i - 1].x + movement_edit_.frames[i].dx;
         movement_edit_.rel_positions[i].y = movement_edit_.rel_positions[i - 1].y + movement_edit_.frames[i].dz;
         movement_edit_.rel_positions_z[i] = movement_edit_.frames[i].dy;
@@ -7800,13 +7800,13 @@ void RoomEditor::rebuild_movement_rel_positions() {
 }
 
 void RoomEditor::rebuild_movement_frames_from_positions() {
-    if (movement_edit_.frames.empty()) {
+    if (!movement_edit_.has_frames()) {
         return;
     }
     movement_edit_.frames[0].dx = 0.0f;
     movement_edit_.frames[0].dy = movement_edit_.rel_positions_z.empty() ? 0.0f : movement_edit_.rel_positions_z[0];
     movement_edit_.frames[0].dz = 0.0f;
-    for (std::size_t i = 1; i < movement_edit_.frames.size(); ++i) {
+    for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
         const SDL_FPoint prev = movement_edit_.rel_positions[i - 1];
         const SDL_FPoint curr = movement_edit_.rel_positions[i];
         movement_edit_.frames[i].dx = std::round(curr.x - prev.x);
@@ -7826,10 +7826,10 @@ void RoomEditor::normalize_movement_frames_to_current_animation() {
         return;
     }
 
-    const std::size_t desired_count = std::max<std::size_t>(1, anim_it->second.frames.size());
-    if (movement_edit_.frames.size() < desired_count) {
+    const std::size_t desired_count = std::max<std::size_t>(1, anim_it->second.frame_count());
+    if (movement_edit_.frame_count() < desired_count) {
         movement_edit_.frames.resize(desired_count);
-    } else if (movement_edit_.frames.size() > desired_count) {
+    } else if (movement_edit_.frame_count() > desired_count) {
         movement_edit_.frames.resize(desired_count);
     }
 }
@@ -7845,15 +7845,15 @@ void RoomEditor::refresh_movement_runtime_animation() {
     }
 
     Animation& animation = anim_it->second;
-    if (animation.frames.size() != movement_edit_.frames.size()) {
+    if (animation.frame_count() != movement_edit_.frame_count()) {
         return;
     }
 
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
-    for (std::size_t i = 0; i < movement_edit_.frames.size(); ++i) {
-        AnimationFrame* frame = animation.frames[i];
+    for (std::size_t i = 0; i < movement_edit_.frame_count(); ++i) {
+        AnimationFrame* frame = animation.primary_frame_at(i);
         if (!frame) {
             continue;
         }
@@ -7938,7 +7938,7 @@ void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
     if (!movement_mode_active()) {
         return;
     }
-    if (movement_edit_.frames.empty()) {
+    if (!movement_edit_.has_frames()) {
         movement_edit_.point_selected = false;
         movement_edit_.selected_point_active = false;
         movement_edit_.hovered_point_index = -1;
@@ -7946,7 +7946,7 @@ void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
         return;
     }
     movement_edit_.frame_index =
-        std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frames.size()) - 1);
+        std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
     movement_edit_.selected_point_active = movement_edit_.point_selected;
     if (reset_drag_state) {
         movement_edit_.dragging_point = false;
@@ -8138,14 +8138,14 @@ bool RoomEditor::apply_movement_animation_and_frame(const std::string& animation
         return false;
     }
     auto anim_it = target->info->animations.find(selection.resolved_animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
     const int resolved_index =
-        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frame_count()));
     target->set_current_animation(selection.resolved_animation_id);
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(resolved_index));
     if (!frame) {
         return false;
     }
@@ -8175,15 +8175,15 @@ bool RoomEditor::apply_hitbox_animation_and_frame(const std::string& animation_i
         return false;
     }
     auto anim_it = target->info->animations.find(selection.resolved_animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
     const int resolved_index =
-        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frame_count()));
 
     target->set_current_animation(selection.resolved_animation_id);
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(resolved_index));
     if (!frame) {
         return false;
     }
@@ -8213,15 +8213,15 @@ bool RoomEditor::apply_attack_box_animation_and_frame(const std::string& animati
         return false;
     }
     auto anim_it = target->info->animations.find(selection.resolved_animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
     const int resolved_index =
-        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frame_count()));
 
     target->set_current_animation(selection.resolved_animation_id);
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(resolved_index));
     if (!frame) {
         return false;
     }
@@ -8261,9 +8261,9 @@ void RoomEditor::navigate_movement_animation(int delta) {
     const std::string& next_animation = names[static_cast<std::size_t>(next_index)];
     int next_frame_index = movement_edit_.frame_index;
     auto anim_it = movement_edit_.target_asset->info->animations.find(next_animation);
-    if (anim_it != movement_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+    if (anim_it != movement_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
         next_frame_index =
-            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frames.size()));
+            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frame_count()));
     } else {
         next_frame_index = 0;
     }
@@ -8276,7 +8276,7 @@ void RoomEditor::navigate_movement_animation(int delta) {
         }
     }
     movement_edit_.frames = devmode::room_movement_payload::parse_frames_from_payload(existing);
-    if (movement_edit_.frames.empty()) {
+    if (!movement_edit_.has_frames()) {
         movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
     }
     normalize_movement_frames_to_current_animation();
@@ -8294,11 +8294,11 @@ void RoomEditor::navigate_movement_frame(int delta) {
         persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
     auto anim_it = movement_edit_.target_asset->info->animations.find(movement_edit_.animation_id);
-    if (anim_it == movement_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == movement_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return;
     }
     const int next_frame =
-        devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index + delta, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(movement_edit_.frame_index + delta, static_cast<int>(anim_it->second.frame_count()));
     apply_movement_animation_and_frame(movement_edit_.animation_id, next_frame);
 }
 
@@ -8324,9 +8324,9 @@ void RoomEditor::navigate_hitbox_animation(int delta) {
 
     int next_frame_index = hitbox_edit_.frame_index;
     auto anim_it = hitbox_edit_.target_asset->info->animations.find(next_animation);
-    if (anim_it != hitbox_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+    if (anim_it != hitbox_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
         next_frame_index =
-            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frames.size()));
+            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frame_count()));
     } else {
         next_frame_index = 0;
     }
@@ -8344,11 +8344,11 @@ void RoomEditor::navigate_hitbox_frame(int delta) {
         persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority::Debounced, false);
     }
     auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
-    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return;
     }
     const int next_frame =
-        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index + delta, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index + delta, static_cast<int>(anim_it->second.frame_count()));
     if (apply_hitbox_animation_and_frame(hitbox_edit_.animation_id, next_frame)) {
         sync_hitbox_tools_panel();
     }
@@ -8375,9 +8375,9 @@ void RoomEditor::navigate_attack_box_animation(int delta) {
 
     int next_frame_index = attack_box_edit_.frame_index;
     auto anim_it = attack_box_edit_.target_asset->info->animations.find(next_animation);
-    if (anim_it != attack_box_edit_.target_asset->info->animations.end() && !anim_it->second.frames.empty()) {
+    if (anim_it != attack_box_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
         next_frame_index =
-            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frames.size()));
+            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frame_count()));
     } else {
         next_frame_index = 0;
     }
@@ -8395,12 +8395,12 @@ void RoomEditor::navigate_attack_box_frame(int delta) {
         persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority::Debounced, false);
     }
     auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
-    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return;
     }
     const int next_frame =
         devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index + delta,
-                                              static_cast<int>(anim_it->second.frames.size()));
+                                              static_cast<int>(anim_it->second.frame_count()));
     if (apply_attack_box_animation_and_frame(attack_box_edit_.animation_id, next_frame)) {
         sync_attack_box_tools_panel();
     }
@@ -8417,14 +8417,14 @@ bool RoomEditor::apply_asset_preview_animation_and_frame(Asset* target,
         return false;
     }
     auto anim_it = target->info->animations.find(selection.resolved_animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
 
     const int resolved_index =
-        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frames.size()));
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frame_count()));
     target->set_current_animation(selection.resolved_animation_id);
-    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(resolved_index)];
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(resolved_index));
     if (!frame) {
         return false;
     }
@@ -8469,18 +8469,18 @@ void RoomEditor::navigate_asset_info_preview_animation(int delta) {
 
     int next_frame_index = 0;
     auto current_anim_it = target->info->animations.find(selection.resolved_animation_id);
-    if (current_anim_it != target->info->animations.end() && !current_anim_it->second.frames.empty()) {
-        for (std::size_t i = 0; i < current_anim_it->second.frames.size(); ++i) {
-            if (current_anim_it->second.frames[i] == target->current_frame) {
+    if (current_anim_it != target->info->animations.end() && current_anim_it->second.has_frames()) {
+        for (std::size_t i = 0; i < current_anim_it->second.frame_count(); ++i) {
+            if (current_anim_it->second.primary_frame_at(i) == target->current_frame) {
                 next_frame_index = static_cast<int>(i);
                 break;
             }
         }
     }
     auto next_anim_it = target->info->animations.find(next_animation);
-    if (next_anim_it != target->info->animations.end() && !next_anim_it->second.frames.empty()) {
+    if (next_anim_it != target->info->animations.end() && next_anim_it->second.has_frames()) {
         next_frame_index =
-            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(next_anim_it->second.frames.size()));
+            devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(next_anim_it->second.frame_count()));
     } else {
         next_frame_index = 0;
     }
@@ -8508,20 +8508,20 @@ void RoomEditor::navigate_asset_info_preview_frame(int delta) {
     }
 
     auto anim_it = target->info->animations.find(selection.resolved_animation_id);
-    if (anim_it == target->info->animations.end() || anim_it->second.frames.empty()) {
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return;
     }
 
     int current_frame_index = 0;
-    for (std::size_t i = 0; i < anim_it->second.frames.size(); ++i) {
-        if (anim_it->second.frames[i] == target->current_frame) {
+    for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+        if (anim_it->second.primary_frame_at(i) == target->current_frame) {
             current_frame_index = static_cast<int>(i);
             break;
         }
     }
     const int next_frame = devmode::room_anchor_mode::wrap_index(
         current_frame_index + delta,
-        static_cast<int>(anim_it->second.frames.size()));
+        static_cast<int>(anim_it->second.frame_count()));
     if (apply_asset_preview_animation_and_frame(target, selection.resolved_animation_id, next_frame)) {
         update_asset_editor_layout();
     }
@@ -8557,7 +8557,7 @@ bool RoomEditor::enter_movement_edit_mode() {
         }
     }
     movement_edit_.frames = devmode::room_movement_payload::parse_frames_from_payload(existing_payload);
-    if (movement_edit_.frames.empty()) {
+    if (!movement_edit_.has_frames()) {
         movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
     }
     normalize_movement_frames_to_current_animation();
@@ -8753,8 +8753,8 @@ void RoomEditor::validate_movement_edit_target() {
 
     auto anim_it = target->info->animations.find(movement_edit_.animation_id);
     if (anim_it != target->info->animations.end()) {
-        const std::size_t desired_count = std::max<std::size_t>(1, anim_it->second.frames.size());
-        if (movement_edit_.frames.size() != desired_count) {
+        const std::size_t desired_count = std::max<std::size_t>(1, anim_it->second.frame_count());
+        if (movement_edit_.frame_count() != desired_count) {
             normalize_movement_frames_to_current_animation();
             rebuild_movement_rel_positions();
             apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index);
@@ -12363,8 +12363,8 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
     const float base_depth = static_cast<float>(asset->world_z());
     const auto* gp = cam.grid_point_for_asset(asset);
     const float perspective_scale =
-        (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
-            ? gp->perspective_scale
+        (gp && std::isfinite(gp->projection.perspective_scale) && gp->projection.perspective_scale > 0.0f)
+            ? gp->projection.perspective_scale
             : 1.0f;
 
     auto project_render_object_rect = [&](const RenderObject& obj, SDL_FRect& out_rect) -> bool {
@@ -12529,3 +12529,4 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         }
     }
 }
+

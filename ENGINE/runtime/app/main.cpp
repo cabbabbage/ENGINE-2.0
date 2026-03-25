@@ -274,6 +274,7 @@ void MainApp::setup() {
                                                                                     screen_h_,
                                                                                     renderer);
                         loader_ = std::move(bootstrap_result.loader);
+                        world_context_ = bootstrap_result.world_context;
                         vibble::log::info("[MainApp] Assets object created successfully.");
 
                         const double spawn_seconds = static_cast<double>(bootstrap_result.create_assets_ms) / 1000.0;

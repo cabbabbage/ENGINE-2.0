@@ -64,6 +64,7 @@ RuntimeBootstrapResult prepare_runtime_bootstrap(RuntimeBootstrapRequest request
     const auto spawn_end = std::chrono::steady_clock::now();
     result.create_assets_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(spawn_end - spawn_begin).count();
+    result.world_context = result.loader->runtime_world_context();
 
     const auto all_assets = result.world_grid.all_assets();
     result.asset_count = all_assets.size();
@@ -71,7 +72,7 @@ RuntimeBootstrapResult prepare_runtime_bootstrap(RuntimeBootstrapRequest request
         throw std::runtime_error("Asset count exceeds 200000; aborting.");
     }
 
-    result.room_count = result.loader->getRooms().size();
+    result.room_count = result.world_context ? result.world_context->rooms().size() : 0;
     result.player_ptr = find_player(all_assets);
 
     const int map_radius = static_cast<int>(result.loader->getMapRadius());
@@ -94,7 +95,7 @@ std::unique_ptr<Assets> create_assets_from_bootstrap(RuntimeBootstrapResult& boo
     }
     return std::make_unique<Assets>(*active_library,
                                     bootstrap.player_ptr,
-                                    bootstrap.loader->getRooms(),
+                                    bootstrap.world_context,
                                     screen_w,
                                     screen_h,
                                     bootstrap.start_px,

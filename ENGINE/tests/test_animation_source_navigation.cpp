@@ -17,20 +17,24 @@ struct AnimationSourceFixture {
     Animation& add_file_animation(const std::string& id, int frame_count = 1) {
         Animation animation;
         animation.source.kind = "file";
+        auto& frames = animation.primary_frames();
+        frames.resize(frame_count);
         for (int i = 0; i < frame_count; ++i) {
             owned_frames.push_back(std::make_unique<AnimationFrame>());
             owned_frames.back()->frame_index = i;
-            animation.frames.push_back(owned_frames.back().get());
+            frames[static_cast<std::size_t>(i)].frame_index = i;
         }
         auto [it, inserted] = info->animations.emplace(id, std::move(animation));
         if (!inserted) {
             it->second = Animation{};
             it->second.source.kind = "file";
-            it->second.frames.clear();
+            auto& existing_frames = it->second.primary_frames();
+            existing_frames.clear();
+            existing_frames.resize(frame_count);
             for (int i = 0; i < frame_count; ++i) {
                 owned_frames.push_back(std::make_unique<AnimationFrame>());
                 owned_frames.back()->frame_index = i;
-                it->second.frames.push_back(owned_frames.back().get());
+                existing_frames[static_cast<std::size_t>(i)].frame_index = i;
             }
         }
         return it->second;

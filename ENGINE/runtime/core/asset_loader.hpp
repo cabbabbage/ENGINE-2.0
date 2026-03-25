@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "utils/map_grid_settings.hpp"
+#include "runtime_world_context.hpp"
 
 class Asset;
 class Assets;
@@ -41,7 +42,8 @@ class AssetLoader {
     void createAssets(world::WorldGrid& grid);
     std::vector<const Area*> getAllRoomAndTrailAreas() const;
     AssetLibrary* getAssetLibrary() const { return asset_library_; }
-    const std::vector<Room*>& getRooms() const { return rooms_; }
+    const std::vector<Room*>& getRooms() const { return world_context_->rooms(); }
+    std::shared_ptr<RuntimeWorldContext> runtime_world_context() const { return world_context_; }
     double getMapRadius() const { return map_radius_; }
     const nlohmann::json& map_manifest() const { return map_manifest_json_; }
     const std::string& map_identifier() const { return map_id_; }
@@ -51,8 +53,7 @@ class AssetLoader {
     std::string map_id_;
     std::string map_path_;
     SDL_Renderer* renderer_;
-    std::vector<Room*> rooms_;
-    std::vector<std::unique_ptr<Room>> all_rooms_;
+    std::shared_ptr<RuntimeWorldContext> world_context_;
     std::unique_ptr<AssetLibrary> owned_asset_library_;
     AssetLibrary* asset_library_ = nullptr;
     bool using_shared_asset_library_ = false;

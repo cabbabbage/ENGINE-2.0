@@ -19,6 +19,7 @@ class Input;
 class LoadingScreen;
 class AssetLibrary;
 class EngineRenderer;
+class RuntimeWorldContext;
 
 class MainApp {
 
@@ -38,6 +39,7 @@ protected:
     int           screen_w_   = 0;
     int           screen_h_   = 0;
     std::unique_ptr<AssetLoader> loader_;
+    std::shared_ptr<RuntimeWorldContext> world_context_;
     std::unique_ptr<Assets> game_assets_;
     SceneRenderer* scene_            = nullptr;
     std::unique_ptr<Input> input_;

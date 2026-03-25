@@ -100,11 +100,16 @@ public:
     bool rnd_start = false;
     std::string on_end_animation;
     OnEndDirective on_end_behavior = OnEndDirective::Default;
-    std::vector<AnimationFrame*> frames;
     bool randomize = false;
     bool loop = true;
     bool frozen = false;
     SDL_Texture* preview_texture = nullptr;
+    bool has_frames(std::size_t path_index = 0) const;
+    std::size_t frame_count(std::size_t path_index = 0) const;
+    const std::vector<AnimationFrame>& primary_frames() const;
+    std::vector<AnimationFrame>& primary_frames();
+    const AnimationFrame* primary_frame_at(std::size_t index) const;
+    AnimationFrame* primary_frame_at(std::size_t index);
     std::size_t movement_path_count() const;
     const std::vector<AnimationFrame>& movement_path(std::size_t index) const;
     std::vector<AnimationFrame>& movement_path(std::size_t index);
@@ -119,7 +124,8 @@ private:
     std::vector<std::vector<AnimationFrame>> movement_paths_;
     std::vector<float> variant_steps_;
     void bind_textures_to_frame(AnimationFrame& frame) const;
-    void refresh_frame_texture_bindings();
+    void synchronize_runtime_frames();
+    void update_preview_texture_from_primary_path();
 };
 
 struct PrebuiltAnimationFrames {

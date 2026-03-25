@@ -17,7 +17,7 @@ void default_controller::update(const Input& ) {
     const std::string default_anim{ animation_update::detail::kDefaultAnimation };
 
     auto it = self_->info->animations.find(default_anim);
-    if (it == self_->info->animations.end() || it->second.frames.empty()) {
+    if (it == self_->info->animations.end() || !it->second.has_frames()) {
         return;
     }
 

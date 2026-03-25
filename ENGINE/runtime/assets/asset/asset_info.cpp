@@ -1823,7 +1823,7 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
     }
 }
 
-void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations) {
+void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations, bool assume_cache_ready) {
     if (!anims_json_.is_object()) return;
 
     auto parse_source_animation = [](const nlohmann::json& payload) -> std::optional<std::string> {
@@ -1898,7 +1898,11 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animatio
         PrimaryAssetCache primary_cache(renderer);
         const std::unordered_set<std::string>* filter =
             include_all_animations ? nullptr : &selected_animation_names;
-        primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+        if (assume_cache_ready) {
+            primary_cache.load_cached_only(*this, prebuilt_frames, bundle_data, filter);
+        } else {
+            primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+        }
     }
 
     auto animation_ready = [this](const std::string& name) {
@@ -1907,7 +1911,7 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animatio
             return false;
         }
         const Animation& anim = it->second;
-        return anim.number_of_frames > 0 && !anim.frames.empty();
+        return anim.number_of_frames > 0 && anim.has_frames();
 };
 
     for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {

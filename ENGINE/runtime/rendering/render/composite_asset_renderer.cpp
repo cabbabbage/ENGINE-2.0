@@ -60,12 +60,12 @@ DepthCueOverlayDecision decide_depth_cue_overlay(const world::GridPoint* gp,
     if (!depth_effects_enabled || !gp) {
         return {};
     }
-    if (!std::isfinite(gp->screen.y) || !std::isfinite(viewport_center_y) ||
-        !std::isfinite(gp->distance_to_camera) || gp->distance_to_camera < 0.0f) {
+    if (!std::isfinite(gp->projection.screen.y) || !std::isfinite(viewport_center_y) ||
+        !std::isfinite(gp->projection.distance_to_camera) || gp->projection.distance_to_camera < 0.0f) {
         return {};
     }
 
-    const float signed_vertical_distance = gp->screen.y - viewport_center_y;
+    const float signed_vertical_distance = gp->projection.screen.y - viewport_center_y;
     if (!std::isfinite(signed_vertical_distance) ||
         std::abs(signed_vertical_distance) <= center_deadzone_px) {
         return {};
@@ -105,7 +105,7 @@ DepthCueOverlayDecision decide_depth_cue_overlay(const world::GridPoint* gp,
         far_meters = near_meters + safe_min_range;
     }
 
-    const float t = std::clamp((gp->distance_to_camera - near_meters) / (far_meters - near_meters), 0.0f, 1.0f);
+    const float t = std::clamp((gp->projection.distance_to_camera - near_meters) / (far_meters - near_meters), 0.0f, 1.0f);
     float opacity = 0.0f;
     if (layer == DepthCueLayer::Background) {
         opacity = t;

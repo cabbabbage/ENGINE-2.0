@@ -778,8 +778,8 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
 
     // PRESERVE perspective scale before detaching from old point
     float preserved_perspective = 1.0f;
-    if (a->pos_ && a->pos_->perspective_scale > 0.0001f) {
-        preserved_perspective = a->pos_->perspective_scale;
+    if (a->pos_ && a->pos_->projection.perspective_scale > 0.0001f) {
+        preserved_perspective = a->pos_->projection.perspective_scale;
     }
 
     std::unique_ptr<Asset> owned;
@@ -791,13 +791,11 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         GridPoint* existing_point = point_for_asset(a);
         if (!existing_point) {
             vibble::log::error("[WorldGrid] move_asset invariant violated: source point missing during ownership transfer.");
-            SDL_assert(false && "WorldGrid::move_asset requires source point ownership when point_changed.");
             return nullptr;
         }
         owned = detach_asset_from_grid_point(a, *existing_point, true);
         if (!owned) {
             vibble::log::error("[WorldGrid] move_asset invariant violated: detach did not yield owned asset during transfer.");
-            SDL_assert(false && "WorldGrid::move_asset requires detach_asset_from_grid_point to return ownership.");
             return nullptr;
         }
     }
@@ -809,8 +807,8 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         attach_asset_to_grid_point(std::move(owned), point);
         // Initialize new point's perspective_scale if not yet calculated
         // This prevents a single frame of wrong scaling during movement
-        if (point.perspective_scale <= 0.0001f || !point.screen_data_valid) {
-            point.perspective_scale = preserved_perspective;
+        if (point.projection.perspective_scale <= 0.0001f || !point.projection.screen_data_valid) {
+            point.projection.perspective_scale = preserved_perspective;
         }
     } else {
         point.invalidate_screen_data();

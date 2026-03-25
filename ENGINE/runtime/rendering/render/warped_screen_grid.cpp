@@ -1518,11 +1518,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 static_cast<double>(world_pos.y),
                 base_world_z);
         } else {
-            space.distance = static_cast<double>(gp->distance_to_camera);
+            space.distance = static_cast<double>(gp->projection.distance_to_camera);
             space.valid = true;
         }
 
-        const SDL_FPoint screen_for_bounds = gp->screen;
+        const SDL_FPoint screen_for_bounds = gp->projection.screen;
         auto project_with_base = [&](double world_x, double world_y, double world_z_offset, SDL_FPoint& out) -> bool {
             return project_screen_point(world_x, world_y, base_world_z + world_z_offset, out);
         };
@@ -1692,8 +1692,8 @@ world::GridPoint* WarpedScreenGrid::pick_nearest_point(SDL_Point screen_pt, floa
     world::GridPoint* best = nullptr;
     for (world::GridPoint* gp : visible_points_) {
         if (!gp) continue;
-        const float dx = gp->screen.x - static_cast<float>(screen_pt.x);
-        const float dy = gp->screen.y - static_cast<float>(screen_pt.y);
+        const float dx = gp->projection.screen.x - static_cast<float>(screen_pt.x);
+        const float dy = gp->projection.screen.y - static_cast<float>(screen_pt.y);
         const float dist2 = dx * dx + dy * dy;
         if (dist2 < best_dist2) {
             best_dist2 = dist2;

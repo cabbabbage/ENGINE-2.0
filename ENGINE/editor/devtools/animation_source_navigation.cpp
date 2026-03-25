@@ -11,7 +11,7 @@ namespace devmode {
 namespace {
 
 bool animation_is_navigable(const Animation& animation) {
-    return animation.source.kind != "animation" && !animation.frames.empty();
+    return animation.source.kind != "animation" && animation.has_frames();
 }
 
 std::string first_navigable_animation_id(const AssetInfo& info) {
@@ -71,7 +71,7 @@ FileSourcedAnimationSelection resolve_file_sourced_animation_selection(const Ass
 
         const Animation& animation = animation_it->second;
         if (animation.source.kind != "animation") {
-            if (!animation.frames.empty()) {
+            if (animation.has_frames()) {
                 result.resolved_animation_id = current_id;
                 result.requested_was_derived = (requested_animation_id != current_id);
                 return result;

@@ -1,4 +1,5 @@
 #include "asset_library.hpp"
+#include "primary_asset_cache.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include <algorithm>
 #include <chrono>
@@ -485,8 +486,10 @@ void AssetLibrary::ensureAllAnimationsLoaded(SDL_Renderer* renderer) {
     }
 
     const auto begin = std::chrono::steady_clock::now();
-    std::size_t loaded_now = 0;
+    PrimaryAssetCache primary_cache(renderer);
+    std::size_t prepared_now = 0;
     std::size_t already_cached = 0;
+
     for (auto& [name, info] : info_by_name_) {
         if (!info) {
             continue;
@@ -495,7 +498,20 @@ void AssetLibrary::ensureAllAnimationsLoaded(SDL_Renderer* renderer) {
             ++already_cached;
             continue;
         }
-        info->loadAnimations(renderer);
+        if (primary_cache.ensure_cache_ready(*info)) {
+            ++prepared_now;
+        }
+    }
+
+    std::size_t loaded_now = 0;
+    for (auto& [name, info] : info_by_name_) {
+        if (!info) {
+            continue;
+        }
+        if (!info->animations.empty()) {
+            continue;
+        }
+        info->loadAnimations(renderer, true, true);
         ++loaded_now;
     }
     animations_fully_cached_ = true;
@@ -503,7 +519,10 @@ void AssetLibrary::ensureAllAnimationsLoaded(SDL_Renderer* renderer) {
     if (loaded_now > 0) {
         const auto end = std::chrono::steady_clock::now();
         const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-        vibble::log::info(std::string("[AssetLibrary] Cached animations for ") + std::to_string(loaded_now) + " additional asset(s) (" + std::to_string(already_cached) + ") in " + std::to_string(elapsed_ms) + "ms");
+        vibble::log::info(std::string("[AssetLibrary] Prepared caches for ") + std::to_string(prepared_now) +
+                          " asset(s), then loaded animations for " + std::to_string(loaded_now) +
+                          " additional asset(s) (" + std::to_string(already_cached) + ") in " +
+                          std::to_string(elapsed_ms) + "ms");
     }
 }
 

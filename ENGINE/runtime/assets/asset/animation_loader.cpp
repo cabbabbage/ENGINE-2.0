@@ -833,7 +833,7 @@ void AnimationLoader::load(Animation& animation,
                 auto it = info.animations.find(animation.source.name);
                 if (it != info.animations.end()) {
                         const Animation& src_anim = it->second;
-                        if (!src_anim.frames.empty()) {
+                        if (src_anim.has_frames()) {
                                 AnimationCloner::Options opts{};
                                 opts.flip_horizontal           = animation.flipped_source;
                                 opts.flip_vertical             = animation.flip_vertical_source;
@@ -1030,8 +1030,6 @@ void AnimationLoader::load(Animation& animation,
                 animation.movement_paths_.emplace_back();
         }
 
-        animation.frames.clear();
-
         bool any_motion = false;
         for (std::size_t path_idx = 0; path_idx < animation.movement_paths_.size(); ++path_idx) {
                 auto& path = animation.movement_paths_[path_idx];
@@ -1046,23 +1044,6 @@ void AnimationLoader::load(Animation& animation,
                         f.is_last     = (i + 1 == path.size());
                         f.frame_index = static_cast<int>(i);
 
-                        f.variants.clear();
-                        if (i < animation.frame_cache_.size()) {
-                            const auto& cache = animation.frame_cache_[i];
-                            for (size_t v = 0; v < cache.textures.size(); ++v) {
-                                FrameVariant variant;
-                                variant.varient = static_cast<int>(v);
-                                variant.base_texture = cache.textures[v];
-                                if (v < cache.foreground_textures.size()) variant.foreground_texture = cache.foreground_textures[v];
-                                if (v < cache.background_textures.size()) variant.background_texture = cache.background_textures[v];
-                                variant.source_rect = SDL_Rect{0, 0,
-                                                                (v < cache.widths.size()) ? cache.widths[v] : 0,
-                                                                (v < cache.heights.size()) ? cache.heights[v] : 0};
-                                variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
-                                f.variants.push_back(variant);
-                            }
-                        }
-
                         if (i < anchor_frames.size()) {
                                 f.set_anchor_points(anchor_frames[i]);
                         } else {
@@ -1072,14 +1053,11 @@ void AnimationLoader::load(Animation& animation,
                         if (f.dx != 0 || f.dy != 0 || f.dz != 0) {
                                 any_motion = true;
                         }
-
-                if (path_idx == 0) {
-                        animation.frames.push_back(&f);
                 }
         }
-}
 
         apply_frame_boxes(animation.movement_paths_, hit_box_frames, attack_box_frames);
+        animation.synchronize_runtime_frames();
 
         animation.total_dx = 0;
         animation.total_dy = 0;
@@ -1097,16 +1075,11 @@ void AnimationLoader::load(Animation& animation,
         }
 
         animation.movment = any_motion;
-        animation.number_of_frames = static_cast<int>(frame_count);
-        if (trigger == "default" && !animation.frames.empty() && !animation.frames[0]->variants.empty()) {
-                base_sprite = animation.frames[0]->variants[0].base_texture;
-                info.preview_texture = animation.frames[0]->variants[0].base_texture;
-        }
-
-        if (!animation.frames.empty() && !animation.frames[0]->variants.empty()) {
-            animation.preview_texture = animation.frames[0]->variants[0].base_texture;
-        } else {
-            animation.preview_texture = nullptr;
+        if (trigger == "default") {
+                if (const AnimationFrame* first = animation.primary_frame_at(0); first && !first->variants.empty()) {
+                        base_sprite = first->variants[0].base_texture;
+                        info.preview_texture = first->variants[0].base_texture;
+                }
         }
 
         int frame_width  = 0;

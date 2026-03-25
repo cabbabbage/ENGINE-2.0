@@ -592,6 +592,9 @@ private:
         std::vector<devmode::room_movement_payload::MovementFrame> frames;
         std::vector<SDL_FPoint> rel_positions;
         std::vector<float> rel_positions_z;
+
+        bool has_frames() const { return !frames.empty(); }
+        std::size_t frame_count() const { return frames.size(); }
     };
     MovementEditState movement_edit_;
 

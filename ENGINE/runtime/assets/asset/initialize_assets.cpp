@@ -11,7 +11,6 @@
 #include <SDL3/SDL.h>
 
 void InitializeAssets::initialize(Assets& assets,
-                                  std::vector<Room*> rooms,
                                   int,
                                   int,
                                   int ,
@@ -19,7 +18,6 @@ void InitializeAssets::initialize(Assets& assets,
                                   int)
 {
         vibble::log::debug("[InitializeAssets] Initializing Assets manager...");
-        assets.set_rooms(std::move(rooms));
         assets.all.clear();
         auto grid_assets = assets.world_grid().all_assets();
         assets.all.reserve(grid_assets.size());
@@ -38,7 +36,7 @@ void InitializeAssets::initialize(Assets& assets,
                         continue;
                 }
                 auto it = raw->info->animations.find("default");
-                if (it == raw->info->animations.end() || it->second.frames.empty()) {
+                if (it == raw->info->animations.end() || !it->second.has_frames()) {
                         vibble::log::debug("[InitializeAssets] Skipping asset '" + raw->info->name + "': missing or empty default animation");
                         assets.world_grid().remove_asset(raw);
                         continue;

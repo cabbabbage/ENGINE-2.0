@@ -295,18 +295,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             continue;
         }
 
-        const world::GridPoint virtual_point =
-            world::GridPoint::make_virtual(static_cast<int>(std::lround(assignment.world_pos.x)),
-                                           static_cast<int>(std::lround(assignment.world_pos.y)),
-                                           assignment.world_z,
-                                           assignment.key.resolution_layer);
-        const world::GridKey virtual_key =
-            grid.grid_key_from_world(virtual_point, assignment.key.resolution_layer);
-        if (world::GridPoint* gp = grid.find_grid_point(virtual_key)) {
-            gp->region_kind = world::GridPoint::RegionKind::Boundary;
-            gp->region_owner = nullptr;
-        }
-
         SDL_FPoint screen_pos{};
         if (!cam.project_world_point(assignment.world_pos, static_cast<float>(assignment.world_z), screen_pos)) {
             continue;
@@ -525,15 +513,15 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
 
     if (anim_it != info->animations.end()) {
         const Animation& animation = anim_it->second;
-        for (const AnimationFrame* frame : animation.frames) {
-            if (!frame || frame->variants.empty()) {
+        for (const AnimationFrame& frame : animation.primary_frames()) {
+            if (frame.variants.empty()) {
                 continue;
             }
             BoundaryFrame boundary_frame;
             boundary_frame.duration_ms = kDefaultAnimationFrameMs;
-            boundary_frame.variants.reserve(frame->variants.size());
+            boundary_frame.variants.reserve(frame.variants.size());
             bool has_texture = false;
-            for (const FrameVariant& variant : frame->variants) {
+            for (const FrameVariant& variant : frame.variants) {
                 if (!variant.base_texture) {
                     boundary_frame.variants.push_back(BoundaryFrameVariant{nullptr, 0, 0});
                     continue;

@@ -81,7 +81,7 @@ TEST_CASE("GridPoint projection round-trips via camera params") {
     params.state_version = 1;
 
     original.project_to_screen(params);
-    SDL_FPoint screen_pos = original.screen;
+    SDL_FPoint screen_pos = original.projection.screen;
     REQUIRE(std::isfinite(screen_pos.x));
     REQUIRE(std::isfinite(screen_pos.y));
 

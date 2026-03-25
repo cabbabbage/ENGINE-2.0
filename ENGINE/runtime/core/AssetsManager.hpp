@@ -22,6 +22,7 @@
 #include "assets/asset/Asset.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
+#include "runtime_world_context.hpp"
 
 class Asset;
 class SceneRenderer;
@@ -68,7 +69,7 @@ public:
 
     Assets(AssetLibrary& library,
            Asset*,
-           std::vector<Room*> rooms,
+           std::shared_ptr<RuntimeWorldContext> world_context,
            int screen_width,
            int screen_height,
            int screen_center_x,
@@ -213,12 +214,11 @@ public:
     AssetLibrary& library();
     const AssetLibrary& library() const;
 
-    void set_rooms(std::vector<Room*> rooms);
     void ensure_light_textures_loaded(Asset* asset);
     std::vector<Room*>& rooms();
     const std::vector<Room*>& rooms() const;
     void notify_rooms_changed();
-    std::size_t rooms_generation() const { return rooms_generation_; }
+    std::size_t rooms_generation() const;
 
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();
@@ -300,8 +300,7 @@ private:
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
     std::unordered_set<Asset*> filtered_active_asset_membership_;
-    std::vector<Room*> rooms_;
-    std::size_t rooms_generation_ = 0;
+    std::shared_ptr<RuntimeWorldContext> world_context_;
     Room* current_room_ = nullptr;
     bool dev_mode = false;
     bool camera_settings_dirty_ = false;

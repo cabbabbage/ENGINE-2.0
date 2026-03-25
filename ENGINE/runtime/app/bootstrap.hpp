@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "gameplay/world/world_grid.hpp"
+#include "runtime_world_context.hpp"
 
 class Asset;
 class AssetLoader;
@@ -31,6 +32,7 @@ struct RuntimeBootstrapRequest {
 
 struct RuntimeBootstrapResult {
     std::unique_ptr<AssetLoader> loader;
+    std::shared_ptr<RuntimeWorldContext> world_context;
     world::WorldGrid world_grid{};
     Asset* player_ptr = nullptr;
     int start_px = 0;

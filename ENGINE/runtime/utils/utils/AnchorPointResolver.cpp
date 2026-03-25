@@ -541,10 +541,10 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     const world::GridPoint* render_gp = cam.grid_point_for_asset(&asset);
     const bool has_render_perspective =
         render_gp &&
-        std::isfinite(render_gp->perspective_scale) &&
-        render_gp->perspective_scale > 0.0f;
+        std::isfinite(render_gp->projection.perspective_scale) &&
+        render_gp->projection.perspective_scale > 0.0f;
     const float render_perspective = has_render_perspective
-        ? std::max(0.0001f, render_gp->perspective_scale)
+        ? std::max(0.0001f, render_gp->projection.perspective_scale)
         : perspective_scale;
     const float perspective_delta = std::fabs(render_perspective - perspective_scale);
     const std::uint64_t camera_state_version = cam.camera_state_version();

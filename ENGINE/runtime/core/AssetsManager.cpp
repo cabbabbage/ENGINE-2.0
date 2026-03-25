@@ -116,7 +116,7 @@ bool vibble_scale_trace_enabled() {
 
 Assets::Assets(AssetLibrary& library,
                Asset*,
-               std::vector<Room*> rooms,
+               std::shared_ptr<RuntimeWorldContext> world_context,
                int screen_width_,
                int screen_height_,
                int screen_center_x,
@@ -145,9 +145,13 @@ Assets::Assets(AssetLibrary& library,
       screen_height(screen_height_),
       world_grid_(std::move(world_grid)),
       library_(library),
+      world_context_(std::move(world_context)),
       map_id_(map_id),
       map_path_(std::move(content_root))
 {
+    if (!world_context_) {
+        world_context_ = std::make_shared<RuntimeWorldContext>();
+    }
     perf_counter_frequency_ = static_cast<double>(SDL_GetPerformanceFrequency());
     last_frame_counter_     = SDL_GetPerformanceCounter();
     map_info_json_ = map_manifest;
@@ -159,10 +163,11 @@ Assets::Assets(AssetLibrary& library,
     depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
-    InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
+    InitializeAssets::initialize(*this, screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
     vibble::log::info("[Assets] Constructor: InitializeAssets complete");
 
-    finder_ = new CurrentRoomFinder(rooms_, player);
+    auto& room_refs = rooms();
+    finder_ = new CurrentRoomFinder(room_refs, player);
     if (finder_) {
         camera_.set_up_rooms(finder_);
     }
@@ -330,7 +335,7 @@ void Assets::snapshot_rooms_to_map_info() {
     if (!map_info_json_.is_object()) {
         map_info_json_ = nlohmann::json::object();
     }
-    for (Room* room : rooms_) {
+    for (Room* room : rooms()) {
         if (!room) {
             continue;
         }
@@ -571,30 +576,34 @@ const AssetLibrary& Assets::library() const {
     return library_;
 }
 
-void Assets::set_rooms(std::vector<Room*> rooms) {
-    rooms_ = std::move(rooms);
-    mark_camera_dirty();
-    notify_rooms_changed();
-}
-
 void Assets::ensure_light_textures_loaded(Asset* /*asset*/) {
 }
 
 std::vector<Room*>& Assets::rooms() {
-    return rooms_;
+    static std::vector<Room*> empty_rooms;
+    return world_context_ ? world_context_->rooms() : empty_rooms;
 }
 
 const std::vector<Room*>& Assets::rooms() const {
-    return rooms_;
+    static const std::vector<Room*> empty_rooms;
+    return world_context_ ? world_context_->rooms() : empty_rooms;
+}
+
+std::size_t Assets::rooms_generation() const {
+    return world_context_ ? world_context_->topology_generation() : 0;
 }
 
 void Assets::notify_rooms_changed() {
-    ++rooms_generation_;
+    if (world_context_) {
+        world_context_->notify_topology_changed();
+    }
     if (finder_) {
-        finder_->setRooms(rooms_);
+        auto& room_refs = rooms();
+        finder_->setRooms(room_refs);
     }
     if (dev_controls_) {
-        dev_controls_->set_rooms(&rooms_, rooms_generation_);
+        auto& room_refs = rooms();
+        dev_controls_->set_rooms(&room_refs, rooms_generation());
     }
 }
 
@@ -905,6 +914,10 @@ void Assets::log_asset_movement(Asset* asset, const world::GridPoint& previous, 
         previous.world_z() == current.world_z()) {
         return;
     }
+    if (!world_grid_.point_for_asset(asset)) {
+        vibble::log::error("[Assets] Ignoring movement for asset that is not currently owned by WorldGrid.");
+        return;
+    }
     movement_commands_buffer_.push_back(GridMovementCommand{
         asset,
         previous,
@@ -967,7 +980,8 @@ void Assets::ensure_dev_controls() {
         dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
         sync_dev_controls_current_room(current_room_, true);
         dev_controls_->set_screen_dimensions(screen_width, screen_height);
-        dev_controls_->set_rooms(&rooms_, rooms_generation_);
+        auto& room_refs = rooms();
+        dev_controls_->set_rooms(&room_refs, rooms_generation());
         dev_controls_->set_input(input);
         dev_controls_->set_map_info(&map_info_json_);
         dev_controls_->set_map_context(&map_info_json_, map_path_);
@@ -1009,7 +1023,8 @@ void Assets::set_input(Input* m) {
             dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
             sync_dev_controls_current_room(current_room_);
             dev_controls_->set_screen_dimensions(screen_width, screen_height);
-            dev_controls_->set_rooms(&rooms_, rooms_generation_);
+            auto& room_refs = rooms();
+            dev_controls_->set_rooms(&room_refs, rooms_generation());
             dev_controls_->set_map_context(&map_info_json_, map_path_);
         }
     }
@@ -1213,9 +1228,13 @@ void Assets::update(const Input& input)
         if (!movement_commands_buffer_.empty()) {
             for (const GridMovementCommand& cmd : movement_commands_buffer_) {
                 if (!cmd.asset) continue;
-                world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
-                cmd.asset->cache_grid_residency(cmd.current);
-                mark_anchor_basis_dirty(cmd.asset);
+                Asset* moved = world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
+                if (!moved) {
+                    vibble::log::error("[Assets] Skipping post-move cache updates because WorldGrid::move_asset failed.");
+                    continue;
+                }
+                moved->cache_grid_residency(cmd.current);
+                mark_anchor_basis_dirty(moved);
             }
             movement_commands_buffer_.clear();
 

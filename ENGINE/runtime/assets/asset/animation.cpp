@@ -274,50 +274,11 @@ void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
     number_of_frames = static_cast<int>(frame_cache_.size());
 
     movement_paths_.clear();
-    if (number_of_frames <= 0) {
-            movement_paths_.emplace_back();
-            return;
-    }
-
     movement_paths_.emplace_back();
-    auto& path = movement_paths_.back();
-    path.resize(number_of_frames);
-    frames.reserve(number_of_frames);
-
-    for (std::size_t idx = 0; idx < path.size(); ++idx) {
-            auto& frame = path[idx];
-            frame.frame_index = static_cast<int>(idx);
-            frame.is_first   = (idx == 0);
-            frame.is_last    = (idx + 1 == path.size());
-            frame.next       = (idx + 1 < path.size()) ? &path[idx + 1] : nullptr;
-            frame.prev       = (idx > 0) ? &path[idx - 1] : nullptr;
-
-            if (idx < frame_cache_.size()) {
-                const auto& cache = frame_cache_[idx];
-                for (size_t v = 0; v < cache.textures.size(); ++v) {
-                    FrameVariant variant;
-                    variant.varient = static_cast<int>(v);
-                    variant.base_texture = cache.textures[v];
-                    if (v < cache.source_rects.size()) {
-                        variant.source_rect = cache.source_rects[v];
-                    } else {
-                        variant.source_rect = SDL_Rect{0, 0,
-                                                       (v < cache.widths.size()) ? cache.widths[v] : 0,
-                                                       (v < cache.heights.size()) ? cache.heights[v] : 0};
-                    }
-                    variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
-                    if (v < cache.foreground_textures.size()) {
-                        variant.foreground_texture = cache.foreground_textures[v];
-                    }
-                    if (v < cache.background_textures.size()) {
-                        variant.background_texture = cache.background_textures[v];
-                    }
-                    frame.variants.push_back(variant);
-                }
-            }
-            frames.push_back(&frame);
+    if (number_of_frames > 0) {
+            movement_paths_.back().resize(number_of_frames);
     }
-
+    synchronize_runtime_frames();
 }
 
 bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool flip_vertical, bool reverse_frames, SDL_Renderer* renderer, AssetInfo& info) {
@@ -453,6 +414,7 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
         std::reverse(frame_cache_.begin(), frame_cache_.end());
     }
 
+    synchronize_runtime_frames();
     return !frame_cache_.empty();
 }
 
@@ -483,7 +445,7 @@ AnimationFrame* Animation::get_first_frame(std::size_t path_index) {
 int Animation::index_of(const AnimationFrame* frame) const {
     if (!frame) return -1;
     const int index = frame->frame_index;
-    if (index < 0 || index >= static_cast<int>(frames.size())) return -1;
+    if (index < 0 || index >= static_cast<int>(frame_count())) return -1;
     for (const auto& path : movement_paths_) {
         if (path.empty()) continue;
         const AnimationFrame* data = path.data();
@@ -521,7 +483,7 @@ std::vector<AnimationFrame>& Animation::movement_path(std::size_t index) {
 void Animation::inherit_movement_from(const Animation& source) {
     movement_paths_ = source.movement_paths_;
     if (movement_paths_.empty()) {
-        return;
+        movement_paths_.emplace_back();
     }
     if (reverse_source) {
         for (auto& path : movement_paths_) {
@@ -542,6 +504,7 @@ void Animation::inherit_movement_from(const Animation& source) {
             }
         }
     }
+    synchronize_runtime_frames();
 }
 
 std::size_t Animation::clamp_path_index(std::size_t index) const {
@@ -552,7 +515,7 @@ std::size_t Animation::clamp_path_index(std::size_t index) const {
 
 void Animation::freeze() { frozen = true; }
 
-bool Animation::is_frozen() const { return frozen || frames.size() <= 1; }
+bool Animation::is_frozen() const { return frozen || frame_count() <= 1; }
 
 bool Animation::has_audio() const { return static_cast<bool>(audio_clip.buffer); }
 
@@ -561,4 +524,99 @@ const Animation::AudioClip* Animation::audio_data() const {
         return nullptr;
     }
     return &audio_clip;
+}
+
+bool Animation::has_frames(std::size_t path_index) const {
+    return frame_count(path_index) > 0;
+}
+
+std::size_t Animation::frame_count(std::size_t path_index) const {
+    return movement_path(path_index).size();
+}
+
+const std::vector<AnimationFrame>& Animation::primary_frames() const {
+    return movement_path(default_movement_path_index());
+}
+
+std::vector<AnimationFrame>& Animation::primary_frames() {
+    return movement_path(default_movement_path_index());
+}
+
+const AnimationFrame* Animation::primary_frame_at(std::size_t index) const {
+    const auto& frames = primary_frames();
+    if (index >= frames.size()) {
+        return nullptr;
+    }
+    return &frames[index];
+}
+
+AnimationFrame* Animation::primary_frame_at(std::size_t index) {
+    auto& frames = primary_frames();
+    if (index >= frames.size()) {
+        return nullptr;
+    }
+    return &frames[index];
+}
+
+void Animation::bind_textures_to_frame(AnimationFrame& frame) const {
+    const int raw_index = frame.frame_index;
+    if (raw_index < 0 || raw_index >= static_cast<int>(frame_cache_.size())) {
+        frame.variants.clear();
+        return;
+    }
+
+    const std::size_t index = static_cast<std::size_t>(raw_index);
+    const auto& cache = frame_cache_[index];
+    frame.variants.clear();
+    frame.variants.reserve(cache.textures.size());
+    for (std::size_t v = 0; v < cache.textures.size(); ++v) {
+        FrameVariant variant;
+        variant.varient = static_cast<int>(v);
+        variant.base_texture = cache.textures[v];
+        variant.foreground_texture = (v < cache.foreground_textures.size()) ? cache.foreground_textures[v] : nullptr;
+        variant.background_texture = (v < cache.background_textures.size()) ? cache.background_textures[v] : nullptr;
+        if (v < cache.source_rects.size()) {
+            variant.source_rect = cache.source_rects[v];
+        } else {
+            variant.source_rect = SDL_Rect{0, 0,
+                                           (v < cache.widths.size()) ? cache.widths[v] : 0,
+                                           (v < cache.heights.size()) ? cache.heights[v] : 0};
+        }
+        variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
+        frame.variants.push_back(variant);
+    }
+}
+
+void Animation::update_preview_texture_from_primary_path() {
+    const AnimationFrame* first = primary_frame_at(0);
+    if (!first || first->variants.empty()) {
+        preview_texture = nullptr;
+        return;
+    }
+    preview_texture = first->variants[0].base_texture;
+}
+
+void Animation::synchronize_runtime_frames() {
+    if (movement_paths_.empty()) {
+        movement_paths_.emplace_back();
+    }
+
+    const std::size_t expected_frame_count = frame_cache_.size();
+    for (auto& path : movement_paths_) {
+        if (path.size() != expected_frame_count) {
+            path.resize(expected_frame_count);
+        }
+        for (std::size_t idx = 0; idx < path.size(); ++idx) {
+            AnimationFrame& frame = path[idx];
+            frame.frame_index = static_cast<int>(idx);
+            frame.is_first = (idx == 0);
+            frame.is_last = (idx + 1 == path.size());
+            frame.prev = (idx > 0) ? &path[idx - 1] : nullptr;
+            frame.next = (idx + 1 < path.size()) ? &path[idx + 1] : nullptr;
+            bind_textures_to_frame(frame);
+        }
+    }
+
+    number_of_frames = static_cast<int>(expected_frame_count);
+    update_preview_texture_from_primary_path();
 }

@@ -149,13 +149,13 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         if (it == info->animations.end()) {
                 it = info->animations.find("default");
         }
-        if (it != info->animations.end() && !it->second.frames.empty()) {
+        if (it != info->animations.end() && it->second.has_frames()) {
                 current_animation = it->first;
                 Animation& anim  = it->second;
-                static_frame     = (anim.frames.size() == 1);
+                static_frame     = (anim.frame_count() == 1);
                 current_frame    = anim.get_first_frame();
-                if ((anim.randomize || anim.rnd_start) && anim.frames.size() > 1) {
-                        std::uniform_int_distribution<int> d(0, int(anim.frames.size()) - 1);
+                if ((anim.randomize || anim.rnd_start) && anim.frame_count() > 1) {
+                        std::uniform_int_distribution<int> d(0, int(anim.frame_count()) - 1);
                         int idx;
                         {
                                 std::lock_guard<std::mutex> lock(asset_rng_mutex());
@@ -414,9 +414,6 @@ void Asset::initialize_anchor_registry_from_animations() {
 
         for (const auto& [anim_id, anim] : info->animations) {
                 (void)anim_id;
-                for (const AnimationFrame* frame : anim.frames) {
-                        collect_from_frame(frame);
-                }
                 const std::size_t path_count = anim.movement_path_count();
                 for (std::size_t i = 0; i < path_count; ++i) {
                         const auto& path = anim.movement_path(i);
@@ -469,19 +466,19 @@ void Asset::finalize_setup() {
                 initialize_anchor_registry_from_animations();
         }
         if (current_animation.empty() ||
-        info->animations[current_animation].frames.empty())
+        !info->animations[current_animation].has_frames())
         {
 		std::string start_id = info->start_animation.empty() ? std::string{"default"} : info->start_animation;
 		auto it = info->animations.find(start_id);
 		if (it == info->animations.end()) it = info->animations.find("default");
 		if (it == info->animations.end()) it = info->animations.begin();
-		if (it != info->animations.end() && !it->second.frames.empty()) {
+		if (it != info->animations.end() && it->second.has_frames()) {
 			current_animation = it->first;
 			Animation& anim = it->second;
                         anim.change(current_frame, static_frame);
                         frame_progress = 0.0f;
-                        if ((anim.randomize || anim.rnd_start) && anim.frames.size() > 1) {
-                                std::uniform_int_distribution<int> dist(0, int(anim.frames.size()) - 1);
+                        if ((anim.randomize || anim.rnd_start) && anim.frame_count() > 1) {
+                                std::uniform_int_distribution<int> dist(0, int(anim.frame_count()) - 1);
                                 int idx;
                                 {
                                         std::lock_guard<std::mutex> lock(asset_rng_mutex());
@@ -494,7 +491,7 @@ void Asset::finalize_setup() {
                 }
 	}
         if (!current_animation.empty() && info->animations.count(current_animation) &&
-            !info->animations[current_animation].frames.empty()) {
+            info->animations[current_animation].has_frames()) {
             ensure_animation_runtime(false);
         } else {
             vibble::log::warn("[Asset] Cannot create animation runtime: animation '" + current_animation + "' is missing or has no frames");
@@ -630,18 +627,18 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     }
 
     if (traversal_gp &&
-        std::isfinite(traversal_gp->perspective_scale) &&
-        traversal_gp->perspective_scale > 0.0001f) {
-        sample.scale = std::max(0.0001f, traversal_gp->perspective_scale);
+        std::isfinite(traversal_gp->projection.perspective_scale) &&
+        traversal_gp->projection.perspective_scale > 0.0001f) {
+        sample.scale = std::max(0.0001f, traversal_gp->projection.perspective_scale);
         sample.resolution_layer = traversal_gp->resolution_layer();
         sample.source = PerspectiveSource::CameraTraversal;
         return sample;
     }
 
     if (pos_ &&
-        std::isfinite(pos_->perspective_scale) &&
-        pos_->perspective_scale > 0.0001f) {
-        sample.scale = std::max(0.0001f, pos_->perspective_scale);
+        std::isfinite(pos_->projection.perspective_scale) &&
+        pos_->projection.perspective_scale > 0.0001f) {
+        sample.scale = std::max(0.0001f, pos_->projection.perspective_scale);
         sample.resolution_layer = pos_->resolution_layer();
         sample.source = PerspectiveSource::AssetGridPoint;
         return sample;

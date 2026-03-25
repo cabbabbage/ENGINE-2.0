@@ -1101,7 +1101,7 @@ bool DevControls::run_exit_save_sequence(const std::string& reason) {
 #if defined(PROJECT_ROOT)
         generator_options.manifest_path = std::filesystem::path(PROJECT_ROOT) / "manifest.json";
 #endif
-        generator_options.effects_backend = imgcache::EffectsBackend::Cpu;
+        generator_options.effects_backend = imgcache::EffectsBackend::Auto;
         generator_options.quiet_task_logs = true;
         generator_options.missing_only = false;
         generator_options.force_rebuild = false;

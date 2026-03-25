@@ -16,6 +16,13 @@ class PrimaryAssetCache {
 public:
     explicit PrimaryAssetCache(SDL_Renderer* renderer);
 
+    bool ensure_cache_ready(class AssetInfo& info,
+                            CacheManager::BundleData* out_bundle = nullptr,
+                            const std::unordered_set<std::string>* animation_filter = nullptr);
+    bool load_cached_only(class AssetInfo& info,
+                          std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
+                          CacheManager::BundleData& raw_bundle,
+                          const std::unordered_set<std::string>* animation_filter = nullptr);
     bool load_or_build(class AssetInfo& info,
                        std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                        CacheManager::BundleData& raw_bundle,

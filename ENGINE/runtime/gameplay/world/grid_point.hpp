@@ -85,6 +85,54 @@ struct CameraProjectionParams {
 using GridId = std::uint64_t;
 
 struct GridPoint {
+    struct ProjectionCache {
+        SDL_FPoint screen = SDL_FPoint{0.0f, 0.0f};
+        float parallax_dx = 0.0f;
+        float vertical_scale = 1.0f;
+        float horizon_fade_alpha = 1.0f;
+        float near_camera_fade_alpha = 1.0f;
+        float perspective_scale = 1.0f;
+        float distance_to_camera = 0.0f;
+        float tilt_radians = 0.0f;
+        bool on_screen = false;
+        std::uint64_t screen_data_frame_updated = 0;
+        bool screen_data_valid = false;
+        std::uint64_t last_camera_state_version = 0;
+
+        bool needs_projection_update(std::uint64_t current_frame,
+                                     std::uint64_t camera_version) const {
+            return !screen_data_valid ||
+                   screen_data_frame_updated != current_frame ||
+                   last_camera_state_version != camera_version;
+        }
+
+        void reset(std::uint64_t frame_stamp = 0) {
+            screen = SDL_FPoint{0.0f, 0.0f};
+            parallax_dx = 0.0f;
+            vertical_scale = 1.0f;
+            horizon_fade_alpha = 1.0f;
+            near_camera_fade_alpha = 1.0f;
+            perspective_scale = 1.0f;
+            distance_to_camera = 0.0f;
+            tilt_radians = 0.0f;
+            on_screen = false;
+            screen_data_frame_updated = frame_stamp;
+            screen_data_valid = false;
+        }
+
+        void invalidate() {
+            screen_data_valid = false;
+        }
+
+        void mark_updated(std::uint64_t frame) {
+            screen_data_frame_updated = frame;
+            screen_data_valid = true;
+        }
+
+        bool has_valid_data(std::uint64_t current_frame) const {
+            return screen_data_valid && screen_data_frame_updated == current_frame;
+        }
+    };
 
     GridPoint() = delete;
     GridPoint(int world_x,
@@ -130,14 +178,6 @@ struct GridPoint {
     GridPoint* parent() const { return parent_; }
     bool is_virtual() const { return is_virtual_; }
 
-    enum class RegionKind {
-        Boundary = 0,
-        Room,
-        Trail
-    };
-
-    RegionKind region_kind = RegionKind::Boundary;
-    const Room* region_owner = nullptr; // Non-owning; points to Room that contains this point, if any.
     // True when this grid point represents the ground (floor) for its XZ.
     bool is_floor = false;
 
@@ -190,28 +230,14 @@ struct GridPoint {
     GridCoord        chunk_index  = GridCoord{0, 0};
     Chunk*           chunk        = nullptr;
 
-    // Per-frame camera fields; WarpedScreenGrid must refresh these each rebuild.
-    SDL_FPoint screen             = SDL_FPoint{0.0f, 0.0f};
-    float      parallax_dx        = 0.0f;
-    float      vertical_scale     = 1.0f;
-    float      horizon_fade_alpha = 1.0f;
-    float      near_camera_fade_alpha = 1.0f;
-    float      perspective_scale  = 1.0f;
-    float      distance_to_camera = 0.0f;
-    float      tilt_radians       = 0.0f;
-    bool       on_screen          = false;
-
-    mutable std::uint64_t screen_data_frame_updated = 0;
-    mutable bool          screen_data_valid         = false;
-    mutable std::uint64_t last_camera_state_version_ = 0;
+    // Per-frame camera projection and screen cache data.
+    ProjectionCache projection{};
     mutable std::uint64_t last_region_query_stamp = 0;
 
     // Smart caching: returns true if projection calculation is needed
     bool needs_projection_update(std::uint64_t current_frame,
                                  std::uint64_t camera_version) const {
-        return !screen_data_valid ||
-               screen_data_frame_updated != current_frame ||
-               last_camera_state_version_ != camera_version;
+        return projection.needs_projection_update(current_frame, camera_version);
     }
 
     // Self-contained projection: GridPoint calculates its own screen position
@@ -227,31 +253,20 @@ struct GridPoint {
     friend void swap(GridPoint& a, GridPoint& b) noexcept;
 
     void reset_frame_state(std::uint64_t frame_stamp = 0) {
-        screen             = SDL_FPoint{0.0f, 0.0f};
-        parallax_dx        = 0.0f;
-        vertical_scale     = 1.0f;
-        horizon_fade_alpha = 1.0f;
-        near_camera_fade_alpha = 1.0f;
-        perspective_scale  = 1.0f;
-        distance_to_camera = 0.0f;
-        tilt_radians       = 0.0f;
-        on_screen          = false;
         is_floor           = (world_position().y == 0);
-        screen_data_frame_updated = frame_stamp;
-        screen_data_valid  = false;
+        projection.reset(frame_stamp);
     }
 
     void invalidate_screen_data() {
-        screen_data_valid = false;
+        projection.invalidate();
     }
 
     void mark_screen_data_updated(std::uint64_t frame) {
-        screen_data_frame_updated = frame;
-        screen_data_valid = true;
+        projection.mark_updated(frame);
     }
 
     bool has_valid_screen_data(std::uint64_t current_frame) const {
-        return screen_data_valid && screen_data_frame_updated == current_frame;
+        return projection.has_valid_data(current_frame);
     }
 
     // Asset/branch tracking: occupants remain the canonical list; branch bits mark active 3D children.

@@ -13,7 +13,7 @@ TEST_CASE("Asset runtime perspective sample prefers the asset grid point in worl
 
     world::GridPoint* point = asset.grid_point();
     REQUIRE(point != nullptr);
-    point->perspective_scale = 1.75f;
+    point->projection.perspective_scale = 1.75f;
 
     const Asset::PerspectiveSample sample = asset.runtime_perspective_sample();
     CHECK(sample.scale == doctest::Approx(1.75f));

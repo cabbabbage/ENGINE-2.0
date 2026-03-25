@@ -96,8 +96,8 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     sample.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
     sample.source = PerspectiveSource::Default;
 
-    if (pos_ && std::isfinite(pos_->perspective_scale) && pos_->perspective_scale > 0.0001f) {
-        sample.scale = std::max(0.0001f, pos_->perspective_scale);
+    if (pos_ && std::isfinite(pos_->projection.perspective_scale) && pos_->projection.perspective_scale > 0.0001f) {
+        sample.scale = std::max(0.0001f, pos_->projection.perspective_scale);
         sample.resolution_layer = pos_->resolution_layer();
         sample.source = PerspectiveSource::AssetGridPoint;
         return sample;

@@ -45,6 +45,7 @@ AssetLoader::AssetLoader(const std::string& map_id,
 : map_id_(map_id),
 map_path_(std::move(content_root)),
 renderer_(renderer),
+world_context_(std::make_shared<RuntimeWorldContext>()),
 manifest_store_(manifest_store)
 {
         vibble::log::info(std::string("[AssetLoader] Start for map '") + map_id_ + "' at root '" + map_path_ + "'.");
@@ -95,7 +96,7 @@ manifest_store_(manifest_store)
                 vibble::log::error("[AssetLoader] loadRooms failed with unknown error.");
         }
         const auto rooms_end = std::chrono::steady_clock::now();
-        vibble::log::info(std::string("[AssetLoader] Rooms created: ") + std::to_string(rooms_.size()) + " in " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(rooms_end - rooms_begin).count()) + "ms");
+        vibble::log::info(std::string("[AssetLoader] Rooms created: ") + std::to_string(getRooms().size()) + " in " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(rooms_end - rooms_begin).count()) + "ms");
         loading_status::notify("Loading assets");
     {
         const auto preload_begin = std::chrono::steady_clock::now();
@@ -150,13 +151,14 @@ manifest_store_(manifest_store)
 
 std::vector<Asset*> AssetLoader::collectDistantAssets(int lock_threshold, int remove_threshold) {
         std::vector<Asset*> distant_assets;
-        distant_assets.reserve(rooms_.size() * 4);
+        const std::vector<Room*>& rooms = getRooms();
+        distant_assets.reserve(rooms.size() * 4);
         auto allZones = getAllRoomAndTrailAreas();
         auto zoneCache = asset_loader_internal::build_zone_cache(allZones);
 
         std::unordered_map<std::string, Room*> room_lookup;
-        room_lookup.reserve(rooms_.size());
-        for (Room* room : rooms_) {
+        room_lookup.reserve(rooms.size());
+        for (Room* room : rooms) {
                 if (room) {
                         room_lookup.emplace(room->room_name, room);
                 }
@@ -166,7 +168,7 @@ std::vector<Asset*> AssetLoader::collectDistantAssets(int lock_threshold, int re
         const double lock_distance = static_cast<double>(lock_threshold);
         int considered = 0, skipped_type = 0, kept_in_room = 0, kept_in_zone = 0, removed = 0, locked = 0;
 
-        for (Room* room : rooms_) {
+        for (Room* room : rooms) {
                 for (auto& asset_up : room->assets) {
                         Asset* asset = asset_up.get();
             if (!asset->info || asset->info->type != asset_types::boundary) {
@@ -231,16 +233,13 @@ void AssetLoader::loadRooms() {
         MapGridSettings grid_settings = map_grid_settings_;
         nlohmann::json& map_assets_json = map_assets_data_ ? *map_assets_data_ : empty_assets;
         auto room_ptrs = generator.build( asset_library_, map_radius_, layer_radii_, map_boundary_data_ ? *map_boundary_data_ : empty_boundary, rooms_data_        ? *rooms_data_        : empty_rooms, trails_data_       ? *trails_data_       : empty_trails, map_assets_json, grid_settings);
-        for (auto& up : room_ptrs) {
-                rooms_.push_back(up.get());
-                all_rooms_.push_back(std::move(up));
-	}
-        if (rooms_.empty()) {
+        world_context_->adopt_rooms(std::move(room_ptrs));
+        if (getRooms().empty()) {
                 throw std::runtime_error("[AssetLoader] Room generation produced zero rooms after manifest normalization.");
         }
 
-        vibble::log::info("[AssetLoader] Room generation completed successfully: " + std::to_string(rooms_.size()) + " rooms created");
-        vibble::log::debug(std::string("[AssetLoader] loadRooms: rooms_=") + std::to_string(rooms_.size()));
+        vibble::log::info("[AssetLoader] Room generation completed successfully: " + std::to_string(getRooms().size()) + " rooms created");
+        vibble::log::debug(std::string("[AssetLoader] loadRooms: rooms=") + std::to_string(getRooms().size()));
 }
 
 void AssetLoader::finalizeAssets() {
@@ -249,7 +248,7 @@ void AssetLoader::finalizeAssets() {
         std::size_t finalized_assets   = 0;
         std::size_t skipped_assets     = 0;
 
-        for (Room* room : rooms_) {
+        for (Room* room : getRooms()) {
                 if (!room) {
                         ++room_index;
                         continue;
@@ -273,7 +272,7 @@ void AssetLoader::finalizeAssets() {
                         // Guard against assets whose default animation has no frames (e.g., missing art on disk).
                         // These can cause downstream crashes when animation runtimes are built.
                         auto default_anim = a->info->animations.find("default");
-                        if (default_anim == a->info->animations.end() || default_anim->second.frames.empty()) {
+                        if (default_anim == a->info->animations.end() || !default_anim->second.has_frames()) {
                                 vibble::log::error(std::string("[AssetLoader] finalizeAssets: asset '") + name + "' is missing default animation frames; skipping.");
                                 asset_up.reset();
                                 ++skipped_assets;
@@ -322,8 +321,9 @@ void AssetLoader::finalizeAssets() {
 
 std::vector<std::unique_ptr<Asset>> AssetLoader::extract_all_assets() {
         std::vector<std::unique_ptr<Asset>> out;
-        out.reserve(rooms_.size() * 4);
-        for (Room* room : rooms_) {
+        const std::vector<Room*>& rooms = getRooms();
+        out.reserve(rooms.size() * 4);
+        for (Room* room : rooms) {
                 if (!room) continue;
                 auto& assets = room->assets;
                 for (auto it = assets.begin(); it != assets.end();) {
@@ -390,8 +390,9 @@ void AssetLoader::createAssets(world::WorldGrid& grid) {
 
 std::vector<const Area*> AssetLoader::getAllRoomAndTrailAreas() const {
         std::vector<const Area*> areas;
-        areas.reserve(rooms_.size());
-        for (const Room* r : rooms_) {
+        const std::vector<Room*>& rooms = getRooms();
+        areas.reserve(rooms.size());
+        for (const Room* r : rooms) {
                 if (r && r->room_area) {
                         areas.push_back(r->room_area.get());
                 }

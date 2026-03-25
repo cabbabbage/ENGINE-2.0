@@ -26,11 +26,8 @@ public:
 private:
     SDL_Renderer* renderer_ = nullptr;
 
-    std::uint64_t compute_hash(const AssetInfo& info,
-                               const std::unordered_set<std::string>* animation_filter = nullptr) const;
-    bool inputs_newer_than_bundle(const AssetInfo& info,
-                                  const std::filesystem::path& bundle_path,
-                                  const std::unordered_set<std::string>* animation_filter = nullptr) const;
+    bool repair_missing_cache_files(AssetInfo& info,
+                                    const std::unordered_set<std::string>* animation_filter = nullptr) const;
     bool build_bundle_from_sources(const AssetInfo& info,
                                    CacheManager::BundleData& out_data,
                                    const std::unordered_set<std::string>* animation_filter = nullptr);

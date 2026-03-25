@@ -53,7 +53,6 @@
 #include "utils/map_grid_settings.hpp"
 #include "utils/AnchorPointResolver.hpp"
 #include "utils/relative_room_position.hpp"
-#include "utils/rebuild_queue.hpp"
 
 #include <algorithm>
 #include <array>
@@ -7907,10 +7906,6 @@ bool RoomEditor::persist_movement_current_animation(devmode::core::DevSaveCoordi
     }
 
     target_info->mark_dirty();
-    if (!target_info->name.empty()) {
-        vibble::RebuildQueueCoordinator coordinator;
-        coordinator.request_asset(target_info->name);
-    }
 
     if (save_coordinator_) {
         Assets* assets = assets_;

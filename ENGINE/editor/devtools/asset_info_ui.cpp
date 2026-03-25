@@ -28,7 +28,6 @@
 #include "utils/area.hpp"
 #include "utils/string_utils.hpp"
 #include "utils/cache_manager.hpp"
-#include "utils/rebuild_queue.hpp"
 #include "widgets.hpp"
 #include "tag_utils.hpp"
 
@@ -2297,12 +2296,8 @@ void AssetInfoUI::on_animation_document_saved() {
     const bool animation_data_changed = reloaded && before_snapshot != after_snapshot;
 
     if (animation_data_changed) {
-        // Queue cache work only when animation manifest data actually changed.
+        info_->classify_animation_snapshot_rebuilds(before_snapshot, after_snapshot);
         info_->mark_dirty();
-    }
-    if (animation_data_changed && !info_->name.empty()) {
-        vibble::RebuildQueueCoordinator coordinator;
-        coordinator.request_asset(info_->name);
     }
 
     SDL_Renderer* renderer = nullptr;

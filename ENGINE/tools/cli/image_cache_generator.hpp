@@ -24,6 +24,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -56,10 +57,12 @@ enum class EffectsBackend : std::uint8_t {
     D3D11
 };
 
-struct FrameMeta {
-    // Mirrors manifest frames[*].needs_rebuild
-    bool needs_rebuild = false;
-};
+inline constexpr std::uint8_t kTextureVariantMaskNone = 0u;
+inline constexpr std::uint8_t kTextureVariantMaskNormal = 1u << 0;
+inline constexpr std::uint8_t kTextureVariantMaskForeground = 1u << 1;
+inline constexpr std::uint8_t kTextureVariantMaskBackground = 1u << 2;
+inline constexpr std::uint8_t kTextureVariantMaskAll = static_cast<std::uint8_t>(
+    kTextureVariantMaskNormal | kTextureVariantMaskForeground | kTextureVariantMaskBackground);
 
 struct EffectsParams {
     // Mirrors effects.py / apply_color_effects.py semantics.
@@ -178,10 +181,16 @@ struct GeneratorOptions {
     fs::path cache_root_override;
 
     bool force_rebuild = false;
+    bool missing_only = false;
     bool dry_run = false;
 
-    // Must remain true for safety unless you intentionally diverge from Python.
-    bool clear_needs_rebuild_on_success_only = true;
+    struct AnimationRebuildRequest {
+        std::string asset_name;
+        std::string animation_name;
+        std::uint8_t all_frames_variant_mask = kTextureVariantMaskNone;
+        std::unordered_map<int, std::uint8_t> frame_variant_masks;
+    };
+    std::vector<AnimationRebuildRequest> explicit_rebuild_requests;
 
     // Legacy compatibility option. Runtime generation enforces canonical
     // scales: 100, 90, 80, 70, 60, 50, 40, 30, 20, 10.
@@ -200,6 +209,8 @@ struct GeneratorOptions {
     bool quiet_task_logs = true;
 
     GeneratorFilters filters;
+
+    bool has_explicit_rebuild_requests() const { return !explicit_rebuild_requests.empty(); }
 };
 
 // -----------------------------
@@ -211,8 +222,6 @@ struct AnimPayload {
 
     fs::path src_anim_dir;
     std::vector<fs::path> src_frames;
-
-    std::vector<FrameMeta> frames_meta;
 
     EffectsParams fx_foreground;
     EffectsParams fx_background;
@@ -262,8 +271,10 @@ struct GenResult {
     bool ok = false;
     std::string error;
 
-    bool rebuild_queue_written = false;
     GenStats stats;
+    std::vector<std::string> touched_assets;
+    std::vector<std::string> touched_animations;
+    std::vector<fs::path> written_files;
 };
 
 // -----------------------------
@@ -272,14 +283,10 @@ struct GenResult {
 class ImageCacheGenerator final {
 public:
     // Entry point.
-    // Must reproduce Python behavior:
-    // - Manifest parsing (for global effects) and asset iteration
-    // - Animation discovery (subdirs vs default)
-    // - Source frame enumeration: 0.png..N.png stopping at first missing
-    // - Rebuild decision: needs_rebuild true OR output missing, plus force option
-    // - Write output PNGs into the exact cache structure
-    // - Clear rebuild queue flags only after full successful generation
-    // - Never write the rebuild queue if any frame fails
+    // Runtime behavior:
+    // - explicit_rebuild_requests: rebuild only requested animations/frames/variants
+    // - missing_only: rebuild only missing output files in selected scope
+    // - no queue persistence and no metadata-hash stale checks
     static GenResult Run(const GeneratorOptions& opt, ILogger& log);
 
     // -------------------------
@@ -305,12 +312,6 @@ public:
     // Source frames in animation dir:
     // Only numeric enumeration 0.png.. until first missing.
     static std::vector<fs::path> EnumerateSourceFrames(const fs::path& anim_src_dir);
-
-    // -------------------------
-    // Manifest parsing and planning
-    // -------------------------
-    // Ensure frames_meta is at least source_frame_count long (default needs_rebuild=false).
-    static void EnsureFrameMetadata(std::vector<FrameMeta>& frames_meta, int source_frame_count);
 
     // Decide whether output should be built:
     // - if force_rebuild -> true

@@ -72,11 +72,12 @@
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"
 #include "utils/input.hpp"
-#include "utils/rebuild_queue.hpp"
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
 #include "utils/string_utils.hpp"
 #include "utils/display_color.hpp"
+#include "assets/asset/primary_asset_cache.hpp"
+#include "image_cache_generator.hpp"
 
 #include <algorithm>
 #include <unordered_map>
@@ -1074,13 +1075,121 @@ bool DevControls::run_exit_save_sequence(const std::string& reason) {
     bool cache_rebuild_ok = true;
     bool cache_pending_after = false;
 
-    if (!has_dirty_after) {
-        vibble::RebuildQueueCoordinator coordinator;
-        if (coordinator.has_pending_asset_work()) {
+    if (!has_dirty_after && assets_) {
+        struct PendingAssetRebuild {
+            std::shared_ptr<AssetInfo> info;
+            AssetInfo::TextureRebuildBucket pending;
+        };
+
+        class ExitRebuildLogger final : public imgcache::ILogger {
+        public:
+            void info(const std::string& msg) override {
+                vibble::log::info("[ExitRebuild] " + msg);
+            }
+            void warn(const std::string& msg) override {
+                vibble::log::warn("[ExitRebuild] " + msg);
+            }
+            void error(const std::string& msg) override {
+                vibble::log::warn("[ExitRebuild] " + msg);
+            }
+        };
+
+        std::vector<PendingAssetRebuild> pending_by_asset;
+        pending_by_asset.reserve(assets_->library().all().size());
+
+        imgcache::GeneratorOptions generator_options;
+#if defined(PROJECT_ROOT)
+        generator_options.manifest_path = std::filesystem::path(PROJECT_ROOT) / "manifest.json";
+#endif
+        generator_options.effects_backend = imgcache::EffectsBackend::Cpu;
+        generator_options.quiet_task_logs = true;
+        generator_options.missing_only = false;
+        generator_options.force_rebuild = false;
+
+        std::unordered_set<std::string> assets_requiring_bundle_refresh;
+
+        for (const auto& [asset_name, info] : assets_->library().all()) {
+            if (asset_name.empty() || !info) {
+                continue;
+            }
+
+            auto pending = info->consume_pending_texture_rebuild_on_close();
+            if (pending.empty()) {
+                continue;
+            }
+
+            if (pending.bundle_refresh_required) {
+                assets_requiring_bundle_refresh.insert(asset_name);
+            }
+
+            for (const auto& [animation_name, animation_request] : pending.animations) {
+                imgcache::GeneratorOptions::AnimationRebuildRequest request;
+                request.asset_name = asset_name;
+                request.animation_name = animation_name;
+                request.all_frames_variant_mask =
+                    static_cast<std::uint8_t>(animation_request.all_frames_variants &
+                                              imgcache::kTextureVariantMaskAll);
+                for (const auto& [frame_index, frame_mask] : animation_request.frame_variants) {
+                    request.frame_variant_masks[frame_index] =
+                        static_cast<std::uint8_t>(frame_mask & imgcache::kTextureVariantMaskAll);
+                }
+                generator_options.explicit_rebuild_requests.push_back(std::move(request));
+            }
+
+            pending_by_asset.push_back(PendingAssetRebuild{info, std::move(pending)});
+        }
+
+        if (!pending_by_asset.empty()) {
             cache_rebuild_attempted = true;
-            std::cout << "[DevControls] Exit save sequence running pending asset cache rebuilds.\n";
-            cache_rebuild_ok = coordinator.run_asset_tool();
-            cache_pending_after = coordinator.has_pending_asset_work();
+
+            auto restore_pending_flags = [&pending_by_asset]() {
+                for (auto& entry : pending_by_asset) {
+                    if (!entry.info) {
+                        continue;
+                    }
+                    entry.info->merge_pending_texture_rebuild_on_close(entry.pending);
+                }
+            };
+
+            if (!generator_options.explicit_rebuild_requests.empty()) {
+                ExitRebuildLogger logger;
+                auto generation_result = imgcache::ImageCacheGenerator::Run(generator_options, logger);
+                if (!generation_result.ok) {
+                    cache_rebuild_ok = false;
+                    cache_pending_after = true;
+                    restore_pending_flags();
+                } else {
+                    assets_requiring_bundle_refresh.insert(generation_result.touched_assets.begin(),
+                                                           generation_result.touched_assets.end());
+                }
+            }
+
+            if (cache_rebuild_ok && !assets_requiring_bundle_refresh.empty()) {
+                PrimaryAssetCache bundle_cache(assets_->renderer());
+                for (const auto& asset_name : assets_requiring_bundle_refresh) {
+                    auto info = assets_->library().get(asset_name);
+                    if (!info) {
+                        continue;
+                    }
+                    if (!bundle_cache.save_current(*info)) {
+                        cache_rebuild_ok = false;
+                        cache_pending_after = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!cache_rebuild_ok && !cache_pending_after) {
+                cache_pending_after = true;
+            }
+            if (!cache_rebuild_ok) {
+                for (auto& entry : pending_by_asset) {
+                    if (!entry.info) {
+                        continue;
+                    }
+                    entry.info->merge_pending_texture_rebuild_on_close(entry.pending);
+                }
+            }
         }
     }
 

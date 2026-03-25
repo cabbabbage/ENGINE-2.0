@@ -7,7 +7,7 @@
 // - Asset src resolution: default <manifest_dir>/resources/assets/<asset>, or asset_directory override
 // - Animation discovery: subdirectories, else single "default"
 // - Frame enumeration: 0.png, 1.png, ... stop at first missing
-// - Rebuild selection: flagged needs_rebuild frames OR missing output file(s) OR force option
+// - Rebuild selection: explicit runtime requests OR missing output file(s) OR force option
 // - Output layout:
 //   <cache_root>/<asset>/animations/<anim>/scale_<pct>/{normal,foreground,background}/{out_idx}.png
 // - Effects math matches apply_color_effects.py CPU path (brightness, contrast, hue, per-channel saturation)
@@ -21,9 +21,7 @@
 
 #include "image_cache_generator.hpp"
 
-#include "asset_metadata.hpp"
 #include "d3d11_effects_backend.hpp"
-#include "rebuild_queue.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -43,24 +41,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
-// ---- stb ----
-// You can move these defines into a single translation unit in your tools project if you prefer.
-#if defined(IMGCACHE_STB_IMAGE_IMPL) && !defined(STB_IMAGE_IMPLEMENTATION)
-#define STB_IMAGE_IMPLEMENTATION
-#endif
-#ifndef IMGCACHE_STB_IMAGE_IMPL
-#define IMGCACHE_STB_IMAGE_IMPL
-#define STB_IMAGE_IMPLEMENTATION
-#endif
 #include "utils/stb_image.h"
 
-#if defined(IMGCACHE_STB_IMAGE_WRITE_IMPL) && !defined(STB_IMAGE_WRITE_IMPLEMENTATION)
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#endif
-#ifndef IMGCACHE_STB_IMAGE_WRITE_IMPL
-#define IMGCACHE_STB_IMAGE_WRITE_IMPL
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#endif
 #include "utils/stb_image_write.h"
 
 namespace imgcache {
@@ -109,24 +91,6 @@ static inline bool file_exists(const fs::path& p) {
     return fs::exists(p, ec) && !ec;
 }
 
-static inline fs::file_time_type safe_last_write_time(const fs::path& p) {
-    std::error_code ec;
-    auto t = fs::last_write_time(p, ec);
-    if (ec) return fs::file_time_type::min();
-    return t;
-}
-
-static inline bool file_missing_or_stale(const fs::path& p, fs::file_time_type baseline) {
-    std::error_code ec;
-    if (!fs::exists(p, ec) || ec) return true;
-    auto t = fs::last_write_time(p, ec);
-    if (ec) return true;
-    if (baseline != fs::file_time_type::min() && t < baseline) return true;
-    uintmax_t sz = fs::file_size(p, ec);
-    if (ec) return true;
-    return sz < 32;
-}
-
 static const std::vector<int>& canonical_scale_percents() {
     static const std::vector<int> kCanonicalScalePercents{100, 90, 80, 70, 60, 50, 40, 30, 20, 10};
     return kCanonicalScalePercents;
@@ -164,6 +128,31 @@ static void prune_non_canonical_scale_dirs(const fs::path& animation_cache_root,
             log.info("Pruned non-canonical scale directory: " + entry.path().string());
         }
     }
+}
+
+static std::vector<std::string> discover_asset_names_from_source_root(const fs::path& assets_root) {
+    std::vector<std::string> names;
+    std::error_code ec;
+    if (!fs::exists(assets_root, ec) || ec || !fs::is_directory(assets_root, ec)) {
+        return names;
+    }
+
+    for (const auto& entry : fs::directory_iterator(assets_root, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_directory()) {
+            continue;
+        }
+        const std::string asset_name = entry.path().filename().string();
+        if (!asset_name.empty()) {
+            names.push_back(asset_name);
+        }
+    }
+
+    std::sort(names.begin(), names.end());
+    names.erase(std::unique(names.begin(), names.end()), names.end());
+    return names;
 }
 
 // -----------------------------
@@ -894,9 +883,110 @@ struct SourceFrameBatch {
 // ImageCacheGenerator public API
 // -----------------------------
 GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
-    GenResult result;
+    auto sanitize_mask = [](std::uint8_t mask) -> std::uint8_t {
+        return static_cast<std::uint8_t>(mask & kTextureVariantMaskAll);
+    };
+    auto merge_mask = [&](std::uint8_t& target, std::uint8_t mask) {
+        target = sanitize_mask(static_cast<std::uint8_t>(target | sanitize_mask(mask)));
+    };
+    auto merge_frame_mask = [&](std::unordered_map<int, std::uint8_t>& target,
+                                int frame_idx,
+                                std::uint8_t mask) {
+        if (frame_idx < 0) {
+            return;
+        }
+        mask = sanitize_mask(mask);
+        if (mask == kTextureVariantMaskNone) {
+            return;
+        }
+        auto [it, inserted] = target.emplace(frame_idx, mask);
+        if (!inserted) {
+            merge_mask(it->second, mask);
+        }
+    };
+    auto animations_payload_from_asset = [](const ordered_json& asset_meta) -> const ordered_json* {
+        if (!asset_meta.is_object()) {
+            return nullptr;
+        }
+        auto it = asset_meta.find("animations");
+        if (it == asset_meta.end() || !it->is_object()) {
+            return nullptr;
+        }
+        auto nested = it->find("animations");
+        if (nested != it->end() && nested->is_object()) {
+            return &(*nested);
+        }
+        return &(*it);
+    };
+    auto resolve_anim_dir_runtime = [&](const fs::path& asset_src_dir,
+                                        const std::string& anim_name,
+                                        const ordered_json& anim_meta,
+                                        const std::unordered_map<std::string, fs::path>& discovered_anims) {
+        if (anim_meta.is_object() && anim_meta.contains("source") && anim_meta["source"].is_object()) {
+            const auto& source = anim_meta["source"];
+            const std::string kind = source.value("kind", std::string{});
+            if (kind == "folder") {
+                const std::string path = source.value("path", anim_name);
+                if (!path.empty()) {
+                    fs::path p(path);
+                    if (p.is_absolute()) {
+                        return p;
+                    }
+                    return asset_src_dir / p;
+                }
+            }
+        }
+        auto discovered_it = discovered_anims.find(anim_name);
+        if (discovered_it != discovered_anims.end()) {
+            return discovered_it->second;
+        }
+        if (anim_name == "default") {
+            return asset_src_dir;
+        }
+        return asset_src_dir / anim_name;
+    };
+    auto output_missing_mask = [&](const fs::path& cache_root,
+                                   const std::string& asset_name,
+                                   const std::string& anim_name,
+                                   int scale_pct,
+                                   int out_idx) {
+        std::uint8_t mask = kTextureVariantMaskNone;
+        if (!file_exists(CachePaths::frame_png_path(cache_root,
+                                                    asset_name,
+                                                    anim_name,
+                                                    scale_pct,
+                                                    Variant::Normal,
+                                                    out_idx))) {
+            merge_mask(mask, kTextureVariantMaskNormal);
+        }
+        if (!file_exists(CachePaths::frame_png_path(cache_root,
+                                                    asset_name,
+                                                    anim_name,
+                                                    scale_pct,
+                                                    Variant::Foreground,
+                                                    out_idx))) {
+            merge_mask(mask, kTextureVariantMaskForeground);
+        }
+        if (!file_exists(CachePaths::frame_png_path(cache_root,
+                                                    asset_name,
+                                                    anim_name,
+                                                    scale_pct,
+                                                    Variant::Background,
+                                                    out_idx))) {
+            merge_mask(mask, kTextureVariantMaskBackground);
+        }
+        return mask;
+    };
 
-    // Resolve manifest path
+    struct ExplicitAnimRequest {
+        std::uint8_t all_frames_mask = kTextureVariantMaskNone;
+        std::unordered_map<int, std::uint8_t> frame_masks;
+    };
+
+    GenResult result;
+    const bool explicit_mode = opt.has_explicit_rebuild_requests();
+    const bool missing_only_mode = opt.missing_only || (!explicit_mode && !opt.force_rebuild);
+
     auto manifest_path_opt = ResolveManifestPath(opt);
     if (!manifest_path_opt) {
         result.ok = false;
@@ -905,8 +995,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     }
     const fs::path manifest_path = *manifest_path_opt;
     const fs::path manifest_dir = manifest_path.parent_path();
+    const fs::path repo_root = manifest_dir;
 
-    // Read manifest as ordered_json to preserve ordering on write
     std::string err;
     std::string text = read_text_file(manifest_path, err);
     if (!err.empty()) {
@@ -923,42 +1013,26 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         result.error = std::string("Manifest parse failed: ") + e.what();
         return result;
     }
-
     if (!manifest.is_object()) {
         result.ok = false;
         result.error = "Manifest root is not a JSON object.";
         return result;
     }
 
-    // Repo root is defined by python as the directory containing manifest.json (search upward).
-    // The python tool defaults asset src to: <manifest_dir>/resources/assets/<asset>
-    fs::path repo_root = manifest_dir;
-
-    // Cache root
-    fs::path cache_root = ResolveCacheRoot(repo_root, opt);
-
-    // Update effects cache like python. FG/BG freshness checks compare against this timestamp.
-    if (!opt.dry_run) {
-        update_effects_cache_like_python(cache_root, manifest, log);
-    }
-    const fs::path effects_cache_path = cache_root / "effects_cache.json";
-    const fs::file_time_type effects_cache_mtime = safe_last_write_time(effects_cache_path);
-
-    // Canonical scales are always enforced engine-wide.
+    const fs::path cache_root = ResolveCacheRoot(repo_root, opt);
     std::vector<int> scale_pcts = canonical_scale_percents();
     if (!opt.scale_percents.empty() && opt.scale_percents != scale_pcts) {
         log.warn("Ignoring custom scale percentages; generator enforces canonical 100..10 variants.");
     }
 
-    // Worker count
     std::uint32_t workers = opt.worker_count_override;
     if (workers == 0) {
         unsigned hc = std::thread::hardware_concurrency();
         if (hc == 0) hc = 4;
         workers = (hc > 1) ? (hc - 1) : 1;
     }
+    (void)workers;
 
-    // Resolve effects backend once per run.
     bool use_d3d11_effects = false;
     std::string d3d11_reason;
     if (opt.effects_backend == EffectsBackend::Auto || opt.effects_backend == EffectsBackend::D3D11) {
@@ -974,584 +1048,328 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         log.info(std::string("Effects backend: cpu (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
     }
 
-    // Load rebuild queue
-    const fs::path rebuild_queue_path = ResolveRebuildQueuePath(cache_root);
-    ordered_json rebuild_queue = LoadRebuildQueue(rebuild_queue_path);
-    bool rebuild_queue_dirty = false;
-
-    ordered_json metadata_cache = LoadAssetMetadataCache(cache_root);
-    bool metadata_cache_dirty = false;
-
-    // Collect work grouped by source frame so PNG decode happens once per source.
-    std::vector<SourceFrameBatch> source_batches;
-    source_batches.reserve(1024);
-    std::unordered_map<std::string, std::size_t> source_batch_index;
-    source_batch_index.reserve(1024);
-    std::uint64_t planned_scale_tasks = 0;
-
-    // Track per-animation flagged variants to clear if everything succeeds.
-    struct FlagClearFrame {
-        int frame_idx = -1;
-        std::uint8_t variants = kVariantAll;
-    };
-    struct FlagClear {
-        std::string asset_name;
-        std::string anim_name;
-        std::vector<FlagClearFrame> flagged;
-    };
-    std::vector<FlagClear> to_clear;
-
-    std::unordered_set<std::string> assets_touched;
-    std::unordered_set<std::string> anims_touched;
-    std::unordered_map<std::string, std::string> asset_meta_hashes;
-
-    const fs::path assets_root = manifest_dir / "resources" / "assets";
-    std::vector<std::string> asset_names;
-    if (!opt.filters.assets.empty()) {
-        asset_names.assign(opt.filters.assets.begin(), opt.filters.assets.end());
-    } else {
-        asset_names = DiscoverAssetNames(assets_root);
-    }
-    if (asset_names.empty() && rebuild_queue.contains("assets") && rebuild_queue["assets"].is_object()) {
-        for (auto it = rebuild_queue["assets"].begin(); it != rebuild_queue["assets"].end(); ++it) {
-            asset_names.push_back(it.key());
+    std::unordered_map<std::string, std::unordered_map<std::string, ExplicitAnimRequest>> explicit_requests;
+    for (const auto& request : opt.explicit_rebuild_requests) {
+        if (request.asset_name.empty() || request.animation_name.empty()) {
+            continue;
+        }
+        auto& entry = explicit_requests[request.asset_name][request.animation_name];
+        merge_mask(entry.all_frames_mask, request.all_frames_variant_mask);
+        for (const auto& frame_pair : request.frame_variant_masks) {
+            merge_frame_mask(entry.frame_masks, frame_pair.first, frame_pair.second);
         }
     }
+
+    const ordered_json* manifest_assets = nullptr;
+    if (manifest.contains("assets") && manifest["assets"].is_object()) {
+        manifest_assets = &manifest["assets"];
+    }
+
+    std::vector<std::string> asset_names;
+    if (explicit_mode) {
+        asset_names.reserve(explicit_requests.size());
+        for (const auto& entry : explicit_requests) {
+            if (!entry.first.empty()) {
+                asset_names.push_back(entry.first);
+            }
+        }
+    } else if (!opt.filters.assets.empty()) {
+        asset_names.assign(opt.filters.assets.begin(), opt.filters.assets.end());
+    } else if (manifest_assets) {
+        for (auto it = manifest_assets->begin(); it != manifest_assets->end(); ++it) {
+            if (!it.key().empty()) {
+                asset_names.push_back(it.key());
+            }
+        }
+    } else {
+        asset_names = discover_asset_names_from_source_root(manifest_dir / "resources" / "assets");
+    }
+    std::sort(asset_names.begin(), asset_names.end());
+    asset_names.erase(std::unique(asset_names.begin(), asset_names.end()), asset_names.end());
 
     EffectsParams fx_fg = parse_effects_block(manifest, "foreground");
     EffectsParams fx_bg = parse_effects_block(manifest, "background");
 
-    // Iterate assets
+    std::unordered_set<std::string> touched_assets_set;
+    std::unordered_set<std::string> touched_anims_set;
+    std::vector<fs::path> written_files;
+
+    auto finalize_fail = [&](const std::string& message) -> GenResult {
+        result.ok = false;
+        result.error = message;
+        result.stats.assets_touched = touched_assets_set.size();
+        result.stats.animations_touched = touched_anims_set.size();
+        result.touched_assets.assign(touched_assets_set.begin(), touched_assets_set.end());
+        result.touched_animations.assign(touched_anims_set.begin(), touched_anims_set.end());
+        std::sort(result.touched_assets.begin(), result.touched_assets.end());
+        std::sort(result.touched_animations.begin(), result.touched_animations.end());
+        result.written_files = std::move(written_files);
+        return result;
+    };
+
     for (const auto& asset_name : asset_names) {
-        if (!opt.filters.matches_asset(asset_name)) continue;
+        if (!opt.filters.matches_asset(asset_name)) {
+            continue;
+        }
 
-        AssetRecord asset = BuildAssetRecord(manifest_dir, repo_root, cache_root, asset_name);
-        const std::string current_meta_hash = BuildImageMetadataHash(asset.meta);
-        asset_meta_hashes[asset_name] = current_meta_hash;
-        const std::string cached_meta_hash = CachedImageMetadataHash(metadata_cache, asset_name);
-        const bool asset_meta_changed = !current_meta_hash.empty() && current_meta_hash != cached_meta_hash;
+        ordered_json asset_meta = ordered_json::object();
+        if (manifest_assets &&
+            manifest_assets->contains(asset_name) &&
+            (*manifest_assets)[asset_name].is_object()) {
+            asset_meta = (*manifest_assets)[asset_name];
+        }
 
-        const ordered_json* anim_payloads = AnimationsObject(asset.meta);
+        const fs::path asset_source_dir = ResolveAssetSourceDir(manifest_dir, repo_root, asset_name, asset_meta);
+        const auto discovered_anims_list = DiscoverAnimations(asset_source_dir);
+        std::unordered_map<std::string, fs::path> discovered_anims;
+        for (const auto& discovered : discovered_anims_list) {
+            if (!discovered.first.empty()) {
+                discovered_anims.emplace(discovered.first, discovered.second);
+            }
+        }
 
-        for (const auto& anim_name : asset.anim_names) {
-            if (!opt.filters.matches_anim(anim_name)) continue;
+        const ordered_json* anim_payloads = animations_payload_from_asset(asset_meta);
+        std::vector<std::string> anim_names;
+        if (anim_payloads && anim_payloads->is_object()) {
+            for (auto it = anim_payloads->begin(); it != anim_payloads->end(); ++it) {
+                if (!it.key().empty()) {
+                    anim_names.push_back(it.key());
+                }
+            }
+        }
+        for (const auto& discovered : discovered_anims) {
+            if (std::find(anim_names.begin(), anim_names.end(), discovered.first) == anim_names.end()) {
+                anim_names.push_back(discovered.first);
+            }
+        }
+        std::sort(anim_names.begin(), anim_names.end());
+        anim_names.erase(std::unique(anim_names.begin(), anim_names.end()), anim_names.end());
+
+        for (const auto& anim_name : anim_names) {
+            if (!opt.filters.matches_anim(anim_name)) {
+                continue;
+            }
+
+            const auto explicit_asset_it = explicit_requests.find(asset_name);
+            const auto explicit_anim_it =
+                explicit_asset_it == explicit_requests.end()
+                    ? std::unordered_map<std::string, ExplicitAnimRequest>::const_iterator{}
+                    : explicit_asset_it->second.find(anim_name);
+            const bool has_explicit_request =
+                explicit_asset_it != explicit_requests.end() &&
+                explicit_anim_it != explicit_asset_it->second.end();
+
+            if (explicit_mode && !has_explicit_request && !missing_only_mode && !opt.force_rebuild) {
+                continue;
+            }
 
             ordered_json anim_meta = ordered_json::object();
-            if (anim_payloads && anim_payloads->is_object() &&
-                anim_payloads->contains(anim_name) && (*anim_payloads)[anim_name].is_object()) {
+            if (anim_payloads &&
+                anim_payloads->is_object() &&
+                anim_payloads->contains(anim_name) &&
+                (*anim_payloads)[anim_name].is_object()) {
                 anim_meta = (*anim_payloads)[anim_name];
             }
 
-            const fs::path anim_dir = ResolveAnimDir(asset.source_dir, anim_name, anim_meta, asset.discovered_anims);
-
-            // Enumerate numeric frames
-            std::vector<fs::path> frame_paths = EnumerateSourceFrames(anim_dir);
+            const fs::path anim_dir =
+                resolve_anim_dir_runtime(asset_source_dir, anim_name, anim_meta, discovered_anims);
+            const std::vector<fs::path> frame_paths = EnumerateSourceFrames(anim_dir);
             if (frame_paths.empty()) {
-                log.warn("No frames found for asset '" + asset_name + "' animation '" + anim_name + "' in " + anim_dir.string());
+                log.warn("No frames found for asset '" + asset_name + "' animation '" + anim_name +
+                         "' in " + anim_dir.string());
                 continue;
             }
 
             if (!opt.dry_run) {
-                const fs::path anim_cache_root = cache_root / asset_name / "animations" / anim_name;
-                prune_non_canonical_scale_dirs(anim_cache_root, log);
+                prune_non_canonical_scale_dirs(cache_root / asset_name / "animations" / anim_name, log);
             }
-            std::vector<fs::file_time_type> frame_mtimes(frame_paths.size(), fs::file_time_type::min());
-            for (size_t i = 0; i < frame_paths.size(); ++i) frame_mtimes[i] = safe_last_write_time(frame_paths[i]);
 
-            const ordered_json* queue_anim_entry = FindAnimEntry(rebuild_queue, asset_name, anim_name, false);
-            std::vector<FlaggedFrame> flagged_entries =
-                queue_anim_entry ? FlaggedFramesDetailed(*queue_anim_entry) : std::vector<FlaggedFrame>{};
-
-            std::unordered_map<int, std::uint8_t> flagged_masks_by_frame;
-            flagged_masks_by_frame.reserve(flagged_entries.size());
-            for (const FlaggedFrame& flagged_entry : flagged_entries) {
-                const int frame_idx = flagged_entry.index;
-                if (frame_idx < 0) {
+            bool touched_animation = false;
+            for (int frame_idx = 0; frame_idx < static_cast<int>(frame_paths.size()); ++frame_idx) {
+                if (!opt.filters.matches_source_frame(frame_idx)) {
                     continue;
                 }
-                const std::uint8_t mask = flagged_entry.has_variant_mask ? flagged_entry.variants : kVariantAll;
-                auto [it, inserted] = flagged_masks_by_frame.emplace(frame_idx, mask);
-                if (!inserted) {
-                    it->second = static_cast<std::uint8_t>(it->second | mask);
-                }
-            }
 
-            std::vector<int> frame_sequence(frame_paths.size());
-            std::iota(frame_sequence.begin(), frame_sequence.end(), 0);
+                bool source_loaded = false;
+                ImageRGBA source_image;
+                bool expanded_loaded = false;
+                ImageRGBA expanded_source;
+                bool fg_ready = false;
+                ImageRGBA fg_base;
+                bool bg_ready = false;
+                ImageRGBA bg_base;
 
-            // For each scale, build output groups like python
-            for (int pct : scale_pcts) {
-                float scale_factor = static_cast<float>(pct) / 100.0f;
+                for (int pct : scale_pcts) {
+                    const int out_idx = frame_idx;
+                    std::uint8_t write_mask = kTextureVariantMaskNone;
 
-                struct OutputGroup {
-                    int src_idx = 0;
-                    std::uint8_t write_mask = 0;
-                    std::vector<int> out_indices;
-                };
-                std::unordered_map<std::string, OutputGroup> output_groups;
-                output_groups.reserve(frame_paths.size());
-
-                for (int out_idx = 0; out_idx < static_cast<int>(frame_sequence.size()); ++out_idx) {
-                    int src_idx = frame_sequence[out_idx];
-                    if (src_idx < 0 || src_idx >= static_cast<int>(frame_paths.size())) continue;
-                    if (!opt.filters.matches_source_frame(src_idx)) continue;
-
-                    const auto flagged_it = flagged_masks_by_frame.find(src_idx);
-                    const std::uint8_t flagged_mask = flagged_it != flagged_masks_by_frame.end() ? flagged_it->second : 0u;
-                    const bool flagged_normal = (flagged_mask & kVariantNormal) != 0u;
-                    const bool flagged_foreground = (flagged_mask & kVariantForeground) != 0u;
-                    const bool flagged_background = (flagged_mask & kVariantBackground) != 0u;
-
-                    fs::file_time_type normal_baseline = fs::file_time_type::min();
-                    if (src_idx >= 0 && src_idx < static_cast<int>(frame_mtimes.size())) {
-                        normal_baseline = frame_mtimes[static_cast<size_t>(src_idx)];
+                    if (opt.force_rebuild) {
+                        write_mask = kTextureVariantMaskAll;
                     }
-                    fs::file_time_type effects_baseline = std::max(normal_baseline, effects_cache_mtime);
-
-                    fs::path npath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Normal, out_idx);
-                    fs::path fpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Foreground, out_idx);
-                    fs::path bpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Background, out_idx);
-
-                    const bool stale_normal =
-                        asset_meta_changed || file_missing_or_stale(npath, normal_baseline);
-                    const bool stale_foreground =
-                        asset_meta_changed || file_missing_or_stale(fpath, effects_baseline);
-                    const bool stale_background =
-                        asset_meta_changed || file_missing_or_stale(bpath, effects_baseline);
-
-                    const bool write_normal = opt.force_rebuild || flagged_normal || stale_normal;
-                    const bool write_foreground = opt.force_rebuild || flagged_foreground || stale_foreground;
-                    const bool write_background = opt.force_rebuild || flagged_background || stale_background;
-
-                    std::uint8_t write_mask = 0u;
-                    if (write_normal) {
-                        write_mask = static_cast<std::uint8_t>(write_mask | kVariantNormal);
+                    if (has_explicit_request) {
+                        merge_mask(write_mask, explicit_anim_it->second.all_frames_mask);
+                        auto frame_it = explicit_anim_it->second.frame_masks.find(frame_idx);
+                        if (frame_it != explicit_anim_it->second.frame_masks.end()) {
+                            merge_mask(write_mask, frame_it->second);
+                        }
                     }
-                    if (write_foreground) {
-                        write_mask = static_cast<std::uint8_t>(write_mask | kVariantForeground);
-                    }
-                    if (write_background) {
-                        write_mask = static_cast<std::uint8_t>(write_mask | kVariantBackground);
+                    if (missing_only_mode) {
+                        merge_mask(write_mask,
+                                   output_missing_mask(cache_root, asset_name, anim_name, pct, out_idx));
                     }
 
-                    if (write_mask == 0u) {
+                    write_mask = sanitize_mask(write_mask);
+                    if (write_mask == kTextureVariantMaskNone) {
                         continue;
                     }
 
-                    const std::string group_key = std::to_string(src_idx) + ":" + std::to_string(static_cast<int>(write_mask));
-                    auto [group_it, inserted] = output_groups.emplace(group_key, OutputGroup{});
-                    if (inserted) {
-                        group_it->second.src_idx = src_idx;
-                        group_it->second.write_mask = write_mask;
+                    touched_animation = true;
+                    ++result.stats.tasks_total;
+
+                    if (opt.dry_run) {
+                        ++result.stats.tasks_succeeded;
+                        continue;
                     }
-                    group_it->second.out_indices.push_back(out_idx);
-                }
 
-                if (output_groups.empty()) continue;
+                    if (!source_loaded) {
+                        auto source_opt = LoadPngRGBA(frame_paths[frame_idx], err);
+                        if (!source_opt) {
+                            ++result.stats.tasks_failed;
+                            return finalize_fail("Load failed: " + frame_paths[frame_idx].string() + " : " + err);
+                        }
+                        source_image = std::move(*source_opt);
+                        source_loaded = true;
+                    }
 
-                // Ensure dirs like python
-                fs::path normal_dir = CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Normal);
-                fs::path fg_dir = CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Foreground);
-                fs::path bg_dir = CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Background);
-
-                if (!opt.dry_run) {
+                    const fs::path normal_dir =
+                        CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Normal);
+                    const fs::path fg_dir =
+                        CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Foreground);
+                    const fs::path bg_dir =
+                        CachePaths::variant_dir(cache_root, asset_name, anim_name, pct, Variant::Background);
                     std::error_code ec;
                     fs::create_directories(normal_dir, ec);
                     fs::create_directories(fg_dir, ec);
                     fs::create_directories(bg_dir, ec);
-                }
 
-                for (auto& kv : output_groups) {
-                    OutputGroup& group = kv.second;
-                    const int src_idx = group.src_idx;
-                    WorkItem w;
-                    w.asset_name = asset_name;
-                    w.anim_name = anim_name;
-                    w.src_frame_index = src_idx;
-                    w.out_indices = std::move(group.out_indices);
-                    w.scale_pct = pct;
-                    w.scale_factor = scale_factor;
-                    w.src_png_path = frame_paths[src_idx];
-                    w.out_normal_dir = normal_dir;
-                    w.out_foreground_dir = fg_dir;
-                    w.out_background_dir = bg_dir;
-                    w.write_normal = (group.write_mask & kVariantNormal) != 0u;
-                    w.write_foreground = (group.write_mask & kVariantForeground) != 0u;
-                    w.write_background = (group.write_mask & kVariantBackground) != 0u;
-                    w.fx_foreground = fx_fg;
-                    w.fx_background = fx_bg;
+                    const fs::path normal_path = normal_dir / (std::to_string(out_idx) + ".png");
+                    const fs::path fg_path = fg_dir / (std::to_string(out_idx) + ".png");
+                    const fs::path bg_path = bg_dir / (std::to_string(out_idx) + ".png");
 
-                    const std::string batch_key = asset_name + '\x1f' + anim_name + '\x1f' + std::to_string(src_idx);
-                    auto [it, inserted] = source_batch_index.emplace(batch_key, source_batches.size());
-                    if (inserted) {
-                        SourceFrameBatch batch;
-                        batch.asset_name = asset_name;
-                        batch.anim_name = anim_name;
-                        batch.src_frame_index = src_idx;
-                        batch.src_png_path = frame_paths[src_idx];
-                        source_batches.push_back(std::move(batch));
-                    }
-                    source_batches[it->second].scale_items.push_back(std::move(w));
-                    ++planned_scale_tasks;
-                }
+                    const float scale_factor = static_cast<float>(pct) / 100.0f;
+                    const int normal_w = std::max(1, static_cast<int>(std::lround(source_image.w * scale_factor)));
+                    const int normal_h = std::max(1, static_cast<int>(std::lround(source_image.h * scale_factor)));
+                    const int effects_w = std::max(1, normal_w * 2);
+                    const int effects_h = std::max(1, normal_h * 2);
 
-                assets_touched.insert(asset_name);
-                anims_touched.insert(asset_name + "::" + anim_name);
-            }
-
-            // Only clear the frames that were flagged at the start, and only after full success.
-            // This matches Python: it clears only flagged_frames, not missing-output rebuilds.
-            if (!flagged_entries.empty()) {
-                FlagClear clear_entry;
-                clear_entry.asset_name = asset_name;
-                clear_entry.anim_name = anim_name;
-                clear_entry.flagged.reserve(flagged_masks_by_frame.size());
-                for (const auto& flagged_pair : flagged_masks_by_frame) {
-                    clear_entry.flagged.push_back(FlagClearFrame{flagged_pair.first, flagged_pair.second});
-                }
-                to_clear.push_back(std::move(clear_entry));
-            }
-        }
-    }
-
-    result.stats.tasks_total = planned_scale_tasks;
-    result.stats.assets_touched = assets_touched.size();
-    result.stats.animations_touched = anims_touched.size();
-
-    // Dry run: report and exit
-    if (opt.dry_run) {
-        std::ostringstream ss;
-        ss << "Dry run: " << planned_scale_tasks << " scale tasks in " << source_batches.size() << " source-frame batches";
-        log.info(ss.str());
-        result.ok = true;
-        return result;
-    }
-
-    std::atomic<bool> any_fail{false};
-    std::mutex err_mu;
-    std::string first_error;
-
-    std::atomic<std::uint64_t> pngs_written{0};
-    std::atomic<std::uint64_t> pngs_skipped{0};
-    std::atomic<std::uint64_t> tasks_ok{0};
-    std::atomic<std::uint64_t> tasks_fail{0};
-
-    if (!source_batches.empty()) {
-        const std::uint64_t total_scale_tasks = planned_scale_tasks;
-        std::atomic<std::uint64_t> scales_progress{0};
-        const std::uint64_t progress_interval = 50;
-
-        // Execute source-frame batches in thread pool. Each batch decodes source PNG once and fans out to all scales.
-        ThreadPool pool(workers);
-
-        for (const SourceFrameBatch& batch : source_batches) {
-            pool.enqueue([&log,
-                          &batch,
-                          use_d3d11_effects,
-                          quiet_task_logs = opt.quiet_task_logs,
-                          total_scale_tasks,
-                          progress_interval,
-                          &scales_progress,
-                          &any_fail,
-                          &err_mu,
-                          &first_error,
-                          &pngs_written,
-                          &pngs_skipped,
-                          &tasks_ok,
-                          &tasks_fail]() {
-                if (any_fail.load(std::memory_order_relaxed)) {
-                    // We still allow other tasks to finish, but no need to do extra work.
-                }
-
-                if (!quiet_task_logs) {
-                    std::ostringstream hdr;
-                    hdr << "[batch " << batch.asset_name << "/" << batch.anim_name
-                        << " src=" << batch.src_frame_index
-                        << " scales=" << batch.scale_items.size() << "]";
-                    log.info(hdr.str());
-                }
-
-                std::string err;
-                auto src_img_opt = ImageCacheGenerator::LoadPngRGBA(batch.src_png_path, err);
-                if (!src_img_opt) {
-                    tasks_fail.fetch_add(batch.scale_items.size());
-                    any_fail.store(true);
-                    std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Load failed: " + batch.src_png_path.string() + " : " + err;
-                    log.error("Load failed: " + batch.src_png_path.string() + " : " + err);
-                    return;
-                }
-                ImageRGBA src_img = *src_img_opt;
-
-                bool batch_needs_fg = false;
-                bool batch_needs_bg = false;
-                for (const WorkItem& item : batch.scale_items) {
-                    batch_needs_fg = batch_needs_fg || item.write_foreground;
-                    batch_needs_bg = batch_needs_bg || item.write_background;
-                }
-
-                ImageRGBA fg_base;
-                ImageRGBA bg_base;
-                if (batch_needs_fg || batch_needs_bg) {
-                    ImageRGBA expanded_src = make_centered_transparent_2x_canvas(src_img);
-                    if (!expanded_src.valid()) {
-                        tasks_fail.fetch_add(batch.scale_items.size());
-                        any_fail.store(true);
-                        std::lock_guard<std::mutex> lk(err_mu);
-                        if (first_error.empty()) first_error = "Expand canvas failed: " + batch.src_png_path.string();
-                        log.error("Expand canvas failed: " + batch.src_png_path.string());
-                        return;
-                    }
-
-                    const WorkItem& fx_ref = batch.scale_items.front();
-                    if (batch_needs_fg) {
-                        if (!apply_effects_on_expanded_canvas(expanded_src,
-                                                              fx_ref.fx_foreground,
-                                                              EffectLayerMode::Foreground,
-                                                              use_d3d11_effects,
-                                                              fg_base,
-                                                              err)) {
-                            tasks_fail.fetch_add(batch.scale_items.size());
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Foreground effects failed: " + batch.src_png_path.string() + " : " + err;
-                            log.error("Foreground effects failed: " + batch.src_png_path.string() + " : " + err);
-                            return;
+                    if ((write_mask & kTextureVariantMaskNormal) != 0u) {
+                        auto normal_opt = resize_lanczos_rgba(source_image, normal_w, normal_h, err);
+                        if (!normal_opt) {
+                            ++result.stats.tasks_failed;
+                            return finalize_fail("Normal resize failed: " + frame_paths[frame_idx].string() + " : " + err);
                         }
-                    }
-
-                    if (batch_needs_bg) {
-                        if (!apply_effects_on_expanded_canvas(expanded_src,
-                                                              fx_ref.fx_background,
-                                                              EffectLayerMode::Background,
-                                                              use_d3d11_effects,
-                                                              bg_base,
-                                                              err)) {
-                            tasks_fail.fetch_add(batch.scale_items.size());
-                            any_fail.store(true);
-                            std::lock_guard<std::mutex> lk(err_mu);
-                            if (first_error.empty()) first_error = "Background effects failed: " + batch.src_png_path.string() + " : " + err;
-                            log.error("Background effects failed: " + batch.src_png_path.string() + " : " + err);
-                            return;
+                        if (!SavePngRGBA(normal_path, *normal_opt, err)) {
+                            ++result.stats.tasks_failed;
+                            return finalize_fail("Save failed: " + normal_path.string() + " : " + err);
                         }
-                    }
-                }
-
-                std::unordered_map<int, ImageRGBA> normal_scale_cache;
-                std::unordered_map<int, ImageRGBA> fg_scale_cache;
-                std::unordered_map<int, ImageRGBA> bg_scale_cache;
-                normal_scale_cache.reserve(batch.scale_items.size());
-                fg_scale_cache.reserve(batch.scale_items.size());
-                bg_scale_cache.reserve(batch.scale_items.size());
-
-                for (std::size_t scale_idx = 0; scale_idx < batch.scale_items.size(); ++scale_idx) {
-                    const WorkItem& w = batch.scale_items[scale_idx];
-                    const std::size_t remaining_scales = batch.scale_items.size() - scale_idx;
-
-                    if (!quiet_task_logs) {
-                        std::ostringstream hdr;
-                        hdr << "[" << w.asset_name << "/" << w.anim_name
-                            << " src=" << w.src_frame_index
-                            << " scale=" << w.scale_pct
-                            << " outs=" << w.out_indices.size()
-                            << " write(n=" << (w.write_normal ? "y" : "n")
-                            << ",fg=" << (w.write_foreground ? "y" : "n")
-                            << ",bg=" << (w.write_background ? "y" : "n") << ")]";
-                        log.info(hdr.str());
+                        written_files.push_back(normal_path);
+                        ++result.stats.pngs_written;
                     }
 
-                    const int normal_w = std::max(1, static_cast<int>(std::lround(src_img.w * w.scale_factor)));
-                    const int normal_h = std::max(1, static_cast<int>(std::lround(src_img.h * w.scale_factor)));
-                    const int effect_w = std::max(1, normal_w * 2);
-                    const int effect_h = std::max(1, normal_h * 2);
-
-                    const ImageRGBA* normal_img = nullptr;
-                    if (w.write_normal) {
-                        auto normal_it = normal_scale_cache.find(w.scale_pct);
-                        if (normal_it == normal_scale_cache.end()) {
-                            auto resized_opt = resize_lanczos_rgba(src_img, normal_w, normal_h, err);
-                            if (!resized_opt) {
-                                tasks_fail.fetch_add(remaining_scales);
-                                any_fail.store(true);
-                                std::lock_guard<std::mutex> lk(err_mu);
-                                if (first_error.empty()) first_error = "Normal resize failed: " + batch.src_png_path.string() + " : " + err;
-                                log.error("Normal resize failed: " + batch.src_png_path.string() + " : " + err);
-                                return;
-                            }
-                            normal_it = normal_scale_cache.emplace(w.scale_pct, std::move(*resized_opt)).first;
-                        }
-                        normal_img = &normal_it->second;
-                    }
-
-                    const ImageRGBA* fg_img = nullptr;
-                    if (w.write_foreground) {
-                        if (w.scale_pct == 100) {
-                            fg_img = &fg_base;
-                        } else {
-                            auto fg_it = fg_scale_cache.find(w.scale_pct);
-                            if (fg_it == fg_scale_cache.end()) {
-                                auto resized_opt = resize_lanczos_rgba(fg_base, effect_w, effect_h, err);
-                                if (!resized_opt) {
-                                    tasks_fail.fetch_add(remaining_scales);
-                                    any_fail.store(true);
-                                    std::lock_guard<std::mutex> lk(err_mu);
-                                    if (first_error.empty()) first_error = "Foreground downscale failed: " + batch.src_png_path.string() + " : " + err;
-                                    log.error("Foreground downscale failed: " + batch.src_png_path.string() + " : " + err);
-                                    return;
+                    if ((write_mask & kTextureVariantMaskForeground) != 0u) {
+                        if (!fg_ready) {
+                            if (!expanded_loaded) {
+                                expanded_source = make_centered_transparent_2x_canvas(source_image);
+                                if (!expanded_source.valid()) {
+                                    ++result.stats.tasks_failed;
+                                    return finalize_fail("Expand canvas failed: " + frame_paths[frame_idx].string());
                                 }
-                                fg_it = fg_scale_cache.emplace(w.scale_pct, std::move(*resized_opt)).first;
+                                expanded_loaded = true;
                             }
-                            fg_img = &fg_it->second;
+                            if (!apply_effects_on_expanded_canvas(expanded_source,
+                                                                  fx_fg,
+                                                                  EffectLayerMode::Foreground,
+                                                                  use_d3d11_effects,
+                                                                  fg_base,
+                                                                  err)) {
+                                ++result.stats.tasks_failed;
+                                return finalize_fail("Foreground effects failed: " + frame_paths[frame_idx].string() + " : " + err);
+                            }
+                            fg_ready = true;
                         }
+                        ImageRGBA fg_scaled = fg_base;
+                        if (pct != 100) {
+                            auto fg_opt = resize_lanczos_rgba(fg_base, effects_w, effects_h, err);
+                            if (!fg_opt) {
+                                ++result.stats.tasks_failed;
+                                return finalize_fail("Foreground downscale failed: " + frame_paths[frame_idx].string() + " : " + err);
+                            }
+                            fg_scaled = std::move(*fg_opt);
+                        }
+                        if (!SavePngRGBA(fg_path, fg_scaled, err)) {
+                            ++result.stats.tasks_failed;
+                            return finalize_fail("Save failed: " + fg_path.string() + " : " + err);
+                        }
+                        written_files.push_back(fg_path);
+                        ++result.stats.pngs_written;
                     }
 
-                    const ImageRGBA* bg_img = nullptr;
-                    if (w.write_background) {
-                        if (w.scale_pct == 100) {
-                            bg_img = &bg_base;
-                        } else {
-                            auto bg_it = bg_scale_cache.find(w.scale_pct);
-                            if (bg_it == bg_scale_cache.end()) {
-                                auto resized_opt = resize_lanczos_rgba(bg_base, effect_w, effect_h, err);
-                                if (!resized_opt) {
-                                    tasks_fail.fetch_add(remaining_scales);
-                                    any_fail.store(true);
-                                    std::lock_guard<std::mutex> lk(err_mu);
-                                    if (first_error.empty()) first_error = "Background downscale failed: " + batch.src_png_path.string() + " : " + err;
-                                    log.error("Background downscale failed: " + batch.src_png_path.string() + " : " + err);
-                                    return;
+                    if ((write_mask & kTextureVariantMaskBackground) != 0u) {
+                        if (!bg_ready) {
+                            if (!expanded_loaded) {
+                                expanded_source = make_centered_transparent_2x_canvas(source_image);
+                                if (!expanded_source.valid()) {
+                                    ++result.stats.tasks_failed;
+                                    return finalize_fail("Expand canvas failed: " + frame_paths[frame_idx].string());
                                 }
-                                bg_it = bg_scale_cache.emplace(w.scale_pct, std::move(*resized_opt)).first;
+                                expanded_loaded = true;
                             }
-                            bg_img = &bg_it->second;
+                            if (!apply_effects_on_expanded_canvas(expanded_source,
+                                                                  fx_bg,
+                                                                  EffectLayerMode::Background,
+                                                                  use_d3d11_effects,
+                                                                  bg_base,
+                                                                  err)) {
+                                ++result.stats.tasks_failed;
+                                return finalize_fail("Background effects failed: " + frame_paths[frame_idx].string() + " : " + err);
+                            }
+                            bg_ready = true;
                         }
+                        ImageRGBA bg_scaled = bg_base;
+                        if (pct != 100) {
+                            auto bg_opt = resize_lanczos_rgba(bg_base, effects_w, effects_h, err);
+                            if (!bg_opt) {
+                                ++result.stats.tasks_failed;
+                                return finalize_fail("Background downscale failed: " + frame_paths[frame_idx].string() + " : " + err);
+                            }
+                            bg_scaled = std::move(*bg_opt);
+                        }
+                        if (!SavePngRGBA(bg_path, bg_scaled, err)) {
+                            ++result.stats.tasks_failed;
+                            return finalize_fail("Save failed: " + bg_path.string() + " : " + err);
+                        }
+                        written_files.push_back(bg_path);
+                        ++result.stats.pngs_written;
                     }
 
-                    // Save all requested output indices
-                    for (int out_idx : w.out_indices) {
-                        fs::path npath = w.out_normal_dir / (std::to_string(out_idx) + ".png");
-                        fs::path fpath = w.out_foreground_dir / (std::to_string(out_idx) + ".png");
-                        fs::path bpath = w.out_background_dir / (std::to_string(out_idx) + ".png");
-
-                        // Python overwrites files for scheduled outputs, so we always write.
-                        if (w.write_normal && normal_img) {
-                            std::string e1;
-                            if (!ImageCacheGenerator::SavePngRGBA(npath, *normal_img, e1)) {
-                                tasks_fail.fetch_add(remaining_scales);
-                                any_fail.store(true);
-                                std::lock_guard<std::mutex> lk(err_mu);
-                                if (first_error.empty()) first_error = "Save failed: " + npath.string() + " : " + e1;
-                                log.error("Save failed: " + npath.string() + " : " + e1);
-                                return;
-                            }
-                            pngs_written.fetch_add(1);
-                        }
-
-                        if (w.write_foreground && fg_img) {
-                            std::string e2;
-                            if (!ImageCacheGenerator::SavePngRGBA(fpath, *fg_img, e2)) {
-                                tasks_fail.fetch_add(remaining_scales);
-                                any_fail.store(true);
-                                std::lock_guard<std::mutex> lk(err_mu);
-                                if (first_error.empty()) first_error = "Save failed: " + fpath.string() + " : " + e2;
-                                log.error("Save failed: " + fpath.string() + " : " + e2);
-                                return;
-                            }
-                            pngs_written.fetch_add(1);
-                        }
-
-                        if (w.write_background && bg_img) {
-                            std::string e3;
-                            if (!ImageCacheGenerator::SavePngRGBA(bpath, *bg_img, e3)) {
-                                tasks_fail.fetch_add(remaining_scales);
-                                any_fail.store(true);
-                                std::lock_guard<std::mutex> lk(err_mu);
-                                if (first_error.empty()) first_error = "Save failed: " + bpath.string() + " : " + e3;
-                                log.error("Save failed: " + bpath.string() + " : " + e3);
-                                return;
-                            }
-                            pngs_written.fetch_add(1);
-                        }
-                    }
-
-                    tasks_ok.fetch_add(1);
-                    const std::uint64_t done = scales_progress.fetch_add(1) + 1;
-                    if (quiet_task_logs && (done == total_scale_tasks || (done % progress_interval) == 0)) {
-                        log.info("Cache generation progress: " + std::to_string(done) + "/" + std::to_string(total_scale_tasks) + " scale tasks");
-                    }
+                    ++result.stats.tasks_succeeded;
                 }
-            });
-        }
-
-        // Wait for all scheduled work
-        pool.wait_idle();
-    }
-
-    result.stats.tasks_succeeded = tasks_ok.load();
-    result.stats.tasks_failed = tasks_fail.load();
-    result.stats.pngs_written = pngs_written.load();
-    result.stats.pngs_skipped_existing = pngs_skipped.load();
-
-    if (any_fail.load()) {
-        result.ok = false;
-        result.error = first_error.empty() ? "One or more tasks failed." : first_error;
-        // HARD RULE: do not write rebuild queue if any frame failed
-        result.rebuild_queue_written = false;
-        return result;
-    }
-
-    result.ok = true;
-
-    // Clear originally-flagged frame variants after full success.
-    for (auto& c : to_clear) {
-        ordered_json* anim_entry = FindAnimEntry(rebuild_queue, c.asset_name, c.anim_name, true);
-        if (!anim_entry) {
-            continue;
-        }
-        int max_frame_idx = -1;
-        for (const auto& flagged_frame : c.flagged) {
-            max_frame_idx = std::max(max_frame_idx, flagged_frame.frame_idx);
-        }
-        EnsureFramesArray(*anim_entry, std::max(0, max_frame_idx + 1));
-
-        for (const auto& flagged_frame : c.flagged) {
-            if (flagged_frame.frame_idx < 0) {
-                continue;
             }
-            ClearFrameFlag(*anim_entry, flagged_frame.frame_idx, flagged_frame.variants);
-            rebuild_queue_dirty = true;
-        }
-    }
 
-    if (rebuild_queue_dirty) {
-        if (!SaveRebuildQueue(rebuild_queue_path, rebuild_queue)) {
-            result.ok = false;
-            result.error = "Failed to write rebuild queue: " + rebuild_queue_path.string();
-            result.rebuild_queue_written = false;
-            return result;
-        }
-        result.rebuild_queue_written = true;
-    }
-
-    if (!assets_touched.empty()) {
-        for (const auto& asset_name : assets_touched) {
-            auto it = asset_meta_hashes.find(asset_name);
-            if (it == asset_meta_hashes.end() || it->second.empty()) {
-                continue;
+            if (touched_animation) {
+                touched_assets_set.insert(asset_name);
+                touched_anims_set.insert(asset_name + "::" + anim_name);
             }
-            UpdateAssetMetadataCache(metadata_cache, asset_name, it->second);
-            metadata_cache_dirty = true;
         }
     }
 
-    if (metadata_cache_dirty) {
-        if (!SaveAssetMetadataCache(cache_root, metadata_cache)) {
-            result.ok = false;
-            result.error = "Failed to write asset metadata cache: " + (cache_root / "asset_metadata_cache.json").string();
-            return result;
-        }
-    }
-
+    result.stats.assets_touched = touched_assets_set.size();
+    result.stats.animations_touched = touched_anims_set.size();
+    result.touched_assets.assign(touched_assets_set.begin(), touched_assets_set.end());
+    result.touched_animations.assign(touched_anims_set.begin(), touched_anims_set.end());
+    std::sort(result.touched_assets.begin(), result.touched_assets.end());
+    std::sort(result.touched_animations.begin(), result.touched_animations.end());
+    result.written_files = std::move(written_files);
     result.ok = true;
     return result;
 }
@@ -1649,13 +1467,6 @@ std::vector<fs::path> ImageCacheGenerator::EnumerateSourceFrames(const fs::path&
         ++idx;
     }
     return frames;
-}
-
-void ImageCacheGenerator::EnsureFrameMetadata(std::vector<FrameMeta>& frames_meta, int source_frame_count) {
-    if (source_frame_count < 0) source_frame_count = 0;
-    if (static_cast<int>(frames_meta.size()) < source_frame_count) {
-        frames_meta.resize(static_cast<size_t>(source_frame_count), FrameMeta{false});
-    }
 }
 
 bool ImageCacheGenerator::OutputMissingAnyVariant(const fs::path& cache_root,
@@ -1768,3 +1579,4 @@ std::optional<ImageRGBA> ImageCacheGenerator::ApplyEffects(const ImageRGBA& src,
 }
 
 } // namespace imgcache
+

@@ -731,7 +731,7 @@ int main(int argc, char* argv[]) {
         (void)argc;
         (void)argv;
         vibble::log::info("[Main] Starting game engine...");
-        vibble::log::info("[Main] Startup uses existing asset caches; missing/stale cache entries regenerate on demand.");
+        vibble::log::info("[Main] Startup uses existing asset caches; missing cache entries regenerate on demand.");
 
         const SDL_InitFlags init_flags =
                 static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);

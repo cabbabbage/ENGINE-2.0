@@ -4,7 +4,6 @@
 #include "assets/asset/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
-#include "utils/rebuild_queue.hpp"
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
@@ -83,6 +82,38 @@ nlohmann::json normalize_animation_payload(nlohmann::json payload) {
     payload.erase("speed_multiplier");
     payload.erase("fps");
     return payload;
+}
+
+std::string source_value_string(const nlohmann::json& payload, const char* key) {
+    if (!payload.is_object()) {
+        return {};
+    }
+    if (!payload.contains("source") || !payload["source"].is_object()) {
+        return {};
+    }
+    const nlohmann::json& source = payload["source"];
+    if (!source.contains(key) || source[key].is_null()) {
+        return {};
+    }
+    try {
+        if (source[key].is_string()) {
+            return source[key].get<std::string>();
+        }
+        return source[key].dump();
+    } catch (...) {
+        return {};
+    }
+}
+
+const nlohmann::json* snapshot_animations_object(const nlohmann::json& snapshot) {
+    if (!snapshot.is_object()) {
+        return nullptr;
+    }
+    auto it = snapshot.find("animations");
+    if (it == snapshot.end() || !it->is_object()) {
+        return nullptr;
+    }
+    return &(*it);
 }
 
 std::filesystem::path assets_root_for(const std::string& asset_name) {
@@ -653,6 +684,309 @@ bool AssetInfo::has_tag(const std::string &tag) const {
     return tag_lookup_.find(tag) != tag_lookup_.end();
 }
 
+bool AssetInfo::AnimationTextureRebuildRequest::empty() const {
+    return all_frames_variants == kTextureVariantNone && frame_variants.empty();
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::clear() {
+    all_frames_variants = kTextureVariantNone;
+    frame_variants.clear();
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::mark_animation(std::uint8_t variants) {
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    all_frames_variants = static_cast<std::uint8_t>(all_frames_variants | variants);
+    if (all_frames_variants == kTextureVariantAll) {
+        frame_variants.clear();
+        return;
+    }
+
+    for (auto it = frame_variants.begin(); it != frame_variants.end();) {
+        it->second = AssetInfo::sanitize_texture_variant_mask(
+            static_cast<std::uint8_t>(it->second & static_cast<std::uint8_t>(~all_frames_variants)));
+        if (it->second == kTextureVariantNone) {
+            it = frame_variants.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::mark_frame(int frame_index, std::uint8_t variants) {
+    if (frame_index < 0) {
+        return;
+    }
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    variants = static_cast<std::uint8_t>(variants & static_cast<std::uint8_t>(~all_frames_variants));
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    auto& frame_mask = frame_variants[frame_index];
+    frame_mask = AssetInfo::sanitize_texture_variant_mask(static_cast<std::uint8_t>(frame_mask | variants));
+    if (frame_mask == kTextureVariantNone) {
+        frame_variants.erase(frame_index);
+    }
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::merge(const AnimationTextureRebuildRequest& other) {
+    mark_animation(other.all_frames_variants);
+    for (const auto& entry : other.frame_variants) {
+        mark_frame(entry.first, entry.second);
+    }
+}
+
+bool AssetInfo::TextureRebuildBucket::empty() const {
+    if (bundle_refresh_required) {
+        return false;
+    }
+    for (const auto& entry : animations) {
+        if (!entry.second.empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void AssetInfo::TextureRebuildBucket::clear() {
+    bundle_refresh_required = false;
+    animations.clear();
+}
+
+void AssetInfo::TextureRebuildBucket::mark_bundle_refresh() {
+    bundle_refresh_required = true;
+}
+
+void AssetInfo::TextureRebuildBucket::mark_animation(const std::string& animation_name, std::uint8_t variants) {
+    if (animation_name.empty()) {
+        return;
+    }
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    animations[animation_name].mark_animation(variants);
+    bundle_refresh_required = true;
+}
+
+void AssetInfo::TextureRebuildBucket::mark_frame(const std::string& animation_name, int frame_index, std::uint8_t variants) {
+    if (animation_name.empty() || frame_index < 0) {
+        return;
+    }
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    animations[animation_name].mark_frame(frame_index, variants);
+    bundle_refresh_required = true;
+}
+
+void AssetInfo::TextureRebuildBucket::merge(const TextureRebuildBucket& other) {
+    bundle_refresh_required = bundle_refresh_required || other.bundle_refresh_required;
+    for (const auto& entry : other.animations) {
+        if (entry.first.empty()) {
+            continue;
+        }
+        animations[entry.first].merge(entry.second);
+        if (animations[entry.first].empty()) {
+            animations.erase(entry.first);
+        }
+    }
+}
+
+void AssetInfo::RuntimeTextureRebuildState::clear() {
+    pending_on_load.clear();
+    pending_on_close.clear();
+}
+
+std::uint8_t AssetInfo::sanitize_texture_variant_mask(std::uint8_t variants) {
+    return static_cast<std::uint8_t>(variants & kTextureVariantAll);
+}
+
+std::uint8_t AssetInfo::classify_texture_rebuild_variants(const nlohmann::json& before_payload,
+                                                          const nlohmann::json& after_payload) {
+    const std::string before_kind = source_value_string(before_payload, "kind");
+    const std::string before_path = source_value_string(before_payload, "path");
+    const std::string before_name = source_value_string(before_payload, "name");
+    const std::string after_kind = source_value_string(after_payload, "kind");
+    const std::string after_path = source_value_string(after_payload, "path");
+    const std::string after_name = source_value_string(after_payload, "name");
+
+    const bool source_changed =
+        before_kind != after_kind || before_path != after_path || before_name != after_name;
+    if (source_changed) {
+        return kTextureVariantAll;
+    }
+
+    auto read_frame_count = [](const nlohmann::json& payload) -> int {
+        if (!payload.is_object() || !payload.contains("number_of_frames")) {
+            return -1;
+        }
+        const auto& value = payload["number_of_frames"];
+        try {
+            if (value.is_number_integer()) {
+                return value.get<int>();
+            }
+            if (value.is_number_float()) {
+                return static_cast<int>(std::lround(value.get<double>()));
+            }
+            if (value.is_string()) {
+                return std::stoi(value.get<std::string>());
+            }
+        } catch (...) {
+            return -1;
+        }
+        return -1;
+    };
+
+    const int before_frames = read_frame_count(before_payload);
+    const int after_frames = read_frame_count(after_payload);
+    const bool has_source_hint =
+        !before_kind.empty() || !after_kind.empty() || !before_path.empty() || !after_path.empty();
+    if (has_source_hint && before_frames != after_frames) {
+        return kTextureVariantAll;
+    }
+
+    return kTextureVariantNone;
+}
+
+void AssetInfo::clear_runtime_texture_rebuild_state() {
+    runtime_texture_rebuild_state_.clear();
+}
+
+void AssetInfo::mark_texture_rebuild_on_close(const std::string& animation_name, std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_close.mark_animation(animation_name, variants);
+}
+
+void AssetInfo::mark_texture_frame_rebuild_on_close(const std::string& animation_name,
+                                                    int frame_index,
+                                                    std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_close.mark_frame(animation_name, frame_index, variants);
+}
+
+void AssetInfo::mark_all_animation_textures_on_close(std::uint8_t variants) {
+    variants = sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+
+    bool marked_any = false;
+    if (anims_json_.is_object()) {
+        for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+            if (!it.value().is_object() || it.key().empty()) {
+                continue;
+            }
+            runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), variants);
+            marked_any = true;
+        }
+    }
+
+    if (!marked_any) {
+        if (const auto* payloads = locate_animation_payloads(info_json_)) {
+            if (payloads->is_object()) {
+                for (auto it = payloads->begin(); it != payloads->end(); ++it) {
+                    if (!it.value().is_object() || it.key().empty()) {
+                        continue;
+                    }
+                    runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), variants);
+                    marked_any = true;
+                }
+            }
+        }
+    }
+
+    if (!marked_any) {
+        runtime_texture_rebuild_state_.pending_on_close.mark_bundle_refresh();
+    }
+}
+
+void AssetInfo::mark_bundle_refresh_on_close() {
+    runtime_texture_rebuild_state_.pending_on_close.mark_bundle_refresh();
+}
+
+void AssetInfo::mark_texture_rebuild_on_load(const std::string& animation_name, std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_load.mark_animation(animation_name, variants);
+}
+
+void AssetInfo::mark_texture_frame_rebuild_on_load(const std::string& animation_name,
+                                                   int frame_index,
+                                                   std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_load.mark_frame(animation_name, frame_index, variants);
+}
+
+AssetInfo::TextureRebuildBucket AssetInfo::consume_pending_texture_rebuild_on_close() {
+    TextureRebuildBucket pending = runtime_texture_rebuild_state_.pending_on_close;
+    runtime_texture_rebuild_state_.pending_on_close.clear();
+    return pending;
+}
+
+AssetInfo::TextureRebuildBucket AssetInfo::consume_pending_texture_rebuild_on_load() {
+    TextureRebuildBucket pending = runtime_texture_rebuild_state_.pending_on_load;
+    runtime_texture_rebuild_state_.pending_on_load.clear();
+    return pending;
+}
+
+void AssetInfo::merge_pending_texture_rebuild_on_close(const TextureRebuildBucket& pending) {
+    runtime_texture_rebuild_state_.pending_on_close.merge(pending);
+}
+
+void AssetInfo::merge_pending_texture_rebuild_on_load(const TextureRebuildBucket& pending) {
+    runtime_texture_rebuild_state_.pending_on_load.merge(pending);
+}
+
+void AssetInfo::classify_animation_snapshot_rebuilds(const nlohmann::json& before_snapshot,
+                                                     const nlohmann::json& after_snapshot) {
+    const nlohmann::json* before_anims = snapshot_animations_object(before_snapshot);
+    const nlohmann::json* after_anims = snapshot_animations_object(after_snapshot);
+    if ((!before_anims || !before_anims->is_object()) && (!after_anims || !after_anims->is_object())) {
+        return;
+    }
+
+    std::unordered_set<std::string> animation_names;
+    if (before_anims && before_anims->is_object()) {
+        for (auto it = before_anims->begin(); it != before_anims->end(); ++it) {
+            animation_names.insert(it.key());
+        }
+    }
+    if (after_anims && after_anims->is_object()) {
+        for (auto it = after_anims->begin(); it != after_anims->end(); ++it) {
+            animation_names.insert(it.key());
+        }
+    }
+
+    for (const auto& animation_name : animation_names) {
+        const bool in_before = before_anims && before_anims->is_object() &&
+                               before_anims->contains(animation_name) &&
+                               (*before_anims)[animation_name].is_object();
+        const bool in_after = after_anims && after_anims->is_object() &&
+                              after_anims->contains(animation_name) &&
+                              (*after_anims)[animation_name].is_object();
+
+        if (!in_before && in_after) {
+            mark_texture_rebuild_on_close(animation_name, kTextureVariantAll);
+            continue;
+        }
+        if (in_before && !in_after) {
+            mark_bundle_refresh_on_close();
+            continue;
+        }
+        if (!in_before || !in_after) {
+            continue;
+        }
+
+        const auto variants = classify_texture_rebuild_variants((*before_anims)[animation_name],
+                                                                (*after_anims)[animation_name]);
+        if (variants != kTextureVariantNone) {
+            mark_texture_rebuild_on_close(animation_name, variants);
+        }
+    }
+}
+
 nlohmann::json AssetInfo::manifest_payload() const {
         nlohmann::json payload = info_json_;
         if (!payload.is_object()) {
@@ -713,27 +1047,15 @@ bool AssetInfo::save_self_to_manifest(devmode::core::ManifestStore* store) {
 }
 
 bool AssetInfo::save_self_to_cache_if_dirty(SDL_Renderer* renderer) {
+        (void)renderer;
         if (!dirty_) {
                 return true;
         }
 
-        bool bundle_saved = false;
-        try {
-                PrimaryAssetCache cache(renderer);
-                bundle_saved = cache.save_current(*this);
-                if (!bundle_saved) {
-                        std::cerr << "[AssetInfo] Failed to save bundle for '" << name << "'\n";
-                }
-        } catch (const std::exception& ex) {
-                std::cerr << "[AssetInfo] Exception during bundle save for '" << name << "': " << ex.what() << "\n";
-        } catch (...) {
-                std::cerr << "[AssetInfo] Unknown error saving bundle for '" << name << "'\n";
-        }
-
-        if (bundle_saved) {
-                dirty_ = false;
-        }
-        return bundle_saved;
+        // Cache regeneration is runtime-flag driven (pending_on_close / pending_on_load).
+        // Dirty here tracks manifest/session mutation only.
+        dirty_ = false;
+        return true;
 }
 
 bool AssetInfo::commit_manifest() {
@@ -742,7 +1064,7 @@ bool AssetInfo::commit_manifest() {
                 return false;
         }
         mark_dirty();
-        return save_self_to_cache_if_dirty(nullptr);
+        return true;
 }
 
 void AssetInfo::set_asset_type(const std::string &t) {
@@ -1288,6 +1610,20 @@ nlohmann::json AssetInfo::animation_payload(const std::string& name) const {
 bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& payload) {
 	if (name.empty()) return false;
 	try {
+		nlohmann::json existing_payload = nlohmann::json::object();
+		bool has_existing = false;
+		if (anims_json_.is_object() && anims_json_.contains(name) && anims_json_[name].is_object()) {
+			existing_payload = normalize_animation_payload(anims_json_[name]);
+			has_existing = true;
+		} else if (info_json_.is_object() &&
+		           info_json_.contains("animations") &&
+		           info_json_["animations"].is_object() &&
+		           info_json_["animations"].contains(name) &&
+		           info_json_["animations"][name].is_object()) {
+			existing_payload = normalize_animation_payload(info_json_["animations"][name]);
+			has_existing = true;
+		}
+
 		nlohmann::json clean_payload = normalize_animation_payload(payload);
 		if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
 			info_json_["animations"] = nlohmann::json::object();
@@ -1296,6 +1632,15 @@ bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& 
 
 		if (anims_json_.is_null() || !anims_json_.is_object()) anims_json_ = nlohmann::json::object();
 		anims_json_[name] = clean_payload;
+
+		if (!has_existing) {
+			mark_texture_rebuild_on_close(name, kTextureVariantAll);
+		} else {
+			const auto variants = classify_texture_rebuild_variants(existing_payload, clean_payload);
+			if (variants != kTextureVariantNone) {
+				mark_texture_rebuild_on_close(name, variants);
+			}
+		}
 		return true;
 	} catch (...) {
 		return false;
@@ -1317,6 +1662,9 @@ bool AssetInfo::remove_animation(const std::string& name) {
 		}
 	} catch (...) {
 		removed = false;
+	}
+	if (removed) {
+		mark_bundle_refresh_on_close();
 	}
 	return removed;
 }
@@ -1341,6 +1689,8 @@ bool AssetInfo::rename_animation(const std::string& old_name, const std::string&
 			start_animation = new_name;
 		 info_json_["start"] = start_animation;
 		}
+		mark_texture_rebuild_on_close(new_name, kTextureVariantAll);
+		mark_bundle_refresh_on_close();
 		return true;
 	} catch (...) {
 		return false;
@@ -1453,6 +1803,17 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
         if (should_set_start) {
             start_animation = animation_name;
             info_json_["start"] = start_animation;
+        }
+
+        if (animation_changed) {
+            if (!has_existing_animation) {
+                mark_texture_rebuild_on_close(animation_name, kTextureVariantAll);
+            } else {
+                const auto variants = classify_texture_rebuild_variants(existing_animation, updated_animation);
+                if (variants != kTextureVariantNone) {
+                    mark_texture_rebuild_on_close(animation_name, variants);
+                }
+            }
         }
 
         return true;

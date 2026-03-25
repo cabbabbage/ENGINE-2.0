@@ -63,13 +63,15 @@ list(REMOVE_DUPLICATES ENGINE_SRC)
 # Exclude standalone tool entry points from the main engine binary
 list(REMOVE_ITEM ENGINE_SRC
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/asset_tool_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/set_rebuild_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/cache_validator_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/apply_effects_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
 )
 
 add_executable(engine ${ENGINE_SRC})
+target_sources(engine PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/d3d11_effects_backend.cpp
+)
 
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
@@ -203,6 +205,7 @@ target_include_directories(engine
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
           ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+          ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
   )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
@@ -235,6 +238,7 @@ endif()
 # Link Windows COM/Shell libs for modern file dialogs
 if (WIN32)
     target_link_libraries(engine PRIVATE Ole32 Shell32)
+    target_link_libraries(engine PRIVATE d3d11 d3dcompiler)
 endif()
 
 # Faster relinks on MSVC Debug
@@ -358,15 +362,12 @@ function(add_cli_tool target_name entry_point)
         ENGINE/tools/cli/${entry_point}
         ENGINE/tools/cli/image_cache_generator.cpp
         ENGINE/tools/cli/d3d11_effects_backend.cpp
+        ENGINE/runtime/utils/utils/stb_image_impl.cpp
     )
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
         ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
         ${CMAKE_SOURCE_DIR}/external
-    )
-    target_compile_definitions(${target_name} PRIVATE
-        IMGCACHE_STB_IMAGE_IMPL=1
-        IMGCACHE_STB_IMAGE_WRITE_IMPL=1
     )
     target_link_libraries(${target_name} PRIVATE
         nlohmann_json::nlohmann_json
@@ -379,17 +380,11 @@ endfunction()
 # Asset Tool CLI - main cache generator
 add_cli_tool(asset_tool_cli asset_tool_cli.cpp)
 
-# Set Rebuild Values CLI - manifest manipulation
-add_cli_tool(set_rebuild_cli set_rebuild_cli.cpp)
-
-# Cache Validator CLI - cache integrity validation
-add_cli_tool(cache_validator_cli cache_validator_cli.cpp)
-
 # Apply Effects CLI - effect preview generation
 add_cli_tool(apply_effects_cli apply_effects_cli.cpp)
 
 # Output all tools to ENGINE/tools directory
-foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_effects_cli)
+foreach(tool_target asset_tool_cli apply_effects_cli)
     set_target_properties(${tool_target} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/ENGINE/tools"
     )

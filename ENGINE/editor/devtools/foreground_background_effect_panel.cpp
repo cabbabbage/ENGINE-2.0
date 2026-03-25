@@ -6,7 +6,7 @@
 #include "devtools/dm_styles.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/widgets.hpp"
-#include "utils/rebuild_queue.hpp"
+#include "assets/asset/asset_info.hpp"
 
 #include <SDL3/SDL_timer.h>
 #include <SDL3_image/SDL_image.h>
@@ -437,7 +437,7 @@ void ForegroundBackgroundEffectPanel::build_ui() {
     fg_preview_ = std::make_unique<PreviewPaneWidget>("Foreground Preview");
     bg_preview_ = std::make_unique<PreviewPaneWidget>("Background Preview");
 
-    apply_button_ = std::make_unique<DMButton>("Apply + Queue Rebuild", &DMStyles::AccentButton(), 0, DMButton::height());
+    apply_button_ = std::make_unique<DMButton>("Apply + Mark Rebuild", &DMStyles::AccentButton(), 0, DMButton::height());
     apply_button_widget_ = std::make_unique<ButtonWidget>(apply_button_.get(), [this]() { this->apply_and_queue_rebuild(); });
 
     restore_defaults_button_ = std::make_unique<DMButton>("Reset Both", &DMStyles::WarnButton(), 0, DMButton::height());
@@ -1159,11 +1159,21 @@ void ForegroundBackgroundEffectPanel::apply_and_queue_rebuild() {
         committed_bg_ = draft_bg_;
         refresh_unsaved_state();
 
-        vibble::RebuildQueueCoordinator coordinator;
-        coordinator.request_effect_layers_rebuild();
+        if (assets_) {
+            for (const auto& [asset_name, info] : assets_->library().all()) {
+                (void)asset_name;
+                if (!info) {
+                    continue;
+                }
+                info->mark_all_animation_textures_on_close(
+                    static_cast<std::uint8_t>(AssetInfo::kTextureVariantForeground |
+                                              AssetInfo::kTextureVariantBackground));
+                info->mark_dirty();
+            }
+        }
 
-        fg_preview_status_ = "Applied. Foreground rebuild queued for save/exit pipeline.";
-        bg_preview_status_ = "Applied. Background rebuild queued for save/exit pipeline.";
+        fg_preview_status_ = "Applied. Foreground rebuild marked for exit save.";
+        bg_preview_status_ = "Applied. Background rebuild marked for exit save.";
     } catch (const std::exception& e) {
         fg_preview_status_ = std::string("Apply failed: ") + e.what();
         bg_preview_status_ = fg_preview_status_;

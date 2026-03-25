@@ -1,7 +1,6 @@
 // asset_tool_cli.cpp
 //
-// CLI wrapper for ImageCacheGenerator - replaces asset_tool.py
-// Processes animation frames marked with needs_rebuild=true in cache/rebuild_queue.json
+// CLI wrapper for ImageCacheGenerator.
 // Generates cache structure: cache/<asset>/animations/<anim>/scale_<pct>/{normal,foreground,background}/<idx>.png
 
 #include "image_cache_generator.hpp"
@@ -36,7 +35,8 @@ void print_usage(const char* prog_name) {
     std::cout << "OPTIONS:\n";
     std::cout << "  --manifest <path>       Path to manifest.json (default: auto-discover)\n";
     std::cout << "  --cache-root <path>     Override cache directory (default: <repo>/cache)\n";
-    std::cout << "  --force-rebuild         Force rebuild all frames regardless of needs_rebuild\n";
+    std::cout << "  --force-rebuild         Force rebuild all frames/variants in selected scope\n";
+    std::cout << "  --missing-only          Rebuild only missing output files in selected scope\n";
     std::cout << "  --dry-run               Plan without executing (show what would be done)\n";
     std::cout << "  --asset <name>          Only process specified asset\n";
     std::cout << "  --animation <name>      Only process specified animation (requires --asset)\n";
@@ -46,7 +46,7 @@ void print_usage(const char* prog_name) {
     std::cout << "  --verbose-tasks         Enable per-task progress logs (default: quiet aggregate logs)\n";
     std::cout << "  --help                  Show this help message\n\n";
     std::cout << "Examples:\n";
-    std::cout << "  " << prog_name << "                                  # Process all flagged frames\n";
+    std::cout << "  " << prog_name << " --missing-only                   # Repair missing files only\n";
     std::cout << "  " << prog_name << " --force-rebuild                 # Rebuild everything\n";
     std::cout << "  " << prog_name << " --asset player                  # Process only player asset\n";
     std::cout << "  " << prog_name << " --asset player --animation idle # Process only player/idle\n";
@@ -79,6 +79,9 @@ int main(int argc, char** argv) {
         }
         else if (arg == "--force-rebuild") {
             opts.force_rebuild = true;
+        }
+        else if (arg == "--missing-only") {
+            opts.missing_only = true;
         }
         else if (arg == "--dry-run") {
             opts.dry_run = true;
@@ -186,7 +189,8 @@ int main(int argc, char** argv) {
         std::cout << "  Tasks succeeded: " << result.stats.tasks_succeeded
                   << " / " << result.stats.tasks_total << "\n";
         std::cout << "  PNGs written: " << result.stats.pngs_written << "\n";
-        std::cout << "  Rebuild queue updated: " << (result.rebuild_queue_written ? "yes" : "no") << "\n";
+        std::cout << "  Assets touched: " << result.stats.assets_touched << "\n";
+        std::cout << "  Animations touched: " << result.stats.animations_touched << "\n";
 
         if (result.stats.tasks_total == 0) {
             logger.info("No work required - all cache files up to date");
@@ -199,7 +203,7 @@ int main(int argc, char** argv) {
         std::cerr << "  Error: " << result.error << "\n";
         std::cerr << "  Tasks succeeded: " << result.stats.tasks_succeeded
                   << " / " << result.stats.tasks_total << "\n";
-        std::cerr << "  Rebuild queue updated: " << (result.rebuild_queue_written ? "yes" : "no") << "\n";
+        std::cerr << "  PNGs written: " << result.stats.pngs_written << "\n";
 
         return 1;
     }

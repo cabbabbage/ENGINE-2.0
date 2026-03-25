@@ -43,7 +43,7 @@ vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
 }
 
 vibble_controller::vibble_controller(Asset* player)
-    : player_(player) {}
+    : CustomAssetController(player) {}
 
 
 vibble_controller::~vibble_controller() = default;
@@ -52,7 +52,8 @@ int vibble_controller::get_dy() const { return dy_; }
 
 void vibble_controller::movement(const Input& input) {
     dx_ = dy_ = 0;
-    if (!player_ || !player_->anim_) return;
+    Asset* player = self_ptr();
+    if (!player || !player->anim_) return;
 
     const float dt = frame_dt();
 
@@ -68,14 +69,14 @@ void vibble_controller::movement(const Input& input) {
     const int input_x = (right ? 1 : 0) - (left ? 1 : 0);
     const int input_y = (down  ? 1 : 0) - (up    ? 1 : 0);
     const vibble::player_direction::DirectionIntent direction_intent =
-        resolve_direction_intent_for_player(player_, input_x, input_y);
+        resolve_direction_intent_for_player(player, input_x, input_y);
     const int world_x = direction_intent.world_x;
     const int world_y = direction_intent.world_y;
 
     if (world_x == 0 && world_y == 0) {
         subpixel_x_ = 0.0f;
         subpixel_y_ = 0.0f;
-        player_->anim_->move(SDL_Point{ 0, 0 }, animation_update::detail::kDefaultAnimation);
+        player->anim_->move(SDL_Point{ 0, 0 }, animation_update::detail::kDefaultAnimation);
         return;
     }
 
@@ -124,24 +125,25 @@ void vibble_controller::movement(const Input& input) {
     std::string animation_id = animation_for_direction(
         direction_intent.world_x,
         direction_intent.world_y);
-    if (isDashing && player_->info) {
+    if (isDashing && player->info) {
 
-        const auto& animations = player_->info->animations;
+        const auto& animations = player->info->animations;
         if (animations.find("dash") != animations.end()) {
             animation_id = "dash";
         }
     }
 
-    player_->anim_->move(SDL_Point{ dx_, dy_ }, animation_id);
+    player->anim_->move(SDL_Point{ dx_, dy_ }, animation_id);
 
 }
 
 float vibble_controller::frame_dt() const {
     constexpr float kFallbackDt = 1.0f / 60.0f;
-    if (!player_) {
+    Asset* player = self_ptr();
+    if (!player) {
         return kFallbackDt;
     }
-    if (Assets* assets = player_->get_assets()) {
+    if (Assets* assets = player->get_assets()) {
         const float dt = assets->frame_delta_seconds();
         if (std::isfinite(dt) && dt > 0.0f) {
 
@@ -151,9 +153,11 @@ float vibble_controller::frame_dt() const {
     return kFallbackDt;
 }
 
-void vibble_controller::update(const Input& input) {
+void vibble_controller::on_update(const Input& input) {
     using namespace std::chrono;
     auto now = steady_clock::now();
+
+    ensure_eyes_child();
 
     if (isDashing && now >= dashEndTime) {
         isDashing = false;
@@ -170,7 +174,23 @@ void vibble_controller::update(const Input& input) {
 
     dx_ = dy_ = 0;
     movement(input);
+    if (eyes_child_.has_value()) {
+        eyes_child_->update();
+    }
 
+}
+
+void vibble_controller::ensure_eyes_child() {
+    Asset* player = self_ptr();
+    if (eyes_child_.has_value() || !player) {
+        return;
+    }
+    if (!player->get_assets()) {
+        return;
+    }
+
+    eyes_child_.emplace("vibble_eyes");
+    eyes_child_->bind("eyes");
 }
 
 std::string vibble_controller::animation_for_direction(int screen_x, int screen_y) const {
@@ -181,11 +201,12 @@ std::string vibble_controller::animation_for_direction(int screen_x, int screen_
         return std::string{ animation_update::detail::kDefaultAnimation };
     }
 
-    if (!player_ || !player_->info) {
+    Asset* player = self_ptr();
+    if (!player || !player->info) {
         return std::string{ animation_update::detail::kDefaultAnimation };
     }
 
-    const auto& animations = player_->info->animations;
+    const auto& animations = player->info->animations;
 
     auto has_animation = [&animations](const std::string& name) {
         return animations.find(name) != animations.end();
@@ -241,7 +262,7 @@ void vibble_controller::Dash() {
             std::chrono::duration<float>(dashingTime));
 }
 
-void vibble_controller::process_pending_attacks(Asset& self) {
+void vibble_controller::on_process_pending_attacks(Asset& self) {
     using namespace animation_update;
 
     if (!self.info || !self.current_animation_frame() || self.dead || !self.active) {

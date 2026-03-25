@@ -1,17 +1,15 @@
 #pragma once
-#include "assets/asset/asset_controller.hpp"
+#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
 
 class Asset;
 class Input;
 
-class default_controller : public AssetController {
+class default_controller : public CustomAssetController {
 
 public:
     default_controller(Asset* self);
     ~default_controller() override = default;
-    void update(const Input& in) override;
-    void process_pending_attacks(Asset& self) override;
-
-private:
-    Asset* self_ = nullptr;
+protected:
+    void on_update(const Input& in) override;
+    void on_process_pending_attacks(Asset& self) override;
 };

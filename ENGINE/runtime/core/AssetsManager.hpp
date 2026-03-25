@@ -32,8 +32,6 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
-class AnchorBoundAssetHelper;
-
 class QuickTaskPopup;
 namespace animation_editor {
 class AnimationDocument;
@@ -206,8 +204,6 @@ public:
     std::unique_ptr<Asset> extract_asset(Asset* asset);
     Asset* attach_asset(std::unique_ptr<Asset> asset, int world_z = 0, int resolution_layer = -1);
     std::unique_ptr<Asset> create_unattached_asset(const std::string& name, SDL_Point world_pos);
-    void register_binding_helper(class AnchorBoundAssetHelper* helper);
-    void unregister_binding_helper(class AnchorBoundAssetHelper* helper);
 
     void persist_map_info_json();
 
@@ -410,11 +406,6 @@ private:
 
     std::function<void()> dev_grid_overlay_callback_;
 
-    std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
-    std::unique_ptr<AnchorBoundAssetHelper> follower_binding_helper_;
-    std::vector<Asset*> follower_binding_candidates_;
-    bool follower_binding_candidates_dirty_ = true;
-
     void rebuild_non_player_update_buffer_if_needed();
     void refresh_visible_asset_scaling_only();
     void run_idle_frame_pipeline(const Input& input);
@@ -425,9 +416,6 @@ private:
     void refresh_filtered_active_assets_if_needed();
     void render_runtime_frame();
     void finalize_dev_frame_state();
-    void mark_follower_binding_candidates_dirty();
-    void rebuild_follower_binding_candidates_if_needed();
-    void reconcile_manifest_follower_bindings();
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
     std::uint64_t next_anchor_invalidation_version();

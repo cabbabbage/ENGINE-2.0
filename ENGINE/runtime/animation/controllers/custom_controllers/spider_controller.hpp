@@ -1,23 +1,20 @@
 #ifndef spider_CONTROLLER_HPP
 #define spider_CONTROLLER_HPP
 
-#include "assets/asset/asset_controller.hpp"
+#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
 
 class Asset;
-class Assets;
 class Input;
 
-class spider_controller : public AssetController {
+class spider_controller : public CustomAssetController {
 
 public:
-    spider_controller(Assets* assets, Asset* self);
+    explicit spider_controller(Asset* self);
     ~spider_controller() override = default;
-    void update(const Input&) override;
-    void process_pending_attacks(Asset& self) override;
 
-private:
-    Assets* assets_ = nullptr;
-    Asset*  self_   = nullptr;
+protected:
+    void on_update(const Input&) override;
+    void on_process_pending_attacks(Asset& self) override;
 };
 
 #endif

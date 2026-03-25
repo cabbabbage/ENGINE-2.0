@@ -32,28 +32,6 @@ struct CanvasMetrics {
     int height = 0;
 };
 
-constexpr const char* kVibbleEyesAssetName = "vibble_eyes";
-constexpr const char* kVibbleAssetName = "vibble";
-constexpr const char* kVibbleEyesAnchorName = "eyes";
-
-void apply_vibble_eyes_follower_binding_defaults(AssetInfo& info) {
-    if (info.name != kVibbleEyesAssetName) {
-        return;
-    }
-
-    AssetInfo::FollowerBindingSpec spec =
-        info.follower_binding.has_value() ? *info.follower_binding : AssetInfo::FollowerBindingSpec{};
-    if (spec.controller_asset_id.empty()) {
-        spec.controller_asset_id = kVibbleAssetName;
-    }
-    if (spec.anchor_name.empty()) {
-        spec.anchor_name = kVibbleEyesAnchorName;
-    }
-    if (!spec.anchor_name.empty()) {
-        info.follower_binding = std::move(spec);
-    }
-}
-
 std::vector<std::string> parse_string_array(const nlohmann::json& json_value) {
     std::vector<std::string> values;
     if (!json_value.is_array()) {
@@ -1452,34 +1430,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 custom_controller_key.clear();
         }
 
-        try {
-                if (data.contains("follower_binding") && data["follower_binding"].is_object()) {
-                        const auto& binding = data["follower_binding"];
-                        FollowerBindingSpec spec;
-                        if (binding.contains("controller_asset_id") && binding["controller_asset_id"].is_string()) {
-                                spec.controller_asset_id = binding["controller_asset_id"].get<std::string>();
-                        }
-                        if (binding.contains("anchor_name") && binding["anchor_name"].is_string()) {
-                                spec.anchor_name = binding["anchor_name"].get<std::string>();
-                        }
-                        if (binding.contains("follower_anchor_name") && binding["follower_anchor_name"].is_string()) {
-                                spec.follower_anchor_name = binding["follower_anchor_name"].get<std::string>();
-                        }
-                        if (binding.contains("depth_policy") && binding["depth_policy"].is_string()) {
-                                spec.depth_policy = binding["depth_policy"].get<std::string>();
-                        }
-                        if (binding.contains("layer_policy") && binding["layer_policy"].is_string()) {
-                                spec.layer_policy = binding["layer_policy"].get<std::string>();
-                        }
-                        follower_binding = std::optional<FollowerBindingSpec>(std::move(spec));
-                } else {
-                        follower_binding.reset();
-                }
-        } catch (...) {
-                follower_binding.reset();
-        }
-
-        apply_vibble_eyes_follower_binding_defaults(*this);
 }
 
 void AssetInfo::set_spawn_groups_payload(const nlohmann::json& groups) {

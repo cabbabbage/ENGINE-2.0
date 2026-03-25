@@ -1,23 +1,20 @@
 #ifndef BOMB_CONTROLLER_HPP
 #define BOMB_CONTROLLER_HPP
 
-#include "assets/asset/asset_controller.hpp"
+#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
 
 class Asset;
-class Assets;
 class Input;
 
-class bomb_controller : public AssetController {
+class bomb_controller : public CustomAssetController {
 
 public:
-    bomb_controller(Assets* assets, Asset* self);
+    explicit bomb_controller(Asset* self);
     ~bomb_controller() override = default;
-    void update(const Input&) override;
-    void process_pending_attacks(Asset& self) override;
 
-private:
-    Assets* assets_ = nullptr;
-    Asset*  self_   = nullptr;
+protected:
+    void on_update(const Input&) override;
+    void on_process_pending_attacks(Asset& self) override;
 };
 
 #endif

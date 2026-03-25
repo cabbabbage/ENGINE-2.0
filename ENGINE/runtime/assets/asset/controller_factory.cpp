@@ -101,19 +101,19 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
                 }
 
                 if (matches("davey_controller"))
-                        return std::make_unique<davey_controller>(assets_, self);
+                        return std::make_unique<davey_controller>(self);
                 if (matches("frog_controller"))
-                        return std::make_unique<frog_controller>(assets_, self);
+                        return std::make_unique<frog_controller>(self);
                 if (matches("carrie_controller"))
-                        return std::make_unique<carrie_controller>(assets_, self);
+                        return std::make_unique<carrie_controller>(self);
                 if (matches("gary_controller"))
-                        return std::make_unique<gary_controller>(assets_, self);
+                        return std::make_unique<gary_controller>(self);
                 if (matches("bartender_controller"))
-                        return std::make_unique<bartender_controller>(assets_, self);
+                        return std::make_unique<bartender_controller>(self);
                 if (matches("spider_controller"))
-                        return std::make_unique<spider_controller>(assets_, self);
+                        return std::make_unique<spider_controller>(self);
                 if (matches("bomb_controller"))
-                        return std::make_unique<bomb_controller>(assets_, self);
+                        return std::make_unique<bomb_controller>(self);
 
                 // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
                 // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>

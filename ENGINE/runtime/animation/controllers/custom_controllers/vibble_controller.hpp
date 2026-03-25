@@ -9,25 +9,30 @@
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "assets/asset/asset_controller.hpp"
+#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
+#include "animation/controllers/custom_controllers/child_asset.hpp"
 #include <SDL3/SDL.h>
-#include <string>
 #include <chrono>
+#include <optional>
+#include <string>
 
 class Asset;
 class Input;
 
-class vibble_controller : public AssetController {
+class vibble_controller : public CustomAssetController {
 
 public:
     vibble_controller(Asset* player);
     ~vibble_controller() override;
-    void update(const Input& in) override;
-    void process_pending_attacks(Asset& self) override;
     int get_dx() const;
     int get_dy() const;
 
+protected:
+    void on_update(const Input& in) override;
+    void on_process_pending_attacks(Asset& self) override;
+
 private:
+    void ensure_eyes_child();
     void movement(const Input& input);
     float frame_dt() const;
     std::string animation_for_direction(int screen_x, int screen_y) const;
@@ -36,7 +41,7 @@ private:
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
 
-    Asset* player_ = nullptr;
+    std::optional<ChildAsset> eyes_child_;
     int    dx_ = 0;
     int    dy_ = 0;
 

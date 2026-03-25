@@ -262,6 +262,9 @@ add_executable(engine_tests
     ENGINE/runtime/assets/asset/animation.cpp
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp
+    ENGINE/runtime/assets/asset/asset_controller.cpp
+    ENGINE/runtime/animation/controllers/custom_controllers/custom_asset_controller.cpp
+    ENGINE/runtime/animation/controllers/custom_controllers/child_asset.cpp
     ENGINE/runtime/animation/attack_validation.cpp
     ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
     ENGINE/editor/devtools/dm_styles.cpp
@@ -294,6 +297,7 @@ add_executable(engine_tests
     ENGINE/runtime/rendering/render/projected_sprite_frame.cpp
     ENGINE/runtime/rendering/render/render_object_projection.cpp
     ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
+    ENGINE/tests/stubs/asset/child_asset_runtime_test_support.cpp
     ENGINE/tests/stubs/utils/Area_world_tests_stubs.cpp
     ENGINE/tests/stubs/render/WarpedScreenGrid_projection_tests_stubs.cpp
     ENGINE/tests/test_render_object_projection.cpp
@@ -312,6 +316,7 @@ add_executable(engine_tests
     ENGINE/tests/test_input_activity.cpp
     ENGINE/tests/test_camera_controller.cpp
     ENGINE/tests/test_asset_perspective_sample.cpp
+    ENGINE/tests/test_child_asset_runtime.cpp
     ENGINE/tests/test_animation_runtime_ownership.cpp
     ENGINE/tests/test_scaling_logic_variants.cpp
   )

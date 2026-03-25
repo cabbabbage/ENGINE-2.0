@@ -404,15 +404,6 @@ void CustomControllerService::update_asset_metadata(const std::string& base_name
 
     data["custom_controller_key"] = base_name;
 
-    const std::string trimmed_binding_reference = strings::trim_copy(binding_reference);
-    const std::size_t dot_index = trimmed_binding_reference.find('.');
-    if (dot_index != std::string::npos && dot_index > 0 && dot_index + 1 < trimmed_binding_reference.size()) {
-        nlohmann::json follower_binding = nlohmann::json::object();
-        follower_binding["controller_asset_id"] = sanitize_controller_name(trimmed_binding_reference.substr(0, dot_index));
-        follower_binding["anchor_name"] = strings::trim_copy(trimmed_binding_reference.substr(dot_index + 1));
-        data["follower_binding"] = std::move(follower_binding);
-    }
-
     if (!animation_id.empty()) {
         nlohmann::json* animations_container = nullptr;
         auto animations_it = data.find("animations");

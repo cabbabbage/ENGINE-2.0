@@ -14,7 +14,6 @@
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -246,9 +245,6 @@ Assets::Assets(AssetLibrary& library,
     }
     vibble::log::info("[Assets] Constructor: Asset finalization complete");
 
-    // Engine-wide follower binding helper (manifest-driven, not controller-specific).
-    follower_binding_helper_ = std::make_unique<AnchorBoundAssetHelper>(this);
-
     register_pending_static_assets();
 
     update_filtered_active_assets();
@@ -327,7 +323,6 @@ bool Assets::mutate_map_data(const std::function<bool(manifest::MapData&)>& muta
 }
 
 void Assets::mark_map_data_dirty() {
-    mark_follower_binding_candidates_dirty();
     map_data_dirty_ = true;
 }
 
@@ -1184,24 +1179,7 @@ void Assets::run_visibility_build_stage() {
 }
 
 void Assets::run_runtime_effects_stage() {
-    // Keep manifest-driven follower bindings generic and engine-wide.
-    reconcile_manifest_follower_bindings();
-
-    // Solve follower constraints against the fresh parent/child anchor cache.
-    if (!binding_helpers_.empty()) {
-        bool binding_changed = false;
-        for (auto* helper : binding_helpers_) {
-            if (!helper) {
-                continue;
-            }
-            binding_changed = helper->tick_for_frame() || binding_changed;
-        }
-        if (binding_changed) {
-            mark_active_assets_dirty();
-        }
-    }
-
-    // Rebuild traversal after attachment movement, then refresh anchors/runtime caches once.
+    // Rebuild traversal after controller-driven child updates and other runtime changes.
     run_visibility_build_stage();
     refresh_visible_asset_scaling_only();
     run_active_runtime_single_pass();
@@ -1832,7 +1810,6 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
 
     if (!already_tracked) {
         all.push_back(raw);
-        mark_follower_binding_candidates_dirty();
     }
 
     queue_asset_dimension_update(raw);
@@ -1842,104 +1819,6 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     mark_non_player_update_buffer_dirty();
 
     return raw;
-}
-
-void Assets::register_binding_helper(AnchorBoundAssetHelper* helper) {
-    if (!helper) return;
-    if (std::find(binding_helpers_.begin(), binding_helpers_.end(), helper) == binding_helpers_.end()) {
-        binding_helpers_.push_back(helper);
-    }
-}
-
-void Assets::unregister_binding_helper(AnchorBoundAssetHelper* helper) {
-    if (!helper) return;
-    auto it = std::remove(binding_helpers_.begin(), binding_helpers_.end(), helper);
-    binding_helpers_.erase(it, binding_helpers_.end());
-}
-
-void Assets::mark_follower_binding_candidates_dirty() {
-    follower_binding_candidates_dirty_ = true;
-}
-
-void Assets::rebuild_follower_binding_candidates_if_needed() {
-    if (!follower_binding_candidates_dirty_) {
-        return;
-    }
-
-    follower_binding_candidates_.clear();
-    follower_binding_candidates_.reserve(all.size());
-    for (Asset* asset : all) {
-        if (!asset || !asset->info) {
-            continue;
-        }
-        if (!asset->info->follower_binding.has_value()) {
-            continue;
-        }
-        follower_binding_candidates_.push_back(asset);
-    }
-    follower_binding_candidates_dirty_ = false;
-}
-
-void Assets::reconcile_manifest_follower_bindings() {
-    if (!follower_binding_helper_) {
-        return;
-    }
-    rebuild_follower_binding_candidates_if_needed();
-
-    auto set_follower_hidden = [](Asset* follower, bool hidden) {
-        if (!follower) {
-            return;
-        }
-        follower->set_hidden(hidden);
-        follower->set_anchor_hidden(hidden);
-        follower->active = !hidden;
-    };
-
-    bool needs_candidate_refresh = false;
-    for (Asset* child : follower_binding_candidates_) {
-        if (!child || !child->info) {
-            continue;
-        }
-
-        if (!child->info->follower_binding.has_value()) {
-            follower_binding_helper_->unbind_child(*child);
-            needs_candidate_refresh = true;
-            continue;
-        }
-
-        const auto& spec = *child->info->follower_binding;
-        const bool has_required_parent_anchor = !spec.anchor_name.empty();
-        if (!has_required_parent_anchor) {
-            follower_binding_helper_->unbind_child(*child);
-            set_follower_hidden(child, true);
-            continue;
-        }
-
-        if (spec.controller_asset_id.empty()) {
-            follower_binding_helper_->unbind_child(*child);
-            set_follower_hidden(child, true);
-            continue;
-        }
-
-        Asset* parent = find_asset_by_stable_id(spec.controller_asset_id);
-        if (!parent || parent == child) {
-            follower_binding_helper_->unbind_child(*child);
-            set_follower_hidden(child, true);
-            continue;
-        }
-
-        follower_binding_helper_->bind_child_to_anchor_names(
-            *parent,
-            *child,
-            spec.anchor_name,
-            spec.follower_anchor_name,
-            spec.depth_policy,
-            spec.layer_policy,
-            -1);
-    }
-    if (needs_candidate_refresh) {
-        mark_follower_binding_candidates_dirty();
-    }
 }
 
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
@@ -1969,7 +1848,6 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     const world::GridPoint floor_point = resolve_floor_world_point(world_pos);
     raw = world_grid_.create_asset_at_point(std::move(uptr), floor_point.world_z(), floor_point.resolution_layer());
     all.push_back(raw);
-    mark_follower_binding_candidates_dirty();
     if (world::GridPoint* registered_point = world_grid_.point_for_asset(raw)) {
         raw->cache_grid_residency(*registered_point);
     }
@@ -2203,7 +2081,6 @@ void Assets::rebuild_all_assets_from_grid() {
             }
         }
     }
-    mark_follower_binding_candidates_dirty();
     cached_height_level_ = camera_scale;
     max_asset_dimensions_dirty_ = false;
     finalize_max_asset_dimensions(max_width, max_height);
@@ -2370,17 +2247,6 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     }
     if (unique_removals.empty()) {
         return 0;
-    }
-
-    // Purge anchor bindings that reference assets slated for removal (parents or children).
-    if (!binding_helpers_.empty()) {
-        for (Asset* victim : unique_removals) {
-            for (auto* helper : binding_helpers_) {
-                if (helper) {
-                    helper->purge_bindings_for_asset(victim);
-                }
-            }
-        }
     }
 
     for (Asset* asset : all) {

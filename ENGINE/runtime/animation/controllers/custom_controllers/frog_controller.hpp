@@ -1,27 +1,24 @@
 #ifndef FROG_CONTROLLER_HPP
 #define FROG_CONTROLLER_HPP
 
-#include "assets/asset/asset_controller.hpp"
+#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
 
 #include <SDL3/SDL.h>
 
-class Assets;
 class Asset;
 class Input;
 
-class frog_controller : public AssetController {
+class frog_controller : public CustomAssetController {
 
 public:
 
-    frog_controller(Assets* assets, Asset* self);
+    explicit frog_controller(Asset* self);
 
     ~frog_controller() override = default;
-    void update(const Input& in) override;
-    void process_pending_attacks(Asset& self) override;
 
-private:
-    Assets* assets_ = nullptr;
-    Asset*  self_   = nullptr;
+protected:
+    void on_update(const Input& in) override;
+    void on_process_pending_attacks(Asset& self) override;
 };
 
 #endif

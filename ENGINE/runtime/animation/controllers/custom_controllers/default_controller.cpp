@@ -7,35 +7,37 @@
 #include <string>
 
 default_controller::default_controller(Asset* self)
-    : self_(self) {}
+    : CustomAssetController(self) {}
 
-void default_controller::update(const Input& ) {
-    if (!self_ || !self_->info || !self_->anim_) {
+void default_controller::on_update(const Input& ) {
+    Asset* self = self_ptr();
+    if (!self || !self->info || !self->anim_) {
         return;
     }
 
     const std::string default_anim{ animation_update::detail::kDefaultAnimation };
 
-    auto it = self_->info->animations.find(default_anim);
-    if (it == self_->info->animations.end() || !it->second.has_frames()) {
+    auto it = self->info->animations.find(default_anim);
+    if (it == self->info->animations.end() || !it->second.has_frames()) {
         return;
     }
 
-    if (self_->current_animation != default_anim || self_->current_frame == nullptr) {
-        self_->anim_->move(SDL_Point{ 0, 0 }, default_anim);
+    if (self->current_animation != default_anim || self->current_frame == nullptr) {
+        self->anim_->move(SDL_Point{ 0, 0 }, default_anim);
         return;
     }
 
 }
 
-void default_controller::process_pending_attacks(Asset& ) {
-    if (!self_ || !self_->info || !self_->anim_) {
+void default_controller::on_process_pending_attacks(Asset& ) {
+    Asset* self = self_ptr();
+    if (!self || !self->info || !self->anim_) {
         return;
     }
-    if (self_->current_animation == "damaged" && self_->info->animations.count("destroyed")) {
-        self_->anim_->set_animation("destroy");
+    if (self->current_animation == "damaged" && self->info->animations.count("destroyed")) {
+        self->anim_->set_animation("destroy");
     }
-    if (self_->info->animations.count("damaged")) {
-        self_->anim_->set_animation("damaged");
+    if (self->info->animations.count("damaged")) {
+        self->anim_->set_animation("damaged");
     }
 }

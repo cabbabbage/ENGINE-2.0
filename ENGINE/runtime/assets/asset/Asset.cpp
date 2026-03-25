@@ -6,6 +6,7 @@
 #include "rendering/render/render.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/custom_controllers/child_asset.hpp"
 #include "utils/area_helpers.hpp"
 #include "assets/asset_filter_tags.hpp"
 #include "asset_types.hpp"
@@ -760,6 +761,7 @@ void Asset::update() {
 
     // Re-check anchor basis after any movement/animation/scale changes we just applied.
     const bool post_world_changed = update_anchor_basis_if_needed();
+    ChildAsset::sync_registered_for_owner(this);
 
     if (assets_ && (external_world_changed || post_world_changed)) {
         assets_->mark_collision_context_dirty();

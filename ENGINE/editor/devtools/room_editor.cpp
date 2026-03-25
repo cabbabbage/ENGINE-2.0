@@ -12242,10 +12242,7 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
             ? SelectionFilter::All
             : selection_filter_;
 
-    const bool is_anchored_asset =
-        asset->info &&
-        asset->info->follower_binding.has_value() &&
-        asset->info->follower_binding->is_valid();
+    const bool is_anchored_asset = false;
 
     // Check if asset is a map asset
     const bool is_map_asset = !asset->spawn_id.empty() && !is_room_spawn_id(asset->spawn_id);

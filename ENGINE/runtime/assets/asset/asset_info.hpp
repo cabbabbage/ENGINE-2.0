@@ -125,19 +125,7 @@ class AssetInfo {
     std::map<std::string, Animation> animations;
     std::map<std::string, Mapping> mappings;
 
-    struct FollowerBindingSpec {
-        std::string controller_asset_id;
-        std::string anchor_name;
-        std::string follower_anchor_name;
-        std::optional<std::string> depth_policy;
-        std::optional<std::string> layer_policy;
-
-        bool is_valid() const {
-            return !anchor_name.empty();
-        }
-    };
     std::string custom_controller_key;
-    std::optional<FollowerBindingSpec> follower_binding;
 
 	public:
     void loadAnimations(SDL_Renderer* renderer,

@@ -343,16 +343,12 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
 
     bool reverse = payload.value("reverse_source", false);
     bool flip_x = payload.value("flipped_source", false);
-    bool flip_y = false;
-    bool flip_movement_x = false;
-    bool flip_movement_y = false;
+    bool flip_y = payload.value("flip_vertical_source", false);
     if (kind == "animation" && payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
         const auto& modifiers = payload["derived_modifiers"];
         reverse = modifiers.value("reverse", reverse);
         flip_x = modifiers.value("flipX", flip_x);
-        flip_y = modifiers.value("flipY", false);
-        flip_movement_x = modifiers.value("flipMovementX", flip_movement_x);
-        flip_movement_y = modifiers.value("flipMovementY", flip_movement_y);
+        flip_y = modifiers.value("flipY", flip_y);
     }
 
     if (kind == "animation") {
@@ -382,8 +378,6 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
         result.signature.push_back(reverse ? '1' : '0');
         result.signature.push_back(flip_x ? '1' : '0');
         result.signature.push_back(flip_y ? '1' : '0');
-        result.signature.push_back(flip_movement_x ? '1' : '0');
-        result.signature.push_back(flip_movement_y ? '1' : '0');
         return result;
     }
 

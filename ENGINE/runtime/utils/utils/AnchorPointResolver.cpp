@@ -134,6 +134,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     const float flat_world_z = static_cast<float>(asset.world_z()) + asset.world_z_offset();
     sample.resolved.world_px = asset.world_xy_point();
     sample.resolved.world_z = static_cast<int>(std::lround(flat_world_z));
+    sample.resolved.world_depth = flat_world_z;
     sample.resolved.depth_offset = anchor.depth_offset;
     sample.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
     sample.flat_screen_px = sample.screen_px;
@@ -154,6 +155,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         static_cast<int>(std::lround(sample.final_anchor_point.x)),
         static_cast<int>(std::lround(sample.final_anchor_point.y))};
     sample.resolved.world_z = static_cast<int>(std::lround(sample.final_anchor_point.z));
+    sample.resolved.world_depth = sample.final_anchor_point.z;
     sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
     sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
@@ -627,6 +629,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
     sample.resolved.world_z = resolved_z;
+    sample.resolved.world_depth = final_anchor_point.z;
     sample.resolved.resolution_layer = resolution_layer;
     sample.resolved.source_texture_px = anchor_sample.source_px;
     sample.resolved.has_canonical_texture_source = true;

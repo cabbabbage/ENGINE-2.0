@@ -1367,6 +1367,7 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
                 resolved.screen_pos_2d = SDL_FPoint{0.0f, 0.0f};
         }
         resolved.world_z = handle.world_z;
+        resolved.world_depth = handle.world_depth;
         resolved.resolution_layer = handle.resolution_layer;
 }
 
@@ -1447,6 +1448,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 grid = nullptr;
                 world_px = SDL_Point{0, 0};
                 world_z = 0;
+                world_depth = 0.0f;
                 resolution_layer = 0;
                 missing = true;
                 depth_offset = 0;
@@ -1494,6 +1496,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         grid = resolved_sample.resolved.grid_point;
         world_px = resolved_sample.resolved.world_px;
         world_z = resolved_sample.resolved.world_z;
+        world_depth = resolved_sample.resolved.world_depth;
         resolution_layer = resolved_sample.resolved.resolution_layer;
         missing = resolved_sample.resolved.missing;
         depth_offset = resolved_sample.resolved.depth_offset;

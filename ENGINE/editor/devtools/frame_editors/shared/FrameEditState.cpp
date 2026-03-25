@@ -95,29 +95,6 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
     return frames;
 }
 
-namespace {
-
-nlohmann::json normalize_frame_array_key(const nlohmann::json& payload,
-                                         const char* key,
-                                         std::size_t frame_count) {
-    nlohmann::json value = (payload.contains(key) && payload[key].is_array())
-                               ? payload[key]
-                               : nlohmann::json::array();
-    if (value.size() < frame_count) {
-        value.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array());
-    } else if (value.size() > frame_count) {
-        value.erase(value.begin() + static_cast<std::ptrdiff_t>(frame_count), value.end());
-    }
-    for (std::size_t i = 0; i < value.size(); ++i) {
-        if (!value[i].is_array()) {
-            value[i] = nlohmann::json::array();
-        }
-    }
-    return value;
-}
-
-}  // namespace
-
 nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frames,
                                          const nlohmann::json& existing_payload) {
     nlohmann::json payload = existing_payload;
@@ -208,12 +185,6 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
     }
     payload["movement"] = std::move(movement);
     payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
-
-    payload["anchor_points"] = normalize_frame_array_key(payload, "anchor_points", frame_count);
-    payload["hit_boxes"] = normalize_frame_array_key(payload, "hit_boxes", frame_count);
-    payload["attack_boxes"] = normalize_frame_array_key(payload, "attack_boxes", frame_count);
-    payload.erase("hit_geometry");
-    payload.erase("attack_geometry");
 
     return payload;
 }

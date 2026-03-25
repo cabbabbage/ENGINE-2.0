@@ -113,9 +113,7 @@ class AnimationEditorWindow {
                                                   const std::string& source_animation_id,
                                                   int frame_count,
                                                   bool flip_x,
-                                                  bool flip_y,
-                                                  bool flip_movement_x,
-                                                  bool flip_movement_y) const;
+                                                  bool flip_y) const;
     void open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode);
     Asset* resolve_frame_editor_asset();
     void create_animation_via_prompt();

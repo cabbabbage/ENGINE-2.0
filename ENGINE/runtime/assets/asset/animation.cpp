@@ -352,7 +352,6 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     variant_steps_ = source.variant_steps_;
     render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps_);
     locked = source.locked;
-    inherit_source_movement = source.inherit_source_movement;
     const std::size_t frame_count = source.frame_cache_.size();
     const std::size_t variant_count = variant_steps_.size();
 
@@ -480,31 +479,11 @@ std::vector<AnimationFrame>& Animation::movement_path(std::size_t index) {
     return movement_paths_[index];
 }
 
-void Animation::inherit_movement_from(const Animation& source) {
-    movement_paths_ = source.movement_paths_;
+void Animation::replace_movement_paths(std::vector<std::vector<AnimationFrame>> paths) {
+    movement_paths_ = std::move(paths);
     if (movement_paths_.empty()) {
         movement_paths_.emplace_back();
     }
-    if (reverse_source) {
-        for (auto& path : movement_paths_) {
-            std::reverse(path.begin(), path.end());
-        }
-    }
-    if (flip_movement_horizontal) {
-        for (auto& path : movement_paths_) {
-            for (auto& frame : path) {
-                frame.dx = -frame.dx;
-            }
-        }
-    }
-    if (flip_movement_vertical) {
-        for (auto& path : movement_paths_) {
-            for (auto& frame : path) {
-                frame.dz = -frame.dz;
-            }
-        }
-    }
-    synchronize_runtime_frames();
 }
 
 std::size_t Animation::clamp_path_index(std::size_t index) const {

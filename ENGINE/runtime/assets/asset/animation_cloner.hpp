@@ -12,8 +12,6 @@ public:
         bool flip_horizontal = false;
         bool flip_vertical   = false;
         bool reverse_frames  = false;
-        bool flip_movement_horizontal = false;
-        bool flip_movement_vertical   = false;
 };
 
     static bool Clone(const Animation& source, Animation&       dest, const Options&   opts, SDL_Renderer*    renderer, AssetInfo&       info);

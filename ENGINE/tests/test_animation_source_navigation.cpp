@@ -35,15 +35,31 @@ struct AnimationSourceFixture {
         return it->second;
     }
 
-    Animation& add_derived_animation(const std::string& id, const std::string& source_id) {
+    Animation& add_derived_animation(const std::string& id,
+                                     const std::string& source_id,
+                                     bool inherit_geometry = true,
+                                     int frame_count = 1) {
         Animation animation;
         animation.source.kind = "animation";
         animation.source.name = source_id;
+        animation.inherit_source_geometry = inherit_geometry;
+        auto& frames = animation.primary_frames();
+        frames.resize(frame_count);
+        for (int i = 0; i < frame_count; ++i) {
+            frames[static_cast<std::size_t>(i)].frame_index = i;
+        }
         auto [it, inserted] = info->animations.emplace(id, std::move(animation));
         if (!inserted) {
             it->second = Animation{};
             it->second.source.kind = "animation";
             it->second.source.name = source_id;
+            it->second.inherit_source_geometry = inherit_geometry;
+            auto& existing_frames = it->second.primary_frames();
+            existing_frames.clear();
+            existing_frames.resize(frame_count);
+            for (int i = 0; i < frame_count; ++i) {
+                existing_frames[static_cast<std::size_t>(i)].frame_index = i;
+            }
         }
         return it->second;
     }
@@ -80,6 +96,22 @@ TEST_CASE("Derived animation resolves to top-level file sourced animation") {
     CHECK(selection.requested_was_derived);
     CHECK(!selection.used_fallback);
     CHECK(selection.navigable_animation_ids == std::vector<std::string>{"idle"});
+}
+
+TEST_CASE("Derived animation with local geometry is directly navigable") {
+    AnimationSourceFixture fixture;
+    fixture.add_file_animation("idle", 3);
+    fixture.add_derived_animation("idle_variant", "idle", false, 3);
+    fixture.add_derived_animation("idle_variant_flip", "idle_variant");
+
+    const auto selection =
+        devmode::resolve_file_sourced_animation_selection(fixture.info.get(), "idle_variant");
+
+    CHECK(selection.has_selection());
+    CHECK(selection.resolved_animation_id == "idle_variant");
+    CHECK(!selection.requested_was_derived);
+    CHECK(!selection.used_fallback);
+    CHECK(selection.navigable_animation_ids == std::vector<std::string>{"idle", "idle_variant"});
 }
 
 TEST_CASE("Broken and cyclic chains fall back to the first file sourced animation") {

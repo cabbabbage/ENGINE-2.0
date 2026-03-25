@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include "animation/controllers/custom_controllers/anchor_binding_order.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 
 TEST_CASE("Anchor binding order keeps parent before chained children") {
     const std::vector<anchor_binding_order::Node> nodes{
@@ -46,3 +47,16 @@ TEST_CASE("Anchor binding order reports cycles and appends a stable fallback ord
     CHECK(result.ordered_ids[1] == 200);
 }
 
+TEST_CASE("Quantized depth bias restores exact render ordering") {
+    constexpr double anchor_depth = 100.0;
+    constexpr double exact_object_depth = 12.25;
+    constexpr double quantized_object_depth = 12.0;
+
+    const double biased_depth = render_depth::depth_from_anchor(
+        anchor_depth,
+        quantized_object_depth,
+        render_depth::bias_for_quantized_depth(exact_object_depth, quantized_object_depth));
+    const double exact_depth = render_depth::depth_from_anchor(anchor_depth, exact_object_depth);
+
+    CHECK(biased_depth == doctest::Approx(exact_depth).epsilon(1e-9));
+}

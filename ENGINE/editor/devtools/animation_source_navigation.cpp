@@ -11,7 +11,13 @@ namespace devmode {
 namespace {
 
 bool animation_is_navigable(const Animation& animation) {
-    return animation.source.kind != "animation" && animation.has_frames();
+    if (!animation.has_frames()) {
+        return false;
+    }
+    if (animation.source.kind != "animation") {
+        return true;
+    }
+    return !animation.inherit_source_geometry;
 }
 
 std::string first_navigable_animation_id(const AssetInfo& info) {
@@ -70,7 +76,7 @@ FileSourcedAnimationSelection resolve_file_sourced_animation_selection(const Ass
         }
 
         const Animation& animation = animation_it->second;
-        if (animation.source.kind != "animation") {
+        if (animation.source.kind != "animation" || !animation.inherit_source_geometry) {
             if (animation.has_frames()) {
                 result.resolved_animation_id = current_id;
                 result.requested_was_derived = (requested_animation_id != current_id);

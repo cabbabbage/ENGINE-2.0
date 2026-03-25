@@ -38,9 +38,7 @@ class PlaybackSettingsPanel {
         bool flipped_source = false;
         bool reverse_source = false;
         bool flip_vertical = false;
-        bool flip_movement_horizontal = false;
-        bool flip_movement_vertical = false;
-        bool inherit_source_movement = true;
+        bool inherit_source_geometry = true;
         bool locked = false;
         bool random_start = false;
 
@@ -48,9 +46,7 @@ class PlaybackSettingsPanel {
             return flipped_source == other.flipped_source &&
                    reverse_source == other.reverse_source &&
                    flip_vertical == other.flip_vertical &&
-                   flip_movement_horizontal == other.flip_movement_horizontal &&
-                   flip_movement_vertical == other.flip_movement_vertical &&
-                   inherit_source_movement == other.inherit_source_movement &&
+                   inherit_source_geometry == other.inherit_source_geometry &&
                    locked == other.locked &&
                    random_start == other.random_start;
         }
@@ -80,9 +76,7 @@ class PlaybackSettingsPanel {
 
     std::unique_ptr<DMCheckbox> flip_checkbox_;
     std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;
-    std::unique_ptr<DMCheckbox> inherit_movement_checkbox_;
-    std::unique_ptr<DMCheckbox> flip_movement_horizontal_checkbox_;
-    std::unique_ptr<DMCheckbox> flip_movement_vertical_checkbox_;
+    std::unique_ptr<DMCheckbox> inherit_geometry_checkbox_;
     std::unique_ptr<DMCheckbox> reverse_checkbox_;
     std::unique_ptr<DMCheckbox> locked_checkbox_;
     std::unique_ptr<DMCheckbox> random_start_checkbox_;

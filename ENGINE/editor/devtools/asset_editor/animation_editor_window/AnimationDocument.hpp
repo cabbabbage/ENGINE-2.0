@@ -46,6 +46,9 @@ class AnimationDocument {
     double scale_percentage() const;
 
   private:
+    std::optional<nlohmann::json> raw_animation_payload_json(const std::string& animation_id) const;
+    nlohmann::json normalize_payload_for_storage(const std::string& animation_id,
+                                                 const nlohmann::json& payload) const;
     void load_from_json_object(const nlohmann::json& root);
     void ensure_document_initialized();
     void rebuild_animation_cache();

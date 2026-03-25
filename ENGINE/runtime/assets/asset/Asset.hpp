@@ -327,6 +327,7 @@ class Asset {
         world::GridPoint* grid = nullptr;
         SDL_Point       world_px{0, 0};
         int             world_z = 0;
+        float           world_depth = 0.0f;
         int             resolution_layer = 0;
         SDL_Point       source_texture_px{0, 0};
         SDL_FPoint      screen_px{0.0f, 0.0f};

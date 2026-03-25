@@ -127,4 +127,30 @@ TEST_CASE("Flat anchor depth plane includes asset world z offset") {
     REQUIRE(sample.flat_relative_pixel_point.valid);
     CHECK(sample.flat_relative_pixel_point.z == doctest::Approx(6.0f).epsilon(1e-6));
     CHECK(sample.resolved.world_z == 6);
+    CHECK(sample.resolved.world_depth == doctest::Approx(6.0f).epsilon(1e-6));
+}
+
+TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z") {
+    Asset asset = make_test_asset(0, 0);
+    const anchor_points::AnchorWorldPoint3 flat{0.0f, 0.0f, 10.0f, true};
+    anchor_points::AnchorWorldPoint3 displaced{};
+
+    REQUIRE(anchor_points::displace_along_camera_to_point_ray(asset, flat, 2.5f, displaced));
+    REQUIRE(displaced.valid);
+
+    DisplacedAssetAnchorPoint anchor{};
+    anchor.name = "depth_precision";
+    anchor.texture_x = 0;
+    anchor.texture_y = 0;
+    anchor.depth_offset = 3;
+
+    const auto sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        anchor,
+        anchor_points::GridMaterialization::None);
+
+    REQUIRE_FALSE(sample.resolved.missing);
+    REQUIRE(sample.final_anchor_point.valid);
+    CHECK(sample.resolved.world_depth == doctest::Approx(sample.final_anchor_point.z).epsilon(1e-6));
+    CHECK(sample.resolved.world_z == static_cast<int>(std::lround(sample.final_anchor_point.z)));
 }

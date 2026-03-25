@@ -48,6 +48,22 @@ std::size_t mode_index(FrameEditorLaunchMode mode) {
 
 using animation_editor::strings::trim_copy;
 
+bool payload_inherits_geometry(const nlohmann::json& payload) {
+    const bool source_is_animation =
+        payload.contains("source") &&
+        payload["source"].is_object() &&
+        payload["source"].value("kind", std::string{}) == "animation";
+    if (!source_is_animation) {
+        return false;
+    }
+    const bool has_local_frame_data =
+        (payload.contains("movement") && payload["movement"].is_array()) ||
+        (payload.contains("anchor_points") && payload["anchor_points"].is_array()) ||
+        (payload.contains("hit_boxes") && payload["hit_boxes"].is_array()) ||
+        (payload.contains("attack_boxes") && payload["attack_boxes"].is_array());
+    return payload.value("inherit_source_geometry", !has_local_frame_data);
+}
+
 void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x, int y, SDL_Color color) {
     if (!renderer || text.empty()) {
         return;
@@ -160,28 +176,19 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
     const nlohmann::json* source = payload.contains("source") && payload["source"].is_object() ? &payload["source"] : nullptr;
     std::string kind = source ? source->value("kind", std::string{"folder"}) : std::string{"folder"};
 
-    if (kind == "animation") {
-
-        bool inherit_movement = payload.value("inherit_source_movement", true);
-        if (!inherit_movement) {
-
-            kind = "folder";
-        }
+    if (kind == "animation" && !payload_inherits_geometry(payload)) {
+        kind = "folder";
     }
 
     if (kind == "animation") {
         bool reverse = payload.value("reverse_source", false);
         bool flip_x = payload.value("flipped_source", false);
-        bool flip_y = false;
-        bool flip_movement_x = false;
-        bool flip_movement_y = false;
+        bool flip_y = payload.value("flip_vertical_source", false);
         if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
             const auto& modifiers = payload["derived_modifiers"];
             reverse = modifiers.value("reverse", reverse);
             flip_x = modifiers.value("flipX", flip_x);
-            flip_y = modifiers.value("flipY", false);
-            flip_movement_x = modifiers.value("flipMovementX", flip_movement_x);
-            flip_movement_y = modifiers.value("flipMovementY", flip_movement_y);
+            flip_y = modifiers.value("flipY", flip_y);
         }
 
         std::string reference = source ? source->value("name", std::string{}) : std::string{};
@@ -203,20 +210,17 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
         result.derived = true;
         result.source_id = reference;
 
-        if (flip_movement_x) result.total_dx = -result.total_dx;
-        if (flip_movement_y) result.total_dz = -result.total_dz;
+        if (flip_x) result.total_dx = -result.total_dx;
+        if (flip_y) result.total_dz = -result.total_dz;
         if (reverse) result.modifiers.push_back("Reverse");
         if (flip_x) result.modifiers.push_back("Flip X");
         if (flip_y) result.modifiers.push_back("Flip Y");
-        if (flip_movement_x) result.modifiers.push_back("Flip Movement X");
-        if (flip_movement_y) result.modifiers.push_back("Flip Movement Y");
+        result.modifiers.push_back("Inherit Geometry");
 
         result.signature += "|mods:";
         result.signature.push_back(reverse ? '1' : '0');
         result.signature.push_back(flip_x ? '1' : '0');
         result.signature.push_back(flip_y ? '1' : '0');
-        result.signature.push_back(flip_movement_x ? '1' : '0');
-        result.signature.push_back(flip_movement_y ? '1' : '0');
         return result;
     }
 
@@ -537,7 +541,7 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
 
     if (derived_from_animation_) {
         std::string target = inherited_source_id_.empty() ? std::string("the source animation") : "animation '" + inherited_source_id_ + "'";
-        inherited_message_lines_.push_back("Movement inherits from " + target + ".");
+        inherited_message_lines_.push_back("Geometry inherits from " + target + ".");
         if (!resolved.modifiers.empty()) {
             std::string joined;
             for (size_t i = 0; i < resolved.modifiers.size(); ++i) {

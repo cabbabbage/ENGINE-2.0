@@ -35,24 +35,42 @@ using json_coercion::read_bool_field_like;
 using json_coercion::read_int_field_like;
 using json_coercion::read_string_field_like;
 
-void resolve_inherited_movements(AssetInfo& info) {
-        for (auto& [name, anim] : info.animations) {
-                if (!anim.inherit_source_movement || anim.source.kind != "animation" || anim.source.name.empty()) {
-                        continue;
-                }
-                auto it = info.animations.find(anim.source.name);
-                if (it == info.animations.end()) continue;
+std::string source_animation_id(const Animation& animation) {
+        if (animation.source.kind != "animation") {
+                return {};
+        }
+        if (!animation.source.name.empty()) {
+                return animation.source.name;
+        }
+        return animation.source.path;
+}
 
-                bool has_frames = false;
-                for (std::size_t path_idx = 0; path_idx < anim.movement_path_count(); ++path_idx) {
-                        const auto& path = anim.movement_path(path_idx);
-                        if (!path.empty()) {
-                                has_frames = true;
-                                break;
+bool animation_inherits_geometry(const Animation& animation) {
+        return animation.inherit_source_geometry && !source_animation_id(animation).empty();
+}
+
+void apply_movement_transforms(std::vector<std::vector<AnimationFrame>>& paths,
+                               bool                                      reverse_frames,
+                               bool                                      flip_horizontal,
+                               bool                                      flip_vertical) {
+        if (reverse_frames) {
+                for (auto& path : paths) {
+                        std::reverse(path.begin(), path.end());
+                }
+        }
+        if (flip_horizontal) {
+                for (auto& path : paths) {
+                        for (auto& frame : path) {
+                                frame.dx = -frame.dx;
                         }
                 }
-                if (has_frames) continue;
-                anim.inherit_movement_from(it->second);
+        }
+        if (flip_vertical) {
+                for (auto& path : paths) {
+                        for (auto& frame : path) {
+                                frame.dz = -frame.dz;
+                        }
+                }
         }
 }
 
@@ -201,17 +219,13 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
                              const std::vector<Animation::FrameCache>& frame_cache,
                              bool                                                 reverse_frames,
                              bool                                                 flip_x,
-                             bool                                                 flip_y,
-                             bool                                                 flip_movement_x,
-                             bool                                                 flip_movement_y) {
+                             bool                                                 flip_y) {
         if (anchors.empty()) {
                 return;
         }
         if (reverse_frames) {
                 std::reverse(anchors.begin(), anchors.end());
         }
-        const bool flip_horizontal = flip_x || flip_movement_x;
-        const bool flip_vertical = flip_y || flip_movement_y;
         for (std::size_t frame_index = 0; frame_index < anchors.size(); ++frame_index) {
                 auto& frame = anchors[frame_index];
                 int frame_w = 0;
@@ -226,10 +240,10 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
                         }
                 }
                 for (auto& anchor : frame) {
-                        if (flip_horizontal && frame_w > 0) {
+                        if (flip_x && frame_w > 0) {
                                 anchor.texture_x = frame_w - 1 - anchor.texture_x;
                         }
-                        if (flip_vertical && frame_h > 0) {
+                        if (flip_y && frame_h > 0) {
                                 anchor.texture_y = frame_h - 1 - anchor.texture_y;
                         }
                 }
@@ -397,17 +411,13 @@ void apply_box_transforms(std::vector<std::vector<TBox>>& boxes,
                           const std::vector<Animation::FrameCache>& frame_cache,
                           bool reverse_frames,
                           bool flip_x,
-                          bool flip_y,
-                          bool flip_movement_x,
-                          bool flip_movement_y) {
+                          bool flip_y) {
         if (boxes.empty()) {
                 return;
         }
         if (reverse_frames) {
                 std::reverse(boxes.begin(), boxes.end());
         }
-        const bool flip_horizontal = flip_x || flip_movement_x;
-        const bool flip_vertical = flip_y || flip_movement_y;
         for (std::size_t frame_index = 0; frame_index < boxes.size(); ++frame_index) {
                 int frame_w = 0;
                 int frame_h = 0;
@@ -422,13 +432,13 @@ void apply_box_transforms(std::vector<std::vector<TBox>>& boxes,
                 }
                 for (auto& box : boxes[frame_index]) {
                         animation_update::FrameBoxRect flipped = box.rect;
-                        if (flip_horizontal && frame_w > 0) {
+                        if (flip_x && frame_w > 0) {
                                 const int next_left = frame_w - 1 - box.rect.right;
                                 const int next_right = frame_w - 1 - box.rect.left;
                                 flipped.left = next_left;
                                 flipped.right = next_right;
                         }
-                        if (flip_vertical && frame_h > 0) {
+                        if (flip_y && frame_h > 0) {
                                 const int next_top = frame_h - 1 - box.rect.bottom;
                                 const int next_bottom = frame_h - 1 - box.rect.top;
                                 flipped.top = next_top;
@@ -456,6 +466,123 @@ void apply_frame_boxes(std::vector<std::vector<AnimationFrame>>& paths,
                                 frame.set_attack_boxes({});
                         }
                 }
+        }
+}
+
+bool bind_frame_data(Animation&                                                       animation,
+                     const std::vector<std::vector<DisplacedAssetAnchorPoint>>&       anchor_frames,
+                     const std::vector<std::vector<animation_update::FrameHitBox>>&   hit_box_frames,
+                     const std::vector<std::vector<animation_update::FrameAttackBox>>& attack_box_frames) {
+        const std::size_t frame_count = animation.cached_frame_count();
+        std::vector<std::vector<AnimationFrame>> paths;
+        for (std::size_t path_idx = 0; path_idx < animation.movement_path_count(); ++path_idx) {
+                paths.push_back(animation.movement_path(path_idx));
+        }
+        if (paths.empty()) {
+                paths.emplace_back();
+        }
+
+        std::vector<std::vector<DisplacedAssetAnchorPoint>> anchors = anchor_frames;
+        std::vector<std::vector<animation_update::FrameHitBox>> hit_boxes = hit_box_frames;
+        std::vector<std::vector<animation_update::FrameAttackBox>> attack_boxes = attack_box_frames;
+        if (anchors.size() < frame_count) anchors.resize(frame_count);
+        if (hit_boxes.size() < frame_count) hit_boxes.resize(frame_count);
+        if (attack_boxes.size() < frame_count) attack_boxes.resize(frame_count);
+
+        bool any_motion = false;
+        for (std::size_t path_idx = 0; path_idx < paths.size(); ++path_idx) {
+                auto& path = paths[path_idx];
+                if (path.size() != frame_count) {
+                        path.resize(frame_count);
+                }
+                for (std::size_t i = 0; i < path.size(); ++i) {
+                        AnimationFrame& f = path[i];
+                        f.prev        = (i > 0) ? &path[i - 1] : nullptr;
+                        f.next        = (i + 1 < path.size()) ? &path[i + 1] : nullptr;
+                        f.is_first    = (i == 0);
+                        f.is_last     = (i + 1 == path.size());
+                        f.frame_index = static_cast<int>(i);
+                        f.set_anchor_points(i < anchors.size() ? anchors[i] : std::vector<DisplacedAssetAnchorPoint>{});
+
+                        if (f.dx != 0 || f.dy != 0 || f.dz != 0) {
+                                any_motion = true;
+                        }
+                }
+        }
+
+        apply_frame_boxes(paths, hit_boxes, attack_boxes);
+        animation.replace_movement_paths(std::move(paths));
+        animation.synchronize_runtime_frames();
+
+        animation.total_dx = 0;
+        animation.total_dy = 0;
+        animation.total_dz = 0;
+        if (animation.movement_path_count() > 0) {
+                const auto& primary = animation.movement_path(0);
+                for (const auto& frame : primary) {
+                        animation.total_dx += frame.dx;
+                        animation.total_dy += frame.dy;
+                        animation.total_dz += frame.dz;
+                        if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
+                                any_motion = true;
+                        }
+                }
+        }
+
+        animation.movment = any_motion;
+        return any_motion;
+}
+
+void resolve_inherited_frame_data(AssetInfo& info) {
+        for (auto& [animation_id, animation] : info.animations) {
+                if (!animation_inherits_geometry(animation)) {
+                        continue;
+                }
+
+                const std::string source_id = source_animation_id(animation);
+                auto source_it = info.animations.find(source_id);
+                if (source_it == info.animations.end()) {
+                        continue;
+                }
+
+                const Animation& source = source_it->second;
+                const std::size_t frame_count = animation.cached_frame_count();
+
+                std::vector<std::vector<AnimationFrame>> inherited_paths;
+                for (std::size_t path_idx = 0; path_idx < source.movement_path_count(); ++path_idx) {
+                        inherited_paths.push_back(source.movement_path(path_idx));
+                }
+                if (inherited_paths.empty()) {
+                        inherited_paths.emplace_back();
+                }
+                apply_movement_transforms(inherited_paths,
+                                          animation.reverse_source,
+                                          animation.flipped_source,
+                                          animation.flip_vertical_source);
+                animation.replace_movement_paths(std::move(inherited_paths));
+
+                auto anchor_frames = collect_anchor_frames_from_animation(source, frame_count);
+                apply_anchor_transforms(anchor_frames,
+                                        animation.cached_frames(),
+                                        animation.reverse_source,
+                                        animation.flipped_source,
+                                        animation.flip_vertical_source);
+
+                auto hit_box_frames = collect_hit_box_frames_from_animation(source, frame_count);
+                apply_box_transforms(hit_box_frames,
+                                     animation.cached_frames(),
+                                     animation.reverse_source,
+                                     animation.flipped_source,
+                                     animation.flip_vertical_source);
+
+                auto attack_box_frames = collect_attack_box_frames_from_animation(source, frame_count);
+                apply_box_transforms(attack_box_frames,
+                                     animation.cached_frames(),
+                                     animation.reverse_source,
+                                     animation.flipped_source,
+                                     animation.flip_vertical_source);
+
+                bind_frame_data(animation, anchor_frames, hit_box_frames, attack_box_frames);
         }
 }
 
@@ -641,27 +768,16 @@ void AnimationLoader::load(Animation& animation,
 
         animation.flipped_source = read_bool_field_like(anim_json, "flipped_source", false);
         animation.flip_vertical_source = read_bool_field_like(anim_json, "flip_vertical_source", false);
-        animation.flip_movement_horizontal = read_bool_field_like(anim_json, "flip_movement_horizontal", false);
-        animation.flip_movement_vertical = read_bool_field_like(anim_json, "flip_movement_vertical", false);
         animation.reverse_source = read_bool_field_like(anim_json, "reverse_source", false);
-        const bool inherit_source_movement =
-            read_bool_field_like(anim_json, "inherit_source_movement", (animation.source.kind == "animation"));
         if (animation.source.kind == "animation" && anim_json.contains("derived_modifiers") &&
             anim_json["derived_modifiers"].is_object()) {
                 const auto& modifiers = anim_json["derived_modifiers"];
                 animation.reverse_source = read_bool_field_like(modifiers, "reverse", animation.reverse_source);
                 animation.flipped_source = read_bool_field_like(modifiers, "flipX", animation.flipped_source);
                 animation.flip_vertical_source = read_bool_field_like(modifiers, "flipY", animation.flip_vertical_source);
-                animation.flip_movement_horizontal =
-                    read_bool_field_like(modifiers, "flipMovementX", animation.flip_movement_horizontal);
-                animation.flip_movement_vertical =
-                    read_bool_field_like(modifiers, "flipMovementY", animation.flip_movement_vertical);
         } else if (animation.source.kind != "animation") {
                 animation.flip_vertical_source = false;
-                animation.flip_movement_horizontal = false;
-                animation.flip_movement_vertical = false;
         }
-        animation.inherit_source_movement = (animation.source.kind == "animation") && inherit_source_movement;
 
         animation.locked = read_bool_field_like(anim_json, "locked", false);
         animation.loop = read_bool_field_like(anim_json, "loop", true);
@@ -690,6 +806,16 @@ void AnimationLoader::load(Animation& animation,
         if (has_attack_boxes_json) {
                 attack_boxes_json = anim_json["attack_boxes"];
         }
+        const bool has_movement_json = anim_json.contains("movement") && anim_json["movement"].is_array();
+        const bool has_any_local_frame_data =
+            has_movement_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
+        const bool legacy_inherit_source_movement =
+            read_bool_field_like(anim_json, "inherit_source_movement", (animation.source.kind == "animation"));
+        const bool inherit_source_geometry = read_bool_field_like(
+            anim_json,
+            "inherit_source_geometry",
+            (animation.source.kind == "animation") && legacy_inherit_source_movement && !has_any_local_frame_data);
+        animation.inherit_source_geometry = (animation.source.kind == "animation") && inherit_source_geometry;
 
         auto parse_movement_sequence = [&](const nlohmann::json& seq, std::vector<AnimationFrame>& dest) {
                 bool specified = false;
@@ -835,11 +961,9 @@ void AnimationLoader::load(Animation& animation,
                         const Animation& src_anim = it->second;
                         if (src_anim.has_frames()) {
                                 AnimationCloner::Options opts{};
-                                opts.flip_horizontal           = animation.flipped_source;
-                                opts.flip_vertical             = animation.flip_vertical_source;
-                                opts.reverse_frames            = animation.reverse_source;
-                                opts.flip_movement_horizontal  = animation.flip_movement_horizontal;
-                                opts.flip_movement_vertical    = animation.flip_movement_vertical;
+                                opts.flip_horizontal = animation.flipped_source;
+                                opts.flip_vertical   = animation.flip_vertical_source;
+                                opts.reverse_frames  = animation.reverse_source;
 
                                 if (!AnimationCloner::Clone(src_anim, animation, opts, renderer, info)) {
                                         flush_diagnostics();
@@ -875,17 +999,13 @@ void AnimationLoader::load(Animation& animation,
                 auto src_it = info.animations.find(animation.source.name);
                 if (src_it != info.animations.end() && !src_it->second.frame_cache_.empty()) {
                         AnimationCloner::Options opts{};
-                        opts.flip_horizontal           = animation.flipped_source;
-                        opts.flip_vertical             = animation.flip_vertical_source;
-                        opts.reverse_frames            = animation.reverse_source;
-                        opts.flip_movement_horizontal  = animation.flip_movement_horizontal;
-                        opts.flip_movement_vertical    = animation.flip_movement_vertical;
+                        opts.flip_horizontal = animation.flipped_source;
+                        opts.flip_vertical   = animation.flip_vertical_source;
+                        opts.reverse_frames  = animation.reverse_source;
                         std::cout << "[AnimationLoader] " << info.name << "::" << trigger
                                   << " late-cloning from source animation '" << animation.source.name
                                   << "' (flipH=" << opts.flip_horizontal
                                   << ", flipV=" << opts.flip_vertical
-                                  << ", flipMoveH=" << opts.flip_movement_horizontal
-                                  << ", flipMoveV=" << opts.flip_movement_vertical
                                   << ", reverse=" << opts.reverse_frames << ")\n";
                         if (AnimationCloner::Clone(src_it->second, animation, opts, renderer, info)) {
                                 reused_animation = true;
@@ -893,33 +1013,11 @@ void AnimationLoader::load(Animation& animation,
                 }
         }
 
-        auto apply_movement_transforms = [&](std::vector<std::vector<AnimationFrame>>& paths) {
-                if (animation.reverse_source) {
-                        for (auto& path : paths) {
-                                std::reverse(path.begin(), path.end());
-                        }
-                }
-                if (animation.flip_movement_horizontal) {
-                        for (auto& path : paths) {
-                                for (auto& frame : path) {
-                                        frame.dx = -frame.dx;
-                                }
-                        }
-                }
-                if (animation.flip_movement_vertical) {
-                        for (auto& path : paths) {
-                                for (auto& frame : path) {
-                                        frame.dz = -frame.dz;
-                                }
-                        }
-                }
-};
-
-        const bool derive_from_animation = (animation.source.kind == "animation" && !animation.source.name.empty());
-        const bool use_inherited_movement = derive_from_animation && animation.inherit_source_movement;
+        const bool derive_from_animation = !source_animation_id(animation).empty();
+        const bool use_inherited_geometry = animation_inherits_geometry(animation);
         bool       movement_from_source = false;
-        if (use_inherited_movement) {
-                auto it = info.animations.find(animation.source.name);
+        if (use_inherited_geometry) {
+                auto it = info.animations.find(source_animation_id(animation));
                 if (it != info.animations.end()) {
                         animation.movement_paths_ = it->second.movement_paths_;
                         movement_from_source = true;
@@ -935,8 +1033,11 @@ void AnimationLoader::load(Animation& animation,
         if (!movement_from_source) {
                 animation.movement_paths_ = authored_movement_paths;
         }
-        if (derive_from_animation) {
-                apply_movement_transforms(animation.movement_paths_);
+        if (use_inherited_geometry) {
+                apply_movement_transforms(animation.movement_paths_,
+                                          animation.reverse_source,
+                                          animation.flipped_source,
+                                          animation.flip_vertical_source);
         }
         const bool has_audio_json = anim_json.contains("audio") && anim_json["audio"].is_object();
         const nlohmann::json* audio_json = has_audio_json ? &anim_json["audio"] : nullptr;
@@ -980,101 +1081,38 @@ void AnimationLoader::load(Animation& animation,
         std::vector<std::vector<DisplacedAssetAnchorPoint>> anchor_frames;
         if (has_anchor_points_json) {
                 anchor_frames = parse_anchor_frames(anchor_points_json, frame_count);
-        } else if (source_animation_ptr) {
+        } else if (source_animation_ptr && use_inherited_geometry) {
                 anchor_frames = collect_anchor_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_anchor_transforms(anchor_frames,
                                         animation.frame_cache_,
                                         animation.reverse_source,
                                         animation.flipped_source,
-                                        animation.flip_vertical_source,
-                                        animation.flip_movement_horizontal,
-                                        animation.flip_movement_vertical);
+                                        animation.flip_vertical_source);
         }
         std::vector<std::vector<animation_update::FrameHitBox>> hit_box_frames;
         if (has_hit_boxes_json) {
                 hit_box_frames = parse_hit_box_frames(hit_boxes_json, frame_count);
-        } else if (source_animation_ptr) {
+        } else if (source_animation_ptr && use_inherited_geometry) {
                 hit_box_frames = collect_hit_box_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_box_transforms(hit_box_frames,
                                      animation.frame_cache_,
                                      animation.reverse_source,
                                      animation.flipped_source,
-                                     animation.flip_vertical_source,
-                                     animation.flip_movement_horizontal,
-                                     animation.flip_movement_vertical);
+                                     animation.flip_vertical_source);
         }
 
         std::vector<std::vector<animation_update::FrameAttackBox>> attack_box_frames;
         if (has_attack_boxes_json) {
                 attack_box_frames = parse_attack_box_frames(attack_boxes_json, frame_count);
-        } else if (source_animation_ptr) {
+        } else if (source_animation_ptr && use_inherited_geometry) {
                 attack_box_frames = collect_attack_box_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_box_transforms(attack_box_frames,
                                      animation.frame_cache_,
                                      animation.reverse_source,
                                      animation.flipped_source,
-                                     animation.flip_vertical_source,
-                                     animation.flip_movement_horizontal,
-                                     animation.flip_movement_vertical);
+                                     animation.flip_vertical_source);
         }
-        if (anchor_frames.size() < frame_count) {
-                anchor_frames.resize(frame_count);
-        }
-        if (hit_box_frames.size() < frame_count) {
-                hit_box_frames.resize(frame_count);
-        }
-        if (attack_box_frames.size() < frame_count) {
-                attack_box_frames.resize(frame_count);
-        }
-        if (animation.movement_paths_.empty()) {
-                animation.movement_paths_.emplace_back();
-        }
-
-        bool any_motion = false;
-        for (std::size_t path_idx = 0; path_idx < animation.movement_paths_.size(); ++path_idx) {
-                auto& path = animation.movement_paths_[path_idx];
-                if (path.size() != frame_count) {
-                        path.resize(frame_count);
-                }
-                for (std::size_t i = 0; i < path.size(); ++i) {
-                        AnimationFrame& f = path[i];
-                        f.prev        = (i > 0) ? &path[i - 1] : nullptr;
-                        f.next        = (i + 1 < path.size()) ? &path[i + 1] : nullptr;
-                        f.is_first    = (i == 0);
-                        f.is_last     = (i + 1 == path.size());
-                        f.frame_index = static_cast<int>(i);
-
-                        if (i < anchor_frames.size()) {
-                                f.set_anchor_points(anchor_frames[i]);
-                        } else {
-                                f.set_anchor_points({});
-                        }
-
-                        if (f.dx != 0 || f.dy != 0 || f.dz != 0) {
-                                any_motion = true;
-                        }
-                }
-        }
-
-        apply_frame_boxes(animation.movement_paths_, hit_box_frames, attack_box_frames);
-        animation.synchronize_runtime_frames();
-
-        animation.total_dx = 0;
-        animation.total_dy = 0;
-        animation.total_dz = 0;
-        if (!animation.movement_paths_.empty()) {
-                const auto& primary = animation.movement_paths_.front();
-                for (const auto& frame : primary) {
-                        animation.total_dx += frame.dx;
-                        animation.total_dy += frame.dy;
-                        animation.total_dz += frame.dz;
-                        if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
-                                any_motion = true;
-                        }
-                }
-        }
-
-        animation.movment = any_motion;
+        bind_frame_data(animation, anchor_frames, hit_box_frames, attack_box_frames);
         if (trigger == "default") {
                 if (const AnimationFrame* first = animation.primary_frame_at(0); first && !first->variants.empty()) {
                         base_sprite = first->variants[0].base_texture;
@@ -1106,6 +1144,6 @@ void AnimationLoader::load(Animation& animation,
 
         // Load completed
 
-        resolve_inherited_movements(info);
+        resolve_inherited_frame_data(info);
         flush_diagnostics();
 }

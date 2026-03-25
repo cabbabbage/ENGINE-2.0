@@ -46,6 +46,7 @@ struct DisplacedAssetAnchorPoint {
 struct ResolvedAnchor {
     SDL_Point        world_px{0, 0};
     int              world_z = 0;
+    float            world_depth = 0.0f;
     int              resolution_layer = 0;
     SDL_Point        source_texture_px{0, 0};
     bool             has_canonical_texture_source = false;
@@ -64,6 +65,7 @@ struct AnchorPoint {
     Vec2 relative_pos_2d{};
     Vec2 world_pos_2d{};
     int world_z = 0;
+    float world_depth = 0.0f;
     int resolution_layer = 0;
 
     bool is_active() const { return exists; }

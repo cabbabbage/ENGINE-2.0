@@ -1370,8 +1370,6 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
     self->preview_reverse_ = false;
     self->preview_flip_x_ = false;
     self->preview_flip_y_ = false;
-    self->preview_flip_movement_x_ = false;
-    self->preview_flip_movement_y_ = false;
     self->frame_count_ = 1;
 
     if (!payload_dump.has_value()) {
@@ -1395,30 +1393,19 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
     if (derived) {
         self->preview_reverse_ = payload.value("reverse_source", false);
         self->preview_flip_x_ = payload.value("flipped_source", false);
+        self->preview_flip_y_ = payload.value("flip_vertical_source", false);
         if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
             const auto& modifiers = payload["derived_modifiers"];
             self->preview_reverse_ = modifiers.value("reverse", self->preview_reverse_);
             self->preview_flip_x_ = modifiers.value("flipX", self->preview_flip_x_);
-            self->preview_flip_y_ = modifiers.value("flipY", false);
-            bool inherit_movement = payload.value("inherit_source_movement", true);
-            if (inherit_movement) {
-                self->preview_flip_movement_x_ = modifiers.value("flipMovementX", false);
-                self->preview_flip_movement_y_ = modifiers.value("flipMovementY", false);
-            } else {
-                self->preview_flip_movement_x_ = false;
-                self->preview_flip_movement_y_ = false;
-            }
+            self->preview_flip_y_ = modifiers.value("flipY", self->preview_flip_y_);
         } else {
-            self->preview_flip_y_ = false;
-            self->preview_flip_movement_x_ = false;
-            self->preview_flip_movement_y_ = false;
+            self->preview_flip_y_ = payload.value("flip_vertical_source", false);
         }
     } else {
         self->preview_reverse_ = payload.value("reverse_source", false);
         self->preview_flip_x_ = payload.value("flipped_source", false);
         self->preview_flip_y_ = false;
-        self->preview_flip_movement_x_ = false;
-        self->preview_flip_movement_y_ = false;
     }
 
     if (payload.contains("number_of_frames")) {

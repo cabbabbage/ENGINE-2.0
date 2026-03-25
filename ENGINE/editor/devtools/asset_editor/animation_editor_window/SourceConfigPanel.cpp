@@ -552,7 +552,10 @@ bool SourceConfigPanel::animation_is_frame_based(const std::string& id) const {
         return false;
     }
     SourceConfig config = parse_source(*payload);
-    return to_lower_copy(config.kind) != std::string{"animation"};
+    if (to_lower_copy(config.kind) != std::string{"animation"}) {
+        return true;
+    }
+    return !payload->value("inherit_source_geometry", false);
 }
 
 SourceConfigPanel::SourceConfig SourceConfigPanel::parse_source(const nlohmann::json& payload) const {
@@ -823,7 +826,9 @@ void SourceConfigPanel::refresh_animation_options() {
             if (id == animation_id_) {
                 continue;
             }
-            new_options.push_back(id);
+            if (animation_is_frame_based(id)) {
+                new_options.push_back(id);
+            }
         }
     }
 

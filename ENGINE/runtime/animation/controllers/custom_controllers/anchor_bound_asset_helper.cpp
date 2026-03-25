@@ -4,6 +4,7 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "core/AssetsManager.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "utils/log.hpp"
 
 #include <SDL3/SDL.h>
@@ -56,6 +57,11 @@ std::string normalize_policy_string(const std::optional<std::string>& raw) {
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     }
     return normalized;
+}
+
+double desired_child_render_depth_bias(double exact_world_depth, int rounded_world_depth) {
+    return render_depth::bias_for_quantized_depth(exact_world_depth,
+                                                  static_cast<double>(rounded_world_depth));
 }
 
 } // namespace
@@ -502,9 +508,11 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
     const int anchor_world_x = static_cast<int>(std::lround(anchor.world_pos_2d.x));
     const int anchor_world_y = static_cast<int>(std::lround(anchor.world_pos_2d.y));
     int target_anchor_world_z = anchor.world_z;
+    double target_anchor_world_depth = anchor.world_depth;
     int target_anchor_layer = anchor.resolution_layer;
     if (state.depth_policy == DepthPolicy::MatchOwner) {
         target_anchor_world_z = state.parent->world_z();
+        target_anchor_world_depth = static_cast<double>(target_anchor_world_z);
     }
     if (state.layer_policy == LayerPolicy::MatchControllerAsset) {
         target_anchor_layer = asset_resolution_layer(state.parent);
@@ -525,6 +533,7 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
     const int child_origin_world_x = state.child->world_x();
     const int child_origin_world_y = state.child->world_y();
     const int child_origin_world_z = state.child->world_z();
+    const double child_origin_world_depth = static_cast<double>(child_origin_world_z);
     const int child_origin_layer = asset_resolution_layer(state.child);
     const int child_anchor_world_x = use_child_origin_as_anchor
         ? child_origin_world_x
@@ -533,16 +542,21 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
         ? child_origin_world_y
         : static_cast<int>(std::lround(child_anchor->world_pos_2d.y));
     const int child_anchor_world_z = use_child_origin_as_anchor ? child_origin_world_z : child_anchor->world_z;
+    const double child_anchor_world_depth = use_child_origin_as_anchor
+        ? child_origin_world_depth
+        : static_cast<double>(child_anchor->world_depth);
     const int child_anchor_layer = use_child_origin_as_anchor ? child_origin_layer : child_anchor->resolution_layer;
     const int child_anchor_offset_x = child_anchor_world_x - child_origin_world_x;
     const int child_anchor_offset_y = child_anchor_world_y - child_origin_world_y;
     const int child_anchor_offset_z = child_anchor_world_z - child_origin_world_z;
+    const double child_anchor_offset_depth = child_anchor_world_depth - child_origin_world_depth;
     const int child_anchor_layer_offset = child_anchor_layer - child_origin_layer;
 
     // Solve translation by enforcing child_anchor_world == parent_anchor_world.
     const int expected_child_world_x = anchor_world_x - child_anchor_offset_x;
     const int expected_child_world_y = anchor_world_y - child_anchor_offset_y;
     const int expected_child_world_z = target_anchor_world_z - child_anchor_offset_z;
+    const double expected_child_world_depth = target_anchor_world_depth - child_anchor_offset_depth;
     const int expected_child_layer = target_anchor_layer - child_anchor_layer_offset;
 
     const bool need_move =
@@ -556,6 +570,13 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
                                             expected_child_world_y,
                                             expected_child_world_z,
                                             expected_child_layer);
+        changed = true;
+    }
+
+    const double desired_depth_bias =
+        desired_child_render_depth_bias(expected_child_world_depth, expected_child_world_z);
+    if (std::fabs(state.child->render_depth_bias() - desired_depth_bias) > 1e-6) {
+        state.child->set_render_depth_bias(desired_depth_bias);
         changed = true;
     }
 

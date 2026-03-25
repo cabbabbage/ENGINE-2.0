@@ -1728,12 +1728,12 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
         {"name", ""}
     });
     payload["number_of_frames"] = std::max(frame_count, 1);
-    payload["inherit_source_movement"] = false;
     payload["movement"] = build_movement_sequence(frame_count, dx, depth_dz);
     payload["loop"] = true;
     payload["locked"] = false;
     payload["reverse_source"] = false;
     payload["flipped_source"] = false;
+    payload["flip_vertical_source"] = false;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
     return payload;
@@ -1743,9 +1743,7 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
                                                                      const std::string& source_animation_id,
                                                                      int frame_count,
                                                                      bool flip_x,
-                                                                     bool flip_y,
-                                                                     bool flip_movement_x,
-                                                                     bool flip_movement_y) const {
+                                                                     bool flip_y) const {
     (void)animation_id;
     nlohmann::json payload = nlohmann::json::object();
     payload["source"] = nlohmann::json::object({
@@ -1754,19 +1752,18 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
         {"name", source_animation_id}
     });
     payload["number_of_frames"] = std::max(frame_count, 1);
-    payload["inherit_source_movement"] = true;
+    payload["inherit_source_geometry"] = true;
     payload["loop"] = true;
     payload["locked"] = false;
     payload["reverse_source"] = false;
     payload["flipped_source"] = false;
+    payload["flip_vertical_source"] = flip_y;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
     payload["derived_modifiers"] = nlohmann::json::object({
         {"reverse", false},
         {"flipX", flip_x},
-        {"flipY", flip_y},
-        {"flipMovementX", flip_movement_x},
-        {"flipMovementY", flip_movement_y}
+        {"flipY", flip_y}
     });
     return payload;
 }
@@ -1859,11 +1856,9 @@ void AnimationEditorWindow::handle_create_defaults() {
     auto create_derived = [&](const std::string& id,
                               const std::string& source,
                               bool flip_x,
-                              bool flip_y,
-                              bool flip_movement_x,
-                              bool flip_movement_y) {
+                              bool flip_y) {
         if (!ok) return;
-        nlohmann::json payload = build_derived_movement_payload(id, source, frame_count, flip_x, flip_y, flip_movement_x, flip_movement_y);
+        nlohmann::json payload = build_derived_movement_payload(id, source, frame_count, flip_x, flip_y);
         if (!create_or_replace_animation_payload(id, payload)) {
             ok = false;
             return;
@@ -1873,16 +1868,16 @@ void AnimationEditorWindow::handle_create_defaults() {
 
     if (create_diagonals) {
         create_file_based("up_left", -d, -d);
-        create_derived("up_right", "up_left", true, false, true, false);
-        create_derived("down_left", "up_left", false, true, false, true);
-        create_derived("down_right", "up_left", true, true, true, true);
+        create_derived("up_right", "up_left", true, false);
+        create_derived("down_left", "up_left", false, true);
+        create_derived("down_right", "up_left", true, true);
     }
 
     if (create_basic) {
         create_file_based("up", 0, -d);
         create_file_based("left", -d, 0);
-        create_derived("down", "up", false, true, false, true);
-        create_derived("right", "left", true, false, true, false);
+        create_derived("down", "up", false, true);
+        create_derived("right", "left", true, false);
     }
 
     if (!ok) {
@@ -2781,8 +2776,8 @@ std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() co
 std::optional<std::string> AnimationEditorWindow::pick_animation_reference() const {
     if (!document_) return std::nullopt;
     auto ids = document_->animation_ids();
-    std::vector<std::string> frame_based;
-    frame_based.reserve(ids.size());
+    std::vector<std::string> selectable;
+    selectable.reserve(ids.size());
     for (const auto& id : ids) {
         if (selected_animation_id_ && id == *selected_animation_id_) {
             continue;
@@ -2799,32 +2794,34 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
         if (payload.contains("source") && payload["source"].is_object()) {
             kind = payload["source"].value("kind", std::string{"folder"});
         }
-        if (animation_editor::strings::to_lower_copy(kind) == std::string{"animation"}) {
-            continue;
+        const bool sourced_from_animation =
+            animation_editor::strings::to_lower_copy(kind) == std::string{"animation"};
+        const bool inherits_geometry = payload.value("inherit_source_geometry", false);
+        if (!sourced_from_animation || !inherits_geometry) {
+            selectable.push_back(id);
         }
-        frame_based.push_back(id);
     }
 
-    if (frame_based.empty()) return std::nullopt;
+    if (selectable.empty()) return std::nullopt;
 
     std::ostringstream oss;
-    oss << "Animations sourced from frames:\n";
-    for (const auto& id : frame_based) {
+    oss << "Animations with editable geometry:\n";
+    for (const auto& id : selectable) {
         oss << " - " << id << "\n";
     }
 
-    const char* result = tinyfd_inputBox("Select Animation", oss.str().c_str(), frame_based.front().c_str());
+    const char* result = tinyfd_inputBox("Select Animation", oss.str().c_str(), selectable.front().c_str());
     if (!result) return std::nullopt;
     std::string choice = animation_editor::strings::trim_copy(result);
     if (choice.empty()) return std::nullopt;
 
-    auto match_it = std::find(frame_based.begin(), frame_based.end(), choice);
-    if (match_it == frame_based.end()) {
+    auto match_it = std::find(selectable.begin(), selectable.end(), choice);
+    if (match_it == selectable.end()) {
         std::string lowered = animation_editor::strings::to_lower_copy(choice);
-        match_it = std::find_if(frame_based.begin(), frame_based.end(), [&](const std::string& value) {
+        match_it = std::find_if(selectable.begin(), selectable.end(), [&](const std::string& value) {
             return animation_editor::strings::to_lower_copy(value) == lowered;
         });
-        if (match_it == frame_based.end()) {
+        if (match_it == selectable.end()) {
             return std::nullopt;
         }
         choice = *match_it;

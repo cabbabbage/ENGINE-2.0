@@ -272,8 +272,11 @@ add_executable(engine_tests
     ENGINE/editor/devtools/draw_utils.cpp
     ENGINE/editor/devtools/font_cache.cpp
     ENGINE/editor/devtools/room_anchor_mode_utils.cpp
+    ENGINE/editor/devtools/room_movement_payload.cpp
     ENGINE/editor/devtools/room_box_payload_utils.cpp
     ENGINE/editor/devtools/widgets.cpp
+    ENGINE/editor/devtools/animation_source_navigation.cpp
+    ENGINE/editor/devtools/frame_editors/shared/FrameEditState.cpp
     ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp
     ENGINE/runtime/core/manifest/manifest_loader.cpp
     ENGINE/runtime/utils/utils/log.cpp
@@ -296,8 +299,11 @@ add_executable(engine_tests
     ENGINE/tests/test_render_object_projection.cpp
     ENGINE/tests/test_anchor_binding_order.cpp
     ENGINE/tests/test_anchor_point_resolver.cpp
+    ENGINE/tests/test_animation_document_geometry.cpp
+    ENGINE/tests/test_animation_source_navigation.cpp
     ENGINE/tests/test_combat_box_geometry.cpp
     ENGINE/tests/test_map_data.cpp
+    ENGINE/tests/test_movement_payload_geometry.cpp
     ENGINE/tests/test_player_direction_intent.cpp
     ENGINE/tests/test_room_anchor_mode_utils.cpp
     ENGINE/tests/test_spawn_group_codec.cpp

@@ -1,5 +1,3 @@
-//TODO we need to implement a public height() that should return the current height in screen pixles of our asset
-//we need to add a public method to return the current grid point of the asset
 #ifndef ASSET_HPP
 #define ASSET_HPP
 
@@ -119,18 +117,18 @@ class Asset {
     void on_scale_factor_changed();
 
     // 3D Grid Position accessors
-    GridPoint* grid_point() const { return pos_; }
+    GridPoint* grid_point() const { return grid_point_; }
     int world_x() const {
-        SDL_assert(pos_ != nullptr);
-        return pos_ ? pos_->world_x() : 0;
+        SDL_assert(grid_point_ != nullptr);
+        return grid_point_ ? grid_point_->world_x() : 0;
     }
     int world_y() const {
-        SDL_assert(pos_ != nullptr);
-        return pos_ ? pos_->world_y() : 0;
+        SDL_assert(grid_point_ != nullptr);
+        return grid_point_ ? grid_point_->world_y() : 0;
     }
     int world_z() const {
-        SDL_assert(pos_ != nullptr);
-        return pos_ ? pos_->world_z() : 0;
+        SDL_assert(grid_point_ != nullptr);
+        return grid_point_ ? grid_point_->world_z() : 0;
     }
     SDL_Point world_xz_point() const { return SDL_Point{world_x(), world_z()}; }
     SDL_Point world_xy_point() const { return SDL_Point{world_x(), world_y()}; }
@@ -424,7 +422,9 @@ private:
     void set_provisional_grid_point(const world::GridPoint& point);
     void set_provisional_grid_point(int world_x, int world_y, int world_z, int resolution_layer);
     GridPoint provisional_grid_point_ = GridPoint::make_virtual(0, 0, 0, 0);
-    GridPoint* pos_ = &provisional_grid_point_; // Non-owning pointer to active grid point; WorldGrid updates on registration.
+    // Non-owning pointer to the current authoritative grid point. When detached from
+    // WorldGrid, this falls back to provisional_grid_point_ until reattachment.
+    GridPoint* grid_point_ = &provisional_grid_point_;
     void set_flip();
 
     float frame_progress = 0.0f;

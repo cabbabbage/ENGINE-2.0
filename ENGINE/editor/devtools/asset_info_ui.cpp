@@ -340,9 +340,9 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     float distance_scale = 1.0f;
     float vertical_scale = 1.0f;
     if (auto* gp = cam.grid_point_for_asset(target)) {
-        screen_pos = gp->projection.screen;
-        distance_scale = std::max(0.0001f, gp->projection.perspective_scale);
-        vertical_scale = std::max(0.0001f, gp->projection.vertical_scale);
+        screen_pos = gp->screen_position();
+        distance_scale = std::max(0.0001f, gp->perspective_scale());
+        vertical_scale = std::max(0.0001f, gp->vertical_scale());
     }
 
     float scaled_sw = base_sw * distance_scale;
@@ -1578,8 +1578,8 @@ float AssetInfoUI::compute_player_screen_height(const WarpedScreenGrid& cam) con
     float distance_scale = 1.0f;
     float vertical_scale = 1.0f;
     if (gp) {
-        distance_scale = std::max(0.0001f, gp->projection.perspective_scale);
-        vertical_scale = std::max(0.0001f, gp->projection.vertical_scale);
+        distance_scale = std::max(0.0001f, gp->perspective_scale());
+        vertical_scale = std::max(0.0001f, gp->vertical_scale());
     }
 
     if (ph > 0) {

@@ -4346,10 +4346,11 @@ bool RoomEditor::asset_anchor_screen_position(const WarpedScreenGrid& cam,
     }
 
     if (const auto* projected = cam.grid_point_for_asset(asset)) {
-        if (std::isfinite(projected->projection.screen.x) && std::isfinite(projected->projection.screen.y)) {
+        const SDL_FPoint projected_screen = projected->screen_position();
+        if (std::isfinite(projected_screen.x) && std::isfinite(projected_screen.y)) {
             out_screen = SDL_Point{
-                static_cast<int>(std::lround(projected->projection.screen.x)),
-                static_cast<int>(std::lround(projected->projection.screen.y))
+                static_cast<int>(std::lround(projected_screen.x)),
+                static_cast<int>(std::lround(projected_screen.y))
             };
             return true;
         }
@@ -4577,8 +4578,8 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
     const float base_depth = static_cast<float>(asset->world_z());
     const auto* gp = cam.grid_point_for_asset(asset);
     const float perspective_scale =
-        (gp && std::isfinite(gp->projection.perspective_scale) && gp->projection.perspective_scale > 0.0f)
-            ? gp->projection.perspective_scale
+        (gp && std::isfinite(gp->perspective_scale()) && gp->perspective_scale() > 0.0f)
+            ? gp->perspective_scale()
             : 1.0f;
 
     for (const auto& obj : asset->render_package) {
@@ -4664,16 +4665,16 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     }
 
     auto* gp = cam.grid_point_for_asset(asset);
-    if (!gp || !gp->projection.on_screen) {
+    if (!gp || !gp->is_on_screen()) {
         return false;
     }
 
-    if (gp->projection.perspective_scale <= 0.0f || gp->projection.vertical_scale <= 0.0f) {
+    if (gp->perspective_scale() <= 0.0f || gp->vertical_scale() <= 0.0f) {
         return false;
     }
 
     if (compute_asset_render_package_bounds(cam, asset, out_rect)) {
-        out_screen_y = static_cast<int>(std::lround(gp->projection.screen.y));
+        out_screen_y = static_cast<int>(std::lround(gp->screen_position().y));
         return true;
     }
 
@@ -4710,8 +4711,10 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
         scaled_fh = static_cast<float>(fh) * fallback_runtime_scale;
     }
 
-    const float screen_width = scaled_fw * gp->projection.perspective_scale;
-    const float screen_height = scaled_fh * gp->projection.perspective_scale * gp->projection.vertical_scale;
+    const float perspective_scale = gp->perspective_scale();
+    const float vertical_scale = gp->vertical_scale();
+    const float screen_width = scaled_fw * perspective_scale;
+    const float screen_height = scaled_fh * perspective_scale * vertical_scale;
     if (!std::isfinite(screen_width) || !std::isfinite(screen_height) ||
         screen_width <= 0.0f || screen_height <= 0.0f) {
         return false;
@@ -4720,8 +4723,9 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     const int sw = std::max(1, static_cast<int>(std::lround(static_cast<double>(screen_width))));
     const int sh = std::max(1, static_cast<int>(std::lround(static_cast<double>(screen_height))));
 
-    const float center_x = gp->projection.screen.x;
-    const float center_y = gp->projection.screen.y;
+    const SDL_FPoint screen_pos = gp->screen_position();
+    const float center_x = screen_pos.x;
+    const float center_y = screen_pos.y;
     const int   left     = static_cast<int>(std::lround(center_x - static_cast<float>(sw) * 0.5f));
     const int   top      = static_cast<int>(std::lround(center_y)) - sh;
     out_rect             = SDL_Rect{left, top, sw, sh};
@@ -12363,8 +12367,8 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
     const float base_depth = static_cast<float>(asset->world_z());
     const auto* gp = cam.grid_point_for_asset(asset);
     const float perspective_scale =
-        (gp && std::isfinite(gp->projection.perspective_scale) && gp->projection.perspective_scale > 0.0f)
-            ? gp->projection.perspective_scale
+        (gp && std::isfinite(gp->perspective_scale()) && gp->perspective_scale() > 0.0f)
+            ? gp->perspective_scale()
             : 1.0f;
 
     auto project_render_object_rect = [&](const RenderObject& obj, SDL_FRect& out_rect) -> bool {

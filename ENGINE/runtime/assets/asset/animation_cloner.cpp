@@ -183,6 +183,8 @@ bool AnimationCloner::Clone(const Animation& source,
             const std::size_t src_idx = src_index_for(dst_idx);
             const AnimationFrame* src_frame = (src_idx < src_path.size()) ? &src_path[src_idx] : nullptr;
             AnimationFrame& dst_frame = dst_path[dst_idx];
+            const Animation::FrameCache* dst_cache =
+                (dst_idx < dest.frame_cache_.size()) ? &dest.frame_cache_[dst_idx] : nullptr;
 
             if (src_frame) {
                 dst_frame.dx       = opts.flip_movement_horizontal ? -src_frame->dx : src_frame->dx;
@@ -207,11 +209,15 @@ bool AnimationCloner::Clone(const Animation& source,
                 dst_frame.anchor_points.reserve(src_frame->anchor_points.size());
                 int frame_w = 0;
                 int frame_h = 0;
-                if (!dst_cache.widths.empty()) frame_w = dst_cache.widths.front();
-                if (!dst_cache.heights.empty()) frame_h = dst_cache.heights.front();
-                if (!dst_cache.source_rects.empty() && !dst_cache.uses_atlas.empty() && dst_cache.uses_atlas.front()) {
-                    frame_w = dst_cache.source_rects.front().w;
-                    frame_h = dst_cache.source_rects.front().h;
+                if (dst_cache) {
+                    if (!dst_cache->widths.empty()) frame_w = dst_cache->widths.front();
+                    if (!dst_cache->heights.empty()) frame_h = dst_cache->heights.front();
+                    if (!dst_cache->source_rects.empty() &&
+                        !dst_cache->uses_atlas.empty() &&
+                        dst_cache->uses_atlas.front()) {
+                        frame_w = dst_cache->source_rects.front().w;
+                        frame_h = dst_cache->source_rects.front().h;
+                    }
                 }
                 for (auto anchor : src_frame->anchor_points) {
                     if (opts.flip_horizontal) {

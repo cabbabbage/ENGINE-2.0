@@ -282,6 +282,7 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
     ENGINE/runtime/utils/utils/input.cpp
     ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
+    ENGINE/runtime/core/runtime_world_context.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/world_grid.cpp
     ENGINE/runtime/gameplay/world/chunk.cpp
@@ -305,6 +306,7 @@ add_executable(engine_tests
     ENGINE/tests/test_input_activity.cpp
     ENGINE/tests/test_camera_controller.cpp
     ENGINE/tests/test_asset_perspective_sample.cpp
+    ENGINE/tests/test_animation_runtime_ownership.cpp
     ENGINE/tests/test_scaling_logic_variants.cpp
   )
 

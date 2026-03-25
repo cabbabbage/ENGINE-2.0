@@ -42,7 +42,7 @@ std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& ass
 }
 
 bool AssetInfo::has_tag(const std::string&) const { return false; }
-void AssetInfo::loadAnimations(SDL_Renderer*, bool) {}
+void AssetInfo::loadAnimations(SDL_Renderer*, bool, bool) {}
 bool AssetInfo::commit_manifest() { return false; }
 nlohmann::json AssetInfo::manifest_payload() const { return nlohmann::json::object(); }
 void AssetInfo::set_asset_type(const std::string& t) { type = t; }
@@ -60,7 +60,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
                                                       0,
                                                       start_pos.y,
                                                       vibble::grid::clamp_resolution(grid_resolution_in)))
-    , pos_(&provisional_grid_point_)
+    , grid_point_(&provisional_grid_point_)
     , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_in))
     , depth(depth_in)
     , spawn_id(spawn_id_in)
@@ -75,11 +75,11 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
 Asset::~Asset() = default;
 
 float Asset::smoothed_translation_x() const {
-    return pos_ ? static_cast<float>(pos_->world_x()) : 0.0f;
+    return grid_point_ ? static_cast<float>(grid_point_->world_x()) : 0.0f;
 }
 
 float Asset::smoothed_translation_y() const {
-    return pos_ ? static_cast<float>(pos_->world_y()) : 0.0f;
+    return grid_point_ ? static_cast<float>(grid_point_->world_y()) : 0.0f;
 }
 
 float Asset::smoothed_scale() const {
@@ -93,12 +93,14 @@ float Asset::runtime_height_px() const {
 Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     PerspectiveSample sample{};
     sample.scale = 1.0f;
-    sample.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    sample.resolution_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
     sample.source = PerspectiveSource::Default;
 
-    if (pos_ && std::isfinite(pos_->perspective_scale()) && pos_->perspective_scale() > 0.0001f) {
-        sample.scale = std::max(0.0001f, pos_->perspective_scale());
-        sample.resolution_layer = pos_->resolution_layer();
+    if (grid_point_ &&
+        std::isfinite(grid_point_->perspective_scale()) &&
+        grid_point_->perspective_scale() > 0.0001f) {
+        sample.scale = std::max(0.0001f, grid_point_->perspective_scale());
+        sample.resolution_layer = grid_point_->resolution_layer();
         sample.source = PerspectiveSource::AssetGridPoint;
         return sample;
     }
@@ -145,7 +147,7 @@ void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, in
                                 world_y,
                                 world_z,
                                 vibble::grid::clamp_resolution(resolution_layer)));
-    pos_ = &provisional_grid_point_;
+    grid_point_ = &provisional_grid_point_;
 }
 
 void Asset::cache_grid_residency(const world::GridPoint& point) {

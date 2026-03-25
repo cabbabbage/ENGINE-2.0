@@ -625,7 +625,7 @@ void WorldGrid::bind_asset_to_point(Asset* a, GridPoint& point) {
     if (!a) {
         return;
     }
-    a->pos_ = &point;
+    a->grid_point_ = &point;
     a->grid_resolution = point.resolution_layer();
     GridKey key{point.world_x(), point.world_y(), point.world_z(), point.resolution_layer()};
     asset_to_key_[a] = key;
@@ -791,8 +791,8 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
 
     // PRESERVE perspective scale before detaching from old point
     float preserved_perspective = 1.0f;
-    if (a->pos_ && a->pos_->perspective_scale() > 0.0001f) {
-        preserved_perspective = a->pos_->perspective_scale();
+    if (a->grid_point_ && a->grid_point_->perspective_scale() > 0.0001f) {
+        preserved_perspective = a->grid_point_->perspective_scale();
     }
 
     std::unique_ptr<Asset> owned;

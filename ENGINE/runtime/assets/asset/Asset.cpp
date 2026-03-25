@@ -1,11 +1,3 @@
-//TODO We need to update this to completly remove "pos" and instead use grid point fully
-//TODO find usage of pos in the code base replace with grid point usage
-//TODO we need a good function for updating an assets grid point
-
-//make sure that any asset can exist in a 3d space
-
-//remove legacy old or unessesary data from this class
-
 #include "Asset.hpp"
 #include "controller_factory.hpp"
 #include "animation.hpp"
@@ -128,7 +120,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , static_frame(false)
 , active(false)
 , provisional_grid_point_(GridPoint::make_virtual(start_pos.x, 0, start_pos.y, vibble::grid::clamp_resolution(grid_resolution_)))
-, pos_(&provisional_grid_point_)
+, grid_point_(&provisional_grid_point_)
 , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_))
 , depth(depth_)
 , spawn_id(spawn_id_)
@@ -197,7 +189,7 @@ void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, in
                                 world_y,
                                 world_z,
                                 vibble::grid::clamp_resolution(resolution_layer)));
-    pos_ = &provisional_grid_point_;
+    grid_point_ = &provisional_grid_point_;
 }
 
 void Asset::clear_downscale_cache() {
@@ -224,13 +216,13 @@ Asset::~Asset() {
 Asset::Asset(const Asset& o)
     : info(o.info)
     , current_animation(o.current_animation)
-    , provisional_grid_point_(o.pos_
-            ? GridPoint::make_virtual(o.pos_->world_x(),
-                                      o.pos_->world_y(),
-                                      o.pos_->world_z(),
-                                      o.pos_->resolution_layer())
+    , provisional_grid_point_(o.grid_point_
+            ? GridPoint::make_virtual(o.grid_point_->world_x(),
+                                      o.grid_point_->world_y(),
+                                      o.grid_point_->world_z(),
+                                      o.grid_point_->resolution_layer())
             : GridPoint::make_virtual(0, 0, 0, vibble::grid::clamp_resolution(o.grid_resolution)))
-    , pos_(&provisional_grid_point_)
+    , grid_point_(&provisional_grid_point_)
     , grid_resolution(vibble::grid::clamp_resolution(o.grid_resolution))
     , active(o.active)
     , flipped(o.flipped)
@@ -292,11 +284,11 @@ Asset& Asset::operator=(const Asset& o) {
         clear_render_caches();
         info                 = o.info;
         current_animation    = o.current_animation;
-        if (o.pos_) {
-                set_provisional_grid_point(o.pos_->world_x(),
-                                           o.pos_->world_y(),
-                                           o.pos_->world_z(),
-                                           o.pos_->resolution_layer());
+        if (o.grid_point_) {
+                set_provisional_grid_point(o.grid_point_->world_x(),
+                                           o.grid_point_->world_y(),
+                                           o.grid_point_->world_z(),
+                                           o.grid_point_->resolution_layer());
         } else {
                 set_provisional_grid_point(0, 0, 0, vibble::grid::clamp_resolution(o.grid_resolution));
         }
@@ -615,7 +607,7 @@ const char* Asset::perspective_source_label(PerspectiveSource source) {
 Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     PerspectiveSample sample{};
     sample.scale = 1.0f;
-    sample.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    sample.resolution_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
     sample.source = PerspectiveSource::Default;
 
     const world::GridPoint* traversal_gp = nullptr;
@@ -634,11 +626,11 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
         return sample;
     }
 
-    if (pos_ &&
-        std::isfinite(pos_->perspective_scale()) &&
-        pos_->perspective_scale() > 0.0001f) {
-        sample.scale = std::max(0.0001f, pos_->perspective_scale());
-        sample.resolution_layer = pos_->resolution_layer();
+    if (grid_point_ &&
+        std::isfinite(grid_point_->perspective_scale()) &&
+        grid_point_->perspective_scale() > 0.0001f) {
+        sample.scale = std::max(0.0001f, grid_point_->perspective_scale());
+        sample.resolution_layer = grid_point_->resolution_layer();
         sample.source = PerspectiveSource::AssetGridPoint;
         return sample;
     }

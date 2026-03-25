@@ -467,9 +467,12 @@ int AnimationUpdate::effective_grid_resolution(std::optional<int> override_resol
 }
 
 void AnimationUpdate::set_animation(const std::string& animation_id) {
-    if (!self_ || !self_->info) return;
+    if (!self_ || !self_->info || !runtime_) {
+        return;
+    }
     auto it = self_->info->animations.find(animation_id);
-    if (it == self_->info->animations.end()) return;
-    const Animation& anim = it->second;
-    player_.m_animation = const_cast<Animation*>(&anim);
+    if (it == self_->info->animations.end()) {
+        return;
+    }
+    runtime_->switch_to(animation_id, path_index_for(animation_id));
 }

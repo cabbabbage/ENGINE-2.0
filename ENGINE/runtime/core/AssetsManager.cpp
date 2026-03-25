@@ -1030,6 +1030,230 @@ void Assets::set_input(Input* m) {
     }
 }
 
+void Assets::run_idle_frame_pipeline(const Input& input) {
+    refresh_visible_asset_scaling_only();
+    run_visibility_build_stage();
+    refresh_visible_asset_scaling_only();
+    run_active_runtime_single_pass(false);
+    sync_dev_controls_for_frame(input);
+    refresh_filtered_active_assets_if_needed();
+    render_runtime_frame();
+    finalize_dev_frame_state();
+}
+
+void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved) {
+    Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
+    Room* active_room = detected_room;
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        active_room = dev_controls_->resolve_current_room(detected_room);
+    }
+    room_changed = (current_room_ != active_room);
+    current_room_ = active_room;
+
+    delta_x_ = delta_z_ = 0;
+
+    // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
+    const bool runtime_updates_enabled = should_run_runtime_updates();
+    const auto should_process_asset = [this](const Asset* asset) {
+        return asset_matches_focus_filter(asset);
+    };
+
+    int start_px = player ? player->world_x() : 0;
+    int start_pz = player ? player->world_z() : 0;
+
+    if (player && should_process_asset(player)) {
+        player->active = true;
+        if (runtime_updates_enabled) {
+            player->update();
+        } else {
+            if (player->info) {
+                player->update_scale_values();
+            }
+        }
+    }
+
+    player_moved = false;
+    if (player) {
+        delta_x_ = player->world_x() - start_px;
+        delta_z_ = player->world_z() - start_pz;
+        const bool moved_during_update = (delta_x_ != 0 || delta_z_ != 0);
+        world::GridPoint current_player_pos = world::GridPoint::make_virtual(player->world_x(),
+                                                                             player->world_y(),
+                                                                             player->world_z(),
+                                                                             player->grid_resolution);
+        const bool moved_since_last_frame =
+            !last_player_pos_valid_ ||
+            current_player_pos.world_x() != last_known_player_pos_.world_x() ||
+            current_player_pos.world_z() != last_known_player_pos_.world_z() ||
+            current_player_pos.world_y() != last_known_player_pos_.world_y();
+
+        last_known_player_pos_ = std::move(current_player_pos);
+        last_player_pos_valid_ = true;
+
+        player_moved = moved_during_update || moved_since_last_frame;
+        if (runtime_updates_enabled && moved_during_update) {
+            log_asset_movement(player,
+                               world::GridPoint::make_virtual(start_px, 0, start_pz, player->grid_resolution),
+                               current_player_pos);
+        }
+    } else {
+        last_player_pos_valid_ = false;
+    }
+
+    rebuild_non_player_update_buffer_if_needed();
+
+    for (Asset* asset : non_player_update_buffer_) {
+        if (!asset) continue;
+        if (!should_process_asset(asset)) {
+            asset->active = false;
+            continue;
+        }
+        world::GridPoint previous_pos = world::GridPoint::make_virtual(asset->world_x(),
+                                                                       asset->world_y(),
+                                                                       asset->world_z(),
+                                                                       asset->grid_resolution);
+        asset->active = true;
+
+        if (runtime_updates_enabled) {
+            asset->update();
+            if (previous_pos.world_x() != asset->world_x() ||
+                previous_pos.world_y() != asset->world_y() ||
+                previous_pos.world_z() != asset->world_z()) {
+                log_asset_movement(asset,
+                                   previous_pos,
+                                   world::GridPoint::make_virtual(asset->world_x(),
+                                                                  asset->world_y(),
+                                                                  asset->world_z(),
+                                                                  asset->grid_resolution));
+            }
+        } else {
+            if (asset->info) {
+                asset->update_scale_values();
+            }
+        }
+    }
+
+    if (runtime_updates_enabled) {
+        if (!movement_commands_buffer_.empty()) {
+            for (const GridMovementCommand& cmd : movement_commands_buffer_) {
+                if (!cmd.asset) continue;
+                Asset* moved = world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
+                if (!moved) {
+                    vibble::log::error("[Assets] Skipping post-move cache updates because WorldGrid::move_asset failed.");
+                    continue;
+                }
+                moved->cache_grid_residency(cmd.current);
+                mark_anchor_basis_dirty(moved);
+            }
+            movement_commands_buffer_.clear();
+
+            moving_assets_for_grid_.clear();
+            grid_registration_buffer_.clear();
+            touch_dev_active_state_version();
+            mark_grid_dirty();
+        }
+
+    } else {
+        movement_commands_buffer_.clear();
+        moving_assets_for_grid_.clear();
+        grid_registration_buffer_.clear();
+    }
+
+    const bool height_animation_active = false;
+    const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;
+    if (dev_controls_) {
+        dev_controls_->sync_camera_tilt_override();
+    }
+    camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
+    camera_settings_dirty_ = false;
+
+    update_max_asset_dimensions();
+
+    culled_debug_rects_.clear();
+
+    sync_dev_controls_for_frame(input);
+
+    register_pending_static_assets();
+    if (process_removals()) {
+        mark_active_assets_dirty();
+    }
+}
+
+void Assets::run_visibility_build_stage() {
+    run_frame_rebuild_stage();
+}
+
+void Assets::run_runtime_effects_stage() {
+    // Keep manifest-driven follower bindings generic and engine-wide.
+    reconcile_manifest_follower_bindings();
+
+    // Solve follower constraints against the fresh parent/child anchor cache.
+    if (!binding_helpers_.empty()) {
+        bool binding_changed = false;
+        for (auto* helper : binding_helpers_) {
+            if (!helper) {
+                continue;
+            }
+            binding_changed = helper->tick_for_frame() || binding_changed;
+        }
+        if (binding_changed) {
+            mark_active_assets_dirty();
+        }
+    }
+
+    // Rebuild traversal after attachment movement, then refresh anchors/runtime caches once.
+    run_visibility_build_stage();
+    refresh_visible_asset_scaling_only();
+    run_active_runtime_single_pass();
+}
+
+void Assets::sync_dev_controls_for_frame(const Input& input) {
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        sync_dev_controls_current_room(current_room_);
+        dev_controls_->update(input);
+        dev_controls_->update_ui(input);
+    }
+}
+
+void Assets::refresh_filtered_active_assets_if_needed() {
+    bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
+    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+    std::uint64_t dev_filter_version = 0;
+    if (dev_controls_enabled) {
+        dev_filter_version = dev_controls_->other_settings_state_version();
+        if (!last_dev_controls_enabled_ || dev_filter_version != last_dev_filter_state_version_) {
+            needs_filtered_active_refresh = true;
+        }
+    } else if (last_dev_controls_enabled_) {
+        needs_filtered_active_refresh = true;
+    }
+    last_dev_controls_enabled_ = dev_controls_enabled;
+    last_dev_filter_state_version_ = dev_controls_enabled ? dev_filter_version : 0;
+
+    if (needs_filtered_active_refresh) {
+        needs_filtered_active_refresh_ = false;
+        update_filtered_active_assets();
+        if (dev_controls_enabled) {
+            dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
+            sync_dev_controls_current_room(current_room_);
+        }
+    }
+}
+
+void Assets::render_runtime_frame() {
+    if (!suppress_render_ && scene) {
+        scene->render();
+    }
+
+    render_overlays(renderer());
+}
+
+void Assets::finalize_dev_frame_state() {
+    last_camera_state_version_for_dev_ = camera_.camera_state_version();
+    last_dev_active_state_version_snapshot_ = dev_active_state_version_;
+    dev_frame_initialized_ = true;
+}
+
 void Assets::update(const Input& input)
 {
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
@@ -1039,48 +1263,7 @@ void Assets::update(const Input& input)
     reset_frame_rebuild_stage();
 
     if (!should_step_frame) {
-        refresh_visible_asset_scaling_only();
-        run_frame_rebuild_stage();
-        refresh_visible_asset_scaling_only();
-        run_active_runtime_single_pass(false);
-
-        if (dev_controls_ && dev_controls_->is_enabled()) {
-            sync_dev_controls_current_room(current_room_);
-            dev_controls_->update(input);
-            dev_controls_->update_ui(input);
-        }
-
-        bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
-        const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
-        std::uint64_t dev_filter_version = 0;
-        if (dev_controls_enabled) {
-            dev_filter_version = dev_controls_->other_settings_state_version();
-            if (!last_dev_controls_enabled_ || dev_filter_version != last_dev_filter_state_version_) {
-                needs_filtered_active_refresh = true;
-            }
-        } else if (last_dev_controls_enabled_) {
-            needs_filtered_active_refresh = true;
-        }
-        last_dev_controls_enabled_ = dev_controls_enabled;
-        last_dev_filter_state_version_ = dev_controls_enabled ? dev_filter_version : 0;
-
-        if (needs_filtered_active_refresh) {
-            needs_filtered_active_refresh_ = false;
-            update_filtered_active_assets();
-            if (dev_controls_enabled) {
-                dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
-                sync_dev_controls_current_room(current_room_);
-            }
-        }
-
-        if (!suppress_render_ && scene) {
-            scene->render();
-        }
-        render_overlays(renderer());
-
-        last_camera_state_version_for_dev_ = camera_.camera_state_version();
-        last_dev_active_state_version_snapshot_ = dev_active_state_version_;
-        dev_frame_initialized_ = true;
+        run_idle_frame_pipeline(input);
         last_frame_dt_seconds_ = 0.0f;
         last_frame_counter_    = now_counter;
         return;
@@ -1128,208 +1311,20 @@ void Assets::update(const Input& input)
     if (quick_task_popup_) {
         quick_task_popup_->update();
     }
-
-    Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
-    Room* active_room = detected_room;
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        active_room = dev_controls_->resolve_current_room(detected_room);
-    }
-    const bool room_changed = (current_room_ != active_room);
-    current_room_ = active_room;
-
-    delta_x_ = delta_z_ = 0;
-
-    // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
-    const bool runtime_updates_enabled = should_run_runtime_updates();
-    const auto should_process_asset = [this](const Asset* asset) {
-        return asset_matches_focus_filter(asset);
-    };
-
-    int start_px = player ? player->world_x() : 0;
-    int start_pz = player ? player->world_z() : 0;
-
-    if (player && should_process_asset(player)) {
-        player->active = true;
-        if (runtime_updates_enabled) {
-
-            player->update();
-        } else {
-
-            if (player->info) {
-                player->update_scale_values();
-            }
-        }
-    }
-
+    bool room_changed = false;
     bool player_moved = false;
-    if (player) {
-        delta_x_ = player->world_x() - start_px;
-        delta_z_ = player->world_z() - start_pz;
-        const bool moved_during_update = (delta_x_ != 0 || delta_z_ != 0);
-        world::GridPoint current_player_pos = world::GridPoint::make_virtual(player->world_x(),
-                                                                             player->world_y(),
-                                                                             player->world_z(),
-                                                                             player->grid_resolution);
-        const bool moved_since_last_frame =
-            !last_player_pos_valid_ ||
-            current_player_pos.world_x() != last_known_player_pos_.world_x() ||
-            current_player_pos.world_z() != last_known_player_pos_.world_z() ||
-            current_player_pos.world_y() != last_known_player_pos_.world_y();
+    run_world_update_stage(input, room_changed, player_moved);
 
-        last_known_player_pos_ = std::move(current_player_pos);
-        last_player_pos_valid_ = true;
+    // Stage: visibility or traversal build from movement/controller updates.
+    run_visibility_build_stage();
 
-        player_moved = moved_during_update || moved_since_last_frame;
-        if (runtime_updates_enabled && moved_during_update) {
-            log_asset_movement(player,
-                               world::GridPoint::make_virtual(start_px, 0, start_pz, player->grid_resolution),
-                               current_player_pos);
-        }
-    } else {
-        last_player_pos_valid_ = false;
-    }
+    // Stage: runtime effects + traversal refresh.
+    run_runtime_effects_stage();
 
-    rebuild_non_player_update_buffer_if_needed();
-
-    for (Asset* asset : non_player_update_buffer_) {
-        if (!asset) continue;
-        if (!should_process_asset(asset)) {
-            asset->active = false;
-            continue;
-        }
-        world::GridPoint previous_pos = world::GridPoint::make_virtual(asset->world_x(),
-                                                                       asset->world_y(),
-                                                                       asset->world_z(),
-                                                                       asset->grid_resolution);
-        asset->active = true;
-
-        if (runtime_updates_enabled) {
-
-            asset->update();
-            if (previous_pos.world_x() != asset->world_x() ||
-                previous_pos.world_y() != asset->world_y() ||
-                previous_pos.world_z() != asset->world_z()) {
-                log_asset_movement(asset,
-                                   previous_pos,
-                                   world::GridPoint::make_virtual(asset->world_x(),
-                                                                  asset->world_y(),
-                                                                  asset->world_z(),
-                                                                  asset->grid_resolution));
-            }
-        } else {
-
-            if (asset->info) {
-                asset->update_scale_values();
-            }
-        }
-    }
-
-    if (runtime_updates_enabled) {
-        if (!movement_commands_buffer_.empty()) {
-            for (const GridMovementCommand& cmd : movement_commands_buffer_) {
-                if (!cmd.asset) continue;
-                Asset* moved = world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
-                if (!moved) {
-                    vibble::log::error("[Assets] Skipping post-move cache updates because WorldGrid::move_asset failed.");
-                    continue;
-                }
-                moved->cache_grid_residency(cmd.current);
-                mark_anchor_basis_dirty(moved);
-            }
-            movement_commands_buffer_.clear();
-
-            moving_assets_for_grid_.clear();
-            grid_registration_buffer_.clear();
-            touch_dev_active_state_version();
-            mark_grid_dirty();
-        }
-
-    } else {
-        movement_commands_buffer_.clear();
-        moving_assets_for_grid_.clear();
-        grid_registration_buffer_.clear();
-    }
-
-    const bool height_animation_active = false;
-    const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;
-    if (dev_controls_) {
-        dev_controls_->sync_camera_tilt_override();
-    }
-    camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
-    camera_settings_dirty_ = false;
-
-    update_max_asset_dimensions();
-
-    culled_debug_rects_.clear();
-
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        sync_dev_controls_current_room(current_room_);
-        dev_controls_->update(input);
-        dev_controls_->update_ui(input);
-    }
-
-    register_pending_static_assets();
-    if (process_removals()) {
-        mark_active_assets_dirty();
-    }
-
-    // Pass 1: refresh traversal from movement/controller updates.
-    run_frame_rebuild_stage();
-
-    // Keep manifest-driven follower bindings generic and engine-wide.
-    reconcile_manifest_follower_bindings();
-
-    // Pass 2: solve follower constraints against the fresh parent/child anchor cache.
-    if (!binding_helpers_.empty()) {
-        bool binding_changed = false;
-        for (auto* helper : binding_helpers_) {
-            if (!helper) {
-                continue;
-            }
-            binding_changed = helper->tick_for_frame() || binding_changed;
-        }
-        if (binding_changed) {
-            mark_active_assets_dirty();
-        }
-    }
-
-    // Pass 2: rebuild traversal after attachment movement, then refresh anchors/runtime caches once.
-    run_frame_rebuild_stage();
-    refresh_visible_asset_scaling_only();
-    run_active_runtime_single_pass();
-
-    bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
-    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
-    std::uint64_t dev_filter_version = 0;
-    if (dev_controls_enabled) {
-        dev_filter_version = dev_controls_->other_settings_state_version();
-        if (!last_dev_controls_enabled_ || dev_filter_version != last_dev_filter_state_version_) {
-            needs_filtered_active_refresh = true;
-        }
-    } else if (last_dev_controls_enabled_) {
-        needs_filtered_active_refresh = true;
-    }
-    last_dev_controls_enabled_ = dev_controls_enabled;
-    last_dev_filter_state_version_ = dev_controls_enabled ? dev_filter_version : 0;
-
-    if (needs_filtered_active_refresh) {
-        needs_filtered_active_refresh_ = false;
-        update_filtered_active_assets();
-        if (dev_controls_enabled) {
-            dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
-            sync_dev_controls_current_room(current_room_);
-        }
-    }
-
-    if (!suppress_render_ && scene) {
-        scene->render();
-    }
-
-    render_overlays(renderer());
-
-    last_camera_state_version_for_dev_ = camera_.camera_state_version();
-    last_dev_active_state_version_snapshot_ = dev_active_state_version_;
-    dev_frame_initialized_ = true;
+    // Stage: render + UI refresh.
+    refresh_filtered_active_assets_if_needed();
+    render_runtime_frame();
+    finalize_dev_frame_state();
 }
 
 void Assets::refresh_visible_asset_scaling_only() {
@@ -2893,9 +2888,6 @@ void Assets::rebuild_active_from_screen_grid() {
 
     const auto& visible_traversal = camera_.visible_traversal_entries();
     active_assets.reserve(visible_traversal.size());
-    visible_candidate_buffer_.clear();
-    visible_candidate_buffer_.reserve(visible_traversal.size());
-
     std::unordered_set<Asset*> seen_assets;
     seen_assets.reserve(visible_traversal.size() * 2);
 

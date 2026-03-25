@@ -360,8 +360,6 @@ private:
     std::uint32_t last_audio_engine_update_frame_id_ = 0;
     Asset* max_asset_width_holder_ = nullptr;
     Asset* max_asset_height_holder_ = nullptr;
-    std::vector<Asset*> visible_candidate_buffer_;
-    std::uint64_t active_candidate_generation_ = 0;
     std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
@@ -419,6 +417,14 @@ private:
 
     void rebuild_non_player_update_buffer_if_needed();
     void refresh_visible_asset_scaling_only();
+    void run_idle_frame_pipeline(const Input& input);
+    void run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved);
+    void run_visibility_build_stage();
+    void run_runtime_effects_stage();
+    void sync_dev_controls_for_frame(const Input& input);
+    void refresh_filtered_active_assets_if_needed();
+    void render_runtime_frame();
+    void finalize_dev_frame_state();
     void mark_follower_binding_candidates_dirty();
     void rebuild_follower_binding_candidates_if_needed();
     void reconcile_manifest_follower_bindings();

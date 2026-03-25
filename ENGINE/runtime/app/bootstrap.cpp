@@ -64,7 +64,10 @@ RuntimeBootstrapResult prepare_runtime_bootstrap(RuntimeBootstrapRequest request
     const auto spawn_end = std::chrono::steady_clock::now();
     result.create_assets_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(spawn_end - spawn_begin).count();
-    result.world_context = result.loader->runtime_world_context();
+    result.world_context = result.loader->release_runtime_world_context();
+    if (!result.world_context) {
+        throw std::runtime_error("Runtime world context unavailable after bootstrap handoff.");
+    }
 
     const auto all_assets = result.world_grid.all_assets();
     result.asset_count = all_assets.size();

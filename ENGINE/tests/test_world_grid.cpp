@@ -81,7 +81,7 @@ TEST_CASE("GridPoint projection round-trips via camera params") {
     params.state_version = 1;
 
     original.project_to_screen(params);
-    SDL_FPoint screen_pos = original.projection.screen;
+    SDL_FPoint screen_pos = original.screen_position();
     REQUIRE(std::isfinite(screen_pos.x));
     REQUIRE(std::isfinite(screen_pos.y));
 
@@ -93,6 +93,23 @@ TEST_CASE("GridPoint projection round-trips via camera params") {
     CHECK(round_trip->world_x() == original.world_x());
     CHECK(round_trip->world_y() == original.world_y());
     CHECK(round_trip->world_z() == original.world_z());
+}
+
+TEST_CASE("WorldGrid projection cache invalidates on topology updates") {
+    world::WorldGrid grid;
+    world::GridPoint& point = world::GridPoint::from_world(24, 0, 48, 0, grid);
+
+    point.mutable_projection_cache().screen_data_valid = true;
+    point.mutable_projection_cache().screen_data_frame_updated = 77;
+    point.mutable_projection_cache().perspective_scale = 2.25f;
+
+    grid.set_origin(world::GridPoint::make_virtual(100, 0, 200, 0));
+    CHECK_FALSE(point.projection_cache().screen_data_valid);
+    CHECK(point.perspective_scale() == doctest::Approx(2.25f));
+
+    point.mutable_projection_cache().screen_data_valid = true;
+    grid.set_grid_resolution(1);
+    CHECK_FALSE(point.projection_cache().screen_data_valid);
 }
 
 TEST_CASE("WorldGrid keys stay stable across repeated requests") {

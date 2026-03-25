@@ -316,7 +316,6 @@ Asset& Asset::operator=(const Asset& o) {
         highlighted          = o.highlighted;
         hidden               = o.hidden;
         selected             = o.selected;
-        merged_from_neighbors_ = o.merged_from_neighbors_;
         current_frame        = o.current_frame;
         frame_progress       = o.frame_progress;
         last_rendered_frame_   = nullptr;
@@ -627,18 +626,18 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     }
 
     if (traversal_gp &&
-        std::isfinite(traversal_gp->projection.perspective_scale) &&
-        traversal_gp->projection.perspective_scale > 0.0001f) {
-        sample.scale = std::max(0.0001f, traversal_gp->projection.perspective_scale);
+        std::isfinite(traversal_gp->perspective_scale()) &&
+        traversal_gp->perspective_scale() > 0.0001f) {
+        sample.scale = std::max(0.0001f, traversal_gp->perspective_scale());
         sample.resolution_layer = traversal_gp->resolution_layer();
         sample.source = PerspectiveSource::CameraTraversal;
         return sample;
     }
 
     if (pos_ &&
-        std::isfinite(pos_->projection.perspective_scale) &&
-        pos_->projection.perspective_scale > 0.0001f) {
-        sample.scale = std::max(0.0001f, pos_->projection.perspective_scale);
+        std::isfinite(pos_->perspective_scale()) &&
+        pos_->perspective_scale() > 0.0001f) {
+        sample.scale = std::max(0.0001f, pos_->perspective_scale());
         sample.resolution_layer = pos_->resolution_layer();
         sample.source = PerspectiveSource::AssetGridPoint;
         return sample;

@@ -231,13 +231,21 @@ struct GridPoint {
     Chunk*           chunk        = nullptr;
 
     // Per-frame camera projection and screen cache data.
-    ProjectionCache projection{};
-    mutable std::uint64_t last_region_query_stamp = 0;
+    const ProjectionCache& projection_cache() const { return projection_; }
+    ProjectionCache& mutable_projection_cache() { return projection_; }
+    SDL_FPoint screen_position() const { return projection_.screen; }
+    float perspective_scale() const { return projection_.perspective_scale; }
+    float vertical_scale() const { return projection_.vertical_scale; }
+    float horizon_fade_alpha() const { return projection_.horizon_fade_alpha; }
+    float near_camera_fade_alpha() const { return projection_.near_camera_fade_alpha; }
+    float distance_to_camera() const { return projection_.distance_to_camera; }
+    float tilt_radians() const { return projection_.tilt_radians; }
+    bool is_on_screen() const { return projection_.on_screen; }
 
     // Smart caching: returns true if projection calculation is needed
     bool needs_projection_update(std::uint64_t current_frame,
                                  std::uint64_t camera_version) const {
-        return projection.needs_projection_update(current_frame, camera_version);
+        return projection_.needs_projection_update(current_frame, camera_version);
     }
 
     // Self-contained projection: GridPoint calculates its own screen position
@@ -254,19 +262,19 @@ struct GridPoint {
 
     void reset_frame_state(std::uint64_t frame_stamp = 0) {
         is_floor           = (world_position().y == 0);
-        projection.reset(frame_stamp);
+        projection_.reset(frame_stamp);
     }
 
     void invalidate_screen_data() {
-        projection.invalidate();
+        projection_.invalidate();
     }
 
     void mark_screen_data_updated(std::uint64_t frame) {
-        projection.mark_updated(frame);
+        projection_.mark_updated(frame);
     }
 
     bool has_valid_screen_data(std::uint64_t current_frame) const {
-        return projection.has_valid_data(current_frame);
+        return projection_.has_valid_data(current_frame);
     }
 
     // Asset/branch tracking: occupants remain the canonical list; branch bits mark active 3D children.
@@ -389,6 +397,7 @@ private:
     int resolution_layer_ = 0;
     GridPoint* parent_    = nullptr;
     bool is_virtual_      = false;
+    ProjectionCache projection_{};
 
     // Non-owning hierarchy links; Map Grid owns nodes, Screen Grid only references.
     GridPoint* x_child_neg_ = nullptr;

@@ -227,8 +227,6 @@ class Asset {
     bool is_highlighted();
     void set_selected(bool state);
     bool is_selected();
-    void set_merged_from_neighbors(bool state);
-    bool merged_from_neighbors() const;
     void cache_grid_residency(const world::GridPoint& point);
     void clear_grid_residency_cache();
     bool has_grid_residency_cache() const;
@@ -423,7 +421,6 @@ private:
     bool hidden = false;
     bool anchor_hidden_ = false;
     bool selected = false;
-    bool merged_from_neighbors_ = false;
     void set_provisional_grid_point(const world::GridPoint& point);
     void set_provisional_grid_point(int world_x, int world_y, int world_z, int resolution_layer);
     GridPoint provisional_grid_point_ = GridPoint::make_virtual(0, 0, 0, 0);

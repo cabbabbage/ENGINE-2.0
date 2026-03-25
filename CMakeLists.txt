@@ -300,6 +300,7 @@ add_executable(engine_tests
     ENGINE/tests/test_player_direction_intent.cpp
     ENGINE/tests/test_room_anchor_mode_utils.cpp
     ENGINE/tests/test_spawn_group_codec.cpp
+    ENGINE/tests/test_runtime_ownership.cpp
     ENGINE/tests/test_world_grid.cpp
     ENGINE/tests/test_input_activity.cpp
     ENGINE/tests/test_camera_controller.cpp

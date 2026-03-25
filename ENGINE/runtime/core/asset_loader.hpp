@@ -42,8 +42,9 @@ class AssetLoader {
     void createAssets(world::WorldGrid& grid);
     std::vector<const Area*> getAllRoomAndTrailAreas() const;
     AssetLibrary* getAssetLibrary() const { return asset_library_; }
-    const std::vector<Room*>& getRooms() const { return world_context_->rooms(); }
+    const std::vector<Room*>& getRooms() const;
     std::shared_ptr<RuntimeWorldContext> runtime_world_context() const { return world_context_; }
+    std::shared_ptr<RuntimeWorldContext> release_runtime_world_context();
     double getMapRadius() const { return map_radius_; }
     const nlohmann::json& map_manifest() const { return map_manifest_json_; }
     const std::string& map_identifier() const { return map_id_; }

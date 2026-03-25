@@ -11,7 +11,6 @@
 #include "map_layers_panel.hpp"
 #include "map_rooms_display.hpp"
 #include "config/room_config/room_configurator.hpp"
-#include "fog_settings_panel.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "SlidingWindowContainer.hpp"
 #include "core/AssetsManager.hpp"
@@ -430,10 +429,6 @@ void MapModeUI::apply_sliding_area_bounds() {
         room_configurator_->set_work_area(work_area);
         room_configurator_->set_bounds(right_bounds);
     }
-    if (fog_settings_panel_) {
-        fog_settings_panel_->set_work_area(work_area);
-    }
-
     if (room_config_container_) {
         room_config_container_->set_panel_bounds_override(right_bounds);
     }
@@ -856,16 +851,6 @@ void MapModeUI::ensure_panels() {
     if (layers_preview_panel_ && map_info_) {
         layers_preview_panel_->set_map_info(map_info_, [this]() { return auto_save_layers_data(); });
     }
-    if (!fog_settings_panel_) {
-        fog_settings_panel_ = std::make_unique<FogSettingsPanel>();
-        fog_settings_panel_->build();
-        fog_settings_panel_->set_visible(false);
-        fog_settings_panel_->set_on_close([this]() { this->sync_footer_button_states(); });
-    }
-    if (fog_settings_panel_) {
-        fog_settings_panel_->set_work_area(effective_work_area());
-        track_floating_panel(fog_settings_panel_.get());
-    }
     if (!footer_bar_) {
         footer_bar_ = std::make_unique<DevFooterBar>("");
         footer_bar_->set_bounds(screen_w_, screen_h_);
@@ -938,21 +923,6 @@ void MapModeUI::configure_footer_buttons() {
             buttons.push_back(std::move(layers_btn));
         }
 
-        DevFooterBar::Button fog_btn;
-        fog_btn.id = "fog";
-        fog_btn.label = "Fog";
-        fog_btn.group = FooterButtonGroup::Primary;
-        fog_btn.style_override = &DMStyles::HeaderButton();
-        fog_btn.active_style_override = &DMStyles::AccentButton();
-        fog_btn.on_toggle = [this](bool active) {
-            if (active) {
-                this->open_fog_panel();
-            } else {
-                this->close_fog_panel();
-            }
-        };
-        buttons.push_back(std::move(fog_btn));
-
         DevFooterBar::Button save_btn;
         save_btn.id = "save";
         save_btn.label = "Save";
@@ -977,8 +947,6 @@ void MapModeUI::sync_footer_button_states() {
     if (!footer_bar_) return;
     const bool layers_visible = layers_panel_ && layers_panel_->is_visible();
     footer_bar_->set_button_active_state("layers", layers_visible);
-    const bool fog_visible = fog_settings_panel_ && fog_settings_panel_->is_visible();
-    footer_bar_->set_button_active_state("fog", fog_visible);
     for (const auto& config : room_mode_buttons_) {
         footer_bar_->set_button_active_state(config.id, config.active);
     }
@@ -1042,11 +1010,6 @@ void MapModeUI::sync_panel_map_info() {
         layer_controls_display_->set_controller(layers_controller_);
         layer_controls_display_->set_selected_layer(layers_panel_ ? layers_panel_->selected_layer() : -1);
         layer_controls_display_->refresh();
-    }
-    if (fog_settings_panel_) {
-        fog_settings_panel_->set_map_info(map_info_, [this]() {
-            return this->save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
-        });
     }
 }
 
@@ -1260,39 +1223,10 @@ void MapModeUI::toggle_layers_panel() {
     }
 }
 
-void MapModeUI::open_fog_panel() {
-    ensure_panels();
-    if (fog_settings_panel_) {
-        fog_settings_panel_->open();
-        bring_panel_to_front(fog_settings_panel_.get());
-    }
-    sync_footer_button_states();
-}
-
-void MapModeUI::close_fog_panel() {
-    if (fog_settings_panel_) {
-        fog_settings_panel_->close();
-    }
-    sync_footer_button_states();
-}
-
-void MapModeUI::toggle_fog_panel() {
-    ensure_panels();
-    if (!fog_settings_panel_) {
-        return;
-    }
-    if (fog_settings_panel_->is_visible()) {
-        close_fog_panel();
-    } else {
-        open_fog_panel();
-    }
-}
-
 void MapModeUI::close_all_panels() {
     if (layers_preview_panel_) {
         layers_preview_panel_->close();
     }
-    close_fog_panel();
     set_active_panel(PanelType::None);
     close_room_configuration(false);
 }
@@ -1526,10 +1460,6 @@ bool MapModeUI::is_any_panel_visible() const {
 
 bool MapModeUI::is_layers_panel_visible() const {
     return layers_panel_ && layers_panel_->is_visible();
-}
-
-bool MapModeUI::is_fog_panel_visible() const {
-    return fog_settings_panel_ && fog_settings_panel_->is_visible();
 }
 
 bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority priority) const {

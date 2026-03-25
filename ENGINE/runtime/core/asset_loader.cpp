@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <string>
 #include <cstdlib>
+#include <utility>
 #include <SDL3/SDL.h>
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_library.hpp"
@@ -35,6 +36,15 @@
 using json = nlohmann::json;
 
 AssetLoader::~AssetLoader() = default;
+
+const std::vector<Room*>& AssetLoader::getRooms() const {
+        static const std::vector<Room*> empty_rooms;
+        return world_context_ ? world_context_->rooms() : empty_rooms;
+}
+
+std::shared_ptr<RuntimeWorldContext> AssetLoader::release_runtime_world_context() {
+        return std::exchange(world_context_, nullptr);
+}
 
 AssetLoader::AssetLoader(const std::string& map_id,
                          const nlohmann::json& map_manifest,

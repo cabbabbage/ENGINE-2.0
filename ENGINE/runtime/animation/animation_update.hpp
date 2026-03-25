@@ -25,29 +25,6 @@ class Grid;
 class Animation;
 class AnimationRuntime;
 
-struct AnimationPlayer {
-    Animation* m_animation = nullptr;
-    int m_start_frame = 0;
-    int m_end_frame = 0;
-    int m_current_frame = 0;
-    int m_variant = 0;
-
-    SDL_Texture* current_texture() const {
-        if (!m_animation || m_current_frame < 0 || m_current_frame >= int(m_animation->frames.size())) {
-            return nullptr;
-        }
-        const auto* frame = m_animation->frames[m_current_frame];
-        if (!frame || frame->variants.empty()) {
-            return nullptr;
-        }
-        int variant_index = m_variant;
-        if (variant_index < 0 || variant_index >= static_cast<int>(frame->variants.size())) {
-            variant_index = 0;
-        }
-        return frame->variants[variant_index].base_texture;
-    }
-};
-
 namespace animation_update::detail {
 
 inline constexpr const char kDefaultAnimation[] = "default";
@@ -108,10 +85,7 @@ private:
 
     void clear_movement_plan();
     std::size_t path_index_for(const std::string& anim_id) const;
-    AnimationPlayer& player() { return player_; }
     SDL_Point final_dest{0, 0};
-
-    AnimationPlayer player_{};
 
     Asset*  self_          = nullptr;
     Assets* assets_owner_  = nullptr;

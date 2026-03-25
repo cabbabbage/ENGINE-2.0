@@ -88,6 +88,7 @@ public:
     void detach_asset_from_hierarchy(GridPoint& point);
     static std::size_t hash_key(const GridKey& key);
     void debug_validate_keys_and_masks() const;
+    void invalidate_projection_cache();
     std::vector<GridPoint*> query_region(const GridBounds& bounds,
                                          int min_layer,
                                          int max_layer,
@@ -111,7 +112,6 @@ public:
 private:
     void remove_from_chunk(Asset* a, Chunk* c);
     void invalidate_active_cache();
-    std::uint64_t next_traversal_stamp() const;
     GridId make_point_id(int grid_x, int grid_depth, int world_y, int resolution_layer, std::uint32_t salt = 0) const;
     void remove_asset_from_point(Asset* a, GridPoint& point);
     std::unique_ptr<Asset> detach_asset_from_grid_point(Asset* a, GridPoint& point, bool clear_mapping);
@@ -142,7 +142,6 @@ private:
     std::unordered_map<Asset*, GridKey> asset_to_key_;
     std::unordered_map<GridKey, GridId, GridKeyHash> key_to_id_;
     std::vector<GridId> roots_;
-    mutable std::uint64_t traversal_stamp_ = 1;
 
     void add_root_id(GridId id);
     void remove_root_id(GridId id);

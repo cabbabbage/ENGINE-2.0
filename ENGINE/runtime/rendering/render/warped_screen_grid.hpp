@@ -235,10 +235,6 @@ public:
 
     double default_camera_height_for_room(const Room* room) const;
     const std::vector<world::GridPoint*>& get_warped_points() const { return warped_points_; }
-    const std::vector<Asset*>& get_visible_assets() const { return visible_assets_; }
-    const std::vector<world::GridPoint*>& get_visible_points() const { return visible_points_; }
-    const std::vector<world::GridPoint*>& grid_visible_points() const { return visible_points_; }
-    const std::vector<world::Chunk*>& get_active_chunks() const { return active_chunks_; }
     const GridBounds& get_bounds() const { return bounds_; }
     const SDL_Rect& get_cached_world_rect() const { return cached_world_rect_; }
     std::uint32_t last_nodes_visited() const { return last_nodes_visited_; }
@@ -335,13 +331,11 @@ private:
     mutable std::optional<ProjectionFingerprint> last_projection_fingerprint_{};
 
     std::vector<world::GridPoint*> warped_points_;
-    std::vector<Asset*> visible_assets_;
-    std::vector<world::GridPoint*> visible_points_;
     std::vector<VisibleTraversalEntry> visible_traversal_entries_;
-    std::vector<world::Chunk*> active_chunks_;
     std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
     std::uint64_t frame_counter_ = 0;
     mutable std::uint64_t camera_state_version_ = 0;
+    std::uint64_t last_projection_cache_invalidation_version_ = 0;
     std::uint32_t last_nodes_visited_ = 0;
     std::uint32_t last_branches_skipped_ = 0;
     std::uint32_t last_depth_culled_ = 0;

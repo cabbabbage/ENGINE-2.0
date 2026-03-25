@@ -8,7 +8,6 @@
 
 #include "rendering/render/composite_asset_renderer.hpp"
 #include "rendering/render/scaling_logic.hpp"
-#include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include <SDL3/SDL.h>
 
@@ -138,7 +137,6 @@ private:
     bool         anchor_point_debug_enabled_ = false;
 
     CompositeAssetRenderer composite_renderer_;
-    std::unique_ptr<DynamicFogSystem> dynamic_fog_system_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
 
     std::uint32_t depthcue_warmup_frames_ = 8;

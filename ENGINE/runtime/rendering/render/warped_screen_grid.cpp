@@ -1203,37 +1203,51 @@ double WarpedScreenGrid::anchor_world_z() const {
 
 void WarpedScreenGrid::clear_grid_state() {
     warped_points_.clear();
-    visible_assets_.clear();
-    visible_points_.clear();
     visible_traversal_entries_.clear();
-    active_chunks_.clear();
     asset_to_point_.clear();
     cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
     bounds_ = GridBounds{};
 }
 
 void WarpedScreenGrid::rebuild_grid_bounds() {
-    // Prefer visible points when available; otherwise fall back to all warped points.
-    const auto& points = !visible_points_.empty() ? visible_points_ : warped_points_;
-    if (points.empty()) {
+    if (warped_points_.empty()) {
         cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
         bounds_ = GridBounds{};
         return;
     }
 
-    int min_x = std::numeric_limits<int>::max();
-    int max_x = std::numeric_limits<int>::min();
-    int min_z = std::numeric_limits<int>::max();
-    int max_z = std::numeric_limits<int>::min();
-
-    for (const auto* gp : points) {
-        if (!gp) {
-            continue;
+    auto compute_bounds = [](const std::vector<world::GridPoint*>& points, bool on_screen_only) {
+        int min_x = std::numeric_limits<int>::max();
+        int max_x = std::numeric_limits<int>::min();
+        int min_z = std::numeric_limits<int>::max();
+        int max_z = std::numeric_limits<int>::min();
+        for (const auto* gp : points) {
+            if (!gp) {
+                continue;
+            }
+            if (on_screen_only && !gp->is_on_screen()) {
+                continue;
+            }
+            min_x = std::min(min_x, gp->world_x());
+            max_x = std::max(max_x, gp->world_x());
+            min_z = std::min(min_z, gp->world_z());
+            max_z = std::max(max_z, gp->world_z());
         }
-        min_x = std::min(min_x, gp->world_x());
-        max_x = std::max(max_x, gp->world_x());
-        min_z = std::min(min_z, gp->world_z());
-        max_z = std::max(max_z, gp->world_z());
+        return std::array<int, 4>{min_x, max_x, min_z, max_z};
+    };
+
+    auto bounds = compute_bounds(warped_points_, true);
+    int min_x = bounds[0];
+    int max_x = bounds[1];
+    int min_z = bounds[2];
+    int max_z = bounds[3];
+
+    if (min_x == std::numeric_limits<int>::max()) {
+        bounds = compute_bounds(warped_points_, false);
+        min_x = bounds[0];
+        max_x = bounds[1];
+        min_z = bounds[2];
+        max_z = bounds[3];
     }
 
     if (min_x == std::numeric_limits<int>::max()) {
@@ -1290,8 +1304,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     last_nodes_visited_ = region_metrics.nodes_visited;
     last_branches_skipped_ = region_metrics.branches_skipped;
     warped_points_.reserve(grid_points.size());
-    visible_points_.reserve(grid_points.size());
-    visible_assets_.reserve(grid_points.size());
     visible_traversal_entries_.reserve(grid_points.size() * 2);
 
     const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
@@ -1307,6 +1319,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     runtime_pitch_rad_ = cam_state.pitch_radians;
     runtime_pitch_deg_ = cam_state.pitch_degrees;
     runtime_depth_offset_px_ = static_cast<float>(cam_state.reference_depth);
+    if (last_projection_cache_invalidation_version_ != camera_state_version_) {
+        world_grid.invalidate_projection_cache();
+        last_projection_cache_invalidation_version_ = camera_state_version_;
+    }
     if (!cam_state.valid) {
         last_min_world_z_ = 0;
         last_max_world_z_ = 0;
@@ -1518,11 +1534,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 static_cast<double>(world_pos.y),
                 base_world_z);
         } else {
-            space.distance = static_cast<double>(gp->projection.distance_to_camera);
+            space.distance = static_cast<double>(gp->distance_to_camera());
             space.valid = true;
         }
 
-        const SDL_FPoint screen_for_bounds = gp->projection.screen;
+        const SDL_FPoint screen_for_bounds = gp->screen_position();
         auto project_with_base = [&](double world_x, double world_y, double world_z_offset, SDL_FPoint& out) -> bool {
             return project_screen_point(world_x, world_y, base_world_z + world_z_offset, out);
         };
@@ -1627,12 +1643,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
         }
 
-        gp->on_screen = !frustum_hits.empty();
+        gp->mutable_projection_cache().on_screen = !frustum_hits.empty();
 
         warped_points_.push_back(gp);
         if (!frustum_hits.empty()) {
-            visible_points_.push_back(gp);
-            visible_assets_.insert(visible_assets_.end(), frustum_hits.begin(), frustum_hits.end());
             for (Asset* visible_asset : frustum_hits) {
                 if (!visible_asset) {
                     continue;
@@ -1645,12 +1659,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                                                     visible_asset->render_depth_bias())});
             }
         }
-        if (gp->chunk) active_chunks_.push_back(gp->chunk);
-    }
-
-    if (!active_chunks_.empty()) {
-        std::sort(active_chunks_.begin(), active_chunks_.end());
-        active_chunks_.erase(std::unique(active_chunks_.begin(), active_chunks_.end()), active_chunks_.end());
     }
 
     if (!visible_traversal_entries_.empty()) {
@@ -1690,10 +1698,14 @@ const world::GridPoint* WarpedScreenGrid::grid_point_for_asset(const Asset* asse
 world::GridPoint* WarpedScreenGrid::pick_nearest_point(SDL_Point screen_pt, float max_distance_px) {
     float best_dist2 = max_distance_px * max_distance_px;
     world::GridPoint* best = nullptr;
-    for (world::GridPoint* gp : visible_points_) {
+    for (world::GridPoint* gp : warped_points_) {
         if (!gp) continue;
-        const float dx = gp->projection.screen.x - static_cast<float>(screen_pt.x);
-        const float dy = gp->projection.screen.y - static_cast<float>(screen_pt.y);
+        if (!gp->is_on_screen()) {
+            continue;
+        }
+        const SDL_FPoint screen = gp->screen_position();
+        const float dx = screen.x - static_cast<float>(screen_pt.x);
+        const float dy = screen.y - static_cast<float>(screen_pt.y);
         const float dist2 = dx * dx + dy * dy;
         if (dist2 < best_dist2) {
             best_dist2 = dist2;

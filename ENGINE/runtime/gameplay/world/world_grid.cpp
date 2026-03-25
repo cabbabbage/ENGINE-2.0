@@ -7,6 +7,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 #include "assets/asset/Asset.hpp"
@@ -91,6 +92,7 @@ WorldGrid::WorldGrid(const GridPoint& origin, int r_chunk)
 
 void WorldGrid::set_origin(const GridPoint& origin) {
     origin_ = GridPoint::make_virtual(origin.world_x(), origin.world_y(), origin.world_z(), origin.resolution_layer());
+    invalidate_projection_cache();
     invalidate_active_cache();
 }
 
@@ -98,10 +100,11 @@ void WorldGrid::invalidate_active_cache() {
     chunks_.clear_active();
 }
 
-std::uint64_t WorldGrid::next_traversal_stamp() const {
-    const std::uint64_t next = traversal_stamp_ + 1;
-    traversal_stamp_ = (next == 0) ? 1 : next;
-    return traversal_stamp_;
+void WorldGrid::invalidate_projection_cache() {
+    for (auto& [id, point] : points_) {
+        (void)id;
+        point.invalidate_screen_data();
+    }
 }
 
 const ChunkManager& WorldGrid::chunks() const {
@@ -228,27 +231,21 @@ Asset* WorldGrid::remove_asset(Asset* a) {
         return nullptr;
     }
 
-    bool removed_from_point = false;
     auto key_lookup = asset_to_key_.find(a);
-    if (key_lookup != asset_to_key_.end()) {
-        if (GridPoint* gp = find_grid_point_strict(key_lookup->second)) {
-            remove_asset_from_point(a, *gp);
-            removed_from_point = true;
-        }
-        asset_to_key_.erase(key_lookup);
+    if (key_lookup == asset_to_key_.end()) {
+        vibble::log::error("[WorldGrid] remove_asset refused to recover ownership from an unmapped raw pointer.");
+        return nullptr;
     }
 
-    if (!removed_from_point) {
-        for (auto& entry : points_) {
-            auto& point = entry.second;
-            auto it = std::find_if(point.occupants.begin(), point.occupants.end(),
-                [a](const std::unique_ptr<Asset>& up) { return up.get() == a; });
-            if (it != point.occupants.end()) {
-                remove_asset_from_point(a, point);
-                removed_from_point = true;
-                break;
-            }
-        }
+    GridPoint* point = find_grid_point_strict(key_lookup->second);
+    if (!point) {
+        vibble::log::error("[WorldGrid] remove_asset invariant violated: mapped source point missing.");
+        return nullptr;
+    }
+
+    if (!detach_asset_from_grid_point(a, *point, true)) {
+        vibble::log::error("[WorldGrid] remove_asset invariant violated: mapped source point did not own the asset.");
+        return nullptr;
     }
 
     auto it = residency_.find(a);
@@ -495,8 +492,9 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
     const int safe_max_depth = std::max(min_world_depth, max_world_depth);
 
     std::vector<GridPoint*> result;
-    const std::uint64_t visit_stamp = next_traversal_stamp();
     std::vector<GridPoint*> stack = gather_roots<GridPoint>(points_, roots_);
+    std::unordered_set<GridId> visited;
+    visited.reserve(points_.size());
 
     auto push_child = [&](GridPoint* parent, GridPoint::ChildDirection dir) {
         GridPoint* child = parent ? parent->child(dir) : nullptr;
@@ -514,10 +512,9 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
         GridPoint* node = stack.back();
         stack.pop_back();
         if (!node) continue;
-        if (node->last_region_query_stamp == visit_stamp) {
+        if (!visited.insert(node->id).second) {
             continue;
         }
-        node->last_region_query_stamp = visit_stamp;
 
         if (skip_inactive_branches && !node->has_assets_or_active_children()) {
             if (metrics) ++metrics->branches_skipped;
@@ -558,8 +555,9 @@ std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bo
     const int safe_max_depth = std::max(min_world_depth, max_world_depth);
 
     std::vector<const GridPoint*> result;
-    const std::uint64_t visit_stamp = next_traversal_stamp();
     std::vector<const GridPoint*> stack = gather_roots<const GridPoint>(points_, roots_);
+    std::unordered_set<GridId> visited;
+    visited.reserve(points_.size());
 
     auto push_child = [&](const GridPoint* parent, GridPoint::ChildDirection dir) {
         const GridPoint* child = parent ? parent->child(dir) : nullptr;
@@ -577,10 +575,9 @@ std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bo
         const GridPoint* node = stack.back();
         stack.pop_back();
         if (!node) continue;
-        if (node->last_region_query_stamp == visit_stamp) {
+        if (!visited.insert(node->id).second) {
             continue;
         }
-        node->last_region_query_stamp = visit_stamp;
 
         if (skip_inactive_branches && !node->has_assets_or_active_children()) {
             if (metrics) ++metrics->branches_skipped;
@@ -755,14 +752,31 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     if (!a) {
         return nullptr;
     }
+    (void)old_pos;
+    auto key_lookup = asset_to_key_.find(a);
+    if (key_lookup == asset_to_key_.end()) {
+        vibble::log::error("[WorldGrid] move_asset invariant violated: asset ownership mapping missing during transfer.");
+        return nullptr;
+    }
+
+    GridPoint* existing_point = find_grid_point_strict(key_lookup->second);
+    if (!existing_point) {
+        vibble::log::error("[WorldGrid] move_asset invariant violated: source point missing during ownership transfer.");
+        return nullptr;
+    }
+
+    const GridPoint source_pos = GridPoint::make_virtual(existing_point->world_x(),
+                                                         existing_point->world_y(),
+                                                         existing_point->world_z(),
+                                                         existing_point->resolution_layer());
     const int resolved_layer = new_pos.resolution_layer();
     const GridCoord new_index = grid_index_from_world(new_pos, resolved_layer);
     const int chunk_step = 1 << r_chunk_;
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int old_i = vibble::math::floor_div(old_pos.world_x() - origin_.world_x(), chunk_step);
-    const int old_k = vibble::math::floor_div(old_pos.world_z() - origin_.world_z(), chunk_step);
+    const int old_i = vibble::math::floor_div(source_pos.world_x() - origin_.world_x(), chunk_step);
+    const int old_k = vibble::math::floor_div(source_pos.world_z() - origin_.world_z(), chunk_step);
     const int new_i = vibble::math::floor_div(new_pos.world_x() - origin_.world_x(), chunk_step);
     const int new_k = vibble::math::floor_div(new_pos.world_z() - origin_.world_z(), chunk_step);
     const GridCoord chunk_index{new_i, new_k};
@@ -774,44 +788,41 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     } else {
         previous = chunks_.find(old_i, old_k);
     }
-    Chunk& target = chunks_.ensure(new_i, new_k, r_chunk_, origin_);
 
     // PRESERVE perspective scale before detaching from old point
     float preserved_perspective = 1.0f;
-    if (a->pos_ && a->pos_->projection.perspective_scale > 0.0001f) {
-        preserved_perspective = a->pos_->projection.perspective_scale;
+    if (a->pos_ && a->pos_->perspective_scale() > 0.0001f) {
+        preserved_perspective = a->pos_->perspective_scale();
     }
 
     std::unique_ptr<Asset> owned;
-    const bool xz_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_z() != new_pos.world_z());
+    const bool xz_changed = (source_pos.world_x() != new_pos.world_x()) || (source_pos.world_z() != new_pos.world_z());
     const bool point_changed = xz_changed ||
-                               (old_pos.world_y() != new_pos.world_y()) ||
-                               (old_pos.resolution_layer() != new_pos.resolution_layer());
+                               (source_pos.world_y() != new_pos.world_y()) ||
+                               (source_pos.resolution_layer() != new_pos.resolution_layer());
     if (point_changed) {
-        GridPoint* existing_point = point_for_asset(a);
-        if (!existing_point) {
-            vibble::log::error("[WorldGrid] move_asset invariant violated: source point missing during ownership transfer.");
-            return nullptr;
-        }
         owned = detach_asset_from_grid_point(a, *existing_point, true);
         if (!owned) {
             vibble::log::error("[WorldGrid] move_asset invariant violated: detach did not yield owned asset during transfer.");
             return nullptr;
         }
+    } else {
+        existing_point->invalidate_screen_data();
     }
 
-    const GridKey new_key = grid_key_from_world(new_pos, resolved_layer);
-    GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.y, new_key.layer);
+    Chunk& target = chunks_.ensure(new_i, new_k, r_chunk_, origin_);
+    GridPoint* target_point = existing_point;
 
     if (point_changed) {
-        attach_asset_to_grid_point(std::move(owned), point);
+        const GridKey new_key = grid_key_from_world(new_pos, resolved_layer);
+        target_point = &ensure_point(new_index, chunk_index, &target, nullptr, new_key.y, new_key.layer);
+        attach_asset_to_grid_point(std::move(owned), *target_point);
         // Initialize new point's perspective_scale if not yet calculated
         // This prevents a single frame of wrong scaling during movement
-        if (point.projection.perspective_scale <= 0.0001f || !point.projection.screen_data_valid) {
-            point.projection.perspective_scale = preserved_perspective;
+        auto& projection = target_point->mutable_projection_cache();
+        if (projection.perspective_scale <= 0.0001f || !projection.screen_data_valid) {
+            projection.perspective_scale = preserved_perspective;
         }
-    } else {
-        point.invalidate_screen_data();
     }
     if (previous != &target) {
         if (previous) {
@@ -924,6 +935,7 @@ void WorldGrid::set_grid_resolution(int r) {
     }
     r_chunk_ = clamped;
     max_resolution_layers_ = clamped;
+    invalidate_projection_cache();
     invalidate_active_cache();
 }
 

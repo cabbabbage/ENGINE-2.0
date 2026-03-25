@@ -67,14 +67,11 @@
         <mxCell id="22" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#4c1d95;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:32px;font-weight:700;'&gt;AssetInfo other metadata&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;mappings, tag caches, follower binding spec, custom controller key, and spawn groups payload.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="2810" y="1450" width="450" height="140" as="geometry" />
         </mxCell>
-        <mxCell id="23" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:32px;font-weight:700;'&gt;WarpedScreenGrid internals&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;CameraController and visible_points or visible_assets or asset_to_point non-owning pointer caches.&lt;/div&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="23" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:32px;font-weight:700;'&gt;WarpedScreenGrid internals&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;CameraController, visible traversal entries, and asset_to_point non-owning pointer caches.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1160" y="900" width="360" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="24" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:32px;font-weight:700;'&gt;SceneRenderer internals&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;GridTileRenderer, GeometryBatcher, CompositeAssetRenderer, DynamicFogSystem, DynamicBoundarySystem, and scene draw pipeline textures.&lt;/div&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="24" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:32px;font-weight:700;'&gt;SceneRenderer internals&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;GridTileRenderer, GeometryBatcher, CompositeAssetRenderer, DynamicBoundarySystem, and scene draw pipeline textures.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="1160" y="1050" width="360" height="130" as="geometry" />
-        </mxCell>
-        <mxCell id="26" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:32px;font-weight:700;'&gt;DynamicFogSystem&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Owns fog textures, assignment map, and active fog sprites.&lt;/div&gt;&lt;/div&gt;" vertex="1">
-          <mxGeometry x="3300" y="580" width="360" height="120" as="geometry" />
         </mxCell>
         <mxCell id="27" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;fillColor=#ffedd5;strokeColor=#ea580c;fontColor=#7c2d12;rounded=1;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;div style='line-height:1.1;'&gt;&lt;div style='font-size:32px;font-weight:700;'&gt;DynamicBoundarySystem&lt;/div&gt;&lt;div style='font-size:11px;margin-top:6px;line-height:1.28;'&gt;Owns boundary type config, assignment maps, animation state maps, region caches, and active boundary sprites.&lt;/div&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry x="3300" y="720" width="360" height="150" as="geometry" />
@@ -220,9 +217,6 @@
         <mxCell id="e42" parent="1" source="5" target="24" value="owns unique_ptr scene" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e44" parent="1" source="24" target="26" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
         <mxCell id="e45" parent="1" source="24" target="27" value="owns" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -235,9 +229,6 @@
         <mxCell id="e48" parent="1" source="27" target="7" value="AssetLibrary* non-owning" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e49" parent="1" source="26" target="6" value="samples world visibility" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
         <mxCell id="e50" parent="1" source="36" target="15" value="non-owning runtime views" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -245,9 +236,6 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e52" parent="1" source="24" target="15" value="self Asset* non-owning" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e54" parent="1" source="26" target="15" value="controls Asset non-owning" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;endArrow=open;strokeWidth=1.4;strokeColor=#6b7280;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e55" parent="1" source="8" target="37" value="owns staging entries" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.6;strokeColor=#1f2937;" edge="1">

@@ -28,7 +28,6 @@
 #include "assets/asset/asset_library.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_object_projection.hpp"
@@ -850,18 +849,10 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   geometry_batcher_(std::make_unique<GeometryBatcher>(renderer)),
   sky_texture_path_(std::filesystem::path("resources") / "misc_content" / "sky.png"),
   composite_renderer_(renderer, assets),
-  dynamic_fog_system_(std::make_unique<DynamicFogSystem>()),
   dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>())
 {
 
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
-
-    // Initialize dynamic fog system
-    if (dynamic_fog_system_) {
-        if (!dynamic_fog_system_->initialize(renderer_)) {
-            vibble::log::warn("[SceneRenderer] Failed to initialize dynamic fog system");
-        }
-    }
 
     // Initialize dynamic boundary system
     if (dynamic_boundary_system_) {
@@ -1155,8 +1146,8 @@ void SceneRenderer::render() {
             const world::GridPoint* gp = traversal_entry.grid_point ? traversal_entry.grid_point
                                                                     : cam.grid_point_for_asset(asset);
             const float perspective_scale =
-                (gp && std::isfinite(gp->projection.perspective_scale) && gp->projection.perspective_scale > 0.0f)
-                    ? gp->projection.perspective_scale
+                (gp && std::isfinite(gp->perspective_scale()) && gp->perspective_scale() > 0.0f)
+                    ? gp->perspective_scale()
                     : 1.0f;
             const float base_world_z = static_cast<float>(asset->world_z());
             const double depth_bias = asset->render_depth_bias();

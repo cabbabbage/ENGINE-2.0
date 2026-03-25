@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -93,6 +94,7 @@ private:
                                              const camera_effects::ImageEffectSettings& bg);
     void apply_and_queue_rebuild();
     void restore_defaults();
+    void restore_defaults_for_side(PreviewSide side);
     void discard_unsaved_changes();
     void refresh_from_committed();
 
@@ -102,6 +104,7 @@ private:
     void refresh_unsaved_state();
     void update_title_state();
     void sync_modal_geometry(int screen_w, int screen_h);
+    int estimate_content_height_without_fill(int content_width) const;
     bool can_render_preview() const;
 
     void on_panel_closed();
@@ -118,6 +121,8 @@ private:
 
     std::unique_ptr<Widget> fg_label_;
     std::unique_ptr<Widget> bg_label_;
+    std::vector<std::unique_ptr<Widget>> paired_rows_;
+    std::unique_ptr<Widget> fill_spacer_;
     SliderSet fg_sliders_{};
     SliderSet bg_sliders_{};
     std::unique_ptr<Widget> fg_preview_;
@@ -127,6 +132,10 @@ private:
     std::unique_ptr<ButtonWidget> apply_button_widget_;
     std::unique_ptr<DMButton> restore_defaults_button_;
     std::unique_ptr<ButtonWidget> restore_defaults_button_widget_;
+    std::unique_ptr<DMButton> restore_fg_defaults_button_;
+    std::unique_ptr<ButtonWidget> restore_fg_defaults_button_widget_;
+    std::unique_ptr<DMButton> restore_bg_defaults_button_;
+    std::unique_ptr<ButtonWidget> restore_bg_defaults_button_widget_;
     std::unique_ptr<DMButton> discard_button_;
     std::unique_ptr<ButtonWidget> discard_button_widget_;
 
@@ -163,6 +172,8 @@ private:
     std::string bg_preview_status_;
 
     std::filesystem::path preview_temp_root_;
+    int modal_screen_w_ = 0;
+    int modal_screen_h_ = 0;
     int last_modal_body_height_ = -1;
 
     CloseCallback close_callback_;
@@ -170,4 +181,3 @@ private:
 
     static constexpr Uint32 kPreviewDebounceMs = 150;
 };
-

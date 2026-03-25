@@ -33,10 +33,10 @@
             }
         },
         "grid": {
-            "cell_size_px": 27.0,
+            "cell_size_px": 9.0,
             "overlay": {
                 "enabled": true,
-                "r": 3.0
+                "r": 2.0
             },
             "snap": {
                 "enabled": true
@@ -61,7 +61,7 @@
             "near_camera_max_perspective_scale": 4.0,
             "near_camera_scale_end_ratio": 0.38999998569488525,
             "near_camera_scale_start_ratio": 0.12999999523162842,
-            "offscreen_fade_amount_px": 200.0,
+            "offscreen_fade_amount_px": 520.0,
             "render_quality_percent": 100.0,
             "texture_warp_percent": 100.0,
             "texture_warp_y_offset_px": 0.0

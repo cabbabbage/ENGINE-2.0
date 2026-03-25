@@ -31,6 +31,7 @@ std::unique_ptr<Asset> make_test_asset(const std::string& name,
                                        int resolution_layer = 0);
 Asset* attach_owned_asset(Assets* assets, std::unique_ptr<Asset> asset);
 
+void set_spawn_failures(Assets& assets, const std::string& name, int failures);
 void set_anchor(Asset& asset, const AnchorSpec& spec);
 void clear_anchors(Asset& asset);
 

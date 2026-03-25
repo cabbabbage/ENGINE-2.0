@@ -6,7 +6,6 @@
 #include "rendering/render/render.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
-#include "animation/controllers/custom_controllers/child_asset.hpp"
 #include "utils/area_helpers.hpp"
 #include "assets/asset_filter_tags.hpp"
 #include "asset_types.hpp"
@@ -32,6 +31,7 @@
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 #include "utils/AnchorPointResolver.hpp"
+#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 
 #if !defined(NDEBUG)
 namespace {
@@ -761,7 +761,6 @@ void Asset::update() {
 
     // Re-check anchor basis after any movement/animation/scale changes we just applied.
     const bool post_world_changed = update_anchor_basis_if_needed();
-    ChildAsset::sync_registered_for_owner(this);
 
     if (assets_ && (external_world_changed || post_world_changed)) {
         assets_->mark_collision_context_dirty();
@@ -1239,6 +1238,9 @@ void Asset::mark_anchors_dirty() {
         runtime_hit_box_lookup_.clear();
         runtime_attack_box_lookup_.clear();
         ++anchor_world_revision_;
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            this,
+            std::string{});
 }
 
 void Asset::assert_unique_anchor_names_for_frame() const {

@@ -19,6 +19,7 @@ using test_child_asset_runtime::AnchorSpec;
 struct AssetsState {
     std::vector<std::unique_ptr<Asset>> owned_assets;
     bool active_assets_dirty = false;
+    std::unordered_map<std::string, int> spawn_failures_remaining;
 };
 
 std::unordered_map<Assets*, AssetsState> g_assets_states;
@@ -88,6 +89,15 @@ Asset* attach_owned_asset(Assets* assets, std::unique_ptr<Asset> asset) {
     Asset* raw = asset.get();
     state.owned_assets.push_back(std::move(asset));
     return raw;
+}
+
+void set_spawn_failures(Assets& assets, const std::string& name, int failures) {
+    AssetsState& state = require_assets_state(&assets);
+    if (failures <= 0) {
+        state.spawn_failures_remaining.erase(name);
+        return;
+    }
+    state.spawn_failures_remaining[name] = failures;
 }
 
 void set_anchor(Asset& asset, const AnchorSpec& spec) {
@@ -217,6 +227,12 @@ void Assets::mark_active_assets_dirty() {
 }
 
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
+    AssetsState& state = require_assets_state(this);
+    auto failure_it = state.spawn_failures_remaining.find(name);
+    if (failure_it != state.spawn_failures_remaining.end() && failure_it->second > 0) {
+        --failure_it->second;
+        return nullptr;
+    }
     auto asset = test_child_asset_runtime::make_test_asset(name, world_pos.x, 0, world_pos.y, 0);
     return test_child_asset_runtime::attach_owned_asset(this, std::move(asset));
 }

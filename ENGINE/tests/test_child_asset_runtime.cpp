@@ -8,10 +8,13 @@
 
 #include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
 #include "animation/controllers/custom_controllers/child_asset.hpp"
+#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "stubs/asset/child_asset_runtime_test_support.hpp"
 #include "utils/input.hpp"
+
+#include "rendering/render/render_depth_policy.hpp"
 
 namespace {
 
@@ -44,7 +47,11 @@ public:
 protected:
     void on_update(const Input&) override {
         if (!child_ && !pending_child_name_.empty()) {
-            child_.emplace(std::move(pending_child_name_));
+            Asset* owner = self_ptr();
+            Assets* owner_assets = assets();
+            if (owner && owner_assets) {
+                child_.emplace(*owner, *owner_assets, std::move(pending_child_name_));
+            }
             pending_child_name_.clear();
         }
         if (child_) {
@@ -59,6 +66,47 @@ protected:
 private:
     std::optional<ChildAsset> child_;
     std::string pending_child_name_;
+};
+
+class RetryingChildController : public CustomAssetController {
+public:
+    explicit RetryingChildController(Asset* self)
+        : CustomAssetController(self) {}
+
+    ChildAsset* child() {
+        return child_ ? &(*child_) : nullptr;
+    }
+
+protected:
+    void on_update(const Input&) override {
+        Asset* owner = self_ptr();
+        Assets* owner_assets = assets();
+        if (!owner || !owner_assets) {
+            return;
+        }
+
+        if (child_ && child_->get_asset()) {
+            child_->update();
+            return;
+        }
+
+        child_.reset();
+        child_.emplace(*owner, *owner_assets, "vibble_eyes");
+        if (!child_->get_asset()) {
+            child_.reset();
+            return;
+        }
+
+        child_->bind("eyes");
+        child_->update();
+    }
+
+    void on_process_pending_attacks(Asset& self) override {
+        (void)self;
+    }
+
+private:
+    std::optional<ChildAsset> child_;
 };
 
 bool contains_spawn_candidate_named(const nlohmann::json& node, const std::string& name) {
@@ -96,17 +144,28 @@ std::filesystem::path repo_root() {
 
 } // namespace
 
-TEST_CASE("ChildAsset only constructs with an active custom controller context") {
+TEST_CASE("ChildAsset constructs with explicit owner and assets") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(
         assets_scope.assets,
         test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
     REQUIRE(owner != nullptr);
 
-    ChildAsset invalid("vibble_eyes");
-    CHECK(invalid.get_asset() == nullptr);
-    CHECK(invalid.is_hidden());
-    CHECK_FALSE(invalid.is_bound());
+    ChildAsset child(*owner, *assets_scope.assets, "vibble_eyes");
+    REQUIRE(child.get_asset() != nullptr);
+    CHECK(child.is_hidden());
+    CHECK_FALSE(child.is_bound());
+    CHECK(test_child_asset_runtime::asset_count(*assets_scope.assets) == 2);
+}
+
+TEST_CASE("AnchorBoundAssetHelper keeps child updated when owner anchor moves") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 20, 30, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 4, 5, 6, 0, 2, 0.0f, true});
 
     TestCustomController controller(owner);
     Input input;
@@ -115,9 +174,56 @@ TEST_CASE("ChildAsset only constructs with an active custom controller context")
 
     ChildAsset* child = controller.child();
     REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    AnchorSpec moved{"eyes", 7, 8, 9, 0, 3, -0.25f, true};
+    test_child_asset_runtime::set_anchor(*owner, moved);
+
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+
+    CHECK(spawned->world_x() == owner->world_x() + moved.offset_x);
+    CHECK(spawned->world_y() == owner->world_y() + moved.offset_y);
+    CHECK(spawned->world_z() == owner->world_z() + moved.offset_z);
+
+    const double anchor_world_depth =
+        static_cast<double>(owner->world_z() + moved.offset_z) + moved.world_depth_offset;
+    const double expected_bias = render_depth::bias_for_quantized_depth(anchor_world_depth, spawned->world_z());
+    CHECK(spawned->render_depth_bias() == doctest::Approx(expected_bias));
+
+    CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().is_child_bound(spawned));
+}
+
+TEST_CASE("ChildAsset controller retry recreates child after one failed spawn attempt") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 1, 2, 3, 0, 0, 0.0f, true});
+    test_child_asset_runtime::set_spawn_failures(*assets_scope.assets, "vibble_eyes", 1);
+
+    RetryingChildController controller(owner);
+    Input input;
+
+    controller.update(input);
+    CHECK(controller.child() == nullptr);
+    CHECK(test_child_asset_runtime::asset_count(*assets_scope.assets) == 1);
+
+    controller.update(input);
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
     REQUIRE(child->get_asset() != nullptr);
-    CHECK(child->is_hidden());
-    CHECK_FALSE(child->is_bound());
+    CHECK_FALSE(child->is_hidden());
+    CHECK(child->is_bound());
+
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+    CHECK(spawned->world_x() == 11);
+    CHECK(spawned->world_y() == 17);
+    CHECK(spawned->world_z() == 23);
     CHECK(test_child_asset_runtime::asset_count(*assets_scope.assets) == 2);
 }
 

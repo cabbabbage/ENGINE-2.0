@@ -265,6 +265,7 @@ add_executable(engine_tests
     ENGINE/runtime/assets/asset/asset_controller.cpp
     ENGINE/runtime/animation/controllers/custom_controllers/custom_asset_controller.cpp
     ENGINE/runtime/animation/controllers/custom_controllers/child_asset.cpp
+    ENGINE/runtime/animation/controllers/custom_controllers/anchor_bound_asset_helper.cpp
     ENGINE/runtime/animation/attack_validation.cpp
     ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
     ENGINE/editor/devtools/dm_styles.cpp

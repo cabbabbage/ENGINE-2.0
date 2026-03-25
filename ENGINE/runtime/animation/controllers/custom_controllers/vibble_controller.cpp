@@ -182,14 +182,26 @@ void vibble_controller::on_update(const Input& input) {
 
 void vibble_controller::ensure_eyes_child() {
     Asset* player = self_ptr();
-    if (eyes_child_.has_value() || !player) {
+    if (!player) {
         return;
     }
-    if (!player->get_assets()) {
+    Assets* owner_assets = player->get_assets();
+    if (!owner_assets) {
         return;
     }
 
-    eyes_child_.emplace("vibble_eyes");
+    if (eyes_child_.has_value() && eyes_child_->get_asset()) {
+        return;
+    }
+    if (eyes_child_.has_value()) {
+        eyes_child_.reset();
+    }
+
+    eyes_child_.emplace(*player, *owner_assets, "vibble_eyes");
+    if (!eyes_child_->get_asset()) {
+        eyes_child_.reset();
+        return;
+    }
     eyes_child_->bind("eyes");
 }
 

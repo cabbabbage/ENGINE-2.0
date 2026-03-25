@@ -1,15 +1,12 @@
 #include "child_asset.hpp"
 
-#include "custom_asset_controller.hpp"
 #include "assets/asset/Asset.hpp"
+#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "utils/log.hpp"
 
-#include <algorithm>
 #include <cmath>
-#include <unordered_map>
-#include <vector>
 #include <utility>
 
 namespace {
@@ -19,85 +16,12 @@ double desired_render_depth_bias(const AnchorPoint& anchor, int quantized_world_
                                                   static_cast<double>(quantized_world_z));
 }
 
-using ChildRegistry = std::unordered_map<Asset*, std::vector<ChildAsset*>>;
-
-ChildRegistry& child_registry() {
-    static ChildRegistry registry;
-    return registry;
-}
-
-std::vector<Asset*>& owner_sync_stack() {
-    static thread_local std::vector<Asset*> sync_stack;
-    return sync_stack;
-}
-
-void register_child_wrapper(Asset* owner, ChildAsset* child_asset) {
-    if (!owner || !child_asset) {
-        return;
-    }
-    auto& registered = child_registry()[owner];
-    if (std::find(registered.begin(), registered.end(), child_asset) == registered.end()) {
-        registered.push_back(child_asset);
-    }
-}
-
-void unregister_child_wrapper(Asset* owner, ChildAsset* child_asset) {
-    if (!owner || !child_asset) {
-        return;
-    }
-
-    auto registry_it = child_registry().find(owner);
-    if (registry_it == child_registry().end()) {
-        return;
-    }
-
-    auto& registered = registry_it->second;
-    registered.erase(std::remove(registered.begin(), registered.end(), child_asset),
-                     registered.end());
-    if (registered.empty()) {
-        child_registry().erase(registry_it);
-    }
-}
-
-bool push_owner_sync(Asset* owner) {
-    auto& sync_stack = owner_sync_stack();
-    if (!owner) {
-        return false;
-    }
-    if (std::find(sync_stack.begin(), sync_stack.end(), owner) != sync_stack.end()) {
-        return false;
-    }
-    sync_stack.push_back(owner);
-    return true;
-}
-
-void pop_owner_sync(Asset* owner) {
-    auto& sync_stack = owner_sync_stack();
-    if (!owner || sync_stack.empty()) {
-        return;
-    }
-    if (sync_stack.back() == owner) {
-        sync_stack.pop_back();
-        return;
-    }
-
-    auto it = std::find(sync_stack.begin(), sync_stack.end(), owner);
-    if (it != sync_stack.end()) {
-        sync_stack.erase(it);
-    }
-}
-
 } // namespace
 
-ChildAsset::ChildAsset(std::string asset_name)
-    : asset_name_(std::move(asset_name)) {
-    owner_ = CustomAssetController::active_owner_asset();
-    assets_ = CustomAssetController::active_assets();
-    if (!owner_ || !assets_) {
-        vibble::log::warn("[ChildAsset] Cannot create child asset '" + asset_name_ +
-                          "' outside an active custom controller context");
-        return;
-    }
+ChildAsset::ChildAsset(Asset& owner, Assets& assets, std::string asset_name)
+    : asset_name_(std::move(asset_name))
+    , owner_(&owner)
+    , assets_(&assets) {
 
     child_ = assets_->spawn_asset(asset_name_, owner_->world_xz_point());
     if (!child_) {
@@ -106,7 +30,6 @@ ChildAsset::ChildAsset(std::string asset_name)
         return;
     }
     owner_->add_child(child_);
-    register_with_owner();
     refresh_hidden_state();
 }
 
@@ -127,20 +50,13 @@ ChildAsset& ChildAsset::operator=(ChildAsset&& other) noexcept {
 }
 
 void ChildAsset::destroy() {
-    if (!ensure_child_alive()) {
-        child_ = nullptr;
-        bound_ = false;
-        bound_anchor_name_.clear();
-        has_successful_sync_ = false;
-        auto_hidden_for_anchor_ = true;
-        return;
-    }
-
-    if (owner_ && owner_->has_child(child_)) {
+    unregister_anchor_binding();
+    if (child_ && owner_ && owner_->has_child(child_)) {
         owner_->remove_child(child_);
     }
-    unregister_from_owner();
-    child_->Delete();
+    if (child_ && assets_ && assets_->contains_asset(child_)) {
+        child_->Delete();
+    }
     child_ = nullptr;
     bound_ = false;
     bound_anchor_name_.clear();
@@ -170,6 +86,7 @@ void ChildAsset::set_grid_point(const std::string& parent_anchor_name) {
     }
     bound_ = false;
     bound_anchor_name_.clear();
+    unregister_anchor_binding();
     const auto anchor = resolve_owner_anchor(parent_anchor_name);
     if (!anchor.has_value()) {
         auto_hidden_for_anchor_ = true;
@@ -185,6 +102,7 @@ void ChildAsset::set_grid_point(const AnchorPoint& parent_anchor) {
     }
     bound_ = false;
     bound_anchor_name_.clear();
+    unregister_anchor_binding();
     (void)place_once(parent_anchor, false);
 }
 
@@ -201,6 +119,7 @@ void ChildAsset::bind(const std::string& parent_anchor_name) {
         auto_hidden_for_anchor_ = true;
         refresh_hidden_state();
     }
+    register_anchor_binding();
 }
 
 void ChildAsset::bind(const AnchorPoint& parent_anchor) {
@@ -214,6 +133,7 @@ void ChildAsset::bind(const AnchorPoint& parent_anchor) {
     bound_ = true;
     bound_anchor_name_ = parent_anchor.name;
     (void)place_once(parent_anchor, true);
+    register_anchor_binding();
 }
 
 void ChildAsset::unbind() {
@@ -222,6 +142,7 @@ void ChildAsset::unbind() {
     }
     bound_ = false;
     bound_anchor_name_.clear();
+    unregister_anchor_binding();
     auto_hidden_for_anchor_ = false;
     refresh_hidden_state();
 }
@@ -231,7 +152,9 @@ bool ChildAsset::ensure_child_alive() {
         return false;
     }
     if (!assets_ || !assets_->contains_asset(child_)) {
-        unregister_from_owner();
+        if (owner_) {
+            owner_->remove_child(child_);
+        }
         child_ = nullptr;
         return false;
     }
@@ -275,7 +198,6 @@ bool ChildAsset::apply_anchor_solution(const AnchorPoint& parent_anchor) {
     has_successful_sync_ = true;
     auto_hidden_for_anchor_ = false;
     refresh_hidden_state();
-    sync_registered_for_owner(child_);
     return changed;
 }
 
@@ -328,6 +250,26 @@ std::optional<AnchorPoint> ChildAsset::resolve_owner_anchor(const std::string& a
                                 Asset::AnchorResolveMode::ForceRecompute);
 }
 
+void ChildAsset::register_anchor_binding() {
+    if (!bound_ || bound_anchor_name_.empty() || !owner_) {
+        return;
+    }
+    Asset* child_asset = get_asset();
+    if (!child_asset) {
+        return;
+    }
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().register_child(
+        owner_,
+        this,
+        child_asset,
+        bound_anchor_name_);
+}
+
+void ChildAsset::unregister_anchor_binding() {
+    Asset* child_asset = get_asset();
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().unregister_child(child_asset);
+}
+
 void ChildAsset::refresh_hidden_state() {
     if (!ensure_child_alive()) {
         return;
@@ -369,6 +311,7 @@ void ChildAsset::update() {
 }
 
 void ChildAsset::move_from(ChildAsset&& other) noexcept {
+    other.unregister_anchor_binding();
     asset_name_ = std::move(other.asset_name_);
     owner_ = other.owner_;
     assets_ = other.assets_;
@@ -378,8 +321,6 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     manual_hidden_ = other.manual_hidden_;
     auto_hidden_for_anchor_ = other.auto_hidden_for_anchor_;
     has_successful_sync_ = other.has_successful_sync_;
-    unregister_child_wrapper(owner_, &other);
-    register_with_owner();
     other.asset_name_.clear();
     other.owner_ = nullptr;
     other.assets_ = nullptr;
@@ -389,36 +330,7 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     other.manual_hidden_ = false;
     other.auto_hidden_for_anchor_ = true;
     other.has_successful_sync_ = false;
-}
-
-void ChildAsset::sync_registered_for_owner(Asset* owner) {
-    if (!push_owner_sync(owner)) {
-        return;
+    if (bound_) {
+        register_anchor_binding();
     }
-
-    auto registry_it = child_registry().find(owner);
-    if (registry_it != child_registry().end()) {
-        const std::vector<ChildAsset*> registered = registry_it->second;
-        for (ChildAsset* child_asset : registered) {
-            if (child_asset) {
-                child_asset->update();
-            }
-        }
-    }
-
-    pop_owner_sync(owner);
-}
-
-void ChildAsset::register_with_owner() {
-    if (!owner_ || !child_) {
-        return;
-    }
-    register_child_wrapper(owner_, this);
-}
-
-void ChildAsset::unregister_from_owner() {
-    if (!owner_) {
-        return;
-    }
-    unregister_child_wrapper(owner_, this);
 }

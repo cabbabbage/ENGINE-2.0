@@ -10,7 +10,7 @@ class Assets;
 
 class ChildAsset {
 public:
-    explicit ChildAsset(std::string asset_name);
+    ChildAsset(Asset& owner, Assets& assets, std::string asset_name);
     ~ChildAsset();
 
     ChildAsset(const ChildAsset&) = delete;
@@ -30,7 +30,6 @@ public:
     bool is_bound() const;
     Asset* get_asset() const;
     void update();
-    static void sync_registered_for_owner(Asset* owner);
 
 private:
     bool ensure_child_alive();
@@ -40,8 +39,8 @@ private:
     std::optional<AnchorPoint> resolve_owner_anchor(const std::string& anchor_name) const;
     void refresh_hidden_state();
     void move_from(ChildAsset&& other) noexcept;
-    void register_with_owner();
-    void unregister_from_owner();
+    void register_anchor_binding();
+    void unregister_anchor_binding();
 
     std::string asset_name_;
     Asset* owner_ = nullptr;

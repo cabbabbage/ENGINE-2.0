@@ -37,6 +37,7 @@
 #include "dm_styles.hpp"
 #include "room_overlay_renderer.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
@@ -2739,8 +2740,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
         const bool has_selected = !selected_assets_.empty();
         const bool has_hover_highlight = shift_now && !highlighted_assets_.empty();
+        const bool asset_editor_mode_active = (editor_mode_ != EditorMode::Normal);
+        const bool suppress_asset_info_overlays =
+            asset_editor_mode_active || (info_ui_ && info_ui_->is_visible());
 
-        if (has_selected || has_hover_highlight) {
+        if (!suppress_asset_info_overlays && (has_selected || has_hover_highlight)) {
             ensure_spatial_index(cam);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const int outline_offset = 3;  // Thicker outline for better visibility
@@ -2767,7 +2771,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
-        if (anchor_mode_active()) {
+        if (!suppress_asset_info_overlays && anchor_mode_active()) {
             refresh_anchor_mode_handles();
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             for (const AnchorHandleSample& handle : anchor_edit_.handles) {
@@ -2811,7 +2815,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
-        if (movement_mode_active()) {
+        if (!suppress_asset_info_overlays && movement_mode_active()) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const int count = static_cast<int>(movement_edit_.rel_positions.size());
             for (int i = 1; i < count; ++i) {
@@ -2931,7 +2935,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         };
 
-        if (hitbox_mode_active() && hitbox_edit_.target_asset) {
+        if (!suppress_asset_info_overlays && hitbox_mode_active() && hitbox_edit_.target_asset) {
             render_box_editor(hitbox_edit_.target_asset->current_hit_box_volumes(),
                               hitbox_edit_.selected_box_index,
                               hitbox_edit_.point_selected ? hitbox_edit_.selected_point_index : -1,
@@ -2940,7 +2944,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                               SDL_Color{90, 195, 255, 210});
         }
 
-        if (attack_box_mode_active() && attack_box_edit_.target_asset) {
+        if (!suppress_asset_info_overlays && attack_box_mode_active() && attack_box_edit_.target_asset) {
             render_box_editor(attack_box_edit_.target_asset->current_attack_box_volumes(),
                               attack_box_edit_.selected_box_index,
                               attack_box_edit_.point_selected ? attack_box_edit_.selected_point_index : -1,
@@ -7216,7 +7220,7 @@ bool RoomEditor::update_anchor_depth(const std::string& anchor_name, int delta) 
     if (anchor_name.empty() || delta == 0) {
         return false;
     }
-    return mutate_anchor_current_frame(
+    const bool changed = mutate_anchor_current_frame(
         [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
             auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
                 return anchor.name == anchor_name;
@@ -7228,6 +7232,13 @@ bool RoomEditor::update_anchor_depth(const std::string& anchor_name, int delta) 
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+
+    if (changed && anchor_edit_.target_asset) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            anchor_edit_.target_asset,
+            anchor_name);
+    }
+    return changed;
 }
 
 bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point) {
@@ -7244,7 +7255,7 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
         static_cast<float>(screen_point.x),
         static_cast<float>(screen_point.y)};
 
-    return mutate_anchor_current_frame(
+    const bool changed = mutate_anchor_current_frame(
         [&, desired_screen](std::vector<DisplacedAssetAnchorPoint>& anchors) {
             auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
                 return anchor.name == anchor_name;
@@ -7294,6 +7305,11 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+
+    if (changed && target) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, anchor_name);
+    }
+    return changed;
 }
 
 bool RoomEditor::add_anchor_in_current_frame() {
@@ -12242,7 +12258,8 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
             ? SelectionFilter::All
             : selection_filter_;
 
-    const bool is_anchored_asset = false;
+    const bool is_anchored_asset =
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().is_child_bound(asset);
 
     // Check if asset is a map asset
     const bool is_map_asset = !asset->spawn_id.empty() && !is_room_spawn_id(asset->spawn_id);

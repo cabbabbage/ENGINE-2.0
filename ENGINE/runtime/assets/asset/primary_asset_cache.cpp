@@ -15,6 +15,7 @@
 #include <limits>
 #include <unordered_map>
 #include <optional>
+#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -90,6 +91,34 @@ void record_load_repairs_from_written_files(AssetInfo& info, const std::vector<f
         }
         info.mark_texture_frame_rebuild_on_load(animation_name, *frame_index, variants);
     }
+}
+
+std::unordered_map<std::string, std::vector<fs::path>> group_written_files_by_asset(
+    const std::vector<fs::path>& written_files) {
+    std::unordered_map<std::string, std::vector<fs::path>> grouped;
+    for (const auto& file_path : written_files) {
+        const fs::path normalized = file_path.lexically_normal();
+        std::vector<std::string> parts;
+        parts.reserve(8);
+        for (const auto& part : normalized) {
+            parts.push_back(part.string());
+        }
+        auto cache_it = std::find(parts.begin(), parts.end(), "cache");
+        if (cache_it == parts.end()) {
+            continue;
+        }
+        const auto asset_it = std::next(cache_it);
+        if (asset_it == parts.end() || asset_it->empty()) {
+            continue;
+        }
+        grouped[*asset_it].push_back(file_path);
+    }
+    return grouped;
+}
+
+PrimaryAssetCache::WarmupOutcome warmup_outcome_from_bundle_state(bool bundle_loaded) {
+    return bundle_loaded ? PrimaryAssetCache::WarmupOutcome::Rebuilt
+                         : PrimaryAssetCache::WarmupOutcome::Created;
 }
 
 int count_sequential_png(const fs::path& folder) {
@@ -337,11 +366,13 @@ bool PrimaryAssetCache::load_cached_only(AssetInfo& info,
 
 bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
                                            CacheManager::BundleData* out_bundle,
-                                           const std::unordered_set<std::string>* animation_filter) {
+                                           const std::unordered_set<std::string>* animation_filter,
+                                           WarmupOutcome* out_outcome) {
     const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
     const bool has_animation_filter = animation_filter && !animation_filter->empty();
-
-    repair_missing_cache_files(info, animation_filter);
+    if (out_outcome) {
+        *out_outcome = WarmupOutcome::Failed;
+    }
 
     auto bundle_contains_required_folder_animations = [&](const CacheManager::BundleData& bundle) {
         if (!info.anims_json_.is_object()) {
@@ -383,6 +414,9 @@ bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
                               bundle_variant_layout_is_valid(bundle) &&
                               bundle_contains_required_folder_animations(bundle);
     if (bundle_ready) {
+        if (out_outcome) {
+            *out_outcome = WarmupOutcome::Reused;
+        }
         if (out_bundle) {
             *out_bundle = std::move(bundle);
         }
@@ -419,14 +453,41 @@ bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
     if (out_bundle) {
         *out_bundle = std::move(rebuilt);
     }
+    if (out_outcome) {
+        *out_outcome = warmup_outcome_from_bundle_state(bundle_loaded);
+    }
     return true;
 }
 
-bool PrimaryAssetCache::repair_missing_cache_files(
-    AssetInfo& info,
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::detect_missing_cache_files(
+    const std::vector<AssetInfo*>& infos,
     const std::unordered_set<std::string>* animation_filter) const {
-    if (info.name.empty()) {
-        return true;
+    return run_missing_cache_file_batch(infos, animation_filter, true);
+}
+
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::repair_missing_cache_files(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter) const {
+    return run_missing_cache_file_batch(infos, animation_filter, false);
+}
+
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::run_missing_cache_file_batch(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter,
+    bool dry_run) const {
+    BatchRepairResult batch_result;
+    batch_result.ok = true;
+
+    std::vector<AssetInfo*> selected_infos;
+    selected_infos.reserve(infos.size());
+    for (AssetInfo* info : infos) {
+        if (!info || info->name.empty()) {
+            continue;
+        }
+        selected_infos.push_back(info);
+    }
+    if (selected_infos.empty()) {
+        return batch_result;
     }
 
     imgcache::GeneratorOptions options;
@@ -439,9 +500,12 @@ bool PrimaryAssetCache::repair_missing_cache_files(
 #endif
     options.missing_only = true;
     options.force_rebuild = false;
+    options.dry_run = dry_run;
     options.quiet_task_logs = true;
     options.effects_backend = imgcache::EffectsBackend::Auto;
-    options.filters.assets.insert(info.name);
+    for (const AssetInfo* info : selected_infos) {
+        options.filters.assets.insert(info->name);
+    }
     if (animation_filter && !animation_filter->empty()) {
         options.filters.animations = *animation_filter;
     }
@@ -449,16 +513,26 @@ bool PrimaryAssetCache::repair_missing_cache_files(
     GeneratorLogBridge logger;
     auto result = imgcache::ImageCacheGenerator::Run(options, logger);
     if (!result.ok) {
-        vibble::log::warn("[PrimaryAssetCache] Missing-file cache repair failed for " + info.name +
-                          ": " + result.error);
-        return false;
+        batch_result.ok = false;
+        batch_result.error = result.error;
+        return batch_result;
     }
 
-    if (!result.written_files.empty()) {
-        record_load_repairs_from_written_files(info, result.written_files);
-        info.consume_pending_texture_rebuild_on_load();
+    batch_result.touched_assets = std::move(result.touched_assets);
+    if (dry_run || result.written_files.empty()) {
+        return batch_result;
     }
-    return true;
+
+    batch_result.written_files_by_asset = group_written_files_by_asset(result.written_files);
+    for (AssetInfo* info : selected_infos) {
+        auto it = batch_result.written_files_by_asset.find(info->name);
+        if (it == batch_result.written_files_by_asset.end() || it->second.empty()) {
+            continue;
+        }
+        record_load_repairs_from_written_files(*info, it->second);
+        info->consume_pending_texture_rebuild_on_load();
+    }
+    return batch_result;
 }
 
 bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& animation,

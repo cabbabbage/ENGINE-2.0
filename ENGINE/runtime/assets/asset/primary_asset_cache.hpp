@@ -14,11 +14,27 @@
 
 class PrimaryAssetCache {
 public:
+    enum class WarmupOutcome {
+        Failed,
+        Reused,
+        Created,
+        Rebuilt,
+        Repaired,
+    };
+
+    struct BatchRepairResult {
+        bool ok = false;
+        std::string error;
+        std::vector<std::string> touched_assets;
+        std::unordered_map<std::string, std::vector<std::filesystem::path>> written_files_by_asset;
+    };
+
     explicit PrimaryAssetCache(SDL_Renderer* renderer);
 
     bool ensure_cache_ready(class AssetInfo& info,
                             CacheManager::BundleData* out_bundle = nullptr,
-                            const std::unordered_set<std::string>* animation_filter = nullptr);
+                            const std::unordered_set<std::string>* animation_filter = nullptr,
+                            WarmupOutcome* out_outcome = nullptr);
     bool load_cached_only(class AssetInfo& info,
                           std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                           CacheManager::BundleData& raw_bundle,
@@ -28,13 +44,22 @@ public:
                        CacheManager::BundleData& raw_bundle,
                        const std::unordered_set<std::string>* animation_filter = nullptr);
 
+    BatchRepairResult detect_missing_cache_files(
+        const std::vector<class AssetInfo*>& infos,
+        const std::unordered_set<std::string>* animation_filter = nullptr) const;
+    BatchRepairResult repair_missing_cache_files(
+        const std::vector<class AssetInfo*>& infos,
+        const std::unordered_set<std::string>* animation_filter = nullptr) const;
+
     bool save_current(const class AssetInfo& info);
 
 private:
     SDL_Renderer* renderer_ = nullptr;
 
-    bool repair_missing_cache_files(AssetInfo& info,
-                                    const std::unordered_set<std::string>* animation_filter = nullptr) const;
+    BatchRepairResult run_missing_cache_file_batch(
+        const std::vector<class AssetInfo*>& infos,
+        const std::unordered_set<std::string>* animation_filter,
+        bool dry_run) const;
     bool build_bundle_from_sources(const AssetInfo& info,
                                    CacheManager::BundleData& out_data,
                                    const std::unordered_set<std::string>* animation_filter = nullptr);

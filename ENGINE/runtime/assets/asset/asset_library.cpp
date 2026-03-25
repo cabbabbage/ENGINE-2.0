@@ -487,44 +487,176 @@ void AssetLibrary::ensureAllAnimationsLoaded(SDL_Renderer* renderer) {
 
     const auto begin = std::chrono::steady_clock::now();
     PrimaryAssetCache primary_cache(renderer);
-    std::size_t prepared_now = 0;
-    std::size_t already_cached = 0;
+    WarmupPassStats stats;
+    std::vector<std::shared_ptr<AssetInfo>> load_candidates;
+    std::vector<AssetInfo*> repair_candidates;
+    std::vector<std::string> reused_candidate_names;
 
     for (auto& [name, info] : info_by_name_) {
         if (!info) {
             continue;
         }
         if (!info->animations.empty()) {
-            ++already_cached;
+            ++stats.already_loaded;
             continue;
         }
-        if (primary_cache.ensure_cache_ready(*info)) {
-            ++prepared_now;
+
+        PrimaryAssetCache::WarmupOutcome outcome = PrimaryAssetCache::WarmupOutcome::Failed;
+        if (!primary_cache.ensure_cache_ready(*info, nullptr, nullptr, &outcome)) {
+            stats.cache_failed.push_back(name);
+            vibble::log::warn(std::string("[AssetLibrary] Preload pass 1 cache_failed '") + name + "'");
+            continue;
+        }
+
+        load_candidates.push_back(info);
+        switch (outcome) {
+        case PrimaryAssetCache::WarmupOutcome::Created:
+            stats.cache_created.push_back(name);
+            vibble::log::info(std::string("[AssetLibrary] Preload pass 1 cache_created '") + name + "'");
+            break;
+        case PrimaryAssetCache::WarmupOutcome::Rebuilt:
+            stats.cache_rebuilt.push_back(name);
+            vibble::log::info(std::string("[AssetLibrary] Preload pass 1 cache_rebuilt '") + name + "'");
+            break;
+        case PrimaryAssetCache::WarmupOutcome::Reused:
+            repair_candidates.push_back(info.get());
+            reused_candidate_names.push_back(name);
+            break;
+        case PrimaryAssetCache::WarmupOutcome::Repaired:
+            stats.cache_repaired.push_back(name);
+            vibble::log::info(std::string("[AssetLibrary] Preload pass 1 cache_repaired '") + name + "'");
+            break;
+        case PrimaryAssetCache::WarmupOutcome::Failed:
+            stats.cache_failed.push_back(name);
+            vibble::log::warn(std::string("[AssetLibrary] Preload pass 1 cache_failed '") + name + "'");
+            break;
         }
     }
 
-    std::size_t loaded_now = 0;
-    for (auto& [name, info] : info_by_name_) {
-        if (!info) {
-            continue;
-        }
-        if (!info->animations.empty()) {
-            continue;
-        }
-        info->loadAnimations(renderer, true, true);
-        ++loaded_now;
-    }
-    animations_fully_cached_ = true;
+    if (!repair_candidates.empty()) {
+        auto detect_result = primary_cache.detect_missing_cache_files(repair_candidates);
+        std::unordered_set<std::string> repaired_names;
 
-    if (loaded_now > 0) {
-        const auto end = std::chrono::steady_clock::now();
-        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-        vibble::log::info(std::string("[AssetLibrary] Prepared caches for ") + std::to_string(prepared_now) +
-                          " asset(s), then loaded animations for " + std::to_string(loaded_now) +
-                          " additional asset(s) (" + std::to_string(already_cached) + ") in " +
-                          std::to_string(elapsed_ms) + "ms");
+        if (!detect_result.ok) {
+            vibble::log::warn(std::string("[AssetLibrary] Preload pass 1 repair detection failed: ") + detect_result.error);
+        } else if (!detect_result.touched_assets.empty()) {
+            std::unordered_set<std::string> touched_set(detect_result.touched_assets.begin(),
+                                                        detect_result.touched_assets.end());
+            std::vector<AssetInfo*> touched_infos;
+            touched_infos.reserve(detect_result.touched_assets.size());
+            for (AssetInfo* info : repair_candidates) {
+                if (info && touched_set.find(info->name) != touched_set.end()) {
+                    touched_infos.push_back(info);
+                }
+            }
+
+            auto repair_result = primary_cache.repair_missing_cache_files(touched_infos);
+            if (!repair_result.ok) {
+                vibble::log::warn(std::string("[AssetLibrary] Preload pass 1 batched repair failed: ") + repair_result.error);
+            } else {
+                for (const auto& [asset_name, written_files] : repair_result.written_files_by_asset) {
+                    if (written_files.empty()) {
+                        continue;
+                    }
+                    repaired_names.insert(asset_name);
+                    stats.cache_repaired.push_back(asset_name);
+                    vibble::log::info(std::string("[AssetLibrary] Preload pass 1 cache_repaired '") + asset_name + "'");
+                }
+            }
+        }
+
+        for (const auto& name : reused_candidate_names) {
+            if (repaired_names.find(name) != repaired_names.end()) {
+                continue;
+            }
+            stats.cache_reused.push_back(name);
+            vibble::log::info(std::string("[AssetLibrary] Preload pass 1 cache_reused '") + name + "'");
+        }
     }
+
+    const auto preload_end = std::chrono::steady_clock::now();
+    const auto preload_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - begin).count();
+    vibble::log::info(
+        std::string("[AssetLibrary] Preload pass 1 summary: created=") + std::to_string(stats.cache_created.size()) +
+        " " + summarize_names(stats.cache_created) +
+        ", rebuilt=" + std::to_string(stats.cache_rebuilt.size()) +
+        " " + summarize_names(stats.cache_rebuilt) +
+        ", repaired=" + std::to_string(stats.cache_repaired.size()) +
+        " " + summarize_names(stats.cache_repaired) +
+        ", reused=" + std::to_string(stats.cache_reused.size()) +
+        " " + summarize_names(stats.cache_reused) +
+        ", failed=" + std::to_string(stats.cache_failed.size()) +
+        " " + summarize_names(stats.cache_failed) +
+        ", already_loaded=" + std::to_string(stats.already_loaded) +
+        " in " + std::to_string(preload_ms) + "ms");
+
+    const auto load_begin = std::chrono::steady_clock::now();
+    for (const auto& info : load_candidates) {
+        if (!info || !info->animations.empty()) {
+            continue;
+        }
+        try {
+            const auto item_begin = std::chrono::steady_clock::now();
+            info->loadAnimations(renderer, true, true);
+            const auto item_end = std::chrono::steady_clock::now();
+            const auto item_ms = std::chrono::duration_cast<std::chrono::milliseconds>(item_end - item_begin).count();
+            stats.load_succeeded.push_back(info->name);
+            vibble::log::info(std::string("[AssetLibrary] Pure load pass loaded '") + info->name + "' in " +
+                              std::to_string(item_ms) + "ms");
+        } catch (const std::exception& ex) {
+            stats.load_failed.push_back(info->name);
+            vibble::log::error(std::string("[AssetLibrary] Pure load pass failed for '") + info->name +
+                               "': " + ex.what());
+        } catch (...) {
+            stats.load_failed.push_back(info->name);
+            vibble::log::error(std::string("[AssetLibrary] Pure load pass failed for '") + info->name +
+                               "' due to an unknown error.");
+        }
+    }
+    const auto load_end = std::chrono::steady_clock::now();
+    const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count();
+
+    animations_fully_cached_ = stats.load_failed.empty();
+    vibble::log::info(
+        std::string("[AssetLibrary] Pure load pass summary: loaded=") +
+        std::to_string(stats.load_succeeded.size()) + " " + summarize_names(stats.load_succeeded) +
+        ", failed=" + std::to_string(stats.load_failed.size()) + " " + summarize_names(stats.load_failed) +
+        ", already_loaded=" + std::to_string(stats.already_loaded) +
+        " in " + std::to_string(load_ms) + "ms");
 }
+
+std::string summarize_names(std::vector<std::string> names, std::size_t max_names = 8) {
+        if (names.empty()) {
+                return "[]";
+        }
+
+        std::sort(names.begin(), names.end());
+        std::ostringstream oss;
+        oss << "[";
+        const std::size_t count = std::min(max_names, names.size());
+        for (std::size_t idx = 0; idx < count; ++idx) {
+                if (idx > 0) {
+                        oss << ", ";
+                }
+                oss << names[idx];
+        }
+        if (names.size() > count) {
+                oss << ", +" << (names.size() - count) << " more";
+        }
+        oss << "]";
+        return oss.str();
+}
+
+struct WarmupPassStats {
+        std::vector<std::string> cache_created;
+        std::vector<std::string> cache_rebuilt;
+        std::vector<std::string> cache_repaired;
+        std::vector<std::string> cache_reused;
+        std::vector<std::string> cache_failed;
+        std::vector<std::string> load_succeeded;
+        std::vector<std::string> load_failed;
+        std::size_t already_loaded = 0;
+};
 
 void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names) {
     vibble::log::debug(std::string("[AssetLibrary] loadAnimationsFor: count=") + std::to_string(names.size()));

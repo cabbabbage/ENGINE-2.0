@@ -998,7 +998,6 @@ void SceneRenderer::invalidate_dynamic_boundary_system() {
 }
 
 void SceneRenderer::render() {
-    static int s_boundary_render_debug_counter = 0;
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
@@ -1181,15 +1180,6 @@ void SceneRenderer::render() {
             queue_boundary_sprite(sprite, next_boundary_depth);
             continue;
         }
-    }
-
-    ++s_boundary_render_debug_counter;
-    if ((s_boundary_render_debug_counter % 120) == 0) {
-        vibble::log::info(std::string{"[SceneRenderer] boundary draw stats: sprites="} +
-                          std::to_string(boundary_sprites.size()) +
-                          " queued=" + std::to_string(queued_boundary_sprites) +
-                          " width=[" + std::to_string(min_boundary_width) + "," + std::to_string(max_boundary_width) + "]" +
-                          " height=[" + std::to_string(min_boundary_height) + "," + std::to_string(max_boundary_height) + "]");
     }
 
     geometry_batcher_->flush();

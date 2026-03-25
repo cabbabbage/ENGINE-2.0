@@ -132,7 +132,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                                    world::WorldGrid& grid,
                                    Assets* assets,
                                    float delta_ms) {
-    static int s_debug_frame_counter = 0;
     active_boundary_sprites_.clear();
     if (!initialized_ || !renderer_ || !asset_library_ || !assets) {
         return;
@@ -396,13 +395,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             return a.world_pos.x < b.world_pos.x;
         });
 
-    ++s_debug_frame_counter;
-    if ((s_debug_frame_counter % 120) == 0) {
-        vibble::log::info(std::string{"[DynamicBoundarySystem] frame stats: types="} +
-                          std::to_string(boundary_types_.size()) +
-                          " static_assignments=" + std::to_string(static_assignments_.size()) +
-                          " active_sprites=" + std::to_string(active_boundary_sprites_.size()));
-    }
 }
 
 std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const DynamicBoundarySystem::BoundaryKey& key) const noexcept {

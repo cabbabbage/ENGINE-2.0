@@ -2232,10 +2232,10 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -13,
+                "depth_offset": -50,
                 "name": "eyes",
-                "texture_x": 191,
-                "texture_y": 170
+                "texture_x": 236,
+                "texture_y": 165
               }
             ]
           ],
@@ -2335,7 +2335,7 @@
             "flipMovementX": false,
             "flipMovementY": true,
             "flipX": false,
-            "flipY": true,
+            "flipY": false,
             "reverse": false
           },
           "flipped_source": false,
@@ -2422,7 +2422,7 @@
             "flipMovementX": false,
             "flipMovementY": true,
             "flipX": false,
-            "flipY": true,
+            "flipY": false,
             "reverse": false
           },
           "flipped_source": false,
@@ -3438,9 +3438,9 @@
           ],
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -3499,16 +3499,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -184,
-              "dz": -524,
+              "dx": -16,
+              "dz": 224,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3080,
-              "origional_width": 3120,
+              "origional_height": 3104,
+              "origional_width": 2912,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,

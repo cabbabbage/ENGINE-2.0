@@ -1,9 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
-#include <iostream>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -13,10 +12,8 @@
 #include "DockableCollapsible.hpp"
 #include "devtools/float_slider_widget.hpp"
 #include "rendering/render/image_effect_settings.hpp"
-#include <nlohmann/json.hpp>
 
 class Assets;
-class AssetInfo;
 class DMDropdown;
 class DropdownWidget;
 class DMButton;
@@ -26,11 +23,7 @@ class Input;
 
 class ForegroundBackgroundEffectPanel : public DockableCollapsible {
 public:
-    enum class EffectMode {
-        Foreground,
-        Background
-};
-    explicit ForegroundBackgroundEffectPanel(Assets* assets, int x = 160, int y = 160);
+    explicit ForegroundBackgroundEffectPanel(Assets* assets, int x = 0, int y = 0);
     ~ForegroundBackgroundEffectPanel() override;
 
     void set_assets(Assets* assets);
@@ -39,7 +32,6 @@ public:
     void update(const Input& input, int screen_w, int screen_h) override;
     bool handle_event(const SDL_Event& e) override;
     void render(SDL_Renderer* renderer) const override;
-    void render_content(SDL_Renderer* renderer) const override;
 
     void open();
 
@@ -49,6 +41,21 @@ public:
     bool is_point_inside(int x, int y) const;
 
 private:
+    enum class PreviewSide {
+        Foreground,
+        Background
+    };
+
+    struct SliderSet {
+        std::unique_ptr<FloatSliderWidget> contrast;
+        std::unique_ptr<FloatSliderWidget> brightness;
+        std::unique_ptr<FloatSliderWidget> blur;
+        std::unique_ptr<FloatSliderWidget> saturation_r;
+        std::unique_ptr<FloatSliderWidget> saturation_g;
+        std::unique_ptr<FloatSliderWidget> saturation_b;
+        std::unique_ptr<FloatSliderWidget> hue;
+    };
+
     void layout_custom_content(int screen_w, int screen_h) const override;
 
     void build_ui();
@@ -57,88 +64,110 @@ private:
     void recreate_asset_dropdown();
     void handle_asset_selection(int index);
 
-    void update_controls_from_settings(const camera_effects::ImageEffectSettings& settings);
-    camera_effects::ImageEffectSettings read_current_settings() const;
-    void on_slider_changed();
+    void configure_slider_set(SliderSet& set, const std::string& prefix, PreviewSide side);
+    void set_slider_values(SliderSet& set, const camera_effects::ImageEffectSettings& settings);
+    camera_effects::ImageEffectSettings read_slider_values(const SliderSet& set) const;
+    void on_slider_changed(PreviewSide side);
 
-    void set_mode(EffectMode mode);
-    void save_current_mode_settings();
-    void load_current_mode_settings();
-
-    void rebuild_previews();
+    void schedule_preview_rebuild(bool fg, bool bg, Uint32 delay_ms = kPreviewDebounceMs);
+    void update_pending_previews(Uint64 now_ms);
+    void rebuild_preview(PreviewSide side);
     bool ensure_preview_source();
+    bool resolve_preview_source_path(std::string& out_path) const;
+    bool copy_preview_source_to_temp(const std::string& source_path,
+                                     std::string& out_copy_path,
+                                     std::string& error) const;
+    bool generate_preview_with_cli(PreviewSide side,
+                                   const std::string& input_copy_path,
+                                   const camera_effects::ImageEffectSettings& settings,
+                                   std::string& out_path,
+                                   std::string& error) const;
+    void load_side_preview_texture(PreviewSide side, const std::string& image_path);
+    void sync_preview_widgets();
     void destroy_preview_textures();
+    void destroy_base_preview_texture();
+    void destroy_side_preview_texture(PreviewSide side);
 
-    void apply_and_regenerate();
+    void load_committed_settings_from_manifest();
+    void save_committed_settings_to_manifest(const camera_effects::ImageEffectSettings& fg,
+                                             const camera_effects::ImageEffectSettings& bg);
+    void apply_and_queue_rebuild();
     void restore_defaults();
-    void purge_mismatched_caches(std::uint64_t fg_hash, std::uint64_t bg_hash, bool force_purge = false);
-    void request_preview_rebuild();
+    void discard_unsaved_changes();
+    void refresh_from_committed();
+
+    bool settings_equal(const camera_effects::ImageEffectSettings& a,
+                        const camera_effects::ImageEffectSettings& b,
+                        float epsilon = 1e-5f) const;
+    void refresh_unsaved_state();
+    void update_title_state();
+    void sync_modal_geometry(int screen_w, int screen_h);
     bool can_render_preview() const;
 
-    void save_depth_cue_settings_to_manifest();
-    bool load_depth_cue_settings_from_manifest();
-    void update_preview_and_manifest();
-    void generate_preview_with_cli(const std::string& image_path, const camera_effects::ImageEffectSettings& settings);
-    void load_preview_texture(const std::string& image_path);
-    bool settings_equal(const camera_effects::ImageEffectSettings& a, const camera_effects::ImageEffectSettings& b, float epsilon = 1e-5f) const;
-    bool should_skip_preview(const std::string& source_path, EffectMode mode, const camera_effects::ImageEffectSettings& settings) const;
+    void on_panel_closed();
 
 private:
     Assets* assets_ = nullptr;
-    EffectMode current_mode_ = EffectMode::Foreground;
 
     std::vector<std::string> asset_names_;
     std::string selected_asset_;
-    std::string preview_animation_id_;
-    std::shared_ptr<AssetInfo> preview_info_;
 
     std::unique_ptr<Widget> header_spacer_;
-
-    std::unique_ptr<DMButton> fg_mode_button_;
-    std::unique_ptr<DMButton> bg_mode_button_;
-    std::unique_ptr<ButtonWidget> fg_mode_button_widget_;
-    std::unique_ptr<ButtonWidget> bg_mode_button_widget_;
-
     std::unique_ptr<DMDropdown> asset_dropdown_;
     std::unique_ptr<DropdownWidget> asset_dropdown_widget_;
 
-    std::unique_ptr<Widget> preview_;
-    std::unique_ptr<FloatSliderWidget> contrast_;
-    std::unique_ptr<FloatSliderWidget> brightness_;
-    std::unique_ptr<FloatSliderWidget> blur_;
-    std::unique_ptr<FloatSliderWidget> saturation_r_;
-    std::unique_ptr<FloatSliderWidget> saturation_g_;
-    std::unique_ptr<FloatSliderWidget> saturation_b_;
-    std::unique_ptr<FloatSliderWidget> hue_;
+    std::unique_ptr<Widget> fg_label_;
+    std::unique_ptr<Widget> bg_label_;
+    SliderSet fg_sliders_{};
+    SliderSet bg_sliders_{};
+    std::unique_ptr<Widget> fg_preview_;
+    std::unique_ptr<Widget> bg_preview_;
 
     std::unique_ptr<DMButton> apply_button_;
     std::unique_ptr<ButtonWidget> apply_button_widget_;
     std::unique_ptr<DMButton> restore_defaults_button_;
     std::unique_ptr<ButtonWidget> restore_defaults_button_widget_;
+    std::unique_ptr<DMButton> discard_button_;
+    std::unique_ptr<ButtonWidget> discard_button_widget_;
 
     SDL_Texture* base_preview_texture_ = nullptr;
     int base_preview_w_ = 0;
     int base_preview_h_ = 0;
-    SDL_Texture* current_preview_texture_ = nullptr;
-    int current_preview_w_ = 0;
-    int current_preview_h_ = 0;
 
-    camera_effects::ImageEffectSettings fg_settings_{};
-    camera_effects::ImageEffectSettings bg_settings_{};
-    camera_effects::ImageEffectSettings saved_fg_{};
-    camera_effects::ImageEffectSettings saved_bg_{};
-    camera_effects::ImageEffectSettings current_settings_{};
-    camera_effects::ImageEffectSettings last_preview_settings_{};
-    EffectMode last_preview_mode_ = EffectMode::Foreground;
-    std::string last_preview_asset_;
-    std::string last_preview_source_path_;
+    SDL_Texture* fg_preview_texture_ = nullptr;
+    int fg_preview_w_ = 0;
+    int fg_preview_h_ = 0;
 
-    bool preview_dirty_ = true;
+    SDL_Texture* bg_preview_texture_ = nullptr;
+    int bg_preview_w_ = 0;
+    int bg_preview_h_ = 0;
+
+    camera_effects::ImageEffectSettings committed_fg_{};
+    camera_effects::ImageEffectSettings committed_bg_{};
+    camera_effects::ImageEffectSettings draft_fg_{};
+    camera_effects::ImageEffectSettings draft_bg_{};
+
     bool has_unsaved_changes_ = false;
 
-    static constexpr int kPreviewPanelWidth = 320;
-    mutable SDL_Rect preview_rect_{0, 0, 0, 0};
+    bool preview_source_dirty_ = true;
+    bool fg_preview_pending_ = false;
+    bool bg_preview_pending_ = false;
+    Uint64 fg_preview_due_ms_ = 0;
+    Uint64 bg_preview_due_ms_ = 0;
+
+    std::string preview_source_path_;
+    std::string preview_source_copy_path_;
+    std::string preview_source_asset_;
+
+    std::string fg_preview_status_;
+    std::string bg_preview_status_;
+
+    std::filesystem::path preview_temp_root_;
+    int last_modal_body_height_ = -1;
 
     CloseCallback close_callback_;
+    bool close_callback_running_ = false;
+
+    static constexpr Uint32 kPreviewDebounceMs = 150;
 };
 

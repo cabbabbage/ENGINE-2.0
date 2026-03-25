@@ -234,6 +234,11 @@ struct WorkItem {
     fs::path out_foreground_dir;
     fs::path out_background_dir;
 
+    // Per-task write mask. Legacy/full rebuilds write all variants.
+    bool write_normal = true;
+    bool write_foreground = true;
+    bool write_background = true;
+
     EffectsParams fx_foreground;
     EffectsParams fx_background;
 };

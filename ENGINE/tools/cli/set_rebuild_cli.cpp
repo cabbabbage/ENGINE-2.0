@@ -2,7 +2,7 @@
 //
 // CLI tool to mark frames for rebuild in cache/rebuild_queue.json
 // Replaces set_rebuild_values.py
-// Supports modes: all, asset, animation, frame
+// Supports modes: all, effects, asset, animation, frame
 
 #include "asset_metadata.hpp"
 #include "image_cache_generator.hpp"
@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include <string>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <optional>
@@ -45,6 +46,38 @@ void mark_all_for_rebuild(json& queue,
                 continue;
             }
             MarkAllFrames(*anim_entry, static_cast<int>(frames.size()), true);
+        }
+    }
+}
+
+// Mark only foreground/background effect variants for rebuild.
+void mark_effect_layers_for_rebuild(json& queue,
+                                    const fs::path& manifest_dir,
+                                    const fs::path& repo_root,
+                                    const fs::path& cache_root) {
+    const fs::path assets_root = repo_root / "resources" / "assets";
+    const auto assets = DiscoverAssetNames(assets_root);
+    for (const auto& asset_name : assets) {
+        AssetRecord asset = BuildAssetRecord(manifest_dir, repo_root, cache_root, asset_name);
+        for (const auto& anim_name : asset.anim_names) {
+            ordered_json anim_meta = ordered_json::object();
+            const ordered_json* anims = AnimationsObject(asset.meta);
+            if (anims && anims->contains(anim_name) && (*anims)[anim_name].is_object()) {
+                anim_meta = (*anims)[anim_name];
+            }
+            const fs::path anim_dir = ResolveAnimDir(asset.source_dir, anim_name, anim_meta, asset.discovered_anims);
+            const auto frames = ImageCacheGenerator::EnumerateSourceFrames(anim_dir);
+            if (frames.empty()) {
+                continue;
+            }
+            ordered_json* anim_entry = FindAnimEntry(queue, asset_name, anim_name, true);
+            if (!anim_entry) {
+                continue;
+            }
+            MarkAllFrames(*anim_entry,
+                          static_cast<int>(frames.size()),
+                          true,
+                          static_cast<std::uint8_t>(kVariantForeground | kVariantBackground));
         }
     }
 }
@@ -137,6 +170,7 @@ void print_usage(const char* prog_name) {
     std::cout << "Usage: " << prog_name << " <mode> [args...] [--manifest <path>] [--cache-root <path>]\n\n";
     std::cout << "MODES:\n";
     std::cout << "  all                              Mark all frames for rebuild\n";
+    std::cout << "  effects                          Mark foreground/background variants only\n";
     std::cout << "  asset <name>                     Mark all frames in an asset\n";
     std::cout << "  animation <asset> <animation>    Mark all frames in an animation\n";
     std::cout << "  frame <asset> <animation> <idx>  Mark a specific frame\n\n";
@@ -145,6 +179,7 @@ void print_usage(const char* prog_name) {
     std::cout << "  --cache-root <path>              Path to cache root (default: <repo>/cache)\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << prog_name << " all\n";
+    std::cout << "  " << prog_name << " effects\n";
     std::cout << "  " << prog_name << " asset player\n";
     std::cout << "  " << prog_name << " animation player idle\n";
     std::cout << "  " << prog_name << " frame player idle 5\n";
@@ -195,7 +230,7 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    else if (mode != "all") {
+    else if (mode != "all" && mode != "effects") {
         std::cerr << "Error: unknown mode '" << mode << "'\n";
         print_usage(argv[0]);
         return 2;
@@ -253,6 +288,10 @@ int main(int argc, char** argv) {
     if (mode == "all") {
         std::cout << "Marking all frames for rebuild...\n";
         mark_all_for_rebuild(rebuild_queue, manifest_dir, repo_root, cache_root);
+    }
+    else if (mode == "effects") {
+        std::cout << "Marking foreground/background effect variants for rebuild...\n";
+        mark_effect_layers_for_rebuild(rebuild_queue, manifest_dir, repo_root, cache_root);
     }
     else if (mode == "asset") {
         std::cout << "Marking asset '" << asset_name << "' for rebuild...\n";

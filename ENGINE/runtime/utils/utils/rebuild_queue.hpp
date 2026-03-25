@@ -13,6 +13,7 @@ public:
     RebuildQueueCoordinator();
 
     void request_full_asset_rebuild() const;
+    void request_effect_layers_rebuild() const;
     void request_asset(const std::string& asset_name,
                        const std::vector<std::string>& animations = {}) const;
     void request_animation(const std::string& asset_name, const std::string& animation) const;
@@ -31,6 +32,7 @@ private:
     std::filesystem::path cache_root_;
 
     void mark_all_frames_for_rebuild() const;
+    void mark_effect_layers_for_rebuild() const;
     void mark_asset_for_rebuild(const std::string& asset_name) const;
     void mark_animation_for_rebuild(const std::string& asset_name, const std::string& animation) const;
     void mark_frame_for_rebuild(const std::string& asset_name, const std::string& animation, int frame_index) const;

@@ -67,6 +67,10 @@ void RebuildQueueCoordinator::request_full_asset_rebuild() const {
     mark_all_frames_for_rebuild();
 }
 
+void RebuildQueueCoordinator::request_effect_layers_rebuild() const {
+    mark_effect_layers_for_rebuild();
+}
+
 void RebuildQueueCoordinator::request_asset(const std::string& asset_name,
                                             const std::vector<std::string>& animations) const {
     if (asset_name.empty()) {
@@ -153,6 +157,11 @@ bool RebuildQueueCoordinator::run_asset_tool(const std::string& command_prefix) 
 void RebuildQueueCoordinator::mark_all_frames_for_rebuild() const {
     const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
     run_cpp_tool(tool, {"all", "--cache-root", cache_root_.string()}, "");
+}
+
+void RebuildQueueCoordinator::mark_effect_layers_for_rebuild() const {
+    const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
+    run_cpp_tool(tool, {"effects", "--cache-root", cache_root_.string()}, "");
 }
 
 void RebuildQueueCoordinator::mark_asset_for_rebuild(const std::string& asset_name) const {

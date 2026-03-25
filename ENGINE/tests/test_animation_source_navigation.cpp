@@ -12,7 +12,6 @@ namespace {
 
 struct AnimationSourceFixture {
     std::shared_ptr<AssetInfo> info = std::make_shared<AssetInfo>("animation_source_navigation_test");
-    std::vector<std::unique_ptr<AnimationFrame>> owned_frames;
 
     Animation& add_file_animation(const std::string& id, int frame_count = 1) {
         Animation animation;
@@ -20,8 +19,6 @@ struct AnimationSourceFixture {
         auto& frames = animation.primary_frames();
         frames.resize(frame_count);
         for (int i = 0; i < frame_count; ++i) {
-            owned_frames.push_back(std::make_unique<AnimationFrame>());
-            owned_frames.back()->frame_index = i;
             frames[static_cast<std::size_t>(i)].frame_index = i;
         }
         auto [it, inserted] = info->animations.emplace(id, std::move(animation));
@@ -32,8 +29,6 @@ struct AnimationSourceFixture {
             existing_frames.clear();
             existing_frames.resize(frame_count);
             for (int i = 0; i < frame_count; ++i) {
-                owned_frames.push_back(std::make_unique<AnimationFrame>());
-                owned_frames.back()->frame_index = i;
                 existing_frames[static_cast<std::size_t>(i)].frame_index = i;
             }
         }

@@ -4,6 +4,7 @@
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "core/manifest/depth_cue_settings.hpp"
 #include <SDL3/SDL.h>
 #include <atomic>
 #include <functional>
@@ -148,6 +149,9 @@ public:
     void force_camera_view_refresh();
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
+    const depth_cue::DepthCueSettings& depth_cue_settings() const { return depth_cue_settings_; }
+    void set_depth_cue_settings(const depth_cue::DepthCueSettings& settings);
+    std::uint64_t depth_cue_settings_version() const { return depth_cue_settings_version_; }
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
     void set_movement_debug_visible(bool visible);
@@ -310,6 +314,8 @@ private:
     bool suppress_dev_renderer_ = false;
     bool force_high_quality_rendering_ = false;
     bool depth_effects_enabled_ = true;
+    depth_cue::DepthCueSettings depth_cue_settings_{};
+    std::uint64_t depth_cue_settings_version_ = 1;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool anchor_point_debug_enabled_ = false;

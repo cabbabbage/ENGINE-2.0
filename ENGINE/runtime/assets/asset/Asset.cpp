@@ -266,6 +266,7 @@ Asset::Asset(const Asset& o)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
+    , composite_depth_cue_settings_version_(o.composite_depth_cue_settings_version_)
 {
 
         clear_render_caches();
@@ -340,6 +341,7 @@ Asset& Asset::operator=(const Asset& o) {
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
+        composite_depth_cue_settings_version_ = o.composite_depth_cue_settings_version_;
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();

@@ -172,7 +172,7 @@ public:
     void set_status(std::string status) { status_ = std::move(status); }
 
     void set_preferred_height(int height) {
-        const int clamped = std::max(180, height);
+        const int clamped = std::max(96, height);
         if (preferred_height_ == clamped) {
             return;
         }
@@ -330,7 +330,7 @@ ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets,
     set_col_gap(DMSpacing::item_gap());
     set_close_button_enabled(true);
     set_header_button_style(&DMStyles::AccentButton());
-    set_scroll_enabled(true);
+    set_scroll_enabled(false);
     set_visible(false);
 
     std::error_code ec;
@@ -456,6 +456,11 @@ void ForegroundBackgroundEffectPanel::build_ui() {
     discard_button_ = std::make_unique<DMButton>("Cancel", &DMStyles::DeleteButton(), 0, DMButton::height());
     discard_button_widget_ = std::make_unique<ButtonWidget>(discard_button_.get(), [this]() { this->close(); });
 
+    edit_depth_settings_button_ = std::make_unique<DMButton>("Edit Depth Settings", &DMStyles::AccentButton(), 0, DMButton::height());
+    edit_depth_settings_button_widget_ = std::make_unique<ButtonWidget>(
+        edit_depth_settings_button_.get(),
+        [this]() { this->enter_live_depth_settings_editor(); });
+
     fill_spacer_ = std::make_unique<FlexibleSpacerWidget>(0);
 
     rebuild_rows();
@@ -504,6 +509,10 @@ void ForegroundBackgroundEffectPanel::rebuild_rows() {
     }
     if (!action_row.empty()) {
         rows.push_back(std::move(action_row));
+    }
+
+    if (edit_depth_settings_button_widget_) {
+        rows.push_back({edit_depth_settings_button_widget_.get()});
     }
 
     if (fill_spacer_) {
@@ -666,7 +675,7 @@ void ForegroundBackgroundEffectPanel::on_slider_changed(PreviewSide side) {
     refresh_unsaved_state();
     schedule_preview_rebuild(side == PreviewSide::Foreground,
                              side == PreviewSide::Background,
-                             kPreviewDebounceMs);
+                             0);
 }
 
 void ForegroundBackgroundEffectPanel::schedule_preview_rebuild(bool fg, bool bg, Uint32 delay_ms) {
@@ -1023,19 +1032,13 @@ void ForegroundBackgroundEffectPanel::load_side_preview_texture(PreviewSide side
 void ForegroundBackgroundEffectPanel::sync_preview_widgets() {
     auto* fg_widget = dynamic_cast<PreviewPaneWidget*>(fg_preview_.get());
     if (fg_widget) {
-        SDL_Texture* texture = fg_preview_texture_ ? fg_preview_texture_ : base_preview_texture_;
-        int width = fg_preview_texture_ ? fg_preview_w_ : base_preview_w_;
-        int height = fg_preview_texture_ ? fg_preview_h_ : base_preview_h_;
-        fg_widget->set_texture(texture, width, height);
+        fg_widget->set_texture(fg_preview_texture_, fg_preview_w_, fg_preview_h_);
         fg_widget->set_status(fg_preview_status_);
     }
 
     auto* bg_widget = dynamic_cast<PreviewPaneWidget*>(bg_preview_.get());
     if (bg_widget) {
-        SDL_Texture* texture = bg_preview_texture_ ? bg_preview_texture_ : base_preview_texture_;
-        int width = bg_preview_texture_ ? bg_preview_w_ : base_preview_w_;
-        int height = bg_preview_texture_ ? bg_preview_h_ : base_preview_h_;
-        bg_widget->set_texture(texture, width, height);
+        bg_widget->set_texture(bg_preview_texture_, bg_preview_w_, bg_preview_h_);
         bg_widget->set_status(bg_preview_status_);
     }
 }
@@ -1220,6 +1223,15 @@ void ForegroundBackgroundEffectPanel::discard_unsaved_changes() {
     refresh_from_committed();
 }
 
+void ForegroundBackgroundEffectPanel::enter_live_depth_settings_editor() {
+    close();
+    if (edit_depth_settings_callback_ && !edit_depth_callback_running_) {
+        edit_depth_callback_running_ = true;
+        edit_depth_settings_callback_();
+        edit_depth_callback_running_ = false;
+    }
+}
+
 void ForegroundBackgroundEffectPanel::refresh_from_committed() {
     draft_fg_ = committed_fg_;
     draft_bg_ = committed_bg_;
@@ -1275,24 +1287,36 @@ void ForegroundBackgroundEffectPanel::sync_modal_geometry(int screen_w, int scre
     set_available_height_override(available_body);
 
     const int content_width = std::max(1, screen_w - padding_ * 2);
-    const int content_without_fill = estimate_content_height_without_fill(content_width);
-    const int fill_height = std::max(0, available_body - content_without_fill);
-
-    if (auto* flexible = dynamic_cast<FlexibleSpacerWidget*>(fill_spacer_.get())) {
-        flexible->set_height(fill_height);
-    }
-
-    last_modal_body_height_ = available_body;
-
     auto* fg_widget = dynamic_cast<PreviewPaneWidget*>(fg_preview_.get());
     auto* bg_widget = dynamic_cast<PreviewPaneWidget*>(bg_preview_.get());
-    const int preview_height = std::max(260, std::min(460, available_body / 2));
+    constexpr int kPreviewMinHeight = 96;
+    constexpr int kPreviewMaxHeight = 280;
+    if (fg_widget) {
+        fg_widget->set_preferred_height(kPreviewMinHeight);
+    }
+    if (bg_widget) {
+        bg_widget->set_preferred_height(kPreviewMinHeight);
+    }
+
+    const int base_content_without_fill = estimate_content_height_without_fill(content_width);
+    const int available_for_growth = std::max(0, available_body - base_content_without_fill);
+    const int preview_height = std::clamp(kPreviewMinHeight + available_for_growth,
+                                          kPreviewMinHeight,
+                                          kPreviewMaxHeight);
     if (fg_widget) {
         fg_widget->set_preferred_height(preview_height);
     }
     if (bg_widget) {
         bg_widget->set_preferred_height(preview_height);
     }
+
+    const int content_without_fill = estimate_content_height_without_fill(content_width);
+    const int fill_height = std::max(0, available_body - content_without_fill);
+    if (auto* flexible = dynamic_cast<FlexibleSpacerWidget*>(fill_spacer_.get())) {
+        flexible->set_height(fill_height);
+    }
+
+    last_modal_body_height_ = available_body;
 }
 
 int ForegroundBackgroundEffectPanel::estimate_content_height_without_fill(int content_width) const {

@@ -25,6 +25,7 @@ struct MapData {
     nlohmann::json map_boundary_data = nlohmann::json::object();
     nlohmann::json fog_settings = nlohmann::json::object();
     nlohmann::json map_assets_data = nlohmann::json::object();
+    nlohmann::json depth_cue_settings = nlohmann::json::object();
     nlohmann::json dev_map_settings = nlohmann::json::object();
 
     nlohmann::json extras = nlohmann::json::object();
@@ -59,6 +60,7 @@ struct MapData {
         capture_known("map_boundary_data", data.map_boundary_data, nlohmann::json::object());
         capture_known("fog_settings", data.fog_settings, nlohmann::json::object());
         capture_known("map_assets_data", data.map_assets_data, nlohmann::json::object());
+        capture_known("depth_cue_settings", data.depth_cue_settings, nlohmann::json::object());
         capture_known("dev_map_settings", data.dev_map_settings, nlohmann::json::object());
 
         data.extras = nlohmann::json::object();
@@ -71,6 +73,7 @@ struct MapData {
                 key == "map_boundary_data" ||
                 key == "fog_settings" ||
                 key == "map_assets_data" ||
+                key == "depth_cue_settings" ||
                 key == "dev_map_settings" ||
                 key == "schema_version") {
                 continue;
@@ -93,6 +96,7 @@ struct MapData {
         out["map_boundary_data"] = map_boundary_data;
         out["fog_settings"] = fog_settings;
         out["map_assets_data"] = map_assets_data;
+        out["depth_cue_settings"] = depth_cue_settings;
         out["dev_map_settings"] = dev_map_settings;
 
         return out;

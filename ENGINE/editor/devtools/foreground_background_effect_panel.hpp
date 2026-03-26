@@ -38,6 +38,10 @@ public:
 
     using CloseCallback = std::function<void()>;
     void set_close_callback(CloseCallback callback) { close_callback_ = std::move(callback); }
+    using EditDepthSettingsCallback = std::function<void()>;
+    void set_edit_depth_settings_callback(EditDepthSettingsCallback callback) {
+        edit_depth_settings_callback_ = std::move(callback);
+    }
     void close();
     bool is_point_inside(int x, int y) const;
 
@@ -70,7 +74,7 @@ private:
     camera_effects::ImageEffectSettings read_slider_values(const SliderSet& set) const;
     void on_slider_changed(PreviewSide side);
 
-    void schedule_preview_rebuild(bool fg, bool bg, Uint32 delay_ms = kPreviewDebounceMs);
+    void schedule_preview_rebuild(bool fg, bool bg, Uint32 delay_ms = 0);
     void update_pending_previews(Uint64 now_ms);
     void rebuild_preview(PreviewSide side);
     bool ensure_preview_source();
@@ -97,6 +101,7 @@ private:
     void restore_defaults_for_side(PreviewSide side);
     void discard_unsaved_changes();
     void refresh_from_committed();
+    void enter_live_depth_settings_editor();
 
     bool settings_equal(const camera_effects::ImageEffectSettings& a,
                         const camera_effects::ImageEffectSettings& b,
@@ -138,6 +143,8 @@ private:
     std::unique_ptr<ButtonWidget> restore_bg_defaults_button_widget_;
     std::unique_ptr<DMButton> discard_button_;
     std::unique_ptr<ButtonWidget> discard_button_widget_;
+    std::unique_ptr<DMButton> edit_depth_settings_button_;
+    std::unique_ptr<ButtonWidget> edit_depth_settings_button_widget_;
 
     SDL_Texture* base_preview_texture_ = nullptr;
     int base_preview_w_ = 0;
@@ -178,6 +185,6 @@ private:
 
     CloseCallback close_callback_;
     bool close_callback_running_ = false;
-
-    static constexpr Uint32 kPreviewDebounceMs = 150;
+    EditDepthSettingsCallback edit_depth_settings_callback_;
+    bool edit_depth_callback_running_ = false;
 };

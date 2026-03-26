@@ -474,6 +474,7 @@ private:
     bool         composite_dirty_   = true;
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
+    std::uint64_t composite_depth_cue_settings_version_ = 0;
     float        world_z_offset_    = 0.0f;
     bool         mesh_dirty_        = true;
 

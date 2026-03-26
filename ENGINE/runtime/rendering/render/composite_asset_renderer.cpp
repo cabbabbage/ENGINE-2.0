@@ -3,6 +3,7 @@
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame_variant.hpp"
 #include "core/AssetsManager.hpp"
+#include "core/manifest/depth_cue_settings.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "rendering/render/render.hpp"
@@ -50,29 +51,25 @@ SDL_Rect build_overlay_dest_rect_from_base(const RenderObject& base_object) {
 }
 
 DepthCueOverlayDecision decide_depth_cue_overlay(const world::GridPoint* gp,
-                                                 float viewport_center_y,
-                                                 const WarpedScreenGrid::RealismSettings& settings,
+                                                 double anchor_world_z,
+                                                 const depth_cue::DepthCueSettings& settings,
                                                  bool depth_effects_enabled,
                                                  SDL_Texture* foreground_texture,
-                                                 SDL_Texture* background_texture,
-                                                 float center_deadzone_px,
-                                                 float min_depth_range_meters) {
+                                                 SDL_Texture* background_texture) {
     if (!depth_effects_enabled || !gp) {
         return {};
     }
-    if (!std::isfinite(gp->screen_position().y) || !std::isfinite(viewport_center_y) ||
-        !std::isfinite(gp->distance_to_camera()) || gp->distance_to_camera() < 0.0f) {
+    const float signed_depth = static_cast<float>(static_cast<double>(gp->world_z()) - anchor_world_z);
+    if (!std::isfinite(signed_depth)) {
         return {};
     }
 
-    const float signed_vertical_distance = gp->screen_position().y - viewport_center_y;
-    if (!std::isfinite(signed_vertical_distance) ||
-        std::abs(signed_vertical_distance) <= center_deadzone_px) {
-        return {};
-    }
-
-    const DepthCueLayer layer =
-        (signed_vertical_distance < 0.0f) ? DepthCueLayer::Background : DepthCueLayer::Foreground;
+    const float center_depth = settings.center_depth_offset;
+    const float foreground_max_depth = settings.foreground_max_depth_offset;
+    const float background_max_depth = settings.background_max_depth_offset;
+    const DepthCueLayer layer = (signed_depth < center_depth) ? DepthCueLayer::Foreground :
+                                (signed_depth > center_depth) ? DepthCueLayer::Background :
+                                                                DepthCueLayer::None;
     SDL_Texture* chosen_texture = nullptr;
     if (layer == DepthCueLayer::Background) {
         chosen_texture = background_texture;
@@ -83,34 +80,15 @@ DepthCueOverlayDecision decide_depth_cue_overlay(const world::GridPoint* gp,
         return {};
     }
 
-    const float meters_per_world_unit =
-        std::max(1.0e-6f, settings.meters_per_100_world_px * 0.01f);
-    float near_world = std::isfinite(settings.depth_near_world) ? settings.depth_near_world : 0.0f;
-    float far_world = std::isfinite(settings.depth_far_world) ? settings.depth_far_world : near_world;
-
-    float near_meters = near_world * meters_per_world_unit;
-    float far_meters = far_world * meters_per_world_unit;
-    if (!std::isfinite(near_meters)) {
-        near_meters = 0.0f;
-    }
-    if (!std::isfinite(far_meters)) {
-        far_meters = near_meters;
-    }
-
-    if (far_meters < near_meters) {
-        std::swap(far_meters, near_meters);
-    }
-    const float safe_min_range = std::max(1.0e-6f, min_depth_range_meters);
-    if ((far_meters - near_meters) < safe_min_range) {
-        far_meters = near_meters + safe_min_range;
-    }
-
-    const float t = std::clamp((gp->distance_to_camera() - near_meters) / (far_meters - near_meters), 0.0f, 1.0f);
     float opacity = 0.0f;
     if (layer == DepthCueLayer::Background) {
+        const float denom = std::max(1.0e-6f, background_max_depth - center_depth);
+        const float t = std::clamp((signed_depth - center_depth) / denom, 0.0f, 1.0f);
         opacity = t;
     } else if (layer == DepthCueLayer::Foreground) {
-        opacity = 1.0f - t;
+        const float denom = std::max(1.0e-6f, center_depth - foreground_max_depth);
+        const float t = std::clamp((center_depth - signed_depth) / denom, 0.0f, 1.0f);
+        opacity = t;
     }
     if (!std::isfinite(opacity) || opacity <= 0.0f) {
         return {};
@@ -129,6 +107,14 @@ CompositeAssetRenderer::~CompositeAssetRenderer() {}
 void CompositeAssetRenderer::update(Asset* asset,
                                     float flicker_time_seconds) {
     if (!asset) return;
+
+    if (assets_) {
+        const std::uint64_t depth_cue_version = assets_->depth_cue_settings_version();
+        if (asset->composite_depth_cue_settings_version_ != depth_cue_version) {
+            asset->composite_depth_cue_settings_version_ = depth_cue_version;
+            asset->mark_composite_dirty();
+        }
+    }
 
     float package_scale = asset->smoothed_scale();
     if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
@@ -303,21 +289,15 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         if (base_render_object && assets_ && renderer_) {
             const WarpedScreenGrid& cam = assets_->getView();
             const world::GridPoint* gp = cam.grid_point_for_asset(asset);
-
-            int screen_height = 0;
-            int screen_width_unused = 0;
-            SDL_GetCurrentRenderOutputSize(renderer_, &screen_width_unused, &screen_height);
-            const float center_y = static_cast<float>(screen_height) * 0.5f;
+            const depth_cue::DepthCueSettings& depth_settings = assets_->depth_cue_settings();
 
             const DepthCueOverlayDecision overlay_decision = decide_depth_cue_overlay(
                 gp,
-                center_y,
-                cam.realism_settings(),
+                cam.anchor_world_z(),
+                depth_settings,
                 assets_->depth_effects_enabled(),
                 depth_cue_foreground,
-                depth_cue_background,
-                kDepthCueCenterDeadzonePx,
-                kDepthCueMinDepthRangeMeters);
+                depth_cue_background);
 
             const float overlay_opacity = std::clamp(
                 overlay_decision.opacity * (static_cast<float>(asset_alpha) / 255.0f),

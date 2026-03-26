@@ -17,6 +17,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
+#include "core/manifest/depth_cue_settings.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -396,6 +397,8 @@ void Assets::hydrate_map_info_sections() {
 
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
+    depth_cue_settings_ = depth_cue::from_map_entry(map_info_json_);
+    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
 
 }
 
@@ -531,6 +534,30 @@ void Assets::set_depth_effects_enabled(bool enabled) {
         return;
     }
     depth_effects_enabled_ = enabled;
+}
+
+void Assets::set_depth_cue_settings(const depth_cue::DepthCueSettings& settings) {
+    depth_cue::DepthCueSettings sanitized = settings;
+    depth_cue::clamp(sanitized);
+    if (depth_cue::nearly_equal(sanitized, depth_cue_settings_)) {
+        return;
+    }
+
+    depth_cue_settings_ = sanitized;
+    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
+    mark_map_data_dirty();
+
+    for (Asset* asset : all) {
+        if (!asset) {
+            continue;
+        }
+        asset->mark_composite_dirty();
+    }
+
+    ++depth_cue_settings_version_;
+    if (depth_cue_settings_version_ == 0) {
+        ++depth_cue_settings_version_;
+    }
 }
 
 void Assets::set_movement_debug_enabled(bool enabled) {

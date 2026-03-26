@@ -965,6 +965,14 @@ bool Asset::is_current_animation_looping() const {
 	return anim.loop;
 }
 
+float Asset::frame_delta_seconds_clamped() const {
+    if (!assets_) {
+        constexpr float kFallbackDt = 1.0f / 60.0f;
+        return kFallbackDt;
+    }
+    return assets_->frame_delta_seconds_clamped();
+}
+
 void Asset::set_assets(Assets* a) {
     assets_ = a;
     if (assets_) {
@@ -1133,6 +1141,8 @@ void Asset::refresh_frame_texture_bindings() {
         }
         current_frame->rebuild_anchor_lookup();
         last_rendered_frame_ = current_frame;
+        refresh_cached_dimensions();
+        mark_composite_dirty();
         mark_mesh_dirty();
         mark_anchors_dirty();
 }

@@ -2389,6 +2389,15 @@ bool RoomConfigurator::focus_spawn_group(const std::string& spawn_id) {
     return true;
 }
 
+bool RoomConfigurator::focus_name_field() {
+    if (!visible() || !name_box_) {
+        return false;
+    }
+    focus_panel(geometry_panel_.get());
+    name_box_->start_editing();
+    return true;
+}
+
 void RoomConfigurator::set_spawn_area_open_callback(
     std::function<void(const std::string&, const std::string&)> cb,
     std::string stack_key) {

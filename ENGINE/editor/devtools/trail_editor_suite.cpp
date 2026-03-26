@@ -35,7 +35,7 @@ void TrailEditorSuite::set_screen_dimensions(int width, int height) {
     update_bounds();
 }
 
-void TrailEditorSuite::open(Room* trail) {
+void TrailEditorSuite::open(Room* trail, bool focus_name_field) {
     if (!trail) {
         return;
     }
@@ -45,6 +45,9 @@ void TrailEditorSuite::open(Room* trail) {
     if (configurator_) {
         configurator_->open(trail);
         configurator_->set_bounds(config_bounds_);
+        if (focus_name_field) {
+            configurator_->focus_name_field();
+        }
     }
 }
 

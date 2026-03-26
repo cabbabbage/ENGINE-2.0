@@ -91,6 +91,7 @@ public:
                                    std::function<void(const std::string&)> on_regenerate = {},
                                    std::function<void(const std::string&, SDL_Point)> on_open_floating = {});
     bool focus_spawn_group(const std::string& spawn_id);
+    bool focus_name_field();
     void set_spawn_area_open_callback(std::function<void(const std::string&, const std::string&)> cb,
                                       std::string stack_key = {});
 

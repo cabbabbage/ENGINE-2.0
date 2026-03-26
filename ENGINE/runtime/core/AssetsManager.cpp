@@ -15,7 +15,8 @@
 #include "devtools/dev_controls.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "editor/devtools/font_cache.hpp"
+#include "devtools/font_cache.hpp"
+#include "core/manifest/map_data.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -117,6 +118,15 @@ bool vibble_scale_trace_enabled() {
     return enabled;
 }
 
+}
+
+float Assets::frame_delta_seconds_clamped() const {
+    constexpr float kFallbackDt = 1.0f / 60.0f;
+    const float dt = last_frame_dt_seconds_;
+    if (std::isfinite(dt) && dt > 0.0f) {
+        return std::min(dt, 0.1f);
+    }
+    return kFallbackDt;
 }
 
 Assets::Assets(AssetLibrary& library,
@@ -321,13 +331,21 @@ bool Assets::mutate_map_data(const std::function<bool(manifest::MapData&)>& muta
     if (!mutator) {
         return false;
     }
-    manifest::MapData map_data = manifest::MapData::from_manifest_entry(map_id_, map_info_json_);
-    if (!mutator(map_data)) {
+    try {
+        manifest::MapData map_data = manifest::MapData::from_manifest_entry(map_id_, map_info_json_);
+        if (!mutator(map_data)) {
+            return false;
+        }
+        map_info_json_ = map_data.to_manifest_entry();
+        mark_map_data_dirty();
+        return true;
+    } catch (const std::exception& ex) {
+        std::cerr << "[Assets] mutate_map_data failed: " << ex.what() << "\n";
+        return false;
+    } catch (...) {
+        std::cerr << "[Assets] mutate_map_data failed with unknown exception\n";
         return false;
     }
-    map_info_json_ = map_data.to_manifest_entry();
-    mark_map_data_dirty();
-    return true;
 }
 
 void Assets::mark_map_data_dirty() {
@@ -354,6 +372,9 @@ void Assets::persist_map_info_json() {
 void Assets::hydrate_map_info_sections() {
     if (!map_info_json_.is_object()) {
         return;
+    }
+    if (!map_info_json_.contains("schema_version") || !map_info_json_["schema_version"].is_number_integer()) {
+        map_info_json_["schema_version"] = manifest::kMapSchemaVersion;
     }
 
     const auto ensure_object = [&](const char* key) {
@@ -2415,9 +2436,11 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
         if (capture_screenshot_to_root(renderer, screenshot_relative_path)) {
             latest_screenshot_relative_path_ = std::move(screenshot_relative_path);
             screenshot_create_task_start_ticks_ = now;
+            popup_manager_.show_toast("Screenshot saved", 2200);
         } else {
             latest_screenshot_relative_path_.clear();
             screenshot_create_task_start_ticks_ = 0;
+            popup_manager_.show_toast("Screenshot failed", 2200);
         }
         screenshot_capture_pending_ = false;
     }
@@ -2440,13 +2463,16 @@ bool Assets::capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out
 
     const auto now = std::chrono::system_clock::now();
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    std::ostringstream name;
-    name << "screenshot_" << ms << ".png";
-    const std::filesystem::path absolute_path = screenshot_dir / name.str();
+    std::ostringstream stem;
+    stem << "screenshot_" << ms;
+    const std::filesystem::path png_path = screenshot_dir / (stem.str() + ".png");
+    const std::filesystem::path bmp_path = screenshot_dir / (stem.str() + ".bmp");
 
     int out_w = 0;
     int out_h = 0;
-    SDL_GetRendererOutputSize(renderer, &out_w, &out_h);
+    if (!SDL_GetCurrentRenderOutputSize(renderer, &out_w, &out_h)) {
+        return false;
+    }
     if (out_w <= 0 || out_h <= 0) {
         return false;
     }
@@ -2458,16 +2484,22 @@ bool Assets::capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out
         return false;
     }
 
-    const int save_ok = IMG_SavePNG(captured, absolute_path.string().c_str());
-    SDL_DestroySurface(captured);
-    if (save_ok != 0) {
-        std::cerr << "[Assets] Failed to save screenshot PNG: " << SDL_GetError() << "\n";
-        return false;
+    const int png_save_ok = IMG_SavePNG(captured, png_path.string().c_str());
+    if (png_save_ok == 0) {
+        SDL_DestroySurface(captured);
+        out_relative_path = (std::filesystem::path("screen_shots") / png_path.filename()).generic_string();
+        return true;
     }
 
-    const std::filesystem::path relative_path = std::filesystem::path("screen_shots") / name.str();
-    out_relative_path = relative_path.generic_string();
-    return true;
+    const bool bmp_save_ok = SDL_SaveBMP(captured, bmp_path.string().c_str());
+    SDL_DestroySurface(captured);
+    if (bmp_save_ok) {
+        out_relative_path = (std::filesystem::path("screen_shots") / bmp_path.filename()).generic_string();
+        return true;
+    }
+
+    std::cerr << "[Assets] Failed to save screenshot (PNG and BMP): " << SDL_GetError() << "\n";
+    return false;
 }
 
 bool Assets::screenshot_create_task_button_active(Uint32 now_ticks) const {
@@ -2488,7 +2520,9 @@ void Assets::render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32
 
     int output_w = 0;
     int output_h = 0;
-    SDL_GetRendererOutputSize(renderer, &output_w, &output_h);
+    if (!SDL_GetCurrentRenderOutputSize(renderer, &output_w, &output_h)) {
+        return;
+    }
 
     constexpr int kButtonW = 138;
     constexpr int kButtonH = 34;
@@ -2801,6 +2835,13 @@ void Assets::clear_editor_selection() {
 }
 
 void Assets::handle_sdl_event(const SDL_Event& e) {
+    if (e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_S) {
+        const bool ctrl_down = (e.key.mod & SDL_KMOD_CTRL) != 0;
+        if (ctrl_down) {
+            screenshot_capture_pending_ = true;
+        }
+    }
+
     const Uint32 now = SDL_GetTicks();
     if (handle_screenshot_create_task_button_event(e, now)) {
         if (input) {

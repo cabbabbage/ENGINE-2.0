@@ -104,10 +104,10 @@ private:
     std::vector<int> row_offsets_;
 
     int scroll_offset_ = 0;
-    const int row_height_ = 32;
-    const int row_gap_ = 6;
+    const int row_height_ = 160;
+    const int row_gap_ = 14;
 
-    std::vector<std::string> type_options_{"issue", "modification"};
+    std::vector<std::string> type_options_{"issue", "modification", "feature", "design", "research", "media"};
     std::vector<std::string> severity_options_{"low", "medium", "high"};
 
     bool attachment_dialog_open_ = false;

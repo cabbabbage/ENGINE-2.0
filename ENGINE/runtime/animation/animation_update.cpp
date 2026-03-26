@@ -293,7 +293,7 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
-    SDL_Point delta = movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
+    SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
         self_->needs_target = true;
@@ -312,8 +312,8 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     if (self_) {
         self_->target_reached = false;
     }
-    const SDL_Point checkpoint = movement_targets::world_checkpoint(*target_asset);
-    SDL_Point delta = movement_targets::world_delta_to_checkpoint(*self_, checkpoint);
+    const SDL_Point checkpoint = animation_update::movement_targets::world_checkpoint(*target_asset);
+    SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         if (self_) {
             self_->target_reached = true;

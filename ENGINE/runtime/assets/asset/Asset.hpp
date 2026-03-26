@@ -206,6 +206,7 @@ class Asset {
     void set_camera(WarpedScreenGrid* v) { window = v; }
     void set_assets(Assets* a);
     Assets* get_assets() const { return assets_; }
+    float frame_delta_seconds_clamped() const;
     void add_child(Asset* child);
     void remove_child(Asset* child);
     bool has_child(const Asset* child) const;

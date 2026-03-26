@@ -4794,6 +4794,9 @@ void DevControls::create_trail_template() {
     });
 
     if (!created || key.empty()) {
+        if (assets_) {
+            assets_->show_dev_notice("Unable to create trail: invalid map manifest data");
+        }
         sync_header_button_states();
         return;
     }
@@ -4836,7 +4839,7 @@ void DevControls::create_trail_template() {
     mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
 
     if (trail_suite_) {
-        trail_suite_->open(pending_trail_template_.get());
+        trail_suite_->open(pending_trail_template_.get(), true);
     }
 
     if (assets_) {
@@ -4988,7 +4991,7 @@ void DevControls::handle_map_selection() {
     }
     if (is_trail_room(selected)) {
         if (trail_suite_) {
-            trail_suite_->open(selected);
+            trail_suite_->open(selected, false);
         }
         pending_trail_template_.reset();
         return;

@@ -15,6 +15,7 @@
 #include <chrono>
 #include <optional>
 #include <string>
+#include <vector>
 
 class Asset;
 class Input;
@@ -31,14 +32,18 @@ protected:
 
 private:
     void movement(const Input& input);
-    float frame_dt() const;
     std::string animation_for_direction(int screen_x, int screen_y) const;
     void start_dash();
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
 
+    std::vector<ChildAsset*> child_assets_;
+    std::optional<ChildAsset> neck_child_;
+    std::optional<ChildAsset> hat_child_;
+    std::optional<ChildAsset> mouth_child_;
     std::optional<ChildAsset> eyes_child_;
+    std::optional<ChildAsset> weapon_child_;
     int    dx_ = 0;
     int    dy_ = 0;
 

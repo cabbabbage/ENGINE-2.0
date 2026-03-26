@@ -24,7 +24,7 @@
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/widgets.hpp"
-#include "editor/devtools/font_cache.hpp"
+#include "devtools/font_cache.hpp"
 #include "utils/log.hpp"
 #include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
@@ -94,6 +94,12 @@ bool collect_paths_from_array(ComPtr<IShellItemArray> array, std::vector<std::fi
 }
 #endif
 
+constexpr int kRowControlTopPadding = 8;
+constexpr int kRowControlHeight = 34;
+constexpr int kAttachmentLabelSpacing = 6;
+constexpr int kAttachmentLabelHeight = 20;
+constexpr int kDescriptionVerticalSpacing = 8;
+
 } // namespace
 
 TaskEditor::TaskEditor(std::filesystem::path repo_root)
@@ -144,7 +150,9 @@ void TaskEditor::render(SDL_Renderer* renderer) {
     }
 
     SDL_Rect screen_rect{0, 0, 0, 0};
-    SDL_GetRendererOutputSize(renderer, &screen_rect.w, &screen_rect.h);
+    if (!SDL_GetCurrentRenderOutputSize(renderer, &screen_rect.w, &screen_rect.h)) {
+        return;
+    }
     if (layout_dirty_) {
         layout_ui(screen_rect);
     }
@@ -168,15 +176,24 @@ void TaskEditor::render(SDL_Renderer* renderer) {
     DMLabelStyle header_style = DMStyles::Label();
     header_style.font_size += 2;
     const auto metrics = compute_column_metrics();
-    constexpr std::array<const char*, kColumns> headers = {"Updated", "Type", "Severity", "Description", "Created By", "Attachment", ""};
-    for (int col = 0; col < kColumns; ++col) {
-        const int x = metrics.starts[col];
-        DMFontCache::instance().draw_text(renderer, header_style, headers[col], x, table_rect_.y - header_style.font_size - 4);
-    }
+    constexpr std::array<const char*, kColumns> headers = {"Updated", "Type", "Severity", "Description", "Created By", "Attach", "Delete"};
+    DMFontCache::instance().draw_text(renderer, header_style, "Tasks", table_rect_.x, table_rect_.y - (header_style.font_size * 2) - 8);
+    DMFontCache::instance().draw_text(renderer, header_style, headers[ColumnLastUpdated], metrics.starts[ColumnLastUpdated], table_rect_.y - header_style.font_size - 4);
+    DMFontCache::instance().draw_text(renderer, header_style, headers[ColumnType], metrics.starts[ColumnType], table_rect_.y - header_style.font_size - 4);
+    DMFontCache::instance().draw_text(renderer, header_style, headers[ColumnSeverity], metrics.starts[ColumnSeverity], table_rect_.y - header_style.font_size - 4);
+    DMFontCache::instance().draw_text(renderer, header_style, headers[ColumnCreatedBy], metrics.starts[ColumnCreatedBy], table_rect_.y - header_style.font_size - 4);
+    DMFontCache::instance().draw_text(renderer, header_style, headers[ColumnAttachment], metrics.starts[ColumnAttachment], table_rect_.y - header_style.font_size - 4);
+    DMFontCache::instance().draw_text(renderer, header_style, headers[ColumnDelete], metrics.starts[ColumnDelete], table_rect_.y - header_style.font_size - 4);
 
-    SDL_RenderSetClipRect(renderer, &table_rect_);
+    SDL_SetRenderClipRect(renderer, &table_rect_);
     for (size_t i = 0; i < tasks_.size(); ++i) {
         int row_top = table_rect_.y - scroll_offset_ + row_offsets_.at(i);
+        SDL_Rect row_rect{table_rect_.x + 2, row_top, table_rect_.w - 4, row_height_};
+        SDL_SetRenderDrawColor(renderer, 36, 36, 42, 235);
+        sdl_render::FillRect(renderer, &row_rect);
+        SDL_SetRenderDrawColor(renderer, 82, 82, 96, 255);
+        sdl_render::Rect(renderer, &row_rect);
+
         set_row_widget_rects(i, row_top, metrics);
         auto& rw = row_widgets_.at(i);
         if (rw.type_dropdown) rw.type_dropdown->render(renderer);
@@ -187,13 +204,14 @@ void TaskEditor::render(SDL_Renderer* renderer) {
         if (rw.delete_button) rw.delete_button->render(renderer);
 
         const DMLabelStyle label_style = DMStyles::Label();
-        const int text_y = row_top + (row_height_ - label_style.font_size) / 2;
+        const int text_y = row_top + kRowControlTopPadding + 4;
         DMFontCache::instance().draw_text(renderer, label_style, tasks_[i].last_updated, metrics.starts[ColumnLastUpdated], text_y);
         const std::string attachment_label = tasks_[i].attachment_path.empty() ? "(none)" : tasks_[i].attachment_path;
-        DMFontCache::instance().draw_text(renderer, label_style, attachment_label, metrics.starts[ColumnAttachment], text_y);
+        const int attachment_label_y = row_top + kRowControlTopPadding + kRowControlHeight + kAttachmentLabelSpacing;
+        DMFontCache::instance().draw_text(renderer, label_style, attachment_label, metrics.starts[ColumnAttachment], attachment_label_y);
     }
 
-    SDL_RenderSetClipRect(renderer, nullptr);
+    SDL_SetRenderClipRect(renderer, nullptr);
     DMDropdown::render_active_options(renderer);
 
     if (attachment_dialog_open_) {
@@ -231,11 +249,11 @@ bool TaskEditor::handle_event(const SDL_Event& event) {
         last_mouse_pos_.x = static_cast<int>(event.button.x);
         last_mouse_pos_.y = static_cast<int>(event.button.y);
     } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        int mx = 0;
-        int my = 0;
+        float mx = 0.0f;
+        float my = 0.0f;
         SDL_GetMouseState(&mx, &my);
-        last_mouse_pos_.x = mx;
-        last_mouse_pos_.y = my;
+        last_mouse_pos_.x = static_cast<int>(mx);
+        last_mouse_pos_.y = static_cast<int>(my);
     }
 
     if (attachment_dialog_open_) {
@@ -270,7 +288,7 @@ bool TaskEditor::handle_event(const SDL_Event& event) {
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         SDL_Point pt{last_mouse_pos_.x, last_mouse_pos_.y};
         if (SDL_PointInRect(&pt, &table_rect_)) {
-            scroll_offset_ -= event.wheel.y * row_height_;
+            scroll_offset_ -= event.wheel.y * (row_height_ / 2);
             clamp_scroll();
             return true;
         }
@@ -434,26 +452,26 @@ void TaskEditor::rebuild_widgets() {
         TaskRow& row = tasks_[i];
         auto& rw = row_widgets_[i];
         if (!rw.type_dropdown) {
-            rw.type_dropdown = std::make_unique<DMDropdown>("Type", type_options_);
+            rw.type_dropdown = std::make_unique<DMDropdown>("", type_options_);
         }
         const auto type_iter = std::find(type_options_.begin(), type_options_.end(), row.type);
         const int type_index = static_cast<int>(std::distance(type_options_.begin(), type_iter));
         rw.type_dropdown->set_selected(std::clamp(type_index, 0, static_cast<int>(type_options_.size()) - 1));
 
         if (!rw.severity_dropdown) {
-            rw.severity_dropdown = std::make_unique<DMDropdown>("Severity", severity_options_);
+            rw.severity_dropdown = std::make_unique<DMDropdown>("", severity_options_);
         }
         const auto severity_iter = std::find(severity_options_.begin(), severity_options_.end(), row.severity);
         const int severity_index = static_cast<int>(std::distance(severity_options_.begin(), severity_iter));
         rw.severity_dropdown->set_selected(std::clamp(severity_index, 0, static_cast<int>(severity_options_.size()) - 1));
 
         if (!rw.description_box) {
-            rw.description_box = std::make_unique<DMTextBox>("Description", row.description);
+            rw.description_box = std::make_unique<DMTextBox>("", row.description);
         } else {
             rw.description_box->set_value(row.description);
         }
         if (!rw.created_by_box) {
-            rw.created_by_box = std::make_unique<DMTextBox>("Created By", row.created_by);
+            rw.created_by_box = std::make_unique<DMTextBox>("", row.created_by);
         } else {
             rw.created_by_box->set_value(row.created_by);
         }
@@ -471,8 +489,8 @@ void TaskEditor::rebuild_widgets() {
 }
 
 void TaskEditor::layout_ui(const SDL_Rect& screen_rect) {
-    const int width = std::min(1100, screen_rect.w - 80);
-    const int height = std::min(700, screen_rect.h - 80);
+    const int width = std::min(1500, screen_rect.w - 40);
+    const int height = std::min(920, screen_rect.h - 40);
     popup_rect_.w = width;
     popup_rect_.h = height;
     popup_rect_.x = (screen_rect.w - width) / 2;
@@ -522,15 +540,36 @@ void TaskEditor::clamp_scroll() {
 
 TaskEditor::ColumnMetrics TaskEditor::compute_column_metrics() const {
     ColumnMetrics metrics;
-    const int gap = 8;
-    int x = table_rect_.x;
-    const int desc_width = std::max(140, table_rect_.w - (160 + 110 + 110 + 150 + 120 + 60) - (kColumns - 1) * gap);
-    const std::array<int, kColumns> widths = {160, 110, 110, desc_width, 150, 120, 60};
-    for (int i = 0; i < kColumns; ++i) {
-        metrics.starts[i] = x;
-        metrics.widths[i] = widths[i];
-        x += widths[i] + gap;
-    }
+    const int gap = 10;
+    const int left = table_rect_.x + 12;
+    int x = left;
+
+    metrics.starts[ColumnLastUpdated] = x;
+    metrics.widths[ColumnLastUpdated] = 220;
+    x += metrics.widths[ColumnLastUpdated] + gap;
+
+    metrics.starts[ColumnType] = x;
+    metrics.widths[ColumnType] = 130;
+    x += metrics.widths[ColumnType] + gap;
+
+    metrics.starts[ColumnSeverity] = x;
+    metrics.widths[ColumnSeverity] = 130;
+    x += metrics.widths[ColumnSeverity] + gap;
+
+    metrics.starts[ColumnCreatedBy] = x;
+    metrics.widths[ColumnCreatedBy] = 220;
+    x += metrics.widths[ColumnCreatedBy] + gap;
+
+    metrics.starts[ColumnAttachment] = x;
+    metrics.widths[ColumnAttachment] = 110;
+    x += metrics.widths[ColumnAttachment] + gap;
+
+    metrics.starts[ColumnDelete] = x;
+    metrics.widths[ColumnDelete] = 100;
+
+    metrics.starts[ColumnDescription] = left;
+    metrics.widths[ColumnDescription] = std::max(360, table_rect_.w - 24);
+
     return metrics;
 }
 
@@ -539,24 +578,28 @@ void TaskEditor::set_row_widget_rects(size_t index, int row_top, const ColumnMet
         return;
     }
     auto& rw = row_widgets_[index];
-    const int height = row_height_;
+    const int top_y = row_top + kRowControlTopPadding;
+    const int control_h = kRowControlHeight;
+    const int attachment_label_y = top_y + control_h + kAttachmentLabelSpacing;
+    const int desc_y = attachment_label_y + kAttachmentLabelHeight + kDescriptionVerticalSpacing;
+    const int desc_h = std::max(row_height_ - (desc_y - row_top) - kDescriptionVerticalSpacing, 40);
     if (rw.type_dropdown) {
-        rw.type_dropdown->set_rect({metrics.starts[ColumnType], row_top, metrics.widths[ColumnType], height});
+        rw.type_dropdown->set_rect({metrics.starts[ColumnType], top_y, metrics.widths[ColumnType], control_h});
     }
     if (rw.severity_dropdown) {
-        rw.severity_dropdown->set_rect({metrics.starts[ColumnSeverity], row_top, metrics.widths[ColumnSeverity], height});
+        rw.severity_dropdown->set_rect({metrics.starts[ColumnSeverity], top_y, metrics.widths[ColumnSeverity], control_h});
     }
     if (rw.description_box) {
-        rw.description_box->set_rect({metrics.starts[ColumnDescription], row_top, metrics.widths[ColumnDescription], height});
+        rw.description_box->set_rect({metrics.starts[ColumnDescription], desc_y, metrics.widths[ColumnDescription], desc_h});
     }
     if (rw.created_by_box) {
-        rw.created_by_box->set_rect({metrics.starts[ColumnCreatedBy], row_top, metrics.widths[ColumnCreatedBy], height});
+        rw.created_by_box->set_rect({metrics.starts[ColumnCreatedBy], top_y, metrics.widths[ColumnCreatedBy], control_h});
     }
     if (rw.attach_button) {
-        rw.attach_button->set_rect({metrics.starts[ColumnAttachment], row_top, metrics.widths[ColumnAttachment], height});
+        rw.attach_button->set_rect({metrics.starts[ColumnAttachment], top_y, metrics.widths[ColumnAttachment], control_h});
     }
     if (rw.delete_button) {
-        rw.delete_button->set_rect({metrics.starts[ColumnDelete], row_top, metrics.widths[ColumnDelete], height});
+        rw.delete_button->set_rect({metrics.starts[ColumnDelete], top_y, metrics.widths[ColumnDelete], control_h});
     }
 }
 

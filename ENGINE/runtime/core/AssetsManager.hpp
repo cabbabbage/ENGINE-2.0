@@ -118,6 +118,7 @@ public:
     void mark_collision_context_dirty() { frame_collision_context_dirty_ = true; }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
+    float frame_delta_seconds_clamped() const;
     std::uint32_t frame_id() const { return frame_id_; }
 
     void render_overlays(SDL_Renderer* renderer);

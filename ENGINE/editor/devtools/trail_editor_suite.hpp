@@ -22,7 +22,7 @@ public:
 
     void set_screen_dimensions(int width, int height);
 
-    void open(Room* trail);
+    void open(Room* trail, bool focus_name_field = false);
     void close();
     bool is_open() const;
 

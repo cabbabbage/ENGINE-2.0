@@ -15,7 +15,6 @@
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
 #include <algorithm>
-#include <cmath>
 
 namespace {
 
@@ -51,7 +50,41 @@ vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
 }
 
 vibble_controller::vibble_controller(Asset* player)
-    : CustomAssetController(player) {}
+    : CustomAssetController(player) {
+        
+        
+        if (player){
+            if(!eyes_child_.has_value()) {
+                eyes_child_.emplace(*player, "vibble_eyes");
+                eyes_child_->bind("eyes");
+                child_assets_.push_back(&*eyes_child_);
+            }
+            if(!hat_child_.has_value()) {
+                hat_child_.emplace(*player, "vibble_hat");
+                hat_child_->bind("hat");
+                child_assets_.push_back(&*hat_child_);
+            }
+            if (!mouth_child_.has_value()) {
+                mouth_child_.emplace(*player, "vibble_mouth");
+                mouth_child_->bind("mouth");
+                child_assets_.push_back(&*mouth_child_);
+            }
+            if (!neck_child_.has_value()) {
+                neck_child_.emplace(*player, "vibble_neck");
+                neck_child_->bind("neck");
+                child_assets_.push_back(&*neck_child_);   
+            }
+            if (!weapon_child_.has_value()) {
+                weapon_child_.emplace(*player, "vibble_weapon");
+                weapon_child_->bind("weapon");
+                weapon_child_->hide();
+                child_assets_.push_back(&*weapon_child_);   
+            }
+        }
+
+    }
+
+    
 
 vibble_controller::~vibble_controller() = default;
 
@@ -62,7 +95,7 @@ void vibble_controller::movement(const Input& input) {
         return;
     }
 
-    const float dt = frame_dt();
+    const float dt = player->frame_delta_seconds_clamped();
 
     const int input_x =
         ((input.isScancodeDown(SDL_SCANCODE_D) || input.isScancodeDown(SDL_SCANCODE_RIGHT)) ? 1 : 0)
@@ -132,30 +165,11 @@ void vibble_controller::movement(const Input& input) {
     player->anim_->move(SDL_Point{ dx_, dy_ }, animation_id);
 }
 
-float vibble_controller::frame_dt() const {
-    constexpr float kFallbackDt = 1.0f / 60.0f;
-    Asset* player = self_ptr();
-    if (!player) {
-        return kFallbackDt;
-    }
-    if (Assets* assets = player->get_assets()) {
-        const float dt = assets->frame_delta_seconds();
-        if (std::isfinite(dt) && dt > 0.0f) {
-            return std::min(dt, 0.1f);
-        }
-    }
-    return kFallbackDt;
-}
-
 void vibble_controller::on_update(const Input& input) {
     using namespace std::chrono;
     auto now = steady_clock::now();
 
     Asset* player = self_ptr();
-    if (player && !eyes_child_.has_value()) {
-        eyes_child_.emplace(*player, "vibble_eyes");
-        eyes_child_->bind("eyes");
-    }
 
     if (isDashing && now >= dashEndTime) {
         isDashing = false;
@@ -171,8 +185,10 @@ void vibble_controller::on_update(const Input& input) {
     }
 
     movement(input);
-    if (eyes_child_.has_value()) {
-        eyes_child_->update();
+    for (ChildAsset* child : child_assets_) {
+        if (child) {
+            child->update();
+        }
     }
 }
 

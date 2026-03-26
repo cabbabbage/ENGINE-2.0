@@ -3232,7 +3232,8 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
-    if (map_mode_ui_) {
+    const bool image_effect_panel_open = image_effect_panel_ && image_effect_panel_->is_visible();
+    if (map_mode_ui_ && !image_effect_panel_open) {
         if (DevFooterBar* footer = map_mode_ui_->get_footer_bar()) {
             if (footer->visible() && !frame_editor_active && !asset_stack_editor_active) {
                 const bool pointer_in_footer = pointer_relevant && footer->contains(pointer.x, pointer.y);
@@ -5013,9 +5014,26 @@ void DevControls::enter_live_depth_edit_mode() {
 
     live_depth_settings_ = assets_->depth_cue_settings();
     depth_cue::clamp(live_depth_settings_);
+    const bool has_serialized_depth_settings =
+        map_info_json_ && map_info_json_->is_object() &&
+        map_info_json_->contains(depth_cue::kMapEntryKey) &&
+        (*map_info_json_)[depth_cue::kMapEntryKey].is_object();
+    bool injected_default_min_spacing = false;
+    if (!has_serialized_depth_settings) {
+        live_depth_settings_.foreground_max_depth_offset =
+            live_depth_settings_.center_depth_offset - depth_cue::kMinSeparation;
+        live_depth_settings_.background_max_depth_offset =
+            live_depth_settings_.center_depth_offset + depth_cue::kMinSeparation;
+        depth_cue::clamp(live_depth_settings_);
+        injected_default_min_spacing = true;
+    }
     live_depth_selected_line_ = LiveDepthLine::Center;
-    live_depth_settings_dirty_ = false;
+    live_depth_settings_dirty_ = injected_default_min_spacing;
     live_depth_edit_mode_active_ = true;
+    assets_->set_depth_cue_settings(live_depth_settings_);
+    if (injected_default_min_spacing) {
+        mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    }
     if (!live_depth_exit_button_) {
         live_depth_exit_button_ =
             std::make_unique<DMButton>("Exit", &DMStyles::WarnButton(), 0, DMButton::height());
@@ -5047,8 +5065,8 @@ void DevControls::exit_live_depth_edit_mode(bool reopen_depth_panel, bool flush_
     sync_header_button_states();
 }
 
-bool DevControls::project_live_depth_offset_to_screen_x(float depth_offset, float& out_screen_x) const {
-    out_screen_x = 0.0f;
+bool DevControls::project_live_depth_offset_to_screen_y(float depth_offset, float& out_screen_y) const {
+    out_screen_y = 0.0f;
     if (!assets_) {
         return false;
     }
@@ -5061,10 +5079,10 @@ bool DevControls::project_live_depth_offset_to_screen_x(float depth_offset, floa
     if (!cam.project_world_point(floor_xy, world_z, screen)) {
         return false;
     }
-    if (!std::isfinite(screen.x)) {
+    if (!std::isfinite(screen.y)) {
         return false;
     }
-    out_screen_x = screen.x;
+    out_screen_y = screen.y;
     return true;
 }
 
@@ -5137,7 +5155,7 @@ bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
         struct LineSample {
             LiveDepthLine line = LiveDepthLine::Center;
-            float x = 0.0f;
+            float y = 0.0f;
             bool valid = false;
         };
         std::array<LineSample, 3> lines{{
@@ -5145,11 +5163,11 @@ bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
             {LiveDepthLine::BackgroundMax, 0.0f, false},
             {LiveDepthLine::ForegroundMax, 0.0f, false},
         }};
-        lines[0].valid = project_live_depth_offset_to_screen_x(live_depth_settings_.center_depth_offset, lines[0].x);
-        lines[1].valid = project_live_depth_offset_to_screen_x(live_depth_settings_.background_max_depth_offset, lines[1].x);
-        lines[2].valid = project_live_depth_offset_to_screen_x(live_depth_settings_.foreground_max_depth_offset, lines[2].x);
+        lines[0].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.center_depth_offset, lines[0].y);
+        lines[1].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, lines[1].y);
+        lines[2].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, lines[2].y);
 
-        const float click_x = event.button.x;
+        const float click_y = event.button.y;
         bool have_best = false;
         float best_dist = 0.0f;
         LiveDepthLine best_line = live_depth_selected_line_;
@@ -5157,7 +5175,7 @@ bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
             if (!sample.valid) {
                 continue;
             }
-            const float dist = std::fabs(sample.x - click_x);
+            const float dist = std::fabs(sample.y - click_y);
             if (!have_best || dist < best_dist) {
                 have_best = true;
                 best_dist = dist;

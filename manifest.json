@@ -208,7 +208,13 @@
           }
         }
       },
-      "anti_tags": [],
+      "anti_tags": [
+        "bone",
+        "enemy",
+        "metal",
+        "scary",
+        "urban"
+      ],
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
       "asset_type": "Object",
@@ -218,10 +224,24 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 50.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "blue",
+        "colorful",
+        "flower",
+        "forrest",
+        "garden",
+        "living",
+        "manmade",
+        "medow",
+        "natural",
+        "nature",
+        "pretty",
+        "small"
+      ],
+      "tillable": false,
       "update_radius": 0
     },
     "bone": {
@@ -5191,7 +5211,7 @@
       "content_root": "content/forrest",
       "depth_cue_settings": {
         "background_max_depth_offset": 600.0,
-        "center_depth_offset": 0.0,
+        "center_depth_offset": -25.0,
         "foreground_max_depth_offset": -600.0
       },
       "dev_map_settings": {},
@@ -5361,13 +5381,13 @@
           "camera_center_dx": -486,
           "camera_center_dz": -408,
           "camera_height_px": 622,
-          "camera_tilt_deg": 47.80000305175781,
+          "camera_tilt_deg": 48.0,
           "camera_zoom_percent": 20,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -5503,6 +5523,66 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-67930fb631d0"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "purple_flower"
+                }
+              ],
+              "display_name": "purple_flower",
+              "dx": 1802,
+              "dz": -2628,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 2936,
+              "origional_width": 3416,
+              "position": "Exact",
+              "priority": 4,
+              "quantity": 1,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-2c47ce45939e"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "blue_flower"
+                }
+              ],
+              "display_name": "blue_flower",
+              "dx": -1114,
+              "dz": 288,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 2936,
+              "origional_width": 3416,
+              "position": "Exact",
+              "priority": 5,
+              "quantity": 1,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-48b336ac104f"
             }
           ]
         }

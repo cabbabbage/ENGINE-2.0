@@ -16,7 +16,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iomanip>
+#include <locale>
 #include <sstream>
 #include <system_error>
 
@@ -827,6 +830,8 @@ void ForegroundBackgroundEffectPanel::rebuild_preview(PreviewSide side) {
         } else {
             bg_preview_status_ = "Preview generation failed: " + error;
         }
+        // Preserve visual feedback even when the CLI preview build fails.
+        load_side_preview_texture(side, preview_source_copy_path_);
         sync_preview_widgets();
         return;
     }
@@ -1060,8 +1065,11 @@ bool ForegroundBackgroundEffectPanel::generate_preview_with_cli(PreviewSide side
     }
 
     const fs::path output_path = asset_preview_dir / (std::string("preview_") + layer_name + ".png");
+    const fs::path output_log_path = asset_preview_dir / (std::string("preview_") + layer_name + ".log");
 
     std::ostringstream cmd;
+    cmd.imbue(std::locale::classic());
+    cmd << std::fixed << std::setprecision(4);
     cmd << '"' << tool_path.string() << '"' << ' '
         << '"' << input_copy_path << '"' << ' '
         << '"' << output_path.string() << '"' << ' '
@@ -1072,11 +1080,32 @@ bool ForegroundBackgroundEffectPanel::generate_preview_with_cli(PreviewSide side
         << settings.saturation_red << ' '
         << settings.saturation_green << ' '
         << settings.saturation_blue << ' '
-        << settings.hue;
+        << settings.hue
+        << " > \"" << output_log_path.string() << "\" 2>&1";
 
     const int rc = std::system(cmd.str().c_str());
     if (rc != 0) {
+        std::string details;
+        std::ifstream log_stream(output_log_path, std::ios::in);
+        if (log_stream) {
+            std::ostringstream buffer;
+            buffer << log_stream.rdbuf();
+            details = buffer.str();
+            details.erase(std::remove(details.begin(), details.end(), '\r'), details.end());
+            while (!details.empty() &&
+                   (details.back() == '\n' || details.back() == '\t' || details.back() == ' ')) {
+                details.pop_back();
+            }
+        }
+
         error = "apply_effects_cli exited with code " + std::to_string(rc);
+        if (!details.empty()) {
+            constexpr std::size_t kDetailLimit = 180;
+            if (details.size() > kDetailLimit) {
+                details = details.substr(details.size() - kDetailLimit);
+            }
+            error += " (" + details + ")";
+        }
         return false;
     }
 
@@ -1122,13 +1151,19 @@ void ForegroundBackgroundEffectPanel::load_side_preview_texture(PreviewSide side
 void ForegroundBackgroundEffectPanel::sync_preview_widgets() {
     auto* fg_widget = dynamic_cast<PreviewPaneWidget*>(fg_preview_.get());
     if (fg_widget) {
-        fg_widget->set_texture(fg_preview_texture_, fg_preview_w_, fg_preview_h_);
+        SDL_Texture* texture = fg_preview_texture_ ? fg_preview_texture_ : base_preview_texture_;
+        const int width = fg_preview_texture_ ? fg_preview_w_ : base_preview_w_;
+        const int height = fg_preview_texture_ ? fg_preview_h_ : base_preview_h_;
+        fg_widget->set_texture(texture, width, height);
         fg_widget->set_status(fg_preview_status_);
     }
 
     auto* bg_widget = dynamic_cast<PreviewPaneWidget*>(bg_preview_.get());
     if (bg_widget) {
-        bg_widget->set_texture(bg_preview_texture_, bg_preview_w_, bg_preview_h_);
+        SDL_Texture* texture = bg_preview_texture_ ? bg_preview_texture_ : base_preview_texture_;
+        const int width = bg_preview_texture_ ? bg_preview_w_ : base_preview_w_;
+        const int height = bg_preview_texture_ ? bg_preview_h_ : base_preview_h_;
+        bg_widget->set_texture(texture, width, height);
         bg_widget->set_status(bg_preview_status_);
     }
 }
@@ -1401,7 +1436,8 @@ void ForegroundBackgroundEffectPanel::sync_modal_geometry(int screen_w, int scre
     }
 
     const int content_without_fill = estimate_content_height_without_fill(content_width);
-    const int fill_height = std::max(0, available_body - content_without_fill);
+    constexpr int kBottomActionRowLift = 14;
+    const int fill_height = std::max(0, available_body - content_without_fill - kBottomActionRowLift);
     if (auto* flexible = dynamic_cast<FlexibleSpacerWidget*>(fill_spacer_.get())) {
         flexible->set_height(fill_height);
     }

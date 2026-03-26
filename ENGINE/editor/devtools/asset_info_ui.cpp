@@ -1797,6 +1797,7 @@ void AssetInfoUI::focus_section(DockableCollapsible* section) {
     }
     DockableCollapsible* previous = focused_section_;
     focused_section_ = resolved;
+    collapse_all_except(focused_section_);
     apply_section_focus_states();
     if (focused_section_) {
         focused_section_->force_pointer_ready();
@@ -1811,6 +1812,18 @@ void AssetInfoUI::focus_section(DockableCollapsible* section) {
 
 void AssetInfoUI::clear_section_focus() {
     focus_section(nullptr);
+}
+
+void AssetInfoUI::collapse_all_except(DockableCollapsible* keep) {
+    for (auto& entry : sections_) {
+        DockableCollapsible* section = entry.get();
+        if (!section || section == keep) {
+            continue;
+        }
+        if (section->is_expanded()) {
+            section->set_expanded(false);
+        }
+    }
 }
 
 DockableCollapsible* AssetInfoUI::section_at_point(SDL_Point p) const {

@@ -109,6 +109,7 @@ bool should_emit_scale_trace_for_frame(const Asset& asset, std::uint32_t frame_i
 
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 Asset::Asset(std::shared_ptr<AssetInfo> info_,
              const Area& spawn_area,
              SDL_Point start_pos,
@@ -176,6 +177,7 @@ void Asset::refresh_filter_tags() {
     filter_method_tag_ = asset_filters::canonicalize_spawn_method(spawn_method);
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::set_provisional_grid_point(const world::GridPoint& point) {
     set_provisional_grid_point(point.world_x(),
                                point.world_y(),
@@ -184,14 +186,16 @@ void Asset::set_provisional_grid_point(const world::GridPoint& point) {
 }
 
 void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, int resolution_layer) {
-    provisional_grid_point_.~GridPoint();
-    new (&provisional_grid_point_) GridPoint(
-        GridPoint::make_virtual(world_x,
-                                world_y,
-                                world_z,
-                                vibble::grid::clamp_resolution(resolution_layer)));
-    grid_point_ = &provisional_grid_point_;
+        provisional_grid_point_.~GridPoint();
+        new (&provisional_grid_point_) GridPoint(
+                GridPoint::make_virtual(world_x,
+                                        world_y,
+                                        world_z,
+                                        vibble::grid::clamp_resolution(resolution_layer)));
+        grid_point_ = &provisional_grid_point_;
 }
+
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::clear_downscale_cache() {
     if (last_scaled_texture_) {
@@ -205,6 +209,7 @@ void Asset::clear_downscale_cache() {
     downscale_cache_ready_revision_ = 0;
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 Asset::~Asset() {
         clear_render_caches();
         if (composite_texture_) {
@@ -213,6 +218,8 @@ Asset::~Asset() {
         }
         visibility_stamp = 0;
 }
+
+#endif // !ENGINE_WORLD_TESTS
 
 Asset::Asset(const Asset& o)
     : info(o.info)
@@ -593,20 +600,23 @@ void Asset::update_scale_values() {
     mark_mesh_dirty();
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 const char* Asset::perspective_source_label(PerspectiveSource source) {
-    switch (source) {
-    case PerspectiveSource::CameraTraversal:
-        return "camera-traversal";
+        switch (source) {
+        case PerspectiveSource::CameraTraversal:
+                return "camera-traversal";
     case PerspectiveSource::AssetGridPoint:
         return "asset-grid-point";
     case PerspectiveSource::CachedLastFrame:
         return "cached-last-frame";
     case PerspectiveSource::Default:
     default:
-        return "default";
-    }
+                return "default";
+        }
 }
+#endif // !ENGINE_WORLD_TESTS
 
+ #if !defined(ENGINE_WORLD_TESTS)
 Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     PerspectiveSample sample{};
     sample.scale = 1.0f;
@@ -647,6 +657,7 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
 
     return sample;
 }
+#endif // !ENGINE_WORLD_TESTS
 
 SDL_Texture* Asset::get_current_variant_texture() const {
     if (!current_frame) return nullptr;
@@ -975,6 +986,7 @@ float Asset::frame_delta_seconds_clamped() const {
     return assets_->frame_delta_seconds_clamped();
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::set_assets(Assets* a) {
     assets_ = a;
     if (assets_) {
@@ -987,6 +999,8 @@ void Asset::set_assets(Assets* a) {
     }
 
 }
+ 
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::set_tiling_info(std::optional<TilingInfo> info) {
     tiling_info_ = std::move(info);
@@ -1002,6 +1016,7 @@ void Asset::rebuild_animation_runtime() {
 
 
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::Delete() {
     if (dead) {
         return;
@@ -1012,6 +1027,8 @@ void Asset::Delete() {
         assets_->schedule_removal(this);
     }
 }
+
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::ensure_animation_runtime(bool force_recreate) {
     if (!assets_) {
@@ -1179,6 +1196,7 @@ float Asset::runtime_width_px() const {
         return base_width * runtime_scale_remainder();
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 float Asset::runtime_height_px() const {
         const float base_height = static_cast<float>(height());
         if (!(base_height > 0.0f)) {
@@ -1186,6 +1204,7 @@ float Asset::runtime_height_px() const {
         }
         return base_height * runtime_scale_remainder();
 }
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::on_scale_factor_changed() {
 
@@ -1216,18 +1235,22 @@ bool  Asset::is_highlighted(){ return highlighted; }
 void Asset::set_selected(bool state){ selected = state; }
 bool  Asset::is_selected(){ return selected; }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::cache_grid_residency(const world::GridPoint& point) {
         cached_grid_residency_    = point.key();
         has_cached_grid_residency_ = true;
 }
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::clear_grid_residency_cache() {
         cached_grid_residency_    = world::GridKey{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min(), 0, 0 };
         has_cached_grid_residency_ = false;
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::sync_transform_to_position() {
 }
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::send_attack(const animation_update::Attack& attack) {
         std::lock_guard<std::mutex> lock(pending_attacks_mutex_);
@@ -1241,6 +1264,7 @@ std::vector<animation_update::Attack> Asset::process_pending_attacks() {
         return attacks;
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::mark_anchors_dirty() {
         for (auto& handle : anchor_handles_) {
                 handle.dirty = true;
@@ -1254,6 +1278,8 @@ void Asset::mark_anchors_dirty() {
             this,
             std::string{});
 }
+
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::assert_unique_anchor_names_for_frame() const {
 #if !defined(NDEBUG)
@@ -1433,6 +1459,8 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
         return resolved;
 }
 
+#endif // !ENGINE_WORLD_TESTS
+
 void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy, bool force_recompute) {
 #if !defined(NDEBUG)
         auto& counters = anchor_update_counters();
@@ -1536,9 +1564,11 @@ void Asset::set_grid_id(std::uint64_t id) {
         grid_id_ = id;
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::clear_grid_id() {
         grid_id_ = 0;
 }
+#endif // !ENGINE_WORLD_TESTS
 
 void Asset::set_composite_texture(SDL_Texture* tex) {
     if (composite_texture_ && composite_texture_ != tex) {
@@ -1547,6 +1577,7 @@ void Asset::set_composite_texture(SDL_Texture* tex) {
     composite_texture_ = tex;
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 float Asset::smoothed_translation_x() const {
     return static_cast<float>(world_x());
 }
@@ -1559,6 +1590,8 @@ float Asset::smoothed_scale() const {
     return current_scale;
 }
 
+#endif // !ENGINE_WORLD_TESTS
+
 float Asset::smoothed_alpha() const {
         float value = alpha_smoothing_.value_for_render();
         if (!std::isfinite(value)) {
@@ -1567,6 +1600,7 @@ float Asset::smoothed_alpha() const {
         return std::clamp(value, 0.0f, 1.0f);
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::move_to_world_position(int world_x,
                                    int world_y,
                                    int world_z,
@@ -1591,11 +1625,14 @@ void Asset::move_to_world_position(int world_x,
     assets_->mark_collision_context_dirty();
 }
 
+#endif // !ENGINE_WORLD_TESTS
+
 void Asset::set_world_z(int world_z) {
     if (!assets_) return;
     move_to_world_position(world_x(), world_y(), world_z);
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 void Asset::set_render_depth_bias(double bias) {
     if (!std::isfinite(bias)) {
         bias = 0.0;
@@ -1604,3 +1641,5 @@ void Asset::set_render_depth_bias(double bias) {
     constexpr double kMaxBiasMagnitude = 8.0;
     render_depth_bias_ = std::clamp(bias, -kMaxBiasMagnitude, kMaxBiasMagnitude);
 }
+
+#endif // !ENGINE_WORLD_TESTS

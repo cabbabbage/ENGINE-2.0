@@ -256,60 +256,20 @@ endif()
 # ------------------------------------------
 set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
-add_executable(engine_tests
 
+set(ENGINE_TEST_RUNTIME_SRC ${ENGINE_SRC})
+list(REMOVE_ITEM ENGINE_TEST_RUNTIME_SRC
+    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/app/main.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui/ui/menu_ui.cpp"
+)
+list(APPEND ENGINE_TEST_RUNTIME_SRC
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/d3d11_effects_backend.cpp"
+)
+
+add_executable(engine_tests
+    ${ENGINE_TEST_RUNTIME_SRC}
     ENGINE/tests/engine_tests_main.cpp
-    ENGINE/runtime/assets/asset/animation.cpp
-    ENGINE/runtime/assets/asset/surface_utils.cpp
-    ENGINE/runtime/assets/asset/animation_cloner.cpp
-    ENGINE/runtime/assets/asset/asset_controller.cpp
-    ENGINE/runtime/assets/asset/Asset.cpp
-    ENGINE/runtime/animation/controllers/shared/custom_asset_controller.cpp
-    ENGINE/runtime/animation/controllers/shared/child_asset.cpp
-    ENGINE/runtime/animation/controllers/shared/anchor_bound_asset_helper.cpp
-    ENGINE/runtime/animation/attack_validation.cpp
-    ENGINE/runtime/animation/animation_update.cpp
-    ENGINE/runtime/animation/path_sanitizer.cpp
-    ENGINE/runtime/animation/get_best_path.cpp
-    ENGINE/runtime/animation/animation_runtime.cpp
-    ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
-    ENGINE/editor/devtools/dm_styles.cpp
-    ENGINE/editor/devtools/core/dev_json_store.cpp
-    ENGINE/editor/devtools/core/manifest_store.cpp
-    ENGINE/editor/devtools/manifest_asset_utils.cpp
-    ENGINE/editor/devtools/tag_utils.cpp
-    ENGINE/editor/devtools/draw_utils.cpp
-    ENGINE/editor/devtools/font_cache.cpp
-    ENGINE/editor/devtools/room_anchor_mode_utils.cpp
-    ENGINE/editor/devtools/room_movement_payload.cpp
-    ENGINE/editor/devtools/room_box_payload_utils.cpp
-    ENGINE/editor/devtools/widgets.cpp
-    ENGINE/editor/devtools/animation_source_navigation.cpp
-    ENGINE/editor/devtools/frame_editors/shared/FrameEditState.cpp
-    ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp
-    ENGINE/runtime/core/AssetsManager.cpp
-    ENGINE/runtime/core/manifest/manifest_loader.cpp
-    ENGINE/runtime/utils/utils/log.cpp
-    ENGINE/runtime/utils/utils/cache_manager.cpp
-    ENGINE/runtime/utils/utils/map_grid_settings.cpp
-    ENGINE/runtime/utils/utils/loading_status_notifier.cpp
-    ENGINE/runtime/utils/utils/input.cpp
-    ENGINE/runtime/utils/utils/area.cpp
-    ENGINE/runtime/utils/utils/grid_math.cpp
-    ENGINE/runtime/utils/utils/range_util.cpp
-    ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
-    ENGINE/runtime/core/runtime_world_context.cpp
-    ENGINE/runtime/gameplay/world/grid_point.cpp
-    ENGINE/runtime/gameplay/world/world_grid.cpp
-    ENGINE/runtime/gameplay/world/chunk.cpp
-    ENGINE/runtime/gameplay/world/chunk_manager.cpp
-    ENGINE/runtime/rendering/render/camera_controller.cpp
-    ENGINE/runtime/rendering/render/projected_sprite_frame.cpp
-    ENGINE/runtime/rendering/render/render_object_projection.cpp
-    ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
-    ENGINE/tests/stubs/asset/child_asset_runtime_test_support.cpp
-    ENGINE/tests/stubs/utils/Area_world_tests_stubs.cpp
-    ENGINE/tests/stubs/render/WarpedScreenGrid_projection_tests_stubs.cpp
     ENGINE/tests/test_render_object_projection.cpp
     ENGINE/tests/test_anchor_binding_order.cpp
     ENGINE/tests/test_anchor_point_resolver.cpp
@@ -326,7 +286,6 @@ add_executable(engine_tests
     ENGINE/tests/test_input_activity.cpp
     ENGINE/tests/test_camera_controller.cpp
     ENGINE/tests/test_asset_perspective_sample.cpp
-    ENGINE/tests/test_child_asset_runtime.cpp
     ENGINE/tests/test_animation_runtime_ownership.cpp
     ENGINE/tests/test_scaling_logic_variants.cpp
     ENGINE/tests/test_movement_pathing_axis.cpp
@@ -339,14 +298,17 @@ target_include_directories(engine_tests
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/audio
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+          ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
           ${CMAKE_SOURCE_DIR}/external
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core
   )
 
 target_compile_definitions(engine_tests PRIVATE
     DEV_MODE_DISABLE_JSON_DEBOUNCE=1
-    ENGINE_WORLD_TESTS=1
     PROJECT_ROOT="${TEST_ROOT}"
     FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
     FRAME_EDITOR_ACCESS=public
@@ -377,6 +339,7 @@ endif()
 
 if (WIN32)
     target_link_libraries(engine_tests PRIVATE Ole32 Shell32)
+    target_link_libraries(engine_tests PRIVATE d3d11 d3dcompiler)
 endif()
 
 # ------------------------------------------

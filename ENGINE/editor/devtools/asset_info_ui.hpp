@@ -102,6 +102,7 @@ class AssetInfoUI {
     DockableCollapsible* section_at_point(SDL_Point p) const;
     bool handle_section_focus_event(const SDL_Event& e);
     std::shared_ptr<animation_editor::AnimationDocument> animation_document() const;
+    void collapse_all_except(DockableCollapsible* keep);
 
   private:
     bool visible_ = false;

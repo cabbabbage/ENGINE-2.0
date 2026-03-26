@@ -565,6 +565,7 @@ AssetInfo::ManifestStoreProvider& manifest_store_provider_slot() {
 
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 AssetInfo::AssetInfo(const std::string &asset_folder_name)
     : AssetInfo(asset_folder_name, nlohmann::json::object()) {}
 
@@ -593,6 +594,9 @@ AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json&
         }
 }
 
+#endif // !ENGINE_WORLD_TESTS
+
+ #if !defined(ENGINE_WORLD_TESTS)
 std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& asset_folder_name,
                                                          const nlohmann::json& metadata) {
     nlohmann::json meta = metadata.is_object() ? metadata : nlohmann::json::object();
@@ -605,13 +609,16 @@ std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& ass
             meta = bundle.metadata_snapshot;
         }
     }
-    return std::make_shared<AssetInfo>(asset_folder_name, meta);
+return std::make_shared<AssetInfo>(asset_folder_name, meta);
 }
+
+#endif // !ENGINE_WORLD_TESTS
 
 void AssetInfo::set_manifest_store_provider(ManifestStoreProvider provider) {
     manifest_store_provider_slot() = std::move(provider);
 }
 
+ #if !defined(ENGINE_WORLD_TESTS)
 AssetInfo::~AssetInfo() {
 	for (auto &[key, anim] : animations) {
                 anim.clear_texture_cache();
@@ -1431,6 +1438,8 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         }
 
 }
+
+#endif // !ENGINE_WORLD_TESTS
 
 void AssetInfo::set_spawn_groups_payload(const nlohmann::json& groups) {
     if (!info_json_.is_object()) {

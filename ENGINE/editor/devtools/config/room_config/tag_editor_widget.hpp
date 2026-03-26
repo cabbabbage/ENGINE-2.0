@@ -4,6 +4,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <limits>
 
@@ -11,8 +12,16 @@
 
 class TagEditorWidget : public Widget {
 public:
-    TagEditorWidget();
+    enum class Mode {
+        Legacy,
+        AssetInfoOverhaul
+    };
+
+    explicit TagEditorWidget(Mode mode = Mode::Legacy);
     ~TagEditorWidget() override;
+
+    void set_mode(Mode mode);
+    Mode mode() const { return mode_; }
 
     void set_tags(const std::vector<std::string>& tags, const std::vector<std::string>& anti_tags);
 
@@ -28,16 +37,36 @@ public:
     void render(SDL_Renderer* r) const override;
 
 private:
+    enum class ChipListKind {
+        None,
+        Tags,
+        AntiTags,
+        Recommended,
+        SearchInputVirtual
+    };
+
     struct Chip {
         std::string value;
+        ChipListKind kind = ChipListKind::None;
         std::unique_ptr<DMButton> button;
-};
+    };
+
+    struct DragState {
+        bool pressed = false;
+        bool dragging = false;
+        SDL_Point start_point{0,0};
+        SDL_Point pointer{0,0};
+        std::string value;
+        ChipListKind source_kind = ChipListKind::None;
+        ChipListKind hover_target = ChipListKind::None;
+    };
 
     void rebuild_buttons();
     void refresh_recommendations();
     void mark_dirty();
     void layout_if_needed() const;
     int layout(int width, int origin_x, int origin_y, bool apply);
+    int layout_asset_overhaul(int width, int origin_x, int origin_y, bool apply);
     int layout_grid(std::vector<Chip>& chips, int width, int origin_x, int start_y, bool apply, size_t visible_count = std::numeric_limits<size_t>::max(), const std::vector<size_t>* display_order = nullptr);
     static int label_height();
     void draw_label(SDL_Renderer* r, const std::string& text, const SDL_Rect& rect) const;
@@ -57,9 +86,23 @@ private:
     void clear_search();
     void add_search_text_as_tag();
     static bool event_targets_rect(const SDL_Event& e, const SDL_Rect& rect);
+    static bool starts_with_casefold(const std::string& value, const std::string& prefix);
+
+    void refresh_recommendations_asset_mode();
+    void rebuild_recommended_from_search();
+    bool handle_event_asset_overhaul(const SDL_Event& e);
+    void render_asset_overhaul(SDL_Renderer* r) const;
+    Chip* hit_chip_at(const SDL_Point& p);
+    const Chip* hit_chip_at(const SDL_Point& p) const;
+    ChipListKind drop_target_at(const SDL_Point& p) const;
+    void clear_drag_state();
+    bool move_chip_between_lists(const std::string& value, ChipListKind source, ChipListKind target);
+    bool handle_chip_double_click(const Chip& chip);
+    void clear_asset_session_state();
 
     SDL_Rect rect_{0,0,0,0};
     mutable bool layout_dirty_ = true;
+    Mode mode_ = Mode::Legacy;
 
     std::set<std::string> tags_;
     std::set<std::string> anti_tags_;
@@ -70,12 +113,22 @@ private:
     mutable SDL_Rect anti_label_rect_{0,0,0,0};
     mutable SDL_Rect rec_tags_label_rect_{0,0,0,0};
     mutable SDL_Rect rec_anti_label_rect_{0,0,0,0};
+    mutable SDL_Rect tags_drop_rect_{0,0,0,0};
+    mutable SDL_Rect anti_drop_rect_{0,0,0,0};
+    mutable SDL_Rect rec_drop_rect_{0,0,0,0};
 
     std::vector<Chip> tag_chips_;
     std::vector<Chip> anti_chips_;
     std::vector<Chip> rec_tag_chips_;
     std::vector<Chip> rec_anti_chips_;
     std::vector<size_t> filtered_tag_order_;
+    std::unordered_map<std::string, double> recommendation_context_scores_;
+    std::unordered_map<std::string, int> recommendation_popularity_;
+    std::set<std::string> hidden_recommended_;
+    std::set<std::string> session_recommended_;
+    bool show_search_virtual_chip_ = false;
+    std::string search_virtual_value_;
+    DragState drag_state_;
 
     bool show_all_tag_recs_ = false;
     bool show_all_anti_recs_ = false;

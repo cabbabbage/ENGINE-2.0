@@ -73,6 +73,7 @@ private:
     void set_slider_values(SliderSet& set, const camera_effects::ImageEffectSettings& settings);
     camera_effects::ImageEffectSettings read_slider_values(const SliderSet& set) const;
     void on_slider_changed(PreviewSide side);
+    std::unique_ptr<Widget> make_slider_column_widget(const SliderSet& set);
 
     void schedule_preview_rebuild(bool fg, bool bg, Uint32 delay_ms = 0);
     void update_pending_previews(Uint64 now_ms);
@@ -130,6 +131,8 @@ private:
     std::unique_ptr<Widget> fill_spacer_;
     SliderSet fg_sliders_{};
     SliderSet bg_sliders_{};
+    std::unique_ptr<Widget> fg_slider_column_widget_;
+    std::unique_ptr<Widget> bg_slider_column_widget_;
     std::unique_ptr<Widget> fg_preview_;
     std::unique_ptr<Widget> bg_preview_;
 

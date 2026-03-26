@@ -1727,13 +1727,14 @@
           "movement": [
             [
               0,
+              0,
               0
             ]
           ],
           "movement_total": {
             "dx": 0,
             "dy": 0,
-            "dz": 0
+            "dz": 0.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -2036,59 +2037,41 @@
           "locked": false,
           "loop": true,
           "movement": [
-            {
-              "dx": 0,
-              "dy": 0,
-              "dz": 0,
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            {
-              "dx": -50,
-              "dy": 0,
-              "dz": -50,
-              "x": -50,
-              "y": 0,
-              "z": -50
-            },
-            {
-              "dx": -50,
-              "dy": 0,
-              "dz": -50,
-              "x": -50,
-              "y": 0,
-              "z": -50
-            },
-            {
-              "dx": -50,
-              "dy": 0,
-              "dz": -50,
-              "x": -50,
-              "y": 0,
-              "z": -50
-            },
-            {
-              "dx": -50,
-              "dy": 0,
-              "dz": -50,
-              "x": -50,
-              "y": 0,
-              "z": -50
-            },
-            {
-              "dx": -50,
-              "dy": 0,
-              "dz": -50,
-              "x": -50,
-              "y": 0,
-              "z": -50
-            }
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              -88,
+              0,
+              56
+            ],
+            [
+              -34,
+              0,
+              -6
+            ],
+            [
+              -34,
+              0,
+              -6
+            ],
+            [
+              -34,
+              0,
+              -6
+            ],
+            [
+              -34,
+              0,
+              -6
+            ]
           ],
           "movement_total": {
-            "dx": -250,
+            "dx": -224,
             "dy": 0,
-            "dz": -250
+            "dz": 32.0
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -5099,7 +5082,9 @@
         "scale_percentage": 134.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "player"
+      ],
       "tillable": false,
       "update_radius": 0
     },
@@ -5209,6 +5194,7 @@
         "center_depth_offset": 0.0,
         "foreground_max_depth_offset": -600.0
       },
+      "dev_map_settings": {},
       "fog_settings": {
         "max_random_jitter": 0
       },
@@ -5372,11 +5358,11 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -77,
-          "camera_center_dz": 737,
-          "camera_height_px": 351,
-          "camera_tilt_deg": 34.20000076293945,
-          "camera_zoom_percent": 0,
+          "camera_center_dx": -486,
+          "camera_center_dz": -408,
+          "camera_height_px": 622,
+          "camera_tilt_deg": 47.80000305175781,
+          "camera_zoom_percent": 20,
           "curvyness": 2,
           "display_color": [
             242,
@@ -5500,16 +5486,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -212,
-              "dz": 44,
+              "dx": -1080,
+              "dz": -128,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3272,
-              "origional_width": 2904,
+              "origional_height": 2688,
+              "origional_width": 3408,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -5523,6 +5509,26 @@
       },
       "schema_version": 1,
       "trails_data": {
+        "NewTrail": {
+          "curvyness": 4,
+          "display_color": [
+            242,
+            36,
+            36,
+            255
+          ],
+          "edge_smoothness": 8,
+          "geometry": "Square",
+          "inherits_map_assets": true,
+          "is_boss": false,
+          "is_spawn": false,
+          "max_height": 200,
+          "max_width": 400,
+          "min_height": 200,
+          "min_width": 400,
+          "name": "NewTrail",
+          "spawn_groups": []
+        },
         "basic": {
           "display_color": [
             85,

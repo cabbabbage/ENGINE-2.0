@@ -10,6 +10,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -24,6 +25,12 @@ constexpr int kChipWidth = 132;
 constexpr int kRecommendChipWidth = 148;
 constexpr size_t kRecommendationPreviewCount = 5;
 constexpr size_t kMaxRecommendations = std::numeric_limits<size_t>::max();
+constexpr int kAssetDropMinHeight = 34;
+constexpr float kDragStartThresholdPx = 6.0f;
+constexpr double kPopularityWeight = 0.5;
+constexpr double kSearchBoostExact = 1000000.0;
+constexpr double kSearchBoostPrefix = 500000.0;
+constexpr double kSearchBoostContains = 250000.0;
 
 struct TagDatasetEntry {
     std::vector<std::string> tags;
@@ -213,16 +220,55 @@ std::unique_ptr<DMButton> make_button(const std::string& text, const DMButtonSty
     return std::make_unique<DMButton>(text, &style, width, DMButton::height());
 }
 
+const DMButtonStyle& recommendation_yellow_style() {
+    static const DMButtonStyle style{
+        {dm::FONT_PATH, 16, dm::rgba(36, 36, 36, 255)},
+        dm::rgba(250, 204, 21, 235),
+        dm::rgba(253, 224, 71, 242),
+        dm::rgba(202, 138, 4, 235),
+        dm::rgba(161, 98, 7, 255),
+        dm::rgba(36, 36, 36, 255)
+    };
+    return style;
 }
 
-TagEditorWidget::TagEditorWidget() = default;
+const DMButtonStyle& recommendation_orange_style() {
+    static const DMButtonStyle style{
+        {dm::FONT_PATH, 16, dm::rgba(36, 36, 36, 255)},
+        dm::rgba(251, 146, 60, 235),
+        dm::rgba(253, 186, 116, 242),
+        dm::rgba(234, 88, 12, 235),
+        dm::rgba(194, 65, 12, 255),
+        dm::rgba(36, 36, 36, 255)
+    };
+    return style;
+}
+
+}
+
+TagEditorWidget::TagEditorWidget(Mode mode)
+    : mode_(mode) {}
+
 TagEditorWidget::~TagEditorWidget() = default;
+
+void TagEditorWidget::set_mode(Mode mode) {
+    if (mode_ == mode) {
+        return;
+    }
+    mode_ = mode;
+    clear_asset_session_state();
+    reset_toggle_state();
+    refresh_recommendations();
+    rebuild_buttons();
+    mark_dirty();
+}
 
 void TagEditorWidget::set_tags(const std::vector<std::string>& tags,
                                const std::vector<std::string>& anti_tags) {
     tags_.clear();
     anti_tags_.clear();
     clear_search();
+    clear_asset_session_state();
     for (const auto& t : tags) {
         auto norm = normalize(t);
         if (!norm.empty()) tags_.insert(std::move(norm));
@@ -237,6 +283,7 @@ void TagEditorWidget::set_tags(const std::vector<std::string>& tags,
     refresh_recommendations();
     rebuild_buttons();
     reset_toggle_state();
+    clear_drag_state();
     mark_dirty();
 }
 
@@ -265,6 +312,9 @@ int TagEditorWidget::height_for_width(int w) const {
 }
 
 bool TagEditorWidget::handle_event(const SDL_Event& e) {
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        return handle_event_asset_overhaul(e);
+    }
     layout_if_needed();
     bool used = false;
     for (const auto& chip : tag_chips_) {
@@ -340,6 +390,10 @@ bool TagEditorWidget::handle_event(const SDL_Event& e) {
 }
 
 void TagEditorWidget::render(SDL_Renderer* r) const {
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        render_asset_overhaul(r);
+        return;
+    }
     if (!r) return;
     const_cast<TagEditorWidget*>(this)->layout_if_needed();
 
@@ -388,11 +442,14 @@ void TagEditorWidget::rebuild_buttons() {
 
     const auto& tag_style = DMStyles::CreateButton();
     const auto& anti_style = DMStyles::DeleteButton();
-    const auto& rec_style = DMStyles::ListButton();
+    const auto& rec_style = mode_ == Mode::AssetInfoOverhaul
+        ? recommendation_yellow_style()
+        : DMStyles::ListButton();
 
     for (const auto& value : tags_) {
         Chip chip;
         chip.value = value;
+        chip.kind = ChipListKind::Tags;
         chip.button = make_button(value, tag_style, kChipWidth);
         tag_chips_.push_back(std::move(chip));
     }
@@ -400,25 +457,39 @@ void TagEditorWidget::rebuild_buttons() {
     for (const auto& value : anti_tags_) {
         Chip chip;
         chip.value = value;
+        chip.kind = ChipListKind::AntiTags;
         chip.button = make_button(value, anti_style, kChipWidth);
         anti_chips_.push_back(std::move(chip));
     }
 
+    if (mode_ == Mode::AssetInfoOverhaul && show_search_virtual_chip_ && !search_virtual_value_.empty()) {
+        Chip chip;
+        chip.value = search_virtual_value_;
+        chip.kind = ChipListKind::SearchInputVirtual;
+        chip.button = make_button(search_virtual_value_, recommendation_orange_style(), kRecommendChipWidth);
+        rec_tag_chips_.push_back(std::move(chip));
+    }
+
     for (const auto& value : recommended_tags_) {
-        Chip add_chip;
-        add_chip.value = value;
-        add_chip.button = make_button("+ " + value, rec_style, kRecommendChipWidth);
-        rec_tag_chips_.push_back(std::move(add_chip));
+        Chip chip;
+        chip.value = value;
+        chip.kind = ChipListKind::Recommended;
+        const std::string label = mode_ == Mode::AssetInfoOverhaul ? value : "+ " + value;
+        chip.button = make_button(label, rec_style, kRecommendChipWidth);
+        rec_tag_chips_.push_back(std::move(chip));
     }
 
     for (const auto& value : recommended_anti_) {
-        Chip anti_chip;
-        anti_chip.value = value;
-        anti_chip.button = make_button("- " + value, rec_style, kRecommendChipWidth);
-        rec_anti_chips_.push_back(std::move(anti_chip));
+        Chip chip;
+        chip.value = value;
+        chip.kind = ChipListKind::Recommended;
+        chip.button = make_button("- " + value, rec_style, kRecommendChipWidth);
+        rec_anti_chips_.push_back(std::move(chip));
     }
 
-    update_search_filter();
+    if (mode_ == Mode::Legacy) {
+        update_search_filter();
+    }
 }
 
 void TagEditorWidget::refresh_recommendations() {
@@ -524,6 +595,19 @@ void TagEditorWidget::refresh_recommendations() {
         return output;
 };
 
+    recommendation_context_scores_.clear();
+    recommendation_popularity_.clear();
+    for (const auto& cand : scores) {
+        const int popularity = static_cast<int>(cand.tie_break);
+        recommendation_context_scores_[cand.value] = cand.tag_score;
+        recommendation_popularity_[cand.value] = popularity;
+    }
+
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        refresh_recommendations_asset_mode();
+        return;
+    }
+
     recommended_tags_ = make_list([](const CandidateScore& c) { return c.tag_score; });
     recommended_anti_ = make_list([](const CandidateScore& c) { return c.anti_score; });
 }
@@ -541,6 +625,9 @@ void TagEditorWidget::layout_if_needed() const {
 }
 
 int TagEditorWidget::layout(int width, int origin_x, int origin_y, bool apply) {
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        return layout_asset_overhaul(width, origin_x, origin_y, apply);
+    }
     const int pad = DMSpacing::small_gap();
     const int label_gap = DMSpacing::label_gap();
     const int section_gap = DMSpacing::item_gap();
@@ -719,6 +806,79 @@ int TagEditorWidget::layout(int width, int origin_x, int origin_y, bool apply) {
     return y - origin_y;
 }
 
+int TagEditorWidget::layout_asset_overhaul(int width, int origin_x, int origin_y, bool apply) {
+    const int pad = DMSpacing::small_gap();
+    const int label_gap = DMSpacing::label_gap();
+    const int section_gap = DMSpacing::item_gap();
+    const int label_h = label_height();
+    int y = origin_y + pad;
+
+    if (!tag_search_box_) {
+        tag_search_box_ = std::make_unique<DMTextBox>("", search_input_);
+    }
+    tag_search_box_->set_value(search_input_);
+
+    if (apply) {
+        rec_anti_label_rect_ = SDL_Rect{0,0,0,0};
+        if (show_more_tags_btn_) show_more_tags_btn_->set_rect(SDL_Rect{0,0,0,0});
+        if (show_more_anti_btn_) show_more_anti_btn_->set_rect(SDL_Rect{0,0,0,0});
+        if (add_tag_btn_) add_tag_btn_->set_rect(SDL_Rect{0,0,0,0});
+        if (add_as_anti_checkbox_) add_as_anti_checkbox_->set_rect(SDL_Rect{0,0,0,0});
+        if (add_as_anti_widget_) add_as_anti_widget_->set_rect(SDL_Rect{0,0,0,0});
+        if (browse_tags_btn_) browse_tags_btn_->set_rect(SDL_Rect{0,0,0,0});
+        if (browse_tags_widget_) browse_tags_widget_->set_rect(SDL_Rect{0,0,0,0});
+        tags_drop_rect_ = SDL_Rect{0,0,0,0};
+        anti_drop_rect_ = SDL_Rect{0,0,0,0};
+        rec_drop_rect_ = SDL_Rect{0,0,0,0};
+    }
+
+    const int tags_label_y = y;
+    if (apply) {
+        tags_label_rect_ = SDL_Rect{origin_x, y, width, label_h};
+    }
+    y += label_h + label_gap;
+    const int tags_chip_start = y;
+    y = layout_grid(tag_chips_, width, origin_x, y, apply, kMaxRecommendations, nullptr);
+    const int tags_bottom = std::max(y, tags_chip_start + kAssetDropMinHeight);
+    if (apply) {
+        tags_drop_rect_ = SDL_Rect{origin_x, tags_label_y, width, std::max(1, tags_bottom - tags_label_y)};
+    }
+    y = tags_bottom + section_gap;
+
+    const int anti_label_y = y;
+    if (apply) {
+        anti_label_rect_ = SDL_Rect{origin_x, y, width, label_h};
+    }
+    y += label_h + label_gap;
+    const int anti_chip_start = y;
+    y = layout_grid(anti_chips_, width, origin_x, y, apply, kMaxRecommendations, nullptr);
+    const int anti_bottom = std::max(y, anti_chip_start + kAssetDropMinHeight);
+    if (apply) {
+        anti_drop_rect_ = SDL_Rect{origin_x, anti_label_y, width, std::max(1, anti_bottom - anti_label_y)};
+    }
+    y = anti_bottom + section_gap;
+
+    const int rec_label_y = y;
+    if (apply) {
+        rec_tags_label_rect_ = SDL_Rect{origin_x, y, width, label_h};
+    }
+    y += label_h + label_gap;
+    const int rec_chip_start = y;
+    y = layout_grid(rec_tag_chips_, width, origin_x, y, apply, kMaxRecommendations, nullptr);
+    const int rec_bottom = std::max(y, rec_chip_start + kAssetDropMinHeight);
+    if (apply) {
+        rec_drop_rect_ = SDL_Rect{origin_x, rec_label_y, width, std::max(1, rec_bottom - rec_label_y)};
+    }
+    y = rec_bottom + section_gap;
+
+    const int search_height = std::max(tag_search_box_->height_for_width(width), DMTextBox::height());
+    if (apply) {
+        tag_search_box_->set_rect(SDL_Rect{origin_x, y, width, search_height});
+    }
+    y += search_height + pad;
+    return y - origin_y;
+}
+
 int TagEditorWidget::layout_grid(std::vector<Chip>& chips, int width, int origin_x, int start_y, bool apply,
                                 size_t visible_count, const std::vector<size_t>* display_order) {
     size_t available = display_order ? display_order->size() : chips.size();
@@ -806,6 +966,10 @@ void TagEditorWidget::handle_chip_click(const Chip& chip, const SDL_Event& e,
 void TagEditorWidget::add_tag(const std::string& value) {
     auto norm = normalize(value);
     if (norm.empty()) return;
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        session_recommended_.erase(norm);
+        hidden_recommended_.erase(norm);
+    }
     bool changed = false;
     if (anti_tags_.erase(norm) > 0) changed = true;
     if (tags_.insert(norm).second) changed = true;
@@ -820,6 +984,10 @@ void TagEditorWidget::add_tag(const std::string& value) {
 void TagEditorWidget::add_anti_tag(const std::string& value) {
     auto norm = normalize(value);
     if (norm.empty()) return;
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        session_recommended_.erase(norm);
+        hidden_recommended_.erase(norm);
+    }
     bool changed = false;
     if (tags_.erase(norm) > 0) changed = true;
     if (anti_tags_.insert(norm).second) changed = true;
@@ -880,6 +1048,11 @@ void TagEditorWidget::update_toggle_labels() {
 }
 
 void TagEditorWidget::update_search_filter() {
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        rebuild_recommended_from_search();
+        rebuild_buttons();
+        return;
+    }
     filtered_tag_order_.clear();
     if (rec_tag_chips_.empty()) return;
     if (search_query_.empty()) {
@@ -905,6 +1078,9 @@ void TagEditorWidget::clear_search() {
 }
 
 void TagEditorWidget::add_search_text_as_tag() {
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        return;
+    }
     auto normalized = normalize(search_input_);
     if (normalized.empty()) return;
     bool add_as_anti = add_as_anti_checkbox_ && add_as_anti_checkbox_->value();
@@ -919,6 +1095,9 @@ void TagEditorWidget::add_search_text_as_tag() {
 }
 
 void TagEditorWidget::update_browse_mode() {
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        return;
+    }
     if (show_browse_tags_) {
 
         std::vector<std::string> all_tags = TagLibrary::instance().tags();
@@ -938,6 +1117,347 @@ void TagEditorWidget::update_browse_mode() {
     }
     rebuild_buttons();
     mark_dirty();
+}
+
+bool TagEditorWidget::starts_with_casefold(const std::string& value, const std::string& prefix) {
+    if (prefix.size() > value.size()) return false;
+    return std::equal(prefix.begin(), prefix.end(), value.begin());
+}
+
+void TagEditorWidget::refresh_recommendations_asset_mode() {
+    recommended_anti_.clear();
+    rebuild_recommended_from_search();
+}
+
+void TagEditorWidget::rebuild_recommended_from_search() {
+    recommended_tags_.clear();
+    show_search_virtual_chip_ = false;
+    search_virtual_value_.clear();
+
+    struct RankedCandidate {
+        std::string value;
+        double score = 0.0;
+    };
+
+    std::vector<RankedCandidate> ranked;
+    ranked.reserve(recommendation_context_scores_.size() + session_recommended_.size());
+    std::unordered_set<std::string> seen;
+
+    auto add_candidate = [&](const std::string& raw_value, double score_hint, bool from_session) {
+        std::string value = normalize(raw_value);
+        if (value.empty()) return;
+        if (tags_.count(value) || anti_tags_.count(value)) return;
+        if (hidden_recommended_.count(value)) return;
+        if (!search_query_.empty() && value.find(search_query_) == std::string::npos) return;
+        if (!seen.insert(value).second) return;
+
+        const auto ctx_it = recommendation_context_scores_.find(value);
+        const auto pop_it = recommendation_popularity_.find(value);
+        const double contextual = ctx_it != recommendation_context_scores_.end() ? ctx_it->second : score_hint;
+        const double popularity = pop_it != recommendation_popularity_.end() ? static_cast<double>(pop_it->second) : 0.0;
+        double search_boost = 0.0;
+        if (!search_query_.empty()) {
+            if (value == search_query_) {
+                search_boost = kSearchBoostExact;
+            } else if (starts_with_casefold(value, search_query_)) {
+                search_boost = kSearchBoostPrefix;
+            } else {
+                search_boost = kSearchBoostContains;
+            }
+        }
+        const double session_boost = from_session ? 250000.0 : 0.0;
+        ranked.push_back(RankedCandidate{
+            value,
+            contextual + popularity * kPopularityWeight + search_boost + session_boost
+        });
+    };
+
+    for (const auto& [value, context_score] : recommendation_context_scores_) {
+        add_candidate(value, context_score, session_recommended_.count(value) != 0);
+    }
+    for (const auto& value : session_recommended_) {
+        add_candidate(value, 0.0, true);
+    }
+
+    std::sort(ranked.begin(), ranked.end(), [](const RankedCandidate& a, const RankedCandidate& b) {
+        if (a.score == b.score) return a.value < b.value;
+        return a.score > b.score;
+    });
+
+    for (const auto& item : ranked) {
+        recommended_tags_.push_back(item.value);
+    }
+
+    std::string normalized_search = normalize(search_input_);
+    if (!normalized_search.empty() &&
+        !tags_.count(normalized_search) &&
+        !anti_tags_.count(normalized_search) &&
+        !hidden_recommended_.count(normalized_search)) {
+        show_search_virtual_chip_ = true;
+        search_virtual_value_ = normalized_search;
+        recommended_tags_.erase(
+            std::remove(recommended_tags_.begin(), recommended_tags_.end(), normalized_search),
+            recommended_tags_.end());
+    }
+}
+
+bool TagEditorWidget::handle_event_asset_overhaul(const SDL_Event& e) {
+    layout_if_needed();
+    bool used = false;
+
+    auto update_search_state = [&]() {
+        std::string lowered = to_lower(search_input_);
+        if (lowered != search_query_ || mode_ == Mode::AssetInfoOverhaul) {
+            search_query_ = std::move(lowered);
+            update_search_filter();
+            mark_dirty();
+        }
+    };
+
+    if (tag_search_box_ && tag_search_box_->rect().w > 0) {
+        bool search_used = tag_search_box_->handle_event(e);
+        if (search_used) {
+            used = true;
+            search_input_ = tag_search_box_->value();
+            update_search_state();
+        } else if (event_targets_rect(e, tag_search_box_->rect())) {
+            used = true;
+        }
+    }
+
+    auto pump_chip_widgets = [&](auto& chips) {
+        for (auto& chip : chips) {
+            if (chip.button) {
+                chip.button->handle_event(e);
+            }
+        }
+    };
+    pump_chip_widgets(tag_chips_);
+    pump_chip_widgets(anti_chips_);
+    pump_chip_widgets(rec_tag_chips_);
+
+    auto pointer_from_event = [&](SDL_Point& out) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            out.x = static_cast<int>(std::lround(e.motion.x));
+            out.y = static_cast<int>(std::lround(e.motion.y));
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+            out.x = static_cast<int>(std::lround(e.button.x));
+            out.y = static_cast<int>(std::lround(e.button.y));
+            return true;
+        }
+        return false;
+    };
+
+    SDL_Point pointer{0,0};
+    const bool has_pointer = pointer_from_event(pointer);
+
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && has_pointer) {
+        bool search_hit = tag_search_box_ && SDL_PointInRect(&pointer, &tag_search_box_->rect());
+        if (!search_hit) {
+            if (Chip* chip = hit_chip_at(pointer)) {
+                clear_drag_state();
+                drag_state_.pressed = true;
+                drag_state_.start_point = pointer;
+                drag_state_.pointer = pointer;
+                drag_state_.value = chip->value;
+                drag_state_.source_kind = chip->kind;
+                drag_state_.hover_target = chip->kind;
+                used = true;
+            } else if (drop_target_at(pointer) != ChipListKind::None) {
+                used = true;
+            }
+        }
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION && has_pointer && drag_state_.pressed) {
+        drag_state_.pointer = pointer;
+        if (!drag_state_.dragging) {
+            const float dx = static_cast<float>(pointer.x - drag_state_.start_point.x);
+            const float dy = static_cast<float>(pointer.y - drag_state_.start_point.y);
+            if (std::sqrt(dx * dx + dy * dy) >= kDragStartThresholdPx) {
+                drag_state_.dragging = true;
+            }
+        }
+        if (drag_state_.dragging) {
+            drag_state_.hover_target = drop_target_at(pointer);
+            mark_dirty();
+        }
+        used = true;
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT && has_pointer) {
+        if (drag_state_.pressed) {
+            if (drag_state_.dragging) {
+                move_chip_between_lists(drag_state_.value, drag_state_.source_kind, drop_target_at(pointer));
+            } else if (e.button.clicks >= 2) {
+                if (const Chip* chip = hit_chip_at(pointer)) {
+                    if (chip->value == drag_state_.value && chip->kind == drag_state_.source_kind) {
+                        handle_chip_double_click(*chip);
+                    }
+                }
+            }
+            clear_drag_state();
+            used = true;
+        } else if (drop_target_at(pointer) != ChipListKind::None) {
+            used = true;
+        }
+    } else if (e.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
+        if (drag_state_.pressed) {
+            clear_drag_state();
+            mark_dirty();
+            used = true;
+        }
+    }
+
+    return used;
+}
+
+void TagEditorWidget::render_asset_overhaul(SDL_Renderer* r) const {
+    if (!r) return;
+    const_cast<TagEditorWidget*>(this)->layout_if_needed();
+
+    draw_label(r, "Tags", tags_label_rect_);
+    draw_label(r, "Anti Tags", anti_label_rect_);
+    draw_label(r, "Recommended Tags", rec_tags_label_rect_);
+
+    if (drag_state_.dragging) {
+        SDL_Rect target_rect{0,0,0,0};
+        switch (drag_state_.hover_target) {
+            case ChipListKind::Tags: target_rect = tags_drop_rect_; break;
+            case ChipListKind::AntiTags: target_rect = anti_drop_rect_; break;
+            case ChipListKind::Recommended: target_rect = rec_drop_rect_; break;
+            default: break;
+        }
+        if (target_rect.w > 0 && target_rect.h > 0) {
+            SDL_Color highlight = DMStyles::HighlightColor();
+            highlight.a = static_cast<Uint8>(std::clamp<int>(highlight.a / 2, 0, 255));
+            SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(r, highlight.r, highlight.g, highlight.b, highlight.a);
+            sdl_render::FillRect(r, &target_rect);
+        }
+    }
+
+    for (const auto& chip : tag_chips_) {
+        if (chip.button) chip.button->render(r);
+    }
+    for (const auto& chip : anti_chips_) {
+        if (chip.button) chip.button->render(r);
+    }
+    for (const auto& chip : rec_tag_chips_) {
+        if (chip.button) chip.button->render(r);
+    }
+    if (tag_search_box_ && tag_search_box_->rect().w > 0) {
+        tag_search_box_->render(r);
+    }
+}
+
+TagEditorWidget::Chip* TagEditorWidget::hit_chip_at(const SDL_Point& p) {
+    auto hit_in = [&](std::vector<Chip>& chips) -> Chip* {
+        for (auto& chip : chips) {
+            if (!chip.button) continue;
+            const SDL_Rect& rect = chip.button->rect();
+            if (rect.w <= 0 || rect.h <= 0) continue;
+            if (SDL_PointInRect(&p, &rect)) {
+                return &chip;
+            }
+        }
+        return nullptr;
+    };
+    if (Chip* chip = hit_in(tag_chips_)) return chip;
+    if (Chip* chip = hit_in(anti_chips_)) return chip;
+    return hit_in(rec_tag_chips_);
+}
+
+const TagEditorWidget::Chip* TagEditorWidget::hit_chip_at(const SDL_Point& p) const {
+    return const_cast<TagEditorWidget*>(this)->hit_chip_at(p);
+}
+
+TagEditorWidget::ChipListKind TagEditorWidget::drop_target_at(const SDL_Point& p) const {
+    if (tags_drop_rect_.w > 0 && tags_drop_rect_.h > 0 && SDL_PointInRect(&p, &tags_drop_rect_)) {
+        return ChipListKind::Tags;
+    }
+    if (anti_drop_rect_.w > 0 && anti_drop_rect_.h > 0 && SDL_PointInRect(&p, &anti_drop_rect_)) {
+        return ChipListKind::AntiTags;
+    }
+    if (rec_drop_rect_.w > 0 && rec_drop_rect_.h > 0 && SDL_PointInRect(&p, &rec_drop_rect_)) {
+        return ChipListKind::Recommended;
+    }
+    return ChipListKind::None;
+}
+
+void TagEditorWidget::clear_drag_state() {
+    drag_state_ = DragState{};
+}
+
+bool TagEditorWidget::move_chip_between_lists(const std::string& value, ChipListKind, ChipListKind target) {
+    std::string norm = normalize(value);
+    if (norm.empty() || target == ChipListKind::None) {
+        return false;
+    }
+    if (target == ChipListKind::SearchInputVirtual) {
+        target = ChipListKind::Recommended;
+    }
+
+    switch (target) {
+        case ChipListKind::Tags:
+            session_recommended_.erase(norm);
+            hidden_recommended_.erase(norm);
+            add_tag(norm);
+            return true;
+        case ChipListKind::AntiTags:
+            session_recommended_.erase(norm);
+            hidden_recommended_.erase(norm);
+            add_anti_tag(norm);
+            return true;
+        case ChipListKind::Recommended: {
+            bool changed = false;
+            if (tags_.erase(norm) > 0) changed = true;
+            if (anti_tags_.erase(norm) > 0) changed = true;
+            hidden_recommended_.erase(norm);
+            session_recommended_.insert(norm);
+            refresh_recommendations();
+            rebuild_buttons();
+            mark_dirty();
+            if (changed) {
+                notify_changed();
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+bool TagEditorWidget::handle_chip_double_click(const Chip& chip) {
+    switch (chip.kind) {
+        case ChipListKind::Tags:
+            remove_tag(chip.value);
+            return true;
+        case ChipListKind::AntiTags:
+            remove_anti_tag(chip.value);
+            return true;
+        case ChipListKind::Recommended:
+        case ChipListKind::SearchInputVirtual: {
+            const std::string norm = normalize(chip.value);
+            if (norm.empty()) return false;
+            hidden_recommended_.insert(norm);
+            session_recommended_.erase(norm);
+            refresh_recommendations();
+            rebuild_buttons();
+            mark_dirty();
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+void TagEditorWidget::clear_asset_session_state() {
+    hidden_recommended_.clear();
+    session_recommended_.clear();
+    show_search_virtual_chip_ = false;
+    search_virtual_value_.clear();
+    recommendation_context_scores_.clear();
+    recommendation_popularity_.clear();
+    clear_drag_state();
 }
 
 bool TagEditorWidget::event_targets_rect(const SDL_Event& e, const SDL_Rect& rect) {

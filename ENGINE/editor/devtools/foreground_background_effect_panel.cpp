@@ -93,6 +93,72 @@ private:
     DMLabelStyle style_{};
 };
 
+class SliderColumnWidget : public Widget {
+public:
+    explicit SliderColumnWidget(std::vector<Widget*> children, int spacing)
+        : children_(std::move(children)), spacing_(spacing) {}
+
+    void set_rect(const SDL_Rect& r) override {
+        rect_ = r;
+        int y = r.y;
+        bool first = true;
+        for (auto* child : children_) {
+            if (!child) {
+                continue;
+            }
+            if (!first) {
+                y += spacing_;
+            }
+            first = false;
+            const int child_h = std::max(0, child->height_for_width(r.w));
+            child->set_rect(SDL_Rect{r.x, y, r.w, child_h});
+            y += child_h;
+        }
+    }
+
+    const SDL_Rect& rect() const override { return rect_; }
+
+    int height_for_width(int width) const override {
+        int total = 0;
+        bool first = true;
+        for (auto* child : children_) {
+            if (!child) {
+                continue;
+            }
+            if (!first) {
+                total += spacing_;
+            }
+            first = false;
+            total += std::max(0, child->height_for_width(width));
+        }
+        return total;
+    }
+
+    bool handle_event(const SDL_Event& e) override {
+        bool handled = false;
+        for (auto* child : children_) {
+            if (child) {
+                handled = child->handle_event(e) || handled;
+            }
+        }
+        return handled;
+    }
+
+    void render(SDL_Renderer* renderer) const override {
+        for (auto* child : children_) {
+            if (child) {
+                child->render(renderer);
+            }
+        }
+    }
+
+private:
+    SDL_Rect rect_{0, 0, 0, 0};
+    std::vector<Widget*> children_;
+    int spacing_ = 0;
+};
+
+
 class PairRowWidget : public Widget {
 public:
     PairRowWidget(Widget* left, Widget* right) : left_(left), right_(right) {}
@@ -172,7 +238,7 @@ public:
     void set_status(std::string status) { status_ = std::move(status); }
 
     void set_preferred_height(int height) {
-        const int clamped = std::max(96, height);
+        const int clamped = std::max(64, height);
         if (preferred_height_ == clamped) {
             return;
         }
@@ -196,14 +262,14 @@ public:
         sdl_render::Rect(renderer, &rect_);
 
         DMLabelStyle title_style = DMStyles::Label();
-        title_style.font_size = std::max(16, title_style.font_size + 1);
+        title_style.font_size = 14;
         title_style.color = SDL_Color{218, 226, 244, 255};
 
         DMLabelStyle status_style = DMStyles::Label();
-        status_style.font_size = std::max(13, status_style.font_size - 1);
+        status_style.font_size = 12;
         status_style.color = SDL_Color{171, 182, 205, 255};
 
-        const int pad = 10;
+        const int pad = 6;
         const int title_y = rect_.y + pad;
         DrawLabelText(renderer, title_, rect_.x + pad, title_y, title_style);
 
@@ -213,9 +279,9 @@ public:
         }
 
         SDL_Rect image_area{rect_.x + pad,
-                            title_y + title_style.font_size + 8,
+                            title_y + title_style.font_size + 5,
                             std::max(0, rect_.w - pad * 2),
-                            std::max(0, status_y - (title_y + title_style.font_size + 8) - 8)};
+                            std::max(0, status_y - (title_y + title_style.font_size + 5) - 5)};
 
         SDL_SetRenderDrawColor(renderer, 9, 10, 14, 255);
         sdl_render::FillRect(renderer, &image_area);
@@ -325,9 +391,9 @@ fs::path project_cache_root() {
 ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets, int x, int y)
     : DockableCollapsible("Depth Cue FX Editor", false, x, y),
       assets_(assets) {
-    set_padding(DMSpacing::panel_padding());
-    set_row_gap(DMSpacing::item_gap());
-    set_col_gap(DMSpacing::item_gap());
+    set_padding(std::max(6, DMSpacing::panel_padding() / 3));
+    set_row_gap(std::max(2, DMSpacing::small_gap() / 2));
+    set_col_gap(std::max(6, DMSpacing::small_gap() + 2));
     set_close_button_enabled(true);
     set_header_button_style(&DMStyles::AccentButton());
     set_scroll_enabled(false);
@@ -341,7 +407,6 @@ ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets,
 
     set_on_close([this]() { this->on_panel_closed(); });
 
-    header_spacer_ = std::make_unique<LocalSpacerWidget>(DMSpacing::header_gap());
     build_ui();
     rebuild_asset_options();
     refresh_from_camera();
@@ -428,19 +493,19 @@ void ForegroundBackgroundEffectPanel::layout_custom_content(int, int) const {
 void ForegroundBackgroundEffectPanel::build_ui() {
     recreate_asset_dropdown();
 
-    fg_label_ = std::make_unique<SectionLabelWidget>("Foreground Effects");
-    bg_label_ = std::make_unique<SectionLabelWidget>("Background Effects");
-
     configure_slider_set(fg_sliders_, "FG", PreviewSide::Foreground);
     configure_slider_set(bg_sliders_, "BG", PreviewSide::Background);
 
-    fg_preview_ = std::make_unique<PreviewPaneWidget>("Foreground Preview");
-    bg_preview_ = std::make_unique<PreviewPaneWidget>("Background Preview");
+    fg_slider_column_widget_ = make_slider_column_widget(fg_sliders_);
+    bg_slider_column_widget_ = make_slider_column_widget(bg_sliders_);
 
-    apply_button_ = std::make_unique<DMButton>("Apply + Mark Rebuild", &DMStyles::AccentButton(), 0, DMButton::height());
+    fg_preview_ = std::make_unique<PreviewPaneWidget>("FG Preview");
+    bg_preview_ = std::make_unique<PreviewPaneWidget>("BG Preview");
+
+    apply_button_ = std::make_unique<DMButton>("Apply", &DMStyles::AccentButton(), 0, DMButton::height());
     apply_button_widget_ = std::make_unique<ButtonWidget>(apply_button_.get(), [this]() { this->apply_and_queue_rebuild(); });
 
-    restore_defaults_button_ = std::make_unique<DMButton>("Reset Both", &DMStyles::WarnButton(), 0, DMButton::height());
+    restore_defaults_button_ = std::make_unique<DMButton>("Reset All", &DMStyles::WarnButton(), 0, DMButton::height());
     restore_defaults_button_widget_ = std::make_unique<ButtonWidget>(restore_defaults_button_.get(), [this]() { this->restore_defaults(); });
 
     restore_fg_defaults_button_ = std::make_unique<DMButton>("Reset FG", &DMStyles::HeaderButton(), 0, DMButton::height());
@@ -453,10 +518,10 @@ void ForegroundBackgroundEffectPanel::build_ui() {
         this->restore_defaults_for_side(PreviewSide::Background);
     });
 
-    discard_button_ = std::make_unique<DMButton>("Cancel", &DMStyles::DeleteButton(), 0, DMButton::height());
+    discard_button_ = std::make_unique<DMButton>("Close", &DMStyles::DeleteButton(), 0, DMButton::height());
     discard_button_widget_ = std::make_unique<ButtonWidget>(discard_button_.get(), [this]() { this->close(); });
 
-    edit_depth_settings_button_ = std::make_unique<DMButton>("Edit Depth Settings", &DMStyles::AccentButton(), 0, DMButton::height());
+    edit_depth_settings_button_ = std::make_unique<DMButton>("Edit Depth", &DMStyles::AccentButton(), 0, DMButton::height());
     edit_depth_settings_button_widget_ = std::make_unique<ButtonWidget>(
         edit_depth_settings_button_.get(),
         [this]() { this->enter_live_depth_settings_editor(); });
@@ -468,55 +533,53 @@ void ForegroundBackgroundEffectPanel::build_ui() {
 
 void ForegroundBackgroundEffectPanel::rebuild_rows() {
     Rows rows;
-    if (header_spacer_) {
-        rows.push_back({header_spacer_.get()});
-    }
-
     if (asset_dropdown_widget_) {
         rows.push_back({asset_dropdown_widget_.get()});
     }
 
     paired_rows_.clear();
+    Row compact_main_row;
+    if (fg_slider_column_widget_) {
+        compact_main_row.push_back(fg_slider_column_widget_.get());
+    }
+    if (fg_preview_) {
+        compact_main_row.push_back(fg_preview_.get());
+    }
+    if (bg_slider_column_widget_) {
+        compact_main_row.push_back(bg_slider_column_widget_.get());
+    }
+    if (bg_preview_) {
+        compact_main_row.push_back(bg_preview_.get());
+    }
+    if (!compact_main_row.empty()) {
+        rows.push_back(std::move(compact_main_row));
+    }
 
-    auto add_pair_row = [&](Widget* left, Widget* right) {
-        if (!left && !right) {
-            return;
-        }
-        paired_rows_.push_back(std::make_unique<PairRowWidget>(left, right));
-        rows.push_back({paired_rows_.back().get()});
-    };
-
-    add_pair_row(fg_label_.get(), bg_label_.get());
-    add_pair_row(fg_sliders_.contrast.get(), bg_sliders_.contrast.get());
-    add_pair_row(fg_sliders_.brightness.get(), bg_sliders_.brightness.get());
-    add_pair_row(fg_sliders_.blur.get(), bg_sliders_.blur.get());
-    add_pair_row(fg_sliders_.saturation_r.get(), bg_sliders_.saturation_r.get());
-    add_pair_row(fg_sliders_.saturation_g.get(), bg_sliders_.saturation_g.get());
-    add_pair_row(fg_sliders_.saturation_b.get(), bg_sliders_.saturation_b.get());
-    add_pair_row(fg_sliders_.hue.get(), bg_sliders_.hue.get());
-    add_pair_row(restore_fg_defaults_button_widget_.get(), restore_bg_defaults_button_widget_.get());
-    add_pair_row(fg_preview_.get(), bg_preview_.get());
+    if (fill_spacer_) {
+        rows.push_back({fill_spacer_.get()});
+    }
 
     Row action_row;
-    if (apply_button_widget_) {
-        action_row.push_back(apply_button_widget_.get());
+    if (restore_fg_defaults_button_widget_) {
+        action_row.push_back(restore_fg_defaults_button_widget_.get());
+    }
+    if (restore_bg_defaults_button_widget_) {
+        action_row.push_back(restore_bg_defaults_button_widget_.get());
     }
     if (restore_defaults_button_widget_) {
         action_row.push_back(restore_defaults_button_widget_.get());
+    }
+    if (apply_button_widget_) {
+        action_row.push_back(apply_button_widget_.get());
+    }
+    if (edit_depth_settings_button_widget_) {
+        action_row.push_back(edit_depth_settings_button_widget_.get());
     }
     if (discard_button_widget_) {
         action_row.push_back(discard_button_widget_.get());
     }
     if (!action_row.empty()) {
         rows.push_back(std::move(action_row));
-    }
-
-    if (edit_depth_settings_button_widget_) {
-        rows.push_back({edit_depth_settings_button_widget_.get()});
-    }
-
-    if (fill_spacer_) {
-        rows.push_back({fill_spacer_.get()});
     }
 
     set_rows(rows);
@@ -609,6 +672,33 @@ void ForegroundBackgroundEffectPanel::configure_slider_set(SliderSet& set,
     configure_slider(set.saturation_g, "Green Saturation", -1.0f, 1.0f, 0.02f, 2);
     configure_slider(set.saturation_b, "Blue Saturation", -1.0f, 1.0f, 0.02f, 2);
     configure_slider(set.hue, "Hue Shift (deg)", -180.0f, 180.0f, 1.0f, 0);
+}
+
+std::unique_ptr<Widget> ForegroundBackgroundEffectPanel::make_slider_column_widget(const SliderSet& set) {
+    std::vector<Widget*> children;
+    children.reserve(7);
+    if (set.contrast) {
+        children.push_back(set.contrast.get());
+    }
+    if (set.brightness) {
+        children.push_back(set.brightness.get());
+    }
+    if (set.blur) {
+        children.push_back(set.blur.get());
+    }
+    if (set.saturation_r) {
+        children.push_back(set.saturation_r.get());
+    }
+    if (set.saturation_g) {
+        children.push_back(set.saturation_g.get());
+    }
+    if (set.saturation_b) {
+        children.push_back(set.saturation_b.get());
+    }
+    if (set.hue) {
+        children.push_back(set.hue.get());
+    }
+    return std::make_unique<SliderColumnWidget>(std::move(children), std::max(0, DMSpacing::small_gap() - 4));
 }
 
 void ForegroundBackgroundEffectPanel::set_slider_values(SliderSet& set,
@@ -1289,8 +1379,8 @@ void ForegroundBackgroundEffectPanel::sync_modal_geometry(int screen_w, int scre
     const int content_width = std::max(1, screen_w - padding_ * 2);
     auto* fg_widget = dynamic_cast<PreviewPaneWidget*>(fg_preview_.get());
     auto* bg_widget = dynamic_cast<PreviewPaneWidget*>(bg_preview_.get());
-    constexpr int kPreviewMinHeight = 96;
-    constexpr int kPreviewMaxHeight = 280;
+    constexpr int kPreviewMinHeight = 72;
+    constexpr int kPreviewMaxHeight = 180;
     if (fg_widget) {
         fg_widget->set_preferred_height(kPreviewMinHeight);
     }

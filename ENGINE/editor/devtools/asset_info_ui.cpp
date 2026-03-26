@@ -400,7 +400,7 @@ class Section_Tags : public DockableCollapsible {
       }
 
       if (!tag_editor_) {
-        tag_editor_ = std::make_unique<TagEditorWidget>();
+        tag_editor_ = std::make_unique<TagEditorWidget>(TagEditorWidget::Mode::AssetInfoOverhaul);
         tag_editor_->set_on_changed([this](const std::vector<std::string>& tags,
                                            const std::vector<std::string>& anti_tags) {
           if (!info_) return;

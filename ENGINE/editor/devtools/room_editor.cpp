@@ -2844,7 +2844,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
-        if (!suppress_asset_info_overlays && movement_mode_active()) {
+        if (movement_mode_active()) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const int count = static_cast<int>(movement_edit_.rel_positions.size());
             for (int i = 1; i < count; ++i) {
@@ -7840,7 +7840,8 @@ void RoomEditor::rebuild_movement_rel_positions() {
     if (!movement_edit_.has_frames()) {
         return;
     }
-    movement_edit_.rel_positions_z[0] = movement_edit_.frames[0].dy;
+    // Frame 0 is the movement origin and must remain fixed at zero.
+    movement_edit_.rel_positions_z[0] = 0.0f;
     for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
         movement_edit_.rel_positions[i].x = movement_edit_.rel_positions[i - 1].x + movement_edit_.frames[i].dx;
         movement_edit_.rel_positions[i].y = movement_edit_.rel_positions[i - 1].y + movement_edit_.frames[i].dz;
@@ -7853,7 +7854,7 @@ void RoomEditor::rebuild_movement_frames_from_positions() {
         return;
     }
     movement_edit_.frames[0].dx = 0.0f;
-    movement_edit_.frames[0].dy = movement_edit_.rel_positions_z.empty() ? 0.0f : movement_edit_.rel_positions_z[0];
+    movement_edit_.frames[0].dy = 0.0f;
     movement_edit_.frames[0].dz = 0.0f;
     for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
         const SDL_FPoint prev = movement_edit_.rel_positions[i - 1];
@@ -9705,12 +9706,22 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
 
     if (left_pressed && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
         const int hit = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
-        if (hit >= 0) {
+        if (hit > 0) {
             movement_edit_.frame_index = hit;
             movement_edit_.point_selected = true;
             movement_edit_.selected_point_active = true;
             movement_edit_.dragging_point = true;
             apply_movement_animation_and_frame(movement_edit_.animation_id, hit);
+            // apply_movement_animation_and_frame refreshes selection and clears drag state.
+            // Restore drag so a press+move gesture actually updates the selected point.
+            movement_edit_.dragging_point = true;
+            movement_edit_.selected_point_active = true;
+        } else if (hit == 0) {
+            movement_edit_.frame_index = 0;
+            movement_edit_.point_selected = true;
+            movement_edit_.selected_point_active = true;
+            movement_edit_.dragging_point = false;
+            apply_movement_animation_and_frame(movement_edit_.animation_id, 0);
         } else {
             movement_edit_.point_selected = false;
             movement_edit_.selected_point_active = false;
@@ -9728,6 +9739,10 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
             world_px = vibble::grid::snap_world_to_vertex(world_px, resolution);
         }
         const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions.size()) - 1);
+        if (index <= 0) {
+            movement_edit_.dragging_point = false;
+            return true;
+        }
         movement_edit_.rel_positions[static_cast<std::size_t>(index)] = SDL_FPoint{
             static_cast<float>(world_px.x - anchor.x),
             static_cast<float>(world_px.y - anchor.y)};
@@ -9739,7 +9754,10 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     }
 
     const int scroll_y = input.getScrollY();
-    if (scroll_y != 0 && movement_edit_.point_selected && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
+    if (scroll_y != 0 &&
+        movement_edit_.point_selected &&
+        movement_edit_.frame_index > 0 &&
+        !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
         const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions_z.size()) - 1);
         movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] += static_cast<float>(scroll_y * 4);
         redistribute_movement_points_after_adjustment(index);

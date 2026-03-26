@@ -41,7 +41,14 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                 f.dx = static_cast<float>(entry[0].get<double>());
             }
             if (entry.size() > 1 && entry[1].is_number()) {
-                f.dy = static_cast<float>(entry[1].get<double>());
+                // Canonical arrays are [dx, y(height), z(depth)].
+                // Legacy arrays may only include [dx, depth].
+                if (entry.size() > 2 && entry[2].is_number()) {
+                    f.dy = static_cast<float>(entry[1].get<double>());
+                } else {
+                    f.dy = 0.0f;
+                    f.dz = static_cast<float>(entry[1].get<double>());
+                }
             }
             if (entry.size() > 2 && entry[2].is_number()) {
                 f.dz = static_cast<float>(entry[2].get<double>());
@@ -52,9 +59,32 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                 f.resort_z = entry[3].get<bool>();
             }
         } else if (entry.is_object()) {
-            f.dx = static_cast<float>(entry.value("dx", 0.0));
-            f.dy = static_cast<float>(entry.value("dy", 0.0));
-            f.dz = static_cast<float>(entry.value("dz", 0.0));
+            auto read_number = [&](const char* key, float fallback) -> float {
+                if (!entry.contains(key) || !entry[key].is_number()) {
+                    return fallback;
+                }
+                return static_cast<float>(entry[key].get<double>());
+            };
+            f.dx = entry.contains("dx") ? read_number("dx", 0.0f) : read_number("x", 0.0f);
+
+            const bool has_depth_key = entry.contains("dz") || entry.contains("z");
+            const bool has_height_key = entry.contains("dy") || entry.contains("y");
+            float parsed_height = entry.contains("dy") ? read_number("dy", 0.0f) : read_number("y", 0.0f);
+            float parsed_depth = entry.contains("dz") ? read_number("dz", 0.0f) : read_number("z", 0.0f);
+
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const bool legacy_depth_in_height =
+                (!has_depth_key && has_height_key) ||
+                (has_depth_key && has_height_key && has_xy_keys && has_dxyz_keys &&
+                 std::abs(parsed_depth) < 1e-5f && std::abs(parsed_height) > 1e-5f);
+            if (legacy_depth_in_height) {
+                parsed_depth = parsed_height;
+                parsed_height = 0.0f;
+            }
+
+            f.dy = parsed_height;
+            f.dz = parsed_depth;
             f.resort_z = entry.value("resort_z", false);
         }
         frames.push_back(clamp_frame(f));

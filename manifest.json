@@ -2023,6 +2023,14 @@
           }
         },
         "up_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -5366,9 +5374,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 2,

@@ -5,6 +5,7 @@
 #include "animation/controllers/custom_controllers/controller_visit_threshold.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "utils/range_util.hpp"
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
@@ -30,10 +31,8 @@ void frog_controller::on_update(const Input&) {
     }
 
     constexpr int kFleeThresholdPx = 64;
-    const int distance_sq = (self->world_x() - player->world_x()) * (self->world_x() - player->world_x()) +
-                            (self->world_z() - player->world_z()) * (self->world_z() - player->world_z());
-
-    if (distance_sq <= (kFleeThresholdPx * kFleeThresholdPx)) {
+    const bool in_flee_range = Range::is_in_range(self, player, kFleeThresholdPx);
+    if (in_flee_range) {
         if (!self->needs_target) {
             return;
         }

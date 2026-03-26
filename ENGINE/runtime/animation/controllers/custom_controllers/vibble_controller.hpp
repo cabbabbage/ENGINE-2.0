@@ -24,19 +24,16 @@ class vibble_controller : public CustomAssetController {
 public:
     vibble_controller(Asset* player);
     ~vibble_controller() override;
-    int get_dx() const;
-    int get_dy() const;
 
 protected:
     void on_update(const Input& in) override;
     void on_process_pending_attacks(Asset& self) override;
 
 private:
-    void ensure_eyes_child();
     void movement(const Input& input);
     float frame_dt() const;
     std::string animation_for_direction(int screen_x, int screen_y) const;
-    void Dash();
+    void start_dash();
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;

@@ -2,6 +2,7 @@
 #include "animation/controllers/custom_controllers/attack_helpers.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "utils/range_util.hpp"
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
@@ -23,11 +24,13 @@ SDL_Point gary_controller::get_random_point_in_room() {
 
     std::uniform_int_distribution<int> dist(-500, 500);
     int dx = dist(rng_);
-    int dy = dist(rng_);
-    return {self->world_x() + dx, self->world_z() + dy};
+    int dz = dist(rng_);
+    return {self->world_x() + dx, self->world_z() + dz};
 }
 
 void gary_controller::on_update(const Input&) {
+    constexpr int kIdleRangePx = 500;
+
     Asset* self = self_ptr();
     Assets* assets = this->assets();
     if (!self || !self->anim_ || !assets) {
@@ -39,9 +42,11 @@ void gary_controller::on_update(const Input&) {
         return;
     }
 
-    int distance_sq = (self->world_x() - player->world_x()) * (self->world_x() - player->world_x()) + (self->world_z() - player->world_z()) * (self->world_z() - player->world_z());
-
-    if (distance_sq <= 500) {
+    const bool in_idle_range = Range::is_in_range(self, player, kIdleRangePx);
+    if (in_idle_range) {
+        if (!self->needs_target) {
+            self->anim_->cancel_all_movement();
+        }
         if (self->needs_target) {
             self->anim_->set_animation("default");
         }

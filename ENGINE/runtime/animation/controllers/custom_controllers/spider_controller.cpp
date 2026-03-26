@@ -2,6 +2,7 @@
 #include "animation/controllers/custom_controllers/attack_helpers.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "utils/range_util.hpp"
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
@@ -15,6 +16,8 @@ spider_controller::spider_controller(Asset* self)
 }
 
 void spider_controller::on_update(const Input&) {
+    constexpr int kSpiderStopRadiusPx = 96;
+
     Asset* self = self_ptr();
     Assets* assets = this->assets();
     if (!self || !self->anim_ || !assets) {
@@ -26,15 +29,13 @@ void spider_controller::on_update(const Input&) {
         return;
     }
 
-    int distance_sq = (self->world_x() - player->world_x()) * (self->world_x() - player->world_x()) + (self->world_z() - player->world_z()) * (self->world_z() - player->world_z());
-
-    if (distance_sq <= 700) {
-        if (self->info && self->info->animations.count("explosion")) {
-            self->anim_->set_animation("explosion");
+    const bool in_attack_range = Range::is_in_range(self, player, kSpiderStopRadiusPx);
+    if (in_attack_range) {
+        if (!self->needs_target) {
+            self->anim_->cancel_all_movement();
         }
-    }
-    else if (self->needs_target) {
-        self->anim_->auto_move(player->world_xz_point());
+    } else if (self->needs_target) {
+        self->anim_->auto_move(player);
     }
 
     attack_helpers::send_attack_if_hit(self, player);

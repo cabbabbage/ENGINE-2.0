@@ -50,7 +50,7 @@ protected:
             Asset* owner = self_ptr();
             Assets* owner_assets = assets();
             if (owner && owner_assets) {
-                child_.emplace(*owner, *owner_assets, std::move(pending_child_name_));
+                child_.emplace(*owner, std::move(pending_child_name_));
             }
             pending_child_name_.clear();
         }
@@ -91,7 +91,7 @@ protected:
         }
 
         child_.reset();
-        child_.emplace(*owner, *owner_assets, "vibble_eyes");
+        child_.emplace(*owner, "vibble_eyes");
         if (!child_->get_asset()) {
             child_.reset();
             return;
@@ -151,7 +151,7 @@ TEST_CASE("ChildAsset constructs with explicit owner and assets") {
         test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
     REQUIRE(owner != nullptr);
 
-    ChildAsset child(*owner, *assets_scope.assets, "vibble_eyes");
+    ChildAsset child(*owner, "vibble_eyes");
     REQUIRE(child.get_asset() != nullptr);
     CHECK(child.is_hidden());
     CHECK_FALSE(child.is_bound());

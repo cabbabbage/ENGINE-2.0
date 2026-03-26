@@ -6,6 +6,7 @@
 
 #include <string>
 
+
 default_controller::default_controller(Asset* self)
     : CustomAssetController(self) {}
 

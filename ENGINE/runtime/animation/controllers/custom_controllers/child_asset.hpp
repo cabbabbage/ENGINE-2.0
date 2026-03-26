@@ -10,7 +10,7 @@ class Assets;
 
 class ChildAsset {
 public:
-    ChildAsset(Asset& owner, Assets& assets, std::string asset_name);
+    ChildAsset(Asset& owner, std::string asset_name);
     ~ChildAsset();
 
     ChildAsset(const ChildAsset&) = delete;
@@ -34,8 +34,12 @@ public:
 private:
     bool ensure_child_alive();
     bool apply_anchor_solution(const AnchorPoint& parent_anchor);
+    bool apply_anchor_solution_internal(const AnchorPoint& parent_anchor);
     bool place_once(const AnchorPoint& parent_anchor, bool keep_bound);
     bool set_child_hidden_state(bool hidden);
+    bool set_child_hidden_state_internal(bool hidden);
+    Assets* resolve_assets();
+    bool spawn_child_asset();
     std::optional<AnchorPoint> resolve_owner_anchor(const std::string& anchor_name) const;
     void refresh_hidden_state();
     void move_from(ChildAsset&& other) noexcept;
@@ -51,4 +55,5 @@ private:
     bool manual_hidden_ = false;
     bool auto_hidden_for_anchor_ = true;
     bool has_successful_sync_ = false;
+    bool spawn_warning_logged_ = false;
 };

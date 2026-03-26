@@ -288,6 +288,8 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/map_grid_settings.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
     ENGINE/runtime/utils/utils/input.cpp
+    ENGINE/runtime/utils/utils/grid_math.cpp
+    ENGINE/runtime/utils/utils/range_util.cpp
     ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
     ENGINE/runtime/core/runtime_world_context.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
@@ -320,6 +322,7 @@ add_executable(engine_tests
     ENGINE/tests/test_child_asset_runtime.cpp
     ENGINE/tests/test_animation_runtime_ownership.cpp
     ENGINE/tests/test_scaling_logic_variants.cpp
+    ENGINE/tests/test_movement_pathing_axis.cpp
   )
 
 target_include_directories(engine_tests

@@ -3506,22 +3506,22 @@
   },
   "image_effects": {
     "background": {
-      "blur": 1.0,
+      "blur": 0.25999999046325684,
       "brightness": 0.0,
-      "contrast": -0.14000004529953003,
+      "contrast": 0.0,
       "hue": 0.0,
-      "saturation_blue": 0.12000000476837158,
-      "saturation_green": 0.07999992370605469,
-      "saturation_red": -0.3400000333786011
+      "saturation_blue": 0.0,
+      "saturation_green": 0.0,
+      "saturation_red": 0.0
     },
     "foreground": {
-      "blur": 0.2200000286102295,
+      "blur": 0.1799999475479126,
       "brightness": 0.0,
-      "contrast": 0.19999992847442627,
+      "contrast": 0.0,
       "hue": 0.0,
-      "saturation_blue": -0.20000004768371582,
+      "saturation_blue": 0.0,
       "saturation_green": 0.0,
-      "saturation_red": 0.15999996662139893
+      "saturation_red": 0.3399999141693115
     }
   },
   "maps": {
@@ -3702,10 +3702,10 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -158,
-          "camera_center_dz": 736,
-          "camera_height_px": 621,
-          "camera_tilt_deg": 49.400001525878906,
+          "camera_center_dx": -77,
+          "camera_center_dz": 737,
+          "camera_height_px": 351,
+          "camera_tilt_deg": 34.20000076293945,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [

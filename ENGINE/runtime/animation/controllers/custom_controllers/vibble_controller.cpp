@@ -19,6 +19,14 @@
 
 namespace {
 
+int consume_axis(float& accumulator) {
+    const int whole = static_cast<int>(accumulator);
+    if (whole != 0) {
+        accumulator -= static_cast<float>(whole);
+    }
+    return whole;
+}
+
 vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
     const Asset* player,
     int screen_x,
@@ -45,29 +53,28 @@ vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
 vibble_controller::vibble_controller(Asset* player)
     : CustomAssetController(player) {}
 
-
 vibble_controller::~vibble_controller() = default;
-int vibble_controller::get_dx() const { return dx_; }
-int vibble_controller::get_dy() const { return dy_; }
 
 void vibble_controller::movement(const Input& input) {
     dx_ = dy_ = 0;
     Asset* player = self_ptr();
-    if (!player || !player->anim_) return;
+    if (!player || !player->anim_) {
+        return;
+    }
 
     const float dt = frame_dt();
 
-    const bool up    = input.isScancodeDown(SDL_SCANCODE_W) || input.isScancodeDown(SDL_SCANCODE_UP);
-    const bool down  = input.isScancodeDown(SDL_SCANCODE_S) || input.isScancodeDown(SDL_SCANCODE_DOWN);
-    const bool left  = input.isScancodeDown(SDL_SCANCODE_A) || input.isScancodeDown(SDL_SCANCODE_LEFT);
-    const bool right = input.isScancodeDown(SDL_SCANCODE_D) || input.isScancodeDown(SDL_SCANCODE_RIGHT);
-    const bool sprint = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
-    const bool dash = input.isScancodeDown(SDL_SCANCODE_SPACE);
-    const bool melee = input.isScancodeDown(SDL_SCANCODE_E);
+    const int input_x =
+        ((input.isScancodeDown(SDL_SCANCODE_D) || input.isScancodeDown(SDL_SCANCODE_RIGHT)) ? 1 : 0)
+        - ((input.isScancodeDown(SDL_SCANCODE_A) || input.isScancodeDown(SDL_SCANCODE_LEFT)) ? 1 : 0);
+    const int input_y =
+        ((input.isScancodeDown(SDL_SCANCODE_S) || input.isScancodeDown(SDL_SCANCODE_DOWN)) ? 1 : 0)
+        - ((input.isScancodeDown(SDL_SCANCODE_W) || input.isScancodeDown(SDL_SCANCODE_UP)) ? 1 : 0);
+    const bool sprint =
+        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    const bool dash_pressed = input.isScancodeDown(SDL_SCANCODE_SPACE);
+    const bool melee_pressed = input.isScancodeDown(SDL_SCANCODE_E);
 
-
-    const int input_x = (right ? 1 : 0) - (left ? 1 : 0);
-    const int input_y = (down  ? 1 : 0) - (up    ? 1 : 0);
     const vibble::player_direction::DirectionIntent direction_intent =
         resolve_direction_intent_for_player(player, input_x, input_y);
     const int world_x = direction_intent.world_x;
@@ -82,34 +89,24 @@ void vibble_controller::movement(const Input& input) {
 
     const float stride_count = sprint ? kSprintMultiplier : 1.0f;
 
-    if (dash && canDash) {
-        Dash();
+    if (dash_pressed && canDash) {
+        start_dash();
     }
-    if (melee && canMelee) {
+    if (melee_pressed && canMelee) {
         canMelee = false;
         isMeleeing = true;
-        meleeCooldownEndTime = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(meleeCooldown));
+        meleeCooldownEndTime = std::chrono::steady_clock::now()
+                               + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                   std::chrono::duration<float>(meleeCooldown));
     }
 
-    float speedMultiplier = kWalkSpeed;
+    float speed_multiplier = kWalkSpeed;
     if (isDashing) {
-        speedMultiplier *= dashingPower;
+        speed_multiplier *= dashingPower;
     }
 
-    const float velocity_x = static_cast<float>(world_x) * speedMultiplier * stride_count;
-    const float velocity_y = static_cast<float>(world_y) * speedMultiplier * stride_count;
-
-    auto consume_axis = [](float& accumulator) -> int {
-        int whole = 0;
-        if (accumulator >= 1.0f) {
-            whole = static_cast<int>(std::floor(accumulator));
-            accumulator -= static_cast<float>(whole);
-        } else if (accumulator <= -1.0f) {
-            whole = static_cast<int>(std::ceil(accumulator));
-            accumulator -= static_cast<float>(whole);
-        }
-        return whole;
-    };
+    const float velocity_x = static_cast<float>(world_x) * speed_multiplier * stride_count;
+    const float velocity_y = static_cast<float>(world_y) * speed_multiplier * stride_count;
 
     subpixel_x_ += velocity_x * dt;
     subpixel_y_ += velocity_y * dt;
@@ -126,7 +123,6 @@ void vibble_controller::movement(const Input& input) {
         direction_intent.world_x,
         direction_intent.world_y);
     if (isDashing && player->info) {
-
         const auto& animations = player->info->animations;
         if (animations.find("dash") != animations.end()) {
             animation_id = "dash";
@@ -134,7 +130,6 @@ void vibble_controller::movement(const Input& input) {
     }
 
     player->anim_->move(SDL_Point{ dx_, dy_ }, animation_id);
-
 }
 
 float vibble_controller::frame_dt() const {
@@ -146,7 +141,6 @@ float vibble_controller::frame_dt() const {
     if (Assets* assets = player->get_assets()) {
         const float dt = assets->frame_delta_seconds();
         if (std::isfinite(dt) && dt > 0.0f) {
-
             return std::min(dt, 0.1f);
         }
     }
@@ -157,7 +151,11 @@ void vibble_controller::on_update(const Input& input) {
     using namespace std::chrono;
     auto now = steady_clock::now();
 
-    ensure_eyes_child();
+    Asset* player = self_ptr();
+    if (player && !eyes_child_.has_value()) {
+        eyes_child_.emplace(*player, "vibble_eyes");
+        eyes_child_->bind("eyes");
+    }
 
     if (isDashing && now >= dashEndTime) {
         isDashing = false;
@@ -172,37 +170,10 @@ void vibble_controller::on_update(const Input& input) {
         canMelee = true;
     }
 
-    dx_ = dy_ = 0;
     movement(input);
     if (eyes_child_.has_value()) {
         eyes_child_->update();
     }
-
-}
-
-void vibble_controller::ensure_eyes_child() {
-    Asset* player = self_ptr();
-    if (!player) {
-        return;
-    }
-    Assets* owner_assets = player->get_assets();
-    if (!owner_assets) {
-        return;
-    }
-
-    if (eyes_child_.has_value() && eyes_child_->get_asset()) {
-        return;
-    }
-    if (eyes_child_.has_value()) {
-        eyes_child_.reset();
-    }
-
-    eyes_child_.emplace(*player, *owner_assets, "vibble_eyes");
-    if (!eyes_child_->get_asset()) {
-        eyes_child_.reset();
-        return;
-    }
-    eyes_child_->bind("eyes");
 }
 
 std::string vibble_controller::animation_for_direction(int screen_x, int screen_y) const {
@@ -219,50 +190,29 @@ std::string vibble_controller::animation_for_direction(int screen_x, int screen_
     }
 
     const auto& animations = player->info->animations;
-
-    auto has_animation = [&animations](const std::string& name) {
+    auto has_animation = [&animations](const char* name) {
         return animations.find(name) != animations.end();
     };
 
-    const std::string forward_anim   = "down";
-    const std::string backward_anim  = "up";
-    const std::string left_anim      = "left";
-    const std::string right_anim     = "right";
+    const char* vertical_choice = sign_y > 0 ? "up" : "down";
+    const char* horizontal_choice = sign_x < 0 ? "left" : "right";
 
-    if (sign_x != 0 && sign_y != 0) {
-        const std::string vertical_choice = (sign_y > 0) ? backward_anim : forward_anim;
-        if (has_animation(vertical_choice)) {
-            return vertical_choice;
-        }
-
-        const std::string horizontal_choice = (sign_x < 0) ? left_anim : right_anim;
-        if (has_animation(horizontal_choice)) {
-            return horizontal_choice;
-        }
+    if (sign_x != 0 && sign_y != 0 && has_animation(vertical_choice)) {
+        return vertical_choice;
     }
-
-    if (sign_y != 0) {
-        const std::string vertical_choice = (sign_y > 0) ? backward_anim : forward_anim;
-        if (has_animation(vertical_choice)) {
-            return vertical_choice;
-        }
+    if (sign_x != 0 && sign_y != 0 && has_animation(horizontal_choice)) {
+        return horizontal_choice;
     }
-
-    if (sign_x != 0) {
-        const std::string horizontal_choice = (sign_x < 0) ? left_anim : right_anim;
-        if (has_animation(horizontal_choice)) {
-            return horizontal_choice;
-        }
+    if (sign_y != 0 && has_animation(vertical_choice)) {
+        return vertical_choice;
     }
-
-    if (has_animation(animation_update::detail::kDefaultAnimation)) {
-        return std::string{ animation_update::detail::kDefaultAnimation };
+    if (sign_x != 0 && has_animation(horizontal_choice)) {
+        return horizontal_choice;
     }
-
-    return std::string{ animation_update::detail::kDefaultAnimation };
+    return animation_update::detail::kDefaultAnimation;
 }
 
-void vibble_controller::Dash() {
+void vibble_controller::start_dash() {
     if (!canDash) {
         return;
     }
@@ -270,8 +220,8 @@ void vibble_controller::Dash() {
     canDash = false;
     isDashing = true;
     dashEndTime = std::chrono::steady_clock::now()
-        + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-            std::chrono::duration<float>(dashingTime));
+                  + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                      std::chrono::duration<float>(dashingTime));
 }
 
 void vibble_controller::on_process_pending_attacks(Asset& self) {
@@ -286,10 +236,8 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
         return;
     }
 
-    // Get active assets as potential targets
     const auto& active_assets = assets->getActive();
 
-    // Check attacks against all other assets
     for (Asset* target : active_assets) {
         if (!target || target == &self || !target->info || !target->current_animation_frame() ||
             target->dead || !target->active) {
@@ -303,8 +251,5 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
         }
     }
 
-    // Process any attacks that were sent to self
     self.process_pending_attacks();
 }
-
-

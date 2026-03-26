@@ -32,7 +32,7 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
-class QuickTaskPopup;
+class TaskEditor;
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
@@ -285,7 +285,11 @@ private:
     Input* input = nullptr;
     DevControls* dev_controls_ = nullptr;
     Room* dev_controls_last_room_ = nullptr;
-    std::unique_ptr<QuickTaskPopup> quick_task_popup_;
+    std::unique_ptr<TaskEditor> task_editor_;
+    bool screenshot_capture_pending_ = false;
+    std::string latest_screenshot_relative_path_;
+    Uint32 screenshot_create_task_start_ticks_ = 0;
+    SDL_Rect screenshot_create_task_button_rect_{};
     PopupManager popup_manager_;
     WarpedScreenGrid camera_;
     std::unique_ptr<SceneRenderer> scene;
@@ -423,6 +427,10 @@ private:
     void run_active_runtime_single_pass_for_asset(Asset* asset,
                                                   const SDL_Point& camera_focus,
                                                   std::uint64_t camera_state_version);
+    bool capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out_relative_path);
+    bool screenshot_create_task_button_active(Uint32 now_ticks) const;
+    void render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32 now_ticks);
+    bool handle_screenshot_create_task_button_event(const SDL_Event& e, Uint32 now_ticks);
     void rebuild_frame_collision_context() const;
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;

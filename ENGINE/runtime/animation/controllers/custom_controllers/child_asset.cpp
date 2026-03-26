@@ -18,19 +18,12 @@ double desired_render_depth_bias(const AnchorPoint& anchor, int quantized_world_
 
 } // namespace
 
-ChildAsset::ChildAsset(Asset& owner, Assets& assets, std::string asset_name)
+ChildAsset::ChildAsset(Asset& owner, std::string asset_name)
     : asset_name_(std::move(asset_name))
     , owner_(&owner)
-    , assets_(&assets) {
+    , assets_(owner.get_assets()) {
 
-    child_ = assets_->spawn_asset(asset_name_, owner_->world_xz_point());
-    if (!child_) {
-        vibble::log::warn("[ChildAsset] Cannot create child asset '" + asset_name_ +
-                          "' because spawn_asset failed");
-        return;
-    }
-    owner_->add_child(child_);
-    refresh_hidden_state();
+    (void)ensure_child_alive();
 }
 
 ChildAsset::~ChildAsset() {
@@ -148,16 +141,34 @@ void ChildAsset::unbind() {
 }
 
 bool ChildAsset::ensure_child_alive() {
-    if (!child_) {
+    if (child_ && assets_ && assets_->contains_asset(child_)) {
+        return true;
+    }
+
+    unregister_anchor_binding();
+    if (child_ && owner_ && owner_->has_child(child_)) {
+        owner_->remove_child(child_);
+    }
+    child_ = nullptr;
+
+    if (!owner_) {
         return false;
     }
-    if (!assets_ || !assets_->contains_asset(child_)) {
-        if (owner_) {
-            owner_->remove_child(child_);
-        }
-        child_ = nullptr;
+
+    if (!spawn_child_asset()) {
         return false;
     }
+
+    has_successful_sync_ = false;
+    auto_hidden_for_anchor_ = true;
+
+    if (bound_ && !bound_anchor_name_.empty()) {
+        bind(bound_anchor_name_);
+    } else {
+        const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
+        (void)set_child_hidden_state_internal(should_hide);
+    }
+
     return true;
 }
 
@@ -165,10 +176,15 @@ bool ChildAsset::apply_anchor_solution(const AnchorPoint& parent_anchor) {
     if (!ensure_child_alive()) {
         return false;
     }
+    return apply_anchor_solution_internal(parent_anchor);
+}
+
+bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor) {
     const bool anchor_available = parent_anchor.is_active();
     if (!anchor_available) {
         auto_hidden_for_anchor_ = true;
-        refresh_hidden_state();
+        const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
+        (void)set_child_hidden_state_internal(should_hide);
         return false;
     }
 
@@ -197,7 +213,8 @@ bool ChildAsset::apply_anchor_solution(const AnchorPoint& parent_anchor) {
 
     has_successful_sync_ = true;
     auto_hidden_for_anchor_ = false;
-    refresh_hidden_state();
+    const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
+    (void)set_child_hidden_state_internal(should_hide);
     return changed;
 }
 
@@ -220,7 +237,13 @@ bool ChildAsset::set_child_hidden_state(bool hidden) {
     if (!ensure_child_alive()) {
         return false;
     }
+    return set_child_hidden_state_internal(hidden);
+}
 
+bool ChildAsset::set_child_hidden_state_internal(bool hidden) {
+    if (!child_) {
+        return false;
+    }
     bool changed = false;
     if (child_->is_hidden() != hidden) {
         child_->set_hidden(hidden);
@@ -276,7 +299,39 @@ void ChildAsset::refresh_hidden_state() {
     }
 
     const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
-    (void)set_child_hidden_state(should_hide);
+    (void)set_child_hidden_state_internal(should_hide);
+}
+
+bool ChildAsset::spawn_child_asset() {
+    if (!owner_) {
+        return false;
+    }
+    Assets* resolved_assets = resolve_assets();
+    if (!resolved_assets) {
+        return false;
+    }
+    child_ = resolved_assets->spawn_asset(asset_name_, owner_->world_xz_point());
+    if (!child_) {
+        if (!spawn_warning_logged_) {
+            vibble::log::warn("[ChildAsset] Cannot create child asset '" + asset_name_ +
+                              "' because spawn_asset failed");
+            spawn_warning_logged_ = true;
+        }
+        return false;
+    }
+    spawn_warning_logged_ = false;
+    owner_->add_child(child_);
+    return true;
+}
+
+Assets* ChildAsset::resolve_assets() {
+    if (assets_) {
+        return assets_;
+    }
+    if (owner_) {
+        assets_ = owner_->get_assets();
+    }
+    return assets_;
 }
 
 bool ChildAsset::is_hidden() const {
@@ -321,6 +376,7 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     manual_hidden_ = other.manual_hidden_;
     auto_hidden_for_anchor_ = other.auto_hidden_for_anchor_;
     has_successful_sync_ = other.has_successful_sync_;
+    spawn_warning_logged_ = other.spawn_warning_logged_;
     other.asset_name_.clear();
     other.owner_ = nullptr;
     other.assets_ = nullptr;
@@ -330,6 +386,7 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     other.manual_hidden_ = false;
     other.auto_hidden_for_anchor_ = true;
     other.has_successful_sync_ = false;
+    other.spawn_warning_logged_ = false;
     if (bound_) {
         register_anchor_binding();
     }

@@ -13,7 +13,9 @@
 #include "animation/animation_runtime.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
+#include "devtools/dm_styles.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "editor/devtools/font_cache.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -22,9 +24,10 @@
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
 #include "utils/map_grid_settings.hpp"
-#include "utils/quick_task_popup.hpp"
 #include "utils/log.hpp"
+#include "utils/task_editor.hpp"
 
+#include <filesystem>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -48,11 +51,14 @@
 #include <array>
 #include <sstream>
 #include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 namespace {
 
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
+constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
+constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
 
 struct AssetWorldBounds {
     float left = 0.0f;
@@ -249,7 +255,9 @@ Assets::Assets(AssetLibrary& library,
 
     update_filtered_active_assets();
 
-    quick_task_popup_ = std::make_unique<QuickTaskPopup>();
+    const std::filesystem::path manifest_root =
+        std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()).parent_path());
+    task_editor_ = std::make_unique<TaskEditor>(manifest_root);
 
     vibble::log::info("[Assets] Constructor: Initialization complete");
 }
@@ -980,10 +988,6 @@ void Assets::ensure_dev_controls() {
         dev_controls_->set_input(input);
         dev_controls_->set_map_info(&map_info_json_);
         dev_controls_->set_map_context(&map_info_json_, map_path_);
-        if (quick_task_popup_) {
-            quick_task_popup_->set_manifest_store(&dev_controls_->manifest_store());
-        }
-
         suppress_dev_renderer_ = false;
     } catch (const std::exception& ex) {
         std::cout << "[Assets] Failed to wire Dev Controls: " << ex.what() << "\n";
@@ -1269,14 +1273,19 @@ void Assets::update(const Input& input)
                   << (asset_boundary_box_display_enabled_ ? "enabled" : "disabled") << " (Ctrl+B).\n";
     }
 
-    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_T) && quick_task_popup_) {
-        if (quick_task_popup_->is_open()) {
-            quick_task_popup_->close();
+    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_T) && task_editor_) {
+        if (task_editor_->is_open()) {
+            task_editor_->close();
         } else {
-            quick_task_popup_->open();
+            task_editor_->open();
         }
-        std::cout << "[Assets] Quick Task popup "
-                  << (quick_task_popup_->is_open() ? "opened" : "closed") << " (Ctrl+T).\n";
+        std::cout << "[Assets] Task editor "
+                  << (task_editor_->is_open() ? "opened" : "closed") << " (Ctrl+T).\n";
+    }
+
+    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_S)) {
+        screenshot_capture_pending_ = true;
+        std::cout << "[Assets] Screenshot requested (Ctrl+S).\n";
     }
 
     if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
@@ -1286,8 +1295,8 @@ void Assets::update(const Input& input)
                   << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
     }
 
-    if (quick_task_popup_) {
-        quick_task_popup_->update();
+    if (task_editor_) {
+        task_editor_->update();
     }
     bool room_changed = false;
     bool player_moved = false;
@@ -2342,15 +2351,16 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
 }
 
 void Assets::render_overlays(SDL_Renderer* renderer) {
+    const Uint32 now = SDL_GetTicks();
+
     if (renderer && dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->render_overlays(renderer);
     }
 
-    if (quick_task_popup_) {
-        quick_task_popup_->render(renderer);
+    if (task_editor_) {
+        task_editor_->render(renderer);
     }
 
-    const Uint32 now = SDL_GetTicks();
     popup_manager_.update(now);
     if (!renderer) {
         return;
@@ -2395,6 +2405,149 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
     }
 
     popup_manager_.render(renderer, screen_width, screen_height, now);
+
+    if (screenshot_create_task_button_active(now)) {
+        render_screenshot_create_task_button(renderer, now);
+    }
+
+    if (screenshot_capture_pending_) {
+        std::string screenshot_relative_path;
+        if (capture_screenshot_to_root(renderer, screenshot_relative_path)) {
+            latest_screenshot_relative_path_ = std::move(screenshot_relative_path);
+            screenshot_create_task_start_ticks_ = now;
+        } else {
+            latest_screenshot_relative_path_.clear();
+            screenshot_create_task_start_ticks_ = 0;
+        }
+        screenshot_capture_pending_ = false;
+    }
+}
+
+bool Assets::capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out_relative_path) {
+    out_relative_path.clear();
+    if (!renderer) {
+        return false;
+    }
+
+    const std::filesystem::path root = std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()).parent_path());
+    const std::filesystem::path screenshot_dir = root / "screen_shots";
+    std::error_code ec;
+    std::filesystem::create_directories(screenshot_dir, ec);
+    if (ec) {
+        std::cerr << "[Assets] Failed to create screenshot directory: " << ec.message() << "\n";
+        return false;
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    std::ostringstream name;
+    name << "screenshot_" << ms << ".png";
+    const std::filesystem::path absolute_path = screenshot_dir / name.str();
+
+    int out_w = 0;
+    int out_h = 0;
+    SDL_GetRendererOutputSize(renderer, &out_w, &out_h);
+    if (out_w <= 0 || out_h <= 0) {
+        return false;
+    }
+
+    SDL_Rect capture_rect{0, 0, out_w, out_h};
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &capture_rect);
+    if (!captured) {
+        std::cerr << "[Assets] Failed to capture screenshot: " << SDL_GetError() << "\n";
+        return false;
+    }
+
+    const int save_ok = IMG_SavePNG(captured, absolute_path.string().c_str());
+    SDL_DestroySurface(captured);
+    if (save_ok != 0) {
+        std::cerr << "[Assets] Failed to save screenshot PNG: " << SDL_GetError() << "\n";
+        return false;
+    }
+
+    const std::filesystem::path relative_path = std::filesystem::path("screen_shots") / name.str();
+    out_relative_path = relative_path.generic_string();
+    return true;
+}
+
+bool Assets::screenshot_create_task_button_active(Uint32 now_ticks) const {
+    if (latest_screenshot_relative_path_.empty() || screenshot_create_task_start_ticks_ == 0) {
+        return false;
+    }
+    if (task_editor_ && task_editor_->is_open()) {
+        return false;
+    }
+    const Uint32 elapsed = now_ticks - screenshot_create_task_start_ticks_;
+    return elapsed < kCreateTaskButtonLifetimeMs;
+}
+
+void Assets::render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32 now_ticks) {
+    if (!renderer || !screenshot_create_task_button_active(now_ticks)) {
+        return;
+    }
+
+    int output_w = 0;
+    int output_h = 0;
+    SDL_GetRendererOutputSize(renderer, &output_w, &output_h);
+
+    constexpr int kButtonW = 138;
+    constexpr int kButtonH = 34;
+    constexpr int kLeftMargin = 16;
+    constexpr int kBottomSafePadding = 92;
+
+    screenshot_create_task_button_rect_ = SDL_Rect{
+        kLeftMargin,
+        std::max(0, output_h - kBottomSafePadding - kButtonH),
+        kButtonW,
+        kButtonH
+    };
+
+    Uint8 alpha = 230;
+    const Uint32 elapsed = now_ticks - screenshot_create_task_start_ticks_;
+    if (elapsed > (kCreateTaskButtonLifetimeMs - kCreateTaskButtonFadeMs)) {
+        const Uint32 fade_elapsed = elapsed - (kCreateTaskButtonLifetimeMs - kCreateTaskButtonFadeMs);
+        const float t = static_cast<float>(fade_elapsed) / static_cast<float>(kCreateTaskButtonFadeMs);
+        const float keep = std::clamp(1.0f - t, 0.0f, 1.0f);
+        alpha = static_cast<Uint8>(std::lround(230.0f * keep));
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 42, 42, 48, alpha);
+    sdl_render::FillRect(renderer, &screenshot_create_task_button_rect_);
+    SDL_SetRenderDrawColor(renderer, 170, 170, 185, alpha);
+    sdl_render::Rect(renderer, &screenshot_create_task_button_rect_);
+
+    DMLabelStyle label_style = DMStyles::Label();
+    label_style.color.a = alpha;
+    const std::string label = "Create Task";
+    SDL_Point size = DMFontCache::instance().measure_text(label_style, label);
+    const int text_x = screenshot_create_task_button_rect_.x + (screenshot_create_task_button_rect_.w - size.x) / 2;
+    const int text_y = screenshot_create_task_button_rect_.y + (screenshot_create_task_button_rect_.h - size.y) / 2;
+    DMFontCache::instance().draw_text(renderer, label_style, label, text_x, text_y);
+}
+
+bool Assets::handle_screenshot_create_task_button_event(const SDL_Event& e, Uint32 now_ticks) {
+    if (!screenshot_create_task_button_active(now_ticks)) {
+        return false;
+    }
+    if (e.type != SDL_EVENT_MOUSE_BUTTON_UP || e.button.button != SDL_BUTTON_LEFT) {
+        return false;
+    }
+
+    SDL_Point point{
+        static_cast<int>(std::lround(e.button.x)),
+        static_cast<int>(std::lround(e.button.y))
+    };
+    if (!SDL_PointInRect(&point, &screenshot_create_task_button_rect_)) {
+        return false;
+    }
+
+    if (task_editor_) {
+        task_editor_->open_with_new_task_attachment(latest_screenshot_relative_path_);
+    }
+    screenshot_create_task_start_ticks_ = 0;
+    latest_screenshot_relative_path_.clear();
+    return true;
 }
 
 SDL_Renderer* Assets::renderer() const {
@@ -2648,9 +2801,16 @@ void Assets::clear_editor_selection() {
 }
 
 void Assets::handle_sdl_event(const SDL_Event& e) {
+    const Uint32 now = SDL_GetTicks();
+    if (handle_screenshot_create_task_button_event(e, now)) {
+        if (input) {
+            input->consumeEvent(e);
+        }
+        return;
+    }
 
-    if (quick_task_popup_ && quick_task_popup_->is_open()) {
-        if (quick_task_popup_->handle_event(e)) {
+    if (task_editor_ && task_editor_->is_open()) {
+        if (task_editor_->handle_event(e)) {
 
             if (input) {
                 input->consumeEvent(e);
@@ -2864,7 +3024,9 @@ bool Assets::should_step_dev_frame(const Input& input) const {
 bool Assets::has_pending_dev_work(bool include_animation_plans) const {
     if (pending_initial_rebuild_) return true;
     if (popup_manager_.has_active_content()) return true;
-    if (quick_task_popup_ && quick_task_popup_->is_open()) return true;
+    if (task_editor_ && task_editor_->is_open()) return true;
+    if (screenshot_capture_pending_) return true;
+    if (screenshot_create_task_button_active(SDL_GetTicks())) return true;
 
     if (!include_animation_plans) {
         return false;

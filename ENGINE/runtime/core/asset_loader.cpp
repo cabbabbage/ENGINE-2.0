@@ -186,7 +186,7 @@ std::vector<Asset*> AssetLoader::collectDistantAssets(int lock_threshold, int re
                     continue;
             }
                         ++considered;
-                        SDL_Point asset_point{asset->world_x(), asset->world_y()};
+                        const SDL_Point asset_world_xz = asset->world_xz_point();
 
                         Room* owning_room = room;
                         const std::string& owner_name = asset->owning_room_name();
@@ -197,16 +197,16 @@ std::vector<Asset*> AssetLoader::collectDistantAssets(int lock_threshold, int re
                                 }
                         }
 
-                        if (owning_room && owning_room->room_area && owning_room->room_area->contains_point(asset_point)) {
+                        if (owning_room && owning_room->room_area && owning_room->room_area->contains_point(asset_world_xz)) {
                                 ++kept_in_room;
                                 continue;
                         }
 
-                        if (asset_loader_internal::point_inside_any_zone(asset_point, zoneCache)) {
+                        if (asset_loader_internal::point_inside_any_zone(asset_world_xz, zoneCache)) {
                                 ++kept_in_zone;
                                 continue;
                         }
-                        double minDistSq = asset_loader_internal::min_distance_sq_to_zones(asset_point, zoneCache, remove_threshold);
+                        double minDistSq = asset_loader_internal::min_distance_sq_to_zones(asset_world_xz, zoneCache, remove_threshold);
                         double minDist = std::sqrt(minDistSq);
 
                         const bool should_lock = minDist > lock_distance;

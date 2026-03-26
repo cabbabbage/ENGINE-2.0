@@ -17,6 +17,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
+#include "movement_target_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/grid_point.hpp"
@@ -70,6 +71,18 @@ bool is_playable_room_cached(const Room& room, PlayableRoomsCacheEntry& entry) {
         it->second = compute_is_playable_room(room);
     }
     return it->second;
+}
+
+int resolve_effective_grid_resolution(const Asset* self,
+                                      const vibble::grid::Grid& grid_service,
+                                      std::optional<int> override_resolution) {
+    if (override_resolution.has_value()) {
+        return vibble::grid::clamp_resolution(*override_resolution);
+    }
+    if (self) {
+        return vibble::grid::clamp_resolution(self->grid_resolution);
+    }
+    return grid_service.default_resolution();
 }
 
 }
@@ -280,7 +293,7 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
-    SDL_Point delta{ world_checkpoint.x - self_->world_x(), world_checkpoint.y - self_->world_z() };
+    SDL_Point delta = movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
         self_->needs_target = true;
@@ -299,7 +312,8 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     if (self_) {
         self_->target_reached = false;
     }
-    SDL_Point delta{ target_asset->world_x() - self_->world_x(), target_asset->world_z() - self_->world_z() };
+    const SDL_Point checkpoint = movement_targets::world_checkpoint(*target_asset);
+    SDL_Point delta = movement_targets::world_delta_to_checkpoint(*self_, checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         if (self_) {
             self_->target_reached = true;
@@ -307,7 +321,7 @@ void AnimationUpdate::auto_move(Asset* target_asset,
         }
         return;
     }
-    auto_move(delta, visited_thresh_px, std::nullopt, override_non_locked);
+    auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked);
 }
 
 void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
@@ -461,9 +475,7 @@ vibble::grid::Grid& AnimationUpdate::grid() const {
 }
 
 int AnimationUpdate::effective_grid_resolution(std::optional<int> override_resolution) const {
-    (void)override_resolution;
-
-    return 0;
+    return resolve_effective_grid_resolution(self_, grid(), override_resolution);
 }
 
 void AnimationUpdate::set_animation(const std::string& animation_id) {

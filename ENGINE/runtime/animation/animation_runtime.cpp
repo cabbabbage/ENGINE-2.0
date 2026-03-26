@@ -88,6 +88,18 @@ std::vector<SDL_Point> build_escape_directions(SDL_Point primary) {
     }
     return dirs;
 }
+
+int resolve_effective_grid_resolution(const Asset* self,
+                                      const vibble::grid::Grid& grid_service,
+                                      std::optional<int> override_resolution) {
+    if (override_resolution.has_value()) {
+        return vibble::grid::clamp_resolution(*override_resolution);
+    }
+    if (self) {
+        return vibble::grid::clamp_resolution(self->grid_resolution);
+    }
+    return grid_service.default_resolution();
+}
 }
 
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
@@ -808,13 +820,14 @@ vibble::grid::Grid& AnimationRuntime::grid() const {
 }
 
 int AnimationRuntime::effective_grid_resolution(std::optional<int> override_resolution) const {
-    (void)override_resolution;
-
-    return 0;
+    return resolve_effective_grid_resolution(self_, grid(), override_resolution);
 }
 
 SDL_Point AnimationRuntime::convert_delta_to_world(SDL_Point delta, int resolution) const {
-    (void)resolution;
+    const int clamped_resolution = vibble::grid::clamp_resolution(resolution);
+    (void)clamped_resolution;
+    // Controller/movement deltas are authored in world-space pixels (X/Z).
+    // Resolution affects planning checkpoints but not per-frame root-motion deltas.
     return delta;
 }
 

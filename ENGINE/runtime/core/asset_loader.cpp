@@ -371,7 +371,7 @@ void AssetLoader::createAssets(world::WorldGrid& grid) {
                 Asset* asset = grid.create_asset_at_point(std::move(asset_up));
                 if (asset) {
                         registered_assets.push_back(asset);
-                        vibble::log::info(std::string("[AssetLoader] Registered asset: ") + (asset->info ? asset->info->name : std::string{"<null>"}));
+                        //vibble::log::info(std::string("[AssetLoader] Registered asset: ") + (asset->info ? asset->info->name : std::string{"<null>"}));
                 }
         }
         vibble::log::debug(std::string("[AssetLoader] Registered assets: total=") + std::to_string(registered_assets.size()));

@@ -315,6 +315,12 @@ public:
     bool is_import_busy() const;
 
 private:
+    enum class LiveDepthLine {
+        Center,
+        BackgroundMax,
+        ForegroundMax,
+    };
+
     enum class DirtyFlag : std::uint32_t {
         None   = 0,
         Layout = 1 << 0,
@@ -342,6 +348,13 @@ private:
     void regenerate_map_grid_assets();
     void ensure_map_assets_modal_open();
     void ensure_boundary_assets_modal_open();
+    void ensure_image_effect_panel();
+    void enter_live_depth_edit_mode();
+    void exit_live_depth_edit_mode(bool reopen_depth_panel, bool flush_immediately);
+    bool handle_live_depth_edit_event(const SDL_Event& event);
+    void render_live_depth_edit_overlay(SDL_Renderer* renderer);
+    bool project_live_depth_offset_to_screen_x(float depth_offset, float& out_screen_x) const;
+    bool update_live_depth_setting(LiveDepthLine line, float delta_world);
 
 
     bool persist_map_info_to_disk();
@@ -374,6 +387,11 @@ private:
     std::string map_path_;
     bool pointer_over_camera_panel_ = false;
     bool pointer_over_image_effect_panel_ = false;
+    bool live_depth_edit_mode_active_ = false;
+    bool live_depth_settings_dirty_ = false;
+    LiveDepthLine live_depth_selected_line_ = LiveDepthLine::Center;
+    depth_cue::DepthCueSettings live_depth_settings_{};
+    std::unique_ptr<DMButton> live_depth_exit_button_;
     bool modal_headers_hidden_ = false;
     bool sliding_headers_hidden_ = false;
     bool world_mutation_in_progress_ = false;

@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "animation/controllers/custom_controllers/anchor_binding_order.hpp"
+#include "animation/controllers/shared/anchor_binding_order.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 
 TEST_CASE("Anchor binding order keeps parent before chained children") {

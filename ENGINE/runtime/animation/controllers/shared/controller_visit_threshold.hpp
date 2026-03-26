@@ -1,10 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <cmath>
 #include <vector>
 
-#include "animation/controllers/custom_controllers/controller_path_utils.hpp"
+#include "animation/controllers/shared/controller_path_utils.hpp"
 
 class Asset;
 

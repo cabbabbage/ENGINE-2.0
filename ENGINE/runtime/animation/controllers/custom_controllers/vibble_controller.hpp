@@ -9,8 +9,8 @@
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
-#include "animation/controllers/custom_controllers/child_asset.hpp"
+#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/child_asset.hpp"
 #include <SDL3/SDL.h>
 #include <chrono>
 #include <optional>

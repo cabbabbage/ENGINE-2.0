@@ -14,7 +14,9 @@
 #include "animation/controllers/custom_controllers/gary_controller.hpp"
 #include "animation/controllers/custom_controllers/spider_controller.hpp"
 
-#include "animation/controllers/custom_controllers/default_controller.hpp"
+#include "animation/controllers/shared/custom_asset_controller.hpp"
+
+// <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>
 
 namespace {
 
@@ -112,17 +114,17 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
                         return std::make_unique<bartender_controller>(self);
                 if (matches("spider_controller"))
                         return std::make_unique<spider_controller>(self);
-                if (matches("bomb_controller"))
+        if (matches("bomb_controller"))
                         return std::make_unique<bomb_controller>(self);
 
                 // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
                 // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
-                if (matches("vibble_controller"))
+        if (matches("vibble_controller"))
                         return std::make_unique<vibble_controller>(self);
 
         } catch (...) {
         }
-        return std::make_unique<default_controller>(self);
+        return std::make_unique<CustomAssetController>(self);
 }
 
 std::unique_ptr<AssetController>

@@ -1,5 +1,5 @@
 #pragma once
-#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
+#include "animation/controllers/shared/custom_asset_controller.hpp"
 
 #include <random>
 #include <SDL3/SDL.h>

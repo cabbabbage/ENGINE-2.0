@@ -1,16 +1,32 @@
-#include "default_controller.hpp"
+#include "custom_asset_controller.hpp"
+
+#include <SDL3/SDL.h>
+#include <string>
+
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation/animation_update.hpp"
+#include "core/AssetsManager.hpp"
 
-#include <string>
+CustomAssetController::CustomAssetController(Asset* self)
+    : self_(self) {}
 
+CustomAssetController::~CustomAssetController() = default;
 
-default_controller::default_controller(Asset* self)
-    : CustomAssetController(self) {}
+void CustomAssetController::update(const Input& in) {
+    on_update(in);
+}
 
-void default_controller::on_update(const Input& ) {
+void CustomAssetController::process_pending_attacks(Asset& self) {
+    on_process_pending_attacks(self);
+}
+
+Assets* CustomAssetController::assets() const {
+    return self_ ? self_->get_assets() : nullptr;
+}
+
+void CustomAssetController::on_update(const Input&) {
     Asset* self = self_ptr();
     if (!self || !self->info || !self->anim_) {
         return;
@@ -25,12 +41,10 @@ void default_controller::on_update(const Input& ) {
 
     if (self->current_animation != default_anim || self->current_frame == nullptr) {
         self->anim_->move(SDL_Point{ 0, 0 }, default_anim);
-        return;
     }
-
 }
 
-void default_controller::on_process_pending_attacks(Asset& ) {
+void CustomAssetController::on_process_pending_attacks(Asset&) {
     Asset* self = self_ptr();
     if (!self || !self->info || !self->anim_) {
         return;

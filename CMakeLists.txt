@@ -263,10 +263,15 @@ add_executable(engine_tests
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp
     ENGINE/runtime/assets/asset/asset_controller.cpp
-    ENGINE/runtime/animation/controllers/custom_controllers/custom_asset_controller.cpp
-    ENGINE/runtime/animation/controllers/custom_controllers/child_asset.cpp
-    ENGINE/runtime/animation/controllers/custom_controllers/anchor_bound_asset_helper.cpp
+    ENGINE/runtime/assets/asset/Asset.cpp
+    ENGINE/runtime/animation/controllers/shared/custom_asset_controller.cpp
+    ENGINE/runtime/animation/controllers/shared/child_asset.cpp
+    ENGINE/runtime/animation/controllers/shared/anchor_bound_asset_helper.cpp
     ENGINE/runtime/animation/attack_validation.cpp
+    ENGINE/runtime/animation/animation_update.cpp
+    ENGINE/runtime/animation/path_sanitizer.cpp
+    ENGINE/runtime/animation/get_best_path.cpp
+    ENGINE/runtime/animation/animation_runtime.cpp
     ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
     ENGINE/editor/devtools/dm_styles.cpp
     ENGINE/editor/devtools/core/dev_json_store.cpp
@@ -282,12 +287,14 @@ add_executable(engine_tests
     ENGINE/editor/devtools/animation_source_navigation.cpp
     ENGINE/editor/devtools/frame_editors/shared/FrameEditState.cpp
     ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp
+    ENGINE/runtime/core/AssetsManager.cpp
     ENGINE/runtime/core/manifest/manifest_loader.cpp
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/runtime/utils/utils/cache_manager.cpp
     ENGINE/runtime/utils/utils/map_grid_settings.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
     ENGINE/runtime/utils/utils/input.cpp
+    ENGINE/runtime/utils/utils/area.cpp
     ENGINE/runtime/utils/utils/grid_math.cpp
     ENGINE/runtime/utils/utils/range_util.cpp
     ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
@@ -330,9 +337,11 @@ target_include_directories(engine_tests
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/app
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/audio
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
           ${CMAKE_SOURCE_DIR}/external
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core
   )
 
 target_compile_definitions(engine_tests PRIVATE

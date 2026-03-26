@@ -6,9 +6,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "animation/controllers/custom_controllers/custom_asset_controller.hpp"
-#include "animation/controllers/custom_controllers/child_asset.hpp"
-#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/child_asset.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "stubs/asset/child_asset_runtime_test_support.hpp"

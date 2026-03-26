@@ -1,7 +1,7 @@
 #include "child_asset.hpp"
 
 #include "assets/asset/Asset.hpp"
-#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "utils/log.hpp"

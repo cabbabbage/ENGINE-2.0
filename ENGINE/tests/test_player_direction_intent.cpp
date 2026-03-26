@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "animation/controllers/custom_controllers/player_direction_intent.hpp"
+#include "animation/controllers/shared/player_direction_intent.hpp"
 
 namespace {
 

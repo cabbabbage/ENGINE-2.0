@@ -37,7 +37,7 @@
 #include "dm_styles.hpp"
 #include "room_overlay_renderer.hpp"
 #include "animation/animation_update.hpp"
-#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/warped_screen_grid.hpp"

@@ -1,8 +1,8 @@
 #include "frog_controller.hpp"
-#include "animation/controllers/custom_controllers/attack_helpers.hpp"
+#include "animation/controllers/shared/attack_helpers.hpp"
 
-#include "animation/controllers/custom_controllers/controller_path_utils.hpp"
-#include "animation/controllers/custom_controllers/controller_visit_threshold.hpp"
+#include "animation/controllers/shared/controller_path_utils.hpp"
+#include "animation/controllers/shared/controller_visit_threshold.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"

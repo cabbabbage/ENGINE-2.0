@@ -10,7 +10,7 @@
 
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
-#include "animation/controllers/custom_controllers/player_direction_intent.hpp"
+#include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"

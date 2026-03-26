@@ -2456,11 +2456,17 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
     bool modified = false;
     const std::string include_line = "#include \"animation/controllers/custom_controllers/" + key + ".hpp\"";
     if (content.find(include_line) == std::string::npos) {
-        auto include_pos = content.find("#include \"animation/controllers/custom_controllers/default_controller.hpp\"");
+        const std::string include_marker = "// <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>";
+        auto include_pos = content.find(include_marker);
         if (include_pos != std::string::npos) {
             content.insert(include_pos, include_line + "\n");
         } else {
-            content = include_line + "\n" + content;
+            include_pos = content.find("#include \"animation/controllers/custom_controllers/default_controller.hpp\"");
+            if (include_pos != std::string::npos) {
+                content.insert(include_pos, include_line + "\n");
+            } else {
+                content = include_line + "\n" + content;
+            }
         }
         modified = true;
     }

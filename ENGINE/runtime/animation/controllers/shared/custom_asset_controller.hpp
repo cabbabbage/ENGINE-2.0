@@ -20,8 +20,8 @@ protected:
     Asset* self_ptr() const { return self_; }
     Assets* assets() const;
 
-    virtual void on_update(const Input& in) = 0;
-    virtual void on_process_pending_attacks(Asset& self) = 0;
+    virtual void on_update(const Input& in);
+    virtual void on_process_pending_attacks(Asset& self);
 
 private:
     Asset* self_ = nullptr;

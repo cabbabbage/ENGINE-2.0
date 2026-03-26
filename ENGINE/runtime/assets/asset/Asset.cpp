@@ -31,7 +31,7 @@
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 #include "utils/AnchorPointResolver.hpp"
-#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 
 #if !defined(NDEBUG)
 namespace {

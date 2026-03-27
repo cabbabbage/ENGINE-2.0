@@ -579,8 +579,9 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
     // Get camera settings for realism warping
     const auto& settings = cam->get_settings();
     const float base_height = settings.base_height_px;
-    const float depth_near = settings.depth_near_world;
-    const float depth_far = settings.depth_far_world;
+    const double anchor_depth = cam->current_anchor_world_z();
+    const float depth_near = static_cast<float>(anchor_depth + static_cast<double>(settings.depth_near_world));
+    const float depth_far = static_cast<float>(anchor_depth + static_cast<double>(settings.depth_far_world));
 
     // Calculate perspective scale based on depth
     // Objects further away (larger Z) should appear smaller

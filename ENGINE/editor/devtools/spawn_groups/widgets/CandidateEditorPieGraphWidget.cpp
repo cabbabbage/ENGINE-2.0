@@ -1091,6 +1091,17 @@ bool CandidateEditorPieGraphWidget::search_visible() const {
     return search_assets_ && search_assets_->visible();
 }
 
+bool CandidateEditorPieGraphWidget::is_search_visible() const {
+    return search_visible();
+}
+
+bool CandidateEditorPieGraphWidget::is_search_point_inside(int x, int y) const {
+    if (!search_assets_ || !search_assets_->visible()) {
+        return false;
+    }
+    return search_assets_->is_point_inside(x, y);
+}
+
 void CandidateEditorPieGraphWidget::apply_live_delta(int index, double delta) {
     if (index < 0 || index >= static_cast<int>(candidates_.size()) || std::abs(delta) < 1e-9) {
         return;

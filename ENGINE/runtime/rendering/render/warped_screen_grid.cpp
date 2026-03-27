@@ -1289,9 +1289,28 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         height,
         0,
         world_grid.default_resolution_layer());
+    const CameraState& cam_state = camera_state_cached();
+    const double anchor_depth = cam_state.anchor_world_z;
+    const auto clamp_world_depth = [](double value) -> int {
+        if (!std::isfinite(value)) {
+            return 0;
+        }
+        const double min_value = static_cast<double>(std::numeric_limits<int>::min());
+        const double max_value = static_cast<double>(std::numeric_limits<int>::max());
+        if (value <= min_value) {
+            return std::numeric_limits<int>::min();
+        }
+        if (value >= max_value) {
+            return std::numeric_limits<int>::max();
+        }
+        return static_cast<int>(value);
+    };
     world::WorldGrid::RegionMetrics region_metrics{};
-    const int min_world_z = static_cast<int>(std::floor(settings_.depth_near_world));
-    const int max_world_z = static_cast<int>(std::ceil(settings_.depth_far_world));
+    int min_world_z = clamp_world_depth(std::floor(anchor_depth + static_cast<double>(settings_.depth_near_world)));
+    int max_world_z = clamp_world_depth(std::ceil(anchor_depth + static_cast<double>(settings_.depth_far_world)));
+    if (min_world_z > max_world_z) {
+        std::swap(min_world_z, max_world_z);
+    }
     std::vector<world::GridPoint*> grid_points = world_grid.query_region(
         world_bounds,
         0,
@@ -1310,8 +1329,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     const float virtual_w = virtual_bounds.right - virtual_bounds.left;
     const float virtual_h = virtual_bounds.bottom - virtual_bounds.top;
 
-    const CameraState& cam_state = camera_state_cached();
-    const double anchor_depth = cam_state.anchor_world_z;
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;
     runtime_anchor_world_z_ = cam_state.anchor_world_z;
@@ -1345,8 +1362,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
 };
     const float min_visible_px =
         static_cast<float>(screen_height_) * std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
-    last_min_world_z_ = std::numeric_limits<int>::max();
-    last_max_world_z_ = std::numeric_limits<int>::min();
+    last_min_world_z_ = min_world_z;
+    last_max_world_z_ = max_world_z;
     last_depth_culled_ = 0;
 
     const double padding_world = std::max(0.0f, frustum_padding_world_);

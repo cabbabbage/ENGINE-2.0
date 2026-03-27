@@ -1933,7 +1933,27 @@ nlohmann::json SpawnGroupConfig::to_json() const {
 }
 
 void SpawnGroupConfig::update(const Input& input, int screen_w, int screen_h) {
+    const SDL_Point pointer{input.getX(), input.getY()};
+    bool suppress_parent_scroll = false;
+    if (scroll_enabled()) {
+        for (const auto& entry : entries_) {
+            if (!entry) continue;
+            if (auto* graph = entry->candidate_editor_widget()) {
+                if (graph->is_search_point_inside(pointer.x, pointer.y)) {
+                    suppress_parent_scroll = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (suppress_parent_scroll) {
+        set_scroll_enabled(false);
+    }
     DockableCollapsible::update(input, screen_w, screen_h);
+    if (suppress_parent_scroll) {
+        set_scroll_enabled(true);
+    }
     if (drag_state_.active) {
         update_drag_visuals(input);
     }
@@ -1947,6 +1967,22 @@ void SpawnGroupConfig::update(const Input& input, int screen_w, int screen_h) {
 bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+
+    if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        for (const auto& entry : entries_) {
+            if (!entry) continue;
+            auto* graph = entry->candidate_editor_widget();
+            if (!graph || !graph->is_search_point_inside(mx, my)) {
+                continue;
+            }
+            graph->handle_event(e);
+            process_pending_notifications();
+            return true;  // Keep wheel input from bubbling to parent panel while over embedded search.
+        }
+    }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT && e.button.clicks >= 2) {
         SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);

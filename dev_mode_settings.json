@@ -2,12 +2,12 @@
     "dev": {
         "anchor_points": {
             "debug": {
-                "enabled": true
+                "enabled": false
             }
         },
         "asset_filter": {
             "current_room": true,
-            "filters_expanded": false,
+            "filters_expanded": true,
             "fog": false,
             "initialized": true,
             "map_assets": true,

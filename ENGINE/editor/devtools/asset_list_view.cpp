@@ -438,6 +438,11 @@ SDL_Texture* AssetListView::default_frame_texture(const AssetInfo& info) const {
             return first->variants[0].base_texture;
         }
     }
+
+    if (info.preview_texture) {
+        return info.preview_texture;
+    }
+
     return nullptr;
 }
 

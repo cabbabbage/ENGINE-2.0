@@ -47,7 +47,7 @@ SearchAssets::SearchAssets(devmode::core::ManifestStore* manifest_store)
         nullptr
     });
 
-    panel_->set_rows(list_view_.rows());
+    panel_->set_rows(list_view_.rows(embedded_ ? 1 : 2));
     last_known_position_ = panel_->position();
     pending_position_ = last_known_position_;
     has_pending_position_ = true;
@@ -96,7 +96,7 @@ void SearchAssets::apply_position(int x, int y) {
         panel_->set_col_gap(16);
         panel_->set_cell_width(220);
         panel_->set_floating_content_width(520);
-        panel_->set_rows(list_view_.rows());
+        panel_->set_rows(list_view_.rows(embedded_ ? 1 : 2));
     }
     if (embedded_) {
         panel_->set_rect(SDL_Rect{x, y, panel_->rect().w, panel_->rect().h});
@@ -493,7 +493,7 @@ void SearchAssets::filter_assets() {
 
     list_view_.set_entries(std::move(entries));
     list_view_.refresh_tiles();
-    panel_->set_rows(list_view_.rows());
+    panel_->set_rows(list_view_.rows(embedded_ ? 1 : 2));
 
     Input dummy;
     if (embedded_) {

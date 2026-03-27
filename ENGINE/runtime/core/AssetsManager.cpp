@@ -2945,6 +2945,14 @@ void Assets::invalidate_dynamic_boundary_system() {
     }
 }
 
+const std::vector<DynamicBoundarySystem::BoundarySprite>& Assets::dynamic_boundary_sprites() const {
+    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
+    if (!scene) {
+        return kEmptyBoundarySprites;
+    }
+    return scene->dynamic_boundary_sprites();
+}
+
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {
     popup_manager_.show_toast(message, duration_ms);
 }

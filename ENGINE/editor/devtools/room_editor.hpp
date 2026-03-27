@@ -21,6 +21,7 @@
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
+#include "devtools/room_selection_filter_utils.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "animation/combat_geometry.hpp"
 #include "utils/input.hpp"
@@ -335,7 +336,39 @@ private:
     static bool asset_info_contains_spawn_group(const class AssetInfo* info, const std::string& spawn_id);
     void mark_highlight_dirty();
     bool spawn_group_locked(const std::string& spawn_id) const;
+    room_selection_filter::SelectionFilter effective_selection_filter() const;
+    room_selection_filter::SpawnOwnership classify_spawn_group_ownership(const std::string& spawn_id) const;
+    room_selection_filter::SpawnOwnership classify_asset_ownership(const Asset* asset) const;
+    bool owner_array_matches_map_section(const nlohmann::json* owner_array, const char* section_key) const;
     bool asset_matches_selection_filter(const Asset* asset) const;
+    struct DynamicBoundaryProxyKey {
+        std::string spawn_id;
+        std::string asset_name;
+        int boundary_type_index = -1;
+        int candidate_index = -1;
+        int world_x = 0;
+        int world_z = 0;
+
+        bool valid() const { return !spawn_id.empty(); }
+        bool operator==(const DynamicBoundaryProxyKey& other) const {
+            return spawn_id == other.spawn_id &&
+                   asset_name == other.asset_name &&
+                   boundary_type_index == other.boundary_type_index &&
+                   candidate_index == other.candidate_index &&
+                   world_x == other.world_x &&
+                   world_z == other.world_z;
+        }
+    };
+    struct DynamicBoundaryProxyHit {
+        DynamicBoundaryProxyKey key{};
+        SDL_FRect screen_rect{0.0f, 0.0f, 0.0f, 0.0f};
+        int world_z = 0;
+    };
+    std::optional<DynamicBoundaryProxyHit> hit_test_dynamic_boundary_sprite(SDL_Point screen_point) const;
+    std::optional<SDL_FRect> dynamic_boundary_proxy_rect(const DynamicBoundaryProxyKey& key) const;
+    void clear_dynamic_boundary_proxy_selection();
+    bool open_asset_info_for_dynamic_boundary(const DynamicBoundaryProxyHit& hit);
+    void render_dynamic_boundary_proxy_overlay(SDL_Renderer* renderer) const;
     void cycle_selection_filter();
     void reset_selection_filter();
     void ensure_anchor_editor_widgets();
@@ -757,9 +790,13 @@ private:
     bool camera_settings_lock_active_ = false;
     CameraSettingsDragState camera_settings_drag_{};
     std::unordered_set<std::string> room_spawn_ids_;
+    std::unordered_set<std::string> map_assets_spawn_ids_;
+    std::unordered_set<std::string> map_boundary_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;
     bool asset_belongs_to_room(const Asset* asset) const;
+    std::optional<DynamicBoundaryProxyKey> selected_dynamic_boundary_proxy_{};
+    std::optional<DynamicBoundaryProxyKey> hovered_dynamic_boundary_proxy_{};
 
     RoomAssetsSavedCallback room_assets_saved_callback_;
     std::string rename_active_room(const std::string& old_name, const std::string& desired_name);

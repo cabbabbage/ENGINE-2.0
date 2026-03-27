@@ -5014,19 +5014,31 @@ void DevControls::enter_live_depth_edit_mode() {
 
     live_depth_settings_ = assets_->depth_cue_settings();
     depth_cue::clamp(live_depth_settings_);
-    const bool has_serialized_depth_settings =
-        map_info_json_ && map_info_json_->is_object() &&
-        map_info_json_->contains(depth_cue::kMapEntryKey) &&
-        (*map_info_json_)[depth_cue::kMapEntryKey].is_object();
+    const nlohmann::json* depth_section = nullptr;
+    if (map_info_json_ && map_info_json_->is_object()) {
+        auto it = map_info_json_->find(depth_cue::kMapEntryKey);
+        if (it != map_info_json_->end() && it->is_object()) {
+            depth_section = &(*it);
+        }
+    }
+    const bool has_foreground_max =
+        depth_section && depth_section->contains(depth_cue::kForegroundMaxDepthOffsetKey) &&
+        (*depth_section)[depth_cue::kForegroundMaxDepthOffsetKey].is_number();
+    const bool has_background_max =
+        depth_section && depth_section->contains(depth_cue::kBackgroundMaxDepthOffsetKey) &&
+        (*depth_section)[depth_cue::kBackgroundMaxDepthOffsetKey].is_number();
     bool injected_default_min_spacing = false;
-    if (!has_serialized_depth_settings) {
+    if (!has_foreground_max) {
         live_depth_settings_.foreground_max_depth_offset =
             live_depth_settings_.center_depth_offset - depth_cue::kMinSeparation;
-        live_depth_settings_.background_max_depth_offset =
-            live_depth_settings_.center_depth_offset + depth_cue::kMinSeparation;
-        depth_cue::clamp(live_depth_settings_);
         injected_default_min_spacing = true;
     }
+    if (!has_background_max) {
+        live_depth_settings_.background_max_depth_offset =
+            live_depth_settings_.center_depth_offset + depth_cue::kMinSeparation;
+        injected_default_min_spacing = true;
+    }
+    depth_cue::clamp(live_depth_settings_);
     live_depth_selected_line_ = LiveDepthLine::Center;
     live_depth_settings_dirty_ = injected_default_min_spacing;
     live_depth_edit_mode_active_ = true;
@@ -5227,7 +5239,7 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
 
     struct LineInfo {
         LiveDepthLine line = LiveDepthLine::Center;
-        float x = 0.0f;
+        float y = 0.0f;
         bool valid = false;
         const char* label = "";
         SDL_Color color{255, 255, 255, 255};
@@ -5238,19 +5250,19 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
         {LiveDepthLine::BackgroundMax, 0.0f, false, "Background Max", SDL_Color{96, 192, 255, 200}},
     }};
 
-    lines[0].valid = project_live_depth_offset_to_screen_x(live_depth_settings_.foreground_max_depth_offset, lines[0].x);
-    lines[1].valid = project_live_depth_offset_to_screen_x(live_depth_settings_.center_depth_offset, lines[1].x);
-    lines[2].valid = project_live_depth_offset_to_screen_x(live_depth_settings_.background_max_depth_offset, lines[2].x);
+    lines[0].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, lines[0].y);
+    lines[1].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.center_depth_offset, lines[1].y);
+    lines[2].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, lines[2].y);
 
     SDL_BlendMode previous_blend = SDL_BLENDMODE_NONE;
     SDL_GetRenderDrawBlendMode(renderer, &previous_blend);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    auto draw_line = [&](int x, SDL_Color color, int thickness) {
+    auto draw_line = [&](int y, SDL_Color color, int thickness) {
         const int half = std::max(0, thickness / 2);
         SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-        for (int dx = -half; dx <= half; ++dx) {
-            SDL_RenderLine(renderer, x + dx, 0, x + dx, screen_h_);
+        for (int dy = -half; dy <= half; ++dy) {
+            SDL_RenderLine(renderer, 0, y + dy, screen_w_, y + dy);
         }
     };
 
@@ -5258,26 +5270,27 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
     label_style.font_size = std::max(12, label_style.font_size - 1);
 
     for (const LineInfo& line : lines) {
-        if (!line.valid || !std::isfinite(line.x)) {
+        if (!line.valid || !std::isfinite(line.y)) {
             continue;
         }
-        const int xi = static_cast<int>(std::lround(line.x));
+        const int yi = static_cast<int>(std::lround(line.y));
         const bool selected = (line.line == live_depth_selected_line_);
         SDL_Color draw_color = line.color;
         int thickness = selected ? 5 : 2;
         if (selected) {
             draw_color = SDL_Color{255, 245, 168, 240};
         }
-        draw_line(xi, draw_color, thickness);
+        draw_line(yi, draw_color, thickness);
 
         label_style.color = selected ? SDL_Color{255, 245, 168, 255} : line.color;
-        const int label_x = std::clamp(xi + 8, 6, std::max(6, screen_w_ - 220));
-        DrawLabelText(renderer, line.label, label_x, 8, label_style);
+        const int label_y = std::clamp(yi - 18, 6, std::max(6, screen_h_ - 22));
+        const int label_x = 12;
+        DrawLabelText(renderer, line.label, label_x, label_y, label_style);
     }
 
     DMLabelStyle instruction_style = DMStyles::Label();
     instruction_style.color = SDL_Color{228, 236, 248, 255};
-    DrawLabelText(renderer, "Live Depth Editing: Click a line, then mouse wheel to move depth", 16, 32, instruction_style);
+    DrawLabelText(renderer, "Live Depth Editing: Click a horizontal line, then mouse wheel to move depth", 16, 32, instruction_style);
 
     live_depth_exit_button_->render(renderer);
     SDL_SetRenderDrawBlendMode(renderer, previous_blend);

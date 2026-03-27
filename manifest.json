@@ -217,7 +217,7 @@
       ],
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -5210,9 +5210,9 @@
       },
       "content_root": "content/forrest",
       "depth_cue_settings": {
-        "background_max_depth_offset": 600.0,
-        "center_depth_offset": -25.0,
-        "foreground_max_depth_offset": -600.0
+        "background_max_depth_offset": 650.0,
+        "center_depth_offset": -75.0,
+        "foreground_max_depth_offset": -150.0
       },
       "dev_map_settings": {},
       "fog_settings": {

@@ -38,6 +38,7 @@ public:
     struct BoundarySprite {
         SDL_Texture* texture = nullptr;
         std::string  spawn_id;
+        std::string  asset_name;
         SDL_FPoint   world_pos{0.0f, 0.0f};
         SDL_FPoint   screen_pos{0.0f, 0.0f};
         float        asset_scale = 1.0f;

@@ -122,6 +122,55 @@ std::optional<nlohmann::json> find_room_manifest_animation_payload(const nlohman
     return *it;
 }
 
+std::vector<devmode::room_movement_payload::MovementFrame>
+movement_frames_from_runtime_animation(const Animation& animation) {
+    std::vector<devmode::room_movement_payload::MovementFrame> frames;
+    if (!animation.has_frames()) {
+        frames.push_back(devmode::room_movement_payload::MovementFrame{});
+        return frames;
+    }
+
+    frames.resize(std::max<std::size_t>(std::size_t{1}, animation.frame_count()));
+    for (std::size_t i = 0; i < animation.frame_count(); ++i) {
+        const AnimationFrame* runtime_frame = animation.primary_frame_at(i);
+        if (!runtime_frame) {
+            continue;
+        }
+        auto& frame = frames[i];
+        frame.dx = static_cast<float>(runtime_frame->dx);
+        frame.dy = static_cast<float>(runtime_frame->dy);
+        frame.dz = static_cast<float>(runtime_frame->dz);
+        frame.resort_z = runtime_frame->z_resort;
+    }
+    return frames;
+}
+
+std::vector<devmode::room_movement_payload::MovementFrame>
+resolve_room_movement_frames_for_animation(const Asset* target, const std::string& animation_id) {
+    if (!target || !target->info || animation_id.empty()) {
+        return {devmode::room_movement_payload::MovementFrame{}};
+    }
+
+    nlohmann::json manifest_payload = target->info->manifest_payload();
+    nlohmann::json existing_payload =
+        find_room_manifest_animation_payload(manifest_payload, animation_id).value_or(nlohmann::json::object());
+    const bool has_local_movement =
+        existing_payload.is_object() &&
+        existing_payload.contains("movement") &&
+        existing_payload["movement"].is_array();
+
+    if (has_local_movement) {
+        return devmode::room_movement_payload::parse_frames_from_payload(existing_payload);
+    }
+
+    auto anim_it = target->info->animations.find(animation_id);
+    if (anim_it != target->info->animations.end()) {
+        return movement_frames_from_runtime_animation(anim_it->second);
+    }
+
+    return {devmode::room_movement_payload::MovementFrame{}};
+}
+
 int clamp_box_corner_index(int index) {
     return std::clamp(index, 0, 3);
 }
@@ -8313,10 +8362,7 @@ void RoomEditor::navigate_movement_animation(int delta) {
     } else {
         next_frame_index = 0;
     }
-    nlohmann::json payload = movement_edit_.target_asset->info->manifest_payload();
-    nlohmann::json existing =
-        find_room_manifest_animation_payload(payload, next_animation).value_or(nlohmann::json::object());
-    movement_edit_.frames = devmode::room_movement_payload::parse_frames_from_payload(existing);
+    movement_edit_.frames = resolve_room_movement_frames_for_animation(movement_edit_.target_asset, next_animation);
     if (!movement_edit_.has_frames()) {
         movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
     }
@@ -8589,11 +8635,7 @@ bool RoomEditor::enter_movement_edit_mode() {
     movement_edit_.static_frame_before = target->static_frame;
     movement_edit_.animation_id = selection.resolved_animation_id;
 
-    nlohmann::json manifest_payload = target->info->manifest_payload();
-    nlohmann::json existing_payload =
-        find_room_manifest_animation_payload(manifest_payload, movement_edit_.animation_id)
-            .value_or(nlohmann::json::object());
-    movement_edit_.frames = devmode::room_movement_payload::parse_frames_from_payload(existing_payload);
+    movement_edit_.frames = resolve_room_movement_frames_for_animation(target, movement_edit_.animation_id);
     if (!movement_edit_.has_frames()) {
         movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
     }
@@ -8773,11 +8815,7 @@ void RoomEditor::validate_movement_edit_target() {
     }
     if (selection.resolved_animation_id != movement_edit_.animation_id) {
         movement_edit_.animation_id = selection.resolved_animation_id;
-        nlohmann::json payload = target->info->manifest_payload();
-        nlohmann::json existing =
-            find_room_manifest_animation_payload(payload, movement_edit_.animation_id)
-                .value_or(nlohmann::json::object());
-        movement_edit_.frames = devmode::room_movement_payload::parse_frames_from_payload(existing);
+        movement_edit_.frames = resolve_room_movement_frames_for_animation(target, movement_edit_.animation_id);
         normalize_movement_frames_to_current_animation();
         rebuild_movement_rel_positions();
         apply_movement_animation_and_frame(movement_edit_.animation_id, 0);

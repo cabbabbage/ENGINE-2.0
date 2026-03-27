@@ -997,6 +997,14 @@ void SceneRenderer::invalidate_dynamic_boundary_system() {
     }
 }
 
+const std::vector<DynamicBoundarySystem::BoundarySprite>& SceneRenderer::dynamic_boundary_sprites() const {
+    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
+    if (!dynamic_boundary_system_) {
+        return kEmptyBoundarySprites;
+    }
+    return dynamic_boundary_system_->get_boundary_sprites();
+}
+
 void SceneRenderer::render() {
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;

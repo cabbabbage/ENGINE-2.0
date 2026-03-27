@@ -24,6 +24,7 @@
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
 #include "runtime_world_context.hpp"
+#include "rendering/render/dynamic_boundary_system.hpp"
 
 class Asset;
 class SceneRenderer;
@@ -180,6 +181,7 @@ public:
     void notify_spawn_group_config_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
     void invalidate_dynamic_boundary_system();
+    const std::vector<DynamicBoundarySystem::BoundarySprite>& dynamic_boundary_sprites() const;
 
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
     void notify_camera_activity(bool active);

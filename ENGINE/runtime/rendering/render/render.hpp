@@ -82,6 +82,7 @@ public:
     ~SceneRenderer();
 
     void invalidate_dynamic_boundary_system();
+    const std::vector<DynamicBoundarySystem::BoundarySprite>& dynamic_boundary_sprites() const;
 
     static inline bool prerequisites_ready(SDL_Renderer* renderer, Assets* assets, std::string* reason = nullptr) {
         if (!renderer) {

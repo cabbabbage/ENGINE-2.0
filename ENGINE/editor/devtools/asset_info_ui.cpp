@@ -419,6 +419,7 @@ class Section_Tags : public DockableCollapsible {
         });
       }
 
+      tag_editor_->set_subject_asset_name(info_->name);
       tag_editor_->set_tags(info_->tags, info_->anti_tags);
       rows.push_back({ tag_editor_.get() });
 

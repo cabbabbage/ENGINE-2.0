@@ -24,6 +24,7 @@ public:
     Mode mode() const { return mode_; }
 
     void set_tags(const std::vector<std::string>& tags, const std::vector<std::string>& anti_tags);
+    void set_subject_asset_name(const std::string& asset_name);
 
     std::vector<std::string> tags() const;
     std::vector<std::string> anti_tags() const;
@@ -142,10 +143,27 @@ private:
     std::unique_ptr<ButtonWidget> browse_tags_widget_;
     std::string search_input_;
     std::string search_query_;
+    std::string subject_asset_name_;
     bool show_browse_tags_ = false;
 
     std::function<void(const std::vector<std::string>&, const std::vector<std::string>&)> on_changed_;
 
 private:
     void update_browse_mode();
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    friend struct TagEditorWidgetTestAccess;
+#endif
 };
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+struct TagEditorWidgetTestAccess {
+    static void set_query(TagEditorWidget& widget, const std::string& query);
+    static const std::vector<std::string>& recommended_tags(const TagEditorWidget& widget);
+    static bool has_search_virtual_chip(const TagEditorWidget& widget);
+    static const std::string& search_virtual_value(const TagEditorWidget& widget);
+    static void rebuild_recommendations(TagEditorWidget& widget);
+    static std::vector<std::string> top_similar_asset_names(const TagEditorWidget& widget);
+    static bool pruning_matches_exact(const TagEditorWidget& widget);
+};
+#endif

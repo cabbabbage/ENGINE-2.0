@@ -5,14 +5,13 @@
 #include "dm_styles.hpp"
 #include "tag_library.hpp"
 #include "tag_utils.hpp"
+#include "core/manifest/manifest_loader.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdint>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 #include <limits>
 #include <set>
 #include <unordered_map>
@@ -25,16 +24,34 @@ constexpr int kChipWidth = 132;
 constexpr int kRecommendChipWidth = 148;
 constexpr size_t kRecommendationPreviewCount = 5;
 constexpr size_t kMaxRecommendations = std::numeric_limits<size_t>::max();
+constexpr size_t kAssetRecommendationLimit = 25;
 constexpr int kAssetDropMinHeight = 34;
 constexpr float kDragStartThresholdPx = 6.0f;
-constexpr double kPopularityWeight = 0.5;
-constexpr double kSearchBoostExact = 1000000.0;
-constexpr double kSearchBoostPrefix = 500000.0;
-constexpr double kSearchBoostContains = 250000.0;
+constexpr double kAssetSimilarityWeight = 0.55;
+constexpr double kAssetPopularityWeight = 0.45;
+constexpr size_t kSimilarAssetCount = 3;
 
 struct TagDatasetEntry {
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
+};
+
+struct AssetTagProfile {
+    std::string asset_name;
+    std::unordered_set<std::string> tags;
+    std::unordered_set<std::string> anti_tags;
+};
+
+struct ManifestTagCorpus {
+    std::vector<AssetTagProfile> profiles;
+    std::vector<std::string> unique_tags;
+    std::unordered_map<std::string, int> popularity;
+    int max_popularity = 0;
+};
+
+struct SimilarAssetScore {
+    const AssetTagProfile* profile = nullptr;
+    double similarity = 0.0;
 };
 
 struct TagStats {
@@ -53,7 +70,7 @@ std::string to_lower(const std::string& value) {
     return out;
 }
 
-void append_strings(const nlohmann::json& node, std::set<std::string>& dest) {
+void append_strings(const nlohmann::json& node, std::unordered_set<std::string>& dest) {
     if (node.is_array()) {
         for (const auto& entry : node) {
             if (!entry.is_string()) continue;
@@ -66,7 +83,7 @@ void append_strings(const nlohmann::json& node, std::set<std::string>& dest) {
     }
 }
 
-void extract_tag_section(const nlohmann::json& node, std::set<std::string>& tags, std::set<std::string>& anti) {
+void extract_tag_section(const nlohmann::json& node, std::unordered_set<std::string>& tags, std::unordered_set<std::string>& anti) {
     if (node.is_array() || node.is_string()) {
         append_strings(node, tags);
         return;
@@ -78,7 +95,7 @@ void extract_tag_section(const nlohmann::json& node, std::set<std::string>& tags
     if (node.contains("anti_tags")) append_strings(node["anti_tags"], anti);
 }
 
-void extract_anti_section(const nlohmann::json& node, std::set<std::string>& anti) {
+void extract_anti_section(const nlohmann::json& node, std::unordered_set<std::string>& anti) {
     if (node.is_array() || node.is_string()) {
         append_strings(node, anti);
         return;
@@ -90,60 +107,169 @@ void extract_anti_section(const nlohmann::json& node, std::set<std::string>& ant
     if (node.contains("anti_tags")) append_strings(node["anti_tags"], anti);
 }
 
-void collect_tags_recursive(const nlohmann::json& node, std::set<std::string>& tags, std::set<std::string>& anti) {
-    if (node.is_object()) {
-        for (const auto& [key, value] : node.items()) {
-            if (key == "tags") {
-                extract_tag_section(value, tags, anti);
-            } else if (key == "anti_tags") {
-                extract_anti_section(value, anti);
-            } else {
-                collect_tags_recursive(value, tags, anti);
-            }
-        }
-    } else if (node.is_array()) {
-        for (const auto& value : node) {
-            collect_tags_recursive(value, tags, anti);
-        }
+double jaccard_upper_bound(size_t left_size, size_t right_size) {
+    if (left_size == 0 || right_size == 0) {
+        return 0.0;
     }
+    return static_cast<double>(std::min(left_size, right_size)) /
+           static_cast<double>(std::max(left_size, right_size));
 }
 
-std::vector<std::filesystem::path> dataset_roots() {
-    std::vector<std::filesystem::path> filtered;
-    std::unordered_set<std::string> seen;
-    std::vector<std::filesystem::path> candidates;
-#ifdef PROJECT_ROOT
-    candidates.emplace_back(std::filesystem::path(PROJECT_ROOT) / "resources");
-    candidates.emplace_back(std::filesystem::path(PROJECT_ROOT) / "content");
-#endif
-    candidates.emplace_back("resources");
-    candidates.emplace_back("content");
-
-    for (const auto& candidate : candidates) {
-        std::error_code ec;
-        auto absolute = std::filesystem::absolute(candidate, ec);
-        if (ec) {
-            ec.clear();
-            continue;
-        }
-        auto key = absolute.generic_string();
-        if (key.empty()) {
-            key = absolute.string();
-        }
-        if (key.empty()) {
-            continue;
-        }
-        if (!seen.insert(key).second) {
-            continue;
-        }
-        ec.clear();
-        if (!std::filesystem::exists(absolute, ec)) {
-            continue;
-        }
-        filtered.push_back(std::move(absolute));
+double jaccard_similarity(const std::set<std::string>& left, const std::unordered_set<std::string>& right) {
+    if (left.empty() || right.empty()) {
+        return 0.0;
     }
 
-    return filtered;
+    size_t shared = 0;
+    for (const auto& value : left) {
+        if (right.count(value) != 0) {
+            ++shared;
+        }
+    }
+    if (shared == 0) {
+        return 0.0;
+    }
+
+    const size_t union_count = left.size() + right.size() - shared;
+    if (union_count == 0) {
+        return 0.0;
+    }
+    return static_cast<double>(shared) / static_cast<double>(union_count);
+}
+
+double combined_similarity_upper_bound(const std::set<std::string>& current_tags,
+                                       const std::set<std::string>& current_anti_tags,
+                                       const AssetTagProfile& candidate) {
+    const double pos_upper = jaccard_upper_bound(current_tags.size(), candidate.tags.size());
+    const double neg_upper = jaccard_upper_bound(current_anti_tags.size(), candidate.anti_tags.size());
+    return 0.5 * (pos_upper + neg_upper);
+}
+
+double combined_similarity_score(const std::set<std::string>& current_tags,
+                                 const std::set<std::string>& current_anti_tags,
+                                 const AssetTagProfile& candidate) {
+    const double pos_similarity = jaccard_similarity(current_tags, candidate.tags);
+    const double neg_similarity = jaccard_similarity(current_anti_tags, candidate.anti_tags);
+    return 0.5 * (pos_similarity + neg_similarity);
+}
+
+void add_top_similar_asset(std::vector<SimilarAssetScore>& top_scores,
+                           const AssetTagProfile* profile,
+                           double similarity) {
+    if (!profile) {
+        return;
+    }
+
+    if (top_scores.size() < kSimilarAssetCount) {
+        top_scores.push_back(SimilarAssetScore{profile, similarity});
+    } else if (similarity > top_scores.back().similarity) {
+        top_scores.back() = SimilarAssetScore{profile, similarity};
+    } else {
+        return;
+    }
+
+    std::sort(top_scores.begin(), top_scores.end(), [](const SimilarAssetScore& a, const SimilarAssetScore& b) {
+        if (a.similarity == b.similarity) {
+            const std::string left_name = a.profile ? a.profile->asset_name : std::string{};
+            const std::string right_name = b.profile ? b.profile->asset_name : std::string{};
+            return left_name < right_name;
+        }
+        return a.similarity > b.similarity;
+    });
+}
+
+std::vector<SimilarAssetScore> collect_top_similar_assets(const ManifestTagCorpus& corpus,
+                                                          const std::set<std::string>& current_tags,
+                                                          const std::set<std::string>& current_anti_tags,
+                                                          const std::string& subject_asset_name,
+                                                          bool use_pruning) {
+    std::vector<SimilarAssetScore> top_similar_assets;
+    top_similar_assets.reserve(kSimilarAssetCount);
+
+    for (const auto& profile : corpus.profiles) {
+        if (!subject_asset_name.empty() && profile.asset_name == subject_asset_name) {
+            continue;
+        }
+
+        if (use_pruning && top_similar_assets.size() >= kSimilarAssetCount) {
+            const double upper_bound = combined_similarity_upper_bound(current_tags, current_anti_tags, profile);
+            if (upper_bound <= top_similar_assets.back().similarity) {
+                continue;
+            }
+        }
+
+        const double similarity = combined_similarity_score(current_tags, current_anti_tags, profile);
+        add_top_similar_asset(top_similar_assets, &profile, similarity);
+    }
+
+    return top_similar_assets;
+}
+
+ManifestTagCorpus build_manifest_tag_corpus() {
+    ManifestTagCorpus corpus;
+
+    manifest::ManifestData data;
+    try {
+        data = manifest::load_manifest();
+    } catch (...) {
+        return corpus;
+    }
+
+    if (!data.assets.is_object()) {
+        return corpus;
+    }
+
+    for (auto it = data.assets.begin(); it != data.assets.end(); ++it) {
+        const std::string asset_name = it.key();
+        const nlohmann::json& payload = it.value();
+        if (!payload.is_object()) {
+            continue;
+        }
+
+        AssetTagProfile profile;
+        profile.asset_name = asset_name;
+        if (payload.contains("tags")) {
+            extract_tag_section(payload["tags"], profile.tags, profile.anti_tags);
+        }
+        if (payload.contains("anti_tags")) {
+            extract_anti_section(payload["anti_tags"], profile.anti_tags);
+        }
+
+        std::unordered_set<std::string> merged = profile.tags;
+        merged.insert(profile.anti_tags.begin(), profile.anti_tags.end());
+        for (const auto& tag : merged) {
+            int& popularity = corpus.popularity[tag];
+            popularity += 1;
+            corpus.max_popularity = std::max(corpus.max_popularity, popularity);
+        }
+
+        if (!merged.empty()) {
+            corpus.profiles.push_back(std::move(profile));
+        }
+    }
+
+    corpus.unique_tags.reserve(corpus.popularity.size());
+    for (const auto& [tag, _] : corpus.popularity) {
+        corpus.unique_tags.push_back(tag);
+    }
+    std::sort(corpus.unique_tags.begin(), corpus.unique_tags.end());
+    return corpus;
+}
+
+const ManifestTagCorpus& manifest_tag_corpus() {
+    static ManifestTagCorpus cached;
+    static bool loaded = false;
+    static std::uint64_t loaded_version = 0;
+
+    const std::uint64_t current_version = tag_utils::tag_version();
+    if (loaded && loaded_version == current_version) {
+        return cached;
+    }
+
+    cached = build_manifest_tag_corpus();
+    loaded = true;
+    loaded_version = current_version;
+    return cached;
 }
 
 const std::vector<TagDatasetEntry>& tag_dataset() {
@@ -160,44 +286,15 @@ const std::vector<TagDatasetEntry>& tag_dataset() {
     loaded = true;
     loaded_version = current_version;
 
-    auto add_file = [&](const std::filesystem::path& path) {
-        std::ifstream in(path);
-        if (!in) return;
-        nlohmann::json data;
-        try {
-            in >> data;
-        } catch (...) {
-            return;
-        }
-        std::set<std::string> tags;
-        std::set<std::string> anti;
-        collect_tags_recursive(data, tags, anti);
-        if (tags.empty() && anti.empty()) return;
+    const auto& corpus = manifest_tag_corpus();
+    dataset.reserve(corpus.profiles.size());
+    for (const auto& profile : corpus.profiles) {
         TagDatasetEntry entry;
-        entry.tags.assign(tags.begin(), tags.end());
-        entry.anti_tags.assign(anti.begin(), anti.end());
+        entry.tags.assign(profile.tags.begin(), profile.tags.end());
+        entry.anti_tags.assign(profile.anti_tags.begin(), profile.anti_tags.end());
+        std::sort(entry.tags.begin(), entry.tags.end());
+        std::sort(entry.anti_tags.begin(), entry.anti_tags.end());
         dataset.push_back(std::move(entry));
-};
-
-    std::error_code ec;
-    const std::filesystem::directory_options opts = std::filesystem::directory_options::skip_permission_denied;
-    auto roots = dataset_roots();
-    for (const auto& root : roots) {
-        std::filesystem::recursive_directory_iterator it(root, opts, ec);
-        std::filesystem::recursive_directory_iterator end;
-        while (it != end) {
-            if (ec) {
-                ec.clear();
-                it.increment(ec);
-                continue;
-            }
-            if (it->is_regular_file(ec) && it->path().extension() == ".json") {
-                add_file(it->path());
-            }
-            if (ec) ec.clear();
-            it.increment(ec);
-        }
-        ec.clear();
     }
     return dataset;
 }
@@ -285,6 +382,18 @@ void TagEditorWidget::set_tags(const std::vector<std::string>& tags,
     reset_toggle_state();
     clear_drag_state();
     mark_dirty();
+}
+
+void TagEditorWidget::set_subject_asset_name(const std::string& asset_name) {
+    if (subject_asset_name_ == asset_name) {
+        return;
+    }
+    subject_asset_name_ = asset_name;
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        refresh_recommendations();
+        rebuild_buttons();
+        mark_dirty();
+    }
 }
 
 std::vector<std::string> TagEditorWidget::tags() const {
@@ -493,6 +602,11 @@ void TagEditorWidget::rebuild_buttons() {
 }
 
 void TagEditorWidget::refresh_recommendations() {
+    if (mode_ == Mode::AssetInfoOverhaul) {
+        refresh_recommendations_asset_mode();
+        return;
+    }
+
     const auto& dataset = tag_dataset();
     std::unordered_map<std::string, TagStats> stats;
 
@@ -601,11 +715,6 @@ void TagEditorWidget::refresh_recommendations() {
         const int popularity = static_cast<int>(cand.tie_break);
         recommendation_context_scores_[cand.value] = cand.tag_score;
         recommendation_popularity_[cand.value] = popularity;
-    }
-
-    if (mode_ == Mode::AssetInfoOverhaul) {
-        refresh_recommendations_asset_mode();
-        return;
     }
 
     recommended_tags_ = make_list([](const CandidateScore& c) { return c.tag_score; });
@@ -1126,6 +1235,71 @@ bool TagEditorWidget::starts_with_casefold(const std::string& value, const std::
 
 void TagEditorWidget::refresh_recommendations_asset_mode() {
     recommended_anti_.clear();
+    recommendation_context_scores_.clear();
+    recommendation_popularity_.clear();
+
+    const auto& corpus = manifest_tag_corpus();
+    if (corpus.unique_tags.empty()) {
+        rebuild_recommended_from_search();
+        return;
+    }
+
+    std::vector<SimilarAssetScore> top_similar_assets =
+        collect_top_similar_assets(corpus, tags_, anti_tags_, subject_asset_name_, true);
+
+    std::unordered_map<std::string, double> similarity_likelihood;
+    double max_similarity_likelihood = 0.0;
+    for (const auto& similar_asset : top_similar_assets) {
+        if (!similar_asset.profile || similar_asset.similarity <= 0.0) {
+            continue;
+        }
+        for (const auto& tag : similar_asset.profile->tags) {
+            double& score = similarity_likelihood[tag];
+            score += similar_asset.similarity;
+            if (score > max_similarity_likelihood) {
+                max_similarity_likelihood = score;
+            }
+        }
+    }
+
+    const double inv_max_popularity = corpus.max_popularity > 0
+        ? 1.0 / static_cast<double>(corpus.max_popularity)
+        : 0.0;
+    const double inv_max_similarity = max_similarity_likelihood > 0.0
+        ? 1.0 / max_similarity_likelihood
+        : 0.0;
+
+    std::unordered_set<std::string> candidate_pool;
+    for (const auto& profile : corpus.profiles) {
+        if (!subject_asset_name_.empty() && profile.asset_name == subject_asset_name_) {
+            continue;
+        }
+        candidate_pool.insert(profile.tags.begin(), profile.tags.end());
+        candidate_pool.insert(profile.anti_tags.begin(), profile.anti_tags.end());
+    }
+
+    for (const auto& candidate : corpus.unique_tags) {
+        if (!subject_asset_name_.empty() && candidate_pool.count(candidate) == 0) {
+            continue;
+        }
+        if (tags_.count(candidate) || anti_tags_.count(candidate)) {
+            continue;
+        }
+
+        const auto pop_it = corpus.popularity.find(candidate);
+        const int popularity = pop_it != corpus.popularity.end() ? pop_it->second : 0;
+        const auto similar_it = similarity_likelihood.find(candidate);
+        const double similarity = similar_it != similarity_likelihood.end() ? similar_it->second : 0.0;
+
+        const double normalized_popularity = static_cast<double>(popularity) * inv_max_popularity;
+        const double normalized_similarity = similarity * inv_max_similarity;
+        const double score = kAssetSimilarityWeight * normalized_similarity +
+                             kAssetPopularityWeight * normalized_popularity;
+
+        recommendation_context_scores_[candidate] = score;
+        recommendation_popularity_[candidate] = popularity;
+    }
+
     rebuild_recommended_from_search();
 }
 
@@ -1136,56 +1310,56 @@ void TagEditorWidget::rebuild_recommended_from_search() {
 
     struct RankedCandidate {
         std::string value;
-        double score = 0.0;
+        int match_tier = 3;  // 0=exact, 1=prefix, 2=contains, 3=non-match
+        double non_text_score = 0.0;
+        int popularity = 0;
+    };
+
+    auto classify_match_tier = [&](const std::string& value) {
+        if (search_query_.empty()) {
+            return 0;
+        }
+        if (value == search_query_) {
+            return 0;
+        }
+        if (starts_with_casefold(value, search_query_)) {
+            return 1;
+        }
+        if (value.find(search_query_) != std::string::npos) {
+            return 2;
+        }
+        return 3;
     };
 
     std::vector<RankedCandidate> ranked;
-    ranked.reserve(recommendation_context_scores_.size() + session_recommended_.size());
-    std::unordered_set<std::string> seen;
+    ranked.reserve(recommendation_context_scores_.size());
+    for (const auto& [value, contextual_score] : recommendation_context_scores_) {
+        if (value.empty()) continue;
+        if (tags_.count(value) || anti_tags_.count(value)) continue;
+        if (hidden_recommended_.count(value)) continue;
 
-    auto add_candidate = [&](const std::string& raw_value, double score_hint, bool from_session) {
-        std::string value = normalize(raw_value);
-        if (value.empty()) return;
-        if (tags_.count(value) || anti_tags_.count(value)) return;
-        if (hidden_recommended_.count(value)) return;
-        if (!search_query_.empty() && value.find(search_query_) == std::string::npos) return;
-        if (!seen.insert(value).second) return;
-
-        const auto ctx_it = recommendation_context_scores_.find(value);
         const auto pop_it = recommendation_popularity_.find(value);
-        const double contextual = ctx_it != recommendation_context_scores_.end() ? ctx_it->second : score_hint;
-        const double popularity = pop_it != recommendation_popularity_.end() ? static_cast<double>(pop_it->second) : 0.0;
-        double search_boost = 0.0;
-        if (!search_query_.empty()) {
-            if (value == search_query_) {
-                search_boost = kSearchBoostExact;
-            } else if (starts_with_casefold(value, search_query_)) {
-                search_boost = kSearchBoostPrefix;
-            } else {
-                search_boost = kSearchBoostContains;
-            }
-        }
-        const double session_boost = from_session ? 250000.0 : 0.0;
+        const int popularity = pop_it != recommendation_popularity_.end() ? pop_it->second : 0;
         ranked.push_back(RankedCandidate{
             value,
-            contextual + popularity * kPopularityWeight + search_boost + session_boost
+            classify_match_tier(value),
+            contextual_score,
+            popularity
         });
-    };
-
-    for (const auto& [value, context_score] : recommendation_context_scores_) {
-        add_candidate(value, context_score, session_recommended_.count(value) != 0);
-    }
-    for (const auto& value : session_recommended_) {
-        add_candidate(value, 0.0, true);
     }
 
     std::sort(ranked.begin(), ranked.end(), [](const RankedCandidate& a, const RankedCandidate& b) {
-        if (a.score == b.score) return a.value < b.value;
-        return a.score > b.score;
+        if (a.match_tier != b.match_tier) return a.match_tier < b.match_tier;
+        if (a.non_text_score != b.non_text_score) return a.non_text_score > b.non_text_score;
+        if (a.popularity != b.popularity) return a.popularity > b.popularity;
+        return a.value < b.value;
     });
 
     for (const auto& item : ranked) {
         recommended_tags_.push_back(item.value);
+        if (recommended_tags_.size() >= kAssetRecommendationLimit) {
+            break;
+        }
     }
 
     std::string normalized_search = normalize(search_input_);
@@ -1207,7 +1381,7 @@ bool TagEditorWidget::handle_event_asset_overhaul(const SDL_Event& e) {
 
     auto update_search_state = [&]() {
         std::string lowered = to_lower(search_input_);
-        if (lowered != search_query_ || mode_ == Mode::AssetInfoOverhaul) {
+        if (lowered != search_query_) {
             search_query_ = std::move(lowered);
             update_search_filter();
             mark_dirty();
@@ -1293,11 +1467,24 @@ bool TagEditorWidget::handle_event_asset_overhaul(const SDL_Event& e) {
                         handle_chip_double_click(*chip);
                     }
                 }
+            } else if (const Chip* chip = hit_chip_at(pointer)) {
+                if (chip->value == drag_state_.value && chip->kind == drag_state_.source_kind) {
+                    if (chip->kind == ChipListKind::Recommended || chip->kind == ChipListKind::SearchInputVirtual) {
+                        move_chip_between_lists(chip->value, chip->kind, ChipListKind::Tags);
+                    }
+                }
             }
             clear_drag_state();
             used = true;
         } else if (drop_target_at(pointer) != ChipListKind::None) {
             used = true;
+        }
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_RIGHT && has_pointer) {
+        if (const Chip* chip = hit_chip_at(pointer)) {
+            if (chip->kind == ChipListKind::Recommended || chip->kind == ChipListKind::SearchInputVirtual) {
+                move_chip_between_lists(chip->value, chip->kind, ChipListKind::AntiTags);
+                used = true;
+            }
         }
     } else if (e.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
         if (drag_state_.pressed) {
@@ -1485,5 +1672,79 @@ bool TagEditorWidget::event_targets_rect(const SDL_Event& e, const SDL_Rect& rec
     return SDL_PointInRect(&p, &rect) != 0;
 }
 
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+void TagEditorWidgetTestAccess::set_query(TagEditorWidget& widget, const std::string& query) {
+    widget.search_input_ = query;
+    widget.search_query_ = to_lower(query);
+    widget.update_search_filter();
+}
 
+const std::vector<std::string>& TagEditorWidgetTestAccess::recommended_tags(const TagEditorWidget& widget) {
+    return widget.recommended_tags_;
+}
+
+bool TagEditorWidgetTestAccess::has_search_virtual_chip(const TagEditorWidget& widget) {
+    return widget.show_search_virtual_chip_;
+}
+
+const std::string& TagEditorWidgetTestAccess::search_virtual_value(const TagEditorWidget& widget) {
+    return widget.search_virtual_value_;
+}
+
+void TagEditorWidgetTestAccess::rebuild_recommendations(TagEditorWidget& widget) {
+    widget.refresh_recommendations();
+    widget.rebuild_buttons();
+}
+
+std::vector<std::string> TagEditorWidgetTestAccess::top_similar_asset_names(const TagEditorWidget& widget) {
+    const auto& corpus = manifest_tag_corpus();
+    const auto top_scores = collect_top_similar_assets(
+        corpus,
+        widget.tags_,
+        widget.anti_tags_,
+        widget.subject_asset_name_,
+        true);
+    std::vector<std::string> names;
+    names.reserve(top_scores.size());
+    for (const auto& entry : top_scores) {
+        if (entry.profile) {
+            names.push_back(entry.profile->asset_name);
+        }
+    }
+    return names;
+}
+
+bool TagEditorWidgetTestAccess::pruning_matches_exact(const TagEditorWidget& widget) {
+    const auto& corpus = manifest_tag_corpus();
+    const auto with_pruning = collect_top_similar_assets(
+        corpus,
+        widget.tags_,
+        widget.anti_tags_,
+        widget.subject_asset_name_,
+        true);
+    const auto without_pruning = collect_top_similar_assets(
+        corpus,
+        widget.tags_,
+        widget.anti_tags_,
+        widget.subject_asset_name_,
+        false);
+
+    if (with_pruning.size() != without_pruning.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < with_pruning.size(); ++i) {
+        const auto* left_profile = with_pruning[i].profile;
+        const auto* right_profile = without_pruning[i].profile;
+        const std::string left_name = left_profile ? left_profile->asset_name : std::string{};
+        const std::string right_name = right_profile ? right_profile->asset_name : std::string{};
+        if (left_name != right_name) {
+            return false;
+        }
+        if (std::abs(with_pruning[i].similarity - without_pruning[i].similarity) > 1e-9) {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
 

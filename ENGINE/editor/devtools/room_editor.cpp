@@ -6543,11 +6543,38 @@ RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditor
     return AssetEditorSubview::AssetInfo;
 }
 
+bool RoomEditor::can_enter_asset_editor_subview(AssetEditorSubview subview) const {
+    if (subview == AssetEditorSubview::AssetInfo) {
+        return info_ui_ != nullptr;
+    }
+
+    Asset* target = selected_anchor_mode_asset();
+    if (!target || !target->info) {
+        return false;
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (subview == AssetEditorSubview::Anchor) {
+        return !selection.navigable_animation_ids.empty();
+    }
+    return selection.has_selection();
+}
+
 void RoomEditor::cycle_asset_editor_subview() {
     if (!asset_editor_tab_scope_active()) {
         return;
     }
-    set_asset_editor_subview(next_asset_editor_subview(asset_editor_subview_), true);
+
+    AssetEditorSubview candidate = asset_editor_subview_;
+    constexpr int kAssetEditorSubviewCount = 5;
+    for (int i = 0; i < kAssetEditorSubviewCount; ++i) {
+        candidate = next_asset_editor_subview(candidate);
+        if (!can_enter_asset_editor_subview(candidate)) {
+            continue;
+        }
+        set_asset_editor_subview(candidate, true);
+        return;
+    }
 }
 
 void RoomEditor::begin_asset_editor_transition(AssetEditorSubview from, AssetEditorSubview to) {
@@ -6561,23 +6588,6 @@ void RoomEditor::begin_asset_editor_transition(AssetEditorSubview from, AssetEdi
 void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool animate) {
     if (!info_ui_) {
         return;
-    }
-
-    if (subview != AssetEditorSubview::AssetInfo) {
-        if (info_ui_->is_visible()) {
-            info_ui_->close();
-        }
-        info_ui_->clear_panel_bounds_override();
-        if (active_modal_ == ActiveModal::AssetInfo) {
-            active_modal_ = ActiveModal::None;
-        }
-    }
-
-    if (subview == AssetEditorSubview::AssetInfo) {
-        if (!info_ui_->is_visible()) {
-            info_ui_->open();
-        }
-        active_modal_ = ActiveModal::AssetInfo;
     }
 
     const AssetEditorSubview previous = asset_editor_subview_;
@@ -6598,24 +6608,59 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
         exit_attack_box_edit_mode(true);
     }
 
+    bool enter_success = true;
     if (subview == AssetEditorSubview::Anchor) {
         if (!enter_anchor_edit_mode()) {
-            return;
+            enter_success = false;
         }
     } else if (subview == AssetEditorSubview::Movement) {
         if (!enter_movement_edit_mode()) {
-            return;
+            enter_success = false;
         }
     } else if (subview == AssetEditorSubview::Hitbox) {
         if (!enter_hitbox_edit_mode()) {
-            return;
+            enter_success = false;
         }
     } else if (subview == AssetEditorSubview::AttackBox) {
         if (!enter_attack_box_edit_mode()) {
-            return;
+            enter_success = false;
         }
     } else {
         editor_mode_ = EditorMode::Normal;
+    }
+
+    if (!enter_success) {
+        if (previous == AssetEditorSubview::AssetInfo) {
+            if (!info_ui_->is_visible()) {
+                info_ui_->open();
+            }
+            active_modal_ = ActiveModal::AssetInfo;
+        } else if (previous == AssetEditorSubview::Anchor) {
+            (void)enter_anchor_edit_mode();
+        } else if (previous == AssetEditorSubview::Movement) {
+            (void)enter_movement_edit_mode();
+        } else if (previous == AssetEditorSubview::Hitbox) {
+            (void)enter_hitbox_edit_mode();
+        } else if (previous == AssetEditorSubview::AttackBox) {
+            (void)enter_attack_box_edit_mode();
+        }
+        update_asset_editor_layout();
+        return;
+    }
+
+    if (subview != AssetEditorSubview::AssetInfo) {
+        if (info_ui_->is_visible()) {
+            info_ui_->close();
+        }
+        info_ui_->clear_panel_bounds_override();
+        if (active_modal_ == ActiveModal::AssetInfo) {
+            active_modal_ = ActiveModal::None;
+        }
+    } else {
+        if (!info_ui_->is_visible()) {
+            info_ui_->open();
+        }
+        active_modal_ = ActiveModal::AssetInfo;
     }
 
     asset_editor_subview_ = subview;

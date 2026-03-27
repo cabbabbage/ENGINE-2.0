@@ -386,6 +386,7 @@ private:
     bool attack_box_mode_active() const;
     Asset* selected_anchor_mode_asset() const;
     AssetEditorSubview next_asset_editor_subview(AssetEditorSubview subview) const;
+    bool can_enter_asset_editor_subview(AssetEditorSubview subview) const;
     void cycle_asset_editor_subview();
     void set_asset_editor_subview(AssetEditorSubview subview, bool animate);
     void begin_asset_editor_transition(AssetEditorSubview from, AssetEditorSubview to);

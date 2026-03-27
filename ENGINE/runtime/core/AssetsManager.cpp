@@ -11,6 +11,7 @@
 #include "assets/asset/asset_types.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/animation_runtime.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
 #include "devtools/dm_styles.hpp"
@@ -720,6 +721,8 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
         AudioEngine::instance().update();
         last_audio_engine_update_frame_id_ = frame_id_;
     }
+
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
 }
 
 void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,

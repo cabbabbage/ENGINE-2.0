@@ -14,10 +14,10 @@
             "methods": {
                 "center": true,
                 "childrandom": false,
-                "edge": false,
+                "edge": true,
                 "exact": true,
-                "exact_position": false,
-                "percent": false,
+                "exact_position": true,
+                "percent": true,
                 "perimeter": true,
                 "random": true
             },
@@ -29,7 +29,7 @@
                 "npc": false,
                 "object": true,
                 "player": true,
-                "texture": false
+                "texture": true
             }
         },
         "grid": {

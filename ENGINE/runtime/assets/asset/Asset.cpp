@@ -506,7 +506,17 @@ void Asset::finalize_setup() {
 
         finalized_ = true;
 }
-void Asset::update_scale_values() {
+void Asset::update_scale_values(bool force) {
+    const std::uint32_t frame_id = assets_ ? assets_->frame_id() : 0;
+    const std::uint64_t camera_state_version = assets_ ? assets_->getView().camera_state_version() : 0;
+    if (!force &&
+        last_scale_update_frame_id_ == frame_id &&
+        last_scale_update_camera_state_version_ == camera_state_version) {
+        return;
+    }
+    last_scale_update_frame_id_ = frame_id;
+    last_scale_update_camera_state_version_ = camera_state_version;
+
     const PerspectiveSample perspective_sample = runtime_perspective_sample();
     const float base_scale =
         (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
@@ -527,7 +537,6 @@ void Asset::update_scale_values() {
     const float prospective_scale = base_scale * perspective_scale;
     constexpr float kScaleEpsilon = 1e-4f;
     const float scale_delta = prospective_scale - current_scale;
-    const std::uint32_t frame_id = assets_ ? assets_->frame_id() : 0;
     const bool trace_scale = should_trace_asset_scale(*this) &&
                              should_emit_scale_trace_for_frame(*this, frame_id);
     if (trace_scale) {
@@ -727,8 +736,6 @@ void Asset::update() {
         }
         controller_->process_pending_attacks(*this);
     }
-
-    update_scale_values();
 
     if (anim_) {
         auto iti = info->animations.find(current_animation);

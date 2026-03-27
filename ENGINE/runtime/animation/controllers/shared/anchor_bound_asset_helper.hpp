@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 
 class Asset;
@@ -16,6 +17,7 @@ public:
     void unregister_child(Asset* child_asset);
     bool is_child_bound(const Asset* child_asset) const;
     void notify_anchor_changed(Asset* owner, const std::string& anchor_name);
+    void flush_pending_updates();
 
 private:
     struct BindingRecord {
@@ -26,6 +28,8 @@ private:
     };
 
     std::unordered_map<Asset*, BindingRecord> bindings_;
+    std::unordered_set<ChildAsset*> pending_children_;
+    bool flush_in_progress_ = false;
 };
 
 } // namespace anchor_bound_asset_helper

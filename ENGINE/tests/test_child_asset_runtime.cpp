@@ -182,6 +182,11 @@ TEST_CASE("AnchorBoundAssetHelper keeps child updated when owner anchor moves") 
     test_child_asset_runtime::set_anchor(*owner, moved);
 
     anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+    // Updates are queued; child transform should not change until flush.
+    CHECK(spawned->world_x() != owner->world_x() + moved.offset_x);
+    CHECK(spawned->world_y() != owner->world_y() + moved.offset_y);
+    CHECK(spawned->world_z() != owner->world_z() + moved.offset_z);
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
 
     CHECK(spawned->world_x() == owner->world_x() + moved.offset_x);
     CHECK(spawned->world_y() == owner->world_y() + moved.offset_y);
@@ -193,6 +198,84 @@ TEST_CASE("AnchorBoundAssetHelper keeps child updated when owner anchor moves") 
     CHECK(spawned->render_depth_bias() == doctest::Approx(expected_bias));
 
     CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().is_child_bound(spawned));
+}
+
+TEST_CASE("AnchorBoundAssetHelper batches repeated owner anchor dirties and flushes final state once") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 50, 100, 150, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 4, 5, 6, 0, 1, 0.0f, true});
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    const int initial_child_x = spawned->world_x();
+    const int initial_child_y = spawned->world_y();
+    const int initial_child_z = spawned->world_z();
+
+    for (int step = 0; step < 8; ++step) {
+        owner->move_to_world_position(60 + step, 120, 170, 0);
+        test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 4, 5, 6, 0, 1, 0.0f, true});
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+    }
+
+    // No flush yet: child should stay at the previous synchronized point.
+    CHECK(spawned->world_x() == initial_child_x);
+    CHECK(spawned->world_y() == initial_child_y);
+    CHECK(spawned->world_z() == initial_child_z);
+
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+
+    CHECK(spawned->world_x() == owner->world_x() + 4);
+    CHECK(spawned->world_y() == owner->world_y() + 5);
+    CHECK(spawned->world_z() == owner->world_z() + 6);
+    CHECK(spawned->world_x() == 71);
+}
+
+TEST_CASE("Queued anchor flush keeps X-axis child placement stable across sequential moves") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 20, 30, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 2, 1, 0, 0, 0.0f, true});
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    int previous_child_x = spawned->world_x();
+    for (int step = 0; step < 10; ++step) {
+        owner->move_to_world_position(11 + step, 20, 30, 0);
+        test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 2, 1, 0, 0, 0.0f, true});
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+
+        CHECK(spawned->world_x() == owner->world_x() + 3);
+        CHECK(spawned->world_y() == owner->world_y() + 2);
+        CHECK(spawned->world_z() == owner->world_z() + 1);
+        CHECK(spawned->world_x() == previous_child_x + 1);
+        previous_child_x = spawned->world_x();
+    }
 }
 
 TEST_CASE("ChildAsset controller retry recreates child after one failed spawn attempt") {

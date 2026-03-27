@@ -548,6 +548,8 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     const float render_perspective = has_render_perspective
         ? std::max(0.0001f, render_gp->perspective_scale())
         : perspective_scale;
+    const int render_resolution_layer =
+        (has_render_perspective && render_gp) ? render_gp->resolution_layer() : resolution_layer;
     const float perspective_delta = std::fabs(render_perspective - perspective_scale);
     const std::uint64_t camera_state_version = cam.camera_state_version();
     if (has_render_perspective &&
@@ -575,7 +577,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     projection_input.world_x = asset.smoothed_translation_x();
     projection_input.world_y = asset.smoothed_translation_y();
     projection_input.world_z = static_cast<float>(asset.world_z()) + dims.world_z_offset;
-    projection_input.perspective_scale = perspective_scale;
+    projection_input.perspective_scale = render_perspective;
     projection_input.frame_width_px = dims.frame_w;
     projection_input.frame_height_px = dims.frame_h;
     projection_input.final_width_px = dims.final_w;
@@ -630,13 +632,13 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
     sample.resolved.world_z = resolved_z;
     sample.resolved.world_depth = final_anchor_point.z;
-    sample.resolved.resolution_layer = resolution_layer;
+    sample.resolved.resolution_layer = render_resolution_layer;
     sample.resolved.source_texture_px = anchor_sample.source_px;
     sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
 
     world::WorldGrid& grid = assets_owner->world_grid();
-    const world::GridKey key{resolved_x, resolved_y, resolved_z, resolution_layer};
+    const world::GridKey key{resolved_x, resolved_y, resolved_z, render_resolution_layer};
     if (grid_policy == GridMaterialization::Ensure) {
         sample.resolved.grid_point = &grid.find_or_create_grid_point(key);
     } else {

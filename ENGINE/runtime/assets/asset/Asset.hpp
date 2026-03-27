@@ -293,8 +293,10 @@ class Asset {
     float last_scale_perspective_input_ = -1.0f;
     float last_scale_camera_input_ = -1.0f;
     float last_scale_quality_cap_input_ = -1.0f;
+    std::uint32_t last_scale_update_frame_id_ = std::numeric_limits<std::uint32_t>::max();
+    std::uint64_t last_scale_update_camera_state_version_ = std::numeric_limits<std::uint64_t>::max();
 
-    void update_scale_values();
+    void update_scale_values(bool force = false);
     SDL_Texture* get_current_variant_texture() const;
     void set_current_animation(const std::string& name);
     // Queue an attack event for deferred controller handling.

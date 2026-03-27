@@ -26,6 +26,10 @@ void AnchorBoundAssetHelper::unregister_child(Asset* child_asset) {
     if (!child_asset) {
         return;
     }
+    auto it = bindings_.find(child_asset);
+    if (it != bindings_.end() && it->second.child) {
+        pending_children_.erase(it->second.child);
+    }
     bindings_.erase(child_asset);
 }
 
@@ -40,9 +44,8 @@ void AnchorBoundAssetHelper::notify_anchor_changed(Asset* owner, const std::stri
     if (!owner) {
         return;
     }
-    std::vector<ChildAsset*> to_update;
-    to_update.reserve(bindings_.size());
     for (const auto& [child_asset, record] : bindings_) {
+        (void)child_asset;
         if (record.owner != owner) {
             continue;
         }
@@ -50,12 +53,33 @@ void AnchorBoundAssetHelper::notify_anchor_changed(Asset* owner, const std::stri
             continue;
         }
         if (record.child) {
-            to_update.push_back(record.child);
+            pending_children_.insert(record.child);
         }
     }
-    for (ChildAsset* child : to_update) {
-        child->update();
+}
+
+void AnchorBoundAssetHelper::flush_pending_updates() {
+    if (flush_in_progress_ || pending_children_.empty()) {
+        return;
     }
+
+    flush_in_progress_ = true;
+    // Child updates can trigger additional anchor dirties; drain until stable.
+    while (!pending_children_.empty()) {
+        std::vector<ChildAsset*> to_update;
+        to_update.reserve(pending_children_.size());
+        for (ChildAsset* child : pending_children_) {
+            if (child) {
+                to_update.push_back(child);
+            }
+        }
+        pending_children_.clear();
+
+        for (ChildAsset* child : to_update) {
+            child->update();
+        }
+    }
+    flush_in_progress_ = false;
 }
 
 } // namespace anchor_bound_asset_helper

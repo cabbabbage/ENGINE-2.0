@@ -363,6 +363,9 @@ function(add_cli_tool target_name entry_point)
     target_link_libraries(${target_name} PRIVATE
         nlohmann_json::nlohmann_json
     )
+    target_compile_definitions(${target_name} PRIVATE
+        PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
+    )
     if (WIN32)
         target_link_libraries(${target_name} PRIVATE d3d11 d3dcompiler)
     endif()

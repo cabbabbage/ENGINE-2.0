@@ -5039,6 +5039,26 @@ void DevControls::enter_live_depth_edit_mode() {
         injected_default_min_spacing = true;
     }
     depth_cue::clamp(live_depth_settings_);
+
+    // In the live editor, "Foreground" must be lower on screen (closer) and
+    // "Background" must be higher on screen (farther). If saved data violates
+    // that visual order, replace it with sane defaults.
+    float center_y = 0.0f;
+    float fg_line_y = 0.0f; // Foreground line is driven by background_max depth offset.
+    float bg_line_y = 0.0f; // Background line is driven by foreground_max depth offset.
+    const bool center_ok = project_live_depth_offset_to_screen_y(live_depth_settings_.center_depth_offset, center_y);
+    const bool fg_ok = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, fg_line_y);
+    const bool bg_ok = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, bg_line_y);
+    const bool order_ok = center_ok && fg_ok && bg_ok && (bg_line_y < center_y) && (center_y < fg_line_y);
+    if (!order_ok) {
+        live_depth_settings_.foreground_max_depth_offset =
+            live_depth_settings_.center_depth_offset - depth_cue::kMinSeparation;
+        live_depth_settings_.background_max_depth_offset =
+            live_depth_settings_.center_depth_offset + depth_cue::kMinSeparation;
+        depth_cue::clamp(live_depth_settings_);
+        injected_default_min_spacing = true;
+    }
+
     live_depth_selected_line_ = LiveDepthLine::Center;
     live_depth_settings_dirty_ = injected_default_min_spacing;
     live_depth_edit_mode_active_ = true;
@@ -5123,12 +5143,14 @@ bool DevControls::update_live_depth_setting(LiveDepthLine line, float delta_worl
         next.center_depth_offset = std::clamp(next.center_depth_offset + delta_world, min_center, max_center);
         break;
     }
-    case LiveDepthLine::BackgroundMax:
+    case LiveDepthLine::ForegroundMax:
+        // Foreground line (lower on screen) maps to the "background_max_depth_offset" value.
         next.background_max_depth_offset = std::clamp(next.background_max_depth_offset + delta_world,
                                                       next.center_depth_offset + depth_cue::kMinSeparation,
                                                       depth_cue::kMaxDepthOffset);
         break;
-    case LiveDepthLine::ForegroundMax:
+    case LiveDepthLine::BackgroundMax:
+        // Background line (higher on screen) maps to the "foreground_max_depth_offset" value.
         next.foreground_max_depth_offset = std::clamp(next.foreground_max_depth_offset + delta_world,
                                                       depth_cue::kMinDepthOffset,
                                                       next.center_depth_offset - depth_cue::kMinSeparation);
@@ -5242,9 +5264,11 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
         {LiveDepthLine::BackgroundMax, 0.0f, false, "Background Max", SDL_Color{96, 192, 255, 200}},
     }};
 
-    lines[0].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, lines[0].y);
+    // Foreground line is driven by background_max (closer / lower).
+    lines[0].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, lines[0].y);
     lines[1].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.center_depth_offset, lines[1].y);
-    lines[2].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, lines[2].y);
+    // Background line is driven by foreground_max (farther / higher).
+    lines[2].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, lines[2].y);
 
     SDL_BlendMode previous_blend = SDL_BLENDMODE_NONE;
     SDL_GetRenderDrawBlendMode(renderer, &previous_blend);

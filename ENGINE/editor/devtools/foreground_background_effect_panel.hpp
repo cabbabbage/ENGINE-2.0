@@ -80,14 +80,11 @@ private:
     void rebuild_preview(PreviewSide side);
     bool ensure_preview_source();
     bool resolve_preview_source_path(std::string& out_path) const;
-    bool copy_preview_source_to_temp(const std::string& source_path,
-                                     std::string& out_copy_path,
-                                     std::string& error) const;
-    bool generate_preview_with_cli(PreviewSide side,
-                                   const std::string& input_copy_path,
-                                   const camera_effects::ImageEffectSettings& settings,
-                                   std::string& out_path,
-                                   std::string& error) const;
+    bool generate_preview_with_python(PreviewSide side,
+                                      const std::string& input_source_path,
+                                      const camera_effects::ImageEffectSettings& settings,
+                                      std::string& out_path,
+                                      std::string& error) const;
     void load_side_preview_texture(PreviewSide side, const std::string& image_path);
     void sync_preview_widgets();
     void destroy_preview_textures();
@@ -175,13 +172,10 @@ private:
     Uint64 bg_preview_due_ms_ = 0;
 
     std::string preview_source_path_;
-    std::string preview_source_copy_path_;
-    std::string preview_source_asset_;
 
     std::string fg_preview_status_;
     std::string bg_preview_status_;
 
-    std::filesystem::path preview_temp_root_;
     int modal_screen_w_ = 0;
     int modal_screen_h_ = 0;
     int last_modal_body_height_ = -1;

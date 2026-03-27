@@ -5817,10 +5817,21 @@ bool RoomEditor::is_asset_stack_editor_active() const {
 }
 
 Asset* RoomEditor::selected_anchor_mode_asset() const {
-    if (selected_assets_.size() != 1) {
-        return nullptr;
+    if (selected_assets_.size() == 1) {
+        Asset* candidate = selected_assets_.front();
+        if (candidate && asset_belongs_to_room(candidate)) {
+            return candidate;
+        }
     }
-    return selected_assets_.front();
+
+    if (info_ui_ && info_ui_->is_visible()) {
+        Asset* target = info_ui_->get_target_asset();
+        if (target && asset_belongs_to_room(target)) {
+            return target;
+        }
+    }
+
+    return nullptr;
 }
 
 devmode::FileSourcedAnimationSelection RoomEditor::resolve_file_sourced_animation_selection_for_target(const Asset* target,

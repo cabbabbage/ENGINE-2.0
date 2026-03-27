@@ -12,8 +12,8 @@ using devmode::room_selection_filter::matches_filter;
 
 }  // namespace
 
-TEST_CASE("Room selection filter shifts normal mode to all while shift is held") {
-    CHECK(effective_filter(SelectionFilter::Normal, true) == SelectionFilter::All);
+TEST_CASE("Room selection filter keeps explicit mode while shift is held") {
+    CHECK(effective_filter(SelectionFilter::Normal, true) == SelectionFilter::Normal);
     CHECK(effective_filter(SelectionFilter::Boundary, true) == SelectionFilter::Boundary);
     CHECK(effective_filter(SelectionFilter::Normal, false) == SelectionFilter::Normal);
 }
@@ -49,4 +49,3 @@ TEST_CASE("Room selection filter keeps anchored/tiled assets out of normal mode"
     CHECK(matches_filter(SelectionFilter::Tiled, false, tiled));
     CHECK_FALSE(matches_filter(SelectionFilter::Normal, false, tiled));
 }
-

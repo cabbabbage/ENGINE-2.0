@@ -3,9 +3,7 @@
 namespace devmode::room_selection_filter {
 
 SelectionFilter effective_filter(SelectionFilter filter, bool shift_down) {
-    if (shift_down && filter == SelectionFilter::Normal) {
-        return SelectionFilter::All;
-    }
+    (void)shift_down;
     return filter;
 }
 
@@ -47,4 +45,3 @@ bool matches_filter(SelectionFilter filter, bool shift_down, const SelectionTrai
 }
 
 }  // namespace devmode::room_selection_filter
-

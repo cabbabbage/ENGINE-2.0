@@ -13,7 +13,10 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -389,6 +392,91 @@ fs::path project_cache_root() {
     return fs::path(PROJECT_ROOT) / "cache";
 }
 
+fs::path preview_images_root() {
+    return project_cache_root() / "preview_images";
+}
+
+bool file_exists(const fs::path& p) {
+    std::error_code ec;
+    return fs::exists(p, ec) && !ec;
+}
+
+#if defined(_WIN32)
+#define VIBBLE_POPEN _popen
+#define VIBBLE_PCLOSE _pclose
+#else
+#define VIBBLE_POPEN popen
+#define VIBBLE_PCLOSE pclose
+#endif
+
+std::string quote_shell_arg(const std::string& value) {
+    std::string escaped = "\"";
+    escaped.reserve(value.size() + 8);
+    for (char ch : value) {
+        if (ch == '\\' || ch == '"') {
+            escaped.push_back('\\');
+        }
+        escaped.push_back(ch);
+    }
+    escaped.push_back('"');
+    return escaped;
+}
+
+std::string trim_copy(const std::string& text) {
+    std::size_t start = 0;
+    while (start < text.size() &&
+           std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+        ++start;
+    }
+    std::size_t end = text.size();
+    while (end > start &&
+           std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+        --end;
+    }
+    return text.substr(start, end - start);
+}
+
+std::string escape_json_for_shell(const std::string& json_text) {
+    std::string escaped;
+    escaped.reserve(json_text.size() * 2);
+    for (char ch : json_text) {
+        if (ch == '"' || ch == '\\') {
+            escaped.push_back('\\');
+        }
+        escaped.push_back(ch);
+    }
+    return escaped;
+}
+
+fs::path resolve_depth_cue_script_path() {
+    const fs::path root_candidate = fs::path(PROJECT_ROOT) / "scripts" / "depth_cue_effects.py";
+    if (file_exists(root_candidate)) {
+        return root_candidate;
+    }
+    const fs::path cwd_candidate = fs::current_path() / "scripts" / "depth_cue_effects.py";
+    if (file_exists(cwd_candidate)) {
+        return cwd_candidate;
+    }
+    return {};
+}
+
+std::string make_preview_request_id(const std::string& asset_name, const char* layer) {
+    static std::atomic<std::uint64_t> seq{1};
+    std::string id = std::string("preview_") + layer + "_" + std::to_string(seq.fetch_add(1, std::memory_order_relaxed)) +
+                     "_" + asset_name;
+    for (char& ch : id) {
+        const unsigned char uch = static_cast<unsigned char>(ch);
+        if ((uch >= 'a' && uch <= 'z') ||
+            (uch >= 'A' && uch <= 'Z') ||
+            (uch >= '0' && uch <= '9') ||
+            ch == '_' || ch == '-' || ch == '.') {
+            continue;
+        }
+        ch = '_';
+    }
+    return id;
+}
+
 } // namespace
 
 ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets, int x, int y)
@@ -402,12 +490,6 @@ ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets,
     set_scroll_enabled(false);
     set_visible(false);
 
-    std::error_code ec;
-    preview_temp_root_ = fs::temp_directory_path(ec) / "engine_depth_cue_preview";
-    if (preview_temp_root_.empty()) {
-        preview_temp_root_ = project_cache_root() / "_depth_cue_preview";
-    }
-
     set_on_close([this]() { this->on_panel_closed(); });
 
     build_ui();
@@ -417,9 +499,6 @@ ForegroundBackgroundEffectPanel::ForegroundBackgroundEffectPanel(Assets* assets,
 
 ForegroundBackgroundEffectPanel::~ForegroundBackgroundEffectPanel() {
     destroy_preview_textures();
-
-    std::error_code ec;
-    fs::remove_all(preview_temp_root_, ec);
 }
 
 void ForegroundBackgroundEffectPanel::set_assets(Assets* assets) {
@@ -633,7 +712,8 @@ void ForegroundBackgroundEffectPanel::recreate_asset_dropdown() {
     asset_dropdown_->set_on_selection_changed([this](int index) { this->handle_asset_selection(index); });
 
     asset_dropdown_widget_ = std::make_unique<DropdownWidget>(asset_dropdown_.get());
-    asset_dropdown_widget_->set_tooltip("Preview source is a temp copy of the selected asset's first frame.");
+    asset_dropdown_widget_->set_tooltip(
+        "Preview source is the selected asset frame. Generated previews are written to cache/preview_images.");
 }
 
 void ForegroundBackgroundEffectPanel::handle_asset_selection(int index) {
@@ -824,14 +904,12 @@ void ForegroundBackgroundEffectPanel::rebuild_preview(PreviewSide side) {
     const camera_effects::ImageEffectSettings settings =
         (side == PreviewSide::Foreground) ? draft_fg_ : draft_bg_;
 
-    if (!generate_preview_with_cli(side, preview_source_copy_path_, settings, output_path, error)) {
+    if (!generate_preview_with_python(side, preview_source_path_, settings, output_path, error)) {
         if (side == PreviewSide::Foreground) {
             fg_preview_status_ = "Preview generation failed: " + error;
         } else {
             bg_preview_status_ = "Preview generation failed: " + error;
         }
-        // Preserve visual feedback even when the CLI preview build fails.
-        load_side_preview_texture(side, preview_source_copy_path_);
         sync_preview_widgets();
         return;
     }
@@ -848,9 +926,9 @@ void ForegroundBackgroundEffectPanel::rebuild_preview(PreviewSide side) {
 }
 
 bool ForegroundBackgroundEffectPanel::ensure_preview_source() {
-    if (!preview_source_dirty_ && !preview_source_copy_path_.empty()) {
+    if (!preview_source_dirty_ && !preview_source_path_.empty()) {
         std::error_code ec;
-        if (fs::exists(preview_source_copy_path_, ec) && !ec) {
+        if (fs::exists(preview_source_path_, ec) && !ec) {
             return true;
         }
     }
@@ -862,17 +940,7 @@ bool ForegroundBackgroundEffectPanel::ensure_preview_source() {
         return false;
     }
 
-    std::string copy_path;
-    std::string error;
-    if (!copy_preview_source_to_temp(source_path, copy_path, error)) {
-        fg_preview_status_ = "Failed to prepare preview source: " + error;
-        bg_preview_status_ = fg_preview_status_;
-        return false;
-    }
-
     preview_source_path_ = source_path;
-    preview_source_copy_path_ = copy_path;
-    preview_source_asset_ = selected_asset_;
     preview_source_dirty_ = false;
 
     destroy_base_preview_texture();
@@ -883,7 +951,7 @@ bool ForegroundBackgroundEffectPanel::ensure_preview_source() {
         return false;
     }
 
-    SDL_Texture* texture = IMG_LoadTexture(assets_->renderer(), preview_source_copy_path_.c_str());
+    SDL_Texture* texture = IMG_LoadTexture(assets_->renderer(), preview_source_path_.c_str());
     if (!texture) {
         fg_preview_status_ = "Failed to load preview source texture.";
         bg_preview_status_ = fg_preview_status_;
@@ -983,122 +1051,69 @@ bool ForegroundBackgroundEffectPanel::resolve_preview_source_path(std::string& o
     return false;
 }
 
-bool ForegroundBackgroundEffectPanel::copy_preview_source_to_temp(const std::string& source_path,
-                                                                  std::string& out_copy_path,
-                                                                  std::string& error) const {
-    out_copy_path.clear();
-    error.clear();
-
-    if (source_path.empty()) {
-        error = "source path is empty";
-        return false;
-    }
-
-    std::error_code ec;
-
-    const std::string asset_key = selected_asset_.empty()
-                                      ? std::string("default")
-                                      : std::to_string(std::hash<std::string>{}(selected_asset_));
-
-    const fs::path asset_preview_dir = preview_temp_root_ / asset_key;
-    fs::create_directories(asset_preview_dir, ec);
-    if (ec) {
-        error = "failed to create preview temp directory: " + ec.message();
-        return false;
-    }
-
-    const fs::path src(source_path);
-    const fs::path dst = asset_preview_dir / "source_frame_copy.png";
-    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
-    if (ec) {
-        error = "failed to copy source frame: " + ec.message();
-        return false;
-    }
-
-    out_copy_path = dst.string();
-    return true;
-}
-
-bool ForegroundBackgroundEffectPanel::generate_preview_with_cli(PreviewSide side,
-                                                                const std::string& input_copy_path,
-                                                                const camera_effects::ImageEffectSettings& settings,
-                                                                std::string& out_path,
-                                                                std::string& error) const {
+bool ForegroundBackgroundEffectPanel::generate_preview_with_python(
+    PreviewSide side,
+    const std::string& input_source_path,
+    const camera_effects::ImageEffectSettings& settings,
+    std::string& out_path,
+    std::string& error) const {
     out_path.clear();
     error.clear();
 
-    if (input_copy_path.empty()) {
+    if (input_source_path.empty()) {
         error = "preview input is empty";
         return false;
     }
 
-#ifdef _WIN32
-    const std::string exe_ext = ".exe";
-#else
-    const std::string exe_ext;
-#endif
-
-    fs::path tool_path = fs::path(PROJECT_ROOT) / "ENGINE" / "tools" / ("apply_effects_cli" + exe_ext);
-    if (!fs::exists(tool_path)) {
-        const fs::path fallback = fs::path(PROJECT_ROOT) / "tools" / ("apply_effects_cli" + exe_ext);
-        if (fs::exists(fallback)) {
-            tool_path = fallback;
-        }
-    }
-
-    if (!fs::exists(tool_path)) {
-        error = "apply_effects_cli tool not found";
+    const fs::path script_path = resolve_depth_cue_script_path();
+    if (script_path.empty()) {
+        error = "depth_cue_effects.py not found";
         return false;
     }
 
-    const std::string asset_key = selected_asset_.empty()
-                                      ? std::string("default")
-                                      : std::to_string(std::hash<std::string>{}(selected_asset_));
     const char* layer_name = (side == PreviewSide::Foreground) ? "foreground" : "background";
 
     std::error_code ec;
-    const fs::path asset_preview_dir = preview_temp_root_ / asset_key;
-    fs::create_directories(asset_preview_dir, ec);
+    const fs::path preview_dir = preview_images_root();
+    fs::create_directories(preview_dir, ec);
     if (ec) {
         error = "failed to create preview output directory: " + ec.message();
         return false;
     }
 
-    const fs::path output_path = asset_preview_dir / (std::string("preview_") + layer_name + ".png");
-    const fs::path output_log_path = asset_preview_dir / (std::string("preview_") + layer_name + ".log");
+    nlohmann::json payload = nlohmann::json::object();
+    payload["layer"] = layer_name;
+    payload["contrast"] = settings.contrast;
+    payload["brightness"] = settings.brightness;
+    payload["blur"] = settings.blur;
+    payload["saturation_red"] = settings.saturation_red;
+    payload["saturation_green"] = settings.saturation_green;
+    payload["saturation_blue"] = settings.saturation_blue;
+    payload["hue"] = settings.hue;
+    payload["save_mode"] = "preview";
+    payload["request_id"] = make_preview_request_id(selected_asset_, layer_name);
 
-    std::ostringstream cmd;
-    cmd.imbue(std::locale::classic());
-    cmd << std::fixed << std::setprecision(4);
-    cmd << '"' << tool_path.string() << '"' << ' '
-        << '"' << input_copy_path << '"' << ' '
-        << '"' << output_path.string() << '"' << ' '
-        << layer_name << ' '
-        << settings.contrast << ' '
-        << settings.brightness << ' '
-        << settings.blur << ' '
-        << settings.saturation_red << ' '
-        << settings.saturation_green << ' '
-        << settings.saturation_blue << ' '
-        << settings.hue
-        << " > \"" << output_log_path.string() << "\" 2>&1";
+    const std::string payload_arg = "'" + escape_json_for_shell(payload.dump()) + "'";
+    const std::string command = std::string("python ") +
+                                quote_shell_arg(script_path.string()) + " " +
+                                quote_shell_arg(input_source_path) + " " +
+                                payload_arg + " 2>&1";
 
-    const int rc = std::system(cmd.str().c_str());
+    FILE* pipe = VIBBLE_POPEN(command.c_str(), "r");
+    if (!pipe) {
+        error = "failed to launch depth_cue_effects.py";
+        return false;
+    }
+
+    std::string output;
+    char buffer[512];
+    while (std::fgets(buffer, static_cast<int>(sizeof(buffer)), pipe) != nullptr) {
+        output += buffer;
+    }
+    const int rc = VIBBLE_PCLOSE(pipe);
     if (rc != 0) {
-        std::string details;
-        std::ifstream log_stream(output_log_path, std::ios::in);
-        if (log_stream) {
-            std::ostringstream buffer;
-            buffer << log_stream.rdbuf();
-            details = buffer.str();
-            details.erase(std::remove(details.begin(), details.end(), '\r'), details.end());
-            while (!details.empty() &&
-                   (details.back() == '\n' || details.back() == '\t' || details.back() == ' ')) {
-                details.pop_back();
-            }
-        }
-
-        error = "apply_effects_cli exited with code " + std::to_string(rc);
+        std::string details = trim_copy(output);
+        error = "depth_cue_effects.py exited with code " + std::to_string(rc);
         if (!details.empty()) {
             constexpr std::size_t kDetailLimit = 180;
             if (details.size() > kDetailLimit) {
@@ -1109,12 +1124,38 @@ bool ForegroundBackgroundEffectPanel::generate_preview_with_cli(PreviewSide side
         return false;
     }
 
-    if (!fs::exists(output_path, ec) || ec) {
+    std::string output_path;
+    std::istringstream output_stream(output);
+    std::string line;
+    while (std::getline(output_stream, line)) {
+        const std::string trimmed = trim_copy(line);
+        if (!trimmed.empty()) {
+            output_path = trimmed;
+        }
+    }
+    if (output_path.empty()) {
+        error = "depth_cue_effects.py produced no output path";
+        return false;
+    }
+
+    if ((output_path.front() == '"' && output_path.back() == '"') ||
+        (output_path.front() == '\'' && output_path.back() == '\'')) {
+        output_path = output_path.substr(1, output_path.size() - 2);
+    }
+
+    fs::path produced_path(output_path);
+    if (!fs::exists(produced_path, ec) || ec) {
         error = "preview output was not produced";
         return false;
     }
 
-    out_path = output_path.string();
+    const fs::path expected_path = preview_dir / (std::string(layer_name) + ".png");
+    if (!fs::exists(expected_path, ec) || ec) {
+        error = "expected preview cache image not found: " + expected_path.string();
+        return false;
+    }
+
+    out_path = expected_path.string();
     return true;
 }
 

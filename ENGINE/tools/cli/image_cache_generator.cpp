@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
@@ -90,6 +91,186 @@ static inline std::string read_text_file(const fs::path& p, std::string& err) {
 static inline bool file_exists(const fs::path& p) {
     std::error_code ec;
     return fs::exists(p, ec) && !ec;
+}
+
+#if defined(_WIN32)
+#define VIBBLE_POPEN _popen
+#define VIBBLE_PCLOSE _pclose
+#else
+#define VIBBLE_POPEN popen
+#define VIBBLE_PCLOSE pclose
+#endif
+
+static std::string quote_shell_arg(const std::string& value) {
+    std::string escaped = "\"";
+    escaped.reserve(value.size() + 8);
+    for (char ch : value) {
+        if (ch == '\\' || ch == '"') {
+            escaped.push_back('\\');
+        }
+        escaped.push_back(ch);
+    }
+    escaped.push_back('"');
+    return escaped;
+}
+
+static std::string trim_copy(const std::string& text) {
+    std::size_t start = 0;
+    while (start < text.size() &&
+           std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+        ++start;
+    }
+    std::size_t end = text.size();
+    while (end > start &&
+           std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+        --end;
+    }
+    return text.substr(start, end - start);
+}
+
+static std::string escape_json_for_shell(const std::string& json_text) {
+    std::string escaped;
+    escaped.reserve(json_text.size() * 2);
+    for (char ch : json_text) {
+        if (ch == '"' || ch == '\\') {
+            escaped.push_back('\\');
+        }
+        escaped.push_back(ch);
+    }
+    return escaped;
+}
+
+static fs::path resolve_depth_cue_effects_script_path() {
+#if defined(PROJECT_ROOT)
+    const fs::path root_candidate = fs::path(PROJECT_ROOT) / "scripts" / "depth_cue_effects.py";
+    if (file_exists(root_candidate)) {
+        return root_candidate;
+    }
+#endif
+    const fs::path cwd_candidate = fs::current_path() / "scripts" / "depth_cue_effects.py";
+    if (file_exists(cwd_candidate)) {
+        return cwd_candidate;
+    }
+    return {};
+}
+
+static std::string make_python_request_id(const char* scope,
+                                          std::uint64_t seq,
+                                          const std::string& asset_name,
+                                          const std::string& anim_name,
+                                          int frame_idx) {
+    std::string id = std::string(scope) + "_" + std::to_string(seq) + "_" + asset_name + "_" +
+                     anim_name + "_" + std::to_string(frame_idx);
+    for (char& ch : id) {
+        const unsigned char uch = static_cast<unsigned char>(ch);
+        if ((uch >= 'a' && uch <= 'z') ||
+            (uch >= 'A' && uch <= 'Z') ||
+            (uch >= '0' && uch <= '9') ||
+            ch == '_' || ch == '-' || ch == '.') {
+            continue;
+        }
+        ch = '_';
+    }
+    if (id.empty()) {
+        id = std::string(scope) + "_" + std::to_string(seq);
+    }
+    return id;
+}
+
+static bool run_depth_cue_effects_python(const fs::path& input_image_path,
+                                         const EffectsParams& fx,
+                                         EffectLayerMode mode,
+                                         const char* save_mode,
+                                         const std::string& request_id,
+                                         fs::path& out_path,
+                                         std::string& err) {
+    out_path.clear();
+    err.clear();
+
+    const fs::path script_path = resolve_depth_cue_effects_script_path();
+    if (script_path.empty()) {
+        err = "depth_cue_effects.py not found";
+        return false;
+    }
+    if (!file_exists(input_image_path)) {
+        err = "Input image does not exist: " + input_image_path.string();
+        return false;
+    }
+
+    const char* layer = (mode == EffectLayerMode::Foreground) ? "foreground" : "background";
+    float blur_value = fx.blur_radius;
+    if (std::fabs(blur_value) < 1.0e-6f && std::fabs(fx.sharpen_amount) > 1.0e-6f) {
+        blur_value = -std::fabs(fx.sharpen_amount);
+    }
+
+    ordered_json payload = ordered_json::object();
+    payload["layer"] = layer;
+    payload["contrast"] = fx.contrast;
+    payload["brightness"] = fx.brightness;
+    payload["blur"] = blur_value;
+    payload["saturation_red"] = fx.saturation_r;
+    payload["saturation_green"] = fx.saturation_g;
+    payload["saturation_blue"] = fx.saturation_b;
+    payload["hue"] = fx.hue_shift;
+    payload["save_mode"] = save_mode;
+    payload["request_id"] = request_id;
+
+    const std::string payload_arg = "'" + escape_json_for_shell(payload.dump()) + "'";
+    const std::string command = std::string("python ") +
+                                quote_shell_arg(script_path.string()) + " " +
+                                quote_shell_arg(input_image_path.string()) + " " +
+                                payload_arg + " 2>&1";
+
+    FILE* pipe = VIBBLE_POPEN(command.c_str(), "r");
+    if (!pipe) {
+        err = "Failed to launch python depth cue effects command";
+        return false;
+    }
+
+    std::string output;
+    char buffer[512];
+    while (std::fgets(buffer, static_cast<int>(sizeof(buffer)), pipe) != nullptr) {
+        output += buffer;
+    }
+    const int rc = VIBBLE_PCLOSE(pipe);
+    if (rc != 0) {
+        std::string details = trim_copy(output);
+        if (details.size() > 240) {
+            details = details.substr(details.size() - 240);
+        }
+        err = "depth_cue_effects.py exited with code " + std::to_string(rc);
+        if (!details.empty()) {
+            err += " (" + details + ")";
+        }
+        return false;
+    }
+
+    std::string output_path_line;
+    std::istringstream output_stream(output);
+    std::string line;
+    while (std::getline(output_stream, line)) {
+        std::string trimmed = trim_copy(line);
+        if (!trimmed.empty()) {
+            output_path_line = trimmed;
+        }
+    }
+    if (output_path_line.empty()) {
+        err = "depth_cue_effects.py produced no output path";
+        return false;
+    }
+
+    if ((output_path_line.front() == '"' && output_path_line.back() == '"') ||
+        (output_path_line.front() == '\'' && output_path_line.back() == '\'')) {
+        output_path_line = output_path_line.substr(1, output_path_line.size() - 2);
+    }
+
+    out_path = fs::path(output_path_line);
+    std::error_code ec;
+    if (!fs::exists(out_path, ec) || ec) {
+        err = "depth_cue_effects.py output missing: " + out_path.string();
+        return false;
+    }
+    return true;
 }
 
 static const std::vector<int>& canonical_scale_percents() {
@@ -1033,21 +1214,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         workers = (hc > 1) ? (hc - 1) : 1;
     }
 
-    bool use_d3d11_effects = false;
-    std::string d3d11_reason;
     if (!opt.dry_run) {
-        if (opt.effects_backend == EffectsBackend::Auto || opt.effects_backend == EffectsBackend::D3D11) {
-            use_d3d11_effects = D3D11EffectsBackend::Instance().IsAvailable(d3d11_reason);
-            if (use_d3d11_effects) {
-                log.info(std::string("Effects backend: d3d11 (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
-            } else {
-                log.warn(std::string("D3D11 effects backend unavailable; falling back to CPU. Reason: ") +
-                         (d3d11_reason.empty() ? std::string("unknown") : d3d11_reason));
-            }
-        }
-        if (!use_d3d11_effects) {
-            log.info(std::string("Effects backend: cpu (requested ") + to_string_effects_backend(opt.effects_backend) + ")");
-        }
+        log.info(std::string("Effects backend: python (requested ") +
+                 to_string_effects_backend(opt.effects_backend) + ")");
     }
 
     std::unordered_map<std::string, std::unordered_map<std::string, ExplicitAnimRequest>> explicit_requests;
@@ -1221,6 +1390,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     }
 
     std::atomic<bool> abort_requested{false};
+    std::atomic<std::uint64_t> python_request_seq{1};
     std::vector<AnimationTaskResult> task_results(tasks.size());
     auto process_animation = [&](const AnimationTask& task) -> AnimationTaskResult {
         AnimationTaskResult task_result;
@@ -1243,8 +1413,6 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
             bool source_loaded = false;
             ImageRGBA source_image;
-            bool expanded_loaded = false;
-            ImageRGBA expanded_source;
             bool fg_ready = false;
             ImageRGBA fg_base;
             bool bg_ready = false;
@@ -1342,28 +1510,35 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
                 if ((write_mask & kTextureVariantMaskForeground) != 0u) {
                     if (!fg_ready) {
-                        if (!expanded_loaded) {
-                            expanded_source = make_centered_transparent_2x_canvas(source_image);
-                            if (!expanded_source.valid()) {
-                                ++task_result.stats.tasks_failed;
-                                task_result.ok = false;
-                                task_result.error = "Expand canvas failed: " + task.frame_paths[frame_idx].string();
-                                abort_requested.store(true, std::memory_order_relaxed);
-                                return task_result;
-                            }
-                            expanded_loaded = true;
-                        }
-                        if (!apply_effects_on_expanded_canvas(expanded_source,
-                                                              fx_fg,
-                                                              EffectLayerMode::Foreground,
-                                                              use_d3d11_effects,
-                                                              fg_base,
-                                                              task_err)) {
+                        const std::uint64_t seq = python_request_seq.fetch_add(1, std::memory_order_relaxed);
+                        const std::string request_id = make_python_request_id(
+                            "cache_fg", seq, task.asset_name, task.anim_name, frame_idx);
+                        fs::path generated_fg_path;
+                        if (!run_depth_cue_effects_python(task.frame_paths[frame_idx],
+                                                          fx_fg,
+                                                          EffectLayerMode::Foreground,
+                                                          "temp",
+                                                          request_id,
+                                                          generated_fg_path,
+                                                          task_err)) {
                             ++task_result.stats.tasks_failed;
                             task_result.ok = false;
                             task_result.error = "Foreground effects failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
                             abort_requested.store(true, std::memory_order_relaxed);
                             return task_result;
+                        }
+                        auto fg_opt = LoadPngRGBA(generated_fg_path, task_err);
+                        if (!fg_opt) {
+                            ++task_result.stats.tasks_failed;
+                            task_result.ok = false;
+                            task_result.error = "Foreground effects load failed: " + generated_fg_path.string() + " : " + task_err;
+                            abort_requested.store(true, std::memory_order_relaxed);
+                            return task_result;
+                        }
+                        fg_base = std::move(*fg_opt);
+                        {
+                            std::error_code remove_ec;
+                            fs::remove(generated_fg_path, remove_ec);
                         }
                         fg_ready = true;
                     }
@@ -1392,28 +1567,35 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
                 if ((write_mask & kTextureVariantMaskBackground) != 0u) {
                     if (!bg_ready) {
-                        if (!expanded_loaded) {
-                            expanded_source = make_centered_transparent_2x_canvas(source_image);
-                            if (!expanded_source.valid()) {
-                                ++task_result.stats.tasks_failed;
-                                task_result.ok = false;
-                                task_result.error = "Expand canvas failed: " + task.frame_paths[frame_idx].string();
-                                abort_requested.store(true, std::memory_order_relaxed);
-                                return task_result;
-                            }
-                            expanded_loaded = true;
-                        }
-                        if (!apply_effects_on_expanded_canvas(expanded_source,
-                                                              fx_bg,
-                                                              EffectLayerMode::Background,
-                                                              use_d3d11_effects,
-                                                              bg_base,
-                                                              task_err)) {
+                        const std::uint64_t seq = python_request_seq.fetch_add(1, std::memory_order_relaxed);
+                        const std::string request_id = make_python_request_id(
+                            "cache_bg", seq, task.asset_name, task.anim_name, frame_idx);
+                        fs::path generated_bg_path;
+                        if (!run_depth_cue_effects_python(task.frame_paths[frame_idx],
+                                                          fx_bg,
+                                                          EffectLayerMode::Background,
+                                                          "temp",
+                                                          request_id,
+                                                          generated_bg_path,
+                                                          task_err)) {
                             ++task_result.stats.tasks_failed;
                             task_result.ok = false;
                             task_result.error = "Background effects failed: " + task.frame_paths[frame_idx].string() + " : " + task_err;
                             abort_requested.store(true, std::memory_order_relaxed);
                             return task_result;
+                        }
+                        auto bg_opt = LoadPngRGBA(generated_bg_path, task_err);
+                        if (!bg_opt) {
+                            ++task_result.stats.tasks_failed;
+                            task_result.ok = false;
+                            task_result.error = "Background effects load failed: " + generated_bg_path.string() + " : " + task_err;
+                            abort_requested.store(true, std::memory_order_relaxed);
+                            return task_result;
+                        }
+                        bg_base = std::move(*bg_opt);
+                        {
+                            std::error_code remove_ec;
+                            fs::remove(generated_bg_path, remove_ec);
                         }
                         bg_ready = true;
                     }
@@ -1682,20 +1864,50 @@ std::optional<ImageRGBA> ImageCacheGenerator::ApplyEffects(const ImageRGBA& src,
         return std::nullopt;
     }
 
-    ImageRGBA expanded = make_centered_transparent_2x_canvas(src);
-    if (!expanded.valid()) {
-        err = "ApplyEffects: failed to create centered transparent 2x canvas";
+    static std::atomic<std::uint64_t> apply_seq{1};
+    const std::uint64_t seq = apply_seq.fetch_add(1, std::memory_order_relaxed);
+    const std::string request_id = make_python_request_id(
+        "apply", seq, "inline", "inline", static_cast<int>(seq % 1000000u));
+
+#if defined(PROJECT_ROOT)
+    const fs::path temp_root = fs::path(PROJECT_ROOT) / "cache" / "_effects_tmp";
+#else
+    const fs::path temp_root = fs::current_path() / "cache" / "_effects_tmp";
+#endif
+    const fs::path temp_input_path = temp_root / (request_id + "_input.png");
+
+    std::error_code ec;
+    fs::create_directories(temp_root, ec);
+    if (ec) {
+        err = "ApplyEffects: failed to create temp directory: " + ec.message();
         return std::nullopt;
     }
 
-    const bool is_foreground = (mode == EffectLayerMode::Foreground);
-    ImageRGBA out = apply_color_effects_like_python(expanded, fx, is_foreground);
-    if (!out.valid()) {
-        err = "ApplyEffects: effect pipeline produced invalid output";
+    if (!SavePngRGBA(temp_input_path, src, err)) {
+        err = "ApplyEffects: failed to stage temporary input image: " + err;
         return std::nullopt;
     }
 
-    return out;
+    fs::path generated_path;
+    if (!run_depth_cue_effects_python(temp_input_path, fx, mode, "temp", request_id, generated_path, err)) {
+        err = "ApplyEffects: " + err;
+        std::error_code cleanup_ec;
+        fs::remove(temp_input_path, cleanup_ec);
+        return std::nullopt;
+    }
+
+    auto generated_opt = LoadPngRGBA(generated_path, err);
+    if (!generated_opt) {
+        err = "ApplyEffects: failed to load generated output: " + err;
+        std::error_code cleanup_ec;
+        fs::remove(temp_input_path, cleanup_ec);
+        return std::nullopt;
+    }
+
+    std::error_code cleanup_ec;
+    fs::remove(temp_input_path, cleanup_ec);
+    fs::remove(generated_path, cleanup_ec);
+    return generated_opt;
 }
 
 } // namespace imgcache

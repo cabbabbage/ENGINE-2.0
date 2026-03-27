@@ -7,7 +7,7 @@
         },
         "asset_filter": {
             "current_room": true,
-            "filters_expanded": true,
+            "filters_expanded": false,
             "fog": false,
             "initialized": true,
             "map_assets": true,

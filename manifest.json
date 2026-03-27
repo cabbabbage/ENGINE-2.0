@@ -2677,7 +2677,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 182.0
+        "scale_percentage": 292.0
       },
       "start": "default",
       "tags": [
@@ -2716,7 +2716,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 246.0
       },
       "start": "default",
       "tags": [
@@ -5864,8 +5864,24 @@
           {
             "candidates": [
               {
-                "chance": 11,
+                "chance": 3.55,
+                "name": "#tree"
+              },
+              {
+                "chance": 4,
                 "name": "null"
+              },
+              {
+                "chance": 6.0275,
+                "name": "#tree"
+              },
+              {
+                "chance": 4.0275,
+                "name": "#tree"
+              },
+              {
+                "chance": 6.301375,
+                "name": "tree_dark"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -5886,7 +5902,8 @@
             "spawn_id": "spn-forrest-map_boundary"
           }
         ],
-        "inherits_map_assets": false
+        "inherits_map_assets": false,
+        "regen_seed": 1
       },
       "map_grid_settings": {
         "grid_resolution": 6

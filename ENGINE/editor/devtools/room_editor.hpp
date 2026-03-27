@@ -358,6 +358,9 @@ private:
                    world_x == other.world_x &&
                    world_z == other.world_z;
         }
+        bool operator!=(const DynamicBoundaryProxyKey& other) const {
+            return !(*this == other);
+        }
     };
     struct DynamicBoundaryProxyHit {
         DynamicBoundaryProxyKey key{};

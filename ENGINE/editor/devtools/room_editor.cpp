@@ -2800,7 +2800,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
                 SDL_Point anchor_px{0, 0};
                 if (!asset_anchor_screen_position(cam, asset, anchor_px)) {
-                    continue;
+                    return;
                 }
                 SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, point_color.a);
                 const SDL_FRect marker_box{

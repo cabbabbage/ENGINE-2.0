@@ -1291,6 +1291,9 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         world_grid.default_resolution_layer());
     const CameraState& cam_state = camera_state_cached();
     const double anchor_depth = cam_state.anchor_world_z;
+    const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
+    const float virtual_w = virtual_bounds.right - virtual_bounds.left;
+    const float virtual_h = virtual_bounds.bottom - virtual_bounds.top;
     const auto clamp_world_depth = [](double value) -> int {
         if (!std::isfinite(value)) {
             return 0;
@@ -1305,9 +1308,48 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         }
         return static_cast<int>(value);
     };
+
+    const double outward_sign =
+        (cam_state.valid && std::isfinite(cam_state.forward.z) && cam_state.forward.z >= 0.0) ? 1.0 : -1.0;
+    const double near_offset = std::max(0.0, static_cast<double>(settings_.depth_near_world));
+    const double requested_far_offset = std::max(0.0, static_cast<double>(settings_.extra_cull_margin));
+    double effective_far_offset = requested_far_offset;
+
+    std::optional<double> top_edge_world_z;
+    auto consider_top_sample = [&](double screen_x) {
+        const auto ndc = screen_to_ndc_point(cam_state, screen_x, 0.0, screen_width_, screen_height_);
+        const auto world = project_ndc_to_ground(cam_state, ndc.first, ndc.second);
+        if (!world.has_value() || !std::isfinite(world->y)) {
+            return;
+        }
+        if (!top_edge_world_z.has_value()) {
+            top_edge_world_z = static_cast<double>(world->y);
+            return;
+        }
+        const double sample_z = static_cast<double>(world->y);
+        if (outward_sign < 0.0) {
+            top_edge_world_z = std::min(*top_edge_world_z, sample_z);
+        } else {
+            top_edge_world_z = std::max(*top_edge_world_z, sample_z);
+        }
+    };
+    const double right_screen_x = static_cast<double>(std::max(0, screen_width_ - 1));
+    consider_top_sample(0.0);
+    consider_top_sample(right_screen_x * 0.5);
+    consider_top_sample(right_screen_x);
+
+    if (top_edge_world_z.has_value()) {
+        const double top_edge_offset = (*top_edge_world_z - anchor_depth) * outward_sign;
+        if (std::isfinite(top_edge_offset) && top_edge_offset > 0.0) {
+            effective_far_offset = std::min(effective_far_offset, top_edge_offset);
+        }
+    }
+
+    const double near_world_z = anchor_depth + outward_sign * near_offset;
+    const double far_world_z = anchor_depth + outward_sign * effective_far_offset;
     world::WorldGrid::RegionMetrics region_metrics{};
-    int min_world_z = clamp_world_depth(std::floor(anchor_depth + static_cast<double>(settings_.depth_near_world)));
-    int max_world_z = clamp_world_depth(std::ceil(anchor_depth + static_cast<double>(settings_.depth_far_world)));
+    int min_world_z = clamp_world_depth(std::floor(std::min(near_world_z, far_world_z)));
+    int max_world_z = clamp_world_depth(std::ceil(std::max(near_world_z, far_world_z)));
     if (min_world_z > max_world_z) {
         std::swap(min_world_z, max_world_z);
     }
@@ -1324,10 +1366,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     last_branches_skipped_ = region_metrics.branches_skipped;
     warped_points_.reserve(grid_points.size());
     visible_traversal_entries_.reserve(grid_points.size() * 2);
-
-    const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
-    const float virtual_w = virtual_bounds.right - virtual_bounds.left;
-    const float virtual_h = virtual_bounds.bottom - virtual_bounds.top;
 
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;

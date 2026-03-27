@@ -291,6 +291,7 @@ add_executable(engine_tests
     ENGINE/tests/test_scaling_logic_variants.cpp
     ENGINE/tests/test_movement_pathing_axis.cpp
     ENGINE/tests/test_tag_editor_widget_recommendations.cpp
+    ENGINE/tests/test_depth_cue_overlay_math.cpp
   )
 
 target_include_directories(engine_tests

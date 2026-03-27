@@ -465,6 +465,15 @@ void RoomConfigurator::set_manifest_store(devmode::core::ManifestStore* store) {
     }
 }
 
+void RoomConfigurator::set_assets(Assets* assets) {
+    assets_ = assets;
+    for (auto& cfg : spawn_group_configs_) {
+        if (cfg) {
+            cfg->set_assets(assets_);
+        }
+    }
+}
+
 void RoomConfigurator::set_bounds(const SDL_Rect& bounds) {
     bounds_override_ = bounds;
     has_bounds_override_ = bounds.w > 0 && bounds.h > 0;
@@ -1398,9 +1407,8 @@ void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
             config = std::make_unique<SpawnGroupConfig>();
         }
 
-        if (manifest_store_) {
-            config->set_manifest_store(manifest_store_);
-        }
+        config->set_manifest_store(manifest_store_);
+        config->set_assets(assets_);
 
         int default_resolution = MapGridSettings::defaults().grid_resolution;
         if (room_) {

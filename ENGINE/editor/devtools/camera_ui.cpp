@@ -570,7 +570,7 @@ void CameraUIPanel::build_ui() {
     min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     cull_margin_slider_ = std::make_unique<FloatSliderWidget>("Cull Depth (Z axis, world units)", 0.0f, 5000.0f, 10.0f, defaults.extra_cull_margin, 0);
-    cull_margin_slider_->set_tooltip("Distance along the canonical Z (depth) axis from the camera before assets are culled; vertical height (Y) remains unchanged.");
+    cull_margin_slider_->set_tooltip("Requested world-Z depth distance from the camera anchor. Runtime caps it to top-of-screen world depth each frame for stable, efficient culling.");
     cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     render_quality_slider_ = std::make_unique<DiscreteSliderWidget>("Render Quality (%)", std::vector<int>{100, 75, 50, 25, 10}, defaults.render_quality_percent);

@@ -4,8 +4,7 @@
 #include "assets/asset/animation_frame_variant.hpp"
 #include "core/AssetsManager.hpp"
 #include "core/manifest/depth_cue_settings.hpp"
-#include "gameplay/world/world_grid.hpp"
-#include "gameplay/world/grid_point.hpp"
+#include "rendering/render/depth_cue_overlay_math.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
@@ -16,12 +15,6 @@
 #include <optional>
 
 namespace {
-
-enum class DepthCueLayer {
-    None,
-    Foreground,
-    Background
-};
 
 struct DepthCueOverlayDecision {
     SDL_Texture* texture = nullptr;
@@ -50,46 +43,28 @@ SDL_Rect build_overlay_dest_rect_from_base(const RenderObject& base_object) {
     return overlay_rect;
 }
 
-DepthCueOverlayDecision decide_depth_cue_overlay(const world::GridPoint* gp,
-                                                 double anchor_world_z,
+DepthCueOverlayDecision decide_depth_cue_overlay(float signed_depth,
                                                  const depth_cue::DepthCueSettings& settings,
                                                  bool depth_effects_enabled,
                                                  SDL_Texture* foreground_texture,
                                                  SDL_Texture* background_texture) {
-    if (!depth_effects_enabled || !gp) {
+    if (!depth_effects_enabled || !std::isfinite(signed_depth)) {
         return {};
     }
-    const float signed_depth = static_cast<float>(static_cast<double>(gp->world_z()) - anchor_world_z);
-    if (!std::isfinite(signed_depth)) {
-        return {};
-    }
+    const depth_cue::OverlayOpacityDecision opacity_decision =
+        depth_cue::evaluate_overlay_opacity(signed_depth, settings);
 
-    const float center_depth = settings.center_depth_offset;
-    const float foreground_max_depth = settings.foreground_max_depth_offset;
-    const float background_max_depth = settings.background_max_depth_offset;
-    const DepthCueLayer layer = (signed_depth < center_depth) ? DepthCueLayer::Foreground :
-                                (signed_depth > center_depth) ? DepthCueLayer::Background :
-                                                                DepthCueLayer::None;
     SDL_Texture* chosen_texture = nullptr;
-    if (layer == DepthCueLayer::Background) {
+    if (opacity_decision.layer == depth_cue::OverlayLayer::Background) {
         chosen_texture = background_texture;
-    } else if (layer == DepthCueLayer::Foreground) {
+    } else if (opacity_decision.layer == depth_cue::OverlayLayer::Foreground) {
         chosen_texture = foreground_texture;
     }
     if (!chosen_texture) {
         return {};
     }
 
-    float opacity = 0.0f;
-    if (layer == DepthCueLayer::Background) {
-        const float denom = std::max(1.0e-6f, background_max_depth - center_depth);
-        const float t = std::clamp((signed_depth - center_depth) / denom, 0.0f, 1.0f);
-        opacity = t;
-    } else if (layer == DepthCueLayer::Foreground) {
-        const float denom = std::max(1.0e-6f, center_depth - foreground_max_depth);
-        const float t = std::clamp((center_depth - signed_depth) / denom, 0.0f, 1.0f);
-        opacity = t;
-    }
+    const float opacity = std::clamp(opacity_decision.opacity, 0.0f, 1.0f);
     if (!std::isfinite(opacity) || opacity <= 0.0f) {
         return {};
     }
@@ -288,12 +263,13 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             asset->render_package.empty() ? nullptr : &asset->render_package.back();
         if (base_render_object && assets_ && renderer_) {
             const WarpedScreenGrid& cam = assets_->getView();
-            const world::GridPoint* gp = cam.grid_point_for_asset(asset);
             const depth_cue::DepthCueSettings& depth_settings = assets_->depth_cue_settings();
+            const float effective_world_z =
+                static_cast<float>(asset->world_z()) + base_render_object->world_z_offset;
+            const float signed_depth = effective_world_z - static_cast<float>(cam.anchor_world_z());
 
             const DepthCueOverlayDecision overlay_decision = decide_depth_cue_overlay(
-                gp,
-                cam.anchor_world_z(),
+                signed_depth,
                 depth_settings,
                 assets_->depth_effects_enabled(),
                 depth_cue_foreground,

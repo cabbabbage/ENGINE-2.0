@@ -10340,6 +10340,7 @@ void RoomEditor::ensure_room_configurator() {
     }
     if (room_cfg_ui_) {
         room_cfg_ui_->set_manifest_store(manifest_store_);
+        room_cfg_ui_->set_assets(assets_);
         room_cfg_ui_->set_room_save_callback([this](bool immediate) {
             return enqueue_current_room_save(immediate
                 ? devmode::core::DevSaveCoordinator::Priority::Immediate

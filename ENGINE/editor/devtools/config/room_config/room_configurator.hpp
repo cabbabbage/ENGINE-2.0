@@ -19,6 +19,7 @@ namespace devmode::core { class ManifestStore; }
 
 class Input;
 class Room;
+class Assets;
 class TagEditorWidget;
 class SpawnGroupConfig;
 class DropdownWidget;
@@ -59,6 +60,7 @@ public:
     void open(Room* room);
 
     void set_manifest_store(class devmode::core::ManifestStore* store);
+    void set_assets(Assets* assets);
     void set_room_save_callback(std::function<bool(bool immediate)> cb) { room_save_callback_ = std::move(cb); }
 
     bool refresh_spawn_groups(const nlohmann::json& room_data);
@@ -114,6 +116,7 @@ public:
 
 private:
     class devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
     struct State;
 
     bool apply_room_data(const nlohmann::json& data);

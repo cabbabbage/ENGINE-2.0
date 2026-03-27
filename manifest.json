@@ -5571,7 +5571,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 134.0
+        "scale_percentage": 133.0
       },
       "start": "default",
       "tags": [
@@ -5811,9 +5811,9 @@
       },
       "content_root": "content/forrest",
       "depth_cue_settings": {
-        "background_max_depth_offset": 330.0,
-        "center_depth_offset": -75.0,
-        "foreground_max_depth_offset": -1105.0
+        "background_max_depth_offset": 255.0,
+        "center_depth_offset": -750.0,
+        "foreground_max_depth_offset": -1630.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -5920,9 +5920,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
             36,
+            242,
+            184,
             255
           ],
           "edge_smoothness": 2,
@@ -5943,9 +5943,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            37,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 85,
@@ -6004,16 +6004,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 143,
-              "dz": -618,
+              "dx": -440,
+              "dz": -668,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 14552,
-              "origional_width": 14568,
+              "origional_height": 7000,
+              "origional_width": 6992,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -6045,6 +6045,7 @@
               "origional_height": 7008,
               "origional_width": 7016,
               "position": "Exact",
+              "priority": 2,
               "quantity": 1,
               "resolution": 4,
               "resolve_geometry_to_room_size": true,

@@ -447,13 +447,16 @@ SDL_Texture* AssetListView::default_frame_texture(const AssetInfo& info) const {
 }
 
 SDL_Texture* AssetListView::preview_texture_for(const Entry& entry) const {
-    if (entry.is_tag || !assets_) {
+    if (entry.is_tag) {
         return nullptr;
     }
 
     std::string key = entry.manifest_name.empty() ? entry.value : entry.manifest_name;
     if (key.empty() && entry.info) {
         key = entry.info->name;
+    }
+    if (key.empty() && !entry.info) {
+        return nullptr;
     }
     auto it = preview_cache_.find(key);
     if (it != preview_cache_.end()) {

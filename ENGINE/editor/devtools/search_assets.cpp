@@ -47,7 +47,7 @@ SearchAssets::SearchAssets(devmode::core::ManifestStore* manifest_store)
         nullptr
     });
 
-    panel_->set_rows(list_view_.rows(embedded_ ? 1 : 2));
+    panel_->set_rows(list_view_.rows(columns_per_row()));
     last_known_position_ = panel_->position();
     pending_position_ = last_known_position_;
     has_pending_position_ = true;
@@ -96,7 +96,7 @@ void SearchAssets::apply_position(int x, int y) {
         panel_->set_col_gap(16);
         panel_->set_cell_width(220);
         panel_->set_floating_content_width(520);
-        panel_->set_rows(list_view_.rows(embedded_ ? 1 : 2));
+        panel_->set_rows(list_view_.rows(columns_per_row()));
     }
     if (embedded_) {
         panel_->set_rect(SDL_Rect{x, y, panel_->rect().w, panel_->rect().h});
@@ -212,11 +212,18 @@ void SearchAssets::set_embedded_rect(const SDL_Rect& rect) {
     if (target.h <= 0) {
         target.h = panel_->rect().h > 0 ? panel_->rect().h : 0;
     }
-    panel_->set_cell_width(std::max(120, target.w - 20));
+    const int horizontal_padding = 20;
+    const int inter_column_gap = 16;
+    int cell_width = std::max(120, target.w - horizontal_padding);
+    if (columns_per_row() > 1) {
+        cell_width = std::max(120, (target.w - horizontal_padding - inter_column_gap) / 2);
+    }
+    panel_->set_cell_width(cell_width);
     if (target.h > 0) {
         panel_->set_visible_height(target.h);
         panel_->set_available_height_override(target.h);
     }
+    panel_->set_rows(list_view_.rows(columns_per_row()));
     panel_->set_work_area(SDL_Rect{0, 0, target.w, target.h});
     panel_->set_rect(target);
     Input dummy;
@@ -493,7 +500,7 @@ void SearchAssets::filter_assets() {
 
     list_view_.set_entries(std::move(entries));
     list_view_.refresh_tiles();
-    panel_->set_rows(list_view_.rows(embedded_ ? 1 : 2));
+    panel_->set_rows(list_view_.rows(columns_per_row()));
 
     Input dummy;
     if (embedded_) {
@@ -619,6 +626,21 @@ DockManager::PanelInfo SearchAssets::build_panel_info(bool force_layout) const {
     constexpr int kFallbackWidth = 520;
     constexpr int kFallbackHeight = 400;
     return build_panel_info_for_panel(panel_.get(), kFallbackWidth, kFallbackHeight, force_layout);
+}
+
+std::size_t SearchAssets::columns_per_row() const {
+    if (!embedded_) {
+        return 2;
+    }
+
+    int width = embedded_rect_.w;
+    if (width <= 0 && panel_) {
+        width = panel_->rect().w;
+    }
+    if (width <= 0) {
+        width = screen_w_;
+    }
+    return width >= 460 ? 2 : 1;
 }
 
 void SearchAssets::ensure_visible_position(const DockManager::SlidingParentInfo* parent) {

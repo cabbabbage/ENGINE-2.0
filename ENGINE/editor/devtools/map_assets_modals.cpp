@@ -92,6 +92,29 @@ bool ensure_null_candidate_entry(json& entry) {
     return true;
 }
 
+bool is_pointer_or_wheel_event(const SDL_Event& e) {
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_WHEEL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_text_or_key_event(const SDL_Event& e) {
+    switch (e.type) {
+        case SDL_EVENT_TEXT_INPUT:
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
+            return true;
+        default:
+            return false;
+    }
+}
+
 class LabelWidget : public Widget {
 public:
     LabelWidget() = default;
@@ -229,6 +252,20 @@ public:
         }
     }
 
+    void set_manifest_store(devmode::core::ManifestStore* store) {
+        manifest_store_ = store;
+        if (pie_widget_) {
+            pie_widget_->set_manifest_store(manifest_store_);
+        }
+    }
+
+    void set_assets(Assets* assets) {
+        assets_ = assets;
+        if (pie_widget_) {
+            pie_widget_->set_assets(assets_);
+        }
+    }
+
     void bind(json* entry,
               std::string default_display_name,
               std::string ownership_label,
@@ -262,6 +299,8 @@ public:
             pie_widget_ = std::make_unique<CandidateEditorPieGraphWidget>();
         }
         pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
+        pie_widget_->set_manifest_store(manifest_store_);
+        pie_widget_->set_assets(assets_);
         pie_widget_->set_on_request_layout([this]() { this->layout(); });
         // Regular modal writes directly to the section; apply immediately
         pie_widget_->set_defer_adjust_until_release(false);
@@ -295,6 +334,10 @@ public:
     }
 
     bool handle_event(const SDL_Event& e) override {
+        if (route_embedded_search_event(e)) {
+            return true;
+        }
+
         bool used = DockableCollapsible::handle_event(e);
         if (!entry_ || !expanded_) {
             return used;
@@ -317,7 +360,16 @@ public:
         if (pie_widget_) {
             pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
         }
+        const SDL_Point pointer{input.getX(), input.getY()};
+        const bool suppress_parent_scroll =
+            pie_widget_ && pie_widget_->is_search_point_inside(pointer.x, pointer.y);
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(false);
+        }
         DockableCollapsible::update(input, screen_w, screen_h);
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(true);
+        }
         if (pie_widget_) {
             pie_widget_->update_search(input);
         }
@@ -328,6 +380,16 @@ protected:
     std::string_view lock_settings_id() const override { return "candidates"; }
 
 private:
+    bool route_embedded_search_event(const SDL_Event& e) {
+        if (!pie_widget_ || !pie_widget_->is_search_visible()) {
+            return false;
+        }
+        if (!is_pointer_or_wheel_event(e) && !is_text_or_key_event(e)) {
+            return false;
+        }
+        return pie_widget_->handle_event(e);
+    }
+
     bool sanitize_entry() {
         if (!entry_) return false;
         bool changed = devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
@@ -475,6 +537,8 @@ private:
 
     int screen_w_ = 1920;
     int screen_h_ = 1080;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
 
     std::unique_ptr<LabelWidget> ownership_label_widget_{};
     std::unique_ptr<LabelWidget> display_name_widget_{};
@@ -513,6 +577,24 @@ public:
         for (auto& group : group_widgets_) {
             if (group.pie_widget) {
                 group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+            }
+        }
+    }
+
+    void set_manifest_store(devmode::core::ManifestStore* store) {
+        manifest_store_ = store;
+        for (auto& group : group_widgets_) {
+            if (group.pie_widget) {
+                group.pie_widget->set_manifest_store(manifest_store_);
+            }
+        }
+    }
+
+    void set_assets(Assets* assets) {
+        assets_ = assets;
+        for (auto& group : group_widgets_) {
+            if (group.pie_widget) {
+                group.pie_widget->set_assets(assets_);
             }
         }
     }
@@ -590,6 +672,9 @@ public:
     }
 
     bool handle_event(const SDL_Event& e) override {
+        if (route_embedded_search_event(e)) {
+            return true;
+        }
         return DockableCollapsible::handle_event(e);
     }
 
@@ -601,7 +686,22 @@ public:
                 group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
             }
         }
+        const SDL_Point pointer{input.getX(), input.getY()};
+        bool suppress_parent_scroll = false;
+        for (const auto& group : group_widgets_) {
+            if (!group.pie_widget) continue;
+            if (group.pie_widget->is_search_point_inside(pointer.x, pointer.y)) {
+                suppress_parent_scroll = true;
+                break;
+            }
+        }
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(false);
+        }
         DockableCollapsible::update(input, screen_w, screen_h);
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(true);
+        }
         for (auto& group : group_widgets_) {
             if (group.pie_widget) {
                 group.pie_widget->update_search(input);
@@ -636,6 +736,26 @@ private:
         ~PieCallbackGuard() { owner_->in_pie_callback_ = false; }
         BoundaryCandidateListPanelImpl* owner_;
     };
+
+    CandidateEditorPieGraphWidget* active_search_widget() {
+        for (auto& group : group_widgets_) {
+            if (group.pie_widget && group.pie_widget->is_search_visible()) {
+                return group.pie_widget.get();
+            }
+        }
+        return nullptr;
+    }
+
+    bool route_embedded_search_event(const SDL_Event& e) {
+        CandidateEditorPieGraphWidget* widget = active_search_widget();
+        if (!widget) {
+            return false;
+        }
+        if (!is_pointer_or_wheel_event(e) && !is_text_or_key_event(e)) {
+            return false;
+        }
+        return widget->handle_event(e);
+    }
 
     json& ensure_candidate_selectors() {
         if (!section_) {
@@ -825,6 +945,8 @@ private:
 
             group.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
             group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+            group.pie_widget->set_manifest_store(manifest_store_);
+            group.pie_widget->set_assets(assets_);
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
             // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
             group.pie_widget->set_defer_adjust_until_release(true);
@@ -1089,6 +1211,8 @@ private:
 
     int screen_w_ = 1920;
     int screen_h_ = 1080;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
 
     std::unique_ptr<LabelWidget> ownership_label_widget_{};
     std::unique_ptr<LabelWidget> instructions_label_{};
@@ -1177,6 +1301,8 @@ void SingleSpawnGroupModal::open(json& map_info,
 
     if (!panel_) panel_ = std::make_unique<CandidateListPanel>();
     panel_->set_screen_dimensions(screen_w_, screen_h_);
+    panel_->set_manifest_store(manifest_store_);
+    panel_->set_assets(assets_);
     panel_->bind(entry_,
                  default_display_name,
                  ownership_label,
@@ -1232,6 +1358,20 @@ void SingleSpawnGroupModal::set_screen_dimensions(int width, int height) {
     if (panel_) panel_->set_screen_dimensions(screen_w_, screen_h_);
     position_initialized_ = false;
     ensure_visible_position();
+}
+
+void SingleSpawnGroupModal::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    if (panel_) {
+        panel_->set_manifest_store(manifest_store_);
+    }
+}
+
+void SingleSpawnGroupModal::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (panel_) {
+        panel_->set_assets(assets_);
+    }
 }
 
 void SingleSpawnGroupModal::set_floating_stack_key(std::string key) {
@@ -1296,6 +1436,8 @@ void BoundarySpawnGroupModal::open(nlohmann::json& map_info,
 
     if (!panel_) panel_ = std::make_unique<BoundaryCandidateListPanel>();
     panel_->set_screen_dimensions(screen_w_, screen_h_);
+    panel_->set_manifest_store(manifest_store_);
+    panel_->set_assets(assets_);
     panel_->bind(section_,
                  default_display_name,
                  ownership_label,
@@ -1351,6 +1493,20 @@ void BoundarySpawnGroupModal::set_screen_dimensions(int width, int height) {
     if (panel_) panel_->set_screen_dimensions(screen_w_, screen_h_);
     position_initialized_ = false;
     ensure_visible_position();
+}
+
+void BoundarySpawnGroupModal::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    if (panel_) {
+        panel_->set_manifest_store(manifest_store_);
+    }
+}
+
+void BoundarySpawnGroupModal::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (panel_) {
+        panel_->set_assets(assets_);
+    }
 }
 
 void BoundarySpawnGroupModal::set_floating_stack_key(std::string key) {

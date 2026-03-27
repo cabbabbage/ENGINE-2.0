@@ -4665,6 +4665,8 @@ void DevControls::ensure_map_assets_modal_open() {
     } else {
         map_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
     }
+    map_assets_modal_->set_manifest_store(&manifest_store_);
+    map_assets_modal_->set_assets(assets_);
     map_assets_modal_->set_on_close([this]() {
         if (room_editor_) room_editor_->clear_selection();
         this->sync_header_button_states();
@@ -4752,6 +4754,8 @@ void DevControls::ensure_boundary_assets_modal_open() {
     } else {
         boundary_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
     }
+    boundary_assets_modal_->set_manifest_store(&manifest_store_);
+    boundary_assets_modal_->set_assets(assets_);
     boundary_assets_modal_->set_on_close([this]() {
         if (room_editor_) room_editor_->clear_selection();
         this->sync_header_button_states();
@@ -5040,25 +5044,6 @@ void DevControls::enter_live_depth_edit_mode() {
     }
     depth_cue::clamp(live_depth_settings_);
 
-    // In the live editor, "Foreground" must be lower on screen (closer) and
-    // "Background" must be higher on screen (farther). If saved data violates
-    // that visual order, replace it with sane defaults.
-    float center_y = 0.0f;
-    float fg_line_y = 0.0f; // Foreground line is driven by background_max depth offset.
-    float bg_line_y = 0.0f; // Background line is driven by foreground_max depth offset.
-    const bool center_ok = project_live_depth_offset_to_screen_y(live_depth_settings_.center_depth_offset, center_y);
-    const bool fg_ok = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, fg_line_y);
-    const bool bg_ok = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, bg_line_y);
-    const bool order_ok = center_ok && fg_ok && bg_ok && (bg_line_y < center_y) && (center_y < fg_line_y);
-    if (!order_ok) {
-        live_depth_settings_.foreground_max_depth_offset =
-            live_depth_settings_.center_depth_offset - depth_cue::kMinSeparation;
-        live_depth_settings_.background_max_depth_offset =
-            live_depth_settings_.center_depth_offset + depth_cue::kMinSeparation;
-        depth_cue::clamp(live_depth_settings_);
-        injected_default_min_spacing = true;
-    }
-
     live_depth_selected_line_ = LiveDepthLine::Center;
     live_depth_settings_dirty_ = injected_default_min_spacing;
     live_depth_edit_mode_active_ = true;
@@ -5097,37 +5082,39 @@ void DevControls::exit_live_depth_edit_mode(bool reopen_depth_panel, bool flush_
     sync_header_button_states();
 }
 
-bool DevControls::project_live_depth_offset_to_screen_y(float depth_offset, float& out_screen_y) const {
-    out_screen_y = 0.0f;
+DevControls::LiveDepthLine DevControls::live_depth_line_from_cursor_screen(SDL_Point cursor_screen) const {
     if (!assets_) {
-        return false;
+        return LiveDepthLine::Center;
     }
 
     const WarpedScreenGrid& cam = assets_->getView();
-    const SDL_FPoint center_world = cam.get_view_center_f();
-    SDL_FPoint screen{};
-    const SDL_FPoint floor_xy{center_world.x, 0.0f};
-    const float world_z = static_cast<float>(cam.anchor_world_z()) + depth_offset;
-    if (!cam.project_world_point(floor_xy, world_z, screen)) {
-        return false;
-    }
-    if (!std::isfinite(screen.y)) {
-        return false;
-    }
-    out_screen_y = screen.y;
-    return true;
-}
-
-DevControls::LiveDepthLine DevControls::live_depth_line_from_cursor_y(float cursor_y) const {
-    const float screen_h = static_cast<float>(std::max(1, screen_h_));
-    const float y = std::clamp(cursor_y, 0.0f, screen_h - 1.0f);
-    if (y < screen_h / 3.0f) {
-        return LiveDepthLine::BackgroundMax;
-    }
-    if (y < (screen_h * 2.0f) / 3.0f) {
+    const SDL_FPoint cursor_world = cam.screen_to_map(cursor_screen);
+    if (!std::isfinite(cursor_world.y)) {
         return LiveDepthLine::Center;
     }
-    return LiveDepthLine::ForegroundMax;
+    const float anchor_world_z = static_cast<float>(cam.anchor_world_z());
+    const float cursor_depth_offset = cursor_world.y - anchor_world_z;
+
+    struct Candidate {
+        LiveDepthLine line = LiveDepthLine::Center;
+        float depth_offset = 0.0f;
+    };
+    const std::array<Candidate, 3> candidates{{
+        {LiveDepthLine::ForegroundMax, live_depth_settings_.foreground_max_depth_offset},
+        {LiveDepthLine::Center, live_depth_settings_.center_depth_offset},
+        {LiveDepthLine::BackgroundMax, live_depth_settings_.background_max_depth_offset},
+    }};
+
+    LiveDepthLine nearest = LiveDepthLine::Center;
+    float best_distance = std::numeric_limits<float>::infinity();
+    for (const Candidate& candidate : candidates) {
+        const float distance = std::fabs(cursor_depth_offset - candidate.depth_offset);
+        if (distance < best_distance) {
+            best_distance = distance;
+            nearest = candidate.line;
+        }
+    }
+    return nearest;
 }
 
 bool DevControls::update_live_depth_setting(LiveDepthLine line, float delta_world) {
@@ -5144,16 +5131,14 @@ bool DevControls::update_live_depth_setting(LiveDepthLine line, float delta_worl
         break;
     }
     case LiveDepthLine::ForegroundMax:
-        // Foreground line (lower on screen) maps to the "background_max_depth_offset" value.
-        next.background_max_depth_offset = std::clamp(next.background_max_depth_offset + delta_world,
-                                                      next.center_depth_offset + depth_cue::kMinSeparation,
-                                                      depth_cue::kMaxDepthOffset);
-        break;
-    case LiveDepthLine::BackgroundMax:
-        // Background line (higher on screen) maps to the "foreground_max_depth_offset" value.
         next.foreground_max_depth_offset = std::clamp(next.foreground_max_depth_offset + delta_world,
                                                       depth_cue::kMinDepthOffset,
                                                       next.center_depth_offset - depth_cue::kMinSeparation);
+        break;
+    case LiveDepthLine::BackgroundMax:
+        next.background_max_depth_offset = std::clamp(next.background_max_depth_offset + delta_world,
+                                                      next.center_depth_offset + depth_cue::kMinSeparation,
+                                                      depth_cue::kMaxDepthOffset);
         break;
     }
     depth_cue::clamp(next);
@@ -5199,16 +5184,18 @@ bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
     }
 
     if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(event.motion.y));
+        live_depth_selected_line_ = live_depth_line_from_cursor_screen(
+            SDL_Point{static_cast<int>(event.motion.x), static_cast<int>(event.motion.y)});
     } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(event.button.y));
+        live_depth_selected_line_ = live_depth_line_from_cursor_screen(
+            SDL_Point{static_cast<int>(event.button.x), static_cast<int>(event.button.y)});
     }
 
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         int mx = 0;
         int my = 0;
         sdl_mouse_util::GetMouseState(&mx, &my);
-        live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(my));
+        live_depth_selected_line_ = live_depth_line_from_cursor_screen(SDL_Point{mx, my});
 
         int wheel_steps = event.wheel.integer_y;
         if (wheel_steps == 0 && std::fabs(event.wheel.y) > 1.0e-6f) {
@@ -5248,37 +5235,117 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
     int mouse_x = 0;
     int mouse_y = 0;
     sdl_mouse_util::GetMouseState(&mouse_x, &mouse_y);
-    (void)mouse_x;
-    live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(mouse_y));
+    live_depth_selected_line_ = live_depth_line_from_cursor_screen(SDL_Point{mouse_x, mouse_y});
 
     struct LineInfo {
         LiveDepthLine line = LiveDepthLine::Center;
-        float y = 0.0f;
+        float depth_offset = 0.0f;
         bool valid = false;
         const char* label = "";
         SDL_Color color{255, 255, 255, 255};
+        SDL_Point label_anchor{0, 0};
+        std::vector<std::vector<SDL_Point>> segments;
     };
     std::array<LineInfo, 3> lines{{
-        {LiveDepthLine::ForegroundMax, 0.0f, false, "Foreground Max", SDL_Color{255, 184, 84, 200}},
-        {LiveDepthLine::Center, 0.0f, false, "Center", SDL_Color{232, 238, 250, 220}},
-        {LiveDepthLine::BackgroundMax, 0.0f, false, "Background Max", SDL_Color{96, 192, 255, 200}},
+        {LiveDepthLine::ForegroundMax, live_depth_settings_.foreground_max_depth_offset, false, "Foreground Max", SDL_Color{255, 184, 84, 200}},
+        {LiveDepthLine::Center, live_depth_settings_.center_depth_offset, false, "Center", SDL_Color{232, 238, 250, 220}},
+        {LiveDepthLine::BackgroundMax, live_depth_settings_.background_max_depth_offset, false, "Background Max", SDL_Color{96, 192, 255, 200}},
     }};
 
-    // Foreground line is driven by background_max (closer / lower).
-    lines[0].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, lines[0].y);
-    lines[1].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.center_depth_offset, lines[1].y);
-    // Background line is driven by foreground_max (farther / higher).
-    lines[2].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, lines[2].y);
+    const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+    if (cam) {
+        auto [view_min_x, view_min_z, view_max_x, view_max_z] = cam->get_current_view().get_bounds();
+        (void)view_min_z;
+        (void)view_max_z;
+        float min_world_x = static_cast<float>(std::min(view_min_x, view_max_x));
+        float max_world_x = static_cast<float>(std::max(view_min_x, view_max_x));
+        if (max_world_x - min_world_x < 1.0f) {
+            const float center_world_x = static_cast<float>((view_min_x + view_max_x) * 0.5);
+            min_world_x = center_world_x - 200.0f;
+            max_world_x = center_world_x + 200.0f;
+        }
+
+        const float anchor_world_z = static_cast<float>(cam->anchor_world_z());
+        constexpr int kSamplesPerLine = 72;
+
+        auto build_floor_line = [&](float depth_offset,
+                                    std::vector<std::vector<SDL_Point>>& out_segments,
+                                    SDL_Point& out_label_anchor) -> bool {
+            out_segments.clear();
+            out_label_anchor = SDL_Point{0, 0};
+            const float world_z = anchor_world_z + depth_offset;
+            std::vector<SDL_Point> current_segment;
+            current_segment.reserve(static_cast<std::size_t>(kSamplesPerLine + 1));
+            bool have_label_anchor = false;
+            bool have_segment = false;
+            auto flush_segment = [&]() {
+                if (current_segment.size() >= 2) {
+                    out_segments.push_back(current_segment);
+                    have_segment = true;
+                }
+                current_segment.clear();
+            };
+
+            for (int s = 0; s <= kSamplesPerLine; ++s) {
+                const float t = static_cast<float>(s) / static_cast<float>(kSamplesPerLine);
+                const float world_x = min_world_x + (max_world_x - min_world_x) * t;
+                SDL_FPoint projected{};
+                const SDL_FPoint floor_world{world_x, 0.0f};
+                if (!cam->project_world_point(floor_world, world_z, projected)) {
+                    flush_segment();
+                    continue;
+                }
+                const float warped_y = cam->warp_floor_screen_y(0.0f, projected.y);
+                if (!std::isfinite(projected.x) || !std::isfinite(warped_y)) {
+                    flush_segment();
+                    continue;
+                }
+                const SDL_Point screen_point{
+                    static_cast<int>(std::lround(projected.x)),
+                    static_cast<int>(std::lround(warped_y))
+                };
+                if (!have_label_anchor) {
+                    out_label_anchor = screen_point;
+                    have_label_anchor = true;
+                }
+                current_segment.push_back(screen_point);
+            }
+            flush_segment();
+            return have_segment;
+        };
+
+        for (LineInfo& line : lines) {
+            line.valid = build_floor_line(line.depth_offset, line.segments, line.label_anchor);
+        }
+    }
 
     SDL_BlendMode previous_blend = SDL_BLENDMODE_NONE;
     SDL_GetRenderDrawBlendMode(renderer, &previous_blend);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    auto draw_line = [&](int y, SDL_Color color, int thickness) {
+    auto draw_segments = [&](const std::vector<std::vector<SDL_Point>>& segments,
+                             SDL_Color color,
+                             int thickness) {
+        if (segments.empty()) {
+            return;
+        }
         const int half = std::max(0, thickness / 2);
         SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
         for (int dy = -half; dy <= half; ++dy) {
-            SDL_RenderLine(renderer, 0, y + dy, screen_w_, y + dy);
+            for (const std::vector<SDL_Point>& segment : segments) {
+                if (segment.size() < 2) {
+                    continue;
+                }
+                if (dy == 0) {
+                    sdl_render::Lines(renderer, segment.data(), static_cast<int>(segment.size()));
+                    continue;
+                }
+                std::vector<SDL_Point> shifted = segment;
+                for (SDL_Point& point : shifted) {
+                    point.y += dy;
+                }
+                sdl_render::Lines(renderer, shifted.data(), static_cast<int>(shifted.size()));
+            }
         }
     };
 
@@ -5286,28 +5353,27 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
     label_style.font_size = std::max(12, label_style.font_size - 1);
 
     for (const LineInfo& line : lines) {
-        if (!line.valid || !std::isfinite(line.y)) {
+        if (!line.valid || line.segments.empty()) {
             continue;
         }
-        const int yi = static_cast<int>(std::lround(line.y));
         const bool selected = (line.line == live_depth_selected_line_);
         SDL_Color draw_color = line.color;
-        int thickness = selected ? 5 : 2;
+        const int thickness = selected ? 5 : 2;
         if (selected) {
             draw_color = SDL_Color{255, 245, 168, 240};
-            draw_line(yi, SDL_Color{255, 245, 168, 96}, 10);
+            draw_segments(line.segments, SDL_Color{255, 245, 168, 96}, 10);
         }
-        draw_line(yi, draw_color, thickness);
+        draw_segments(line.segments, draw_color, thickness);
 
         label_style.color = selected ? SDL_Color{255, 245, 168, 255} : line.color;
-        const int label_y = std::clamp(yi - 18, 6, std::max(6, screen_h_ - 22));
-        const int label_x = 12;
+        const int label_x = std::clamp(line.label_anchor.x + 10, 12, std::max(12, screen_w_ - 220));
+        const int label_y = std::clamp(line.label_anchor.y - 18, 6, std::max(6, screen_h_ - 22));
         DrawLabelText(renderer, line.label, label_x, label_y, label_style);
     }
 
     DMLabelStyle instruction_style = DMStyles::Label();
     instruction_style.color = SDL_Color{228, 236, 248, 255};
-    DrawLabelText(renderer, "Top third: BG, middle third: Center, bottom third: FG. Use mouse wheel to adjust.", 16, 32, instruction_style);
+    DrawLabelText(renderer, "Hover near a floor guide depth (FG/Center/BG), then use mouse wheel to adjust world depth.", 16, 32, instruction_style);
 
     live_depth_exit_button_->render(renderer);
     SDL_SetRenderDrawBlendMode(renderer, previous_blend);

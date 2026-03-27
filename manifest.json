@@ -1071,7 +1071,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/grass_fps_2",
       "asset_name": "grass_fps_2",
-      "asset_type": "object",
+      "asset_type": "boundary",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -1082,6 +1082,7 @@
       },
       "start": "default",
       "tags": [],
+      "tillable": false,
       "update_radius": 0
     },
     "grave_1": {
@@ -5886,7 +5887,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            114,
+            36,
             36,
             255
           ],
@@ -5909,13 +5910,13 @@
           "curvyness": 2,
           "display_color": [
             242,
-            138,
+            130,
             36,
             255
           ],
           "edge_smoothness": 85,
           "geometry": "Circle",
-          "inherits_map_assets": false,
+          "inherits_map_assets": true,
           "is_boss": false,
           "is_spawn": false,
           "max_height": 6850,

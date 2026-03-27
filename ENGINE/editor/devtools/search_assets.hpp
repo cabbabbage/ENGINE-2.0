@@ -64,8 +64,9 @@ private:
         std::string name;
         std::string manifest_name;
         std::vector<std::string> tags;
+        std::shared_ptr<AssetInfo> info;
         const nlohmann::json* payload = nullptr;
-};
+    };
     void load_assets();
     void filter_assets();
     void activate_result(const Result& result);

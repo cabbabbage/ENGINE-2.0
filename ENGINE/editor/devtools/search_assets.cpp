@@ -6,6 +6,7 @@
 #include "dm_styles.hpp"
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "dev_mode_utils.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
@@ -204,22 +205,33 @@ void SearchAssets::set_embedded_rect(const SDL_Rect& rect) {
         apply_position(rect.x, rect.y);
         return;
     }
-    SDL_Rect applied = rect;
-    if (applied.w <= 0) {
-        applied.w = panel_->rect().w > 0 ? panel_->rect().w : 260;
+    SDL_Rect target = rect;
+    if (target.w <= 0) {
+        target.w = panel_->rect().w > 0 ? panel_->rect().w : 260;
     }
-    if (applied.h <= 0) {
-        applied.h = panel_->rect().h > 0 ? panel_->rect().h : 0;
+    if (target.h <= 0) {
+        target.h = panel_->rect().h > 0 ? panel_->rect().h : 0;
     }
-    panel_->set_cell_width(std::max(120, applied.w - 20));
-    if (applied.h > 0) {
-        panel_->set_visible_height(applied.h);
-        panel_->set_available_height_override(applied.h);
+    panel_->set_cell_width(std::max(120, target.w - 20));
+    if (target.h > 0) {
+        panel_->set_visible_height(target.h);
+        panel_->set_available_height_override(target.h);
     }
-    panel_->set_work_area(SDL_Rect{0, 0, applied.w, applied.h});
-    panel_->set_rect(applied);
+    panel_->set_work_area(SDL_Rect{0, 0, target.w, target.h});
+    panel_->set_rect(target);
     Input dummy;
-    panel_->update(dummy, applied.w, applied.h);
+    panel_->update(dummy, target.w, target.h);
+
+    if (target.h > 0) {
+        const int overshoot = panel_->rect().h - target.h;
+        if (overshoot > 0) {
+            const int adjusted_viewport_height = std::max(0, target.h - overshoot);
+            panel_->set_visible_height(adjusted_viewport_height);
+            panel_->set_available_height_override(adjusted_viewport_height);
+            panel_->set_rect(target);
+            panel_->update(dummy, target.w, target.h);
+        }
+    }
 }
 
 SDL_Rect SearchAssets::rect() const {
@@ -251,8 +263,10 @@ void SearchAssets::open(Callback cb) {
             panel_->update(dummy, applied.w, applied.h);
         }
         list_view_.set_query("");
-        list_view_.refresh_tiles();
-        panel_->set_rows(list_view_.rows());
+        filter_assets();
+        if (auto* box = list_view_.search_box()) {
+            box->start_editing();
+        }
         return;
     }
     SDL_Point target = last_known_position_;
@@ -353,6 +367,7 @@ void SearchAssets::load_assets() {
             asset.name = info->name.empty() ? lib_name : info->name;
             asset.manifest_name = lib_name;
             asset.tags = info->tags;
+            asset.info = info;
             asset.payload = nullptr;
             all_.push_back(std::move(asset));
         }
@@ -404,7 +419,7 @@ void SearchAssets::filter_assets() {
     std::set<std::string> tagset;
     std::vector<AssetListView::Entry> entries;
 
-    auto push_result = [&](Result res) {
+    auto push_result = [&](Result res, std::shared_ptr<AssetInfo> info = nullptr) {
         if (!seen_labels.insert(res.label).second) {
             return;
         }
@@ -415,6 +430,7 @@ void SearchAssets::filter_assets() {
         entry.is_tag = res.is_tag;
         entry.manifest_name = res.manifest_name;
         entry.tags = res.tags;
+        entry.info = std::move(info);
         entry.recommended = res.recommended;
         entries.push_back(std::move(entry));
     };
@@ -434,7 +450,7 @@ void SearchAssets::filter_assets() {
         res.is_tag = false;
         res.manifest_name = entry.manifest_name;
         res.tags = entry.tags;
-        push_result(std::move(res));
+        push_result(std::move(res), a.info);
 
         for (const auto& t : a.tags) {
             if (AssetListView::matches_query(AssetListView::Entry{std::string("#") + t, t, true, "", {t}}, q)) {
@@ -500,6 +516,24 @@ void SearchAssets::activate_result(const Result& result) {
 
 bool SearchAssets::handle_event(const SDL_Event& e) {
     if (!panel_ || !panel_->is_visible()) return false;
+    const bool pointer_event =
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+    const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
+
+    SDL_Point pointer{0, 0};
+    bool has_pointer = false;
+    if (pointer_event) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            pointer = sdl_mouse_util::MotionPoint(e.motion);
+        } else {
+            pointer = sdl_mouse_util::ButtonPoint(e.button);
+        }
+        has_pointer = true;
+    } else if (wheel_event) {
+        sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
+        has_pointer = true;
+    }
+
     SDL_Point before = panel_->position();
     bool used = panel_->handle_event(e);
     SDL_Point after = panel_->position();
@@ -513,6 +547,11 @@ bool SearchAssets::handle_event(const SDL_Event& e) {
     if (list_view_.update_query_from_widget()) {
         filter_assets();
     }
+
+    if (has_pointer && (pointer_event || wheel_event) && panel_->is_point_inside(pointer.x, pointer.y)) {
+        return true;
+    }
+
     return used;
 }
 

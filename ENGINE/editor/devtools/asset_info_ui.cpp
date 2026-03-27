@@ -1931,6 +1931,8 @@ void AssetInfoUI::request_apply_section(AssetInfoSectionId section_id) {
     }
     if (!asset_selector_) asset_selector_ = std::make_unique<SearchAssets>();
     if (!asset_selector_) return;
+    asset_selector_->set_manifest_store(manifest_store_);
+    asset_selector_->set_assets(assets_);
 
     asset_selector_->open([this, section_id](const std::string& selection) {
         if (selection.empty()) return;

@@ -58,10 +58,11 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 57.0
       },
       "start": "default",
       "tags": [],
+      "tillable": false,
       "update_radius": 0
     },
     "axe_in_stump": {
@@ -1036,20 +1037,36 @@
           }
         }
       },
-      "anti_tags": [],
+      "anti_tags": [
+        "grey",
+        "pretty",
+        "tree"
+      ],
       "asset_directory": "resources/assets/grass_1_fps_2",
       "asset_name": "grass_1_fps_2",
       "asset_type": "object",
-      "can_invert": false,
+      "can_invert": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 3.0
+        "scale_percentage": 7.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "animated",
+        "forrest",
+        "grass",
+        "green",
+        "living",
+        "medow",
+        "moving",
+        "natural",
+        "nature",
+        "small"
+      ],
+      "tillable": false,
       "update_radius": 0
     },
     "grass_fps_2": {
@@ -1068,20 +1085,37 @@
           }
         }
       },
-      "anti_tags": [],
+      "anti_tags": [
+        "enemy",
+        "flower",
+        "large",
+        "manmade",
+        "pretty"
+      ],
       "asset_directory": "resources/assets/grass_fps_2",
       "asset_name": "grass_fps_2",
       "asset_type": "boundary",
-      "can_invert": false,
+      "can_invert": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 3.0
+        "scale_percentage": 7.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "animated",
+        "forrest",
+        "grass",
+        "living",
+        "medow",
+        "moving",
+        "natural",
+        "nature",
+        "plant",
+        "small"
+      ],
       "tillable": false,
       "update_radius": 0
     },
@@ -1657,13 +1691,13 @@
       "asset_directory": "resources/assets/purple_flower",
       "asset_name": "purple_flower",
       "asset_type": "object",
-      "can_invert": false,
+      "can_invert": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 30.000001907348633
       },
       "start": "default",
       "tags": [
@@ -2675,7 +2709,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/tree_darker",
       "asset_name": "tree_darker",
-      "asset_type": "Object",
+      "asset_type": "boundary",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -5887,7 +5921,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            36,
+            241,
             36,
             255
           ],
@@ -5909,9 +5943,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            130,
+            37,
             36,
+            242,
             255
           ],
           "edge_smoothness": 85,
@@ -5987,6 +6021,35 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-ccbd1c7900a3"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "attack_speed"
+                }
+              ],
+              "display_name": "attack_speed",
+              "dx": -1320,
+              "dz": -579,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 7008,
+              "origional_width": 7016,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-05404aa5a27d"
             }
           ]
         }

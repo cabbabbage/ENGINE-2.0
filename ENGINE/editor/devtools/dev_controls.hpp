@@ -354,6 +354,7 @@ private:
     bool handle_live_depth_edit_event(const SDL_Event& event);
     void render_live_depth_edit_overlay(SDL_Renderer* renderer);
     bool project_live_depth_offset_to_screen_y(float depth_offset, float& out_screen_y) const;
+    LiveDepthLine live_depth_line_from_cursor_y(float cursor_y) const;
     bool update_live_depth_setting(LiveDepthLine line, float delta_world);
 
 

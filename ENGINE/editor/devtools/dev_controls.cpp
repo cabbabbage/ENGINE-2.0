@@ -5098,6 +5098,18 @@ bool DevControls::project_live_depth_offset_to_screen_y(float depth_offset, floa
     return true;
 }
 
+DevControls::LiveDepthLine DevControls::live_depth_line_from_cursor_y(float cursor_y) const {
+    const float screen_h = static_cast<float>(std::max(1, screen_h_));
+    const float y = std::clamp(cursor_y, 0.0f, screen_h - 1.0f);
+    if (y < screen_h / 3.0f) {
+        return LiveDepthLine::BackgroundMax;
+    }
+    if (y < (screen_h * 2.0f) / 3.0f) {
+        return LiveDepthLine::Center;
+    }
+    return LiveDepthLine::ForegroundMax;
+}
+
 bool DevControls::update_live_depth_setting(LiveDepthLine line, float delta_world) {
     if (!assets_ || !std::isfinite(delta_world) || std::abs(delta_world) <= 1.0e-6f) {
         return false;
@@ -5164,43 +5176,18 @@ bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
         return true;
     }
 
-    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
-        struct LineSample {
-            LiveDepthLine line = LiveDepthLine::Center;
-            float y = 0.0f;
-            bool valid = false;
-        };
-        std::array<LineSample, 3> lines{{
-            {LiveDepthLine::Center, 0.0f, false},
-            {LiveDepthLine::BackgroundMax, 0.0f, false},
-            {LiveDepthLine::ForegroundMax, 0.0f, false},
-        }};
-        lines[0].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.center_depth_offset, lines[0].y);
-        lines[1].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.background_max_depth_offset, lines[1].y);
-        lines[2].valid = project_live_depth_offset_to_screen_y(live_depth_settings_.foreground_max_depth_offset, lines[2].y);
-
-        const float click_y = event.button.y;
-        bool have_best = false;
-        float best_dist = 0.0f;
-        LiveDepthLine best_line = live_depth_selected_line_;
-        for (const LineSample& sample : lines) {
-            if (!sample.valid) {
-                continue;
-            }
-            const float dist = std::fabs(sample.y - click_y);
-            if (!have_best || dist < best_dist) {
-                have_best = true;
-                best_dist = dist;
-                best_line = sample.line;
-            }
-        }
-        if (have_best) {
-            live_depth_selected_line_ = best_line;
-        }
-        return true;
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(event.motion.y));
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(event.button.y));
     }
 
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(my));
+
         int wheel_steps = event.wheel.integer_y;
         if (wheel_steps == 0 && std::fabs(event.wheel.y) > 1.0e-6f) {
             wheel_steps = (event.wheel.y > 0.0f) ? 1 : -1;
@@ -5236,6 +5223,11 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
         button_height
     };
     live_depth_exit_button_->set_rect(button_rect);
+    int mouse_x = 0;
+    int mouse_y = 0;
+    sdl_mouse_util::GetMouseState(&mouse_x, &mouse_y);
+    (void)mouse_x;
+    live_depth_selected_line_ = live_depth_line_from_cursor_y(static_cast<float>(mouse_y));
 
     struct LineInfo {
         LiveDepthLine line = LiveDepthLine::Center;
@@ -5279,6 +5271,7 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
         int thickness = selected ? 5 : 2;
         if (selected) {
             draw_color = SDL_Color{255, 245, 168, 240};
+            draw_line(yi, SDL_Color{255, 245, 168, 96}, 10);
         }
         draw_line(yi, draw_color, thickness);
 
@@ -5290,7 +5283,7 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
 
     DMLabelStyle instruction_style = DMStyles::Label();
     instruction_style.color = SDL_Color{228, 236, 248, 255};
-    DrawLabelText(renderer, "Live Depth Editing: Click a horizontal line, then mouse wheel to move depth", 16, 32, instruction_style);
+    DrawLabelText(renderer, "Top third: BG, middle third: Center, bottom third: FG. Use mouse wheel to adjust.", 16, 32, instruction_style);
 
     live_depth_exit_button_->render(renderer);
     SDL_SetRenderDrawBlendMode(renderer, previous_blend);

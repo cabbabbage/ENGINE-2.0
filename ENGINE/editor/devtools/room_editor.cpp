@@ -2770,15 +2770,19 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         const bool shift_now = is_shift_key_down();
 
         if (shift_now && assets_ && !asset_editor_tab_scope_active()) {
-            const std::vector<Asset*>* source_assets = selection_asset_source();
-            if (!source_assets) {
-                source_assets = &assets_->all;
+            const bool selected_only = !selected_assets_.empty();
+            const std::vector<Asset*>* source_assets = nullptr;
+            if (!selected_only) {
+                source_assets = selection_asset_source();
+                if (!source_assets) {
+                    source_assets = &assets_->all;
+                }
             }
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            for (Asset* asset : *source_assets) {
-                if (!asset || asset->dead) continue;
-                if (!asset_belongs_to_room(asset)) continue;
-                if (!asset_matches_selection_filter(asset)) continue;
+            auto draw_anchor_for_asset = [&](Asset* asset) {
+                if (!asset || asset->dead) return;
+                if (!asset_belongs_to_room(asset)) return;
+                if (!selected_only && !asset_matches_selection_filter(asset)) return;
 
                 const bool is_selected =
                     std::find(selected_assets_.begin(), selected_assets_.end(), asset) != selected_assets_.end();
@@ -2813,8 +2817,20 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 for (int dy = -point_radius; dy <= point_radius; ++dy) {
                     SDL_RenderPoint(renderer, anchor_px.x, anchor_px.y + dy);
                 }
+            };
+
+            if (selected_only) {
+                for (Asset* asset : selected_assets_) {
+                    draw_anchor_for_asset(asset);
+                }
+            } else if (source_assets) {
+                for (Asset* asset : *source_assets) {
+                    draw_anchor_for_asset(asset);
+                }
             }
         }
+
+        render_dynamic_boundary_proxy_overlay(renderer);
 
         const bool has_selected = !selected_assets_.empty();
         const bool has_hover_highlight = shift_now && !highlighted_assets_.empty();
@@ -3480,6 +3496,7 @@ void RoomEditor::reset_click_state() {
     suppress_next_left_click_ = false;
     last_click_asset_ = nullptr;
     last_click_time_ms_ = 0;
+    clear_dynamic_boundary_proxy_selection();
     reset_drag_state();
 }
 
@@ -3500,6 +3517,7 @@ void RoomEditor::clear_selection() {
     highlighted_assets_.clear();
     hovered_asset_ = nullptr;
     hovered_anchor_asset_ = nullptr;
+    clear_dynamic_boundary_proxy_selection();
     reset_drag_state();
     sync_spawn_group_panel_with_selection();
     if (had_selection || had_highlight || had_hover || had_anchor_hover) {
@@ -3519,12 +3537,16 @@ void RoomEditor::clear_highlighted_assets() {
     const size_t prev_selection_size = selected_assets_.size();
     Asset* prev_hover = hovered_asset_;
     Asset* prev_anchor_hover = hovered_anchor_asset_;
+    const bool had_boundary_selection = selected_dynamic_boundary_proxy_.has_value() ||
+                                        hovered_dynamic_boundary_proxy_.has_value();
     highlighted_assets_.clear();
     if (!active_assets_) {
         selected_assets_.clear();
         hovered_asset_ = nullptr;
         hovered_anchor_asset_ = nullptr;
+        clear_dynamic_boundary_proxy_selection();
         if (had_highlight ||
+            had_boundary_selection ||
             prev_selection_size != selected_assets_.size() ||
             hovered_asset_ != prev_hover ||
             hovered_anchor_asset_ != prev_anchor_hover) {
@@ -3563,6 +3585,7 @@ void RoomEditor::clear_highlighted_assets() {
     }
     sync_spawn_group_panel_with_selection();
     if (had_highlight ||
+        had_boundary_selection ||
         prev_selection_size != selected_assets_.size() ||
         hovered_asset_ != prev_hover ||
         hovered_anchor_asset_ != prev_anchor_hover) {
@@ -3623,6 +3646,7 @@ void RoomEditor::set_pointer_queries_suspended(bool suspended) {
     if (suspended) {
         hovered_asset_ = nullptr;
         hovered_anchor_asset_ = nullptr;
+        hovered_dynamic_boundary_proxy_.reset();
         hover_miss_frames_ = 3;
     }
     mark_highlight_dirty();
@@ -3703,6 +3727,7 @@ bool RoomEditor::select_asset_or_group(Asset* asset) {
     }
 
     clear_geometry_selection();
+    clear_dynamic_boundary_proxy_selection();
     selected_assets_.clear();
 
     bool select_group = !asset->spawn_id.empty();
@@ -4132,18 +4157,23 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool left_pressed_this_frame  = input_->wasPressed(Input::LEFT);
     const bool left_released_this_frame = input_->wasReleased(Input::LEFT);
     Asset* anchor_hit = shift_down ? hit_test_asset_anchor(screen_pt, kShiftAnchorHoverRadiusPx) : nullptr;
+    std::optional<DynamicBoundaryProxyHit> boundary_proxy_hit =
+        shift_down ? hit_test_dynamic_boundary_sprite(screen_pt) : std::nullopt;
 
     Asset* hit_before_pan = hit_test_asset(screen_pt, nullptr);
     if (!selected_assets_.empty()) {
         hit_before_pan = selected_asset_within_interaction_radius(screen_pt);
     } else if (shift_down && anchor_hit) {
         hit_before_pan = anchor_hit;
+    } else if (shift_down && boundary_proxy_hit) {
+        hit_before_pan = nullptr;
     } else if (!shift_down) {
         hit_before_pan = nullptr;
     }
     const bool has_selection = !selected_assets_.empty();
+    const bool has_boundary_proxy_selection = selected_dynamic_boundary_proxy_.has_value();
     const bool has_geometry_selection = selected_geometry_room_ != nullptr;
-    const bool selection_interaction_active = shift_down || has_selection || has_geometry_selection;
+    const bool selection_interaction_active = shift_down || has_selection || has_geometry_selection || has_boundary_proxy_selection;
     const bool selection_blocks_camera_pan =
         has_selection || has_geometry_selection || any_editor_point_selected();
     const bool pointer_blocks_pan = selection_blocks_camera_pan ||
@@ -4278,10 +4308,11 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     static bool       was_dragged    = false;
     static const int  kDragPx        = 4;
 
-    if (!shift_down && selected_assets_.empty() && !left_down && !dragging_) {
+    if (!shift_down && selected_assets_.empty() && !left_down && !dragging_ && !selected_dynamic_boundary_proxy_) {
         pressed_asset = nullptr;
         was_dragged = false;
         hovered_anchor_asset_ = nullptr;
+        hovered_dynamic_boundary_proxy_.reset();
     }
 
     if (suppress_next_left_click_) {
@@ -4295,6 +4326,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     if (selection_interaction_active && left_down && !prev_left_down) {
 
         Asset* selection_hit = nullptr;
+        std::optional<DynamicBoundaryProxyHit> selection_boundary_hit;
         if (!selected_assets_.empty()) {
             selection_hit = selected_asset_within_interaction_radius(screen_pt);
         } else if (shift_down) {
@@ -4302,10 +4334,17 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             if (!selection_hit) {
                 selection_hit = hit_test_asset(screen_pt, nullptr);
             }
+            if (!selection_hit && boundary_proxy_hit) {
+                selection_boundary_hit = boundary_proxy_hit;
+            }
         }
 
-        if (!selection_hit && !selected_assets_.empty()) {
+        if (!selection_hit && !selection_boundary_hit && !selected_assets_.empty()) {
             clear_selection();
+        }
+        if (!selection_hit && !selection_boundary_hit && selected_dynamic_boundary_proxy_) {
+            clear_dynamic_boundary_proxy_selection();
+            mark_highlight_dirty();
         }
 
         pressed_asset = selection_hit;
@@ -4315,12 +4354,23 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         if (pressed_asset) {
             select_asset_or_group(pressed_asset);
             rebuild_highlight();
+        } else if (selection_boundary_hit) {
+            clear_selection();
+            selected_dynamic_boundary_proxy_ = selection_boundary_hit->key;
+            hovered_dynamic_boundary_proxy_ = selection_boundary_hit->key;
+            sync_spawn_group_panel_with_selection();
+            mark_highlight_dirty();
         } else {
 
-            if (!selected_assets_.empty() || !highlighted_assets_.empty() || hovered_asset_) {
+            if (!selected_assets_.empty() ||
+                !highlighted_assets_.empty() ||
+                hovered_asset_ ||
+                selected_dynamic_boundary_proxy_ ||
+                hovered_dynamic_boundary_proxy_) {
                 selected_assets_.clear();
                 highlighted_assets_.clear();
                 hovered_asset_ = nullptr;
+                clear_dynamic_boundary_proxy_selection();
                 sync_spawn_group_panel_with_selection();
                 mark_highlight_dirty();
             }
@@ -4380,20 +4430,27 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         was_dragged   = false;
     }
 
-    if (!dragging_ && selected_assets_.empty() && !selected_geometry_room_) {
+    if (!dragging_ && selected_assets_.empty() && !selected_geometry_room_ && !selected_dynamic_boundary_proxy_) {
+        const auto prev_boundary_hover = hovered_dynamic_boundary_proxy_;
         Asset* hover_candidate = nullptr;
         if (shift_down) {
             hover_candidate = anchor_hit ? anchor_hit : hit;
             hovered_anchor_asset_ = anchor_hit;
+            hovered_dynamic_boundary_proxy_ = boundary_proxy_hit ? std::optional<DynamicBoundaryProxyKey>(boundary_proxy_hit->key) : std::nullopt;
         } else {
             hovered_anchor_asset_ = nullptr;
+            hovered_dynamic_boundary_proxy_.reset();
         }
         if (hovered_asset_ != hover_candidate) {
             hovered_asset_ = hover_candidate;
             rebuild_highlight();
         }
+        if (hovered_dynamic_boundary_proxy_ != prev_boundary_hover) {
+            mark_highlight_dirty();
+        }
     } else if (!dragging_ && !selected_assets_.empty()) {
-        hovered_anchor_asset_ = nullptr;
+        hovered_anchor_asset_ = shift_down ? anchor_hit : nullptr;
+        hovered_dynamic_boundary_proxy_.reset();
         Asset* hover_candidate = selected_asset_within_interaction_radius(screen_pt);
         if (!hover_candidate) {
             hover_candidate = selected_assets_.front();
@@ -4402,8 +4459,21 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             hovered_asset_ = hover_candidate;
             rebuild_highlight();
         }
+    } else if (!dragging_ && selected_dynamic_boundary_proxy_) {
+        const auto prev_boundary_hover = hovered_dynamic_boundary_proxy_;
+        hovered_anchor_asset_ = nullptr;
+        hovered_asset_ = nullptr;
+        if (boundary_proxy_hit && boundary_proxy_hit->key == *selected_dynamic_boundary_proxy_) {
+            hovered_dynamic_boundary_proxy_ = boundary_proxy_hit->key;
+        } else {
+            hovered_dynamic_boundary_proxy_.reset();
+        }
+        if (hovered_dynamic_boundary_proxy_ != prev_boundary_hover) {
+            mark_highlight_dirty();
+        }
     } else {
         hovered_anchor_asset_ = nullptr;
+        hovered_dynamic_boundary_proxy_.reset();
     }
 
     const bool any_left_activity = left_pressed_this_frame || left_released_this_frame || left_down;
@@ -4465,10 +4535,6 @@ Asset* RoomEditor::hit_test_asset_anchor(SDL_Point screen_point, int pick_radius
     if (!assets_ || pick_radius_px <= 0) {
         return nullptr;
     }
-    const std::vector<Asset*>* source_assets = selection_asset_source();
-    if (!source_assets || source_assets->empty()) {
-        return nullptr;
-    }
 
     const WarpedScreenGrid& cam = assets_->getView();
     const int radius2 = pick_radius_px * pick_radius_px;
@@ -4477,27 +4543,27 @@ Asset* RoomEditor::hit_test_asset_anchor(SDL_Point screen_point, int pick_radius
     int best_dist2 = std::numeric_limits<int>::max();
     int best_screen_y = std::numeric_limits<int>::max();
 
-    for (Asset* asset : *source_assets) {
+    auto consider_asset = [&](Asset* asset) {
         if (!asset || asset->dead) {
-            continue;
+            return;
         }
         if (!asset_belongs_to_room(asset)) {
-            continue;
+            return;
         }
-        if (!asset_matches_selection_filter(asset)) {
-            continue;
+        if (selected_assets_.empty() && !asset_matches_selection_filter(asset)) {
+            return;
         }
 
         SDL_Point anchor_px{0, 0};
         if (!asset_anchor_screen_position(cam, asset, anchor_px)) {
-            continue;
+            return;
         }
 
         const int dx = anchor_px.x - screen_point.x;
         const int dy = anchor_px.y - screen_point.y;
         const int dist2 = dx * dx + dy * dy;
         if (dist2 > radius2) {
-            continue;
+            return;
         }
 
         const bool is_better =
@@ -4508,6 +4574,20 @@ Asset* RoomEditor::hit_test_asset_anchor(SDL_Point screen_point, int pick_radius
             best = asset;
             best_dist2 = dist2;
             best_screen_y = anchor_px.y;
+        }
+    };
+
+    if (!selected_assets_.empty()) {
+        for (Asset* asset : selected_assets_) {
+            consider_asset(asset);
+        }
+    } else {
+        const std::vector<Asset*>* source_assets = selection_asset_source();
+        if (!source_assets || source_assets->empty()) {
+            return nullptr;
+        }
+        for (Asset* asset : *source_assets) {
+            consider_asset(asset);
         }
     }
 
@@ -5395,14 +5475,22 @@ void RoomEditor::handle_click(const Input& input) {
             }
         };
 
-        Asset* target = selected_assets_.empty() ? nullptr : selected_asset_within_interaction_radius(screen_mouse);
-        if (!target && selected_assets_.empty() && shift_modifier) {
-            target = hovered_asset_;
+        Asset* target = nullptr;
+        if (!selected_assets_.empty()) {
+            target = selected_asset_within_interaction_radius(screen_mouse);
+        } else {
+            target = hit_test_asset(screen_mouse, nullptr);
+            if (!target && shift_modifier) {
+                target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
+            }
         }
         if (target) {
-            map_assets_panel_requested_by_shift_click_ = shift_modifier;
-            select_asset_or_group(target);
             open_asset_info_editor_for_asset(target, false);
+            return;
+        }
+
+        if (auto boundary_hit = hit_test_dynamic_boundary_sprite(screen_mouse)) {
+            open_asset_info_for_dynamic_boundary(*boundary_hit);
             return;
         }
 
@@ -5441,7 +5529,7 @@ void RoomEditor::handle_click(const Input& input) {
         if (hit_room) {
             GeometryHandle handle = hit_test_geometry_handle(hit_room, world_mouse);
             if (handle != GeometryHandle::None || is_point_between_geometry_bounds(hit_room, world_mouse)) {
-                if (!selected_assets_.empty()) {
+                if (!selected_assets_.empty() || selected_dynamic_boundary_proxy_) {
                     clear_selection();
                 }
                 selected_geometry_room_ = hit_room;
@@ -5469,6 +5557,14 @@ void RoomEditor::handle_click(const Input& input) {
         return;
     }
 
+    if (selected_dynamic_boundary_proxy_) {
+        if (!hit_test_dynamic_boundary_sprite(screen_mouse)) {
+            clear_dynamic_boundary_proxy_selection();
+            mark_highlight_dirty();
+        }
+        return;
+    }
+
     if (!shift_modifier) {
         if (selected_geometry_room_) {
             clear_geometry_selection();
@@ -5487,6 +5583,13 @@ void RoomEditor::handle_click(const Input& input) {
         map_assets_panel_requested_by_shift_click_ = shift_modifier;
         select_asset_or_group(clicked_asset);
     } else {
+        if (auto boundary_hit = hit_test_dynamic_boundary_sprite(screen_mouse)) {
+            clear_selection();
+            selected_dynamic_boundary_proxy_ = boundary_hit->key;
+            hovered_dynamic_boundary_proxy_ = boundary_hit->key;
+            mark_highlight_dirty();
+            return;
+        }
         bool inside_room = true;
         if (current_room_ && current_room_->room_area) {
             inside_room = current_room_->room_area->contains_point(world_mouse);
@@ -11903,15 +12006,51 @@ void RoomEditor::reopen_room_configurator() {
 
 void RoomEditor::rebuild_room_spawn_id_cache() {
     room_spawn_ids_.clear();
-    if (!current_room_) return;
-    auto& root = current_room_->assets_data();
-    auto& arr = ensure_spawn_groups_array(root);
-    for (const auto& entry : arr) {
-        if (!entry.is_object()) continue;
-        if (entry.contains("spawn_id") && entry["spawn_id"].is_string()) {
-            room_spawn_ids_.insert(entry["spawn_id"].get<std::string>());
+    map_assets_spawn_ids_.clear();
+    map_boundary_spawn_ids_.clear();
+    if (current_room_) {
+        auto& root = current_room_->assets_data();
+        auto& arr = ensure_spawn_groups_array(root);
+        for (const auto& entry : arr) {
+            if (!entry.is_object()) continue;
+            if (entry.contains("spawn_id") && entry["spawn_id"].is_string()) {
+                room_spawn_ids_.insert(entry["spawn_id"].get<std::string>());
+            }
         }
     }
+
+    if (!assets_) {
+        return;
+    }
+
+    auto gather_spawn_ids = [](const nlohmann::json& map_info,
+                               const char* section_key,
+                               std::unordered_set<std::string>& out) {
+        if (!map_info.is_object()) {
+            return;
+        }
+        auto section_it = map_info.find(section_key);
+        if (section_it == map_info.end() || !section_it->is_object()) {
+            return;
+        }
+        auto groups_it = section_it->find("spawn_groups");
+        if (groups_it == section_it->end() || !groups_it->is_array()) {
+            return;
+        }
+        for (const auto& entry : *groups_it) {
+            if (!entry.is_object()) {
+                continue;
+            }
+            auto spawn_it = entry.find("spawn_id");
+            if (spawn_it != entry.end() && spawn_it->is_string()) {
+                out.insert(spawn_it->get<std::string>());
+            }
+        }
+    };
+
+    const nlohmann::json& map_info = assets_->map_info_json();
+    gather_spawn_ids(map_info, "map_assets_data", map_assets_spawn_ids_);
+    gather_spawn_ids(map_info, "map_boundary_data", map_boundary_spawn_ids_);
 }
 
 bool RoomEditor::is_room_spawn_id(const std::string& spawn_id) const {
@@ -12318,65 +12457,278 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
     return false;
 }
 
+devmode::room_selection_filter::SelectionFilter RoomEditor::effective_selection_filter() const {
+    using Filter = devmode::room_selection_filter::SelectionFilter;
+    Filter filter = Filter::Normal;
+    switch (selection_filter_) {
+        case SelectionFilter::All:
+            filter = Filter::All;
+            break;
+        case SelectionFilter::Normal:
+            filter = Filter::Normal;
+            break;
+        case SelectionFilter::Tiled:
+            filter = Filter::Tiled;
+            break;
+        case SelectionFilter::MapWide:
+            filter = Filter::MapWide;
+            break;
+        case SelectionFilter::Boundary:
+            filter = Filter::Boundary;
+            break;
+        case SelectionFilter::Anchored:
+            filter = Filter::Anchored;
+            break;
+        default:
+            filter = Filter::Normal;
+            break;
+    }
+    return devmode::room_selection_filter::effective_filter(filter, is_shift_key_down());
+}
+
+bool RoomEditor::owner_array_matches_map_section(const nlohmann::json* owner_array, const char* section_key) const {
+    if (!owner_array || !assets_ || !section_key) {
+        return false;
+    }
+    nlohmann::json& map_info = assets_->map_info_json();
+    if (!map_info.is_object()) {
+        return false;
+    }
+    auto section_it = map_info.find(section_key);
+    if (section_it == map_info.end() || !section_it->is_object()) {
+        return false;
+    }
+    auto groups_it = section_it->find("spawn_groups");
+    if (groups_it == section_it->end() || !groups_it->is_array()) {
+        return false;
+    }
+    return &(*groups_it) == owner_array;
+}
+
+devmode::room_selection_filter::SpawnOwnership RoomEditor::classify_spawn_group_ownership(const std::string& spawn_id) const {
+    using Ownership = devmode::room_selection_filter::SpawnOwnership;
+    if (spawn_id.empty()) {
+        return Ownership::Room;
+    }
+    if (room_spawn_ids_.find(spawn_id) != room_spawn_ids_.end()) {
+        return Ownership::Room;
+    }
+    if (map_assets_spawn_ids_.find(spawn_id) != map_assets_spawn_ids_.end()) {
+        return Ownership::MapAssets;
+    }
+    if (map_boundary_spawn_ids_.find(spawn_id) != map_boundary_spawn_ids_.end()) {
+        return Ownership::MapBoundary;
+    }
+
+    RoomEditor* self = const_cast<RoomEditor*>(this);
+    SpawnEntryResolution resolved = self->locate_spawn_entry(spawn_id);
+    if (resolved.source == SpawnEntryResolution::Source::Room) {
+        return Ownership::Room;
+    }
+    if (resolved.source == SpawnEntryResolution::Source::Map) {
+        if (owner_array_matches_map_section(resolved.owner_array, "map_assets_data")) {
+            return Ownership::MapAssets;
+        }
+        if (owner_array_matches_map_section(resolved.owner_array, "map_boundary_data")) {
+            return Ownership::MapBoundary;
+        }
+    }
+    return Ownership::Other;
+}
+
+devmode::room_selection_filter::SpawnOwnership RoomEditor::classify_asset_ownership(const Asset* asset) const {
+    if (!asset) {
+        return devmode::room_selection_filter::SpawnOwnership::Other;
+    }
+    return classify_spawn_group_ownership(asset->spawn_id);
+}
+
 bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     if (!asset) return false;
-    const bool shift_down_now = is_shift_key_down();
-    const SelectionFilter effective_filter =
-        (shift_down_now && selection_filter_ == SelectionFilter::Normal)
-            ? SelectionFilter::All
-            : selection_filter_;
+    using UtilFilter = devmode::room_selection_filter::SelectionFilter;
+    using Traits = devmode::room_selection_filter::SelectionTraits;
 
     const bool is_anchored_asset =
         anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().is_child_bound(asset);
 
-    // Check if asset is a map asset
-    const bool is_map_asset = !asset->spawn_id.empty() && !is_room_spawn_id(asset->spawn_id);
+    Traits traits;
+    traits.is_tiled = asset->info && asset->info->tillable;
+    traits.is_anchored = is_anchored_asset;
+    traits.ownership = classify_asset_ownership(asset);
 
-    // Check if asset is a boundary asset
-    const bool is_boundary_asset = asset->info && asset->info->type == asset_types::boundary;
-
-    // Check if asset is a tiled asset
-    const bool is_tiled_asset = asset->info && asset->info->tillable;
-
-    // Anchored assets are only selectable in anchored/all mode.
-    if (effective_filter != SelectionFilter::Anchored &&
-        effective_filter != SelectionFilter::All &&
-        is_anchored_asset) {
-        return false;
+    UtilFilter filter = UtilFilter::Normal;
+    switch (selection_filter_) {
+        case RoomEditor::SelectionFilter::All:
+            filter = UtilFilter::All;
+            break;
+        case RoomEditor::SelectionFilter::Normal:
+            filter = UtilFilter::Normal;
+            break;
+        case RoomEditor::SelectionFilter::Tiled:
+            filter = UtilFilter::Tiled;
+            break;
+        case RoomEditor::SelectionFilter::MapWide:
+            filter = UtilFilter::MapWide;
+            break;
+        case RoomEditor::SelectionFilter::Boundary:
+            filter = UtilFilter::Boundary;
+            break;
+        case RoomEditor::SelectionFilter::Anchored:
+            filter = UtilFilter::Anchored;
+            break;
+        default:
+            filter = UtilFilter::Normal;
+            break;
     }
 
-    switch (effective_filter) {
-        case SelectionFilter::All:
-            // All-mode is the Shift-entry selector: keep only hard exclusions handled elsewhere.
-            return true;
+    return devmode::room_selection_filter::matches_filter(filter, is_shift_key_down(), traits);
+}
 
-        case SelectionFilter::Normal:
-            // Normal assets: not boundary/tiled/anchored.
-            // If the current room has no local spawn groups, allow map-wide assets in normal mode
-            // so hover/click selection still works on maps authored with global-only spawns.
-            return !is_boundary_asset &&
-                   !is_tiled_asset &&
-                   (!is_anchored_asset) &&
-                   (!is_map_asset || room_spawn_ids_.empty());
+std::optional<RoomEditor::DynamicBoundaryProxyHit> RoomEditor::hit_test_dynamic_boundary_sprite(SDL_Point screen_point) const {
+    if (!assets_) {
+        return std::nullopt;
+    }
 
-        case SelectionFilter::Tiled:
-            // Tiled assets only
-            return is_tiled_asset;
+    const auto filter = effective_selection_filter();
+    if (filter != devmode::room_selection_filter::SelectionFilter::Boundary &&
+        filter != devmode::room_selection_filter::SelectionFilter::All) {
+        return std::nullopt;
+    }
 
-        case SelectionFilter::MapWide:
-            // Map-wide assets only
-            return is_map_asset;
+    const auto& sprites = assets_->dynamic_boundary_sprites();
+    if (sprites.empty()) {
+        return std::nullopt;
+    }
 
-        case SelectionFilter::Boundary:
-            // Boundary assets only
-            return is_boundary_asset;
+    const float vertical_offset = DynamicBoundarySystem::vertical_offset();
+    for (auto it = sprites.rbegin(); it != sprites.rend(); ++it) {
+        const DynamicBoundarySystem::BoundarySprite& sprite = *it;
+        if (sprite.spawn_id.empty() ||
+            sprite.world_width <= 0.0f ||
+            sprite.world_height <= 0.0f ||
+            !std::isfinite(sprite.screen_pos.x) ||
+            !std::isfinite(sprite.screen_pos.y)) {
+            continue;
+        }
+        if (classify_spawn_group_ownership(sprite.spawn_id) != devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
+            continue;
+        }
 
-        case SelectionFilter::Anchored:
-            // Anchored assets only
-            return is_anchored_asset;
+        const float adjusted_y = sprite.screen_pos.y + vertical_offset;
+        const SDL_FRect rect{
+            sprite.screen_pos.x - (sprite.world_width * 0.5f),
+            adjusted_y - sprite.world_height,
+            sprite.world_width,
+            sprite.world_height
+        };
+        if (rect.w <= 0.0f || rect.h <= 0.0f) {
+            continue;
+        }
+        const bool inside =
+            static_cast<float>(screen_point.x) >= rect.x &&
+            static_cast<float>(screen_point.x) <= (rect.x + rect.w) &&
+            static_cast<float>(screen_point.y) >= rect.y &&
+            static_cast<float>(screen_point.y) <= (rect.y + rect.h);
+        if (!inside) {
+            continue;
+        }
 
-        default:
-            return !is_anchored_asset;
+        DynamicBoundaryProxyHit hit;
+        hit.key.spawn_id = sprite.spawn_id;
+        hit.key.asset_name = sprite.asset_name;
+        hit.key.boundary_type_index = sprite.boundary_type_index;
+        hit.key.candidate_index = sprite.candidate_index;
+        hit.key.world_x = static_cast<int>(std::lround(sprite.world_pos.x));
+        hit.key.world_z = sprite.world_z;
+        hit.screen_rect = rect;
+        hit.world_z = sprite.world_z;
+        return hit;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<SDL_FRect> RoomEditor::dynamic_boundary_proxy_rect(const DynamicBoundaryProxyKey& key) const {
+    if (!assets_ || !key.valid()) {
+        return std::nullopt;
+    }
+    const auto& sprites = assets_->dynamic_boundary_sprites();
+    if (sprites.empty()) {
+        return std::nullopt;
+    }
+
+    const float vertical_offset = DynamicBoundarySystem::vertical_offset();
+    for (const auto& sprite : sprites) {
+        if (sprite.spawn_id != key.spawn_id ||
+            sprite.asset_name != key.asset_name ||
+            sprite.boundary_type_index != key.boundary_type_index ||
+            sprite.candidate_index != key.candidate_index ||
+            sprite.world_z != key.world_z ||
+            static_cast<int>(std::lround(sprite.world_pos.x)) != key.world_x) {
+            continue;
+        }
+        const float adjusted_y = sprite.screen_pos.y + vertical_offset;
+        SDL_FRect rect{
+            sprite.screen_pos.x - (sprite.world_width * 0.5f),
+            adjusted_y - sprite.world_height,
+            sprite.world_width,
+            sprite.world_height
+        };
+        if (rect.w > 0.0f && rect.h > 0.0f) {
+            return rect;
+        }
+    }
+    return std::nullopt;
+}
+
+void RoomEditor::clear_dynamic_boundary_proxy_selection() {
+    selected_dynamic_boundary_proxy_.reset();
+    hovered_dynamic_boundary_proxy_.reset();
+}
+
+bool RoomEditor::open_asset_info_for_dynamic_boundary(const DynamicBoundaryProxyHit& hit) {
+    if (!assets_) {
+        return false;
+    }
+    if (hit.key.asset_name.empty()) {
+        show_notice("Boundary sprite has no asset metadata");
+        return false;
+    }
+    std::shared_ptr<AssetInfo> info = assets_->library().get(hit.key.asset_name);
+    if (!info) {
+        show_notice("Unable to resolve boundary asset info");
+        return false;
+    }
+    open_asset_info_editor(info);
+    return true;
+}
+
+void RoomEditor::render_dynamic_boundary_proxy_overlay(SDL_Renderer* renderer) const {
+    if (!renderer || !enabled_) {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    auto draw_rect = [renderer](const SDL_FRect& rect, const SDL_Color& color, int pad) {
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_FRect box{
+            rect.x - static_cast<float>(pad),
+            rect.y - static_cast<float>(pad),
+            rect.w + static_cast<float>(pad * 2),
+            rect.h + static_cast<float>(pad * 2)
+        };
+        sdl_render::Rect(renderer, &box);
+    };
+
+    if (selected_dynamic_boundary_proxy_) {
+        if (auto rect = dynamic_boundary_proxy_rect(*selected_dynamic_boundary_proxy_)) {
+            draw_rect(*rect, SDL_Color{255, 165, 0, 245}, 2);
+        }
+    }
+    if (hovered_dynamic_boundary_proxy_) {
+        if (auto rect = dynamic_boundary_proxy_rect(*hovered_dynamic_boundary_proxy_)) {
+            draw_rect(*rect, SDL_Color{255, 245, 120, 255}, 1);
+        }
     }
 }
 
@@ -12415,6 +12767,7 @@ void RoomEditor::cycle_selection_filter() {
     // Clear hover and selection since filter changed
     hovered_asset_ = nullptr;
     hovered_anchor_asset_ = nullptr;
+    clear_dynamic_boundary_proxy_selection();
     hover_miss_frames_ = 3;
     mark_highlight_dirty();
 }
@@ -12428,6 +12781,7 @@ void RoomEditor::reset_selection_filter() {
         // Clear hover and selection since filter changed
         hovered_asset_ = nullptr;
         hovered_anchor_asset_ = nullptr;
+        clear_dynamic_boundary_proxy_selection();
         hover_miss_frames_ = 3;
         mark_highlight_dirty();
     }

@@ -336,9 +336,9 @@ private:
     static bool asset_info_contains_spawn_group(const class AssetInfo* info, const std::string& spawn_id);
     void mark_highlight_dirty();
     bool spawn_group_locked(const std::string& spawn_id) const;
-    room_selection_filter::SelectionFilter effective_selection_filter() const;
-    room_selection_filter::SpawnOwnership classify_spawn_group_ownership(const std::string& spawn_id) const;
-    room_selection_filter::SpawnOwnership classify_asset_ownership(const Asset* asset) const;
+    devmode::room_selection_filter::SelectionFilter effective_selection_filter() const;
+    devmode::room_selection_filter::SpawnOwnership classify_spawn_group_ownership(const std::string& spawn_id) const;
+    devmode::room_selection_filter::SpawnOwnership classify_asset_ownership(const Asset* asset) const;
     bool owner_array_matches_map_section(const nlohmann::json* owner_array, const char* section_key) const;
     bool asset_matches_selection_filter(const Asset* asset) const;
     struct DynamicBoundaryProxyKey {
@@ -546,10 +546,10 @@ private:
 
     enum class SelectionFilter {
         All,             // All selectable assets
-        Normal,          // Primary assets (excluding boundary, tiled, and anchored)
+        Normal,          // Primary room assets (excluding map-wide, boundary-domain, tiled, and anchored)
         Tiled,           // Tiled assets only
-        MapWide,         // Map-wide assets only
-        Boundary,        // Boundary assets only
+        MapWide,         // map_assets_data spawn-group assets only
+        Boundary,        // map_boundary_data spawn-group assets/sprites only
         Anchored,        // Assets following another asset's anchor point
     };
 

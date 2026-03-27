@@ -75,7 +75,7 @@ vibble_controller::vibble_controller(Asset* player)
                 child_assets_.push_back(&*neck_child_);   
             }
             if (!weapon_child_.has_value()) {
-                weapon_child_.emplace(*player, "vibble_weapon");
+                weapon_child_.emplace(*player, "vibble_attack_1");
                 weapon_child_->bind("weapon");
                 weapon_child_->hide();
                 child_assets_.push_back(&*weapon_child_);   

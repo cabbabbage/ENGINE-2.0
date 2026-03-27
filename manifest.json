@@ -5108,6 +5108,71 @@
       "tillable": false,
       "update_radius": 0
     },
+    "vibble_attack_1": {
+      "animations": {
+        "default": {
+          "flip_vertical_source": false,
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/vibble_attack_1",
+      "asset_name": "vibble_attack_1",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
     "vibble_eyes": {
       "animations": {
         "default": {
@@ -5139,6 +5204,68 @@
       "start": "default",
       "tags": [],
       "tillable": false,
+      "update_radius": 0
+    },
+    "vibble_hat": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/vibble_hat",
+      "asset_name": "vibble_hat",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "vibble_neck": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/vibble_neck",
+      "asset_name": "vibble_neck",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
       "update_radius": 0
     },
     "water": {
@@ -5385,9 +5512,9 @@
           "camera_zoom_percent": 20,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -5506,16 +5633,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1080,
-              "dz": -128,
+              "dx": -940,
+              "dz": 40,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 2688,
-              "origional_width": 3408,
+              "origional_height": 3296,
+              "origional_width": 3288,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

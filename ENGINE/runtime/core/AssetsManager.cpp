@@ -2472,6 +2472,12 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
 void Assets::render_overlays(SDL_Renderer* renderer) {
     const Uint32 now = SDL_GetTicks();
 
+    if (renderer) {
+        SDL_SetRenderTarget(renderer, nullptr);
+        SDL_SetRenderViewport(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
+    }
+
     if (renderer && dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->render_overlays(renderer);
     }

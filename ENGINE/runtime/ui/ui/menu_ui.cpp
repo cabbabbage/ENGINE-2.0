@@ -18,6 +18,24 @@
 
 namespace fs = std::filesystem;
 
+namespace {
+bool is_resize_or_scale_event(Uint32 event_type) {
+        switch (event_type) {
+        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+#ifdef SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
+        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+#endif
+#ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
+        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+#endif
+                return true;
+        default:
+                return false;
+        }
+}
+} // namespace
+
 MenuUI::MenuUI(EngineRenderer* renderer,
                int screen_w,
                int screen_h,
@@ -72,6 +90,11 @@ void MenuUI::game_loop() {
                 bool had_events = false;
                 while (SDL_PollEvent(&e)) {
                         had_events = true;
+                        if (renderer && is_resize_or_scale_event(e.type)) {
+                                if (sync_output_dimensions(renderer)) {
+                                        rebuildButtons();
+                                }
+                        }
                         handle_global_shortcuts(e);
                         const bool menu_was_active = menu_active_;
 			if (e.type == SDL_EVENT_QUIT) {
@@ -110,6 +133,11 @@ void MenuUI::game_loop() {
                 if (should_update) {
                         game_assets_->update(*input_);
                 }
+
+                if (sync_output_dimensions(renderer)) {
+                        rebuildButtons();
+                }
+                log_render_diagnostics(renderer, "MenuUI");
 
                 if (menu_active_) {
                         render();

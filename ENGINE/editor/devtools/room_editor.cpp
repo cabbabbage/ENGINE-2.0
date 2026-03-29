@@ -1901,11 +1901,13 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
 
+    const bool allow_tab_cycle_with_dropdown =
+        (asset_editor_subview_ == AssetEditorSubview::AnimationEditor);
     if (asset_editor_tab_scope_active() &&
         event.type == SDL_EVENT_KEY_DOWN &&
         event.key.key == SDLK_TAB &&
         event.key.repeat == 0 &&
-        DMDropdown::active_dropdown() == nullptr) {
+        (allow_tab_cycle_with_dropdown || DMDropdown::active_dropdown() == nullptr)) {
         cycle_asset_editor_subview();
         if (input_) {
             input_->consumeEvent(event);
@@ -6700,7 +6702,16 @@ void RoomEditor::cycle_asset_editor_subview() {
         if (!can_enter_asset_editor_subview(candidate)) {
             continue;
         }
+        const AssetEditorSubview before = asset_editor_subview_;
         set_asset_editor_subview(candidate, true);
+        if (asset_editor_subview_ == candidate) {
+            return;
+        }
+        // If the attempted entry failed and we stayed on the same subview,
+        // continue scanning for the next available mode in the cycle.
+        if (asset_editor_subview_ == before) {
+            continue;
+        }
         return;
     }
 }

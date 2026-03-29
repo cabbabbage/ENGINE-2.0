@@ -102,6 +102,22 @@ bool env_flag_enabled(const char* name, bool default_value) {
         return default_value;
 }
 
+bool is_resize_or_scale_event(Uint32 event_type) {
+        switch (event_type) {
+        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+#ifdef SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
+        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+#endif
+#ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
+        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+#endif
+                return true;
+        default:
+                return false;
+        }
+}
+
 }
 
 #if defined(_WIN32)
@@ -145,6 +161,7 @@ MainApp::MainApp(MapDescriptor map,
                         windowed_height_ = fallback.h;
                 }
         }
+        render_diagnostics_enabled_ = env_flag_enabled("VIBBLE_RENDER_DIAGNOSTICS", false);
 }
 
 MainApp::~MainApp() {
@@ -323,6 +340,9 @@ void MainApp::game_loop() {
                                 // Keep event coordinates aligned with renderer-space hit testing (DPI/scaling aware).
                                 SDL_ConvertEventToRenderCoordinates(renderer, &e);
                         }
+                        if (renderer && is_resize_or_scale_event(e.type)) {
+                                sync_output_dimensions(renderer);
+                        }
                         handle_global_shortcuts(e);
                         if (e.type == SDL_EVENT_QUIT) {
                                 quit = true;
@@ -337,6 +357,10 @@ void MainApp::game_loop() {
 
                 if (game_assets_ && input_) {
                         game_assets_->update(*input_);
+                }
+                if (renderer) {
+                        sync_output_dimensions(renderer);
+                        log_render_diagnostics(renderer, "MainApp");
                 }
                 if (input_) {
                         input_->update();
@@ -364,6 +388,137 @@ void MainApp::game_loop() {
                         idle_counts_accum = 0.0;
                         idle_frame_counter = 0;
                 }
+        }
+}
+
+bool MainApp::sync_output_dimensions(SDL_Renderer* renderer) {
+        if (!renderer) {
+                return false;
+        }
+
+        int output_w = screen_w_;
+        int output_h = screen_h_;
+        if (!SDL_GetCurrentRenderOutputSize(renderer, &output_w, &output_h) || output_w <= 0 || output_h <= 0) {
+                if (window_) {
+                        SDL_GetWindowSizeInPixels(window_, &output_w, &output_h);
+                }
+        }
+        output_w = std::max(1, output_w);
+        output_h = std::max(1, output_h);
+        if (output_w == screen_w_ && output_h == screen_h_) {
+                return false;
+        }
+
+        screen_w_ = output_w;
+        screen_h_ = output_h;
+        if (game_assets_) {
+                game_assets_->set_output_dimensions(screen_w_, screen_h_);
+        }
+        return true;
+}
+
+void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_label) {
+        if (!render_diagnostics_enabled_ || !renderer) {
+                return;
+        }
+
+        ++frame_diagnostics_counter_;
+
+        int window_w = 0;
+        int window_h = 0;
+        int window_px_w = 0;
+        int window_px_h = 0;
+        if (window_) {
+                SDL_GetWindowSize(window_, &window_w, &window_h);
+                SDL_GetWindowSizeInPixels(window_, &window_px_w, &window_px_h);
+        }
+
+        int output_w = 0;
+        int output_h = 0;
+        if (!SDL_GetCurrentRenderOutputSize(renderer, &output_w, &output_h)) {
+                output_w = screen_w_;
+                output_h = screen_h_;
+        }
+
+        SDL_Texture* active_target = SDL_GetRenderTarget(renderer);
+        int target_w = output_w;
+        int target_h = output_h;
+        bool target_is_backbuffer = (active_target == nullptr);
+        if (active_target) {
+                float tw = 0.0f;
+                float th = 0.0f;
+                if (SDL_GetTextureSize(active_target, &tw, &th) && tw > 0.0f && th > 0.0f) {
+                        target_w = static_cast<int>(std::lround(tw));
+                        target_h = static_cast<int>(std::lround(th));
+                }
+        }
+
+        SDL_Rect viewport{0, 0, 0, 0};
+        SDL_Rect clip{0, 0, 0, 0};
+        SDL_GetRenderViewport(renderer, &viewport);
+        SDL_GetRenderClipRect(renderer, &clip);
+
+        int projection_w = 0;
+        int projection_h = 0;
+        float visible_l = 0.0f;
+        float visible_t = 0.0f;
+        float visible_r = 0.0f;
+        float visible_b = 0.0f;
+        std::uint32_t depth_culled = 0;
+        int frustum_min_z = 0;
+        int frustum_max_z = 0;
+        int frustum_nodes = 0;
+        int frustum_skipped = 0;
+        std::string postprocess_text = "inactive";
+        if (game_assets_) {
+                const WarpedScreenGrid& cam = game_assets_->getView();
+                const world::CameraProjectionParams params = cam.projection_params();
+                projection_w = params.screen_width;
+                projection_h = params.screen_height;
+                const auto bounds = cam.get_bounds();
+                visible_l = bounds.left;
+                visible_t = bounds.top;
+                visible_r = bounds.right;
+                visible_b = bounds.bottom;
+                depth_culled = cam.last_depth_culled();
+                frustum_min_z = cam.last_min_world_z();
+                frustum_max_z = cam.last_max_world_z();
+                frustum_nodes = static_cast<int>(cam.last_nodes_visited());
+                frustum_skipped = static_cast<int>(cam.last_branches_skipped());
+                if (const std::optional<SDL_Point> pp_size = game_assets_->scene_postprocess_target_size()) {
+                        postprocess_text = std::to_string(pp_size->x) + "x" + std::to_string(pp_size->y);
+                }
+        }
+
+        std::ostringstream frame_line;
+        frame_line << "[RenderDiag][" << (loop_label ? loop_label : "loop")
+                   << "] frame=" << frame_diagnostics_counter_
+                   << " window=" << window_w << "x" << window_h
+                   << " window_px=" << window_px_w << "x" << window_px_h
+                   << " output=" << output_w << "x" << output_h
+                   << " target=" << target_w << "x" << target_h << (target_is_backbuffer ? "(backbuffer)" : "(texture)")
+                   << " viewport=(" << viewport.x << "," << viewport.y << "," << viewport.w << "," << viewport.h << ")"
+                   << " clip=(" << clip.x << "," << clip.y << "," << clip.w << "," << clip.h << ")"
+                   << " projection=" << projection_w << "x" << projection_h
+                   << " visible_rect=(" << visible_l << "," << visible_t << "," << visible_r << "," << visible_b << ")"
+                   << " frustum_z=[" << frustum_min_z << "," << frustum_max_z << "]"
+                   << " depth_culled=" << depth_culled
+                   << " nodes=" << frustum_nodes
+                   << " branches_skipped=" << frustum_skipped
+                   << " postprocess=" << postprocess_text;
+        vibble::log::debug(frame_line.str());
+
+        if (output_h > 0 && std::abs(target_h - output_h / 2) <= 1) {
+                vibble::log::warn("[RenderDiag] target height is half of output height (possible mismatch).");
+        }
+        if (viewport.y != 0) {
+                vibble::log::warn("[RenderDiag] viewport has non-zero Y offset: " + std::to_string(viewport.y));
+        }
+        if (clip.y != 0) {
+                vibble::log::warn("[RenderDiag] clip rect has non-zero Y offset: " + std::to_string(clip.y));
+        }
+        if (projection_w > 0 && projection_h > 0 && (projection_w != output_w || projection_h != output_h)) {
+                vibble::log::warn("[RenderDiag] camera projection size does not match render output.");
         }
 }
 

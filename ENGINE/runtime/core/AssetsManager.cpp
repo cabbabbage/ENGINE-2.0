@@ -722,7 +722,11 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
         last_audio_engine_update_frame_id_ = frame_id_;
     }
 
-    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+    const bool child_transforms_changed =
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+    if (child_transforms_changed) {
+        run_post_flush_traversal_refresh_once();
+    }
 }
 
 void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
@@ -1231,6 +1235,40 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
 
 void Assets::run_visibility_build_stage() {
     run_frame_rebuild_stage();
+}
+
+void Assets::run_post_flush_traversal_refresh_once() {
+    if (last_post_flush_refresh_frame_id_ == frame_id_) {
+        return;
+    }
+    last_post_flush_refresh_frame_id_ = frame_id_;
+
+    const SDL_Point center_px = camera_.get_screen_center();
+    const world::GridPoint current_center = world::GridPoint::make_virtual(
+        center_px.x,
+        0,
+        center_px.y,
+        world_grid_.max_resolution_layers());
+    const double current_scale = camera_.get_scale();
+    const double current_pitch = camera_.current_pitch_radians();
+    const std::uint64_t current_projection_version = camera_.camera_state_version();
+
+    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_, frame_id_);
+    world_grid_.update_active_chunks(screen_world_rect(), 0);
+    rebuild_active_from_screen_grid();
+    refresh_visible_asset_scaling_only();
+
+    grid_dirty_ = false;
+    camera_view_dirty_ = false;
+    last_grid_rebuild_frame_ = frame_id_;
+    last_camera_center_for_grid_ = world::GridPoint::make_virtual(
+        current_center.world_x(),
+        current_center.world_y(),
+        current_center.world_z(),
+        current_center.resolution_layer());
+    last_camera_scale_for_grid_ = current_scale;
+    last_camera_pitch_for_grid_ = current_pitch;
+    last_camera_projection_state_version_for_grid_ = current_projection_version;
 }
 
 void Assets::run_runtime_effects_stage() {

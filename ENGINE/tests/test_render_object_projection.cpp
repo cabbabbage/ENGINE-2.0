@@ -64,6 +64,21 @@ TEST_CASE("render object projection input: anchored/src-rect variant") {
     CHECK(input.flip == SDL_FLIP_HORIZONTAL);
 }
 
+TEST_CASE("render object projection input: preserves float world anchor values") {
+    RenderObject obj = make_base_object();
+    obj.world_anchor_x = 320.375f;
+    obj.world_anchor_y = 180.625f;
+
+    render_projection::SpriteProjectionInput input{};
+    const bool ok = render_projection::assemble_render_object_projection_input(
+        obj, 1.25f, 3.5f, input);
+
+    CHECK(ok);
+    CHECK(input.world_x == doctest::Approx(320.375f).epsilon(1e-6));
+    CHECK(input.world_y == doctest::Approx(180.625f).epsilon(1e-6));
+    CHECK(input.world_z == doctest::Approx(3.5f).epsilon(1e-6));
+}
+
 TEST_CASE("render object projection input: tiled/map-wide scale sanitization") {
     RenderObject obj = make_base_object();
     obj.screen_rect = SDL_Rect{-2048, -1024, 8192, 4096};

@@ -185,11 +185,6 @@ void vibble_controller::on_update(const Input& input) {
     }
 
     movement(input);
-    for (ChildAsset* child : child_assets_) {
-        if (child) {
-            child->update();
-        }
-    }
 }
 
 std::string vibble_controller::animation_for_direction(int screen_x, int screen_y) const {

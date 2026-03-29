@@ -5,6 +5,7 @@
 #include "core/AssetsManager.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <new>
 #include <unordered_map>
 #include <utility>
@@ -214,10 +215,23 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
     anchor.name = spec->name;
     anchor.exists = spec->exists;
     anchor.depth_offset = spec->depth_offset;
-    anchor.world_pos_2d = Vec2(static_cast<float>(world_x() + spec->offset_x),
-                               static_cast<float>(world_y() + spec->offset_y));
+    const float exact_world_x = spec->exact_offset_x.has_value()
+        ? static_cast<float>(world_x()) + *spec->exact_offset_x
+        : static_cast<float>(world_x() + spec->offset_x);
+    const float exact_world_y = spec->exact_offset_y.has_value()
+        ? static_cast<float>(world_y()) + *spec->exact_offset_y
+        : static_cast<float>(world_y() + spec->offset_y);
+    anchor.world_pos_2d = Vec2(exact_world_x, exact_world_y);
+    anchor.world_exact_pos_2d = anchor.world_pos_2d;
+    anchor.world_quantized_px = SDL_Point{
+        static_cast<int>(std::lround(anchor.world_pos_2d.x)),
+        static_cast<int>(std::lround(anchor.world_pos_2d.y))};
     anchor.world_z = world_z() + spec->offset_z;
-    anchor.world_depth = static_cast<float>(anchor.world_z) + spec->world_depth_offset;
+    const float exact_world_z = spec->exact_offset_z.has_value()
+        ? static_cast<float>(world_z()) + *spec->exact_offset_z
+        : static_cast<float>(anchor.world_z) + spec->world_depth_offset;
+    anchor.world_exact_z = exact_world_z;
+    anchor.world_depth = exact_world_z;
     anchor.resolution_layer = spec->resolution_layer.value_or(grid_resolution);
     return anchor;
 }

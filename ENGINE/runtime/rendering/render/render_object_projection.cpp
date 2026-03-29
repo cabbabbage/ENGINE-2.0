@@ -74,8 +74,12 @@ bool assemble_render_object_projection_input(const RenderObject& obj,
         return false;
     }
 
-    out_input.world_x = static_cast<float>(obj.screen_rect.x);
-    out_input.world_y = static_cast<float>(obj.screen_rect.y);
+    const float world_anchor_x =
+        std::isfinite(obj.world_anchor_x) ? obj.world_anchor_x : static_cast<float>(obj.screen_rect.x);
+    const float world_anchor_y =
+        std::isfinite(obj.world_anchor_y) ? obj.world_anchor_y : static_cast<float>(obj.screen_rect.y);
+    out_input.world_x = world_anchor_x;
+    out_input.world_y = world_anchor_y;
     out_input.world_z = world_z;
     out_input.perspective_scale = sanitize_perspective_scale(perspective_scale);
     out_input.frame_width_px = std::max(1, frame_w);

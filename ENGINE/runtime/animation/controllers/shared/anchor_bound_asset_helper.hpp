@@ -17,7 +17,7 @@ public:
     void unregister_child(Asset* child_asset);
     bool is_child_bound(const Asset* child_asset) const;
     void notify_anchor_changed(Asset* owner, const std::string& anchor_name);
-    void flush_pending_updates();
+    bool flush_pending_updates();
 
 private:
     struct BindingRecord {

@@ -3,6 +3,7 @@
 #include "assets/asset/Asset.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
 
+#include <algorithm>
 #include <vector>
 
 namespace anchor_bound_asset_helper {
@@ -58,28 +59,29 @@ void AnchorBoundAssetHelper::notify_anchor_changed(Asset* owner, const std::stri
     }
 }
 
-void AnchorBoundAssetHelper::flush_pending_updates() {
+bool AnchorBoundAssetHelper::flush_pending_updates() {
     if (flush_in_progress_ || pending_children_.empty()) {
-        return;
+        return false;
     }
 
     flush_in_progress_ = true;
-    // Child updates can trigger additional anchor dirties; drain until stable.
-    while (!pending_children_.empty()) {
-        std::vector<ChildAsset*> to_update;
-        to_update.reserve(pending_children_.size());
-        for (ChildAsset* child : pending_children_) {
-            if (child) {
-                to_update.push_back(child);
-            }
-        }
-        pending_children_.clear();
-
-        for (ChildAsset* child : to_update) {
-            child->update();
+    bool changed = false;
+    std::vector<ChildAsset*> to_update;
+    to_update.reserve(pending_children_.size());
+    for (ChildAsset* child : pending_children_) {
+        if (child) {
+            to_update.push_back(child);
         }
     }
+    pending_children_.clear();
+    std::sort(to_update.begin(), to_update.end());
+
+    for (ChildAsset* child : to_update) {
+        changed = child->update() || changed;
+    }
+
     flush_in_progress_ = false;
+    return changed;
 }
 
 } // namespace anchor_bound_asset_helper

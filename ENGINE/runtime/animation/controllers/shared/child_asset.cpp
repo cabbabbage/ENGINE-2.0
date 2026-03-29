@@ -44,6 +44,7 @@ ChildAsset& ChildAsset::operator=(ChildAsset&& other) noexcept {
 
 void ChildAsset::destroy() {
     unregister_anchor_binding();
+    (void)clear_child_render_offset();
     if (child_ && owner_ && owner_->has_child(child_)) {
         owner_->remove_child(child_);
     }
@@ -62,6 +63,7 @@ void ChildAsset::hide() {
         return;
     }
     manual_hidden_ = true;
+    (void)clear_child_render_offset();
     refresh_hidden_state();
 }
 
@@ -136,6 +138,7 @@ void ChildAsset::unbind() {
     bound_ = false;
     bound_anchor_name_.clear();
     unregister_anchor_binding();
+    (void)clear_child_render_offset();
     auto_hidden_for_anchor_ = false;
     refresh_hidden_state();
 }
@@ -183,15 +186,32 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
     const bool anchor_available = parent_anchor.is_active();
     if (!anchor_available) {
         auto_hidden_for_anchor_ = true;
+        bool changed = clear_child_render_offset();
         const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
-        (void)set_child_hidden_state_internal(should_hide);
-        return false;
+        changed = set_child_hidden_state_internal(should_hide) || changed;
+        return changed;
     }
 
-    const int target_world_x = static_cast<int>(std::lround(parent_anchor.world_pos_2d.x));
-    const int target_world_y = static_cast<int>(std::lround(parent_anchor.world_pos_2d.y));
+    const float exact_world_x = parent_anchor.world_pos_2d.x;
+    const float exact_world_y = parent_anchor.world_pos_2d.y;
+    const float exact_world_z = std::isfinite(parent_anchor.world_depth)
+        ? parent_anchor.world_depth
+        : static_cast<float>(parent_anchor.world_z);
+
+    const int target_world_x = static_cast<int>(std::lround(exact_world_x));
+    const int target_world_y = static_cast<int>(std::lround(exact_world_y));
     const int target_world_z = parent_anchor.world_z;
-    const int target_layer = parent_anchor.resolution_layer;
+    int target_layer = parent_anchor.resolution_layer;
+    if (target_layer < 0 && owner_ && owner_->grid_point()) {
+        target_layer = owner_->grid_point()->resolution_layer();
+    }
+    if (target_layer < 0) {
+        target_layer = child_->grid_resolution;
+    }
+
+    const float residual_x = exact_world_x - static_cast<float>(target_world_x);
+    const float residual_y = exact_world_y - static_cast<float>(target_world_y);
+    const float residual_z = exact_world_z - static_cast<float>(target_world_z);
 
     bool changed = false;
     if (child_->world_x() != target_world_x ||
@@ -205,6 +225,14 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
         changed = true;
     }
 
+    constexpr float kResidualEpsilon = 1e-5f;
+    if (std::fabs(child_->render_anchor_offset_x() - residual_x) > kResidualEpsilon ||
+        std::fabs(child_->render_anchor_offset_y() - residual_y) > kResidualEpsilon ||
+        std::fabs(child_->render_anchor_offset_z() - residual_z) > kResidualEpsilon) {
+        child_->set_render_anchor_offset(residual_x, residual_y, residual_z);
+        changed = true;
+    }
+
     const double desired_bias = desired_render_depth_bias(parent_anchor, target_world_z);
     if (std::fabs(child_->render_depth_bias() - desired_bias) > 1e-6) {
         child_->set_render_depth_bias(desired_bias);
@@ -214,7 +242,7 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
     has_successful_sync_ = true;
     auto_hidden_for_anchor_ = false;
     const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
-    (void)set_child_hidden_state_internal(should_hide);
+    changed = set_child_hidden_state_internal(should_hide) || changed;
     return changed;
 }
 
@@ -261,7 +289,24 @@ bool ChildAsset::set_child_hidden_state_internal(bool hidden) {
     if (changed && assets_) {
         assets_->mark_active_assets_dirty();
     }
+    if (hidden) {
+        changed = clear_child_render_offset() || changed;
+    }
     return changed;
+}
+
+bool ChildAsset::clear_child_render_offset() {
+    if (!child_) {
+        return false;
+    }
+    constexpr float kResidualEpsilon = 1e-5f;
+    if (std::fabs(child_->render_anchor_offset_x()) <= kResidualEpsilon &&
+        std::fabs(child_->render_anchor_offset_y()) <= kResidualEpsilon &&
+        std::fabs(child_->render_anchor_offset_z()) <= kResidualEpsilon) {
+        return false;
+    }
+    child_->clear_render_anchor_offset();
+    return true;
 }
 
 std::optional<AnchorPoint> ChildAsset::resolve_owner_anchor(const std::string& anchor_name) const {
@@ -352,17 +397,19 @@ Asset* ChildAsset::get_asset() const {
     return child_;
 }
 
-void ChildAsset::update() {
+bool ChildAsset::update() {
     if (!ensure_child_alive() || !bound_) {
-        return;
+        return false;
     }
     const auto anchor = resolve_owner_anchor(bound_anchor_name_);
     if (!anchor.has_value()) {
         auto_hidden_for_anchor_ = true;
-        refresh_hidden_state();
-        return;
+        const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
+        bool changed = set_child_hidden_state_internal(should_hide);
+        changed = clear_child_render_offset() || changed;
+        return changed;
     }
-    (void)apply_anchor_solution(*anchor);
+    return apply_anchor_solution(*anchor);
 }
 
 void ChildAsset::move_from(ChildAsset&& other) noexcept {

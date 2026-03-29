@@ -19,6 +19,9 @@ struct AnchorSpec {
     std::optional<int> resolution_layer{};
     float world_depth_offset = 0.0f;
     bool exists = true;
+    std::optional<float> exact_offset_x{};
+    std::optional<float> exact_offset_y{};
+    std::optional<float> exact_offset_z{};
 };
 
 Assets* create_assets_stub();

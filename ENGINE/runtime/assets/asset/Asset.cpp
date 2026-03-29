@@ -274,6 +274,10 @@ Asset::Asset(const Asset& o)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
     , composite_depth_cue_settings_version_(o.composite_depth_cue_settings_version_)
+    , world_z_offset_(o.world_z_offset_)
+    , render_anchor_offset_x_(o.render_anchor_offset_x_)
+    , render_anchor_offset_y_(o.render_anchor_offset_y_)
+    , render_anchor_offset_z_(o.render_anchor_offset_z_)
 {
 
         clear_render_caches();
@@ -349,6 +353,10 @@ Asset& Asset::operator=(const Asset& o) {
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
         composite_depth_cue_settings_version_ = o.composite_depth_cue_settings_version_;
+        world_z_offset_           = o.world_z_offset_;
+        render_anchor_offset_x_   = o.render_anchor_offset_x_;
+        render_anchor_offset_y_   = o.render_anchor_offset_y_;
+        render_anchor_offset_z_   = o.render_anchor_offset_z_;
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
@@ -827,7 +835,11 @@ void Asset::refresh_anchor_point_cache_from_frame() {
         if (!resolved.exists) {
             resolved.relative_pos_2d = Vec2{};
             resolved.world_pos_2d = Vec2{};
+            resolved.world_exact_pos_2d = Vec2{};
+            resolved.world_quantized_px = SDL_Point{0, 0};
             resolved.world_z = world_z();
+            resolved.world_exact_z = static_cast<float>(world_z());
+            resolved.world_depth = static_cast<float>(world_z());
             resolved.resolution_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
             continue;
         }
@@ -1403,8 +1415,9 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         resolved.depth_offset = anchor_present ? frame_anchor->depth_offset : handle.depth_offset;
 
         if (resolved.exists) {
-                resolved.world_pos_2d = Vec2{static_cast<float>(handle.world_px.x),
-                                             static_cast<float>(handle.world_px.y)};
+                resolved.world_pos_2d = handle.world_exact_pos_2d;
+                resolved.world_exact_pos_2d = handle.world_exact_pos_2d;
+                resolved.world_quantized_px = handle.world_px;
                 const SDL_Point origin_world = world_xy_point();
                 resolved.relative_pos_2d = Vec2{
                         resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
@@ -1412,10 +1425,13 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
                 resolved.screen_pos_2d = handle.screen_px;
         } else {
                 resolved.world_pos_2d = Vec2{};
+                resolved.world_exact_pos_2d = Vec2{};
+                resolved.world_quantized_px = SDL_Point{0, 0};
                 resolved.relative_pos_2d = Vec2{};
                 resolved.screen_pos_2d = SDL_FPoint{0.0f, 0.0f};
         }
         resolved.world_z = handle.world_z;
+        resolved.world_exact_z = handle.world_exact_z;
         resolved.world_depth = handle.world_depth;
         resolved.resolution_layer = handle.resolution_layer;
 }
@@ -1497,6 +1513,8 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         auto mark_missing = [&](const std::string& reason, bool keep_dirty = true) {
                 (void)reason;
                 grid = nullptr;
+                world_exact_pos_2d = Vec2{};
+                world_exact_z = 0.0f;
                 world_px = SDL_Point{0, 0};
                 world_z = 0;
                 world_depth = 0.0f;
@@ -1545,6 +1563,8 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         }
 
         grid = resolved_sample.resolved.grid_point;
+        world_exact_pos_2d = resolved_sample.resolved.world_exact_pos_2d;
+        world_exact_z = resolved_sample.resolved.world_exact_z;
         world_px = resolved_sample.resolved.world_px;
         world_z = resolved_sample.resolved.world_z;
         world_depth = resolved_sample.resolved.world_depth;
@@ -1571,11 +1591,40 @@ void Asset::set_grid_id(std::uint64_t id) {
         grid_id_ = id;
 }
 
- #if !defined(ENGINE_WORLD_TESTS)
+#if !defined(ENGINE_WORLD_TESTS)
 void Asset::clear_grid_id() {
         grid_id_ = 0;
 }
 #endif // !ENGINE_WORLD_TESTS
+
+void Asset::set_render_anchor_offset(float x, float y, float z) {
+        if (!std::isfinite(x)) {
+                x = 0.0f;
+        }
+        if (!std::isfinite(y)) {
+                y = 0.0f;
+        }
+        if (!std::isfinite(z)) {
+                z = 0.0f;
+        }
+
+        constexpr float kEpsilon = 1e-5f;
+        if (std::fabs(render_anchor_offset_x_ - x) < kEpsilon &&
+            std::fabs(render_anchor_offset_y_ - y) < kEpsilon &&
+            std::fabs(render_anchor_offset_z_ - z) < kEpsilon) {
+                return;
+        }
+
+        render_anchor_offset_x_ = x;
+        render_anchor_offset_y_ = y;
+        render_anchor_offset_z_ = z;
+        mark_composite_dirty();
+        mark_mesh_dirty();
+}
+
+void Asset::clear_render_anchor_offset() {
+        set_render_anchor_offset(0.0f, 0.0f, 0.0f);
+}
 
 void Asset::set_composite_texture(SDL_Texture* tex) {
     if (composite_texture_ && composite_texture_ != tex) {

@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <cmath>
 #include <memory>
 
 #include <nlohmann/json.hpp>
@@ -186,7 +187,8 @@ TEST_CASE("AnchorBoundAssetHelper keeps child updated when owner anchor moves") 
     CHECK(spawned->world_x() != owner->world_x() + moved.offset_x);
     CHECK(spawned->world_y() != owner->world_y() + moved.offset_y);
     CHECK(spawned->world_z() != owner->world_z() + moved.offset_z);
-    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+    CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+    CHECK_FALSE(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
 
     CHECK(spawned->world_x() == owner->world_x() + moved.offset_x);
     CHECK(spawned->world_y() == owner->world_y() + moved.offset_y);
@@ -235,7 +237,8 @@ TEST_CASE("AnchorBoundAssetHelper batches repeated owner anchor dirties and flus
     CHECK(spawned->world_y() == initial_child_y);
     CHECK(spawned->world_z() == initial_child_z);
 
-    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+    CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+    CHECK_FALSE(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
 
     CHECK(spawned->world_x() == owner->world_x() + 4);
     CHECK(spawned->world_y() == owner->world_y() + 5);
@@ -268,13 +271,63 @@ TEST_CASE("Queued anchor flush keeps X-axis child placement stable across sequen
         owner->move_to_world_position(11 + step, 20, 30, 0);
         test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 2, 1, 0, 0, 0.0f, true});
         anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
-        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+        CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+        CHECK_FALSE(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
 
         CHECK(spawned->world_x() == owner->world_x() + 3);
         CHECK(spawned->world_y() == owner->world_y() + 2);
         CHECK(spawned->world_z() == owner->world_z() + 1);
+        CHECK(spawned->grid_resolution == 0);
         CHECK(spawned->world_x() == previous_child_x + 1);
         previous_child_x = spawned->world_x();
+    }
+}
+
+TEST_CASE("Child anchor residual stays stable across horizontal movement with exact subpixel offsets") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 20, 30, 0));
+    REQUIRE(owner != nullptr);
+
+    AnchorSpec initial_anchor{};
+    initial_anchor.name = "eyes";
+    initial_anchor.offset_x = 3;
+    initial_anchor.offset_y = 2;
+    initial_anchor.offset_z = 1;
+    initial_anchor.depth_offset = 0;
+    initial_anchor.resolution_layer = 0;
+    initial_anchor.world_depth_offset = 0.0f;
+    initial_anchor.exists = true;
+    initial_anchor.exact_offset_x = 3.25f;
+    initial_anchor.exact_offset_y = 2.0f;
+    initial_anchor.exact_offset_z = 1.0f;
+    test_child_asset_runtime::set_anchor(*owner, initial_anchor);
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    for (int step = 0; step < 12; ++step) {
+        owner->move_to_world_position(10 + step, 20, 30, 0);
+        test_child_asset_runtime::set_anchor(*owner, initial_anchor);
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+        CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+
+        CHECK(spawned->world_x() == static_cast<int>(std::lround(static_cast<float>(owner->world_x()) + 3.25f)));
+        CHECK(spawned->world_y() == owner->world_y() + 2);
+        CHECK(spawned->world_z() == owner->world_z() + 1);
+        CHECK(spawned->grid_resolution == 0);
+        CHECK(spawned->render_anchor_offset_x() == doctest::Approx(0.25f).epsilon(1e-6));
+        CHECK(spawned->render_anchor_offset_y() == doctest::Approx(0.0f).epsilon(1e-6));
+        CHECK(spawned->render_anchor_offset_z() == doctest::Approx(0.0f).epsilon(1e-6));
     }
 }
 

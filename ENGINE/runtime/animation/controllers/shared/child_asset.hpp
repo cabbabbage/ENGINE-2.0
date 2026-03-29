@@ -29,7 +29,7 @@ public:
     bool is_hidden() const;
     bool is_bound() const;
     Asset* get_asset() const;
-    void update();
+    bool update();
 
 private:
     bool ensure_child_alive();
@@ -38,6 +38,7 @@ private:
     bool place_once(const AnchorPoint& parent_anchor, bool keep_bound);
     bool set_child_hidden_state(bool hidden);
     bool set_child_hidden_state_internal(bool hidden);
+    bool clear_child_render_offset();
     Assets* resolve_assets();
     bool spawn_child_asset();
     std::optional<AnchorPoint> resolve_owner_anchor(const std::string& anchor_name) const;

@@ -132,6 +132,10 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               GridMaterialization) {
     FrameAnchorSample sample{};
     const float flat_world_z = static_cast<float>(asset.world_z()) + asset.world_z_offset();
+    sample.resolved.world_exact_pos_2d = Vec2{
+        static_cast<float>(asset.world_x()),
+        static_cast<float>(asset.world_y())};
+    sample.resolved.world_exact_z = flat_world_z;
     sample.resolved.world_px = asset.world_xy_point();
     sample.resolved.world_z = static_cast<int>(std::lround(flat_world_z));
     sample.resolved.world_depth = flat_world_z;
@@ -151,6 +155,10 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                        sample.flat_relative_pixel_point,
                                        static_cast<float>(anchor.depth_offset),
                                        sample.final_anchor_point);
+    sample.resolved.world_exact_pos_2d = Vec2{
+        sample.final_anchor_point.x,
+        sample.final_anchor_point.y};
+    sample.resolved.world_exact_z = sample.final_anchor_point.z;
     sample.resolved.world_px = SDL_Point{
         static_cast<int>(std::lround(sample.final_anchor_point.x)),
         static_cast<int>(std::lround(sample.final_anchor_point.y))};
@@ -545,6 +553,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         render_gp &&
         std::isfinite(render_gp->perspective_scale()) &&
         render_gp->perspective_scale() > 0.0f;
+    // Anchor projection must use the exact same perspective sample the render pass uses.
     const float render_perspective = has_render_perspective
         ? std::max(0.0001f, render_gp->perspective_scale())
         : perspective_scale;
@@ -629,6 +638,8 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     const int resolved_y = static_cast<int>(std::lround(final_anchor_point.y));
     const int resolved_z = static_cast<int>(std::lround(final_anchor_point.z));
 
+    sample.resolved.world_exact_pos_2d = Vec2{final_anchor_point.x, final_anchor_point.y};
+    sample.resolved.world_exact_z = final_anchor_point.z;
     sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
     sample.resolved.world_z = resolved_z;
     sample.resolved.world_depth = final_anchor_point.z;

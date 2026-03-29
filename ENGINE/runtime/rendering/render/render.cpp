@@ -659,21 +659,36 @@ bool build_perspective_mesh(RenderObject& obj,
     if (rect.w <= 0 || rect.h <= 0) {
         return false;
     }
-    const SDL_FPoint current_position{static_cast<float>(rect.x), static_cast<float>(rect.y)};
+    const float anchor_world_x =
+        std::isfinite(obj.world_anchor_x) ? obj.world_anchor_x : static_cast<float>(rect.x);
+    const float anchor_world_y =
+        std::isfinite(obj.world_anchor_y) ? obj.world_anchor_y : static_cast<float>(rect.y);
+    const SDL_FPoint current_position{anchor_world_x, anchor_world_y};
 
     // Render package dimensions are perspective-inclusive; pass them through unchanged
     // so projected frame construction uses a single consistent contract.
     const float safe_perspective = render_projection::sanitize_perspective_scale(perspective_scale);
     const float current_scale = safe_perspective;
     const std::uint64_t current_camera_version = cam.camera_state_version();
-    constexpr float kScaleMatchEpsilon = 1e-4f;
+    auto quantize_projection_key = [](float value) -> std::int64_t {
+        if (!std::isfinite(value)) {
+            return std::numeric_limits<std::int64_t>::min();
+        }
+        constexpr double kFixedPointScale = 256.0;
+        return static_cast<std::int64_t>(std::llround(static_cast<double>(value) * kFixedPointScale));
+    };
+    const std::int64_t current_position_key_x = quantize_projection_key(current_position.x);
+    const std::int64_t current_position_key_y = quantize_projection_key(current_position.y);
+    const std::int64_t current_world_z_key = quantize_projection_key(base_world_z);
+    const std::int64_t current_scale_key = quantize_projection_key(current_scale);
     if (!obj.mesh_dirty &&
         obj.has_cached_mesh &&
         obj.cached_mesh_texture == obj.texture &&
-        std::fabs(obj.cached_scale - current_scale) < kScaleMatchEpsilon &&
-        std::fabs(obj.cached_world_z - base_world_z) < kScaleMatchEpsilon &&
-        obj.cached_position.x == current_position.x &&
-        obj.cached_position.y == current_position.y &&
+        obj.cached_projection_key_valid &&
+        obj.cached_position_key_x == current_position_key_x &&
+        obj.cached_position_key_y == current_position_key_y &&
+        obj.cached_world_z_key == current_world_z_key &&
+        obj.cached_scale_key == current_scale_key &&
         obj.cached_camera_state_version == current_camera_version) {
         mesh.vertices = obj.cached_vertices;
         mesh.indices = obj.cached_indices;
@@ -798,6 +813,11 @@ bool build_perspective_mesh(RenderObject& obj,
     obj.cached_position = current_position;
     obj.cached_world_z = base_world_z;
     obj.cached_scale = current_scale;
+    obj.cached_position_key_x = current_position_key_x;
+    obj.cached_position_key_y = current_position_key_y;
+    obj.cached_world_z_key = current_world_z_key;
+    obj.cached_scale_key = current_scale_key;
+    obj.cached_projection_key_valid = true;
     obj.cached_camera_state_version = current_camera_version;
     obj.cached_mesh_texture = obj.texture;
     obj.has_cached_mesh = true;

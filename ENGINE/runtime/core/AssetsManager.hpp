@@ -373,6 +373,7 @@ private:
     std::uint32_t frame_id_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
+    std::uint32_t last_post_flush_refresh_frame_id_ = std::numeric_limits<std::uint32_t>::max();
     std::uint32_t frame_rebuild_metrics_frame_ = 0;
     std::uint32_t frame_rebuild_request_count_ = 0;
     std::uint32_t frame_rebuild_execution_count_ = 0;
@@ -424,6 +425,7 @@ private:
     void run_idle_frame_pipeline(const Input& input);
     void run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved);
     void run_visibility_build_stage();
+    void run_post_flush_traversal_refresh_once();
     void run_runtime_effects_stage();
     void sync_dev_controls_for_frame(const Input& input);
     void refresh_filtered_active_assets_if_needed();

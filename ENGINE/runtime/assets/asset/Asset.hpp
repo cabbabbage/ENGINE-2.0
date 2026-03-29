@@ -41,6 +41,8 @@ using world::GridPoint;
 struct RenderObject {
     SDL_Texture* texture = nullptr;
     SDL_Rect screen_rect{};
+    float world_anchor_x = std::numeric_limits<float>::quiet_NaN();
+    float world_anchor_y = std::numeric_limits<float>::quiet_NaN();
     SDL_Color color_mod{255, 255, 255, 255};
     SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
     double angle = 0.0;
@@ -62,6 +64,11 @@ struct RenderObject {
     SDL_FPoint cached_position{0.0f, 0.0f};
     float cached_world_z = 0.0f;
     float cached_scale = 0.0f;
+    std::int64_t cached_position_key_x = 0;
+    std::int64_t cached_position_key_y = 0;
+    std::int64_t cached_world_z_key = 0;
+    std::int64_t cached_scale_key = 0;
+    bool cached_projection_key_valid = false;
     std::uint64_t cached_camera_state_version = 0;
     SDL_Texture* cached_mesh_texture = nullptr;
     bool has_cached_mesh = false;
@@ -236,6 +243,11 @@ class Asset {
     void clear_grid_id();
     void set_world_z_offset(float z) { if (world_z_offset_ != z) { world_z_offset_ = z; mark_anchors_dirty(); } }
     float world_z_offset() const { return world_z_offset_; }
+    void set_render_anchor_offset(float x, float y, float z);
+    void clear_render_anchor_offset();
+    float render_anchor_offset_x() const { return render_anchor_offset_x_; }
+    float render_anchor_offset_y() const { return render_anchor_offset_y_; }
+    float render_anchor_offset_z() const { return render_anchor_offset_z_; }
 
     SDL_Texture* composite_texture() const { return composite_texture_; }
     void set_composite_texture(SDL_Texture* tex);
@@ -328,6 +340,8 @@ class Asset {
     struct AnchorHandle {
         std::string     name;
         world::GridPoint* grid = nullptr;
+        Vec2            world_exact_pos_2d{};
+        float           world_exact_z = 0.0f;
         SDL_Point       world_px{0, 0};
         int             world_z = 0;
         float           world_depth = 0.0f;
@@ -478,6 +492,9 @@ private:
     float        composite_scale_   = 1.0f;
     std::uint64_t composite_depth_cue_settings_version_ = 0;
     float        world_z_offset_    = 0.0f;
+    float        render_anchor_offset_x_ = 0.0f;
+    float        render_anchor_offset_y_ = 0.0f;
+    float        render_anchor_offset_z_ = 0.0f;
     bool         mesh_dirty_        = true;
 
     void initialize_anchor_registry_from_animations();

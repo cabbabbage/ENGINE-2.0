@@ -130,7 +130,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   std::optional<SDL_Point> atlas_size = std::nullopt,
                                   float world_z_offset = 0.0f,
                                   std::optional<SDL_Rect> src_rect = std::nullopt,
-                                  std::optional<SDL_FPoint> projection_anchor_uv = std::nullopt) {
+                                  std::optional<SDL_FPoint> projection_anchor_uv = std::nullopt,
+                                  std::optional<SDL_FPoint> world_anchor = std::nullopt) {
         if (!tex) return;
         if (apply_scale) {
             rect.w = static_cast<int>(std::lround(static_cast<float>(rect.w) * package_scale));
@@ -152,6 +153,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         RenderObject obj{};
         obj.texture = tex;
         obj.screen_rect = rect;
+        obj.world_anchor_x = world_anchor.has_value() ? world_anchor->x : static_cast<float>(rect.x);
+        obj.world_anchor_y = world_anchor.has_value() ? world_anchor->y : static_cast<float>(rect.y);
         obj.color_mod = color;
         obj.blend_mode = blend;
         obj.angle = angle;
@@ -238,9 +241,13 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         final_w = std::max(1, final_w);
         final_h = std::max(1, final_h);
 
+        const float world_anchor_x = asset->smoothed_translation_x() + asset->render_anchor_offset_x();
+        const float world_anchor_y = asset->smoothed_translation_y() + asset->render_anchor_offset_y();
+        const float world_anchor_z_offset =
+            asset->world_z_offset() + asset->render_anchor_offset_z();
         SDL_Rect dest_rect = {
-            static_cast<int>(std::lround(asset->smoothed_translation_x())),
-            static_cast<int>(std::lround(asset->smoothed_translation_y())),
+            static_cast<int>(std::lround(world_anchor_x)),
+            static_cast<int>(std::lround(world_anchor_y)),
             final_w,
             final_h
         };
@@ -256,8 +263,10 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           base_flip,
                           SDL_Point{frame_w, frame_h},
                           SDL_Point{texture_w, texture_h},
-                          asset->world_z_offset(),
-                          has_src_rect ? std::optional<SDL_Rect>(src_rect) : std::nullopt);
+                          world_anchor_z_offset,
+                          has_src_rect ? std::optional<SDL_Rect>(src_rect) : std::nullopt,
+                          std::nullopt,
+                          SDL_FPoint{world_anchor_x, world_anchor_y});
 
         const RenderObject* const base_render_object =
             asset->render_package.empty() ? nullptr : &asset->render_package.back();
@@ -305,7 +314,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   SDL_Point{overlay_tex_w, overlay_tex_h},
                                   base_render_object->world_z_offset,
                                   std::nullopt,
-                                  kOverlayAnchorUv);
+                                  kOverlayAnchorUv,
+                                  SDL_FPoint{base_render_object->world_anchor_x, base_render_object->world_anchor_y});
             }
         }
     }

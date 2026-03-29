@@ -4901,7 +4901,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 2,
+                "depth_offset": -12,
                 "name": "eyes",
                 "texture_x": 209,
                 "texture_y": 158
@@ -5967,9 +5967,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
             36,
+            242,
+            141,
             255
           ],
           "edge_smoothness": 2,
@@ -5990,9 +5990,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
             36,
+            242,
+            139,
             255
           ],
           "edge_smoothness": 85,
@@ -6051,8 +6051,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -328,
-              "dz": 148,
+              "dx": -1024,
+              "dz": -316,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -6060,7 +6060,7 @@
               "max_number": 1,
               "min_number": 1,
               "origional_height": 6984,
-              "origional_width": 6992,
+              "origional_width": 7024,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,

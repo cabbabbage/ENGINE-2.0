@@ -1146,7 +1146,8 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
     if (!type.empty() && !type_filter_enabled(type)) {
         return false;
     }
-    const bool is_map_wide_method = (method == "mapwide");
+    const std::string& method_tag = asset.filter_method_tag();
+    const bool is_map_wide_method = (method_tag == "mapwide");
     const bool is_map_asset = is_map_wide_method ||
                               (!asset.spawn_id.empty() &&
                                map_spawn_ids_.find(asset.spawn_id) != map_spawn_ids_.end());

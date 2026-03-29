@@ -274,6 +274,36 @@ Assets::Assets(AssetLibrary& library,
     vibble::log::info("[Assets] Constructor: Initialization complete");
 }
 
+void Assets::set_output_dimensions(int width, int height) {
+    const int safe_w = std::max(1, width);
+    const int safe_h = std::max(1, height);
+    if (screen_width == safe_w && screen_height == safe_h) {
+        return;
+    }
+
+    screen_width = safe_w;
+    screen_height = safe_h;
+
+    camera_.set_screen_dimensions(screen_width, screen_height);
+    if (scene) {
+        scene->set_output_dimensions(screen_width, screen_height);
+    }
+    if (dev_controls_) {
+        dev_controls_->set_screen_dimensions(screen_width, screen_height);
+    }
+
+    mark_grid_dirty();
+    camera_view_dirty_ = true;
+    needs_filtered_active_refresh_ = true;
+}
+
+std::optional<SDL_Point> Assets::scene_postprocess_target_size() const {
+    if (!scene) {
+        return std::nullopt;
+    }
+    return scene->postprocess_target_size();
+}
+
 std::vector<const Room::NamedArea*> Assets::current_room_trigger_areas() const {
     std::vector<const Room::NamedArea*> result;
     if (!current_room_) {

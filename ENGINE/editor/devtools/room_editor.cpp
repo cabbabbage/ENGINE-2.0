@@ -11595,6 +11595,10 @@ void RoomEditor::handle_delete_shortcut(const Input& input) {
         return;
     }
 
+    if (active_modal_ == ActiveModal::AssetInfo || is_asset_stack_editor_active()) {
+        return;
+    }
+
     if (!input.wasScancodePressed(SDL_SCANCODE_DELETE)) {
         return;
     }

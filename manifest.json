@@ -5327,9 +5327,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5345,9 +5345,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ],
             [
@@ -5374,9 +5374,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5392,9 +5392,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ],
             [
@@ -5421,9 +5421,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5439,9 +5439,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ],
             [
@@ -5468,9 +5468,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5486,9 +5486,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ],
             [
@@ -5515,9 +5515,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5533,9 +5533,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ],
             [
@@ -5562,9 +5562,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5580,9 +5580,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ],
             [
@@ -5609,9 +5609,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5627,9 +5627,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ],
             [
@@ -5656,9 +5656,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 184,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -5674,9 +5674,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 182,
+                "texture_y": 159
               }
             ]
           ],
@@ -9221,7 +9221,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            94,
+            90,
             242,
             255
           ],
@@ -9238,15 +9238,15 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": -960,
-          "camera_center_dz": -606,
-          "camera_height_px": 1000,
+          "camera_center_dx": -1609,
+          "camera_center_dz": -1015,
+          "camera_height_px": 319,
           "camera_tilt_deg": 40.0,
-          "camera_zoom_percent": 75,
+          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            225,
             242,
+            241,
             36,
             255
           ],
@@ -9366,16 +9366,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1012,
-              "dz": -1220,
+              "dx": -196,
+              "dz": 924,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6968,
-              "origional_width": 6968,
+              "origional_height": 6984,
+              "origional_width": 6984,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

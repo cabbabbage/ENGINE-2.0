@@ -51,6 +51,7 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     name_textbox_ = std::make_unique<DMTextBox>("Name", "");
     extrusion_textbox_ = std::make_unique<DMTextBox>("Extrusion", "0");
     damage_textbox_ = std::make_unique<DMTextBox>("Damage", "0");
+    onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
 }
 
 RoomBoxToolsPanel::~RoomBoxToolsPanel() = default;
@@ -135,6 +136,16 @@ void RoomBoxToolsPanel::set_detail_values(const DetailValues& values) {
     }
 }
 
+void RoomBoxToolsPanel::set_onion_skin_enabled(bool enabled) {
+    if (onion_skin_checkbox_) {
+        onion_skin_checkbox_->set_value(enabled);
+    }
+}
+
+bool RoomBoxToolsPanel::onion_skin_enabled() const {
+    return onion_skin_checkbox_ ? onion_skin_checkbox_->value() : false;
+}
+
 void RoomBoxToolsPanel::set_on_select(SelectCallback callback) {
     on_select_ = std::move(callback);
 }
@@ -153,6 +164,10 @@ void RoomBoxToolsPanel::set_on_apply(ApplyCallback callback) {
 
 void RoomBoxToolsPanel::set_on_propagate(PropagateCallback callback) {
     on_propagate_ = std::move(callback);
+}
+
+void RoomBoxToolsPanel::set_on_onion_skin_toggle(OnionSkinToggleCallback callback) {
+    on_onion_skin_toggle_ = std::move(callback);
 }
 
 RoomBoxToolsPanel::DetailValues RoomBoxToolsPanel::collect_detail_values() const {
@@ -241,6 +256,17 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
             event.button.button == SDL_BUTTON_LEFT &&
             on_delete_) {
             on_delete_();
+        }
+    }
+
+    if (onion_skin_checkbox_) {
+        const bool before = onion_skin_checkbox_->value();
+        if (onion_skin_checkbox_->handle_event(event)) {
+            handled = true;
+            const bool after = onion_skin_checkbox_->value();
+            if (before != after && on_onion_skin_toggle_) {
+                on_onion_skin_toggle_(after);
+            }
         }
     }
 
@@ -361,6 +387,9 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     if (delete_button_) {
         delete_button_->render(renderer);
     }
+    if (onion_skin_checkbox_) {
+        onion_skin_checkbox_->render(renderer);
+    }
     const bool has_selected_box = selected_box_index_ >= 0 &&
                                   selected_box_index_ < static_cast<int>(box_names_.size());
     if (has_selected_box) {
@@ -439,6 +468,8 @@ void RoomBoxToolsPanel::update_layout() const {
     controls_height += DMButton::height();                               // add
     controls_height += kSectionGap;
     controls_height += DMButton::height();                               // delete
+    controls_height += kSectionGap;
+    controls_height += DMCheckbox::height();                             // onion skin
     if (has_selected_box) {
         controls_height += kSectionGap;
         controls_height += kLineHeight;                                  // details title
@@ -477,6 +508,10 @@ void RoomBoxToolsPanel::update_layout() const {
         delete_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
     }
     y += DMButton::height() + kSectionGap;
+    if (onion_skin_checkbox_) {
+        onion_skin_checkbox_->set_rect(SDL_Rect{controls_x, y, controls_w, DMCheckbox::height()});
+    }
+    y += DMCheckbox::height() + kSectionGap;
 
     if (has_selected_box) {
         detail_title_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};

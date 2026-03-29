@@ -10,6 +10,7 @@
 class DMButton;
 class DMTextBox;
 class DMSlider;
+class DMCheckbox;
 
 class RoomAnchorToolsPanel {
 public:
@@ -32,6 +33,7 @@ public:
     using DeleteCallback = std::function<void()>;
     using ApplyDetailsCallback = std::function<void(const DetailValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
+    using OnionSkinToggleCallback = std::function<void(bool)>;
 
     RoomAnchorToolsPanel();
     ~RoomAnchorToolsPanel();
@@ -48,6 +50,8 @@ public:
     void set_rename_text(const std::string& value);
     std::string rename_text() const;
     void set_detail_values(const DetailValues& values);
+    void set_onion_skin_enabled(bool enabled);
+    bool onion_skin_enabled() const;
 
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
@@ -55,6 +59,7 @@ public:
     void set_on_delete(DeleteCallback callback);
     void set_on_apply_details(ApplyDetailsCallback callback);
     void set_on_propagate(PropagateCallback callback);
+    void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -93,6 +98,7 @@ private:
     std::unique_ptr<DMTextBox> flip_horizontal_textbox_;
     std::unique_ptr<DMTextBox> flip_vertical_textbox_;
     std::unique_ptr<DMSlider> rotation_slider_;
+    std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;
@@ -104,4 +110,5 @@ private:
     DeleteCallback on_delete_;
     ApplyDetailsCallback on_apply_details_;
     PropagateCallback on_propagate_;
+    OnionSkinToggleCallback on_onion_skin_toggle_;
 };

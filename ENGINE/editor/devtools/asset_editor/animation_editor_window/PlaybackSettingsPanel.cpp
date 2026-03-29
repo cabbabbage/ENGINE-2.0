@@ -790,7 +790,7 @@ int PlaybackSettingsPanel::preferred_height(int width) const {
 };
 
     if (derived_from_animation_) {
-        int count = 4;
+        int count = inversion_controls_visible() ? 4 : 2;
         add_checkbox_group(count);
     } else {
         add_checkbox_group(2);
@@ -831,7 +831,7 @@ void PlaybackSettingsPanel::render(SDL_Renderer* renderer) const {
         }
 };
 
-    const bool show_flip_controls = derived_from_animation_;
+    const bool show_flip_controls = inversion_controls_visible();
     render_checkbox(flip_checkbox_, show_flip_controls);
     render_checkbox(flip_vertical_checkbox_, show_flip_controls);
     render_checkbox(inherit_geometry_checkbox_, derived_from_animation_);
@@ -866,7 +866,7 @@ bool PlaybackSettingsPanel::handle_event(const SDL_Event& e) {
         }
 };
 
-    const bool show_flip = derived_from_animation_;
+    const bool show_flip = inversion_controls_visible();
     handle_checkbox_if_visible(flip_checkbox_, show_flip);
     handle_checkbox_if_visible(flip_vertical_checkbox_, show_flip);
     handle_checkbox_if_visible(inherit_geometry_checkbox_, derived_from_animation_);
@@ -933,7 +933,7 @@ void PlaybackSettingsPanel::layout_widgets() const {
 };
 
     bool placed_any_checkbox = false;
-    const bool show_flip_controls = derived_from_animation_;
+    const bool show_flip_controls = inversion_controls_visible();
     place_checkbox(flip_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(flip_vertical_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(inherit_geometry_checkbox_.get(), derived_from_animation_, placed_any_checkbox);
@@ -967,8 +967,13 @@ void PlaybackSettingsPanel::layout_widgets() const {
 
 void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) {
     ensure_widgets();
-    if (flip_checkbox_) flip_checkbox_->set_value(state.flipped_source);
-    if (flip_vertical_checkbox_) flip_vertical_checkbox_->set_value(state.flip_vertical);
+    const bool show_inversion_controls = inversion_controls_visible_for_state(state);
+    if (flip_checkbox_) {
+        flip_checkbox_->set_value(show_inversion_controls ? state.flipped_source : false);
+    }
+    if (flip_vertical_checkbox_) {
+        flip_vertical_checkbox_->set_value(show_inversion_controls ? state.flip_vertical : false);
+    }
     if (inherit_geometry_checkbox_) inherit_geometry_checkbox_->set_value(state.inherit_source_geometry);
     if (reverse_checkbox_) reverse_checkbox_->set_value(state.reverse_source);
     if (locked_checkbox_) locked_checkbox_->set_value(state.locked);
@@ -987,9 +992,14 @@ void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) 
 PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::read_controls() const {
     PlaybackState state = state_;
     if (derived_from_animation_) {
-        if (flip_checkbox_) state.flipped_source = flip_checkbox_->value();
-        if (flip_vertical_checkbox_) state.flip_vertical = flip_vertical_checkbox_->value();
         if (inherit_geometry_checkbox_) state.inherit_source_geometry = inherit_geometry_checkbox_->value();
+        if (inversion_controls_visible_for_state(state)) {
+            if (flip_checkbox_) state.flipped_source = flip_checkbox_->value();
+            if (flip_vertical_checkbox_) state.flip_vertical = flip_vertical_checkbox_->value();
+        } else {
+            state.flipped_source = false;
+            state.flip_vertical = false;
+        }
     }
 
     if (derived_from_animation_) {
@@ -1001,7 +1011,7 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::read_controls() cons
         if (locked_checkbox_) state.locked = locked_checkbox_->value();
     }
     if (!derived_from_animation_) {
-        if (flip_checkbox_) state.flipped_source = state_.flipped_source;
+        state.flipped_source = false;
         state.flip_vertical = false;
         state.inherit_source_geometry = false;
     }
@@ -1169,6 +1179,13 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
 
     if (!source_is_animation) {
         state.reverse_source = false;
+        state.flipped_source = false;
+        state.flip_vertical = false;
+    }
+
+    if (!state.inherit_source_geometry) {
+        state.flipped_source = false;
+        state.flip_vertical = false;
     }
 
     return state;
@@ -1183,9 +1200,13 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         materialize_inherited_geometry(document_.get(), animation_id_, payload);
     }
 
-    payload["flipped_source"] = state.flipped_source;
+    const bool allow_geometry_inversion = derived_from_animation_ && state.inherit_source_geometry;
+    const bool effective_flip_horizontal = allow_geometry_inversion ? state.flipped_source : false;
+    const bool effective_flip_vertical = allow_geometry_inversion ? state.flip_vertical : false;
+
+    payload["flipped_source"] = effective_flip_horizontal;
     payload["reverse_source"] = state.reverse_source;
-    payload["flip_vertical_source"] = state.flip_vertical;
+    payload["flip_vertical_source"] = effective_flip_vertical;
     if (!derived_from_animation_) {
         payload["locked"] = state.locked;
     } else {
@@ -1200,8 +1221,8 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         payload["inherit_source_geometry"] = state.inherit_source_geometry;
         nlohmann::json modifiers = nlohmann::json::object();
         modifiers["reverse"] = state.reverse_source;
-        modifiers["flipX"] = state.flipped_source;
-        modifiers["flipY"] = state.flip_vertical;
+        modifiers["flipX"] = effective_flip_horizontal;
+        modifiers["flipY"] = effective_flip_vertical;
         if (state.inherit_source_geometry) {
             payload.erase("movement");
             payload.erase("movement_total");
@@ -1245,19 +1266,20 @@ void PlaybackSettingsPanel::update_inherited_state(const nlohmann::json& payload
             if (derived_source_id_.empty()) {
                 derived_source_id_ = trim_copy(source.value("path", std::string{}));
             }
+            const bool inherit_geometry = payload_inherits_geometry(payload);
             bool reverse = read_bool_field_like(payload, "reverse_source", false);
-            bool flip_x = read_bool_field_like(payload, "flipped_source", false);
-            bool flip_y = read_bool_field_like(payload, "flip_vertical_source", false);
+            bool flip_x = inherit_geometry && read_bool_field_like(payload, "flipped_source", false);
+            bool flip_y = inherit_geometry && read_bool_field_like(payload, "flip_vertical_source", false);
             if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
                 const auto& modifiers = payload["derived_modifiers"];
                 reverse = read_bool_field_like(modifiers, "reverse", reverse);
-                flip_x = read_bool_field_like(modifiers, "flipX", flip_x);
-                flip_y = read_bool_field_like(modifiers, "flipY", flip_y);
+                flip_x = inherit_geometry && read_bool_field_like(modifiers, "flipX", flip_x);
+                flip_y = inherit_geometry && read_bool_field_like(modifiers, "flipY", flip_y);
             }
             if (reverse) inherited_modifiers_.push_back("Reverse");
             if (flip_x) inherited_modifiers_.push_back("Flip X");
             if (flip_y) inherited_modifiers_.push_back("Flip Y");
-            if (payload_inherits_geometry(payload)) {
+            if (inherit_geometry) {
                 inherited_modifiers_.push_back("Inherit Geometry");
             } else {
                 inherited_modifiers_.push_back("Local Geometry");
@@ -1270,6 +1292,10 @@ void PlaybackSettingsPanel::update_inherited_state(const nlohmann::json& payload
     if (previous_flag != derived_from_animation_ || previous_source != derived_source_id_) {
         layout_dirty_ = true;
     }
+}
+
+bool PlaybackSettingsPanel::inversion_controls_visible_for_state(const PlaybackState& state) const {
+    return derived_from_animation_ && state.inherit_source_geometry;
 }
 
 bool PlaybackSettingsPanel::random_start_visible_for_state(const PlaybackState& state) const {

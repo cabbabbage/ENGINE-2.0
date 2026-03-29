@@ -105,6 +105,10 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
             !derived_flip_movement_x &&
             !derived_flip_movement_y);
     inherit_source_geometry = derived_from_animation && inherit_source_geometry;
+    if (!inherit_source_geometry) {
+        derived_flip_x = false;
+        derived_flip_y = false;
+    }
 
     if (derived_from_animation) {
         payload["derived_modifiers"] = nlohmann::json{{"reverse", derived_reverse},
@@ -727,6 +731,12 @@ void apply_anchor_frame_flip(nlohmann::json& frame, const SDL_Point& size, bool 
                               ? anchor["texture_x"].get<int>()
                               : static_cast<int>(std::lround(anchor["texture_x"].get<double>()));
             anchor["texture_x"] = size.x - 1 - x;
+            const double rotation = (anchor.contains("rotation_degrees") && anchor["rotation_degrees"].is_number())
+                ? (anchor["rotation_degrees"].is_number_integer()
+                       ? static_cast<double>(anchor["rotation_degrees"].get<int>())
+                       : anchor["rotation_degrees"].get<double>())
+                : 0.0;
+            anchor["rotation_degrees"] = std::isfinite(rotation) ? -rotation : 0.0;
         }
         if (flip_y && size.y > 0 && anchor.contains("texture_y") && anchor["texture_y"].is_number()) {
             const int y = anchor["texture_y"].is_number_integer()

@@ -95,6 +95,27 @@ struct BoxCornerPickResult {
     int point_index = -1;
 };
 
+class ScopedAssetFrameOverride {
+public:
+    ScopedAssetFrameOverride(Asset* asset, AnimationFrame* frame)
+        : asset_(asset),
+          original_frame_(asset ? asset->current_frame : nullptr) {
+        if (asset_ && frame) {
+            asset_->current_frame = frame;
+        }
+    }
+
+    ~ScopedAssetFrameOverride() {
+        if (asset_) {
+            asset_->current_frame = original_frame_;
+        }
+    }
+
+private:
+    Asset* asset_ = nullptr;
+    AnimationFrame* original_frame_ = nullptr;
+};
+
 constexpr std::array<std::array<int, 4>, 6> kBoxVolumeFaces{{
     {{0, 1, 2, 3}},
     {{4, 5, 6, 7}},
@@ -103,6 +124,242 @@ constexpr std::array<std::array<int, 4>, 6> kBoxVolumeFaces{{
     {{2, 3, 7, 6}},
     {{3, 0, 4, 7}},
 }};
+
+AnimationFrame* adjacent_frame_for_editor(Asset* target,
+                                          const std::string& animation_id,
+                                          int current_frame_index,
+                                          int delta) {
+    if (!target || !target->info || delta == 0) {
+        return nullptr;
+    }
+    auto anim_it = target->info->animations.find(animation_id);
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
+        return nullptr;
+    }
+    const int frame_count = static_cast<int>(anim_it->second.frame_count());
+    const int candidate = current_frame_index + delta;
+    if (candidate < 0 || candidate >= frame_count) {
+        return nullptr;
+    }
+    return anim_it->second.primary_frame_at(static_cast<std::size_t>(candidate));
+}
+
+bool project_runtime_box_point_to_screen(const Asset::RuntimeBoxPoint3& world_point,
+                                         const WarpedScreenGrid& cam,
+                                         SDL_FPoint& out_screen);
+
+bool projected_volume_contains_screen_point(const Asset::RuntimeBoxVolume& volume,
+                                            const WarpedScreenGrid& cam,
+                                            SDL_Point screen_point);
+
+std::optional<BoxCornerPickResult> find_box_corner_at_screen_point_for_index(
+    const std::vector<Asset::RuntimeBoxVolume>& volumes,
+    int box_index,
+    const WarpedScreenGrid& cam,
+    SDL_Point screen_point,
+    int radius_px) {
+    if (box_index < 0 || box_index >= static_cast<int>(volumes.size())) {
+        return std::nullopt;
+    }
+    const auto& volume = volumes[static_cast<std::size_t>(box_index)];
+    if (!volume.valid) {
+        return std::nullopt;
+    }
+    const float radius_sq = static_cast<float>(radius_px * radius_px);
+    float best_dist_sq = radius_sq;
+    std::optional<BoxCornerPickResult> best;
+    for (int point_index = 0; point_index < 8; ++point_index) {
+        SDL_FPoint projected{};
+        if (!project_runtime_box_point_to_screen(volume.world_points[static_cast<std::size_t>(point_index)],
+                                                 cam,
+                                                 projected)) {
+            continue;
+        }
+        const float dx = projected.x - static_cast<float>(screen_point.x);
+        const float dy = projected.y - static_cast<float>(screen_point.y);
+        const float dist_sq = dx * dx + dy * dy;
+        if (dist_sq <= best_dist_sq) {
+            best_dist_sq = dist_sq;
+            best = BoxCornerPickResult{
+                box_index,
+                point_index % 4,
+                point_index,
+            };
+        }
+    }
+    return best;
+}
+
+bool box_body_contains_screen_point_for_index(const std::vector<Asset::RuntimeBoxVolume>& volumes,
+                                              int box_index,
+                                              const WarpedScreenGrid& cam,
+                                              SDL_Point screen_point) {
+    if (box_index < 0 || box_index >= static_cast<int>(volumes.size())) {
+        return false;
+    }
+    const auto& volume = volumes[static_cast<std::size_t>(box_index)];
+    if (!volume.valid) {
+        return false;
+    }
+    return projected_volume_contains_screen_point(volume, cam, screen_point);
+}
+
+struct OnionAnchorOverlayHandle {
+    SDL_FPoint flat_screen_px{0.0f, 0.0f};
+    bool has_flat_screen_px = false;
+    SDL_FPoint final_screen_px{0.0f, 0.0f};
+    bool has_final_screen_px = false;
+};
+
+std::vector<OnionAnchorOverlayHandle> collect_anchor_overlay_handles_for_frame(Asset* target, AnimationFrame* frame) {
+    std::vector<OnionAnchorOverlayHandle> handles;
+    if (!target || !frame) {
+        return handles;
+    }
+    ScopedAssetFrameOverride frame_scope(target, frame);
+    handles.reserve(frame->anchor_points.size());
+    for (const auto& anchor : frame->anchor_points) {
+        if (!anchor.is_valid()) {
+            continue;
+        }
+        const anchor_points::FrameAnchorSample sample =
+            anchor_points::resolve_frame_anchor_sample(*target, anchor, anchor_points::GridMaterialization::None);
+        OnionAnchorOverlayHandle handle{};
+        handle.flat_screen_px = sample.flat_screen_px;
+        handle.has_flat_screen_px = sample.has_flat_screen_px;
+        handle.final_screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
+        handle.has_final_screen_px = sample.has_final_screen_px ||
+                                     (std::isfinite(sample.screen_px.x) && std::isfinite(sample.screen_px.y));
+        if (handle.has_final_screen_px) {
+            handles.push_back(handle);
+        }
+    }
+    return handles;
+}
+
+template <typename TBox, typename DamageFn, typename MetaFn>
+std::vector<Asset::RuntimeBoxVolume> build_runtime_box_overlay_volumes_for_frame(
+    Asset* target,
+    AnimationFrame* frame,
+    const std::vector<TBox>& boxes,
+    const std::string& fallback_type,
+    DamageFn&& damage_of,
+    MetaFn&& meta_of) {
+    std::vector<Asset::RuntimeBoxVolume> volumes;
+    if (!target || !frame) {
+        return volumes;
+    }
+
+    ScopedAssetFrameOverride frame_scope(target, frame);
+    volumes.reserve(boxes.size());
+    for (const auto& box : boxes) {
+        if (!box.is_valid() || !box.enabled) {
+            continue;
+        }
+
+        Asset::RuntimeBoxVolume volume{};
+        volume.id = box.id;
+        volume.type = box.type.empty() ? fallback_type : box.type;
+        volume.name = box.name;
+        volume.enabled = box.enabled;
+        volume.frame_start = box.frame_start;
+        volume.frame_end = box.frame_end;
+        volume.anchor_link = box.anchor_link;
+        volume.frame_index = frame->frame_index;
+        volume.extrusion_amount = std::max(0, box.extrusion_amount);
+        volume.damage_amount = damage_of(box);
+        volume.meta_json = meta_of(box);
+
+        const auto corners = box.to_runtime_clockwise_points();
+        float sum_x = 0.0f;
+        float sum_y = 0.0f;
+        float sum_z = 0.0f;
+        bool valid = true;
+        const float extrusion = static_cast<float>(volume.extrusion_amount);
+        for (std::size_t corner_index = 0; corner_index < corners.size(); ++corner_index) {
+            const auto& corner = corners[corner_index];
+            DisplacedAssetAnchorPoint sample_anchor{};
+            sample_anchor.name = "__box_corner";
+            sample_anchor.texture_x = std::max(0, corner.texture_x);
+            sample_anchor.texture_y = std::max(0, corner.texture_y);
+            sample_anchor.depth_offset = 0;
+
+            const auto sample =
+                anchor_points::resolve_frame_anchor_sample(*target, sample_anchor, anchor_points::GridMaterialization::None);
+            if (sample.resolved.missing || !sample.flat_relative_pixel_point.valid) {
+                valid = false;
+                break;
+            }
+
+            anchor_points::AnchorWorldPoint3 near_point{};
+            anchor_points::AnchorWorldPoint3 far_point{};
+            if (!anchor_points::build_symmetric_camera_ray_extrusion(*target,
+                                                                     sample.flat_relative_pixel_point,
+                                                                     extrusion,
+                                                                     near_point,
+                                                                     far_point) ||
+                !near_point.valid ||
+                !far_point.valid) {
+                valid = false;
+                break;
+            }
+
+            volume.world_points[corner_index] = Asset::RuntimeBoxPoint3{
+                near_point.x,
+                near_point.y,
+                near_point.z,
+            };
+            volume.world_points[corner_index + corners.size()] = Asset::RuntimeBoxPoint3{
+                far_point.x,
+                far_point.y,
+                far_point.z,
+            };
+            sum_x += near_point.x + far_point.x;
+            sum_y += near_point.y + far_point.y;
+            sum_z += near_point.z + far_point.z;
+        }
+
+        if (!valid) {
+            continue;
+        }
+
+        volume.centroid = Asset::RuntimeBoxPoint3{
+            sum_x / 8.0f,
+            sum_y / 8.0f,
+            sum_z / 8.0f,
+        };
+        volume.valid = true;
+        volumes.push_back(std::move(volume));
+    }
+
+    return volumes;
+}
+
+std::vector<Asset::RuntimeBoxVolume> build_hitbox_overlay_volumes_for_frame(Asset* target, AnimationFrame* frame) {
+    if (!frame) {
+        return {};
+    }
+    return build_runtime_box_overlay_volumes_for_frame(
+        target,
+        frame,
+        frame->hit_boxes.boxes,
+        "hitbox",
+        [](const animation_update::FrameHitBox&) { return 0; },
+        [](const animation_update::FrameHitBox&) { return std::string{"{}"}; });
+}
+
+std::vector<Asset::RuntimeBoxVolume> build_attack_box_overlay_volumes_for_frame(Asset* target, AnimationFrame* frame) {
+    if (!frame) {
+        return {};
+    }
+    return build_runtime_box_overlay_volumes_for_frame(
+        target,
+        frame,
+        frame->attack_boxes.boxes,
+        "attack_box",
+        [](const animation_update::FrameAttackBox& box) { return box.damage_amount; },
+        [](const animation_update::FrameAttackBox& box) { return box.meta_json; });
+}
 
 bool box_trace_enabled() {
     static const bool enabled = [] {
@@ -1946,6 +2203,7 @@ if (auto selected = library_ui_->consume_selection()) {
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active());
+        anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -1956,10 +2214,12 @@ if (auto selected = library_ui_->consume_selection()) {
     if (hitbox_tools_panel_) {
         hitbox_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         hitbox_tools_panel_->set_visible(hitbox_mode_active());
+        hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     }
     if (attack_box_tools_panel_) {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
+        attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
     update_asset_editor_layout();
 
@@ -3091,13 +3351,57 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (!suppress_asset_info_overlays && anchor_mode_active()) {
             refresh_anchor_mode_handles();
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+            if (anchor_edit_.onion_skin_enabled && anchor_edit_.target_asset && anchor_edit_.target_asset->info) {
+                AnimationFrame* prev_frame = adjacent_frame_for_editor(anchor_edit_.target_asset,
+                                                                       anchor_edit_.animation_id,
+                                                                       anchor_edit_.frame_index,
+                                                                       -1);
+                AnimationFrame* next_frame = adjacent_frame_for_editor(anchor_edit_.target_asset,
+                                                                       anchor_edit_.animation_id,
+                                                                       anchor_edit_.frame_index,
+                                                                       1);
+                auto render_onion_handles = [&](AnimationFrame* frame, const SDL_Color& color) {
+                    if (!frame) {
+                        return;
+                    }
+                    for (const OnionAnchorOverlayHandle& handle :
+                         collect_anchor_overlay_handles_for_frame(anchor_edit_.target_asset, frame)) {
+                        if (!handle.has_final_screen_px) {
+                            continue;
+                        }
+                        if (handle.has_flat_screen_px) {
+                            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+                            SDL_RenderLine(renderer,
+                                           handle.flat_screen_px.x,
+                                           handle.flat_screen_px.y,
+                                           handle.final_screen_px.x,
+                                           handle.final_screen_px.y);
+                        }
+                        const int cx = static_cast<int>(std::lround(handle.final_screen_px.x));
+                        const int cy = static_cast<int>(std::lround(handle.final_screen_px.y));
+                        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+                        SDL_Rect box{cx - 3, cy - 3, 7, 7};
+                        sdl_render::FillRect(renderer, &box);
+                    }
+                };
+
+                render_onion_handles(prev_frame, SDL_Color{96, 176, 255, 105});
+                render_onion_handles(next_frame, SDL_Color{255, 204, 120, 105});
+            }
+
+            const bool isolate_selected_anchor =
+                anchor_edit_.point_selected && !anchor_edit_.selected_anchor_name.empty();
             for (const AnchorHandleSample& handle : anchor_edit_.handles) {
                 if (!handle.has_final_screen_px) {
                     continue;
                 }
+                if (isolate_selected_anchor && handle.name != anchor_edit_.selected_anchor_name) {
+                    continue;
+                }
 
                 const bool selected = (handle.name == anchor_edit_.selected_anchor_name);
-                const bool hovered = (handle.name == anchor_edit_.hovered_anchor_name);
+                const bool hovered = !isolate_selected_anchor && (handle.name == anchor_edit_.hovered_anchor_name);
 
                 if (handle.has_flat_screen_px) {
                     SDL_SetRenderDrawColor(renderer, 80, 170, 255, 180);
@@ -3191,7 +3495,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                      int selected_point,
                                      int hovered_box,
                                      int hovered_point,
-                                     const SDL_Color& line_color) {
+                                     const SDL_Color& line_color,
+                                     bool render_handles,
+                                     bool isolate_to_selected_box) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             struct ProjectedBoxOverlay {
                 int box_index = -1;
@@ -3207,11 +3513,14 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 if (!volume.valid) {
                     continue;
                 }
+                if (isolate_to_selected_box && selected_box >= 0 && static_cast<int>(box_index) != selected_box) {
+                    continue;
+                }
 
                 ProjectedBoxOverlay entry{};
                 entry.box_index = static_cast<int>(box_index);
-                entry.selected = entry.box_index == selected_box;
-                entry.hovered = entry.box_index == hovered_box;
+                entry.selected = render_handles && (entry.box_index == selected_box);
+                entry.hovered = render_handles && (entry.box_index == hovered_box);
                 for (int point_index = 0; point_index < 8; ++point_index) {
                     project_volume_point(volume.world_points[static_cast<std::size_t>(point_index)],
                                          entry.points[static_cast<std::size_t>(point_index)]);
@@ -3233,7 +3542,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             // Pass 1: translucent fills so edges/handles remain crisp.
             for (const auto& box : projected) {
                 SDL_Color fill = line_color;
-                fill.a = box.selected ? 96 : (box.hovered ? 76 : 58);
+                fill.a = render_handles ? (box.selected ? 96 : (box.hovered ? 76 : 58)) : 44;
                 for (const auto& face : kBoxVolumeFaces) {
                     SDL_Vertex vertices[4]{};
                     for (int i = 0; i < 4; ++i) {
@@ -3253,10 +3562,12 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             // Pass 2: wireframe edges for readability.
             for (const auto& box : projected) {
                 SDL_Color edge = line_color;
-                if (box.selected) {
+                if (render_handles && box.selected) {
                     edge = SDL_Color{255, 208, 96, 245};
-                } else if (box.hovered) {
+                } else if (render_handles && box.hovered) {
                     edge = SDL_Color{255, 165, 0, 235};
+                } else if (!render_handles) {
+                    edge.a = 108;
                 }
                 SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
                 for (const auto& edge_pair : kBoxVolumeEdges) {
@@ -3268,6 +3579,10 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                    static_cast<int>(std::lround(b.x)),
                                    static_cast<int>(std::lround(b.y)));
                 }
+            }
+
+            if (!render_handles) {
+                return;
             }
 
             // Pass 3: handles on top of fill + edges.
@@ -3302,21 +3617,81 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         };
 
         if (!suppress_asset_info_overlays && hitbox_mode_active() && hitbox_edit_.target_asset) {
+            if (hitbox_edit_.onion_skin_enabled) {
+                AnimationFrame* prev_frame = adjacent_frame_for_editor(hitbox_edit_.target_asset,
+                                                                       hitbox_edit_.animation_id,
+                                                                       hitbox_edit_.frame_index,
+                                                                       -1);
+                AnimationFrame* next_frame = adjacent_frame_for_editor(hitbox_edit_.target_asset,
+                                                                       hitbox_edit_.animation_id,
+                                                                       hitbox_edit_.frame_index,
+                                                                       1);
+                render_box_editor(build_hitbox_overlay_volumes_for_frame(hitbox_edit_.target_asset, prev_frame),
+                                  -1,
+                                  -1,
+                                  -1,
+                                  -1,
+                                  SDL_Color{90, 195, 255, 120},
+                                  false,
+                                  false);
+                render_box_editor(build_hitbox_overlay_volumes_for_frame(hitbox_edit_.target_asset, next_frame),
+                                  -1,
+                                  -1,
+                                  -1,
+                                  -1,
+                                  SDL_Color{120, 220, 255, 120},
+                                  false,
+                                  false);
+            }
+
+            const bool isolate_selected_box = hitbox_edit_.selected_box_index >= 0;
             render_box_editor(hitbox_edit_.target_asset->current_hit_box_volumes(),
                               hitbox_edit_.selected_box_index,
                               hitbox_edit_.point_selected ? hitbox_edit_.selected_point_index : -1,
                               hitbox_edit_.hovered_box_index,
                               hitbox_edit_.hovered_point_index,
-                              SDL_Color{90, 195, 255, 210});
+                              SDL_Color{90, 195, 255, 210},
+                              true,
+                              isolate_selected_box);
         }
 
         if (!suppress_asset_info_overlays && attack_box_mode_active() && attack_box_edit_.target_asset) {
+            if (attack_box_edit_.onion_skin_enabled) {
+                AnimationFrame* prev_frame = adjacent_frame_for_editor(attack_box_edit_.target_asset,
+                                                                       attack_box_edit_.animation_id,
+                                                                       attack_box_edit_.frame_index,
+                                                                       -1);
+                AnimationFrame* next_frame = adjacent_frame_for_editor(attack_box_edit_.target_asset,
+                                                                       attack_box_edit_.animation_id,
+                                                                       attack_box_edit_.frame_index,
+                                                                       1);
+                render_box_editor(build_attack_box_overlay_volumes_for_frame(attack_box_edit_.target_asset, prev_frame),
+                                  -1,
+                                  -1,
+                                  -1,
+                                  -1,
+                                  SDL_Color{255, 120, 120, 120},
+                                  false,
+                                  false);
+                render_box_editor(build_attack_box_overlay_volumes_for_frame(attack_box_edit_.target_asset, next_frame),
+                                  -1,
+                                  -1,
+                                  -1,
+                                  -1,
+                                  SDL_Color{255, 170, 130, 120},
+                                  false,
+                                  false);
+            }
+
+            const bool isolate_selected_box = attack_box_edit_.selected_box_index >= 0;
             render_box_editor(attack_box_edit_.target_asset->current_attack_box_volumes(),
                               attack_box_edit_.selected_box_index,
                               attack_box_edit_.point_selected ? attack_box_edit_.selected_point_index : -1,
                               attack_box_edit_.hovered_box_index,
                               attack_box_edit_.hovered_point_index,
-                              SDL_Color{255, 120, 120, 215});
+                              SDL_Color{255, 120, 120, 215},
+                              true,
+                              isolate_selected_box);
         }
     }
 
@@ -6164,11 +6539,15 @@ void RoomEditor::ensure_anchor_editor_widgets() {
                     break;
             }
         });
+        anchor_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
+            anchor_edit_.onion_skin_enabled = enabled;
+        });
     }
 
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active());
+        anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
 }
 
@@ -6223,10 +6602,14 @@ void RoomEditor::ensure_hitbox_editor_widgets() {
                     break;
             }
         });
+        hitbox_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
+            hitbox_edit_.onion_skin_enabled = enabled;
+        });
     }
     if (hitbox_tools_panel_) {
         hitbox_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         hitbox_tools_panel_->set_visible(hitbox_mode_active());
+        hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     }
 }
 
@@ -6269,10 +6652,14 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
                     break;
             }
         });
+        attack_box_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
+            attack_box_edit_.onion_skin_enabled = enabled;
+        });
     }
     if (attack_box_tools_panel_) {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
+        attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
 }
 
@@ -6296,6 +6683,7 @@ void RoomEditor::sync_hitbox_tools_panel() {
     }
 
     hitbox_tools_panel_->set_box_names(names);
+    hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     int selected_box = hitbox_edit_.selected_box_index;
     if (selected_box >= static_cast<int>(names.size())) {
         selected_box = static_cast<int>(names.size()) - 1;
@@ -6342,6 +6730,7 @@ void RoomEditor::sync_attack_box_tools_panel() {
     }
 
     attack_box_tools_panel_->set_box_names(names);
+    attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     int selected_box = attack_box_edit_.selected_box_index;
     if (selected_box >= static_cast<int>(names.size())) {
         selected_box = static_cast<int>(names.size()) - 1;
@@ -7285,6 +7674,7 @@ void RoomEditor::update_asset_editor_layout() {
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active());
+        anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -7295,10 +7685,12 @@ void RoomEditor::update_asset_editor_layout() {
     if (hitbox_tools_panel_) {
         hitbox_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         hitbox_tools_panel_->set_visible(hitbox_mode_active());
+        hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     }
     if (attack_box_tools_panel_) {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
+        attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
 }
 
@@ -7433,6 +7825,7 @@ void RoomEditor::sync_anchor_tools_panel() {
     }
 
     anchor_tools_panel_->set_visible(true);
+    anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     anchor_tools_panel_->set_anchor_names(names);
     ensure_anchor_selection_valid();
     anchor_tools_panel_->set_selected_anchor(anchor_edit_.selected_anchor_name);
@@ -8317,9 +8710,17 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
     const bool left_pressed = input_->wasPressed(Input::LEFT);
     const bool left_released = input_->wasReleased(Input::LEFT);
     const bool pointer_blocked = is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y);
+    const bool selection_locked =
+        anchor_edit_.point_selected && !anchor_edit_.selected_anchor_name.empty();
 
     if (left_pressed && !pointer_blocked) {
-        const int hit = find_anchor_handle_at_point(screen_pt, kAnchorHandlePickRadiusPx);
+        int hit = find_anchor_handle_at_point(screen_pt, kAnchorHandlePickRadiusPx);
+        if (selection_locked &&
+            hit >= 0 &&
+            static_cast<std::size_t>(hit) < anchor_edit_.handles.size() &&
+            anchor_edit_.handles[static_cast<std::size_t>(hit)].name != anchor_edit_.selected_anchor_name) {
+            hit = -1;
+        }
         if (hit >= 0 && static_cast<std::size_t>(hit) < anchor_edit_.handles.size()) {
             anchor_edit_.selected_anchor_name = anchor_edit_.handles[static_cast<std::size_t>(hit)].name;
             anchor_edit_.dragging_anchor_name = anchor_edit_.selected_anchor_name;
@@ -8347,9 +8748,16 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
     }
 
     if (!anchor_edit_.dragging && !pointer_blocked) {
-        const int hover = find_anchor_handle_at_point(screen_pt, kAnchorHandlePickRadiusPx);
+        int hover = find_anchor_handle_at_point(screen_pt, kAnchorHandlePickRadiusPx);
+        if (selection_locked &&
+            hover >= 0 &&
+            static_cast<std::size_t>(hover) < anchor_edit_.handles.size() &&
+            anchor_edit_.handles[static_cast<std::size_t>(hover)].name != anchor_edit_.selected_anchor_name) {
+            hover = -1;
+        }
         if (hover >= 0 && static_cast<std::size_t>(hover) < anchor_edit_.handles.size()) {
-            anchor_edit_.hovered_anchor_name = anchor_edit_.handles[static_cast<std::size_t>(hover)].name;
+            const std::string& hovered_name = anchor_edit_.handles[static_cast<std::size_t>(hover)].name;
+            anchor_edit_.hovered_anchor_name = hovered_name;
         } else {
             anchor_edit_.hovered_anchor_name.clear();
         }
@@ -10201,11 +10609,29 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     const bool left_pressed = input_->wasPressed(Input::LEFT);
     const bool left_released = input_->wasReleased(Input::LEFT);
     const bool pointer_blocked = is_hitbox_ui_blocking_point(screen_pt.x, screen_pt.y);
+    const int locked_box_index = hitbox_edit_.selected_box_index;
+    const bool lock_to_selected_box = locked_box_index >= 0;
+    const auto& hitbox_volumes = hitbox_edit_.target_asset->current_hit_box_volumes();
 
     if (left_pressed && !pointer_blocked) {
         int corner_idx = -1;
         int point_idx = -1;
-        const int box_idx = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
+        int box_idx = -1;
+        if (lock_to_selected_box) {
+            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(hitbox_volumes,
+                                                                                   locked_box_index,
+                                                                                   assets_->getView(),
+                                                                                   screen_pt,
+                                                                                   kBoxCornerPickRadiusPx);
+                corner_hit.has_value()) {
+                box_idx = corner_hit->box_index;
+                corner_idx = corner_hit->corner_index;
+                point_idx = corner_hit->point_index;
+            }
+        } else {
+            box_idx = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
+        }
+
         if (box_idx >= 0) {
             hitbox_edit_.selected_box_index = box_idx;
             hitbox_edit_.selected_corner_index = editor_corner_from_runtime_corner(corner_idx);
@@ -10217,7 +10643,17 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
             hitbox_edit_.drag_reference_corner_index = -1;
             drag_hitbox_corner_to_screen(box_idx, hitbox_edit_.selected_point_index, screen_pt);
         } else {
-            const int body_box = find_hitbox_body_at_screen_point(screen_pt);
+            int body_box = -1;
+            if (lock_to_selected_box) {
+                if (box_body_contains_screen_point_for_index(hitbox_volumes,
+                                                             locked_box_index,
+                                                             assets_->getView(),
+                                                             screen_pt)) {
+                    body_box = locked_box_index;
+                }
+            } else {
+                body_box = find_hitbox_body_at_screen_point(screen_pt);
+            }
             if (body_box >= 0 && begin_hitbox_box_drag(body_box, screen_pt)) {
                 hitbox_edit_.hovered_box_index = body_box;
                 hitbox_edit_.hovered_corner_index = -1;
@@ -10254,13 +10690,37 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     if (!hitbox_edit_.dragging_corner && !hitbox_edit_.dragging_box && !pointer_blocked) {
         int hover_corner = -1;
         int hover_point = -1;
-        const int hover_box = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+        int hover_box = -1;
+        if (hitbox_edit_.selected_box_index >= 0) {
+            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(hitbox_volumes,
+                                                                                   hitbox_edit_.selected_box_index,
+                                                                                   assets_->getView(),
+                                                                                   screen_pt,
+                                                                                   kBoxCornerPickRadiusPx);
+                corner_hit.has_value()) {
+                hover_box = corner_hit->box_index;
+                hover_corner = corner_hit->corner_index;
+                hover_point = corner_hit->point_index;
+            }
+        } else {
+            hover_box = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+        }
         if (hover_box >= 0) {
             hitbox_edit_.hovered_box_index = hover_box;
             hitbox_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
             hitbox_edit_.hovered_point_index = hover_point;
         } else {
-            hitbox_edit_.hovered_box_index = find_hitbox_body_at_screen_point(screen_pt);
+            if (hitbox_edit_.selected_box_index >= 0 &&
+                box_body_contains_screen_point_for_index(hitbox_volumes,
+                                                         hitbox_edit_.selected_box_index,
+                                                         assets_->getView(),
+                                                         screen_pt)) {
+                hitbox_edit_.hovered_box_index = hitbox_edit_.selected_box_index;
+            } else if (hitbox_edit_.selected_box_index < 0) {
+                hitbox_edit_.hovered_box_index = find_hitbox_body_at_screen_point(screen_pt);
+            } else {
+                hitbox_edit_.hovered_box_index = -1;
+            }
             hitbox_edit_.hovered_corner_index = -1;
             hitbox_edit_.hovered_point_index = -1;
         }
@@ -10305,11 +10765,28 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     const bool left_pressed = input_->wasPressed(Input::LEFT);
     const bool left_released = input_->wasReleased(Input::LEFT);
     const bool pointer_blocked = is_attack_box_ui_blocking_point(screen_pt.x, screen_pt.y);
+    const int locked_box_index = attack_box_edit_.selected_box_index;
+    const bool lock_to_selected_box = locked_box_index >= 0;
+    const auto& attack_volumes = attack_box_edit_.target_asset->current_attack_box_volumes();
 
     if (left_pressed && !pointer_blocked) {
         int corner_idx = -1;
         int point_idx = -1;
-        const int box_idx = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
+        int box_idx = -1;
+        if (lock_to_selected_box) {
+            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(attack_volumes,
+                                                                                   locked_box_index,
+                                                                                   assets_->getView(),
+                                                                                   screen_pt,
+                                                                                   kBoxCornerPickRadiusPx);
+                corner_hit.has_value()) {
+                box_idx = corner_hit->box_index;
+                corner_idx = corner_hit->corner_index;
+                point_idx = corner_hit->point_index;
+            }
+        } else {
+            box_idx = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
+        }
         if (box_idx >= 0) {
             attack_box_edit_.selected_box_index = box_idx;
             attack_box_edit_.selected_corner_index = editor_corner_from_runtime_corner(corner_idx);
@@ -10321,7 +10798,17 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
             attack_box_edit_.drag_reference_corner_index = -1;
             drag_attack_box_corner_to_screen(box_idx, attack_box_edit_.selected_point_index, screen_pt);
         } else {
-            const int body_box = find_attack_box_body_at_screen_point(screen_pt);
+            int body_box = -1;
+            if (lock_to_selected_box) {
+                if (box_body_contains_screen_point_for_index(attack_volumes,
+                                                             locked_box_index,
+                                                             assets_->getView(),
+                                                             screen_pt)) {
+                    body_box = locked_box_index;
+                }
+            } else {
+                body_box = find_attack_box_body_at_screen_point(screen_pt);
+            }
             if (body_box >= 0 && begin_attack_box_drag(body_box, screen_pt)) {
                 attack_box_edit_.hovered_box_index = body_box;
                 attack_box_edit_.hovered_corner_index = -1;
@@ -10358,13 +10845,37 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     if (!attack_box_edit_.dragging_corner && !attack_box_edit_.dragging_box && !pointer_blocked) {
         int hover_corner = -1;
         int hover_point = -1;
-        const int hover_box = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+        int hover_box = -1;
+        if (attack_box_edit_.selected_box_index >= 0) {
+            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(attack_volumes,
+                                                                                   attack_box_edit_.selected_box_index,
+                                                                                   assets_->getView(),
+                                                                                   screen_pt,
+                                                                                   kBoxCornerPickRadiusPx);
+                corner_hit.has_value()) {
+                hover_box = corner_hit->box_index;
+                hover_corner = corner_hit->corner_index;
+                hover_point = corner_hit->point_index;
+            }
+        } else {
+            hover_box = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+        }
         if (hover_box >= 0) {
             attack_box_edit_.hovered_box_index = hover_box;
             attack_box_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
             attack_box_edit_.hovered_point_index = hover_point;
         } else {
-            attack_box_edit_.hovered_box_index = find_attack_box_body_at_screen_point(screen_pt);
+            if (attack_box_edit_.selected_box_index >= 0 &&
+                box_body_contains_screen_point_for_index(attack_volumes,
+                                                         attack_box_edit_.selected_box_index,
+                                                         assets_->getView(),
+                                                         screen_pt)) {
+                attack_box_edit_.hovered_box_index = attack_box_edit_.selected_box_index;
+            } else if (attack_box_edit_.selected_box_index < 0) {
+                attack_box_edit_.hovered_box_index = find_attack_box_body_at_screen_point(screen_pt);
+            } else {
+                attack_box_edit_.hovered_box_index = -1;
+            }
             attack_box_edit_.hovered_corner_index = -1;
             attack_box_edit_.hovered_point_index = -1;
         }

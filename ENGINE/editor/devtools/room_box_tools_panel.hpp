@@ -9,6 +9,7 @@
 
 class DMButton;
 class DMTextBox;
+class DMCheckbox;
 
 class RoomBoxToolsPanel {
 public:
@@ -34,6 +35,7 @@ public:
     using DeleteCallback = std::function<void()>;
     using ApplyCallback = std::function<void(const DetailValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
+    using OnionSkinToggleCallback = std::function<void(bool)>;
 
     explicit RoomBoxToolsPanel(Kind kind);
     ~RoomBoxToolsPanel();
@@ -50,12 +52,15 @@ public:
     void clear_selection();
     void set_name_text(const std::string& value);
     void set_detail_values(const DetailValues& values);
+    void set_onion_skin_enabled(bool enabled);
+    bool onion_skin_enabled() const;
 
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
     void set_on_delete(DeleteCallback callback);
     void set_on_apply(ApplyCallback callback);
     void set_on_propagate(PropagateCallback callback);
+    void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -100,10 +105,12 @@ private:
     std::unique_ptr<DMTextBox> name_textbox_;
     std::unique_ptr<DMTextBox> extrusion_textbox_;
     std::unique_ptr<DMTextBox> damage_textbox_;
+    std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
 
     SelectCallback on_select_;
     AddCallback on_add_;
     DeleteCallback on_delete_;
     ApplyCallback on_apply_;
     PropagateCallback on_propagate_;
+    OnionSkinToggleCallback on_onion_skin_toggle_;
 };

@@ -88,6 +88,13 @@ void apply_movement_transforms(std::vector<std::vector<AnimationFrame>>& paths,
         }
 }
 
+float invert_horizontal_rotation(float rotation_degrees) {
+        if (!std::isfinite(rotation_degrees)) {
+                return 0.0f;
+        }
+        return -rotation_degrees;
+}
+
 std::vector<float> discover_cached_scale_steps(const fs::path& cache_folder) {
         std::vector<float> steps;
         std::error_code ec;
@@ -276,6 +283,7 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
                                         anchor.texture_x = frame_w - 1 - anchor.texture_x;
                                 }
                                 anchor.flip_horizontal = !anchor.flip_horizontal;
+                                anchor.rotation_degrees = invert_horizontal_rotation(anchor.rotation_degrees);
                         }
                         if (flip_y) {
                                 if (frame_h > 0) {
@@ -988,6 +996,11 @@ void AnimationLoader::load(Animation& animation,
             "inherit_source_geometry",
             (animation.source.kind == "animation") && legacy_inherit_source_movement && !has_any_local_frame_data);
         animation.inherit_source_geometry = (animation.source.kind == "animation") && inherit_source_geometry;
+        const bool allow_geometry_inversion = (animation.source.kind == "animation") && animation.inherit_source_geometry;
+        if (!allow_geometry_inversion) {
+                animation.flipped_source = false;
+                animation.flip_vertical_source = false;
+        }
 
         auto parse_movement_sequence = [&](const nlohmann::json& seq, std::vector<AnimationFrame>& dest) {
                 bool specified = false;

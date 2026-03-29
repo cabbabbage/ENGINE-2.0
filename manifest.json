@@ -2392,35 +2392,35 @@
               0
             ],
             [
-              -26,
+              -19,
               0,
-              -40
+              -35
             ],
             [
-              -26,
+              -32,
               0,
-              -40
+              -59
             ],
             [
-              -26,
+              -45,
               0,
-              -40
+              -82
             ],
             [
-              -26,
+              -80,
               0,
-              -40
+              -16
             ],
             [
-              -26,
+              -80,
               0,
-              -40
+              -16
             ]
           ],
           "movement_total": {
-            "dx": -130,
+            "dx": -256,
             "dy": 0,
-            "dz": -200.0
+            "dz": -208.0
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -2842,8 +2842,8 @@
               {
                 "depth_offset": -27,
                 "name": "eyes",
-                "texture_x": 210,
-                "texture_y": 169
+                "texture_x": 193,
+                "texture_y": 166
               },
               {
                 "depth_offset": -1,
@@ -2854,8 +2854,8 @@
               {
                 "depth_offset": -2,
                 "name": "mouth",
-                "texture_x": 138,
-                "texture_y": 182
+                "texture_x": 146,
+                "texture_y": 174
               },
               {
                 "depth_offset": -1,
@@ -4901,7 +4901,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -12,
+                "depth_offset": 2,
                 "name": "eyes",
                 "texture_x": 209,
                 "texture_y": 158
@@ -4909,8 +4909,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -4941,8 +4941,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -4973,8 +4973,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -5005,8 +5005,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -5037,8 +5037,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -5069,8 +5069,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -5101,8 +5101,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -5133,8 +5133,8 @@
               {
                 "depth_offset": -1,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "texture_x": 193,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
@@ -5967,9 +5967,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            37,
             36,
             242,
-            141,
             255
           ],
           "edge_smoothness": 2,
@@ -5985,14 +5985,16 @@
           "spawn_groups": []
         },
         "spawn": {
+          "camera_center_dx": -418,
+          "camera_center_dz": -280,
           "camera_height_px": 1000,
-          "camera_tilt_deg": 60.0,
+          "camera_tilt_deg": 40.0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            130,
             36,
             242,
-            139,
             255
           ],
           "edge_smoothness": 85,
@@ -6051,16 +6053,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1024,
-              "dz": -316,
+              "dx": -784,
+              "dz": -1180,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6984,
-              "origional_width": 7024,
+              "origional_height": 6968,
+              "origional_width": 7008,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,

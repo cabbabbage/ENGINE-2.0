@@ -63,6 +63,15 @@ Area make_warped_screen_test_view(const std::string& name, SDL_Point center, int
     return Area(name, corners, 0);
 }
 
+bool traversal_contains_asset(const WarpedScreenGrid& camera_grid, const Asset* asset) {
+    for (const WarpedScreenGrid::VisibleTraversalEntry& entry : camera_grid.visible_traversal_entries()) {
+        if (entry.asset == asset) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 TEST_CASE("GridPoint projection round-trips via camera params") {
@@ -321,6 +330,71 @@ TEST_CASE("WarpedScreenGrid render-area top follows horizon-clamped cull top") {
 
     CHECK(rebuilt_bounds.top == doctest::Approx(expected_top).epsilon(1e-5));
     CHECK(rebuilt_bounds.top >= virtual_bounds.top);
+}
+
+TEST_CASE("WarpedScreenGrid min on-screen culling uses largest projected dimension") {
+    world::WorldGrid grid;
+    Asset* tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    Asset* wide_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(tiny_asset != nullptr);
+    REQUIRE(wide_asset != nullptr);
+
+    tiny_asset->info->original_canvas_width = 1;
+    tiny_asset->info->original_canvas_height = 1;
+    wide_asset->info->original_canvas_width = 256;
+    wide_asset->info->original_canvas_height = 1;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.03f;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+
+    CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
+    CHECK(traversal_contains_asset(camera_grid, wide_asset));
+}
+
+TEST_CASE("WarpedScreenGrid min on-screen threshold applies immediately after settings change") {
+    world::WorldGrid grid;
+    Asset* tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(tiny_asset != nullptr);
+    tiny_asset->info->original_canvas_width = 1;
+    tiny_asset->info->original_canvas_height = 1;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.0f;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, tiny_asset));
+
+    settings.min_visible_screen_ratio = 0.05f;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 2);
+    CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
+}
+
+TEST_CASE("WarpedScreenGrid min on-screen culling exempts tracked player asset") {
+    world::WorldGrid grid;
+    Asset* player_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    Asset* npc_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(player_asset != nullptr);
+    REQUIRE(npc_asset != nullptr);
+
+    player_asset->info->original_canvas_width = 1;
+    player_asset->info->original_canvas_height = 1;
+    npc_asset->info->original_canvas_width = 1;
+    npc_asset->info->original_canvas_height = 1;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.05f;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.update_camera_height(nullptr, nullptr, player_asset, true, 0.016f, false);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+
+    CHECK(traversal_contains_asset(camera_grid, player_asset));
+    CHECK_FALSE(traversal_contains_asset(camera_grid, npc_asset));
 }
 
 TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") {

@@ -334,4 +334,5 @@ private:
     bool depth_enabled_ = true;
     bool depth_debug_logging_ = false;
     std::optional<float> tilt_override_deg_{};
+    const Asset* tracked_player_asset_ = nullptr;
 };

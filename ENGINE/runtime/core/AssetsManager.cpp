@@ -1446,25 +1446,9 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
 
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(
-        std::min<std::size_t>(kMaxBufferEntries,
-                              std::max(active_traversal.size(), active_assets.size())));
+        std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
     std::unordered_set<const Asset*> buffer_set;
-    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries,
-                                             std::max(active_traversal.size(), active_assets.size())));
-
-    const auto append_unique_assets = [&](const std::vector<Asset*>& source) {
-        for (Asset* asset : source) {
-            if (!asset || asset == player || asset->dead) {
-                continue;
-            }
-            if (buffer_set.insert(asset).second) {
-                non_player_update_buffer_.push_back(asset);
-                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
-                    break;
-                }
-            }
-        }
-    };
+    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
     const auto append_unique_traversal = [&](const std::vector<ActiveTraversalEntry>& source) {
         for (const ActiveTraversalEntry& entry : source) {
             Asset* asset = entry.asset;
@@ -1480,18 +1464,11 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         }
     };
 
-    if (active_traversal.empty()) {
-        append_unique_assets(active_assets);
-    } else if (active_traversal.size() > kMaxBufferEntries) {
+    if (active_traversal.size() > kMaxBufferEntries) {
         std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
-                  << active_traversal.size() << "); falling back to active_assets\n";
-        append_unique_assets(active_assets);
-    } else {
-        append_unique_traversal(active_traversal);
-        if (non_player_update_buffer_.empty() && !active_assets.empty()) {
-            append_unique_assets(active_assets);
-        }
+                  << active_traversal.size() << "); truncating to cap\n";
     }
+    append_unique_traversal(active_traversal);
 
     non_player_update_buffer_dirty_.store(false, std::memory_order_release);
 }

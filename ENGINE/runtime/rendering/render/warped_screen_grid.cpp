@@ -763,6 +763,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     // Keep the anchor unlocked in both modes so the projection math stays consistent.
     // Lock to screen center so depth parallax remains visible on ground plane.
     lock_anchor_to_screen_center_ = true;
+    tracked_player_asset_ = player;
 
     CameraParams cur_params;
     CameraParams neigh_params;
@@ -1420,6 +1421,91 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         return point_inside_frustum(static_cast<double>(center_x), static_cast<double>(center_y), asset_z);
     };
 
+    auto projected_largest_dimension_px = [&](Asset* asset, double base_world_z) -> std::optional<float> {
+        if (!asset || !asset->info) {
+            return std::nullopt;
+        }
+
+        float authored_scale = 1.0f;
+        if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
+            authored_scale = asset->info->scale_factor;
+        }
+        constexpr float kProjectedBoundsSafetyInflation = 1.15f;
+        authored_scale *= kProjectedBoundsSafetyInflation;
+
+        const int fw = std::max(1, asset->info->original_canvas_width);
+        const int fh = std::max(1, asset->info->original_canvas_height);
+        const float world_width = static_cast<float>(fw) * authored_scale;
+        const float world_height = static_cast<float>(fh) * authored_scale;
+        if (!std::isfinite(world_width) || !std::isfinite(world_height) ||
+            world_width <= 0.0f || world_height <= 0.0f) {
+            return std::nullopt;
+        }
+
+        float center_x = asset->smoothed_translation_x();
+        float bottom = asset->smoothed_translation_y();
+        if (!std::isfinite(center_x)) {
+            center_x = static_cast<float>(asset->world_x());
+        }
+        if (!std::isfinite(bottom)) {
+            bottom = static_cast<float>(asset->world_y());
+        }
+
+        const float half_width = 0.5f * world_width;
+        bool have_projected_bounds = false;
+        float min_x = 0.0f;
+        float max_x = 0.0f;
+        float min_y = 0.0f;
+        float max_y = 0.0f;
+
+        auto expand_bounds = [&](const SDL_FPoint& pt) {
+            if (!have_projected_bounds) {
+                min_x = max_x = pt.x;
+                min_y = max_y = pt.y;
+                have_projected_bounds = true;
+                return;
+            }
+            min_x = std::min(min_x, pt.x);
+            max_x = std::max(max_x, pt.x);
+            min_y = std::min(min_y, pt.y);
+            max_y = std::max(max_y, pt.y);
+        };
+
+        auto project_with_base = [&](double world_x, double world_y, double world_z_offset, SDL_FPoint& out) -> bool {
+            return project_screen_point(world_x, world_y, base_world_z + world_z_offset, out);
+        };
+
+        SDL_FPoint corner{};
+        if (project_with_base(center_x - half_width, bottom, 0.0, corner)) {
+            expand_bounds(corner);
+        }
+        if (project_with_base(center_x + half_width, bottom, 0.0, corner)) {
+            expand_bounds(corner);
+        }
+        if (project_with_base(center_x - half_width, bottom, world_height, corner)) {
+            expand_bounds(corner);
+        }
+        if (project_with_base(center_x + half_width, bottom, world_height, corner)) {
+            expand_bounds(corner);
+        }
+        if (!have_projected_bounds) {
+            return std::nullopt;
+        }
+
+        const float width_px = max_x - min_x;
+        const float height_px = max_y - min_y;
+        if (!std::isfinite(width_px) || !std::isfinite(height_px) ||
+            width_px <= 0.0f || height_px <= 0.0f) {
+            return std::nullopt;
+        }
+
+        const float largest_dim = std::max(width_px, height_px);
+        if (!std::isfinite(largest_dim)) {
+            return std::nullopt;
+        }
+        return largest_dim;
+    };
+
     std::vector<Asset*> frustum_hits;
     frustum_hits.reserve(8);
 
@@ -1429,17 +1515,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         gp->is_floor = (gp->world_y() == 0);
 
         if (gp->occupants.empty()) {
-            continue;
-        }
-
-        Asset* primary_asset = nullptr;
-        for (const auto& owned : gp->occupants) {
-            if (owned) {
-                primary_asset = owned.get();
-                break;
-            }
-        }
-        if (!primary_asset) {
             continue;
         }
 
@@ -1467,91 +1542,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             space.valid = true;
         }
 
-        const SDL_FPoint screen_for_bounds = gp->screen_position();
-        auto project_with_base = [&](double world_x, double world_y, double world_z_offset, SDL_FPoint& out) -> bool {
-            return project_screen_point(world_x, world_y, base_world_z + world_z_offset, out);
-        };
-
-        float authored_scale = 1.0f;
-        if (primary_asset && primary_asset->info &&
-            std::isfinite(primary_asset->info->scale_factor) &&
-            primary_asset->info->scale_factor > 0.0f) {
-            authored_scale = primary_asset->info->scale_factor;
-        }
-        constexpr float kProjectedBoundsSafetyInflation = 1.15f;
-        authored_scale *= kProjectedBoundsSafetyInflation;
-
-        const int fw = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_width) : 1;
-        const int fh = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_height) : 1;
-
-        const float world_width = static_cast<float>(fw) * authored_scale;
-        const float world_height = static_cast<float>(fh) * authored_scale;
-        const float half_width = 0.5f * world_width;
-
-        bool have_projected_bounds = false;
-        float min_x = 0.0f;
-        float max_x = 0.0f;
-        float min_y = 0.0f;
-        float max_y = 0.0f;
-        auto expand_bounds = [&](const SDL_FPoint& pt) {
-            if (!have_projected_bounds) {
-                min_x = max_x = pt.x;
-                min_y = max_y = pt.y;
-                have_projected_bounds = true;
-                return;
-            }
-            min_x = std::min(min_x, pt.x);
-            max_x = std::max(max_x, pt.x);
-            min_y = std::min(min_y, pt.y);
-            max_y = std::max(max_y, pt.y);
-        };
-
-        if (world_width > 0.0f && world_height > 0.0f) {
-            SDL_FPoint corner{};
-            if (project_with_base(world_pos.x - half_width, world_pos.y, 0.0, corner)) {
-                expand_bounds(corner);
-            }
-            if (project_with_base(world_pos.x + half_width, world_pos.y, 0.0, corner)) {
-                expand_bounds(corner);
-            }
-            if (project_with_base(world_pos.x - half_width, world_pos.y, world_height, corner)) {
-                expand_bounds(corner);
-            }
-            if (project_with_base(world_pos.x + half_width, world_pos.y, world_height, corner)) {
-                expand_bounds(corner);
-            }
-        }
-
-        const float min_size = std::max(1.0f, min_visible_px);
-        SDL_FRect bounds{};
-        if (have_projected_bounds) {
-            float width = max_x - min_x;
-            float height = max_y - min_y;
-            if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.0f || height <= 0.0f) {
-                have_projected_bounds = false;
-            } else {
-                width = std::max(width, min_size);
-                height = std::max(height, min_size);
-                const float center_x = (min_x + max_x) * 0.5f;
-                const float center_y = (min_y + max_y) * 0.5f;
-                bounds = SDL_FRect{
-                    center_x - width * 0.5f,
-                    center_y - height * 0.5f,
-                    width,
-                    height
-                };
-            }
-        }
-        if (!have_projected_bounds) {
-            const float size = min_size;
-            bounds = SDL_FRect{
-                screen_for_bounds.x - size * 0.5f,
-                screen_for_bounds.y - size,
-                size,
-                size
-            };
-        }
-
         const int z_floor = static_cast<int>(std::floor(base_world_z));
         const int z_ceil  = static_cast<int>(std::ceil(base_world_z));
         last_min_world_z_ = std::min(last_min_world_z_, z_floor);
@@ -1568,6 +1558,13 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
 
             asset_to_point_[owned.get()] = gp;
             if (asset_in_frustum(owned.get(), gp, base_world_z)) {
+                if (owned.get() != tracked_player_asset_ && min_visible_px > 0.0f) {
+                    const std::optional<float> largest_dim_px =
+                        projected_largest_dimension_px(owned.get(), base_world_z);
+                    if (largest_dim_px.has_value() && *largest_dim_px < min_visible_px) {
+                        continue;
+                    }
+                }
                 frustum_hits.push_back(owned.get());
             }
         }

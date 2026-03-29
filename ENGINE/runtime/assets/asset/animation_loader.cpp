@@ -431,6 +431,7 @@ void parse_box_common_fields(TBox& box,
         box.enabled = read_bool_field_like(node, "enabled", true);
         box.extrusion_amount = std::max(0, read_int_field_like(node, "extrusion_amount", 0));
         box.anchor_link = read_string_field_like(node, "anchor_link", std::string{});
+        box.set_rotation_degrees(read_float_field_like(node, "rotation_degrees", 0.0f));
         box.frame_start = static_cast<int>(frame_index);
         box.frame_end = static_cast<int>(frame_index);
         if (node.contains("frame_range") && node["frame_range"].is_object()) {
@@ -625,6 +626,12 @@ void apply_box_transforms(std::vector<std::vector<TBox>>& boxes,
                                 flipped.bottom = next_bottom;
                         }
                         box.set_rect(flipped);
+                        if (flip_x) {
+                                box.set_rotation_degrees(-box.rotation_degrees);
+                        }
+                        if (flip_y) {
+                                box.set_rotation_degrees(-box.rotation_degrees);
+                        }
                 }
         }
 }

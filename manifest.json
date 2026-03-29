@@ -61,7 +61,9 @@
         "scale_percentage": 57.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "surface"
+      ],
       "tillable": false,
       "update_radius": 0
     },
@@ -103,13 +105,13 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0,
+                "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
-                "name": "surface_topnchor",
+                "name": "surface",
                 "rotation_degrees": 0.0,
-                "texture_x": 189,
-                "texture_y": 211
+                "texture_x": 203,
+                "texture_y": 37
               }
             ]
           ],
@@ -304,7 +306,7 @@
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
       "asset_type": "object",
-      "can_invert": false,
+      "can_invert": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
@@ -455,7 +457,14 @@
         "scale_percentage": 100.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "book",
+        "manmade",
+        "red",
+        "small",
+        "surface"
+      ],
+      "tillable": false,
       "update_radius": 0
     },
     "book_1": {
@@ -8989,6 +8998,37 @@
       "tillable": false,
       "update_radius": 0
     },
+    "vibble_mouth": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/vibble_mouth",
+      "asset_name": "vibble_mouth",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
     "vibble_neck": {
       "animations": {
         "default": {
@@ -9221,7 +9261,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            90,
+            120,
             242,
             255
           ],
@@ -9245,9 +9285,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
             36,
+            133,
+            242,
             255
           ],
           "edge_smoothness": 85,

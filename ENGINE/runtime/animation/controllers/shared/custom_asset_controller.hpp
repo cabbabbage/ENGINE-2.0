@@ -1,5 +1,5 @@
 #pragma once
-
+#include "animation/controllers/shared/child_asset.hpp"
 #include "assets/asset/asset_controller.hpp"
 
 class Asset;
@@ -24,5 +24,7 @@ protected:
     virtual void on_process_pending_attacks(Asset& self);
 
 private:
+
+    std::optional<ChildAsset> surface_child_;
     Asset* self_ = nullptr;
 };

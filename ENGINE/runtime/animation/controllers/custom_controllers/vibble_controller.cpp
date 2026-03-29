@@ -78,7 +78,7 @@ vibble_controller::vibble_controller(Asset* player)
             if (!weapon_child_.has_value()) {
                 weapon_child_.emplace(*player, "vibble_attack_1");
                 weapon_child_->bind("weapon");
-                weapon_child_->hide();
+               // weapon_child_->hide();
                 child_assets_.push_back(&*weapon_child_);   
             }
         }
@@ -132,6 +132,9 @@ void vibble_controller::movement(const Input& input) {
         meleeCooldownEndTime = std::chrono::steady_clock::now()
                                + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                                    std::chrono::duration<float>(meleeCooldown));
+        
+        weapon_child_->set_animation("attack");
+
     }
 
     float speed_multiplier = kWalkSpeed;

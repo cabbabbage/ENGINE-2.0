@@ -490,6 +490,8 @@ private:
                                                int radius_px,
                                                int& out_corner_index,
                                                int& out_point_index) const;
+    int find_hitbox_rotation_handle_at_screen_point(SDL_Point screen_point) const;
+    int find_attack_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_hitbox_body_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_body_at_screen_point(SDL_Point screen_point) const;
     bool handle_hitbox_mode_mouse_input(const Input& input);
@@ -504,8 +506,12 @@ private:
     bool drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);
     bool begin_attack_box_drag(int box_index, SDL_Point screen_point);
+    bool begin_hitbox_rotation_drag(int box_index, SDL_Point screen_point);
+    bool begin_attack_box_rotation_drag(int box_index, SDL_Point screen_point);
     bool drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point);
     bool drag_attack_box_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_hitbox_rotation_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_attack_box_rotation_to_screen(int box_index, SDL_Point screen_point);
     bool add_hitbox_in_current_frame();
     bool add_attack_box_in_current_frame();
     bool delete_selected_hitbox_in_current_frame();
@@ -656,11 +662,16 @@ private:
         bool point_selected = false;
         bool dragging_corner = false;
         bool dragging_box = false;
+        bool dragging_rotation = false;
+        bool hovered_rotation_handle = false;
         bool onion_skin_enabled = false;
         int drag_reference_point_index = -1;
         int drag_reference_corner_index = -1;
         SDL_FPoint drag_reference_screen_offset{0.0f, 0.0f};
         animation_update::FrameBoxRect drag_start_rect{};
+        SDL_FPoint rotation_drag_center_screen{0.0f, 0.0f};
+        float rotation_drag_start_angle_degrees = 0.0f;
+        float rotation_drag_start_box_rotation_degrees = 0.0f;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;

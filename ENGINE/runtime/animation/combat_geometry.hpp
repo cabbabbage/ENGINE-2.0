@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -94,6 +95,7 @@ struct FrameBoxBase {
     std::string anchor_link;
     int extrusion_amount = 0;
     FrameBoxRect rect{};
+    float rotation_degrees = 0.0f;
 
     bool is_valid() const {
         return !name.empty() && !id.empty();
@@ -103,18 +105,33 @@ struct FrameBoxBase {
         rect = value.normalized_clamped();
     }
 
-    FrameBoxCorner corner(FrameBoxCornerId id) const {
-        switch (id) {
-            case FrameBoxCornerId::TL:
-                return FrameBoxCorner{rect.left, rect.top};
-            case FrameBoxCornerId::TR:
-                return FrameBoxCorner{rect.right, rect.top};
-            case FrameBoxCornerId::BL:
-                return FrameBoxCorner{rect.left, rect.bottom};
-            case FrameBoxCornerId::BR:
-                return FrameBoxCorner{rect.right, rect.bottom};
+    static float sanitize_rotation_degrees(float value) {
+        if (!std::isfinite(value)) {
+            return 0.0f;
         }
-        return FrameBoxCorner{};
+        float normalized = std::fmod(value, 360.0f);
+        if (normalized > 180.0f) {
+            normalized -= 360.0f;
+        } else if (normalized < -180.0f) {
+            normalized += 360.0f;
+        }
+        return normalized;
+    }
+
+    float normalized_rotation_degrees() const {
+        return sanitize_rotation_degrees(rotation_degrees);
+    }
+
+    void set_rotation_degrees(float value) {
+        rotation_degrees = sanitize_rotation_degrees(value);
+    }
+
+    FrameBoxCorner corner(FrameBoxCornerId id) const {
+        const auto corner_xy = corner_float(id);
+        return FrameBoxCorner{
+            std::max(0, static_cast<int>(std::lround(corner_xy[0]))),
+            std::max(0, static_cast<int>(std::lround(corner_xy[1]))),
+        };
     }
 
     static FrameBoxCornerId corner_id_from_runtime_index(std::size_t index) {
@@ -133,24 +150,98 @@ struct FrameBoxBase {
     void set_corner_clamped(FrameBoxCornerId id, int texture_x, int texture_y) {
         const int x = std::max(0, texture_x);
         const int y = std::max(0, texture_y);
-        switch (id) {
-            case FrameBoxCornerId::TL:
-                rect.left = std::min(x, rect.right);
-                rect.top = std::min(y, rect.bottom);
-                break;
-            case FrameBoxCornerId::TR:
-                rect.right = std::max(x, rect.left);
-                rect.top = std::min(y, rect.bottom);
-                break;
-            case FrameBoxCornerId::BL:
-                rect.left = std::min(x, rect.right);
-                rect.bottom = std::max(y, rect.top);
-                break;
-            case FrameBoxCornerId::BR:
-                rect.right = std::max(x, rect.left);
-                rect.bottom = std::max(y, rect.top);
-                break;
+        const float rotation = normalized_rotation_degrees();
+        if (std::fabs(rotation) <= 1e-4f) {
+            switch (id) {
+                case FrameBoxCornerId::TL:
+                    rect.left = std::min(x, rect.right);
+                    rect.top = std::min(y, rect.bottom);
+                    break;
+                case FrameBoxCornerId::TR:
+                    rect.right = std::max(x, rect.left);
+                    rect.top = std::min(y, rect.bottom);
+                    break;
+                case FrameBoxCornerId::BL:
+                    rect.left = std::min(x, rect.right);
+                    rect.bottom = std::max(y, rect.top);
+                    break;
+                case FrameBoxCornerId::BR:
+                    rect.right = std::max(x, rect.left);
+                    rect.bottom = std::max(y, rect.top);
+                    break;
+            }
+            return;
         }
+
+        auto opposite_corner_id = [](FrameBoxCornerId corner_id) {
+            switch (corner_id) {
+                case FrameBoxCornerId::TL:
+                    return FrameBoxCornerId::BR;
+                case FrameBoxCornerId::TR:
+                    return FrameBoxCornerId::BL;
+                case FrameBoxCornerId::BL:
+                    return FrameBoxCornerId::TR;
+                case FrameBoxCornerId::BR:
+                default:
+                    return FrameBoxCornerId::TL;
+            }
+        };
+
+        auto corner_signs = [](FrameBoxCornerId corner_id, float& sx, float& sy) {
+            switch (corner_id) {
+                case FrameBoxCornerId::TL:
+                    sx = -1.0f;
+                    sy = -1.0f;
+                    break;
+                case FrameBoxCornerId::TR:
+                    sx = 1.0f;
+                    sy = -1.0f;
+                    break;
+                case FrameBoxCornerId::BL:
+                    sx = -1.0f;
+                    sy = 1.0f;
+                    break;
+                case FrameBoxCornerId::BR:
+                default:
+                    sx = 1.0f;
+                    sy = 1.0f;
+                    break;
+            }
+        };
+
+        const auto opposite_corner = corner_float(opposite_corner_id(id));
+        const float ox = opposite_corner[0];
+        const float oy = opposite_corner[1];
+        const float dx = static_cast<float>(x) - ox;
+        const float dy = static_cast<float>(y) - oy;
+
+        const float radians = rotation * static_cast<float>(3.14159265358979323846 / 180.0);
+        const float cos_theta = std::cos(radians);
+        const float sin_theta = std::sin(radians);
+        const float ux = cos_theta;
+        const float uy = sin_theta;
+        const float vx = -sin_theta;
+        const float vy = cos_theta;
+
+        float sign_x = 1.0f;
+        float sign_y = 1.0f;
+        corner_signs(id, sign_x, sign_y);
+
+        const float projected_u = (dx * ux) + (dy * uy);
+        const float projected_v = (dx * vx) + (dy * vy);
+        const float half_w = std::max(0.0f, (sign_x * projected_u) * 0.5f);
+        const float half_h = std::max(0.0f, (sign_y * projected_v) * 0.5f);
+
+        const float offset_x = (sign_x * half_w * ux) + (sign_y * half_h * vx);
+        const float offset_y = (sign_x * half_w * uy) + (sign_y * half_h * vy);
+        const float cx = ox + offset_x;
+        const float cy = oy + offset_y;
+
+        rect.left = static_cast<int>(std::lround(cx - half_w));
+        rect.top = static_cast<int>(std::lround(cy - half_h));
+        rect.right = static_cast<int>(std::lround(cx + half_w));
+        rect.bottom = static_cast<int>(std::lround(cy + half_h));
+        rect = rect.normalized_clamped();
     }
 
     void translate_clamped(int dx, int dy) {
@@ -183,6 +274,42 @@ struct FrameBoxBase {
         const int clamped_width = std::max(0, width);
         const int clamped_height = std::max(0, height);
         set_rect(FrameBoxRect{x, y, x + clamped_width, y + clamped_height});
+    }
+
+private:
+    std::array<float, 2> corner_float(FrameBoxCornerId id) const {
+        const float center_x = (static_cast<float>(rect.left) + static_cast<float>(rect.right)) * 0.5f;
+        const float center_y = (static_cast<float>(rect.top) + static_cast<float>(rect.bottom)) * 0.5f;
+        const float half_w = static_cast<float>(std::max(0, rect.width())) * 0.5f;
+        const float half_h = static_cast<float>(std::max(0, rect.height())) * 0.5f;
+
+        float local_x = 0.0f;
+        float local_y = 0.0f;
+        switch (id) {
+            case FrameBoxCornerId::TL:
+                local_x = -half_w;
+                local_y = -half_h;
+                break;
+            case FrameBoxCornerId::TR:
+                local_x = half_w;
+                local_y = -half_h;
+                break;
+            case FrameBoxCornerId::BL:
+                local_x = -half_w;
+                local_y = half_h;
+                break;
+            case FrameBoxCornerId::BR:
+                local_x = half_w;
+                local_y = half_h;
+                break;
+        }
+
+        const float radians = normalized_rotation_degrees() * static_cast<float>(3.14159265358979323846 / 180.0);
+        const float cos_theta = std::cos(radians);
+        const float sin_theta = std::sin(radians);
+        const float rotated_x = center_x + (local_x * cos_theta) - (local_y * sin_theta);
+        const float rotated_y = center_y + (local_x * sin_theta) + (local_y * cos_theta);
+        return std::array<float, 2>{rotated_x, rotated_y};
     }
 };
 

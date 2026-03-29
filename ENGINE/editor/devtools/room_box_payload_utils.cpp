@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <unordered_set>
 
 #include <SDL3/SDL.h>
@@ -128,6 +129,8 @@ nlohmann::json serialize_box_base(const TBox& box,
         {"w", std::max(0, box.rect.width())},
         {"h", std::max(0, box.rect.height())},
     });
+    node["rotation_degrees"] = static_cast<double>(
+        animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees));
     node["anchor_link"] = box.anchor_link;
     node["extrusion_amount"] = std::max(0, box.extrusion_amount);
     nlohmann::json corners = nlohmann::json::array();

@@ -67,6 +67,25 @@ TEST_CASE("FrameBox runtime winding is TL TR BR BL") {
     CHECK(points[3].texture_y == 6);
 }
 
+TEST_CASE("FrameBox runtime winding rotates rectangle corners around center") {
+    animation_update::FrameHitBox box{};
+    box.id = "hb_rot";
+    box.name = "hb_rot";
+    box.set_rect(animation_update::FrameBoxRect{20, 20, 30, 24});
+    box.set_rotation_degrees(90.0f);
+
+    const auto points = box.to_runtime_clockwise_points();
+    REQUIRE(points.size() == 4);
+    CHECK(points[0].texture_x == 27);  // TL
+    CHECK(points[0].texture_y == 17);
+    CHECK(points[1].texture_x == 27);  // TR
+    CHECK(points[1].texture_y == 27);
+    CHECK(points[2].texture_x == 23);  // BR
+    CHECK(points[2].texture_y == 27);
+    CHECK(points[3].texture_x == 23);  // BL
+    CHECK(points[3].texture_y == 17);
+}
+
 TEST_CASE("FrameBoxRect::from_points normalizes unsorted corners") {
     const std::vector<animation_update::FrameBoxCorner> points{
         animation_update::FrameBoxCorner{9, 4},
@@ -225,4 +244,24 @@ TEST_CASE("Room box payload keeps explicit box id stable across writes") {
     CHECK(payload["hit_boxes"][1][0]["id"] == "stable_box_id");
     CHECK(payload["hit_boxes"][1][0]["frame_range"]["start"] == 1);
     CHECK(payload["hit_boxes"][1][0]["frame_range"]["end"] == 1);
+}
+
+TEST_CASE("Room box payload preserves rotation degrees in serialized schema") {
+    animation_update::FrameHitBox hit_box{};
+    hit_box.id = "rotated_hit";
+    hit_box.type = "hitbox";
+    hit_box.name = "rotated_hit";
+    hit_box.set_rect(animation_update::FrameBoxRect{20, 20, 30, 24});
+    hit_box.set_rotation_degrees(90.0f);
+
+    nlohmann::json payload = nlohmann::json::object();
+    REQUIRE(devmode::room_box_payload::write_hit_box_frame_to_payload(
+        payload,
+        1,
+        0,
+        std::vector<animation_update::FrameHitBox>{hit_box}));
+
+    const auto& box = payload["hit_boxes"][0][0];
+    REQUIRE(box.contains("rotation_degrees"));
+    CHECK(box["rotation_degrees"].get<double>() == doctest::Approx(90.0));
 }

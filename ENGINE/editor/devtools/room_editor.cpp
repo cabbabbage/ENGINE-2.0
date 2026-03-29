@@ -87,12 +87,20 @@ constexpr float kShiftEdgePanExponent = 1.5f;
 constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr int kMovementPointPickRadiusPx = 16;
 constexpr int kBoxCornerPickRadiusPx = 18;
+constexpr int kBoxRotationHandlePickRadiusPx = 16;
+constexpr float kBoxRotationHandleDistancePx = 26.0f;
 constexpr int kBoxExtrusionScrollStep = 4;
 constexpr int kAssetEditorTransitionDurationFrames = 6;
 struct BoxCornerPickResult {
     int box_index = -1;
     int corner_index = -1;
     int point_index = -1;
+};
+
+struct BoxRotationHandlePickResult {
+    int box_index = -1;
+    SDL_FPoint handle_screen{0.0f, 0.0f};
+    SDL_FPoint center_screen{0.0f, 0.0f};
 };
 
 class ScopedAssetFrameOverride {
@@ -202,6 +210,100 @@ bool box_body_contains_screen_point_for_index(const std::vector<Asset::RuntimeBo
         return false;
     }
     return projected_volume_contains_screen_point(volume, cam, screen_point);
+}
+
+float normalize_angle_delta_degrees(float value) {
+    float normalized = std::fmod(value, 360.0f);
+    if (normalized > 180.0f) {
+        normalized -= 360.0f;
+    } else if (normalized < -180.0f) {
+        normalized += 360.0f;
+    }
+    return normalized;
+}
+
+float screen_angle_degrees(const SDL_FPoint& center, const SDL_Point& point) {
+    const float dx = static_cast<float>(point.x) - center.x;
+    const float dy = static_cast<float>(point.y) - center.y;
+    return static_cast<float>(std::atan2(dy, dx) * (180.0 / kPi));
+}
+
+bool compute_rotation_handle_screen_for_volume(const Asset::RuntimeBoxVolume& volume,
+                                               const WarpedScreenGrid& cam,
+                                               SDL_FPoint& out_handle,
+                                               SDL_FPoint* out_top_mid = nullptr,
+                                               SDL_FPoint* out_center = nullptr) {
+    if (!volume.valid) {
+        return false;
+    }
+
+    std::array<SDL_FPoint, 4> near_points{};
+    for (int i = 0; i < 4; ++i) {
+        if (!project_runtime_box_point_to_screen(volume.world_points[static_cast<std::size_t>(i)], cam, near_points[static_cast<std::size_t>(i)])) {
+            return false;
+        }
+    }
+
+    SDL_FPoint center{
+        (near_points[0].x + near_points[1].x + near_points[2].x + near_points[3].x) * 0.25f,
+        (near_points[0].y + near_points[1].y + near_points[2].y + near_points[3].y) * 0.25f,
+    };
+    SDL_FPoint top_mid{
+        (near_points[0].x + near_points[1].x) * 0.5f,
+        (near_points[0].y + near_points[1].y) * 0.5f,
+    };
+
+    float dir_x = top_mid.x - center.x;
+    float dir_y = top_mid.y - center.y;
+    const float dir_len = std::hypot(dir_x, dir_y);
+    if (!std::isfinite(dir_len) || dir_len <= 1e-4f) {
+        dir_x = 0.0f;
+        dir_y = -1.0f;
+    } else {
+        dir_x /= dir_len;
+        dir_y /= dir_len;
+    }
+
+    out_handle = SDL_FPoint{
+        top_mid.x + (dir_x * kBoxRotationHandleDistancePx),
+        top_mid.y + (dir_y * kBoxRotationHandleDistancePx),
+    };
+    if (out_top_mid) {
+        *out_top_mid = top_mid;
+    }
+    if (out_center) {
+        *out_center = center;
+    }
+    return std::isfinite(out_handle.x) && std::isfinite(out_handle.y);
+}
+
+std::optional<BoxRotationHandlePickResult> find_box_rotation_handle_at_screen_point_for_index(
+    const std::vector<Asset::RuntimeBoxVolume>& volumes,
+    int box_index,
+    const WarpedScreenGrid& cam,
+    SDL_Point screen_point,
+    int radius_px) {
+    if (box_index < 0 || box_index >= static_cast<int>(volumes.size())) {
+        return std::nullopt;
+    }
+    const auto& volume = volumes[static_cast<std::size_t>(box_index)];
+    SDL_FPoint handle{};
+    SDL_FPoint center{};
+    if (!compute_rotation_handle_screen_for_volume(volume, cam, handle, nullptr, &center)) {
+        return std::nullopt;
+    }
+    const float dx = handle.x - static_cast<float>(screen_point.x);
+    const float dy = handle.y - static_cast<float>(screen_point.y);
+    const float dist_sq = dx * dx + dy * dy;
+    const float radius_sq = static_cast<float>(radius_px * radius_px);
+    if (dist_sq > radius_sq) {
+        return std::nullopt;
+    }
+    return BoxRotationHandlePickResult{
+        box_index,
+        handle,
+        center,
+    };
 }
 
 struct OnionAnchorOverlayHandle {
@@ -3495,6 +3597,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                      int selected_point,
                                      int hovered_box,
                                      int hovered_point,
+                                     bool hovered_rotation_handle,
                                      const SDL_Color& line_color,
                                      bool render_handles,
                                      bool isolate_to_selected_box) {
@@ -3613,6 +3716,59 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         sdl_render::Rect(renderer, &outline);
                     }
                 }
+                if (!box.selected) {
+                    continue;
+                }
+
+                SDL_FPoint center{
+                    (box.points[0].x + box.points[1].x + box.points[2].x + box.points[3].x) * 0.25f,
+                    (box.points[0].y + box.points[1].y + box.points[2].y + box.points[3].y) * 0.25f,
+                };
+                SDL_FPoint top_mid{
+                    (box.points[0].x + box.points[1].x) * 0.5f,
+                    (box.points[0].y + box.points[1].y) * 0.5f,
+                };
+                float dir_x = top_mid.x - center.x;
+                float dir_y = top_mid.y - center.y;
+                const float dir_len = std::hypot(dir_x, dir_y);
+                if (!std::isfinite(dir_len) || dir_len <= 1e-4f) {
+                    dir_x = 0.0f;
+                    dir_y = -1.0f;
+                } else {
+                    dir_x /= dir_len;
+                    dir_y /= dir_len;
+                }
+
+                SDL_FPoint handle{
+                    top_mid.x + (dir_x * kBoxRotationHandleDistancePx),
+                    top_mid.y + (dir_y * kBoxRotationHandleDistancePx),
+                };
+
+                SDL_SetRenderDrawColor(renderer, 250, 208, 96, 245);
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(top_mid.x)),
+                               static_cast<int>(std::lround(top_mid.y)),
+                               static_cast<int>(std::lround(handle.x)),
+                               static_cast<int>(std::lround(handle.y)));
+
+                const bool rotation_hovered = hovered_rotation_handle;
+                SDL_Color handle_color{255, 208, 96, 245};
+                if (rotation_hovered) {
+                    handle_color = SDL_Color{255, 255, 255, 255};
+                }
+                const int handle_radius = rotation_hovered ? 6 : 5;
+                const int hx = static_cast<int>(std::lround(handle.x));
+                const int hy = static_cast<int>(std::lround(handle.y));
+                SDL_SetRenderDrawColor(renderer, handle_color.r, handle_color.g, handle_color.b, handle_color.a);
+                SDL_Rect handle_rect{hx - handle_radius, hy - handle_radius, handle_radius * 2 + 1, handle_radius * 2 + 1};
+                sdl_render::FillRect(renderer, &handle_rect);
+                SDL_SetRenderDrawColor(renderer, 22, 22, 22, 235);
+                sdl_render::Rect(renderer, &handle_rect);
+                if (rotation_hovered) {
+                    SDL_Rect outline{handle_rect.x - 1, handle_rect.y - 1, handle_rect.w + 2, handle_rect.h + 2};
+                    SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
+                    sdl_render::Rect(renderer, &outline);
+                }
             }
         };
 
@@ -3631,6 +3787,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                   -1,
                                   -1,
                                   -1,
+                                  false,
                                   SDL_Color{90, 195, 255, 120},
                                   false,
                                   false);
@@ -3639,6 +3796,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                   -1,
                                   -1,
                                   -1,
+                                  false,
                                   SDL_Color{120, 220, 255, 120},
                                   false,
                                   false);
@@ -3650,6 +3808,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                               hitbox_edit_.point_selected ? hitbox_edit_.selected_point_index : -1,
                               hitbox_edit_.hovered_box_index,
                               hitbox_edit_.hovered_point_index,
+                              hitbox_edit_.hovered_rotation_handle || hitbox_edit_.dragging_rotation,
                               SDL_Color{90, 195, 255, 210},
                               true,
                               isolate_selected_box);
@@ -3670,6 +3829,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                   -1,
                                   -1,
                                   -1,
+                                  false,
                                   SDL_Color{255, 120, 120, 120},
                                   false,
                                   false);
@@ -3678,6 +3838,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                   -1,
                                   -1,
                                   -1,
+                                  false,
                                   SDL_Color{255, 170, 130, 120},
                                   false,
                                   false);
@@ -3689,6 +3850,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                               attack_box_edit_.point_selected ? attack_box_edit_.selected_point_index : -1,
                               attack_box_edit_.hovered_box_index,
                               attack_box_edit_.hovered_point_index,
+                              attack_box_edit_.hovered_rotation_handle || attack_box_edit_.dragging_rotation,
                               SDL_Color{255, 120, 120, 215},
                               true,
                               isolate_selected_box);
@@ -6573,11 +6735,13 @@ void RoomEditor::ensure_hitbox_editor_widgets() {
             hitbox_edit_.point_selected = false;
             hitbox_edit_.dragging_corner = false;
             hitbox_edit_.dragging_box = false;
+            hitbox_edit_.dragging_rotation = false;
             hitbox_edit_.drag_reference_point_index = -1;
             hitbox_edit_.drag_reference_corner_index = -1;
             hitbox_edit_.hovered_box_index = -1;
             hitbox_edit_.hovered_corner_index = -1;
             hitbox_edit_.hovered_point_index = -1;
+            hitbox_edit_.hovered_rotation_handle = false;
             sync_hitbox_tools_panel();
         });
         hitbox_tools_panel_->set_on_add([this]() {
@@ -6623,11 +6787,13 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
             attack_box_edit_.point_selected = false;
             attack_box_edit_.dragging_corner = false;
             attack_box_edit_.dragging_box = false;
+            attack_box_edit_.dragging_rotation = false;
             attack_box_edit_.drag_reference_point_index = -1;
             attack_box_edit_.drag_reference_corner_index = -1;
             attack_box_edit_.hovered_box_index = -1;
             attack_box_edit_.hovered_corner_index = -1;
             attack_box_edit_.hovered_point_index = -1;
+            attack_box_edit_.hovered_rotation_handle = false;
             sync_attack_box_tools_panel();
         });
         attack_box_tools_panel_->set_on_add([this]() {
@@ -6693,6 +6859,8 @@ void RoomEditor::sync_hitbox_tools_panel() {
         hitbox_edit_.point_selected = false;
         hitbox_edit_.dragging_corner = false;
         hitbox_edit_.dragging_box = false;
+        hitbox_edit_.dragging_rotation = false;
+        hitbox_edit_.hovered_rotation_handle = false;
     }
     hitbox_edit_.selected_box_index = selected_box;
     hitbox_edit_.selected_corner_index = clamp_box_corner_index(hitbox_edit_.selected_corner_index);
@@ -6740,6 +6908,8 @@ void RoomEditor::sync_attack_box_tools_panel() {
         attack_box_edit_.point_selected = false;
         attack_box_edit_.dragging_corner = false;
         attack_box_edit_.dragging_box = false;
+        attack_box_edit_.dragging_rotation = false;
+        attack_box_edit_.hovered_rotation_handle = false;
     }
     attack_box_edit_.selected_box_index = selected_box;
     attack_box_edit_.selected_corner_index = clamp_box_corner_index(attack_box_edit_.selected_corner_index);
@@ -6774,6 +6944,8 @@ bool RoomEditor::add_hitbox_in_current_frame() {
             hitbox_edit_.selected_point_index = 0;
             hitbox_edit_.dragging_box = false;
             hitbox_edit_.dragging_corner = false;
+            hitbox_edit_.dragging_rotation = false;
+            hitbox_edit_.hovered_rotation_handle = false;
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -6811,6 +6983,8 @@ bool RoomEditor::delete_selected_hitbox_in_current_frame() {
             hitbox_edit_.selected_point_index = 0;
             hitbox_edit_.dragging_box = false;
             hitbox_edit_.dragging_corner = false;
+            hitbox_edit_.dragging_rotation = false;
+            hitbox_edit_.hovered_rotation_handle = false;
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -6832,6 +7006,8 @@ bool RoomEditor::add_attack_box_in_current_frame() {
             attack_box_edit_.selected_point_index = 0;
             attack_box_edit_.dragging_box = false;
             attack_box_edit_.dragging_corner = false;
+            attack_box_edit_.dragging_rotation = false;
+            attack_box_edit_.hovered_rotation_handle = false;
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -6869,6 +7045,8 @@ bool RoomEditor::delete_selected_attack_box_in_current_frame() {
             attack_box_edit_.selected_point_index = 0;
             attack_box_edit_.dragging_box = false;
             attack_box_edit_.dragging_corner = false;
+            attack_box_edit_.dragging_rotation = false;
+            attack_box_edit_.hovered_rotation_handle = false;
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -9971,10 +10149,11 @@ bool RoomEditor::any_editor_point_selected() const {
     const bool movement_selected =
         movement_mode_active() && (movement_edit_.point_selected || movement_edit_.dragging_point);
     const bool hitbox_selected =
-        hitbox_mode_active() && (hitbox_edit_.point_selected || hitbox_edit_.dragging_corner || hitbox_edit_.dragging_box);
+        hitbox_mode_active() &&
+        (hitbox_edit_.point_selected || hitbox_edit_.dragging_corner || hitbox_edit_.dragging_box || hitbox_edit_.dragging_rotation);
     const bool attack_box_selected =
         attack_box_mode_active() &&
-        (attack_box_edit_.point_selected || attack_box_edit_.dragging_corner || attack_box_edit_.dragging_box);
+        (attack_box_edit_.point_selected || attack_box_edit_.dragging_corner || attack_box_edit_.dragging_box || attack_box_edit_.dragging_rotation);
     return anchor_selected || movement_selected || hitbox_selected || attack_box_selected;
 }
 
@@ -10024,6 +10203,42 @@ int RoomEditor::find_attack_box_corner_at_screen_point(SDL_Point screen_point,
     out_corner_index = hit->corner_index;
     out_point_index = hit->point_index;
     return hit->box_index;
+}
+
+int RoomEditor::find_hitbox_rotation_handle_at_screen_point(SDL_Point screen_point) const {
+    if (!hitbox_edit_.target_asset || !assets_) {
+        return -1;
+    }
+    const int selected = hitbox_edit_.selected_box_index;
+    if (selected < 0) {
+        return -1;
+    }
+    const WarpedScreenGrid& cam = assets_->getView();
+    const auto hit = find_box_rotation_handle_at_screen_point_for_index(
+        hitbox_edit_.target_asset->current_hit_box_volumes(),
+        selected,
+        cam,
+        screen_point,
+        kBoxRotationHandlePickRadiusPx);
+    return hit ? hit->box_index : -1;
+}
+
+int RoomEditor::find_attack_box_rotation_handle_at_screen_point(SDL_Point screen_point) const {
+    if (!attack_box_edit_.target_asset || !assets_) {
+        return -1;
+    }
+    const int selected = attack_box_edit_.selected_box_index;
+    if (selected < 0) {
+        return -1;
+    }
+    const WarpedScreenGrid& cam = assets_->getView();
+    const auto hit = find_box_rotation_handle_at_screen_point_for_index(
+        attack_box_edit_.target_asset->current_attack_box_volumes(),
+        selected,
+        cam,
+        screen_point,
+        kBoxRotationHandlePickRadiusPx);
+    return hit ? hit->box_index : -1;
 }
 
 int RoomEditor::find_hitbox_body_at_screen_point(SDL_Point screen_point) const {
@@ -10095,9 +10310,11 @@ bool RoomEditor::begin_hitbox_box_drag(int box_index, SDL_Point screen_point) {
     hitbox_edit_.point_selected = false;
     hitbox_edit_.dragging_corner = false;
     hitbox_edit_.dragging_box = true;
+    hitbox_edit_.dragging_rotation = false;
     hitbox_edit_.drag_reference_point_index = best_point;
     hitbox_edit_.drag_reference_corner_index = best_point % 4;
     hitbox_edit_.drag_start_rect = box.rect;
+    hitbox_edit_.hovered_rotation_handle = false;
     hitbox_edit_.drag_reference_screen_offset = SDL_FPoint{
         static_cast<float>(screen_point.x) - best_projected.x,
         static_cast<float>(screen_point.y) - best_projected.y};
@@ -10155,12 +10372,94 @@ bool RoomEditor::begin_attack_box_drag(int box_index, SDL_Point screen_point) {
     attack_box_edit_.point_selected = false;
     attack_box_edit_.dragging_corner = false;
     attack_box_edit_.dragging_box = true;
+    attack_box_edit_.dragging_rotation = false;
     attack_box_edit_.drag_reference_point_index = best_point;
     attack_box_edit_.drag_reference_corner_index = best_point % 4;
     attack_box_edit_.drag_start_rect = box.rect;
+    attack_box_edit_.hovered_rotation_handle = false;
     attack_box_edit_.drag_reference_screen_offset = SDL_FPoint{
         static_cast<float>(screen_point.x) - best_projected.x,
         static_cast<float>(screen_point.y) - best_projected.y};
+    return true;
+}
+
+bool RoomEditor::begin_hitbox_rotation_drag(int box_index, SDL_Point screen_point) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !assets_) {
+        return false;
+    }
+    Asset* target = hitbox_edit_.target_asset;
+    if (!target->current_frame) {
+        return false;
+    }
+    auto& boxes = target->current_frame->hit_boxes.boxes;
+    if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+        return false;
+    }
+    const auto& volumes = target->current_hit_box_volumes();
+    const auto hit = find_box_rotation_handle_at_screen_point_for_index(
+        volumes,
+        box_index,
+        assets_->getView(),
+        screen_point,
+        kBoxRotationHandlePickRadiusPx);
+    if (!hit.has_value()) {
+        return false;
+    }
+
+    hitbox_edit_.selected_box_index = box_index;
+    hitbox_edit_.selected_corner_index = 0;
+    hitbox_edit_.selected_point_index = 0;
+    hitbox_edit_.point_selected = false;
+    hitbox_edit_.dragging_corner = false;
+    hitbox_edit_.dragging_box = false;
+    hitbox_edit_.dragging_rotation = true;
+    hitbox_edit_.hovered_rotation_handle = true;
+    hitbox_edit_.drag_start_rect = boxes[static_cast<std::size_t>(box_index)].rect;
+    hitbox_edit_.rotation_drag_center_screen = hit->center_screen;
+    hitbox_edit_.rotation_drag_start_angle_degrees = screen_angle_degrees(hit->center_screen, screen_point);
+    hitbox_edit_.rotation_drag_start_box_rotation_degrees =
+        animation_update::FrameBoxBase::sanitize_rotation_degrees(
+            boxes[static_cast<std::size_t>(box_index)].rotation_degrees);
+    return true;
+}
+
+bool RoomEditor::begin_attack_box_rotation_drag(int box_index, SDL_Point screen_point) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !assets_) {
+        return false;
+    }
+    Asset* target = attack_box_edit_.target_asset;
+    if (!target->current_frame) {
+        return false;
+    }
+    auto& boxes = target->current_frame->attack_boxes.boxes;
+    if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+        return false;
+    }
+    const auto& volumes = target->current_attack_box_volumes();
+    const auto hit = find_box_rotation_handle_at_screen_point_for_index(
+        volumes,
+        box_index,
+        assets_->getView(),
+        screen_point,
+        kBoxRotationHandlePickRadiusPx);
+    if (!hit.has_value()) {
+        return false;
+    }
+
+    attack_box_edit_.selected_box_index = box_index;
+    attack_box_edit_.selected_corner_index = 0;
+    attack_box_edit_.selected_point_index = 0;
+    attack_box_edit_.point_selected = false;
+    attack_box_edit_.dragging_corner = false;
+    attack_box_edit_.dragging_box = false;
+    attack_box_edit_.dragging_rotation = true;
+    attack_box_edit_.hovered_rotation_handle = true;
+    attack_box_edit_.drag_start_rect = boxes[static_cast<std::size_t>(box_index)].rect;
+    attack_box_edit_.rotation_drag_center_screen = hit->center_screen;
+    attack_box_edit_.rotation_drag_start_angle_degrees = screen_angle_degrees(hit->center_screen, screen_point);
+    attack_box_edit_.rotation_drag_start_box_rotation_degrees =
+        animation_update::FrameBoxBase::sanitize_rotation_degrees(
+            boxes[static_cast<std::size_t>(box_index)].rotation_degrees);
     return true;
 }
 
@@ -10185,18 +10484,29 @@ bool RoomEditor::drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point
     const int reference_point = std::clamp(hitbox_edit_.drag_reference_point_index, 0, 7);
     const int reference_corner = reference_point % 4;
     const animation_update::FrameBoxRect start_rect = hitbox_edit_.drag_start_rect;
+    float start_rotation = 0.0f;
+    if (target->current_frame && box_index >= 0 &&
+        box_index < static_cast<int>(target->current_frame->hit_boxes.boxes.size())) {
+        start_rotation = target->current_frame->hit_boxes.boxes[static_cast<std::size_t>(box_index)].rotation_degrees;
+    }
     const SDL_FPoint desired_screen{
         static_cast<float>(screen_point.x) - hitbox_edit_.drag_reference_screen_offset.x,
         static_cast<float>(screen_point.y) - hitbox_edit_.drag_reference_screen_offset.y};
 
     return mutate_hitbox_current_frame(
-        [target, cam, desired_screen, box_index, reference_point, reference_corner, start_rect](std::vector<animation_update::FrameHitBox>& boxes) {
+        [target, cam, desired_screen, box_index, reference_point, reference_corner, start_rect, start_rotation](std::vector<animation_update::FrameHitBox>& boxes) {
             if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
                 return false;
             }
             auto& box = boxes[static_cast<std::size_t>(box_index)];
-            const int base_x = (reference_corner == 0 || reference_corner == 3) ? start_rect.left : start_rect.right;
-            const int base_y = (reference_corner == 0 || reference_corner == 1) ? start_rect.top : start_rect.bottom;
+            animation_update::FrameHitBox start_box = box;
+            start_box.set_rect(start_rect);
+            start_box.set_rotation_degrees(start_rotation);
+            const auto corner_id = animation_update::FrameBoxBase::corner_id_from_runtime_index(
+                static_cast<std::size_t>(reference_corner));
+            const auto base_corner = start_box.corner(corner_id);
+            const int base_x = base_corner.texture_x;
+            const int base_y = base_corner.texture_y;
             const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
 
             DisplacedAssetAnchorPoint anchor_template{};
@@ -10268,11 +10578,39 @@ bool RoomEditor::drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point
             const int delta_y = solved_y - base_y;
             const animation_update::FrameBoxRect previous = box.rect;
             box.set_rect(start_rect);
+            box.set_rotation_degrees(start_rotation);
             box.translate_clamped(delta_x, delta_y);
             return previous.left != box.rect.left ||
                    previous.top != box.rect.top ||
                    previous.right != box.rect.right ||
                    previous.bottom != box.rect.bottom;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+bool RoomEditor::drag_hitbox_rotation_to_screen(int box_index, SDL_Point screen_point) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset) {
+        return false;
+    }
+    if (!hitbox_edit_.dragging_rotation) {
+        return false;
+    }
+
+    const float current_angle = screen_angle_degrees(hitbox_edit_.rotation_drag_center_screen, screen_point);
+    const float delta_angle = normalize_angle_delta_degrees(
+        current_angle - hitbox_edit_.rotation_drag_start_angle_degrees);
+    const float target_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(
+        hitbox_edit_.rotation_drag_start_box_rotation_degrees + delta_angle);
+    return mutate_hitbox_current_frame(
+        [box_index, target_rotation](std::vector<animation_update::FrameHitBox>& boxes) {
+            if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            auto& box = boxes[static_cast<std::size_t>(box_index)];
+            const float previous_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
+            box.set_rotation_degrees(target_rotation);
+            const float updated_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
+            return std::fabs(updated_rotation - previous_rotation) > 1e-4f;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
 }
@@ -10403,18 +10741,29 @@ bool RoomEditor::drag_attack_box_to_screen(int box_index, SDL_Point screen_point
     const int reference_point = std::clamp(attack_box_edit_.drag_reference_point_index, 0, 7);
     const int reference_corner = reference_point % 4;
     const animation_update::FrameBoxRect start_rect = attack_box_edit_.drag_start_rect;
+    float start_rotation = 0.0f;
+    if (target->current_frame && box_index >= 0 &&
+        box_index < static_cast<int>(target->current_frame->attack_boxes.boxes.size())) {
+        start_rotation = target->current_frame->attack_boxes.boxes[static_cast<std::size_t>(box_index)].rotation_degrees;
+    }
     const SDL_FPoint desired_screen{
         static_cast<float>(screen_point.x) - attack_box_edit_.drag_reference_screen_offset.x,
         static_cast<float>(screen_point.y) - attack_box_edit_.drag_reference_screen_offset.y};
 
     return mutate_attack_box_current_frame(
-        [target, cam, desired_screen, box_index, reference_point, reference_corner, start_rect](std::vector<animation_update::FrameAttackBox>& boxes) {
+        [target, cam, desired_screen, box_index, reference_point, reference_corner, start_rect, start_rotation](std::vector<animation_update::FrameAttackBox>& boxes) {
             if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
                 return false;
             }
             auto& box = boxes[static_cast<std::size_t>(box_index)];
-            const int base_x = (reference_corner == 0 || reference_corner == 3) ? start_rect.left : start_rect.right;
-            const int base_y = (reference_corner == 0 || reference_corner == 1) ? start_rect.top : start_rect.bottom;
+            animation_update::FrameAttackBox start_box = box;
+            start_box.set_rect(start_rect);
+            start_box.set_rotation_degrees(start_rotation);
+            const auto corner_id = animation_update::FrameBoxBase::corner_id_from_runtime_index(
+                static_cast<std::size_t>(reference_corner));
+            const auto base_corner = start_box.corner(corner_id);
+            const int base_x = base_corner.texture_x;
+            const int base_y = base_corner.texture_y;
             const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
 
             DisplacedAssetAnchorPoint anchor_template{};
@@ -10486,6 +10835,7 @@ bool RoomEditor::drag_attack_box_to_screen(int box_index, SDL_Point screen_point
             const int delta_y = solved_y - base_y;
             const animation_update::FrameBoxRect previous = box.rect;
             box.set_rect(start_rect);
+            box.set_rotation_degrees(start_rotation);
             box.translate_clamped(delta_x, delta_y);
             return previous.left != box.rect.left ||
                    previous.top != box.rect.top ||
@@ -10600,6 +10950,33 @@ bool RoomEditor::drag_attack_box_corner_to_screen(int box_index, int point_index
         devmode::core::DevSaveCoordinator::Priority::Debounced);
 }
 
+bool RoomEditor::drag_attack_box_rotation_to_screen(int box_index, SDL_Point screen_point) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset) {
+        return false;
+    }
+    if (!attack_box_edit_.dragging_rotation) {
+        return false;
+    }
+
+    const float current_angle = screen_angle_degrees(attack_box_edit_.rotation_drag_center_screen, screen_point);
+    const float delta_angle = normalize_angle_delta_degrees(
+        current_angle - attack_box_edit_.rotation_drag_start_angle_degrees);
+    const float target_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(
+        attack_box_edit_.rotation_drag_start_box_rotation_degrees + delta_angle);
+    return mutate_attack_box_current_frame(
+        [box_index, target_rotation](std::vector<animation_update::FrameAttackBox>& boxes) {
+            if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            auto& box = boxes[static_cast<std::size_t>(box_index)];
+            const float previous_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
+            box.set_rotation_degrees(target_rotation);
+            const float updated_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
+            return std::fabs(updated_rotation - previous_rotation) > 1e-4f;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
 bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !assets_ || !input_) {
         return false;
@@ -10614,62 +10991,79 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     const auto& hitbox_volumes = hitbox_edit_.target_asset->current_hit_box_volumes();
 
     if (left_pressed && !pointer_blocked) {
-        int corner_idx = -1;
-        int point_idx = -1;
-        int box_idx = -1;
+        bool started_rotation_drag = false;
         if (lock_to_selected_box) {
-            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(hitbox_volumes,
-                                                                                   locked_box_index,
-                                                                                   assets_->getView(),
-                                                                                   screen_pt,
-                                                                                   kBoxCornerPickRadiusPx);
-                corner_hit.has_value()) {
-                box_idx = corner_hit->box_index;
-                corner_idx = corner_hit->corner_index;
-                point_idx = corner_hit->point_index;
+            const int rotation_box = find_hitbox_rotation_handle_at_screen_point(screen_pt);
+            if (rotation_box >= 0 && begin_hitbox_rotation_drag(rotation_box, screen_pt)) {
+                started_rotation_drag = true;
+                hitbox_edit_.hovered_box_index = rotation_box;
+                hitbox_edit_.hovered_corner_index = -1;
+                hitbox_edit_.hovered_point_index = -1;
             }
-        } else {
-            box_idx = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
         }
 
-        if (box_idx >= 0) {
-            hitbox_edit_.selected_box_index = box_idx;
-            hitbox_edit_.selected_corner_index = editor_corner_from_runtime_corner(corner_idx);
-            hitbox_edit_.selected_point_index = std::clamp(point_idx, 0, 7);
-            hitbox_edit_.point_selected = true;
-            hitbox_edit_.dragging_corner = true;
-            hitbox_edit_.dragging_box = false;
-            hitbox_edit_.drag_reference_point_index = -1;
-            hitbox_edit_.drag_reference_corner_index = -1;
-            drag_hitbox_corner_to_screen(box_idx, hitbox_edit_.selected_point_index, screen_pt);
-        } else {
-            int body_box = -1;
+        if (!started_rotation_drag) {
+            int corner_idx = -1;
+            int point_idx = -1;
+            int box_idx = -1;
             if (lock_to_selected_box) {
-                if (box_body_contains_screen_point_for_index(hitbox_volumes,
-                                                             locked_box_index,
-                                                             assets_->getView(),
-                                                             screen_pt)) {
-                    body_box = locked_box_index;
+                if (const auto corner_hit = find_box_corner_at_screen_point_for_index(hitbox_volumes,
+                                                                                       locked_box_index,
+                                                                                       assets_->getView(),
+                                                                                       screen_pt,
+                                                                                       kBoxCornerPickRadiusPx);
+                    corner_hit.has_value()) {
+                    box_idx = corner_hit->box_index;
+                    corner_idx = corner_hit->corner_index;
+                    point_idx = corner_hit->point_index;
                 }
             } else {
-                body_box = find_hitbox_body_at_screen_point(screen_pt);
+                box_idx = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
             }
-            if (body_box >= 0 && begin_hitbox_box_drag(body_box, screen_pt)) {
-                hitbox_edit_.hovered_box_index = body_box;
-                hitbox_edit_.hovered_corner_index = -1;
-                hitbox_edit_.hovered_point_index = -1;
-            } else {
-                hitbox_edit_.selected_box_index = -1;
-                hitbox_edit_.selected_corner_index = 0;
-                hitbox_edit_.selected_point_index = 0;
-                hitbox_edit_.hovered_box_index = -1;
-                hitbox_edit_.hovered_corner_index = -1;
-                hitbox_edit_.hovered_point_index = -1;
-                hitbox_edit_.point_selected = false;
-                hitbox_edit_.dragging_corner = false;
+
+            if (box_idx >= 0) {
+                hitbox_edit_.selected_box_index = box_idx;
+                hitbox_edit_.selected_corner_index = editor_corner_from_runtime_corner(corner_idx);
+                hitbox_edit_.selected_point_index = std::clamp(point_idx, 0, 7);
+                hitbox_edit_.point_selected = true;
+                hitbox_edit_.dragging_corner = true;
                 hitbox_edit_.dragging_box = false;
+                hitbox_edit_.dragging_rotation = false;
+                hitbox_edit_.hovered_rotation_handle = false;
                 hitbox_edit_.drag_reference_point_index = -1;
                 hitbox_edit_.drag_reference_corner_index = -1;
+                drag_hitbox_corner_to_screen(box_idx, hitbox_edit_.selected_point_index, screen_pt);
+            } else {
+                int body_box = -1;
+                if (lock_to_selected_box) {
+                    if (box_body_contains_screen_point_for_index(hitbox_volumes,
+                                                                 locked_box_index,
+                                                                 assets_->getView(),
+                                                                 screen_pt)) {
+                        body_box = locked_box_index;
+                    }
+                } else {
+                    body_box = find_hitbox_body_at_screen_point(screen_pt);
+                }
+                if (body_box >= 0 && begin_hitbox_box_drag(body_box, screen_pt)) {
+                    hitbox_edit_.hovered_box_index = body_box;
+                    hitbox_edit_.hovered_corner_index = -1;
+                    hitbox_edit_.hovered_point_index = -1;
+                } else {
+                    hitbox_edit_.selected_box_index = -1;
+                    hitbox_edit_.selected_corner_index = 0;
+                    hitbox_edit_.selected_point_index = 0;
+                    hitbox_edit_.hovered_box_index = -1;
+                    hitbox_edit_.hovered_corner_index = -1;
+                    hitbox_edit_.hovered_point_index = -1;
+                    hitbox_edit_.hovered_rotation_handle = false;
+                    hitbox_edit_.point_selected = false;
+                    hitbox_edit_.dragging_corner = false;
+                    hitbox_edit_.dragging_box = false;
+                    hitbox_edit_.dragging_rotation = false;
+                    hitbox_edit_.drag_reference_point_index = -1;
+                    hitbox_edit_.drag_reference_corner_index = -1;
+                }
             }
         }
         sync_hitbox_tools_panel();
@@ -10681,53 +11075,78 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     if (hitbox_edit_.dragging_box && left_down) {
         drag_hitbox_box_to_screen(hitbox_edit_.selected_box_index, screen_pt);
     }
+    if (hitbox_edit_.dragging_rotation && left_down) {
+        drag_hitbox_rotation_to_screen(hitbox_edit_.selected_box_index, screen_pt);
+    }
 
     if (left_released) {
         hitbox_edit_.dragging_corner = false;
         hitbox_edit_.dragging_box = false;
+        hitbox_edit_.dragging_rotation = false;
     }
 
-    if (!hitbox_edit_.dragging_corner && !hitbox_edit_.dragging_box && !pointer_blocked) {
-        int hover_corner = -1;
-        int hover_point = -1;
-        int hover_box = -1;
+    if (!hitbox_edit_.dragging_corner && !hitbox_edit_.dragging_box && !hitbox_edit_.dragging_rotation && !pointer_blocked) {
+        hitbox_edit_.hovered_rotation_handle = false;
+        bool rotation_handle_hovered = false;
         if (hitbox_edit_.selected_box_index >= 0) {
-            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(hitbox_volumes,
-                                                                                   hitbox_edit_.selected_box_index,
-                                                                                   assets_->getView(),
-                                                                                   screen_pt,
-                                                                                   kBoxCornerPickRadiusPx);
-                corner_hit.has_value()) {
-                hover_box = corner_hit->box_index;
-                hover_corner = corner_hit->corner_index;
-                hover_point = corner_hit->point_index;
-            }
-        } else {
-            hover_box = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
-        }
-        if (hover_box >= 0) {
-            hitbox_edit_.hovered_box_index = hover_box;
-            hitbox_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
-            hitbox_edit_.hovered_point_index = hover_point;
-        } else {
-            if (hitbox_edit_.selected_box_index >= 0 &&
-                box_body_contains_screen_point_for_index(hitbox_volumes,
-                                                         hitbox_edit_.selected_box_index,
-                                                         assets_->getView(),
-                                                         screen_pt)) {
+            if (const auto rotation_hit = find_box_rotation_handle_at_screen_point_for_index(
+                    hitbox_volumes,
+                    hitbox_edit_.selected_box_index,
+                    assets_->getView(),
+                    screen_pt,
+                    kBoxRotationHandlePickRadiusPx);
+                rotation_hit.has_value()) {
+                hitbox_edit_.hovered_rotation_handle = true;
                 hitbox_edit_.hovered_box_index = hitbox_edit_.selected_box_index;
-            } else if (hitbox_edit_.selected_box_index < 0) {
-                hitbox_edit_.hovered_box_index = find_hitbox_body_at_screen_point(screen_pt);
-            } else {
-                hitbox_edit_.hovered_box_index = -1;
+                hitbox_edit_.hovered_corner_index = -1;
+                hitbox_edit_.hovered_point_index = -1;
+                rotation_handle_hovered = true;
             }
-            hitbox_edit_.hovered_corner_index = -1;
-            hitbox_edit_.hovered_point_index = -1;
+        }
+
+        if (!rotation_handle_hovered) {
+            int hover_corner = -1;
+            int hover_point = -1;
+            int hover_box = -1;
+            if (hitbox_edit_.selected_box_index >= 0) {
+                if (const auto corner_hit = find_box_corner_at_screen_point_for_index(hitbox_volumes,
+                                                                                       hitbox_edit_.selected_box_index,
+                                                                                       assets_->getView(),
+                                                                                       screen_pt,
+                                                                                       kBoxCornerPickRadiusPx);
+                    corner_hit.has_value()) {
+                    hover_box = corner_hit->box_index;
+                    hover_corner = corner_hit->corner_index;
+                    hover_point = corner_hit->point_index;
+                }
+            } else {
+                hover_box = find_hitbox_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+            }
+            if (hover_box >= 0) {
+                hitbox_edit_.hovered_box_index = hover_box;
+                hitbox_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
+                hitbox_edit_.hovered_point_index = hover_point;
+            } else {
+                if (hitbox_edit_.selected_box_index >= 0 &&
+                    box_body_contains_screen_point_for_index(hitbox_volumes,
+                                                             hitbox_edit_.selected_box_index,
+                                                             assets_->getView(),
+                                                             screen_pt)) {
+                    hitbox_edit_.hovered_box_index = hitbox_edit_.selected_box_index;
+                } else if (hitbox_edit_.selected_box_index < 0) {
+                    hitbox_edit_.hovered_box_index = find_hitbox_body_at_screen_point(screen_pt);
+                } else {
+                    hitbox_edit_.hovered_box_index = -1;
+                }
+                hitbox_edit_.hovered_corner_index = -1;
+                hitbox_edit_.hovered_point_index = -1;
+            }
         }
     } else if (pointer_blocked) {
         hitbox_edit_.hovered_box_index = -1;
         hitbox_edit_.hovered_corner_index = -1;
         hitbox_edit_.hovered_point_index = -1;
+        hitbox_edit_.hovered_rotation_handle = false;
     }
 
     const int scroll_y = input_->getScrollY();
@@ -10770,61 +11189,77 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     const auto& attack_volumes = attack_box_edit_.target_asset->current_attack_box_volumes();
 
     if (left_pressed && !pointer_blocked) {
-        int corner_idx = -1;
-        int point_idx = -1;
-        int box_idx = -1;
+        bool started_rotation_drag = false;
         if (lock_to_selected_box) {
-            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(attack_volumes,
-                                                                                   locked_box_index,
-                                                                                   assets_->getView(),
-                                                                                   screen_pt,
-                                                                                   kBoxCornerPickRadiusPx);
-                corner_hit.has_value()) {
-                box_idx = corner_hit->box_index;
-                corner_idx = corner_hit->corner_index;
-                point_idx = corner_hit->point_index;
+            const int rotation_box = find_attack_box_rotation_handle_at_screen_point(screen_pt);
+            if (rotation_box >= 0 && begin_attack_box_rotation_drag(rotation_box, screen_pt)) {
+                started_rotation_drag = true;
+                attack_box_edit_.hovered_box_index = rotation_box;
+                attack_box_edit_.hovered_corner_index = -1;
+                attack_box_edit_.hovered_point_index = -1;
             }
-        } else {
-            box_idx = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
         }
-        if (box_idx >= 0) {
-            attack_box_edit_.selected_box_index = box_idx;
-            attack_box_edit_.selected_corner_index = editor_corner_from_runtime_corner(corner_idx);
-            attack_box_edit_.selected_point_index = std::clamp(point_idx, 0, 7);
-            attack_box_edit_.point_selected = true;
-            attack_box_edit_.dragging_corner = true;
-            attack_box_edit_.dragging_box = false;
-            attack_box_edit_.drag_reference_point_index = -1;
-            attack_box_edit_.drag_reference_corner_index = -1;
-            drag_attack_box_corner_to_screen(box_idx, attack_box_edit_.selected_point_index, screen_pt);
-        } else {
-            int body_box = -1;
+        if (!started_rotation_drag) {
+            int corner_idx = -1;
+            int point_idx = -1;
+            int box_idx = -1;
             if (lock_to_selected_box) {
-                if (box_body_contains_screen_point_for_index(attack_volumes,
-                                                             locked_box_index,
-                                                             assets_->getView(),
-                                                             screen_pt)) {
-                    body_box = locked_box_index;
+                if (const auto corner_hit = find_box_corner_at_screen_point_for_index(attack_volumes,
+                                                                                       locked_box_index,
+                                                                                       assets_->getView(),
+                                                                                       screen_pt,
+                                                                                       kBoxCornerPickRadiusPx);
+                    corner_hit.has_value()) {
+                    box_idx = corner_hit->box_index;
+                    corner_idx = corner_hit->corner_index;
+                    point_idx = corner_hit->point_index;
                 }
             } else {
-                body_box = find_attack_box_body_at_screen_point(screen_pt);
+                box_idx = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, corner_idx, point_idx);
             }
-            if (body_box >= 0 && begin_attack_box_drag(body_box, screen_pt)) {
-                attack_box_edit_.hovered_box_index = body_box;
-                attack_box_edit_.hovered_corner_index = -1;
-                attack_box_edit_.hovered_point_index = -1;
-            } else {
-                attack_box_edit_.selected_box_index = -1;
-                attack_box_edit_.selected_corner_index = 0;
-                attack_box_edit_.selected_point_index = 0;
-                attack_box_edit_.hovered_box_index = -1;
-                attack_box_edit_.hovered_corner_index = -1;
-                attack_box_edit_.hovered_point_index = -1;
-                attack_box_edit_.point_selected = false;
-                attack_box_edit_.dragging_corner = false;
+            if (box_idx >= 0) {
+                attack_box_edit_.selected_box_index = box_idx;
+                attack_box_edit_.selected_corner_index = editor_corner_from_runtime_corner(corner_idx);
+                attack_box_edit_.selected_point_index = std::clamp(point_idx, 0, 7);
+                attack_box_edit_.point_selected = true;
+                attack_box_edit_.dragging_corner = true;
                 attack_box_edit_.dragging_box = false;
+                attack_box_edit_.dragging_rotation = false;
+                attack_box_edit_.hovered_rotation_handle = false;
                 attack_box_edit_.drag_reference_point_index = -1;
                 attack_box_edit_.drag_reference_corner_index = -1;
+                drag_attack_box_corner_to_screen(box_idx, attack_box_edit_.selected_point_index, screen_pt);
+            } else {
+                int body_box = -1;
+                if (lock_to_selected_box) {
+                    if (box_body_contains_screen_point_for_index(attack_volumes,
+                                                                 locked_box_index,
+                                                                 assets_->getView(),
+                                                                 screen_pt)) {
+                        body_box = locked_box_index;
+                    }
+                } else {
+                    body_box = find_attack_box_body_at_screen_point(screen_pt);
+                }
+                if (body_box >= 0 && begin_attack_box_drag(body_box, screen_pt)) {
+                    attack_box_edit_.hovered_box_index = body_box;
+                    attack_box_edit_.hovered_corner_index = -1;
+                    attack_box_edit_.hovered_point_index = -1;
+                } else {
+                    attack_box_edit_.selected_box_index = -1;
+                    attack_box_edit_.selected_corner_index = 0;
+                    attack_box_edit_.selected_point_index = 0;
+                    attack_box_edit_.hovered_box_index = -1;
+                    attack_box_edit_.hovered_corner_index = -1;
+                    attack_box_edit_.hovered_point_index = -1;
+                    attack_box_edit_.hovered_rotation_handle = false;
+                    attack_box_edit_.point_selected = false;
+                    attack_box_edit_.dragging_corner = false;
+                    attack_box_edit_.dragging_box = false;
+                    attack_box_edit_.dragging_rotation = false;
+                    attack_box_edit_.drag_reference_point_index = -1;
+                    attack_box_edit_.drag_reference_corner_index = -1;
+                }
             }
         }
         sync_attack_box_tools_panel();
@@ -10836,53 +11271,78 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     if (attack_box_edit_.dragging_box && left_down) {
         drag_attack_box_to_screen(attack_box_edit_.selected_box_index, screen_pt);
     }
+    if (attack_box_edit_.dragging_rotation && left_down) {
+        drag_attack_box_rotation_to_screen(attack_box_edit_.selected_box_index, screen_pt);
+    }
 
     if (left_released) {
         attack_box_edit_.dragging_corner = false;
         attack_box_edit_.dragging_box = false;
+        attack_box_edit_.dragging_rotation = false;
     }
 
-    if (!attack_box_edit_.dragging_corner && !attack_box_edit_.dragging_box && !pointer_blocked) {
-        int hover_corner = -1;
-        int hover_point = -1;
-        int hover_box = -1;
+    if (!attack_box_edit_.dragging_corner && !attack_box_edit_.dragging_box && !attack_box_edit_.dragging_rotation && !pointer_blocked) {
+        attack_box_edit_.hovered_rotation_handle = false;
+        bool rotation_handle_hovered = false;
         if (attack_box_edit_.selected_box_index >= 0) {
-            if (const auto corner_hit = find_box_corner_at_screen_point_for_index(attack_volumes,
-                                                                                   attack_box_edit_.selected_box_index,
-                                                                                   assets_->getView(),
-                                                                                   screen_pt,
-                                                                                   kBoxCornerPickRadiusPx);
-                corner_hit.has_value()) {
-                hover_box = corner_hit->box_index;
-                hover_corner = corner_hit->corner_index;
-                hover_point = corner_hit->point_index;
-            }
-        } else {
-            hover_box = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
-        }
-        if (hover_box >= 0) {
-            attack_box_edit_.hovered_box_index = hover_box;
-            attack_box_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
-            attack_box_edit_.hovered_point_index = hover_point;
-        } else {
-            if (attack_box_edit_.selected_box_index >= 0 &&
-                box_body_contains_screen_point_for_index(attack_volumes,
-                                                         attack_box_edit_.selected_box_index,
-                                                         assets_->getView(),
-                                                         screen_pt)) {
+            if (const auto rotation_hit = find_box_rotation_handle_at_screen_point_for_index(
+                    attack_volumes,
+                    attack_box_edit_.selected_box_index,
+                    assets_->getView(),
+                    screen_pt,
+                    kBoxRotationHandlePickRadiusPx);
+                rotation_hit.has_value()) {
+                attack_box_edit_.hovered_rotation_handle = true;
                 attack_box_edit_.hovered_box_index = attack_box_edit_.selected_box_index;
-            } else if (attack_box_edit_.selected_box_index < 0) {
-                attack_box_edit_.hovered_box_index = find_attack_box_body_at_screen_point(screen_pt);
-            } else {
-                attack_box_edit_.hovered_box_index = -1;
+                attack_box_edit_.hovered_corner_index = -1;
+                attack_box_edit_.hovered_point_index = -1;
+                rotation_handle_hovered = true;
             }
-            attack_box_edit_.hovered_corner_index = -1;
-            attack_box_edit_.hovered_point_index = -1;
+        }
+
+        if (!rotation_handle_hovered) {
+            int hover_corner = -1;
+            int hover_point = -1;
+            int hover_box = -1;
+            if (attack_box_edit_.selected_box_index >= 0) {
+                if (const auto corner_hit = find_box_corner_at_screen_point_for_index(attack_volumes,
+                                                                                       attack_box_edit_.selected_box_index,
+                                                                                       assets_->getView(),
+                                                                                       screen_pt,
+                                                                                       kBoxCornerPickRadiusPx);
+                    corner_hit.has_value()) {
+                    hover_box = corner_hit->box_index;
+                    hover_corner = corner_hit->corner_index;
+                    hover_point = corner_hit->point_index;
+                }
+            } else {
+                hover_box = find_attack_box_corner_at_screen_point(screen_pt, kBoxCornerPickRadiusPx, hover_corner, hover_point);
+            }
+            if (hover_box >= 0) {
+                attack_box_edit_.hovered_box_index = hover_box;
+                attack_box_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
+                attack_box_edit_.hovered_point_index = hover_point;
+            } else {
+                if (attack_box_edit_.selected_box_index >= 0 &&
+                    box_body_contains_screen_point_for_index(attack_volumes,
+                                                             attack_box_edit_.selected_box_index,
+                                                             assets_->getView(),
+                                                             screen_pt)) {
+                    attack_box_edit_.hovered_box_index = attack_box_edit_.selected_box_index;
+                } else if (attack_box_edit_.selected_box_index < 0) {
+                    attack_box_edit_.hovered_box_index = find_attack_box_body_at_screen_point(screen_pt);
+                } else {
+                    attack_box_edit_.hovered_box_index = -1;
+                }
+                attack_box_edit_.hovered_corner_index = -1;
+                attack_box_edit_.hovered_point_index = -1;
+            }
         }
     } else if (pointer_blocked) {
         attack_box_edit_.hovered_box_index = -1;
         attack_box_edit_.hovered_corner_index = -1;
         attack_box_edit_.hovered_point_index = -1;
+        attack_box_edit_.hovered_rotation_handle = false;
     }
 
     const int scroll_y = input_->getScrollY();

@@ -10,7 +10,12 @@
 #include "core/AssetsManager.hpp"
 
 CustomAssetController::CustomAssetController(Asset* self)
-    : self_(self) {}
+    : self_(self) {
+    if (self_ && !surface_child_.has_value()) {
+        surface_child_.emplace(*self_, "#surface");
+        surface_child_->bind("surface");
+    }
+}
 
 CustomAssetController::~CustomAssetController() = default;
 

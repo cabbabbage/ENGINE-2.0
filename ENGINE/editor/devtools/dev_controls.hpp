@@ -406,6 +406,7 @@ private:
     bool exit_save_sequence_ran_ = false;
     bool exit_save_sequence_ok_ = true;
     bool map_dirty_ = false;
+    bool map_info_dirty_ = false;
     OtherSettingsAndControls other_settings_;
     std::vector<OtherSettingsAndControls::SettingSchema> global_settings_schema_;
 

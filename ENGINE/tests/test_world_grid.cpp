@@ -259,6 +259,38 @@ TEST_CASE("WorldGrid move_asset aborts when source ownership is missing") {
     REQUIRE(grid.point_for_asset(raw) != nullptr);
 }
 
+TEST_CASE("WorldGrid horizontal transfer marks render invalidation every step") {
+    world::WorldGrid grid;
+    std::unique_ptr<Asset> owned = make_world_grid_test_asset(32, 64);
+    Asset* raw = grid.create_asset_at_point(std::move(owned));
+    REQUIRE(raw != nullptr);
+
+    for (int step = 0; step < 6; ++step) {
+        const world::GridPoint* start = grid.point_for_asset(raw);
+        REQUIRE(start != nullptr);
+
+        raw->clear_composite_dirty();
+        raw->clear_mesh_dirty();
+        CHECK_FALSE(raw->is_composite_dirty());
+        CHECK_FALSE(raw->is_mesh_dirty());
+
+        const world::GridPoint old_pos =
+            world::GridPoint::make_virtual(start->world_x(), start->world_y(), start->world_z(), start->resolution_layer());
+        const world::GridPoint new_pos =
+            world::GridPoint::make_virtual(start->world_x() + 24, start->world_y(), start->world_z(), start->resolution_layer());
+
+        Asset* moved = grid.move_asset(raw, old_pos, new_pos);
+        REQUIRE(moved == raw);
+
+        const world::GridPoint* moved_point = grid.point_for_asset(raw);
+        REQUIRE(moved_point != nullptr);
+        CHECK(moved_point->world_x() == new_pos.world_x());
+        CHECK(moved_point->world_z() == new_pos.world_z());
+        CHECK(raw->is_composite_dirty());
+        CHECK(raw->is_mesh_dirty());
+    }
+}
+
 TEST_CASE("ManifestStore map entry round-trip honors writes") {
     FakeManifestBackend storage;
     auto loader = [&storage]() {

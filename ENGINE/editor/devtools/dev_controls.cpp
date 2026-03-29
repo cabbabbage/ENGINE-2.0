@@ -1901,6 +1901,10 @@ void DevControls::sync_camera_tilt_override() {
 void DevControls::update(const Input& input) {
     save_coordinator_.begin_frame();
     if (!enabled_) return;
+    if (map_info_dirty_ && assets_) {
+        other_settings_.set_map_info(&assets_->map_info_json());
+        map_info_dirty_ = false;
+    }
     const bool ctrl = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
     const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool shift_blocks_headers = shift_down && mode_ == Mode::RoomEditor;
@@ -3929,6 +3933,7 @@ void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority pri
         assets_->mark_map_data_dirty();
     }
     map_dirty_ = true;
+    map_info_dirty_ = true;
     if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
         save_manager_.save_dirty(priority, "Immediate map change");
     }

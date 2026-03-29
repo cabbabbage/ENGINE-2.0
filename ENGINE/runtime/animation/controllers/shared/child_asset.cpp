@@ -76,6 +76,16 @@ void ChildAsset::unhide() {
     refresh_hidden_state();
 }
 
+void ChildAsset::set_animation(const std::string& animation_name) {
+    if (!ensure_child_alive()) {
+        return;
+    }
+    if (!child_ || !child_->anim_) {
+        return;
+    }
+    child_->anim_->set_animation(animation_name);
+}
+
 void ChildAsset::set_grid_point(const std::string& parent_anchor_name) {
     if (!ensure_child_alive()) {
         return;

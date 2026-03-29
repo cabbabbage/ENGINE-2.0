@@ -2876,8 +2876,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 172
               },
               {
                 "depth_offset": -1,
@@ -2885,8 +2885,8 @@
                 "flip_vertical": true,
                 "name": "neck",
                 "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "texture_x": 216,
+                "texture_y": 187
               },
               {
                 "depth_offset": 0,
@@ -2903,8 +2903,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 156
               }
             ]
           ],
@@ -8088,8 +8088,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8098,7 +8098,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8115,8 +8115,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ],
             [
@@ -8135,8 +8135,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8145,7 +8145,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8162,8 +8162,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ],
             [
@@ -8182,8 +8182,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8192,7 +8192,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8209,8 +8209,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ],
             [
@@ -8229,8 +8229,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8239,7 +8239,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8256,8 +8256,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ],
             [
@@ -8276,8 +8276,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8286,7 +8286,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8303,8 +8303,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ],
             [
@@ -8323,8 +8323,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8333,7 +8333,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8350,8 +8350,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ],
             [
@@ -8370,8 +8370,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8380,7 +8380,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8397,8 +8397,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ],
             [
@@ -8417,8 +8417,8 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
-                "texture_y": 174
+                "texture_x": 216,
+                "texture_y": 173
               },
               {
                 "depth_offset": -1,
@@ -8427,7 +8427,7 @@
                 "name": "neck",
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
-                "texture_y": 177
+                "texture_y": 188
               },
               {
                 "depth_offset": 0,
@@ -8444,8 +8444,8 @@
                 "flip_vertical": true,
                 "name": "eyes",
                 "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "texture_x": 205,
+                "texture_y": 155
               }
             ]
           ],
@@ -8870,7 +8870,7 @@
     },
     "vibble_attack_1": {
       "animations": {
-        "default": {
+        "attack": {
           "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
@@ -8907,6 +8907,32 @@
             "dz": 0
           },
           "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "attack"
+          }
+        },
+        "default": {
+          "flip_vertical_source": false,
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -9261,7 +9287,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            120,
+            90,
             242,
             255
           ],
@@ -9285,9 +9311,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            133,
             242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 85,
@@ -9406,16 +9432,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -196,
-              "dz": 924,
+              "dx": -512,
+              "dz": 1028,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6984,
-              "origional_width": 6984,
+              "origional_height": 6936,
+              "origional_width": 7040,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

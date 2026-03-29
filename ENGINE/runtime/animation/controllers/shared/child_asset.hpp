@@ -21,6 +21,7 @@ public:
     void destroy();
     void hide();
     void unhide();
+    void set_animation(const std::string& animation_name);
     void set_grid_point(const std::string& parent_anchor_name);
     void set_grid_point(const AnchorPoint& parent_anchor);
     void bind(const std::string& parent_anchor_name);

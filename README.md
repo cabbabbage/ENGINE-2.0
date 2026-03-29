@@ -36,7 +36,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 
 ## Custom Controllers
 - Add new controllers under `ENGINE/runtime/animation/controllers/custom_controllers/` and register them in `ControllerFactory::create_by_key`.
-- Link from content with `"custom_controller_key": "YourController"` in an asset `info.json` or via the Dev Mode editors.
+- Controllers are linked by asset name (for example, asset `spider` maps to `spider_controller`).
 
 ## Testing
 - Build tests: `cmake --build --preset windows-vcpkg-release --target engine_tests`

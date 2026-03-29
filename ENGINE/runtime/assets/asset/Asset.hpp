@@ -323,10 +323,17 @@ class Asset {
     };
 
     struct RuntimeBoxVolume {
+        std::string id;
+        std::string type;
         std::string name;
+        bool enabled = true;
+        int frame_start = 0;
+        int frame_end = 0;
+        std::string anchor_link;
         int frame_index = -1;
         int extrusion_amount = 0;
         int damage_amount = 0;
+        std::string meta_json;
         std::array<RuntimeBoxPoint3, 8> world_points{};
         RuntimeBoxPoint3 centroid{};
         bool valid = false;

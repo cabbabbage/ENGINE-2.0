@@ -4,6 +4,7 @@
 #include <cctype>
 #include <unordered_set>
 
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 namespace devmode::room_box_payload {
@@ -36,6 +37,42 @@ std::string sanitize_box_name(const std::string& value) {
     return trim_copy(out);
 }
 
+std::string sanitize_box_id(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        const unsigned char uch = static_cast<unsigned char>(ch);
+        if (std::isalnum(uch) != 0 || ch == '_' || ch == '-' || ch == '.') {
+            out.push_back(static_cast<char>(std::tolower(uch)));
+        } else if (std::isspace(uch) != 0) {
+            out.push_back('_');
+        }
+    }
+    return trim_copy(out);
+}
+
+bool box_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_BOX_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
+    }();
+    return enabled;
+}
+
+std::string ensure_box_id(const std::string& raw_id,
+                          const std::string& fallback_prefix,
+                          std::size_t ordinal) {
+    const std::string sanitized = sanitize_box_id(raw_id);
+    if (!sanitized.empty()) {
+        return sanitized;
+    }
+    return sanitize_box_id(fallback_prefix + "_" + std::to_string(ordinal + 1));
+}
+
 nlohmann::json normalize_box_frame_array(const nlohmann::json& payload,
                                          const char* key,
                                          std::size_t frame_count) {
@@ -55,44 +92,87 @@ nlohmann::json normalize_box_frame_array(const nlohmann::json& payload,
     return value;
 }
 
-nlohmann::json serialize_hit_boxes(const std::vector<animation_update::FrameHitBox>& boxes) {
+nlohmann::json frame_range_json(const animation_update::FrameBoxBase& box, std::size_t frame_index) {
+    const int fallback_frame = static_cast<int>(frame_index);
+    int frame_start = box.frame_start;
+    int frame_end = box.frame_end;
+    if (frame_start < 0) {
+        frame_start = fallback_frame;
+    }
+    if (frame_end < frame_start) {
+        frame_end = frame_start;
+    }
+    return nlohmann::json::object({
+        {"start", frame_start},
+        {"end", frame_end},
+    });
+}
+
+template <typename TBox>
+nlohmann::json serialize_box_base(const TBox& box,
+                                  std::size_t ordinal,
+                                  std::size_t frame_index,
+                                  const char* default_type) {
+    nlohmann::json node = nlohmann::json::object();
+    const std::string box_id = ensure_box_id(box.id, default_type, ordinal);
+    node["id"] = box_id;
+    node["type"] = std::string{default_type};
+    node["name"] = box.name;
+    node["enabled"] = box.enabled;
+    node["frame_range"] = frame_range_json(box, frame_index);
+    node["position"] = nlohmann::json::object({
+        {"x", box.rect.left},
+        {"y", box.rect.top},
+    });
+    node["size"] = nlohmann::json::object({
+        {"w", std::max(0, box.rect.width())},
+        {"h", std::max(0, box.rect.height())},
+    });
+    node["anchor_link"] = box.anchor_link;
+    node["extrusion_amount"] = std::max(0, box.extrusion_amount);
+    nlohmann::json corners = nlohmann::json::array();
+    const auto runtime_corners = box.to_runtime_clockwise_points();
+    for (std::size_t corner_index = 0; corner_index < runtime_corners.size(); ++corner_index) {
+        const auto& corner = runtime_corners[corner_index];
+        corners.push_back(nlohmann::json::object({
+            {"texture_x", std::max(0, corner.texture_x)},
+            {"texture_y", std::max(0, corner.texture_y)},
+        }));
+    }
+    node["corners"] = std::move(corners);
+    return node;
+}
+
+nlohmann::json parse_meta_json(const std::string& raw_meta) {
+    if (raw_meta.empty()) {
+        return nlohmann::json::object();
+    }
+    nlohmann::json parsed = nlohmann::json::parse(raw_meta, nullptr, false);
+    if (!parsed.is_object()) {
+        return nlohmann::json::object();
+    }
+    return parsed;
+}
+
+nlohmann::json serialize_hit_boxes(const std::vector<animation_update::FrameHitBox>& boxes,
+                                   std::size_t frame_index) {
     nlohmann::json serialized = nlohmann::json::array();
-    for (const auto& box : boxes) {
-        nlohmann::json node = nlohmann::json::object();
-        node["name"] = box.name;
-        node["extrusion_amount"] = std::max(0, box.extrusion_amount);
-        nlohmann::json corners = nlohmann::json::array();
-        const auto runtime_corners = box.to_runtime_clockwise_points();
-        for (std::size_t corner_index = 0; corner_index < runtime_corners.size(); ++corner_index) {
-            const auto& corner = runtime_corners[corner_index];
-            corners.push_back(nlohmann::json::object({
-                {"texture_x", std::max(0, corner.texture_x)},
-                {"texture_y", std::max(0, corner.texture_y)},
-            }));
-        }
-        node["corners"] = std::move(corners);
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        const auto& box = boxes[i];
+        nlohmann::json node = serialize_box_base(box, i, frame_index, "hitbox");
         serialized.push_back(std::move(node));
     }
     return serialized;
 }
 
-nlohmann::json serialize_attack_boxes(const std::vector<animation_update::FrameAttackBox>& boxes) {
+nlohmann::json serialize_attack_boxes(const std::vector<animation_update::FrameAttackBox>& boxes,
+                                      std::size_t frame_index) {
     nlohmann::json serialized = nlohmann::json::array();
-    for (const auto& box : boxes) {
-        nlohmann::json node = nlohmann::json::object();
-        node["name"] = box.name;
-        node["extrusion_amount"] = std::max(0, box.extrusion_amount);
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        const auto& box = boxes[i];
+        nlohmann::json node = serialize_box_base(box, i, frame_index, "attack_box");
         node["damage_amount"] = box.damage_amount;
-        nlohmann::json corners = nlohmann::json::array();
-        const auto runtime_corners = box.to_runtime_clockwise_points();
-        for (std::size_t corner_index = 0; corner_index < runtime_corners.size(); ++corner_index) {
-            const auto& corner = runtime_corners[corner_index];
-            corners.push_back(nlohmann::json::object({
-                {"texture_x", std::max(0, corner.texture_x)},
-                {"texture_y", std::max(0, corner.texture_y)},
-            }));
-        }
-        node["corners"] = std::move(corners);
+        node["meta"] = parse_meta_json(box.meta_json);
         serialized.push_back(std::move(node));
     }
     return serialized;
@@ -112,8 +192,12 @@ bool write_box_frame_to_payload(nlohmann::json& animation_payload,
     nlohmann::json frame_array = normalize_box_frame_array(animation_payload, key, frame_count);
     frame_array[frame_index] = serialized_boxes;
     animation_payload[key] = std::move(frame_array);
+    animation_payload["box_schema_version"] = 1;
     animation_payload.erase("hit_geometry");
     animation_payload.erase("attack_geometry");
+    if (box_trace_enabled()) {
+        SDL_Log("[BoxFlow][serialize] key=%s frame=%zu count=%zu", key, frame_index, serialized_boxes.size());
+    }
     return true;
 }
 
@@ -132,7 +216,13 @@ std::vector<std::string> existing_names_from(const std::vector<std::string>& exi
 template <typename TBox>
 TBox make_default_box_with_name(const std::string& name, int frame_width, int frame_height) {
     TBox box{};
+    box.id = sanitize_box_id(name + "_id");
+    box.type = "hitbox";
     box.name = name;
+    box.enabled = true;
+    box.frame_start = -1;
+    box.frame_end = -1;
+    box.anchor_link.clear();
     box.extrusion_amount = 0;
     const int max_x = std::max(0, frame_width - 1);
     const int max_y = std::max(0, frame_height - 1);
@@ -187,7 +277,9 @@ animation_update::FrameAttackBox make_default_attack_box(const std::vector<std::
             make_unique_box_name({}, existing_names, "attack_box"),
             frame_width,
             frame_height);
+    box.type = "attack_box";
     box.damage_amount = 0;
+    box.meta_json = "{}";
     return box;
 }
 
@@ -199,7 +291,7 @@ bool write_hit_box_frame_to_payload(nlohmann::json& animation_payload,
                                       "hit_boxes",
                                       frame_count,
                                       frame_index,
-                                      serialize_hit_boxes(boxes));
+                                      serialize_hit_boxes(boxes, frame_index));
 }
 
 bool write_attack_box_frame_to_payload(nlohmann::json& animation_payload,
@@ -210,7 +302,7 @@ bool write_attack_box_frame_to_payload(nlohmann::json& animation_payload,
                                       "attack_boxes",
                                       frame_count,
                                       frame_index,
-                                      serialize_attack_boxes(boxes));
+                                      serialize_attack_boxes(boxes, frame_index));
 }
 
 }  // namespace devmode::room_box_payload

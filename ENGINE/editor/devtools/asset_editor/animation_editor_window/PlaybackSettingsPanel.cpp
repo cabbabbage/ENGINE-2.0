@@ -516,29 +516,98 @@ void apply_box_frame_flip(nlohmann::json& frame, const SDL_Point& size, bool fli
         return;
     }
     for (auto& box : frame) {
-        if (!box.is_object() || !box.contains("corners") || !box["corners"].is_array()) {
+        if (!box.is_object()) {
             continue;
         }
-        for (auto& corner : box["corners"]) {
-            if (!corner.is_object()) {
-                continue;
+
+        auto read_int_like_field = [](const nlohmann::json& node, const char* key, int fallback) {
+            if (!node.is_object() || !node.contains(key) || !node[key].is_number()) {
+                return fallback;
             }
-            if (flip_x && size.x > 0 && corner.contains("texture_x") && corner["texture_x"].is_number()) {
-                const int x = corner["texture_x"].is_number_integer()
-                    ? corner["texture_x"].get<int>()
-                    : static_cast<int>(std::lround(corner["texture_x"].get<double>()));
-                corner["texture_x"] = size.x - 1 - x;
+            return node[key].is_number_integer()
+                ? node[key].get<int>()
+                : static_cast<int>(std::lround(node[key].get<double>()));
+        };
+
+        bool has_rect = false;
+        int left = 0;
+        int top = 0;
+        int right = 0;
+        int bottom = 0;
+
+        const bool has_position = box.contains("position") && box["position"].is_object();
+        const bool has_size_obj = box.contains("size") && box["size"].is_object();
+        if (has_position && has_size_obj) {
+            const int x = read_int_like_field(box["position"], "x", 0);
+            const int y = read_int_like_field(box["position"], "y", 0);
+            const int w = std::max(0, read_int_like_field(box["size"], "w", 0));
+            const int h = std::max(0, read_int_like_field(box["size"], "h", 0));
+            left = x;
+            top = y;
+            right = x + w;
+            bottom = y + h;
+            has_rect = true;
+        } else if (box.contains("corners") && box["corners"].is_array()) {
+            bool first_corner = true;
+            for (const auto& corner : box["corners"]) {
+                if (!corner.is_object()) {
+                    continue;
+                }
+                const int x = read_int_like_field(corner, "texture_x", 0);
+                const int y = read_int_like_field(corner, "texture_y", 0);
+                if (first_corner) {
+                    left = right = x;
+                    top = bottom = y;
+                    first_corner = false;
+                } else {
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
             }
-            if (flip_y && size.y > 0 && corner.contains("texture_y") && corner["texture_y"].is_number()) {
-                const int y = corner["texture_y"].is_number_integer()
-                    ? corner["texture_y"].get<int>()
-                    : static_cast<int>(std::lround(corner["texture_y"].get<double>()));
-                corner["texture_y"] = size.y - 1 - y;
-            }
+            has_rect = !first_corner;
         }
+
+        if (!has_rect) {
+            continue;
+        }
+
+        if (flip_x && size.x > 0) {
+            const int next_left = size.x - 1 - right;
+            const int next_right = size.x - 1 - left;
+            left = next_left;
+            right = next_right;
+        }
+        if (flip_y && size.y > 0) {
+            const int next_top = size.y - 1 - bottom;
+            const int next_bottom = size.y - 1 - top;
+            top = next_top;
+            bottom = next_bottom;
+        }
+        if (right < left) {
+            std::swap(left, right);
+        }
+        if (bottom < top) {
+            std::swap(top, bottom);
+        }
+
+        box["position"] = nlohmann::json::object({
+            {"x", left},
+            {"y", top},
+        });
+        box["size"] = nlohmann::json::object({
+            {"w", std::max(0, right - left)},
+            {"h", std::max(0, bottom - top)},
+        });
+        box["corners"] = nlohmann::json::array({
+            nlohmann::json{{"texture_x", left}, {"texture_y", top}},
+            nlohmann::json{{"texture_x", right}, {"texture_y", top}},
+            nlohmann::json{{"texture_x", right}, {"texture_y", bottom}},
+            nlohmann::json{{"texture_x", left}, {"texture_y", bottom}},
+        });
     }
 }
-
 struct GeometryResolution {
     std::vector<nlohmann::json> movement;
     std::vector<nlohmann::json> anchors;

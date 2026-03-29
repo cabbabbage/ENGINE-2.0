@@ -72,6 +72,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <fstream>
+#include <sstream>
 #include <SDL3/SDL_log.h>
 
 namespace {
@@ -93,6 +94,72 @@ struct BoxCornerPickResult {
     int corner_index = -1;
     int point_index = -1;
 };
+
+constexpr std::array<std::array<int, 4>, 6> kBoxVolumeFaces{{
+    {{0, 1, 2, 3}},
+    {{4, 5, 6, 7}},
+    {{0, 1, 5, 4}},
+    {{1, 2, 6, 5}},
+    {{2, 3, 7, 6}},
+    {{3, 0, 4, 7}},
+}};
+
+bool box_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_BOX_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
+    }();
+    return enabled;
+}
+
+template <typename TBox>
+std::string box_ids_csv(const std::vector<TBox>& boxes) {
+    std::ostringstream out;
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        if (i > 0) {
+            out << ",";
+        }
+        out << boxes[i].id;
+    }
+    return out.str();
+}
+
+std::string sanitize_box_id(std::string value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        const unsigned char uch = static_cast<unsigned char>(ch);
+        if (std::isalnum(uch) != 0 || ch == '_' || ch == '-' || ch == '.') {
+            out.push_back(static_cast<char>(std::tolower(uch)));
+        } else if (std::isspace(uch) != 0) {
+            out.push_back('_');
+        }
+    }
+    return out;
+}
+
+std::string ensure_unique_box_id(const std::string& raw_id,
+                                 const char* fallback_prefix,
+                                 int frame_index,
+                                 std::size_t ordinal,
+                                 std::unordered_set<std::string>& used_ids) {
+    std::string base = sanitize_box_id(raw_id);
+    if (base.empty()) {
+        base = sanitize_box_id(std::string{fallback_prefix} + "_" +
+                               std::to_string(frame_index + 1) + "_" +
+                               std::to_string(ordinal + 1));
+    }
+    std::string candidate = base;
+    int suffix = 2;
+    while (!used_ids.insert(candidate).second) {
+        candidate = base + "_" + std::to_string(suffix++);
+    }
+    return candidate;
+}
 
 const nlohmann::json* locate_room_manifest_animation_map(const nlohmann::json& manifest_payload) {
     if (!manifest_payload.is_object()) {
@@ -264,16 +331,7 @@ bool projected_volume_contains_screen_point(const Asset::RuntimeBoxVolume& volum
     }
 
     const SDL_FPoint p{static_cast<float>(screen_point.x), static_cast<float>(screen_point.y)};
-    constexpr std::array<std::array<int, 4>, 6> kFaces{{
-        {{0, 1, 2, 3}},
-        {{4, 5, 6, 7}},
-        {{0, 1, 5, 4}},
-        {{1, 2, 6, 5}},
-        {{2, 3, 7, 6}},
-        {{3, 0, 4, 7}},
-    }};
-
-    for (const auto& face : kFaces) {
+    for (const auto& face : kBoxVolumeFaces) {
         std::array<SDL_FPoint, 4> polygon{
             projected[static_cast<std::size_t>(face[0])],
             projected[static_cast<std::size_t>(face[1])],
@@ -892,6 +950,31 @@ void room_editor_trace(const std::string& message) {
     try {
         vibble::log::debug(std::string{"[RoomEditor] "} + message);
     } catch (...) {}
+}
+
+template <typename TBox>
+void assert_unique_box_ids(const std::vector<TBox>& boxes, const char* label) {
+#if !defined(NDEBUG)
+    std::unordered_set<std::string> seen;
+    for (const auto& box : boxes) {
+        if (box.id.empty()) {
+            SDL_assert(!"Box id must not be empty");
+            continue;
+        }
+        if (!seen.insert(box.id).second) {
+            SDL_assert(!"Box ids must be unique per frame");
+        }
+    }
+#else
+    (void)boxes;
+    (void)label;
+#endif
+    if (box_trace_enabled()) {
+        SDL_Log("[BoxFlow][assert] kind=%s count=%zu ids=%s",
+                label,
+                boxes.size(),
+                box_ids_csv(boxes).c_str());
+    }
 }
 
 }
@@ -1592,6 +1675,12 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
         }
         if (movement_mode_active()) {
             exit_movement_edit_mode(true);
+        }
+        if (hitbox_mode_active()) {
+            exit_hitbox_edit_mode(true);
+        }
+        if (attack_box_mode_active()) {
+            exit_attack_box_edit_mode(true);
         }
         active_modal_ = ActiveModal::None;
         clear_geometry_selection();
@@ -2964,10 +3053,12 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         const bool has_selected = !selected_assets_.empty();
         const bool has_hover_highlight = shift_now && !highlighted_assets_.empty();
         const bool asset_editor_mode_active = (editor_mode_ != EditorMode::Normal);
-        const bool suppress_asset_info_overlays =
+        const bool suppress_selection_outlines =
             asset_editor_mode_active || (info_ui_ && info_ui_->is_visible());
+        const bool suppress_asset_info_overlays =
+            (info_ui_ && info_ui_->is_visible() && !is_asset_stack_editor_active());
 
-        if (!suppress_asset_info_overlays && (has_selected || has_hover_highlight)) {
+        if (!suppress_selection_outlines && (has_selected || has_hover_highlight)) {
             ensure_spatial_index(cam);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const int outline_offset = 3;  // Thicker outline for better visibility
@@ -3099,49 +3190,98 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                      int hovered_point,
                                      const SDL_Color& line_color) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            struct ProjectedBoxOverlay {
+                int box_index = -1;
+                bool selected = false;
+                bool hovered = false;
+                std::array<SDL_FPoint, 8> points{};
+            };
+
+            std::vector<ProjectedBoxOverlay> projected;
+            projected.reserve(volumes.size());
             for (std::size_t box_index = 0; box_index < volumes.size(); ++box_index) {
                 const auto& volume = volumes[box_index];
                 if (!volume.valid) {
                     continue;
                 }
 
-                const bool box_selected = static_cast<int>(box_index) == selected_box;
-                const bool box_hovered = static_cast<int>(box_index) == hovered_box;
+                ProjectedBoxOverlay entry{};
+                entry.box_index = static_cast<int>(box_index);
+                entry.selected = entry.box_index == selected_box;
+                entry.hovered = entry.box_index == hovered_box;
+                for (int point_index = 0; point_index < 8; ++point_index) {
+                    project_volume_point(volume.world_points[static_cast<std::size_t>(point_index)],
+                                         entry.points[static_cast<std::size_t>(point_index)]);
+                }
+                projected.push_back(entry);
+            }
+
+            auto to_fcolor = [](const SDL_Color& color) {
+                return SDL_FColor{
+                    static_cast<float>(color.r) / 255.0f,
+                    static_cast<float>(color.g) / 255.0f,
+                    static_cast<float>(color.b) / 255.0f,
+                    static_cast<float>(color.a) / 255.0f,
+                };
+            };
+
+            constexpr std::array<int, 6> kFaceIndices{{0, 1, 2, 0, 2, 3}};
+
+            // Pass 1: translucent fills so edges/handles remain crisp.
+            for (const auto& box : projected) {
+                SDL_Color fill = line_color;
+                fill.a = box.selected ? 96 : (box.hovered ? 76 : 58);
+                for (const auto& face : kBoxVolumeFaces) {
+                    SDL_Vertex vertices[4]{};
+                    for (int i = 0; i < 4; ++i) {
+                        vertices[i].position = box.points[static_cast<std::size_t>(face[static_cast<std::size_t>(i)])];
+                        vertices[i].color = to_fcolor(fill);
+                        vertices[i].tex_coord = SDL_FPoint{0.0f, 0.0f};
+                    }
+                    SDL_RenderGeometry(renderer,
+                                       nullptr,
+                                       vertices,
+                                       4,
+                                       kFaceIndices.data(),
+                                       static_cast<int>(kFaceIndices.size()));
+                }
+            }
+
+            // Pass 2: wireframe edges for readability.
+            for (const auto& box : projected) {
                 SDL_Color edge = line_color;
-                if (box_selected) {
-                    edge = SDL_Color{255, 208, 96, 240};
-                } else if (box_hovered) {
-                    edge = SDL_Color{255, 165, 0, 230};
+                if (box.selected) {
+                    edge = SDL_Color{255, 208, 96, 245};
+                } else if (box.hovered) {
+                    edge = SDL_Color{255, 165, 0, 235};
                 }
                 SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
                 for (const auto& edge_pair : kBoxVolumeEdges) {
-                    SDL_FPoint a{};
-                    SDL_FPoint b{};
-                    if (!project_volume_point(volume.world_points[static_cast<std::size_t>(edge_pair[0])], a) ||
-                        !project_volume_point(volume.world_points[static_cast<std::size_t>(edge_pair[1])], b)) {
-                        continue;
-                    }
+                    const SDL_FPoint& a = box.points[static_cast<std::size_t>(edge_pair[0])];
+                    const SDL_FPoint& b = box.points[static_cast<std::size_t>(edge_pair[1])];
                     SDL_RenderLine(renderer,
                                    static_cast<int>(std::lround(a.x)),
                                    static_cast<int>(std::lround(a.y)),
                                    static_cast<int>(std::lround(b.x)),
                                    static_cast<int>(std::lround(b.y)));
                 }
+            }
 
+            // Pass 3: handles on top of fill + edges.
+            for (const auto& box : projected) {
                 for (int point_index = 0; point_index < 8; ++point_index) {
-                    SDL_FPoint screen{};
-                    if (!project_volume_point(volume.world_points[static_cast<std::size_t>(point_index)], screen)) {
-                        continue;
-                    }
-                    const bool selected_corner_point =
-                        box_selected && point_index == selected_point;
+                    const SDL_FPoint& screen = box.points[static_cast<std::size_t>(point_index)];
+                    const bool selected_corner_point = box.selected && point_index == selected_point;
                     const bool hovered_corner_point =
-                        static_cast<int>(box_index) == hovered_box && point_index == hovered_point;
-                    SDL_Color draw_color{255, 165, 0, 235};
+                        box.box_index == hovered_box && point_index == hovered_point;
+                    SDL_Color draw_color{line_color.r, line_color.g, line_color.b, 230};
+                    if (hovered_corner_point) {
+                        draw_color = SDL_Color{255, 165, 0, 240};
+                    }
                     if (selected_corner_point) {
                         draw_color = SDL_Color{255, 255, 255, 255};
                     }
-                    const int radius = selected_corner_point ? 6 : 4;
+                    const int radius = selected_corner_point ? 6 : (hovered_corner_point ? 5 : 4);
                     const int cx = static_cast<int>(std::lround(screen.x));
                     const int cy = static_cast<int>(std::lround(screen.y));
                     SDL_SetRenderDrawColor(renderer, draw_color.r, draw_color.g, draw_color.b, draw_color.a);
@@ -3307,6 +3447,18 @@ std::shared_ptr<AssetInfo> RoomEditor::consume_selected_asset_from_library() {
 
 void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) {
     if (!info) return;
+    if (anchor_mode_active()) {
+        exit_anchor_edit_mode(true);
+    }
+    if (movement_mode_active()) {
+        exit_movement_edit_mode(true);
+    }
+    if (hitbox_mode_active()) {
+        exit_hitbox_edit_mode(true);
+    }
+    if (attack_box_mode_active()) {
+        exit_attack_box_edit_mode(true);
+    }
     if (library_ui_) library_ui_->close();
     clear_active_spawn_group_target();
     if (room_config_dock_open_) {
@@ -6214,7 +6366,7 @@ void RoomEditor::sync_attack_box_tools_panel() {
 bool RoomEditor::add_hitbox_in_current_frame() {
     const AnimationFrame* frame = hitbox_edit_.target_asset ? hitbox_edit_.target_asset->current_frame : nullptr;
     const SDL_Point dims = resolve_anchor_editor_frame_dimensions(hitbox_edit_.target_asset, frame);
-    return mutate_hitbox_current_frame(
+    const bool changed = mutate_hitbox_current_frame(
         [this, dims](std::vector<animation_update::FrameHitBox>& boxes) {
             std::vector<std::string> names;
             names.reserve(boxes.size());
@@ -6230,6 +6382,16 @@ bool RoomEditor::add_hitbox_in_current_frame() {
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (changed && box_trace_enabled() && hitbox_edit_.target_asset && hitbox_edit_.target_asset->current_frame) {
+        const auto& boxes = hitbox_edit_.target_asset->current_frame->hit_boxes.boxes;
+        SDL_Log("[BoxFlow][create] kind=hitbox asset=%s anim=%s frame=%d count=%zu ids=%s",
+                hitbox_edit_.target_asset->info ? hitbox_edit_.target_asset->info->name.c_str() : "<unknown>",
+                hitbox_edit_.animation_id.c_str(),
+                hitbox_edit_.target_asset->current_frame->frame_index,
+                boxes.size(),
+                box_ids_csv(boxes).c_str());
+    }
+    return changed;
 }
 
 bool RoomEditor::delete_selected_hitbox_in_current_frame() {
@@ -6262,7 +6424,7 @@ bool RoomEditor::delete_selected_hitbox_in_current_frame() {
 bool RoomEditor::add_attack_box_in_current_frame() {
     const AnimationFrame* frame = attack_box_edit_.target_asset ? attack_box_edit_.target_asset->current_frame : nullptr;
     const SDL_Point dims = resolve_anchor_editor_frame_dimensions(attack_box_edit_.target_asset, frame);
-    return mutate_attack_box_current_frame(
+    const bool changed = mutate_attack_box_current_frame(
         [this, dims](std::vector<animation_update::FrameAttackBox>& boxes) {
             std::vector<std::string> names;
             names.reserve(boxes.size());
@@ -6278,6 +6440,16 @@ bool RoomEditor::add_attack_box_in_current_frame() {
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (changed && box_trace_enabled() && attack_box_edit_.target_asset && attack_box_edit_.target_asset->current_frame) {
+        const auto& boxes = attack_box_edit_.target_asset->current_frame->attack_boxes.boxes;
+        SDL_Log("[BoxFlow][create] kind=attack_box asset=%s anim=%s frame=%d count=%zu ids=%s",
+                attack_box_edit_.target_asset->info ? attack_box_edit_.target_asset->info->name.c_str() : "<unknown>",
+                attack_box_edit_.animation_id.c_str(),
+                attack_box_edit_.target_asset->current_frame->frame_index,
+                boxes.size(),
+                box_ids_csv(boxes).c_str());
+    }
+    return changed;
 }
 
 bool RoomEditor::delete_selected_attack_box_in_current_frame() {
@@ -7460,6 +7632,14 @@ bool RoomEditor::persist_hitbox_current_frame(devmode::core::DevSaveCoordinator:
                                                                   frame->hit_boxes.boxes)) {
         return false;
     }
+    if (box_trace_enabled()) {
+        SDL_Log("[BoxFlow][persist] kind=hitbox asset=%s anim=%s frame=%zu count=%zu ids=%s",
+                target->info->name.c_str(),
+                hitbox_edit_.animation_id.c_str(),
+                frame_index,
+                frame->hit_boxes.boxes.size(),
+                box_ids_csv(frame->hit_boxes.boxes).c_str());
+    }
     if (!target->info->upsert_animation(hitbox_edit_.animation_id, payload)) {
         return false;
     }
@@ -7509,28 +7689,62 @@ bool RoomEditor::mutate_hitbox_current_frame(
     if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
         return false;
     }
-    auto anim_it = hitbox_edit_.target_asset->info->animations.find(hitbox_edit_.animation_id);
-    if (anim_it == hitbox_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
+    Asset* target = hitbox_edit_.target_asset;
+    auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
-    const int frame_index =
-        devmode::room_anchor_mode::wrap_index(hitbox_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
+    const int frame_index = devmode::room_anchor_mode::wrap_index(
+        hitbox_edit_.frame_index,
+        static_cast<int>(anim_it->second.frame_count()));
 
     AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
     if (!frame) {
         return false;
     }
 
+    if (target->current_animation != hitbox_edit_.animation_id || target->current_frame != frame) {
+        target->set_current_animation(hitbox_edit_.animation_id);
+        target->current_frame = frame;
+        target->set_frame_progress(0.0f);
+        target->static_frame = true;
+        target->refresh_frame_texture_bindings();
+    }
+    SDL_assert(target->current_frame == frame);
+
     std::vector<animation_update::FrameHitBox> updated = frame->hit_boxes.boxes;
     if (!mutator(updated)) {
         return false;
     }
 
+    std::unordered_set<std::string> used_ids;
+    for (std::size_t i = 0; i < updated.size(); ++i) {
+        auto& box = updated[i];
+        box.id = ensure_unique_box_id(box.id, "hitbox", frame_index, i, used_ids);
+        box.type = "hitbox";
+        if (box.frame_start < 0) {
+            box.frame_start = frame_index;
+        }
+        if (box.frame_end < box.frame_start) {
+            box.frame_end = box.frame_start;
+        }
+    }
+    assert_unique_box_ids(updated, "hitbox");
+
     frame->set_hit_boxes(std::move(updated));
 
-    hitbox_edit_.target_asset->refresh_runtime_box_cache_from_frame();
+    target->refresh_runtime_box_cache_from_frame();
     if (assets_) {
         assets_->mark_active_assets_dirty();
+    }
+
+    if (box_trace_enabled()) {
+        SDL_Log("[BoxFlow][mutate] kind=hitbox asset=%s anim=%s frame=%d count=%zu ids=%s",
+                target->info ? target->info->name.c_str() : "<unknown>",
+                hitbox_edit_.animation_id.c_str(),
+                frame_index,
+                frame->hit_boxes.boxes.size(),
+                box_ids_csv(frame->hit_boxes.boxes).c_str());
     }
 
     hitbox_edit_.dirty_since_last_flush = true;
@@ -7564,6 +7778,14 @@ bool RoomEditor::persist_attack_box_current_frame(devmode::core::DevSaveCoordina
                                                                      frame_index,
                                                                      frame->attack_boxes.boxes)) {
         return false;
+    }
+    if (box_trace_enabled()) {
+        SDL_Log("[BoxFlow][persist] kind=attack_box asset=%s anim=%s frame=%zu count=%zu ids=%s",
+                target->info->name.c_str(),
+                attack_box_edit_.animation_id.c_str(),
+                frame_index,
+                frame->attack_boxes.boxes.size(),
+                box_ids_csv(frame->attack_boxes.boxes).c_str());
     }
     if (!target->info->upsert_animation(attack_box_edit_.animation_id, payload)) {
         return false;
@@ -7614,28 +7836,65 @@ bool RoomEditor::mutate_attack_box_current_frame(
     if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
         return false;
     }
-    auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
-    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
+    Asset* target = attack_box_edit_.target_asset;
+    auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
     }
-    const int frame_index =
-        devmode::room_anchor_mode::wrap_index(attack_box_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
+    const int frame_index = devmode::room_anchor_mode::wrap_index(
+        attack_box_edit_.frame_index,
+        static_cast<int>(anim_it->second.frame_count()));
 
     AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
     if (!frame) {
         return false;
     }
 
+    if (target->current_animation != attack_box_edit_.animation_id || target->current_frame != frame) {
+        target->set_current_animation(attack_box_edit_.animation_id);
+        target->current_frame = frame;
+        target->set_frame_progress(0.0f);
+        target->static_frame = true;
+        target->refresh_frame_texture_bindings();
+    }
+    SDL_assert(target->current_frame == frame);
+
     std::vector<animation_update::FrameAttackBox> updated = frame->attack_boxes.boxes;
     if (!mutator(updated)) {
         return false;
     }
 
+    std::unordered_set<std::string> used_ids;
+    for (std::size_t i = 0; i < updated.size(); ++i) {
+        auto& box = updated[i];
+        box.id = ensure_unique_box_id(box.id, "attack_box", frame_index, i, used_ids);
+        box.type = "attack_box";
+        if (box.frame_start < 0) {
+            box.frame_start = frame_index;
+        }
+        if (box.frame_end < box.frame_start) {
+            box.frame_end = box.frame_start;
+        }
+        if (box.meta_json.empty()) {
+            box.meta_json = "{}";
+        }
+    }
+    assert_unique_box_ids(updated, "attack_box");
+
     frame->set_attack_boxes(std::move(updated));
 
-    attack_box_edit_.target_asset->refresh_runtime_box_cache_from_frame();
+    target->refresh_runtime_box_cache_from_frame();
     if (assets_) {
         assets_->mark_active_assets_dirty();
+    }
+
+    if (box_trace_enabled()) {
+        SDL_Log("[BoxFlow][mutate] kind=attack_box asset=%s anim=%s frame=%d count=%zu ids=%s",
+                target->info ? target->info->name.c_str() : "<unknown>",
+                attack_box_edit_.animation_id.c_str(),
+                frame_index,
+                frame->attack_boxes.boxes.size(),
+                box_ids_csv(frame->attack_boxes.boxes).c_str());
     }
 
     attack_box_edit_.dirty_since_last_flush = true;

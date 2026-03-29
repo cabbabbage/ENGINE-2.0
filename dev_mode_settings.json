@@ -10,7 +10,7 @@
             "filters_expanded": false,
             "fog": false,
             "initialized": true,
-            "map_assets": false,
+            "map_assets": true,
             "methods": {
                 "center": true,
                 "childrandom": true,

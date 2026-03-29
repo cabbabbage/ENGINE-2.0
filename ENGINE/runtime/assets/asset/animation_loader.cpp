@@ -13,6 +13,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -34,6 +35,18 @@ namespace {
 using json_coercion::read_bool_field_like;
 using json_coercion::read_int_field_like;
 using json_coercion::read_string_field_like;
+
+bool box_trace_enabled() {
+        static const bool enabled = [] {
+                const char* raw = SDL_getenv("VIBBLE_BOX_TRACE");
+                if (!raw || !*raw) {
+                        return false;
+                }
+                const std::string value(raw);
+                return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
+        }();
+        return enabled;
+}
 
 std::string source_animation_id(const Animation& animation) {
         if (animation.source.kind != "animation") {
@@ -266,15 +279,87 @@ std::string make_unique_name(const std::string& desired,
         return candidate;
 }
 
+std::string sanitize_box_id(std::string value) {
+        std::string out;
+        out.reserve(value.size());
+        for (char ch : value) {
+                const unsigned char uch = static_cast<unsigned char>(ch);
+                if (std::isalnum(uch) != 0 || ch == '_' || ch == '-' || ch == '.') {
+                        out.push_back(static_cast<char>(std::tolower(uch)));
+                } else if (std::isspace(uch) != 0) {
+                        out.push_back('_');
+                }
+        }
+        return out;
+}
+
+std::string make_default_box_id(const char* kind_prefix,
+                                std::size_t frame_index,
+                                std::size_t ordinal) {
+        return sanitize_box_id(std::string(kind_prefix) +
+                               "_" +
+                               std::to_string(frame_index + 1) +
+                               "_" +
+                               std::to_string(ordinal + 1));
+}
+
+std::string make_unique_id(const std::string& desired,
+                           const char* fallback_prefix,
+                           std::size_t frame_index,
+                           std::size_t ordinal,
+                           std::unordered_set<std::string>& used_ids) {
+        std::string base = sanitize_box_id(desired);
+        if (base.empty()) {
+                base = make_default_box_id(fallback_prefix, frame_index, ordinal);
+        }
+        std::string candidate = base;
+        int suffix = 2;
+        while (!used_ids.insert(candidate).second) {
+                candidate = base + "_" + std::to_string(suffix++);
+        }
+        return candidate;
+}
+
+int read_box_int_from_path(const nlohmann::json& node,
+                           const char* object_key,
+                           const char* nested_key,
+                           int fallback) {
+        if (!node.is_object() || !node.contains(object_key) || !node[object_key].is_object()) {
+                return fallback;
+        }
+        return read_int_field_like(node[object_key], nested_key, fallback);
+}
+
 template <typename TBox>
-void parse_box_corners(TBox& box, const nlohmann::json& node) {
+std::string box_id_list(const std::vector<TBox>& boxes) {
+        std::ostringstream out;
+        for (std::size_t i = 0; i < boxes.size(); ++i) {
+                if (i > 0) {
+                        out << ",";
+                }
+                out << boxes[i].id;
+        }
+        return out.str();
+}
+
+animation_update::FrameBoxRect parse_box_rect(const nlohmann::json& node) {
+        const bool has_position = node.is_object() && node.contains("position") && node["position"].is_object();
+        const bool has_size = node.is_object() && node.contains("size") && node["size"].is_object();
+        if (has_position && has_size) {
+                const int x = read_box_int_from_path(node, "position", "x", 0);
+                const int y = read_box_int_from_path(node, "position", "y", 0);
+                const int w = std::max(0, read_box_int_from_path(node, "size", "w", 0));
+                const int h = std::max(0, read_box_int_from_path(node, "size", "h", 0));
+                return animation_update::FrameBoxRect{x, y, x + w, y + h}.normalized_clamped();
+        }
+
+        std::vector<animation_update::FrameBoxCorner> parsed_corners;
         if (!node.is_object()) {
-                return;
+                return animation_update::FrameBoxRect{};
         }
         const nlohmann::json& corners = (node.contains("corners") && node["corners"].is_array())
                                             ? node["corners"]
                                             : nlohmann::json::array();
-        std::vector<animation_update::FrameBoxCorner> parsed_corners;
         parsed_corners.reserve(corners.size());
         for (std::size_t idx = 0; idx < corners.size(); ++idx) {
                 if (!corners[idx].is_object()) {
@@ -286,45 +371,92 @@ void parse_box_corners(TBox& box, const nlohmann::json& node) {
                     std::max(0, read_int_field_like(corner_node, "texture_y", 0)),
                 });
         }
-        box.set_rect(animation_update::FrameBoxRect::from_points(parsed_corners));
+        if (!parsed_corners.empty()) {
+                return animation_update::FrameBoxRect::from_points(parsed_corners);
+        }
+        return animation_update::FrameBoxRect{};
 }
 
-animation_update::FrameHitBox parse_hit_box(const nlohmann::json& node, std::size_t ordinal) {
+template <typename TBox>
+void parse_box_common_fields(TBox& box,
+                             const nlohmann::json& node,
+                             const char* fallback_name_prefix,
+                             const char* default_type,
+                             std::size_t frame_index,
+                             std::size_t ordinal) {
+        if (!node.is_object()) {
+                return;
+        }
+
+        box.id = sanitize_box_id(read_string_field_like(
+            node,
+            "id",
+            make_default_box_id(default_type, frame_index, ordinal)));
+        box.type = read_string_field_like(node, "type", std::string{default_type});
+        box.name = read_string_field_like(node,
+                                          "name",
+                                          std::string{fallback_name_prefix + std::string{"_"} + std::to_string(ordinal + 1)});
+        box.enabled = read_bool_field_like(node, "enabled", true);
+        box.extrusion_amount = std::max(0, read_int_field_like(node, "extrusion_amount", 0));
+        box.anchor_link = read_string_field_like(node, "anchor_link", std::string{});
+        box.frame_start = static_cast<int>(frame_index);
+        box.frame_end = static_cast<int>(frame_index);
+        if (node.contains("frame_range") && node["frame_range"].is_object()) {
+                const auto& range = node["frame_range"];
+                box.frame_start = read_int_field_like(range, "start", box.frame_start);
+                box.frame_end = read_int_field_like(range, "end", box.frame_end);
+                if (box.frame_end < box.frame_start) {
+                        box.frame_end = box.frame_start;
+                }
+        }
+        box.set_rect(parse_box_rect(node));
+}
+
+animation_update::FrameHitBox parse_hit_box(const nlohmann::json& node,
+                                            std::size_t frame_index,
+                                            std::size_t ordinal) {
         animation_update::FrameHitBox box{};
         if (!node.is_object()) {
                 return box;
         }
-        box.name = read_string_field_like(node, "name", std::string{"hit_box_" + std::to_string(ordinal + 1)});
-        box.extrusion_amount = std::max(0, read_int_field_like(node, "extrusion_amount", 0));
-        parse_box_corners(box, node);
+        parse_box_common_fields(box, node, "hit_box", "hitbox", frame_index, ordinal);
         return box;
 }
 
-animation_update::FrameAttackBox parse_attack_box(const nlohmann::json& node, std::size_t ordinal) {
+animation_update::FrameAttackBox parse_attack_box(const nlohmann::json& node,
+                                                  std::size_t frame_index,
+                                                  std::size_t ordinal) {
         animation_update::FrameAttackBox box{};
         if (!node.is_object()) {
                 return box;
         }
-        box.name = read_string_field_like(node, "name", std::string{"attack_box_" + std::to_string(ordinal + 1)});
-        box.extrusion_amount = std::max(0, read_int_field_like(node, "extrusion_amount", 0));
-        box.damage_amount = read_int_field_like(node, "damage_amount", read_int_field_like(node, "damage", 0));
-        parse_box_corners(box, node);
+        parse_box_common_fields(box, node, "attack_box", "attack_box", frame_index, ordinal);
+        box.damage_amount = read_int_field_like(node, "damage_amount", 0);
+        if (node.contains("meta") && node["meta"].is_object()) {
+                box.meta_json = node["meta"].dump();
+        } else {
+                box.meta_json = "{}";
+        }
         return box;
 }
 
-std::vector<animation_update::FrameHitBox> parse_hit_box_frame(const nlohmann::json& entry) {
+std::vector<animation_update::FrameHitBox> parse_hit_box_frame(const nlohmann::json& entry,
+                                                               std::size_t frame_index) {
         std::vector<animation_update::FrameHitBox> boxes;
         if (!entry.is_array()) {
                 return boxes;
         }
         std::unordered_set<std::string> used_names;
+        std::unordered_set<std::string> used_ids;
         boxes.reserve(entry.size());
         for (std::size_t idx = 0; idx < entry.size(); ++idx) {
                 if (!entry[idx].is_object()) {
                         continue;
                 }
-                animation_update::FrameHitBox box = parse_hit_box(entry[idx], idx);
+                animation_update::FrameHitBox box = parse_hit_box(entry[idx], frame_index, idx);
                 box.name = make_unique_name(box.name, "hit_box", used_names, idx);
+                box.id = make_unique_id(box.id, "hitbox", frame_index, idx, used_ids);
+                box.type = "hitbox";
                 if (box.is_valid()) {
                         boxes.push_back(std::move(box));
                 }
@@ -332,19 +464,23 @@ std::vector<animation_update::FrameHitBox> parse_hit_box_frame(const nlohmann::j
         return boxes;
 }
 
-std::vector<animation_update::FrameAttackBox> parse_attack_box_frame(const nlohmann::json& entry) {
+std::vector<animation_update::FrameAttackBox> parse_attack_box_frame(const nlohmann::json& entry,
+                                                                     std::size_t frame_index) {
         std::vector<animation_update::FrameAttackBox> boxes;
         if (!entry.is_array()) {
                 return boxes;
         }
         std::unordered_set<std::string> used_names;
+        std::unordered_set<std::string> used_ids;
         boxes.reserve(entry.size());
         for (std::size_t idx = 0; idx < entry.size(); ++idx) {
                 if (!entry[idx].is_object()) {
                         continue;
                 }
-                animation_update::FrameAttackBox box = parse_attack_box(entry[idx], idx);
+                animation_update::FrameAttackBox box = parse_attack_box(entry[idx], frame_index, idx);
                 box.name = make_unique_name(box.name, "attack_box", used_names, idx);
+                box.id = make_unique_id(box.id, "attack_box", frame_index, idx, used_ids);
+                box.type = "attack_box";
                 if (box.is_valid()) {
                         boxes.push_back(std::move(box));
                 }
@@ -360,7 +496,13 @@ std::vector<std::vector<animation_update::FrameHitBox>> parse_hit_box_frames(con
         }
         const std::size_t limit = std::min<std::size_t>(frame_count, hit_boxes_json.size());
         for (std::size_t frame_idx = 0; frame_idx < limit; ++frame_idx) {
-                result[frame_idx] = parse_hit_box_frame(hit_boxes_json[frame_idx]);
+                result[frame_idx] = parse_hit_box_frame(hit_boxes_json[frame_idx], frame_idx);
+                if (box_trace_enabled()) {
+                        SDL_Log("[BoxFlow][deserialize] kind=hitbox frame=%zu count=%zu ids=%s",
+                                frame_idx,
+                                result[frame_idx].size(),
+                                box_id_list(result[frame_idx]).c_str());
+                }
         }
         return result;
 }
@@ -373,7 +515,13 @@ std::vector<std::vector<animation_update::FrameAttackBox>> parse_attack_box_fram
         }
         const std::size_t limit = std::min<std::size_t>(frame_count, attack_boxes_json.size());
         for (std::size_t frame_idx = 0; frame_idx < limit; ++frame_idx) {
-                result[frame_idx] = parse_attack_box_frame(attack_boxes_json[frame_idx]);
+                result[frame_idx] = parse_attack_box_frame(attack_boxes_json[frame_idx], frame_idx);
+                if (box_trace_enabled()) {
+                        SDL_Log("[BoxFlow][deserialize] kind=attack_box frame=%zu count=%zu ids=%s",
+                                frame_idx,
+                                result[frame_idx].size(),
+                                box_id_list(result[frame_idx]).c_str());
+                }
         }
         return result;
 }

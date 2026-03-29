@@ -24,6 +24,7 @@
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
+#include <sstream>
 #include <stdexcept>
 #include <exception>
 #include <cassert>
@@ -105,6 +106,33 @@ bool should_emit_scale_trace_for_frame(const Asset& asset, std::uint32_t frame_i
     }
     last_logged_frame[&asset] = frame_id;
     return true;
+}
+
+bool vibble_box_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_BOX_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" ||
+               value == "true" ||
+               value == "TRUE" ||
+               value == "on" ||
+               value == "ON";
+    }();
+    return enabled;
+}
+
+std::string runtime_box_ids_csv(const std::vector<Asset::RuntimeBoxVolume>& volumes) {
+    std::ostringstream out;
+    for (std::size_t i = 0; i < volumes.size(); ++i) {
+        if (i > 0) {
+            out << ",";
+        }
+        out << volumes[i].id;
+    }
+    return out.str();
 }
 
 }
@@ -511,6 +539,8 @@ void Asset::finalize_setup() {
         }
         NeighborSearchRadius = info->NeighborSearchRadius;
         refresh_cached_dimensions();
+        refresh_anchor_point_cache_from_frame();
+        refresh_runtime_box_cache_from_frame();
 
         finalized_ = true;
 }
@@ -717,7 +747,9 @@ void Asset::set_current_animation(const std::string& name)
 		frame_progress = 0.0f;
 		refresh_cached_dimensions();
                 mark_anchors_dirty();
-        }
+                refresh_anchor_point_cache_from_frame();
+                refresh_runtime_box_cache_from_frame();
+	}
 }
 
 void Asset::update() {
@@ -868,15 +900,29 @@ void Asset::refresh_runtime_box_cache_from_frame() {
     }
 
     auto build_volume = [&](const std::string& name,
+                            const std::string& id,
+                            const std::string& type,
+                            bool enabled,
+                            int frame_start,
+                            int frame_end,
+                            const std::string& anchor_link,
                             int extrusion_amount,
                             int damage_amount,
+                            const std::string& meta_json,
                             const std::array<animation_update::FrameBoxCorner, 4>& corners,
                             RuntimeBoxVolume& out_volume) -> bool {
         out_volume = RuntimeBoxVolume{};
+        out_volume.id = id;
+        out_volume.type = type;
         out_volume.name = name;
+        out_volume.enabled = enabled;
+        out_volume.frame_start = frame_start;
+        out_volume.frame_end = frame_end;
+        out_volume.anchor_link = anchor_link;
         out_volume.frame_index = current_frame ? current_frame->frame_index : -1;
         out_volume.extrusion_amount = std::max(0, extrusion_amount);
         out_volume.damage_amount = damage_amount;
+        out_volume.meta_json = meta_json;
 
         float sum_x = 0.0f;
         float sum_y = 0.0f;
@@ -928,14 +974,42 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         return true;
     };
 
+#if !defined(NDEBUG)
+    {
+        std::unordered_set<std::string> seen_hit_ids;
+        for (const auto& box : current_frame->hit_boxes.boxes) {
+            if (!box.id.empty()) {
+                assert(seen_hit_ids.insert(box.id).second && "Hit box IDs must be unique per frame");
+            }
+        }
+        std::unordered_set<std::string> seen_attack_ids;
+        for (const auto& box : current_frame->attack_boxes.boxes) {
+            if (!box.id.empty()) {
+                assert(seen_attack_ids.insert(box.id).second && "Attack box IDs must be unique per frame");
+            }
+        }
+    }
+#endif
+
     current_hit_box_volumes_.reserve(current_frame->hit_boxes.boxes.size());
     for (const auto& box : current_frame->hit_boxes.boxes) {
-        if (!box.is_valid()) {
+        if (!box.is_valid() || !box.enabled) {
             continue;
         }
         RuntimeBoxVolume volume{};
         const auto runtime_corners = box.to_runtime_clockwise_points();
-        if (!build_volume(box.name, box.extrusion_amount, 0, runtime_corners, volume)) {
+        if (!build_volume(box.name,
+                          box.id,
+                          box.type.empty() ? std::string{"hitbox"} : box.type,
+                          box.enabled,
+                          box.frame_start,
+                          box.frame_end,
+                          box.anchor_link,
+                          box.extrusion_amount,
+                          0,
+                          "{}",
+                          runtime_corners,
+                          volume)) {
             continue;
         }
         runtime_hit_box_lookup_.emplace(volume.name, current_hit_box_volumes_.size());
@@ -944,16 +1018,39 @@ void Asset::refresh_runtime_box_cache_from_frame() {
 
     current_attack_box_volumes_.reserve(current_frame->attack_boxes.boxes.size());
     for (const auto& box : current_frame->attack_boxes.boxes) {
-        if (!box.is_valid()) {
+        if (!box.is_valid() || !box.enabled) {
             continue;
         }
         RuntimeBoxVolume volume{};
         const auto runtime_corners = box.to_runtime_clockwise_points();
-        if (!build_volume(box.name, box.extrusion_amount, box.damage_amount, runtime_corners, volume)) {
+        if (!build_volume(box.name,
+                          box.id,
+                          box.type.empty() ? std::string{"attack_box"} : box.type,
+                          box.enabled,
+                          box.frame_start,
+                          box.frame_end,
+                          box.anchor_link,
+                          box.extrusion_amount,
+                          box.damage_amount,
+                          box.meta_json,
+                          runtime_corners,
+                          volume)) {
             continue;
         }
         runtime_attack_box_lookup_.emplace(volume.name, current_attack_box_volumes_.size());
         current_attack_box_volumes_.push_back(std::move(volume));
+    }
+
+    if (vibble_box_trace_enabled()) {
+        const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+        const int frame_index = current_frame ? current_frame->frame_index : -1;
+        SDL_Log("[BoxFlow][runtime_cache] asset=%s frame=%d hit_count=%zu hit_ids=%s attack_count=%zu attack_ids=%s",
+                asset_name.c_str(),
+                frame_index,
+                current_hit_box_volumes_.size(),
+                runtime_box_ids_csv(current_hit_box_volumes_).c_str(),
+                current_attack_box_volumes_.size(),
+                runtime_box_ids_csv(current_attack_box_volumes_).c_str());
     }
 }
 

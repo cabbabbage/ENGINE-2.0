@@ -85,12 +85,18 @@ struct FrameBoxRect {
 };
 
 struct FrameBoxBase {
+    std::string id;
+    std::string type;
     std::string name;
+    bool enabled = true;
+    int frame_start = -1;
+    int frame_end = -1;
+    std::string anchor_link;
     int extrusion_amount = 0;
     FrameBoxRect rect{};
 
     bool is_valid() const {
-        return !name.empty();
+        return !name.empty() && !id.empty();
     }
 
     void set_rect(const FrameBoxRect& value) {
@@ -172,6 +178,12 @@ struct FrameBoxBase {
             corner(FrameBoxCornerId::BL),
         };
     }
+
+    void set_position_and_size(int x, int y, int width, int height) {
+        const int clamped_width = std::max(0, width);
+        const int clamped_height = std::max(0, height);
+        set_rect(FrameBoxRect{x, y, x + clamped_width, y + clamped_height});
+    }
 };
 
 struct FrameHitBox : FrameBoxBase {
@@ -179,6 +191,7 @@ struct FrameHitBox : FrameBoxBase {
 
 struct FrameAttackBox : FrameBoxBase {
     int damage_amount = 0;
+    std::string meta_json;
 };
 
 struct FrameHitBoxes {

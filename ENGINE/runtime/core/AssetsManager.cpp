@@ -1237,6 +1237,9 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         dev_controls_->sync_camera_tilt_override();
     }
     camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
+    if (camera_refresh_needed) {
+        note_frame_rebuild_request();
+    }
     camera_settings_dirty_ = false;
 
     update_max_asset_dimensions();

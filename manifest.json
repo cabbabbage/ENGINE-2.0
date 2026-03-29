@@ -5967,9 +5967,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            37,
             36,
             242,
+            184,
             255
           ],
           "edge_smoothness": 2,
@@ -5992,9 +5992,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            130,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 85,
@@ -6023,16 +6023,16 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": -912,
-              "dz": -159,
+              "dx": -1548,
+              "dz": 176,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
-              "locked": false,
+              "locked": true,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3176,
-              "origional_width": 2904,
+              "origional_height": 6944,
+              "origional_width": 7016,
               "position": "Exact",
               "priority": 0,
               "quantity": 1,
@@ -6154,6 +6154,26 @@
           "min_height": 200,
           "min_width": 400,
           "name": "NewTrail",
+          "spawn_groups": []
+        },
+        "NewTrail1": {
+          "curvyness": 4,
+          "display_color": [
+            36,
+            38,
+            242,
+            255
+          ],
+          "edge_smoothness": 8,
+          "geometry": "Square",
+          "inherits_map_assets": true,
+          "is_boss": false,
+          "is_spawn": false,
+          "max_height": 200,
+          "max_width": 400,
+          "min_height": 200,
+          "min_width": 400,
+          "name": "NewTrail1",
           "spawn_groups": []
         },
         "basic": {

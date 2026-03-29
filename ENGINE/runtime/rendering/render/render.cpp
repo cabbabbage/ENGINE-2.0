@@ -1456,7 +1456,8 @@ void SceneRenderer::render() {
     geometry_batcher_->flush();
 
     if (debug_auto_paths_ && movement_debug_visible_) {
-        render_movement_debug_paths(renderer_, cam, screen_width_, screen_height_, rendered_assets_for_debug);
+        refresh_movement_debug_snapshots(rendered_assets_for_debug);
+        render_movement_debug_snapshots(cam, screen_width_, screen_height_, rendered_assets_for_debug);
     }
 
     if (anchor_point_debug_enabled_) {

@@ -2062,6 +2062,32 @@
             ]
           ],
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 125,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 125,
+                    "texture_y": 70
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 70
+                  }
+                ],
+                "extrusion_amount": 0,
+                "name": "body"
+              }
+            ]
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
@@ -2443,7 +2469,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 76.0
+        "scale_percentage": 70.0
       },
       "start": "default",
       "tags": [
@@ -6068,6 +6094,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-05404aa5a27d"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": 122,
+              "dz": -1300,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 7040,
+              "origional_width": 6984,
+              "position": "Exact",
+              "priority": 3,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-71cb7066a51b"
             }
           ]
         }

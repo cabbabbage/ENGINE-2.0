@@ -8,8 +8,6 @@ class Assets;
 class Widget;
 class Input;
 class FloatSliderWidget;
-class SectionToggleWidget;
-class DiscreteSliderWidget;
 class PitchDialWidget;
 
 
@@ -24,7 +22,6 @@ public:
     void close();
     void toggle();
     bool is_point_inside(int x, int y) const;
-    bool is_depth_section_visible() const { return is_visible() && depth_section_expanded_; }
 
     void update(const Input& input, int screen_w, int screen_h);
     bool handle_event(const SDL_Event& e);
@@ -50,18 +47,11 @@ private:
 
     std::unique_ptr<Widget> header_spacer_;
     std::unique_ptr<Widget> controls_spacer_;
-    std::unique_ptr<SectionToggleWidget> visibility_section_header_;
-    std::unique_ptr<SectionToggleWidget> depth_section_header_;
 
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
-    std::unique_ptr<FloatSliderWidget> meters_slider_;
     std::unique_ptr<FloatSliderWidget> perspective_cap_slider_;
-    std::unique_ptr<FloatSliderWidget> offscreen_fade_slider_;
 
-    std::unique_ptr<DiscreteSliderWidget> render_quality_slider_;
-    bool visibility_section_expanded_ = true;
-    bool depth_section_expanded_ = true;
     bool applying_settings_ = false;
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;

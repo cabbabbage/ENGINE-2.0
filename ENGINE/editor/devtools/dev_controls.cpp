@@ -3399,7 +3399,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         return true;
     };
 
-    const bool show_depth_guides = camera_panel_ && camera_panel_->is_depth_section_visible();
+    const bool show_depth_guides = camera_panel_ && camera_panel_->is_visible();
     const bool show_grid_overlay = false; // Grid is now rendered in SceneRenderer
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
@@ -3604,13 +3604,10 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
         if (cam && floor_depth_params && floor_depth_params->enabled) {
             const WarpedScreenGrid::RealismSettings& settings = cam->realism_settings();
-            const float meters_per_100 = std::max(0.0001f, settings.meters_per_100_world_px);
-            const float pixels_per_world_unit = 100.0f / meters_per_100;
             const float margin_world_units = std::max(0.0f, settings.extra_cull_margin);
-            const float margin_world_px = margin_world_units * pixels_per_world_unit;
             const SDL_FPoint center_world_f = cam->get_view_center_f();
             const float cos_pitch = std::max(0.0f, std::cos(static_cast<float>(floor_depth_params->pitch_radians)));
-            const float depth_offset_px = margin_world_px * cos_pitch;
+            const float depth_offset_px = margin_world_units * cos_pitch;
             SDL_Point cull_world{
                 static_cast<int>(std::lround(center_world_f.x)),
                 static_cast<int>(std::lround(center_world_f.y - depth_offset_px))

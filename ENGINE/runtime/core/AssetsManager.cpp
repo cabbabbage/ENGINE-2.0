@@ -513,18 +513,8 @@ void Assets::force_camera_view_refresh() {
     needs_filtered_active_refresh_ = true;
 }
 
-int Assets::saved_render_quality_percent() const {
-    return 100;
-}
-
-int Assets::effective_render_quality_percent() const {
-    return saved_render_quality_percent();
-}
-
 void Assets::apply_camera_runtime_settings() {
-    const int effective_percent = effective_render_quality_percent();
-    const float quality_cap = static_cast<float>(effective_percent) / 100.0f;
-    render_pipeline::ScalingLogic::SetQualityCap(quality_cap);
+    render_pipeline::ScalingLogic::SetQualityCap(1.0f);
 }
 
 void Assets::log_camera_fog_state(const char* label) const {
@@ -547,10 +537,8 @@ void Assets::log_camera_fog_state(const char* label) const {
         " room_zoom_percent=" + std::to_string(room ? room->camera_zoom_percent : 0) +
         " base_height_px=" + std::to_string(settings.base_height_px) +
         " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
-        " meters_per_100_world_px=" + std::to_string(settings.meters_per_100_world_px) +
         " extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
         " near_camera_max_perspective_scale=" + std::to_string(settings.near_camera_max_perspective_scale) +
-        " offscreen_fade_amount_px=" + std::to_string(settings.offscreen_fade_amount_px) +
         " view_height_world=" + std::to_string(camera_.view_height_world()) +
         " camera_height=" + std::to_string(camera_height) +
         " pitch_deg=" + std::to_string(pitch_deg) +

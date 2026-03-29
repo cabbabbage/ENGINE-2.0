@@ -5864,6 +5864,10 @@
               {
                 "chance": 5.4,
                 "name": "#pretty"
+              },
+              {
+                "chance": 0,
+                "name": "#tree"
               }
             ],
             "display_name": "batch_map_assets",
@@ -5963,9 +5967,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            37,
-            36,
             242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -5986,7 +5990,7 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            130,
+            37,
             36,
             242,
             255
@@ -6047,16 +6051,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1116,
-              "dz": -908,
+              "dx": -328,
+              "dz": 148,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6968,
-              "origional_width": 7016,
+              "origional_height": 6984,
+              "origional_width": 6992,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,

@@ -280,9 +280,6 @@ private:
     void update_filtered_active_assets();
     bool asset_matches_focus_filter(const Asset* asset) const;
     void ensure_dev_controls();
-    void update_scene_render_quality();
-    int  saved_render_quality_percent() const;
-    int  effective_render_quality_percent() const;
     void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
     void log_camera_fog_state(const char* label) const;

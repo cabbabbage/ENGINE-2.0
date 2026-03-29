@@ -75,7 +75,6 @@ struct CameraProjectionParams {
     // Fade parameters
     float horizon_band_px = 100.0f;
     float near_camera_max_perspective_scale = 4.0f;
-    float offscreen_fade_amount_px = 200.0f;
     // Screen dimensions
     int screen_width = 0, screen_height = 0;
     // Version for cache invalidation
@@ -90,7 +89,6 @@ struct GridPoint {
         float parallax_dx = 0.0f;
         float vertical_scale = 1.0f;
         float horizon_fade_alpha = 1.0f;
-        float near_camera_fade_alpha = 1.0f;
         float perspective_scale = 1.0f;
         float distance_to_camera = 0.0f;
         float tilt_radians = 0.0f;
@@ -111,7 +109,6 @@ struct GridPoint {
             parallax_dx = 0.0f;
             vertical_scale = 1.0f;
             horizon_fade_alpha = 1.0f;
-            near_camera_fade_alpha = 1.0f;
             perspective_scale = 1.0f;
             distance_to_camera = 0.0f;
             tilt_radians = 0.0f;
@@ -237,7 +234,6 @@ struct GridPoint {
     float perspective_scale() const { return projection_.perspective_scale; }
     float vertical_scale() const { return projection_.vertical_scale; }
     float horizon_fade_alpha() const { return projection_.horizon_fade_alpha; }
-    float near_camera_fade_alpha() const { return projection_.near_camera_fade_alpha; }
     float distance_to_camera() const { return projection_.distance_to_camera; }
     float tilt_radians() const { return projection_.tilt_radians; }
     bool is_on_screen() const { return projection_.on_screen; }

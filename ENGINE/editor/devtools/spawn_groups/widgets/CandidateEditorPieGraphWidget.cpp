@@ -925,7 +925,8 @@ void CandidateEditorPieGraphWidget::render_legend(SDL_Renderer* renderer, const 
     }
 
     if (layout.legend.w > 60) {
-        SDL_Color text_color = DMStyles::Label().color;
+        const SDL_Color normal_label_color = DMStyles::Label().color;
+        const SDL_Color anti_label_color = DMStyles::DeleteButton().text;
         int font_height = TTF_GetFontHeight(font);
         int row_height = std::max(font_height + 6, 20);
         cache_legend_rows(layout, row_height);
@@ -963,7 +964,9 @@ void CandidateEditorPieGraphWidget::render_legend(SDL_Renderer* renderer, const 
             double percent = total > 0.0 ? (clamp_positive(candidates_[i].weight) / total) * 100.0 : 0.0;
             std::ostringstream label;
             label << candidates_[i].name << " - " << std::fixed << std::setprecision(1) << percent << "% (" << static_cast<int>(std::round(clamp_positive(candidates_[i].weight))) << ")";
-            draw_text(renderer, font, label.str(), box.x + box.w + 8, row_rect.y + (row_rect.h - font_height) / 2, text_color, false);
+            const bool is_anti_candidate = candidates_[i].weight <= 0.0;
+            const SDL_Color row_text_color = is_anti_candidate ? anti_label_color : normal_label_color;
+            draw_text(renderer, font, label.str(), box.x + box.w + 8, row_rect.y + (row_rect.h - font_height) / 2, row_text_color, false);
         }
     } else {
         std::ostringstream summary;

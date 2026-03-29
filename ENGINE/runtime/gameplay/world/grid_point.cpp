@@ -248,28 +248,12 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         }
     }
 
-    // Calculate near-camera fade
-    float near_fade = 1.0f;
-    if (std::isfinite(screen_y) && params.screen_height > 0) {
-        const float screen_h = static_cast<float>(params.screen_height);
-        const float offscreen_amount = std::max(0.0f, params.offscreen_fade_amount_px);
-        if (static_cast<float>(screen_y) >= screen_h) {
-            if (offscreen_amount <= 0.0f) {
-                near_fade = 0.0f;
-            } else {
-                const float t = (static_cast<float>(screen_y) - screen_h) / offscreen_amount;
-                near_fade = std::clamp(1.0f - t, 0.0f, 1.0f);
-            }
-        }
-    }
-
     // Store results
     projection_.screen = SDL_FPoint{static_cast<float>(screen_x), static_cast<float>(screen_y)};
     projection_.parallax_dx = 0.0f;
     projection_.vertical_scale = vert_scale;
     projection_.perspective_scale = static_cast<float>(std::max(0.0001, scale));
     projection_.horizon_fade_alpha = h_fade;
-    projection_.near_camera_fade_alpha = near_fade;
     projection_.distance_to_camera = static_cast<float>(distance);
     projection_.tilt_radians = static_cast<float>(params.pitch_radians);
     projection_.on_screen = std::isfinite(screen_x) && std::isfinite(screen_y);

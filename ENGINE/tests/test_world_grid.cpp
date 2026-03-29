@@ -310,9 +310,7 @@ TEST_CASE("WarpedScreenGrid render-area top follows horizon-clamped cull top") {
     const WarpedScreenGrid::GridBounds virtual_bounds = camera_grid.get_bounds();
     camera_grid.set_tilt_override(0.0f);
     const world::CameraProjectionParams params = camera_grid.projection_params();
-    const float meters_per_100 = std::max(0.0001f, settings.meters_per_100_world_px);
-    const float pixels_per_world_unit = 100.0f / meters_per_100;
-    const float margin_px = settings.extra_cull_margin * pixels_per_world_unit;
+    const float margin_px = settings.extra_cull_margin;
     const float expected_top = std::clamp(
         static_cast<float>(params.horizon_screen_y) - margin_px,
         virtual_bounds.top,
@@ -323,4 +321,30 @@ TEST_CASE("WarpedScreenGrid render-area top follows horizon-clamped cull top") {
 
     CHECK(rebuilt_bounds.top == doctest::Approx(expected_top).epsilon(1e-5));
     CHECK(rebuilt_bounds.top >= virtual_bounds.top);
+}
+
+TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    const nlohmann::json serialized = camera_grid.camera_settings_to_json();
+
+    CHECK_FALSE(serialized.contains("render_quality_percent"));
+    CHECK_FALSE(serialized.contains("meters_per_100_world_px"));
+    CHECK_FALSE(serialized.contains("offscreen_fade_amount_px"));
+}
+
+TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    const WarpedScreenGrid::RealismSettings before = camera_grid.get_settings();
+
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"render_quality_percent", 10},
+        {"meters_per_100_world_px", 0.5},
+        {"offscreen_fade_amount_px", 0.0},
+        {"near_camera_max_perspective_scale", 6.0}
+    });
+
+    const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
+    CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
+    CHECK(after.extra_cull_margin == doctest::Approx(before.extra_cull_margin));
+    CHECK(after.near_camera_max_perspective_scale == doctest::Approx(6.0f));
 }

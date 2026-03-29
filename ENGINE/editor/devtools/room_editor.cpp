@@ -2944,12 +2944,18 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 const float dx = actual_child_screen.x - expected.child_screen_px.x;
                 const float dy = actual_child_screen.y - expected.child_screen_px.y;
                 const float delta_px = std::sqrt(dx * dx + dy * dy);
-                vibble::log::debug(std::string("[AnchorParity][dev] owner='") +
-                                   (owner->info ? owner->info->name : std::string{"<unknown>"}) +
-                                   "' child='" +
-                                   (child->info ? child->info->name : std::string{"<unknown>"}) +
-                                   "' anchor='" + binding.anchor_name +
-                                   "' delta_px=" + std::to_string(delta_px));
+                constexpr float kParityTolerancePx = 0.5f;
+                const std::string message = std::string("[AnchorParity][dev] owner='") +
+                                            (owner->info ? owner->info->name : std::string{"<unknown>"}) +
+                                            "' child='" +
+                                            (child->info ? child->info->name : std::string{"<unknown>"}) +
+                                            "' anchor='" + binding.anchor_name +
+                                            "' delta_px=" + std::to_string(delta_px);
+                if (delta_px > kParityTolerancePx) {
+                    vibble::log::warn(message);
+                } else {
+                    vibble::log::debug(message);
+                }
             }
         }
 

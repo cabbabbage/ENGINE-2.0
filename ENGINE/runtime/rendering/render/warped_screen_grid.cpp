@@ -631,6 +631,11 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
     runtime_pitch_deg_ = camera_.current_pitch_deg();
     runtime_pitch_rad_ = camera_.current_pitch_rad();
     runtime_anchor_world_z_ = camera_state_cached().anchor_world_z;
+    const ScreenBounds initial_bounds = expanded_screen_bounds(screen_width_, screen_height_);
+    bounds_.left = initial_bounds.left;
+    bounds_.top = initial_bounds.top;
+    bounds_.right = initial_bounds.right;
+    bounds_.bottom = initial_bounds.bottom;
     depth_enabled_   = true;
 }
 
@@ -685,6 +690,11 @@ void WarpedScreenGrid::set_screen_dimensions(int screen_width, int screen_height
 
     const SDL_Point center = get_screen_center();
     base_view_ = make_rect_area("base_view", center, screen_width_, screen_height_, 0);
+    const ScreenBounds resized_bounds = expanded_screen_bounds(screen_width_, screen_height_);
+    bounds_.left = resized_bounds.left;
+    bounds_.top = resized_bounds.top;
+    bounds_.right = resized_bounds.right;
+    bounds_.bottom = resized_bounds.bottom;
     invalidate_camera_cache();
     recompute_current_view();
 }
@@ -1398,12 +1408,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     const float meters_per_100 = std::max(0.0001f, settings_.meters_per_100_world_px);
     const float pixels_per_world_unit = 100.0f / meters_per_100;
     const float margin_px = world_margin_units * pixels_per_world_unit;
-    const float cull_top = std::clamp(static_cast<float>(cam_state.horizon_screen_y) - margin_px, virtual_bounds.top, virtual_bounds.bottom);
     const SDL_FRect cull_rect{
         virtual_bounds.left - margin_px,
-        cull_top,
+        virtual_bounds.top - margin_px,
         virtual_w + margin_px * 2.0f,
-        virtual_bounds.bottom - cull_top + margin_px
+        virtual_h + margin_px * 2.0f
 };
     const float min_visible_px =
         static_cast<float>(screen_height_) * std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);

@@ -128,14 +128,13 @@ void MenuUI::game_loop() {
                         if (game_assets_) game_assets_->handle_sdl_event(e);
                 }
 
-                const bool should_update = !menu_active_ && game_assets_ && input_;
-
-                if (should_update) {
-                        game_assets_->update(*input_);
-                }
-
                 if (sync_output_dimensions(renderer)) {
                         rebuildButtons();
+                }
+
+                const bool should_update = !menu_active_ && game_assets_ && input_;
+                if (should_update) {
+                        game_assets_->update(*input_);
                 }
                 log_render_diagnostics(renderer, "MenuUI");
 

@@ -355,11 +355,13 @@ void MainApp::game_loop() {
                         }
                 }
 
+                if (renderer) {
+                        sync_output_dimensions(renderer);
+                }
                 if (game_assets_ && input_) {
                         game_assets_->update(*input_);
                 }
                 if (renderer) {
-                        sync_output_dimensions(renderer);
                         log_render_diagnostics(renderer, "MainApp");
                 }
                 if (input_) {

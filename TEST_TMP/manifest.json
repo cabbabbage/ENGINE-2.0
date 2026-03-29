@@ -1,0 +1,62 @@
+{
+  "assets": {
+    "barrel": {
+      "anti_tags": [
+        "nature"
+      ],
+      "tags": [
+        "urban",
+        "wood"
+      ]
+    },
+    "flower": {
+      "anti_tags": [],
+      "tags": [
+        "nature",
+        "forest",
+        "pretty"
+      ]
+    },
+    "hero": {
+      "anti_tags": [
+        "urban"
+      ],
+      "tags": [
+        "enemy",
+        "small"
+      ]
+    },
+    "mage": {
+      "anti_tags": [
+        "holy"
+      ],
+      "tags": [
+        "enemy",
+        "magic",
+        "caster"
+      ]
+    },
+    "slime": {
+      "anti_tags": [
+        "water"
+      ],
+      "tags": [
+        "enemy",
+        "cave",
+        "small"
+      ]
+    },
+    "wolf": {
+      "anti_tags": [
+        "urban"
+      ],
+      "tags": [
+        "enemy",
+        "forest",
+        "pack"
+      ]
+    }
+  },
+  "maps": {},
+  "version": 2
+}

@@ -63,17 +63,6 @@ Area make_warped_screen_test_view(const std::string& name, SDL_Point center, int
     return Area(name, corners, 0);
 }
 
-int far_depth_offset_from_bounds(int anchor_z, int min_z, int max_z) {
-    return std::max(std::abs(min_z - anchor_z), std::abs(max_z - anchor_z));
-}
-
-int far_depth_sign_from_bounds(int anchor_z, int min_z, int max_z) {
-    if (std::abs(min_z - anchor_z) >= std::abs(max_z - anchor_z)) {
-        return (min_z < anchor_z) ? -1 : 1;
-    }
-    return (max_z < anchor_z) ? -1 : 1;
-}
-
 } // namespace
 
 TEST_CASE("GridPoint projection round-trips via camera params") {
@@ -286,66 +275,52 @@ TEST_CASE("ManifestStore map entry round-trip honors writes") {
     CHECK(*persisted == map_entry);
 }
 
-TEST_CASE("WarpedScreenGrid depth query follows camera cull depth slider") {
+TEST_CASE("WarpedScreenGrid depth query follows strict near/far world-z window") {
     world::WorldGrid grid;
-    constexpr int kAnchorZ = 20000;
+    Asset* near_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 40));
+    Asset* far_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 160));
+    REQUIRE(near_asset != nullptr);
+    REQUIRE(far_asset != nullptr);
 
-    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, kAnchorZ}));
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     settings.depth_near_world = 0.0f;
-    settings.depth_far_world = 1.0f; // Should not drive traversal depth anymore.
-    settings.extra_cull_margin = 60.0f;
+    settings.depth_far_world = 100.0f;
     camera_grid.set_realism_settings(settings);
-    camera_grid.set_tilt_override(5.0f);
-    camera_grid.set_screen_center(SDL_Point{0, kAnchorZ});
     camera_grid.rebuild_grid(grid, 0.016f, 1);
 
-    const int low_min = camera_grid.last_min_world_z();
-    const int low_max = camera_grid.last_max_world_z();
-    const int outward_sign = far_depth_sign_from_bounds(kAnchorZ, low_min, low_max);
-    Asset* far_asset = grid.create_asset_at_point(
-        make_world_grid_test_asset(0, kAnchorZ + outward_sign * 120));
-    REQUIRE(far_asset != nullptr);
+    CHECK(camera_grid.grid_point_for_asset(near_asset) != nullptr);
     CHECK(camera_grid.grid_point_for_asset(far_asset) == nullptr);
 
-    settings.extra_cull_margin = 250.0f;
+    settings.depth_far_world = 200.0f;
     camera_grid.set_realism_settings(settings);
     camera_grid.rebuild_grid(grid, 0.016f, 2);
-    const int high_min = camera_grid.last_min_world_z();
-    const int high_max = camera_grid.last_max_world_z();
+
+    CHECK(camera_grid.grid_point_for_asset(near_asset) != nullptr);
     CHECK(camera_grid.grid_point_for_asset(far_asset) != nullptr);
-    CHECK(far_depth_offset_from_bounds(kAnchorZ, high_min, high_max) >
-          far_depth_offset_from_bounds(kAnchorZ, low_min, low_max) + 100);
 }
 
-TEST_CASE("WarpedScreenGrid caps cull depth to top-edge world depth") {
+TEST_CASE("WarpedScreenGrid render-area top follows horizon-clamped cull top") {
     world::WorldGrid grid;
-    constexpr int kAnchorZ = 20000;
-
-    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, kAnchorZ}));
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
-    settings.depth_near_world = 0.0f;
-    settings.extra_cull_margin = 5000.0f;
+    settings.extra_cull_margin = 250.0f;
     camera_grid.set_realism_settings(settings);
-    camera_grid.set_tilt_override(80.0f);
-    camera_grid.set_screen_center(SDL_Point{0, kAnchorZ});
+
+    const WarpedScreenGrid::GridBounds virtual_bounds = camera_grid.get_bounds();
+    camera_grid.set_tilt_override(0.0f);
+    const world::CameraProjectionParams params = camera_grid.projection_params();
+    const float meters_per_100 = std::max(0.0001f, settings.meters_per_100_world_px);
+    const float pixels_per_world_unit = 100.0f / meters_per_100;
+    const float margin_px = settings.extra_cull_margin * pixels_per_world_unit;
+    const float expected_top = std::clamp(
+        static_cast<float>(params.horizon_screen_y) - margin_px,
+        virtual_bounds.top,
+        virtual_bounds.bottom);
+
     camera_grid.rebuild_grid(grid, 0.016f, 1);
+    const WarpedScreenGrid::GridBounds rebuilt_bounds = camera_grid.get_bounds();
 
-    const int capped_min = camera_grid.last_min_world_z();
-    const int capped_max = camera_grid.last_max_world_z();
-    const int outward_sign = far_depth_sign_from_bounds(kAnchorZ, capped_min, capped_max);
-    const int capped_offset = far_depth_offset_from_bounds(kAnchorZ, capped_min, capped_max);
-    REQUIRE(capped_offset > 0);
-    CHECK(capped_offset < 5000);
-
-    Asset* in_range = grid.create_asset_at_point(
-        make_world_grid_test_asset(0, kAnchorZ + outward_sign * std::max(1, capped_offset - 5)));
-    Asset* out_of_range = grid.create_asset_at_point(
-        make_world_grid_test_asset(0, kAnchorZ + outward_sign * (capped_offset + 120)));
-    REQUIRE(in_range != nullptr);
-    REQUIRE(out_of_range != nullptr);
-    camera_grid.rebuild_grid(grid, 0.016f, 2);
-
-    CHECK(camera_grid.grid_point_for_asset(in_range) != nullptr);
-    CHECK(camera_grid.grid_point_for_asset(out_of_range) == nullptr);
+    CHECK(rebuilt_bounds.top == doctest::Approx(expected_top).epsilon(1e-5));
+    CHECK(rebuilt_bounds.top >= virtual_bounds.top);
 }

@@ -5963,9 +5963,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            37,
             36,
             242,
-            184,
             255
           ],
           "edge_smoothness": 2,
@@ -5986,9 +5986,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            130,
+            36,
             242,
-            36,
-            36,
             255
           ],
           "edge_smoothness": 85,
@@ -6047,16 +6047,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -440,
-              "dz": -668,
+              "dx": -1116,
+              "dz": -908,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7000,
-              "origional_width": 6992,
+              "origional_height": 6968,
+              "origional_width": 7016,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,

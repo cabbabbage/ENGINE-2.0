@@ -134,10 +134,6 @@ ControllerFactory::create_for_asset(Asset* self) const {
                 return std::make_unique<vibble_controller>(self);
         }
 
-        // Prefer controller derived from asset name; fall back to explicit key for legacy assets.
-        std::string key = canonical_controller_key(self->info->name);
-        if (key.empty()) {
-            key = canonical_controller_key(self->info->custom_controller_key);
-        }
+        const std::string key = canonical_controller_key(self->info->name);
         return create_by_key(key, self);
 }

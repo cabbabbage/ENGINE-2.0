@@ -50,7 +50,6 @@ private:
 
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
-    std::unique_ptr<FloatSliderWidget> perspective_cap_slider_;
 
     bool applying_settings_ = false;
     int last_screen_w_ = 0;

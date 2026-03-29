@@ -138,7 +138,6 @@ void CameraUIPanel::sync_from_camera() {
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
     if (cull_margin_slider_) cull_margin_slider_->set_value(settings.extra_cull_margin);
-    if (perspective_cap_slider_) perspective_cap_slider_->set_value(settings.near_camera_max_perspective_scale);
 }
 
 void CameraUIPanel::build_ui() {
@@ -159,7 +158,6 @@ void CameraUIPanel::build_ui() {
     }
     defaults.min_visible_screen_ratio = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
     defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
-    defaults.near_camera_max_perspective_scale = devmode::camera_prefs::load_near_camera_max_perspective_scale(defaults.near_camera_max_perspective_scale);
 
     min_render_size_slider_ = std::make_unique<FloatSliderWidget>("Min On-Screen Size", 0.0f, 0.05f, 0.001f, defaults.min_visible_screen_ratio, 3);
     min_render_size_slider_->set_tooltip("Cull sprites once their height drops below this fraction of the screen (0.01 = 1%).");
@@ -169,9 +167,6 @@ void CameraUIPanel::build_ui() {
     cull_margin_slider_->set_tooltip("Requested world-Z depth distance from the camera anchor. Runtime caps it to top-of-screen world depth each frame for stable, efficient culling.");
     cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    perspective_cap_slider_ = std::make_unique<FloatSliderWidget>("Max Perspective Scale", 0.25f, 12.0f, 0.05f, defaults.near_camera_max_perspective_scale, 2);
-    perspective_cap_slider_->set_tooltip("Upper bound on perspective stretching near the camera. Lower values flatten the scene; higher values increase depth exaggeration.");
-    perspective_cap_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     rebuild_rows();
 }
 
@@ -190,7 +185,6 @@ void CameraUIPanel::rebuild_rows() {
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
     if (cull_margin_slider_) rows.push_back({ cull_margin_slider_.get() });
-    if (perspective_cap_slider_) rows.push_back({ perspective_cap_slider_.get() });
 
     set_rows(rows);
 }
@@ -212,21 +206,18 @@ void CameraUIPanel::apply_settings_if_needed() {
 
     if (min_render_size_slider_) updated.min_visible_screen_ratio = min_render_size_slider_->value();
     if (cull_margin_slider_)      updated.extra_cull_margin = cull_margin_slider_->value();
-    if (perspective_cap_slider_)  updated.near_camera_max_perspective_scale = perspective_cap_slider_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
     };
     const bool realism_changed =
         float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio) ||
-        float_changed(updated.extra_cull_margin, current.extra_cull_margin) ||
-        float_changed(updated.near_camera_max_perspective_scale, current.near_camera_max_perspective_scale);
+        float_changed(updated.extra_cull_margin, current.extra_cull_margin);
 
     if (realism_changed) {
         cam.set_realism_settings(updated);
         devmode::camera_prefs::save_min_visible_screen_ratio(updated.min_visible_screen_ratio);
         devmode::camera_prefs::save_extra_cull_margin(updated.extra_cull_margin);
-        devmode::camera_prefs::save_near_camera_max_perspective_scale(updated.near_camera_max_perspective_scale);
         assets_->on_camera_settings_changed();
     }
 }

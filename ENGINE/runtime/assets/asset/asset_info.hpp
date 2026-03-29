@@ -125,8 +125,6 @@ class AssetInfo {
     std::map<std::string, Animation> animations;
     std::map<std::string, Mapping> mappings;
 
-    std::string custom_controller_key;
-
 	public:
     void loadAnimations(SDL_Renderer* renderer,
                         bool include_all_animations = true,

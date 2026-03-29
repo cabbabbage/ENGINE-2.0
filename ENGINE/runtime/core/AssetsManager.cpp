@@ -19,6 +19,7 @@
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
 #include "core/manifest/depth_cue_settings.hpp"
+#include "core/dev_mode_animation_policy.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -538,7 +539,6 @@ void Assets::log_camera_fog_state(const char* label) const {
         " base_height_px=" + std::to_string(settings.base_height_px) +
         " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
         " extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
-        " near_camera_max_perspective_scale=" + std::to_string(settings.near_camera_max_perspective_scale) +
         " view_height_world=" + std::to_string(camera_.view_height_world()) +
         " camera_height=" + std::to_string(camera_height) +
         " pitch_deg=" + std::to_string(pitch_deg) +
@@ -3211,11 +3211,13 @@ bool Assets::should_advance_animation_for(const Asset* asset) const {
     if (!asset) {
         return false;
     }
-    if (!dev_mode) {
-        return true;
-    }
-    if (is_frame_editor_target_active(asset)) {
-        return true;
-    }
-    return false;
+
+    const bool frame_editor_session_active =
+        dev_controls_ && dev_controls_->is_frame_editor_session_active();
+
+    return runtime::dev_mode_policy::should_advance_animation_for_asset(
+        dev_mode,
+        should_run_runtime_updates(),
+        frame_editor_session_active,
+        is_frame_editor_target_active(asset));
 }

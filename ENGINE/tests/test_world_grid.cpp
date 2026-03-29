@@ -330,6 +330,7 @@ TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") 
     CHECK_FALSE(serialized.contains("render_quality_percent"));
     CHECK_FALSE(serialized.contains("meters_per_100_world_px"));
     CHECK_FALSE(serialized.contains("offscreen_fade_amount_px"));
+    CHECK_FALSE(serialized.contains("near_camera_max_perspective_scale"));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") {
@@ -346,5 +347,4 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
     CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
     CHECK(after.extra_cull_margin == doctest::Approx(before.extra_cull_margin));
-    CHECK(after.near_camera_max_perspective_scale == doctest::Approx(6.0f));
 }

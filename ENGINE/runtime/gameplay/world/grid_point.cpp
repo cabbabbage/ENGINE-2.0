@@ -221,10 +221,6 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         }
     }
 
-    // Clamp perspective scale
-    if (params.near_camera_max_perspective_scale > 0.0f) {
-        scale = std::min(scale, static_cast<double>(params.near_camera_max_perspective_scale));
-    }
     if (!std::isfinite(scale) || scale <= 0.0) {
         scale = 1.0;
     }

@@ -402,8 +402,6 @@ void CustomControllerService::update_asset_metadata(const std::string& base_name
         data = nlohmann::json::object();
     }
 
-    data["custom_controller_key"] = base_name;
-
     if (!animation_id.empty()) {
         nlohmann::json* animations_container = nullptr;
         auto animations_it = data.find("animations");

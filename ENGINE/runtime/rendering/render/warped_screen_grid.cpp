@@ -174,8 +174,6 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         }
         state.inv_screen_zoom = 1.0 / state.screen_zoom;
 
-        state.near_camera_max_perspective_scale = settings.near_camera_max_perspective_scale;
-
         if (lock_anchor_to_screen_center) {
             const double tan_pitch = std::tan(pitch_rad);
             if (std::isfinite(tan_pitch) && std::fabs(tan_pitch) > 1e-6) {
@@ -290,10 +288,6 @@ struct ProjectionResult {
             return 1.0f;
         }
         float result = static_cast<float>(scale);
-        if (std::isfinite(cam.near_camera_max_perspective_scale) &&
-            cam.near_camera_max_perspective_scale > 0.0f) {
-            result = std::min(result, cam.near_camera_max_perspective_scale);
-        }
         return result;
     }
 
@@ -386,10 +380,6 @@ struct ProjectionResult {
             if (std::isfinite(perspective_scale) && perspective_scale > 1e-6f) {
                 vertical_scale = static_cast<float>(*scale_y / perspective_scale);
             }
-        }
-        if (std::isfinite(cam.near_camera_max_perspective_scale) &&
-            cam.near_camera_max_perspective_scale > 0.0f) {
-            perspective_scale = std::min(perspective_scale, cam.near_camera_max_perspective_scale);
         }
         if (!std::isfinite(perspective_scale) || perspective_scale <= 0.0f) {
             perspective_scale = 1.0f;
@@ -516,7 +506,6 @@ WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
         params.horizon_screen_y = cam.horizon_screen_y;
         params.pitch_radians = cam.pitch_radians;
         params.horizon_band_px = horizon_band_px;
-        params.near_camera_max_perspective_scale = cam.near_camera_max_perspective_scale;
         params.screen_width = screen_width;
         params.screen_height = screen_height;
         params.state_version = 0; // Will be set by caller
@@ -638,8 +627,6 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.base_height_px = 720.0f;
     }
     camera_.set_fallback_height(settings_.base_height_px);
-    settings_.near_camera_max_perspective_scale =
-        std::clamp(settings_.near_camera_max_perspective_scale, 0.0f, 100.0f);
     invalidate_camera_cache();
 
     // No-op: geometry cache is obsolete.
@@ -698,7 +685,6 @@ const CameraState& WarpedScreenGrid::camera_state_cached() const {
     fingerprint.zoom_percent_q = quantize(sanitized_params.zoom_percent);
     fingerprint.pan_y_px_q = quantize(0.0);
     fingerprint.aspect_q = quantize(aspect_);
-    fingerprint.near_camera_scale_q = quantize(settings_.near_camera_max_perspective_scale);
     fingerprint.depth_near_q = quantize(settings_.depth_near_world);
     fingerprint.depth_far_q = quantize(settings_.depth_far_world);
     fingerprint.screen_width = screen_width_;
@@ -1102,9 +1088,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
 
     read_float("extra_cull_margin", updated.extra_cull_margin, 0.0f, 10000.0f);
-    read_float("near_camera_max_perspective_scale", updated.near_camera_max_perspective_scale, 0.0f, 100.0f);
-
-
     set_realism_settings(updated);
 }
 
@@ -1113,9 +1096,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["min_visible_screen_ratio"] = settings_.min_visible_screen_ratio;
     result["base_height_px"] = settings_.base_height_px;
     result["extra_cull_margin"] = settings_.extra_cull_margin;
-    result["near_camera_max_perspective_scale"] = settings_.near_camera_max_perspective_scale;
-
-
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {

@@ -74,7 +74,6 @@ struct CameraProjectionParams {
     double horizon_screen_y = 0.0, pitch_radians = 0.0;
     // Fade parameters
     float horizon_band_px = 100.0f;
-    float near_camera_max_perspective_scale = 4.0f;
     // Screen dimensions
     int screen_width = 0, screen_height = 0;
     // Version for cache invalidation

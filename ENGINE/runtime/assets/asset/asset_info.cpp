@@ -1427,16 +1427,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
 
         }
 
-        try {
-                if (data.contains("custom_controller_key") && data["custom_controller_key"].is_string()) {
-                        custom_controller_key = data["custom_controller_key"].get<std::string>();
-                } else {
-                        custom_controller_key.clear();
-                }
-        } catch (...) {
-                custom_controller_key.clear();
-        }
-
 }
 
 #endif // !ENGINE_WORLD_TESTS

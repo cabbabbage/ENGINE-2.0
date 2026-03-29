@@ -43,7 +43,6 @@ struct CameraState {
     double screen_zoom = 1.0;
     double inv_screen_zoom = 1.0;
     double screen_pan_y_px = 0.0;
-    float  near_camera_max_perspective_scale = 0.0f;
     // Canonical anchors: height is separate from ground-plane depth.
     double anchor_world_z = 0.0; // depth (Z) anchor on ground plane
 };
@@ -77,7 +76,6 @@ public:
         float extra_cull_margin = 1000.0f;
         float depth_near_world = 0.0f;
         float depth_far_world  = 5000.0f;
-        float near_camera_max_perspective_scale = 4.0f;
 };
 
     struct FloorDepthParams {
@@ -255,7 +253,6 @@ private:
         std::int64_t zoom_percent_q = 0;
         std::int64_t pan_y_px_q = 0;
         std::int64_t aspect_q = 0;
-        std::int64_t near_camera_scale_q = 0;
         std::int64_t depth_near_q = 0;
         std::int64_t depth_far_q = 0;
         int screen_width = 0;
@@ -273,7 +270,6 @@ private:
                    zoom_percent_q == other.zoom_percent_q &&
                    pan_y_px_q == other.pan_y_px_q &&
                    aspect_q == other.aspect_q &&
-                   near_camera_scale_q == other.near_camera_scale_q &&
                    depth_near_q == other.depth_near_q &&
                    depth_far_q == other.depth_far_q &&
                    screen_width == other.screen_width &&

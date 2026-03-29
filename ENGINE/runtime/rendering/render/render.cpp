@@ -637,101 +637,34 @@ bool project_floor_debug_point(const WarpedScreenGrid& cam, SDL_Point world_xz, 
     return true;
 }
 
-void render_movement_debug_paths(SDL_Renderer* renderer,
-                                 const WarpedScreenGrid& cam,
-                                 int screen_width,
-                                 int screen_height,
-                                 const std::vector<Asset*>& assets) {
-    if (!renderer) {
-        return;
+std::uint32_t stable_path_color_hash(const std::string& animation_id, std::size_t path_index) {
+    std::uint32_t hash = 2166136261u;
+    for (const unsigned char c : animation_id) {
+        hash ^= c;
+        hash *= 16777619u;
     }
+    hash ^= static_cast<std::uint32_t>(path_index & 0xffffffffu);
+    hash *= 16777619u;
+    return hash;
+}
 
-    constexpr SDL_Color kLineColor{48, 200, 255, 220};
-    constexpr SDL_Color kStartColor{64, 255, 128, 230};
-    constexpr SDL_Color kCheckpointColor{255, 214, 64, 220};
-    constexpr SDL_Color kFinalColor{255, 96, 96, 240};
-    constexpr int kStartRadius = 3;
-    constexpr int kCheckpointRadius = 2;
-    constexpr int kFinalRadius = 3;
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-    for (Asset* asset : assets) {
-        if (!asset || asset->dead || !asset->anim_) {
-            continue;
-        }
-
-        const Plan* plan = asset->anim_->current_plan();
-        if (!plan) {
-            continue;
-        }
-
-        const SDL_Point start_world = asset->world_xz_point();
-        const bool has_checkpoints = !plan->sanitized_checkpoints.empty();
-        const bool has_strides = !plan->strides.empty();
-        const bool has_separate_dest = (plan->final_dest.x != start_world.x || plan->final_dest.y != start_world.y);
-        if (!has_checkpoints && !has_strides && !has_separate_dest) {
-            continue;
-        }
-
-        std::vector<SDL_Point> world_points;
-        world_points.reserve(2 + plan->sanitized_checkpoints.size());
-        world_points.push_back(start_world);
-        for (const SDL_Point& checkpoint : plan->sanitized_checkpoints) {
-            if (world_points.empty() ||
-                checkpoint.x != world_points.back().x ||
-                checkpoint.y != world_points.back().y) {
-                world_points.push_back(checkpoint);
-            }
-        }
-        if (world_points.empty() ||
-            plan->final_dest.x != world_points.back().x ||
-            plan->final_dest.y != world_points.back().y) {
-            world_points.push_back(plan->final_dest);
-        }
-
-        std::vector<SDL_FPoint> projected_points;
-        projected_points.resize(world_points.size(), SDL_FPoint{0.0f, 0.0f});
-        std::vector<bool> point_visible;
-        point_visible.resize(world_points.size(), false);
-        for (std::size_t i = 0; i < world_points.size(); ++i) {
-            SDL_FPoint screen{};
-            if (project_floor_debug_point(cam, world_points[i], screen) &&
-                is_debug_marker_in_bounds(screen, screen_width, screen_height)) {
-                projected_points[i] = screen;
-                point_visible[i] = true;
-            }
-        }
-
-        SDL_SetRenderDrawColor(renderer, kLineColor.r, kLineColor.g, kLineColor.b, kLineColor.a);
-        for (std::size_t i = 1; i < projected_points.size(); ++i) {
-            if (!point_visible[i - 1] || !point_visible[i]) {
-                continue;
-            }
-            SDL_RenderLine(renderer,
-                           projected_points[i - 1].x,
-                           projected_points[i - 1].y,
-                           projected_points[i].x,
-                           projected_points[i].y);
-        }
-
-        if (!projected_points.empty() && point_visible[0]) {
-            draw_filled_debug_dot(renderer, projected_points[0], kStartRadius, kStartColor);
-        }
-
-        if (projected_points.size() > 2) {
-            for (std::size_t i = 1; i + 1 < projected_points.size(); ++i) {
-                if (!point_visible[i]) {
-                    continue;
-                }
-                draw_filled_debug_dot(renderer, projected_points[i], kCheckpointRadius, kCheckpointColor);
-            }
-        }
-
-        if (projected_points.size() > 1 && point_visible.back()) {
-            draw_filled_debug_dot(renderer, projected_points.back(), kFinalRadius, kFinalColor);
-        }
-    }
+SDL_Color stable_movement_path_color(const std::string& animation_id, std::size_t path_index) {
+    constexpr std::array<SDL_Color, 12> kPalette{{
+        SDL_Color{48, 200, 255, 220},
+        SDL_Color{255, 214, 64, 220},
+        SDL_Color{120, 235, 110, 220},
+        SDL_Color{255, 128, 96, 220},
+        SDL_Color{130, 170, 255, 220},
+        SDL_Color{255, 156, 220, 220},
+        SDL_Color{96, 240, 210, 220},
+        SDL_Color{240, 178, 96, 220},
+        SDL_Color{190, 240, 112, 220},
+        SDL_Color{255, 96, 150, 220},
+        SDL_Color{140, 210, 255, 220},
+        SDL_Color{255, 196, 120, 220},
+    }};
+    const std::uint32_t hash = stable_path_color_hash(animation_id, path_index);
+    return kPalette[hash % kPalette.size()];
 }
 
 bool build_perspective_mesh(RenderObject& obj,
@@ -1127,7 +1060,14 @@ std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
 }
 
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {
+    if (debug_auto_paths_ == enabled) {
+        return;
+    }
     debug_auto_paths_ = enabled;
+    if (!enabled) {
+        movement_debug_snapshots_.clear();
+        movement_debug_observed_state_.clear();
+    }
 }
 
 void SceneRenderer::set_movement_debug_visible(bool visible) {
@@ -1150,6 +1090,180 @@ const std::vector<DynamicBoundarySystem::BoundarySprite>& SceneRenderer::dynamic
         return kEmptyBoundarySprites;
     }
     return dynamic_boundary_system_->get_boundary_sprites();
+}
+
+void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets) {
+    std::unordered_set<const Asset*> visible_set;
+    visible_set.reserve(visible_assets.size());
+    for (const Asset* asset : visible_assets) {
+        if (asset && !asset->dead) {
+            visible_set.insert(asset);
+        }
+    }
+
+    for (auto it = movement_debug_snapshots_.begin(); it != movement_debug_snapshots_.end();) {
+        if (visible_set.find(it->first) == visible_set.end()) {
+            it = movement_debug_snapshots_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = movement_debug_observed_state_.begin(); it != movement_debug_observed_state_.end();) {
+        if (visible_set.find(it->first) == visible_set.end()) {
+            it = movement_debug_observed_state_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (Asset* asset : visible_assets) {
+        if (!asset || asset->dead || !asset->info || !asset->current_frame) {
+            continue;
+        }
+
+        const std::string current_animation = asset->current_animation;
+        const AnimationFrame* current_frame = asset->current_frame;
+        const bool current_is_first = current_frame->is_first;
+        const bool current_is_last = current_frame->is_last;
+
+        const auto observed_it = movement_debug_observed_state_.find(asset);
+        const bool has_previous_state = observed_it != movement_debug_observed_state_.end();
+        const bool has_snapshot = movement_debug_snapshots_.find(asset) != movement_debug_snapshots_.end();
+
+        bool loop_trigger = false;
+        bool end_trigger = false;
+        if (has_previous_state) {
+            const MovementDebugObservedState& previous = observed_it->second;
+            loop_trigger = previous.frame_is_last &&
+                           previous.animation_id == current_animation &&
+                           current_is_first;
+            end_trigger = previous.frame_is_last &&
+                          previous.animation_id != current_animation;
+        }
+
+        const bool initial_trigger = !has_snapshot;
+        const bool should_refresh = initial_trigger || loop_trigger || end_trigger;
+        if (should_refresh) {
+            MovementDebugAssetSnapshot snapshot{};
+            const SDL_Point origin = asset->world_xz_point();
+
+            for (const auto& [animation_id, animation] : asset->info->animations) {
+                const std::size_t path_count = animation.movement_path_count();
+                for (std::size_t path_index = 0; path_index < path_count; ++path_index) {
+                    const auto& movement_path = animation.movement_path(path_index);
+                    if (movement_path.empty()) {
+                        continue;
+                    }
+
+                    MovementDebugPathSnapshot path_snapshot{};
+                    path_snapshot.color = stable_movement_path_color(animation_id, path_index);
+                    path_snapshot.world_points.reserve(movement_path.size() + 1);
+                    path_snapshot.world_points.push_back(origin);
+
+                    int world_x = origin.x;
+                    int world_z = origin.y;
+                    bool has_movement = false;
+
+                    for (const AnimationFrame& frame : movement_path) {
+                        if (frame.dx != 0 || frame.dz != 0) {
+                            has_movement = true;
+                        }
+                        world_x += frame.dx;
+                        world_z += frame.dz;
+
+                        const SDL_Point next_point{world_x, world_z};
+                        if (path_snapshot.world_points.empty() ||
+                            next_point.x != path_snapshot.world_points.back().x ||
+                            next_point.y != path_snapshot.world_points.back().y) {
+                            path_snapshot.world_points.push_back(next_point);
+                        }
+                    }
+
+                    if (!has_movement || path_snapshot.world_points.size() < 2) {
+                        continue;
+                    }
+                    snapshot.paths.push_back(std::move(path_snapshot));
+                }
+            }
+
+            if (snapshot.paths.empty()) {
+                movement_debug_snapshots_.erase(asset);
+            } else {
+                movement_debug_snapshots_[asset] = std::move(snapshot);
+            }
+        }
+
+        movement_debug_observed_state_[asset] = MovementDebugObservedState{
+            current_animation,
+            current_frame,
+            current_is_first,
+            current_is_last
+        };
+    }
+}
+
+void SceneRenderer::render_movement_debug_snapshots(const WarpedScreenGrid& cam,
+                                                    int screen_width,
+                                                    int screen_height,
+                                                    const std::vector<Asset*>& visible_assets) const {
+    if (!renderer_) {
+        return;
+    }
+
+    constexpr SDL_Color kStartColor{64, 255, 128, 230};
+    constexpr int kStartRadius = 3;
+    constexpr int kEndRadius = 3;
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    for (const Asset* asset : visible_assets) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+        const auto snapshot_it = movement_debug_snapshots_.find(asset);
+        if (snapshot_it == movement_debug_snapshots_.end()) {
+            continue;
+        }
+
+        const MovementDebugAssetSnapshot& snapshot = snapshot_it->second;
+        for (const MovementDebugPathSnapshot& path : snapshot.paths) {
+            if (path.world_points.size() < 2) {
+                continue;
+            }
+
+            std::vector<SDL_FPoint> projected_points(path.world_points.size(), SDL_FPoint{0.0f, 0.0f});
+            std::vector<bool> point_visible(path.world_points.size(), false);
+            for (std::size_t i = 0; i < path.world_points.size(); ++i) {
+                SDL_FPoint screen{};
+                if (project_floor_debug_point(cam, path.world_points[i], screen) &&
+                    is_debug_marker_in_bounds(screen, screen_width, screen_height)) {
+                    projected_points[i] = screen;
+                    point_visible[i] = true;
+                }
+            }
+
+            SDL_SetRenderDrawColor(renderer_, path.color.r, path.color.g, path.color.b, path.color.a);
+            for (std::size_t i = 1; i < projected_points.size(); ++i) {
+                if (!point_visible[i - 1] || !point_visible[i]) {
+                    continue;
+                }
+                SDL_RenderLine(renderer_,
+                               projected_points[i - 1].x,
+                               projected_points[i - 1].y,
+                               projected_points[i].x,
+                               projected_points[i].y);
+            }
+
+            if (point_visible.front()) {
+                draw_filled_debug_dot(renderer_, projected_points.front(), kStartRadius, kStartColor);
+            }
+            if (point_visible.back()) {
+                SDL_Color end_color = path.color;
+                end_color.a = 240;
+                draw_filled_debug_dot(renderer_, projected_points.back(), kEndRadius, end_color);
+            }
+        }
+    }
 }
 
 void SceneRenderer::render() {

@@ -115,6 +115,22 @@ public:
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
 private:
+    struct MovementDebugPathSnapshot {
+        std::vector<SDL_Point> world_points;
+        SDL_Color color{48, 200, 255, 220};
+    };
+
+    struct MovementDebugAssetSnapshot {
+        std::vector<MovementDebugPathSnapshot> paths;
+    };
+
+    struct MovementDebugObservedState {
+        std::string animation_id;
+        const class AnimationFrame* frame = nullptr;
+        bool frame_is_first = false;
+        bool frame_is_last = false;
+    };
+
     struct PrevalidatedTag {};
 
     SceneRenderer(PrevalidatedTag, SDL_Renderer* renderer, Assets* assets, int screen_width, int screen_height, const nlohmann::json& map_manifest, const std::string& map_id);
@@ -123,6 +139,11 @@ private:
     bool ensure_sky_texture();
     void destroy_sky_texture();
     void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
+    void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
+    void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
+                                         int screen_width,
+                                         int screen_height,
+                                         const std::vector<Asset*>& visible_assets) const;
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -141,6 +162,8 @@ private:
     bool         debug_auto_paths_ = true;
     bool         movement_debug_visible_ = true;
     bool         anchor_point_debug_enabled_ = false;
+    std::unordered_map<const Asset*, MovementDebugAssetSnapshot> movement_debug_snapshots_;
+    std::unordered_map<const Asset*, MovementDebugObservedState> movement_debug_observed_state_;
 
     CompositeAssetRenderer composite_renderer_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;

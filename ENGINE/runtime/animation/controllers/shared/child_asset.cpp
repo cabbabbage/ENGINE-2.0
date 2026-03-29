@@ -200,6 +200,9 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
     placement_input.parent.resolution_layer =
         (owner_ && owner_->grid_point()) ? owner_->grid_point()->resolution_layer() : child_->grid_resolution;
     placement_input.anchor_definition.anchor = parent_anchor;
+    placement_input.sprite_transform.mirror_x = parent_anchor.flip_horizontal;
+    placement_input.sprite_transform.mirror_y = parent_anchor.flip_vertical;
+    placement_input.sprite_transform.rotation_degrees = parent_anchor.rotation_degrees;
 
     anchored_child_placement::PlacementOutput placement{};
     if (!anchored_child_placement::resolve_child_placement(placement_input, placement) ||
@@ -229,8 +232,14 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
     const float residual_x = exact_world_x - static_cast<float>(target_world_x);
     const float residual_y = exact_world_y - static_cast<float>(target_world_y);
     const float residual_z = exact_world_z - static_cast<float>(target_world_z);
-
     bool changed = false;
+    const SDL_FlipMode anchor_flip = static_cast<SDL_FlipMode>(
+        (parent_anchor.flip_horizontal ? static_cast<int>(SDL_FLIP_HORIZONTAL) : 0) |
+        (parent_anchor.flip_vertical ? static_cast<int>(SDL_FLIP_VERTICAL) : 0));
+    if (child_->set_anchor_sprite_transform_override(anchor_flip, static_cast<double>(parent_anchor.rotation_degrees))) {
+        changed = true;
+    }
+
     if (child_->world_x() != target_world_x ||
         child_->world_y() != target_world_y ||
         child_->world_z() != target_world_z ||
@@ -316,11 +325,13 @@ bool ChildAsset::clear_child_render_offset() {
     if (!child_) {
         return false;
     }
+    bool changed = false;
+    changed = child_->clear_anchor_sprite_transform_override() || changed;
     constexpr float kResidualEpsilon = 1e-5f;
     if (std::fabs(child_->render_anchor_offset_x()) <= kResidualEpsilon &&
         std::fabs(child_->render_anchor_offset_y()) <= kResidualEpsilon &&
         std::fabs(child_->render_anchor_offset_z()) <= kResidualEpsilon) {
-        return false;
+        return changed;
     }
     child_->clear_render_anchor_offset();
     return true;

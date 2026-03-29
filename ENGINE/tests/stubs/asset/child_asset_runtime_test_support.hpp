@@ -22,6 +22,9 @@ struct AnchorSpec {
     std::optional<float> exact_offset_x{};
     std::optional<float> exact_offset_y{};
     std::optional<float> exact_offset_z{};
+    bool flip_horizontal = false;
+    bool flip_vertical = false;
+    float rotation_degrees = 0.0f;
 };
 
 Assets* create_assets_stub();

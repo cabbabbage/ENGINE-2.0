@@ -19,6 +19,7 @@
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/animation_source_navigation.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
 #include "devtools/room_selection_filter_utils.hpp"
@@ -474,6 +475,7 @@ private:
     bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
                                      devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::DetailValues& values);
     bool update_anchor_depth(const std::string& anchor_name, int delta);
     bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
     bool add_anchor_in_current_frame();
@@ -593,6 +595,9 @@ private:
         int texture_x = 0;
         int texture_y = 0;
         int depth_offset = 0;
+        bool flip_horizontal = true;
+        bool flip_vertical = true;
+        float rotation_degrees = 0.0f;
         SDL_FPoint flat_screen_px{0.0f, 0.0f};
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};

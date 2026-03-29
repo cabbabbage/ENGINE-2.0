@@ -248,6 +248,11 @@ class Asset {
     float render_anchor_offset_x() const { return render_anchor_offset_x_; }
     float render_anchor_offset_y() const { return render_anchor_offset_y_; }
     float render_anchor_offset_z() const { return render_anchor_offset_z_; }
+    bool set_anchor_sprite_transform_override(SDL_FlipMode flip, double angle_degrees);
+    bool clear_anchor_sprite_transform_override();
+    bool has_anchor_sprite_transform_override() const { return anchor_sprite_transform_override_active_; }
+    SDL_FlipMode effective_render_flip() const;
+    double effective_render_angle() const;
 
     SDL_Texture* composite_texture() const { return composite_texture_; }
     void set_composite_texture(SDL_Texture* tex);
@@ -359,6 +364,9 @@ class Asset {
         bool            dirty = true;
         bool            missing = false;
         int             depth_offset = 0;
+        bool            runtime_flip_horizontal = false;
+        bool            runtime_flip_vertical = false;
+        float           runtime_rotation_degrees = 0.0f;
         Asset*          owner = nullptr;
         struct UpdateKey {
                 anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None;
@@ -392,6 +400,9 @@ class Asset {
         int   frame_index = 0;
         int   variant_index = 0;
         bool  flipped = false;
+        bool  render_flip_horizontal = false;
+        bool  render_flip_vertical = false;
+        float render_rotation_degrees = 0.0f;
         float remainder_scale = 1.0f;       // runtime scale applied to rendered frame geometry
         float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
         float world_z_offset = 0.0f;        // render depth offset used by cached anchor screen projection
@@ -502,6 +513,9 @@ private:
     float        render_anchor_offset_x_ = 0.0f;
     float        render_anchor_offset_y_ = 0.0f;
     float        render_anchor_offset_z_ = 0.0f;
+    bool         anchor_sprite_transform_override_active_ = false;
+    SDL_FlipMode anchor_sprite_transform_override_flip_ = SDL_FLIP_NONE;
+    double       anchor_sprite_transform_override_angle_degrees_ = 0.0;
     bool         mesh_dirty_        = true;
 
     void initialize_anchor_registry_from_animations();

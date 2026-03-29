@@ -6,6 +6,7 @@
 #include "utils/map_grid_settings.hpp"
 #include "core/manifest/depth_cue_settings.hpp"
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -161,6 +162,8 @@ public:
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     bool fog_visible() const;
     bool boundary_assets_visible() const;
+    float boundary_min_visible_screen_ratio() const;
+    void set_boundary_min_visible_screen_ratio(float value);
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 
@@ -348,6 +351,7 @@ private:
     float max_asset_width_world_  = 0.0f;
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
+    float boundary_min_visible_screen_ratio_ = 0.015f;
     struct AssetDimensionCache {
         float width = 0.0f;
         float height = 0.0f;

@@ -98,6 +98,9 @@ nlohmann::json serialize_anchor_frame(const std::vector<DisplacedAssetAnchorPoin
             {"texture_x", anchor.texture_x},
             {"texture_y", anchor.texture_y},
             {"depth_offset", anchor.depth_offset},
+            {"flip_horizontal", anchor.flip_horizontal},
+            {"flip_vertical", anchor.flip_vertical},
+            {"rotation_degrees", anchor.rotation_degrees},
         }));
     }
     return frame_json;

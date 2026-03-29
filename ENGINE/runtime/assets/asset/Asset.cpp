@@ -306,6 +306,9 @@ Asset::Asset(const Asset& o)
     , render_anchor_offset_x_(o.render_anchor_offset_x_)
     , render_anchor_offset_y_(o.render_anchor_offset_y_)
     , render_anchor_offset_z_(o.render_anchor_offset_z_)
+    , anchor_sprite_transform_override_active_(o.anchor_sprite_transform_override_active_)
+    , anchor_sprite_transform_override_flip_(o.anchor_sprite_transform_override_flip_)
+    , anchor_sprite_transform_override_angle_degrees_(o.anchor_sprite_transform_override_angle_degrees_)
 {
 
         clear_render_caches();
@@ -385,6 +388,9 @@ Asset& Asset::operator=(const Asset& o) {
         render_anchor_offset_x_   = o.render_anchor_offset_x_;
         render_anchor_offset_y_   = o.render_anchor_offset_y_;
         render_anchor_offset_z_   = o.render_anchor_offset_z_;
+        anchor_sprite_transform_override_active_ = o.anchor_sprite_transform_override_active_;
+        anchor_sprite_transform_override_flip_ = o.anchor_sprite_transform_override_flip_;
+        anchor_sprite_transform_override_angle_degrees_ = o.anchor_sprite_transform_override_angle_degrees_;
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
@@ -1431,6 +1437,11 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         sig.frame_index = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
         sig.variant_index = current_variant_index;
         sig.flipped = flipped;
+        const SDL_FlipMode render_flip = effective_render_flip();
+        sig.render_flip_horizontal = (render_flip & SDL_FLIP_HORIZONTAL) != 0;
+        sig.render_flip_vertical = (render_flip & SDL_FLIP_VERTICAL) != 0;
+        const double render_angle = effective_render_angle();
+        sig.render_rotation_degrees = std::isfinite(render_angle) ? static_cast<float>(render_angle) : 0.0f;
 
         float remainder = current_remaining_scale_adjustment;
         if (!std::isfinite(remainder) || remainder <= 0.0f) {
@@ -1470,6 +1481,9 @@ bool Asset::update_anchor_basis_if_needed() {
                 signature.frame_index != last_anchor_basis_signature_.frame_index ||
                 signature.variant_index != last_anchor_basis_signature_.variant_index ||
                 signature.flipped != last_anchor_basis_signature_.flipped ||
+                signature.render_flip_horizontal != last_anchor_basis_signature_.render_flip_horizontal ||
+                signature.render_flip_vertical != last_anchor_basis_signature_.render_flip_vertical ||
+                !almost_equal(signature.render_rotation_degrees, last_anchor_basis_signature_.render_rotation_degrees) ||
                 signature.resolution_layer != last_anchor_basis_signature_.resolution_layer ||
                 signature.camera_state_version != last_anchor_basis_signature_.camera_state_version ||
                 !almost_equal(signature.remainder_scale, last_anchor_basis_signature_.remainder_scale) ||
@@ -1510,6 +1524,9 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         const bool anchor_present = frame_anchor && frame_anchor->is_valid();
         resolved.exists = anchor_present && !handle.missing && handle.has_canonical_texture_source;
         resolved.depth_offset = anchor_present ? frame_anchor->depth_offset : handle.depth_offset;
+        resolved.flip_horizontal = resolved.exists ? handle.runtime_flip_horizontal : false;
+        resolved.flip_vertical = resolved.exists ? handle.runtime_flip_vertical : false;
+        resolved.rotation_degrees = resolved.exists ? handle.runtime_rotation_degrees : 0.0f;
 
         if (resolved.exists) {
                 resolved.world_pos_2d = handle.world_exact_pos_2d;
@@ -1603,6 +1620,9 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         last_update_key_.set(grid_policy, camera_state_version);
 
         if (!owner) {
+                runtime_flip_horizontal = false;
+                runtime_flip_vertical = false;
+                runtime_rotation_degrees = 0.0f;
                 dirty = false;
                 return;
         }
@@ -1621,6 +1641,9 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 source_texture_px = SDL_Point{0, 0};
                 screen_px = SDL_FPoint{0.0f, 0.0f};
                 has_canonical_texture_source = false;
+                runtime_flip_horizontal = false;
+                runtime_flip_vertical = false;
+                runtime_rotation_degrees = 0.0f;
                 dirty = keep_dirty;
         };
 
@@ -1671,6 +1694,18 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         source_texture_px = resolved_sample.resolved.source_texture_px;
         screen_px = resolved_sample.screen_px;
         has_canonical_texture_source = resolved_sample.resolved.has_canonical_texture_source;
+        const SDL_FlipMode owner_flip = owner->effective_render_flip();
+        const bool owner_flip_horizontal = (owner_flip & SDL_FLIP_HORIZONTAL) != 0;
+        const bool owner_flip_vertical = (owner_flip & SDL_FLIP_VERTICAL) != 0;
+        const auto combine_inherit_parity = [](bool parent_axis_flip, bool preserve_parent_axis) {
+                return preserve_parent_axis ? parent_axis_flip : !parent_axis_flip;
+        };
+        runtime_flip_horizontal = combine_inherit_parity(owner_flip_horizontal, anchor->flip_horizontal);
+        runtime_flip_vertical = combine_inherit_parity(owner_flip_vertical, anchor->flip_vertical);
+        const float local_rotation = std::isfinite(anchor->rotation_degrees) ? anchor->rotation_degrees : 0.0f;
+        const double owner_rotation = owner->effective_render_angle();
+        const float owner_rotation_f = std::isfinite(owner_rotation) ? static_cast<float>(owner_rotation) : 0.0f;
+        runtime_rotation_degrees = owner_rotation_f + local_rotation;
         dirty = false;
 }
 
@@ -1721,6 +1756,65 @@ void Asset::set_render_anchor_offset(float x, float y, float z) {
 
 void Asset::clear_render_anchor_offset() {
         set_render_anchor_offset(0.0f, 0.0f, 0.0f);
+}
+
+bool Asset::set_anchor_sprite_transform_override(SDL_FlipMode flip, double angle_degrees) {
+        const SDL_FlipMode sanitized_flip = static_cast<SDL_FlipMode>(
+                static_cast<int>(flip) & (static_cast<int>(SDL_FLIP_HORIZONTAL) | static_cast<int>(SDL_FLIP_VERTICAL)));
+        if (!std::isfinite(angle_degrees)) {
+                angle_degrees = 0.0;
+        }
+
+        constexpr double kAngleEpsilon = 1e-6;
+        const bool same_state =
+                anchor_sprite_transform_override_active_ &&
+                anchor_sprite_transform_override_flip_ == sanitized_flip &&
+                std::fabs(anchor_sprite_transform_override_angle_degrees_ - angle_degrees) < kAngleEpsilon;
+        if (same_state) {
+                return false;
+        }
+
+        anchor_sprite_transform_override_active_ = true;
+        anchor_sprite_transform_override_flip_ = sanitized_flip;
+        anchor_sprite_transform_override_angle_degrees_ = angle_degrees;
+        mark_composite_dirty();
+        mark_mesh_dirty();
+        mark_anchors_dirty();
+        return true;
+}
+
+bool Asset::clear_anchor_sprite_transform_override() {
+        if (!anchor_sprite_transform_override_active_ &&
+            anchor_sprite_transform_override_flip_ == SDL_FLIP_NONE &&
+            std::fabs(anchor_sprite_transform_override_angle_degrees_) < 1e-6) {
+                return false;
+        }
+
+        anchor_sprite_transform_override_active_ = false;
+        anchor_sprite_transform_override_flip_ = SDL_FLIP_NONE;
+        anchor_sprite_transform_override_angle_degrees_ = 0.0;
+        mark_composite_dirty();
+        mark_mesh_dirty();
+        mark_anchors_dirty();
+        return true;
+}
+
+SDL_FlipMode Asset::effective_render_flip() const {
+        int flip_bits = flipped ? static_cast<int>(SDL_FLIP_HORIZONTAL) : static_cast<int>(SDL_FLIP_NONE);
+        if (anchor_sprite_transform_override_active_) {
+                flip_bits ^= static_cast<int>(anchor_sprite_transform_override_flip_);
+        }
+        return static_cast<SDL_FlipMode>(
+                flip_bits & (static_cast<int>(SDL_FLIP_HORIZONTAL) | static_cast<int>(SDL_FLIP_VERTICAL)));
+}
+
+double Asset::effective_render_angle() const {
+        if (!anchor_sprite_transform_override_active_) {
+                return 0.0;
+        }
+        return std::isfinite(anchor_sprite_transform_override_angle_degrees_)
+                ? anchor_sprite_transform_override_angle_degrees_
+                : 0.0;
 }
 
 void Asset::set_composite_texture(SDL_Texture* tex) {

@@ -40,6 +40,18 @@ SDL_FPoint sanitize_anchor_uv(SDL_FPoint uv) {
         std::clamp(uv.y, 0.0f, 1.0f)};
 }
 
+SDL_FPoint rotate_about_point(const SDL_FPoint& point,
+                              const SDL_FPoint& pivot,
+                              float radians) {
+    const float dx = point.x - pivot.x;
+    const float dy = point.y - pivot.y;
+    const float cos_theta = std::cos(radians);
+    const float sin_theta = std::sin(radians);
+    return SDL_FPoint{
+        pivot.x + (dx * cos_theta - dy * sin_theta),
+        pivot.y + (dx * sin_theta + dy * cos_theta)};
+}
+
 }  // namespace
 
 namespace render_projection {
@@ -172,6 +184,16 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
         screen_br.y += offset_y;
         screen_bl.x += offset_x;
         screen_bl.y += offset_y;
+    }
+
+    const double angle_degrees = std::isfinite(input.angle) ? input.angle : 0.0;
+    if (std::fabs(angle_degrees) > 1e-6) {
+        constexpr float kPi = 3.14159265358979323846f;
+        const float radians = static_cast<float>(angle_degrees) * (kPi / 180.0f);
+        screen_tl = rotate_about_point(screen_tl, desired_anchor, radians);
+        screen_tr = rotate_about_point(screen_tr, desired_anchor, radians);
+        screen_br = rotate_about_point(screen_br, desired_anchor, radians);
+        screen_bl = rotate_about_point(screen_bl, desired_anchor, radians);
     }
 
     out.screen_tl = screen_tl;

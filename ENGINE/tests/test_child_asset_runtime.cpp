@@ -454,6 +454,57 @@ TEST_CASE("ChildAsset bind and update follow the owner anchor and recover from m
     CHECK(spawned->world_z() == 80);
 }
 
+TEST_CASE("ChildAsset applies anchor flip and rotation overrides to spawned child") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
+    REQUIRE(owner != nullptr);
+
+    AnchorSpec anchor_spec{};
+    anchor_spec.name = "eyes";
+    anchor_spec.offset_x = 1;
+    anchor_spec.offset_y = 2;
+    anchor_spec.offset_z = 3;
+    anchor_spec.flip_horizontal = true;
+    anchor_spec.flip_vertical = false;
+    anchor_spec.rotation_degrees = 22.5f;
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    CHECK(spawned->has_anchor_sprite_transform_override());
+    CHECK((spawned->effective_render_flip() & SDL_FLIP_HORIZONTAL) != 0);
+    CHECK((spawned->effective_render_flip() & SDL_FLIP_VERTICAL) == 0);
+    CHECK(spawned->effective_render_angle() == doctest::Approx(22.5));
+
+    anchor_spec.flip_horizontal = false;
+    anchor_spec.flip_vertical = true;
+    anchor_spec.rotation_degrees = -15.0f;
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+    child->update();
+
+    CHECK((spawned->effective_render_flip() & SDL_FLIP_HORIZONTAL) == 0);
+    CHECK((spawned->effective_render_flip() & SDL_FLIP_VERTICAL) != 0);
+    CHECK(spawned->effective_render_angle() == doctest::Approx(-15.0));
+
+    anchor_spec.exists = false;
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+    child->update();
+    CHECK_FALSE(spawned->has_anchor_sprite_transform_override());
+    CHECK(spawned->effective_render_flip() == SDL_FLIP_NONE);
+    CHECK(spawned->effective_render_angle() == doctest::Approx(0.0));
+}
+
 TEST_CASE("ChildAsset lifecycle controls visibility, one-shot placement, unbind, and deletion") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(

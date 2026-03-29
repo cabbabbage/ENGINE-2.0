@@ -251,21 +251,22 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             final_w,
             final_h
         };
-        SDL_FlipMode base_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        const SDL_FlipMode base_flip = asset->effective_render_flip();
+        const double base_angle = asset->effective_render_angle();
         const Uint8 asset_alpha = static_cast<Uint8>(std::lround(std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
         add_render_object(base_tex,
                           dest_rect,
                           SDL_Color{255, 255, 255, asset_alpha},
                           SDL_BLENDMODE_BLEND,
                           false,
-                          0.0,
+                          base_angle,
                           std::nullopt,
                           base_flip,
                           SDL_Point{frame_w, frame_h},
                           SDL_Point{texture_w, texture_h},
                           world_anchor_z_offset,
                           has_src_rect ? std::optional<SDL_Rect>(src_rect) : std::nullopt,
-                          std::nullopt,
+                          SDL_FPoint{0.5f, 1.0f},
                           SDL_FPoint{world_anchor_x, world_anchor_y});
 
         const RenderObject* const base_render_object =
@@ -307,7 +308,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   SDL_Color{255, 255, 255, overlay_alpha},
                                   SDL_BLENDMODE_BLEND,
                                   false,
-                                  0.0,
+                                  base_angle,
                                   std::nullopt,
                                   base_flip,
                                   SDL_Point{overlay_tex_w, overlay_tex_h},

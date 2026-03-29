@@ -47,6 +47,9 @@ TEST_CASE("Anchor mode default anchor position is center-bottom with depth zero"
     CHECK(anchor.texture_x == 5);
     CHECK(anchor.texture_y == 7);
     CHECK(anchor.depth_offset == 0);
+    CHECK(anchor.flip_horizontal);
+    CHECK(anchor.flip_vertical);
+    CHECK(anchor.rotation_degrees == doctest::Approx(0.0f));
 }
 
 TEST_CASE("Anchor mode payload write normalizes frame count and writes current frame only") {
@@ -82,6 +85,9 @@ TEST_CASE("Anchor mode payload write normalizes frame count and writes current f
     CHECK(payload["anchor_points"][1][0]["texture_x"] == 10);
     CHECK(payload["anchor_points"][1][0]["texture_y"] == 11);
     CHECK(payload["anchor_points"][1][0]["depth_offset"] == 12);
+    CHECK(payload["anchor_points"][1][0]["flip_horizontal"] == true);
+    CHECK(payload["anchor_points"][1][0]["flip_vertical"] == true);
+    CHECK(payload["anchor_points"][1][0]["rotation_degrees"].get<float>() == doctest::Approx(0.0f));
     CHECK(payload["anchor_points"][2].is_array());
     CHECK(payload["anchor_points"][3].is_array());
 }

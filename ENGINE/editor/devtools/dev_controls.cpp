@@ -3607,29 +3607,18 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
 
         if (cam && floor_depth_params && floor_depth_params->enabled) {
-            const WarpedScreenGrid::RealismSettings& settings = cam->realism_settings();
-            const float margin_world_units = std::max(0.0f, settings.extra_cull_margin);
-            const SDL_FPoint center_world_f = cam->get_view_center_f();
-            const float cos_pitch = std::max(0.0f, std::cos(static_cast<float>(floor_depth_params->pitch_radians)));
-            const float depth_offset_px = margin_world_units * cos_pitch;
-            SDL_Point cull_world{
-                static_cast<int>(std::lround(center_world_f.x)),
-                static_cast<int>(std::lround(center_world_f.y - depth_offset_px))
-            };
-            SDL_FPoint cull_screen{};
-            if (try_floor_warped_screen_position(*cam, cull_world, cull_screen)) {
-                const float clamped_y = std::clamp(cull_screen.y, 0.0f, static_cast<float>(screen_h_));
-                const int line_y = static_cast<int>(std::lround(clamped_y));
-                const SDL_Color cull_color{0, 255, 255, 220};
-                SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
-                SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
-                const int marker_x = screen_w_ / 2;
-                SDL_RenderLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
-                DMLabelStyle style = DMStyles::Label();
-                style.color = cull_color;
-                const int label_y = std::max(0, line_y - style.font_size - 2);
-                DrawLabelText(renderer, "Cull Limit", marker_x + 12, label_y, style);
-            }
+            const WarpedScreenGrid::GridBounds cull_bounds = cam->get_bounds();
+            const float clamped_y = std::clamp(cull_bounds.bottom, 0.0f, static_cast<float>(screen_h_));
+            const int line_y = static_cast<int>(std::lround(clamped_y));
+            const SDL_Color cull_color{0, 255, 255, 220};
+            SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
+            SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
+            const int marker_x = screen_w_ / 2;
+            SDL_RenderLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
+            DMLabelStyle style = DMStyles::Label();
+            style.color = cull_color;
+            const int label_y = std::max(0, line_y - style.font_size - 2);
+            DrawLabelText(renderer, "Cull Bottom", marker_x + 12, label_y, style);
         }
 
         SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);

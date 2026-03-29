@@ -323,52 +323,47 @@ TEST_CASE("ManifestStore map entry round-trip honors writes") {
     CHECK(*persisted == map_entry);
 }
 
-TEST_CASE("WarpedScreenGrid depth query follows strict near/far world-z window") {
+TEST_CASE("WarpedScreenGrid traversal keeps deeper world-z points without depth-window culling") {
     world::WorldGrid grid;
     Asset* near_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 40));
-    Asset* far_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 160));
+    Asset* far_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 180));
     REQUIRE(near_asset != nullptr);
     REQUIRE(far_asset != nullptr);
 
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
-    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
-    settings.depth_near_world = 0.0f;
-    settings.depth_far_world = 100.0f;
-    camera_grid.set_realism_settings(settings);
     camera_grid.rebuild_grid(grid, 0.016f, 1);
-
-    CHECK(camera_grid.grid_point_for_asset(near_asset) != nullptr);
-    CHECK(camera_grid.grid_point_for_asset(far_asset) == nullptr);
-
-    settings.depth_far_world = 200.0f;
-    camera_grid.set_realism_settings(settings);
-    camera_grid.rebuild_grid(grid, 0.016f, 2);
 
     CHECK(camera_grid.grid_point_for_asset(near_asset) != nullptr);
     CHECK(camera_grid.grid_point_for_asset(far_asset) != nullptr);
 }
 
-TEST_CASE("WarpedScreenGrid render-area top follows horizon-clamped cull top") {
+TEST_CASE("WarpedScreenGrid directional overscan expands left right and bottom only") {
     world::WorldGrid grid;
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
-    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
-    settings.extra_cull_margin = 250.0f;
-    camera_grid.set_realism_settings(settings);
-
-    const WarpedScreenGrid::GridBounds virtual_bounds = camera_grid.get_bounds();
-    camera_grid.set_tilt_override(0.0f);
-    const world::CameraProjectionParams params = camera_grid.projection_params();
-    const float margin_px = settings.extra_cull_margin;
-    const float expected_top = std::clamp(
-        static_cast<float>(params.horizon_screen_y) - margin_px,
-        virtual_bounds.top,
-        virtual_bounds.bottom);
-
     camera_grid.rebuild_grid(grid, 0.016f, 1);
     const WarpedScreenGrid::GridBounds rebuilt_bounds = camera_grid.get_bounds();
 
-    CHECK(rebuilt_bounds.top == doctest::Approx(expected_top).epsilon(1e-5));
-    CHECK(rebuilt_bounds.top >= virtual_bounds.top);
+    CHECK(rebuilt_bounds.left == doctest::Approx(-128.0f).epsilon(1e-5));
+    CHECK(rebuilt_bounds.right == doctest::Approx(1408.0f).epsilon(1e-5));
+    CHECK(rebuilt_bounds.top == doctest::Approx(0.0f).epsilon(1e-5));
+    CHECK(rebuilt_bounds.bottom == doctest::Approx(828.0f).epsilon(1e-5));
+}
+
+TEST_CASE("WarpedScreenGrid camera-derived query area updates with camera movement") {
+    world::WorldGrid grid;
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    const Area initial_view = camera_grid.get_current_view();
+
+    camera_grid.set_screen_center(SDL_Point{700, 450});
+    camera_grid.rebuild_grid(grid, 0.016f, 2);
+    const Area moved_view = camera_grid.get_current_view();
+
+    auto [initial_min_x, initial_min_z, initial_max_x, initial_max_z] = initial_view.get_bounds();
+    auto [moved_min_x, moved_min_z, moved_max_x, moved_max_z] = moved_view.get_bounds();
+    CHECK((moved_min_x != initial_min_x || moved_max_x != initial_max_x ||
+           moved_min_z != initial_min_z || moved_max_z != initial_max_z));
 }
 
 TEST_CASE("WarpedScreenGrid min on-screen culling uses largest projected dimension") {
@@ -444,6 +439,9 @@ TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") 
     CHECK_FALSE(serialized.contains("meters_per_100_world_px"));
     CHECK_FALSE(serialized.contains("offscreen_fade_amount_px"));
     CHECK_FALSE(serialized.contains("near_camera_max_perspective_scale"));
+    CHECK_FALSE(serialized.contains("extra_cull_margin"));
+    CHECK_FALSE(serialized.contains("depth_near_world"));
+    CHECK_FALSE(serialized.contains("depth_far_world"));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") {
@@ -454,10 +452,13 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
         {"render_quality_percent", 10},
         {"meters_per_100_world_px", 0.5},
         {"offscreen_fade_amount_px", 0.0},
-        {"near_camera_max_perspective_scale", 6.0}
+        {"near_camera_max_perspective_scale", 6.0},
+        {"extra_cull_margin", 250.0},
+        {"depth_near_world", 10.0},
+        {"depth_far_world", 100.0}
     });
 
     const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
     CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
-    CHECK(after.extra_cull_margin == doctest::Approx(before.extra_cull_margin));
+    CHECK(after.base_height_px == doctest::Approx(before.base_height_px));
 }

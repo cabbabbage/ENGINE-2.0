@@ -87,6 +87,7 @@ bool assemble_render_object_projection_input(const RenderObject& obj,
     out_input.final_width_px = std::max(1, static_cast<int>(std::lround(final_width_px)));
     out_input.final_height_px = std::max(1, static_cast<int>(std::lround(final_height_px)));
     out_input.flip = obj.flip;
+    out_input.angle = std::isfinite(obj.angle) ? obj.angle : 0.0;
     out_input.anchor_uv = sanitize_anchor_uv(obj.projection_anchor_uv);
     return true;
 }

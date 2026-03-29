@@ -561,6 +561,9 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
         expected_input.parent.resolution_layer =
             owner->grid_point() ? owner->grid_point()->resolution_layer() : owner->grid_resolution;
         expected_input.anchor_definition.anchor = *anchor;
+        expected_input.sprite_transform.mirror_x = anchor->flip_horizontal;
+        expected_input.sprite_transform.mirror_y = anchor->flip_vertical;
+        expected_input.sprite_transform.rotation_degrees = anchor->rotation_degrees;
         expected_input.camera_state.camera = &cam;
 
         anchored_child_placement::PlacementOutput expected{};
@@ -1308,6 +1311,9 @@ void SceneRenderer::render() {
     const double anchor_depth = cam.anchor_world_z();
     const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
     const float boundary_cull_margin = 64.0f;
+    const float boundary_min_visible_px =
+        static_cast<float>(screen_height_) *
+        std::clamp(assets_->boundary_min_visible_screen_ratio(), 0.0f, 0.5f);
     std::size_t queued_boundary_sprites = 0;
     float min_boundary_width = std::numeric_limits<float>::max();
     float max_boundary_width = 0.0f;
@@ -1341,6 +1347,13 @@ void SceneRenderer::render() {
             adjusted_y < -boundary_cull_margin ||
             adjusted_y - height > static_cast<float>(screen_height_) + boundary_cull_margin) {
             return;
+        }
+
+        if (boundary_min_visible_px > 0.0f) {
+            const float largest_dim = std::max(sprite.world_width, sprite.world_height);
+            if (largest_dim < boundary_min_visible_px) {
+                return;
+            }
         }
 
         const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);

@@ -2991,6 +2991,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 expected_input.parent.resolution_layer =
                     owner->grid_point() ? owner->grid_point()->resolution_layer() : owner->grid_resolution;
                 expected_input.anchor_definition.anchor = *anchor;
+                expected_input.sprite_transform.mirror_x = anchor->flip_horizontal;
+                expected_input.sprite_transform.mirror_y = anchor->flip_vertical;
+                expected_input.sprite_transform.rotation_degrees = anchor->rotation_degrees;
                 expected_input.camera_state.camera = &cam;
 
                 anchored_child_placement::PlacementOutput expected{};
@@ -6145,6 +6148,9 @@ void RoomEditor::ensure_anchor_editor_widgets() {
         anchor_tools_panel_->set_on_delete([this]() {
             delete_selected_anchor_in_current_frame();
         });
+        anchor_tools_panel_->set_on_apply_details([this](const RoomAnchorToolsPanel::DetailValues& values) {
+            apply_anchor_panel_detail_update(values);
+        });
         anchor_tools_panel_->set_on_propagate([this](RoomAnchorToolsPanel::PropagationScope scope) {
             switch (scope) {
                 case RoomAnchorToolsPanel::PropagationScope::NextFrame:
@@ -7411,6 +7417,7 @@ void RoomEditor::sync_anchor_tools_panel() {
         anchor_tools_panel_->set_visible(false);
         anchor_tools_panel_->set_anchor_names({});
         anchor_tools_panel_->set_selected_anchor({});
+        anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
         return;
     }
 
@@ -7429,6 +7436,21 @@ void RoomEditor::sync_anchor_tools_panel() {
     anchor_tools_panel_->set_anchor_names(names);
     ensure_anchor_selection_valid();
     anchor_tools_panel_->set_selected_anchor(anchor_edit_.selected_anchor_name);
+    auto selected_it = std::find_if(anchor_edit_.handles.begin(),
+                                    anchor_edit_.handles.end(),
+                                    [&](const AnchorHandleSample& handle) {
+                                        return handle.name == anchor_edit_.selected_anchor_name;
+                                    });
+    if (selected_it != anchor_edit_.handles.end()) {
+        RoomAnchorToolsPanel::DetailValues detail{};
+        detail.depth_offset = selected_it->depth_offset;
+        detail.flip_horizontal = selected_it->flip_horizontal;
+        detail.flip_vertical = selected_it->flip_vertical;
+        detail.rotation_degrees = selected_it->rotation_degrees;
+        anchor_tools_panel_->set_detail_values(detail);
+    } else {
+        anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
+    }
 }
 
 void RoomEditor::refresh_anchor_mode_handles() {
@@ -7466,6 +7488,9 @@ void RoomEditor::refresh_anchor_mode_handles() {
         handle.texture_x = anchor.texture_x;
         handle.texture_y = anchor.texture_y;
         handle.depth_offset = anchor.depth_offset;
+        handle.flip_horizontal = anchor.flip_horizontal;
+        handle.flip_vertical = anchor.flip_vertical;
+        handle.rotation_degrees = anchor.rotation_degrees;
         handle.flat_screen_px = sample.flat_screen_px;
         handle.has_flat_screen_px = sample.has_flat_screen_px;
         handle.final_screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
@@ -7903,6 +7928,51 @@ bool RoomEditor::mutate_attack_box_current_frame(
     return true;
 }
 
+bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::DetailValues& values) {
+    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+        return false;
+    }
+
+    const int requested_depth = values.depth_offset;
+    const bool requested_flip_horizontal = values.flip_horizontal;
+    const bool requested_flip_vertical = values.flip_vertical;
+    float requested_rotation = values.rotation_degrees;
+    if (!std::isfinite(requested_rotation)) {
+        requested_rotation = 0.0f;
+    }
+
+    const bool changed = mutate_anchor_current_frame(
+        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
+            auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
+                return anchor.name == anchor_edit_.selected_anchor_name;
+            });
+            if (it == anchors.end()) {
+                return false;
+            }
+
+            if (it->depth_offset == requested_depth &&
+                it->flip_horizontal == requested_flip_horizontal &&
+                it->flip_vertical == requested_flip_vertical &&
+                std::fabs(it->rotation_degrees - requested_rotation) < 1e-4f) {
+                return false;
+            }
+
+            it->depth_offset = requested_depth;
+            it->flip_horizontal = requested_flip_horizontal;
+            it->flip_vertical = requested_flip_vertical;
+            it->rotation_degrees = requested_rotation;
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+
+    if (changed && anchor_edit_.target_asset) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            anchor_edit_.target_asset,
+            anchor_edit_.selected_anchor_name);
+    }
+    return changed;
+}
+
 bool RoomEditor::update_anchor_depth(const std::string& anchor_name, int delta) {
     if (anchor_name.empty() || delta == 0) {
         return false;
@@ -8123,6 +8193,7 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
         return false;
     }
 
+    // Copy the full anchor payload (position, depth, flip parity, and rotation) during propagation.
     const std::vector<DisplacedAssetAnchorPoint> source_anchors = source_frame->anchor_points;
     std::unordered_map<std::string, std::vector<std::size_t>> apply_indices;
     if (scope == EditorFramePropagationScope::Asset) {
@@ -13266,7 +13337,7 @@ void RoomEditor::cycle_selection_filter() {
             show_notice("Selecting all assets");
             break;
         default:
-            selection_filter_ = SelectionFilter::All;
+            selection_filter_ = SelectionFilter::Normal;
             show_notice("Selecting all assets");
             break;
     }
@@ -13280,8 +13351,8 @@ void RoomEditor::cycle_selection_filter() {
 }
 
 void RoomEditor::reset_selection_filter() {
-    const bool changed = (selection_filter_ != SelectionFilter::All);
-    selection_filter_ = SelectionFilter::All;
+    const bool changed = (selection_filter_ != SelectionFilter::Normal);
+    selection_filter_ = SelectionFilter::Normal;
     show_notice("Selecting all assets");
 
     if (changed) {

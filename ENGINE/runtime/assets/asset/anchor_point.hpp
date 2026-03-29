@@ -27,16 +27,28 @@ struct DisplacedAssetAnchorPoint {
     int         texture_x = 0;   // Pixel coordinate on the sprite texture (X axis)
     int         texture_y = 0;   // Pixel coordinate on the sprite texture (vertical axis)
     int         depth_offset = 0; // Signed pixel offset along camera->anchor ray from the flat texture point (+farther, -closer)
+    // Transform inheritance parity:
+    // - true  => preserve parent axis orientation
+    // - false => invert parent axis orientation
+    bool        flip_horizontal = true;
+    bool        flip_vertical = true;
+    float       rotation_degrees = 0.0f;
 
     DisplacedAssetAnchorPoint() = default;
     DisplacedAssetAnchorPoint(std::string name_,
                               int tex_x,
                               int tex_y,
-                              int depth_offset_px = 0)
+                              int depth_offset_px = 0,
+                              bool flip_horizontal_ = true,
+                              bool flip_vertical_ = true,
+                              float rotation_degrees_ = 0.0f)
         : name(std::move(name_))
         , texture_x(tex_x)
         , texture_y(tex_y)
-        , depth_offset(depth_offset_px) {}
+        , depth_offset(depth_offset_px)
+        , flip_horizontal(flip_horizontal_)
+        , flip_vertical(flip_vertical_)
+        , rotation_degrees(rotation_degrees_) {}
 
     bool is_valid() const {
         return !name.empty();
@@ -63,6 +75,9 @@ struct AnchorPoint {
     int frame_index = -1;
     bool exists = false;
     int depth_offset = 0;
+    bool flip_horizontal = false;
+    bool flip_vertical = false;
+    float rotation_degrees = 0.0f;
     SDL_FPoint screen_pos_2d{0.0f, 0.0f};
     Vec2 relative_pos_2d{};
     Vec2 world_pos_2d{}; // exact world-space anchor position (render-facing)

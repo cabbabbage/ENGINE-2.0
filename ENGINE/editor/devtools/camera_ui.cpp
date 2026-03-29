@@ -137,7 +137,9 @@ void CameraUIPanel::sync_from_camera() {
     const auto& settings = cam.get_settings();
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
-    if (cull_margin_slider_) cull_margin_slider_->set_value(settings.extra_cull_margin);
+    if (boundary_min_render_size_slider_) {
+        boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
+    }
 }
 
 void CameraUIPanel::build_ui() {
@@ -156,16 +158,25 @@ void CameraUIPanel::build_ui() {
     if (assets_) {
         defaults = assets_->getView().get_settings();
     }
-    defaults.min_visible_screen_ratio = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
-    defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
+    const float min_visible_default = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
+    defaults.min_visible_screen_ratio = min_visible_default;
+    const float boundary_min_visible_default =
+        devmode::camera_prefs::load_boundary_min_visible_screen_ratio(min_visible_default);
 
-    min_render_size_slider_ = std::make_unique<FloatSliderWidget>("Min On-Screen Size", 0.0f, 0.05f, 0.001f, defaults.min_visible_screen_ratio, 3);
+    min_render_size_slider_ = std::make_unique<FloatSliderWidget>("Min On-Screen Size", 0.0f, 0.05f, 0.001f, min_visible_default, 3);
     min_render_size_slider_->set_tooltip("Cull sprites once their height drops below this fraction of the screen (0.01 = 1%).");
     min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    cull_margin_slider_ = std::make_unique<FloatSliderWidget>("Cull Depth (Z axis, world units)", 0.0f, 5000.0f, 10.0f, defaults.extra_cull_margin, 0);
-    cull_margin_slider_->set_tooltip("Requested world-Z depth distance from the camera anchor. Runtime caps it to top-of-screen world depth each frame for stable, efficient culling.");
-    cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    boundary_min_render_size_slider_ = std::make_unique<FloatSliderWidget>(
+        "Boundary Min On-Screen Size",
+        0.0f,
+        0.05f,
+        0.001f,
+        boundary_min_visible_default,
+        3);
+    boundary_min_render_size_slider_->set_tooltip(
+        "Cull dynamically spawned boundary assets once their height drops below this fraction of the screen (0.01 = 1%).");
+    boundary_min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     rebuild_rows();
 }
@@ -184,7 +195,7 @@ void CameraUIPanel::rebuild_rows() {
     if (header_spacer_) rows.push_back({ header_spacer_.get() });
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
-    if (cull_margin_slider_) rows.push_back({ cull_margin_slider_.get() });
+    if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
 
     set_rows(rows);
 }
@@ -205,19 +216,30 @@ void CameraUIPanel::apply_settings_if_needed() {
     WarpedScreenGrid::RealismSettings updated = current;
 
     if (min_render_size_slider_) updated.min_visible_screen_ratio = min_render_size_slider_->value();
-    if (cull_margin_slider_)      updated.extra_cull_margin = cull_margin_slider_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
     };
     const bool realism_changed =
-        float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio) ||
-        float_changed(updated.extra_cull_margin, current.extra_cull_margin);
+        float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio);
+    float boundary_value = assets_->boundary_min_visible_screen_ratio();
+    if (boundary_min_render_size_slider_) {
+        boundary_value = boundary_min_render_size_slider_->value();
+    }
+    const bool boundary_changed =
+        boundary_min_render_size_slider_ &&
+        float_changed(boundary_value, assets_->boundary_min_visible_screen_ratio());
 
     if (realism_changed) {
         cam.set_realism_settings(updated);
         devmode::camera_prefs::save_min_visible_screen_ratio(updated.min_visible_screen_ratio);
-        devmode::camera_prefs::save_extra_cull_margin(updated.extra_cull_margin);
+    }
+    if (boundary_changed) {
+        assets_->set_boundary_min_visible_screen_ratio(boundary_value);
+        devmode::camera_prefs::save_boundary_min_visible_screen_ratio(boundary_value);
+    }
+
+    if (realism_changed || boundary_changed) {
         assets_->on_camera_settings_changed();
     }
 }

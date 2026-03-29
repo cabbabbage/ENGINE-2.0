@@ -1,6 +1,8 @@
 #include "room_anchor_tools_panel.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <utility>
 
 #include "dm_styles.hpp"
@@ -20,12 +22,40 @@ constexpr int kPanelMaxHeight = 720;
 constexpr int kPanelPadding = 10;
 constexpr int kSectionGap = 8;
 constexpr int kHeaderHeight = 24;
+constexpr int kLineHeight = 18;
+
+int parse_int_or(const std::string& text, int fallback) {
+    try {
+        return std::stoi(text);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+bool parse_bool_or(const std::string& text, bool fallback) {
+    std::string lowered;
+    lowered.reserve(text.size());
+    for (const char ch : text) {
+        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    if (lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on") {
+        return true;
+    }
+    if (lowered == "0" || lowered == "false" || lowered == "no" || lowered == "off") {
+        return false;
+    }
+    return fallback;
+}
 
 }  // namespace
 
 RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     add_button_ = std::make_unique<DMButton>("Add Anchor", &DMStyles::CreateButton(), 180, DMButton::height());
     rename_textbox_ = std::make_unique<DMTextBox>("Rename", "");
+    depth_textbox_ = std::make_unique<DMTextBox>("Depth Offset", "0");
+    flip_horizontal_textbox_ = std::make_unique<DMTextBox>("Flip Horizontal (1/0)", "1");
+    flip_vertical_textbox_ = std::make_unique<DMTextBox>("Flip Vertical (1/0)", "1");
+    rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
     apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
     apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
@@ -106,6 +136,22 @@ std::string RoomAnchorToolsPanel::rename_text() const {
     return rename_textbox_ ? rename_textbox_->value() : std::string{};
 }
 
+void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
+    if (depth_textbox_ && !depth_textbox_->is_editing()) {
+        depth_textbox_->set_value(std::to_string(values.depth_offset));
+    }
+    if (flip_horizontal_textbox_ && !flip_horizontal_textbox_->is_editing()) {
+        flip_horizontal_textbox_->set_value(values.flip_horizontal ? "1" : "0");
+    }
+    if (flip_vertical_textbox_ && !flip_vertical_textbox_->is_editing()) {
+        flip_vertical_textbox_->set_value(values.flip_vertical ? "1" : "0");
+    }
+    if (rotation_slider_) {
+        int rotation_degrees = static_cast<int>(std::lround(values.rotation_degrees));
+        rotation_slider_->set_value(rotation_degrees);
+    }
+}
+
 void RoomAnchorToolsPanel::set_on_select(SelectCallback callback) {
     on_select_ = std::move(callback);
 }
@@ -122,8 +168,24 @@ void RoomAnchorToolsPanel::set_on_delete(DeleteCallback callback) {
     on_delete_ = std::move(callback);
 }
 
+void RoomAnchorToolsPanel::set_on_apply_details(ApplyDetailsCallback callback) {
+    on_apply_details_ = std::move(callback);
+}
+
 void RoomAnchorToolsPanel::set_on_propagate(PropagateCallback callback) {
     on_propagate_ = std::move(callback);
+}
+
+RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values() const {
+    DetailValues values;
+    values.depth_offset = parse_int_or(depth_textbox_ ? depth_textbox_->value() : std::string{}, 0);
+    values.flip_horizontal = parse_bool_or(flip_horizontal_textbox_ ? flip_horizontal_textbox_->value() : std::string{}, true);
+    values.flip_vertical = parse_bool_or(flip_vertical_textbox_ ? flip_vertical_textbox_->value() : std::string{}, true);
+    values.rotation_degrees = rotation_slider_ ? static_cast<float>(rotation_slider_->value()) : 0.0f;
+    if (!std::isfinite(values.rotation_degrees)) {
+        values.rotation_degrees = 0.0f;
+    }
+    return values;
 }
 
 bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
@@ -247,8 +309,34 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
+    bool details_changed = false;
+    if (has_selected_anchor && depth_textbox_ && depth_textbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && flip_horizontal_textbox_ && flip_horizontal_textbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && flip_vertical_textbox_ && flip_vertical_textbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && rotation_slider_ && rotation_slider_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (details_changed && on_apply_details_) {
+        on_apply_details_(collect_detail_values());
+        handled = true;
+    }
+
+    const bool detail_editing =
+        (depth_textbox_ && depth_textbox_->is_editing()) ||
+        (flip_horizontal_textbox_ && flip_horizontal_textbox_->is_editing()) ||
+        (flip_vertical_textbox_ && flip_vertical_textbox_->is_editing());
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) &&
-        rename_textbox_ && rename_textbox_->is_editing()) {
+        ((rename_textbox_ && rename_textbox_->is_editing()) || detail_editing)) {
         handled = true;
     }
 
@@ -312,6 +400,21 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
     if (has_selected_anchor && rename_textbox_) {
         rename_textbox_->render(renderer);
     }
+    if (has_selected_anchor) {
+        DMFontCache::instance().draw_text(renderer, label_style, "Anchor Properties", detail_title_rect_.x, detail_title_rect_.y);
+        if (depth_textbox_) {
+            depth_textbox_->render(renderer);
+        }
+        if (flip_horizontal_textbox_) {
+            flip_horizontal_textbox_->render(renderer);
+        }
+        if (flip_vertical_textbox_) {
+            flip_vertical_textbox_->render(renderer);
+        }
+        if (rotation_slider_) {
+            rotation_slider_->render(renderer);
+        }
+    }
     if (delete_button_) {
         delete_button_->render(renderer);
     }
@@ -362,11 +465,25 @@ void RoomAnchorToolsPanel::update_layout() const {
     const bool has_selected_anchor = !selected_anchor_name_.empty();
     const int controls_width = std::max(0, panel_rect_.w - kPanelPadding * 2);
     const int rename_h = rename_textbox_ ? rename_textbox_->preferred_height(controls_width) : DMTextBox::height();
+    const int depth_h = depth_textbox_ ? depth_textbox_->preferred_height(controls_width) : DMTextBox::height();
+    const int flip_h_h = flip_horizontal_textbox_ ? flip_horizontal_textbox_->preferred_height(controls_width) : DMTextBox::height();
+    const int flip_v_h = flip_vertical_textbox_ ? flip_vertical_textbox_->preferred_height(controls_width) : DMTextBox::height();
+    const int rotation_h = rotation_slider_ ? rotation_slider_->preferred_height(controls_width) : DMSlider::height();
     int controls_height = 0;
     controls_height += DMButton::height();                          // add
     controls_height += kSectionGap;
     if (has_selected_anchor) {
         controls_height += rename_h;                                // rename text
+        controls_height += kSectionGap;
+        controls_height += kLineHeight;                             // detail title
+        controls_height += row_gap;
+        controls_height += depth_h;
+        controls_height += row_gap;
+        controls_height += flip_h_h;
+        controls_height += row_gap;
+        controls_height += flip_v_h;
+        controls_height += row_gap;
+        controls_height += rotation_h;
         controls_height += kSectionGap;
     }
     controls_height += DMButton::height();                          // delete
@@ -405,6 +522,42 @@ void RoomAnchorToolsPanel::update_layout() const {
             rename_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
+
+    if (has_selected_anchor) {
+        detail_title_rect_ = SDL_Rect{controls_x, row_y, controls_width, kLineHeight};
+        row_y += kLineHeight + row_gap;
+        if (depth_textbox_) {
+            depth_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, depth_h});
+            row_y += depth_h + row_gap;
+        }
+        if (flip_horizontal_textbox_) {
+            flip_horizontal_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_h_h});
+            row_y += flip_h_h + row_gap;
+        }
+        if (flip_vertical_textbox_) {
+            flip_vertical_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_v_h});
+            row_y += flip_v_h + row_gap;
+        }
+        if (rotation_slider_) {
+            rotation_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, rotation_h});
+            row_y += rotation_h + kSectionGap;
+        }
+    } else {
+        detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
+        if (depth_textbox_) {
+            depth_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (flip_horizontal_textbox_) {
+            flip_horizontal_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (flip_vertical_textbox_) {
+            flip_vertical_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (rotation_slider_) {
+            rotation_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+    }
+
     if (delete_button_) {
         delete_button_->set_rect(SDL_Rect{controls_x, row_y, controls_width, DMButton::height()});
     }

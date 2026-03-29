@@ -193,6 +193,7 @@ struct FrameDimensions {
     int final_w = 0;
     int final_h = 0;
     SDL_FlipMode flip = SDL_FLIP_NONE;
+    double angle = 0.0;
     float world_z_offset = 0.0f;
 };
 
@@ -386,7 +387,11 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     out.frame_h = frame_h;
     out.final_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_w) * remainder)));
     out.final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_h) * remainder)));
-    out.flip = asset.flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+    out.flip = asset.effective_render_flip();
+    out.angle = asset.effective_render_angle();
+    if (!std::isfinite(out.angle)) {
+        out.angle = 0.0;
+    }
     out.world_z_offset = asset.world_z_offset();
     return true;
 }
@@ -592,6 +597,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     projection_input.final_width_px = dims.final_w;
     projection_input.final_height_px = dims.final_h;
     projection_input.flip = dims.flip;
+    projection_input.angle = dims.angle;
 
     render_projection::ProjectedSpriteFrame projected_frame{};
     if (!render_projection::build_projected_sprite_frame(cam, projection_input, projected_frame)) {

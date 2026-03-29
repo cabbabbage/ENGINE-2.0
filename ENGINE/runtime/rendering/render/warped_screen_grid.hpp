@@ -72,10 +72,6 @@ public:
 
 
         float base_height_px               = 1000.0f;
-
-        float extra_cull_margin = 1000.0f;
-        float depth_near_world = 0.0f;
-        float depth_far_world  = 5000.0f;
 };
 
     struct FloorDepthParams {
@@ -253,8 +249,6 @@ private:
         std::int64_t zoom_percent_q = 0;
         std::int64_t pan_y_px_q = 0;
         std::int64_t aspect_q = 0;
-        std::int64_t depth_near_q = 0;
-        std::int64_t depth_far_q = 0;
         int screen_width = 0;
         int screen_height = 0;
         bool lock_anchor_to_center = false;
@@ -270,8 +264,6 @@ private:
                    zoom_percent_q == other.zoom_percent_q &&
                    pan_y_px_q == other.pan_y_px_q &&
                    aspect_q == other.aspect_q &&
-                   depth_near_q == other.depth_near_q &&
-                   depth_far_q == other.depth_far_q &&
                    screen_width == other.screen_width &&
                    screen_height == other.screen_height &&
                    lock_anchor_to_center == other.lock_anchor_to_center &&

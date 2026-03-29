@@ -9,6 +9,7 @@
 
 class DMButton;
 class DMTextBox;
+class DMSlider;
 
 class RoomAnchorToolsPanel {
 public:
@@ -18,10 +19,18 @@ public:
         Asset,
     };
 
+    struct DetailValues {
+        int depth_offset = 0;
+        bool flip_horizontal = true;
+        bool flip_vertical = true;
+        float rotation_degrees = 0.0f;
+    };
+
     using SelectCallback = std::function<void(const std::string&)>;
     using AddCallback = std::function<void()>;
     using RenameCallback = std::function<void(const std::string&)>;
     using DeleteCallback = std::function<void()>;
+    using ApplyDetailsCallback = std::function<void(const DetailValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
 
     RoomAnchorToolsPanel();
@@ -38,11 +47,13 @@ public:
     const std::string& selected_anchor() const { return selected_anchor_name_; }
     void set_rename_text(const std::string& value);
     std::string rename_text() const;
+    void set_detail_values(const DetailValues& values);
 
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
     void set_on_rename(RenameCallback callback);
     void set_on_delete(DeleteCallback callback);
+    void set_on_apply_details(ApplyDetailsCallback callback);
     void set_on_propagate(PropagateCallback callback);
 
     bool handle_event(const SDL_Event& event);
@@ -53,6 +64,7 @@ private:
     void update_layout() const;
     void layout_anchor_buttons() const;
     void scroll_by(int delta);
+    DetailValues collect_detail_values() const;
     static bool point_in_rect(int x, int y, const SDL_Rect& rect);
 
 private:
@@ -65,6 +77,7 @@ private:
     SDL_Rect panel_bounds_override_{0, 0, 0, 0};
     mutable SDL_Rect panel_rect_{12, 56, 300, 420};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
     mutable int content_height_ = 0;
     mutable int max_scroll_ = 0;
@@ -76,6 +89,10 @@ private:
 
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMTextBox> rename_textbox_;
+    std::unique_ptr<DMTextBox> depth_textbox_;
+    std::unique_ptr<DMTextBox> flip_horizontal_textbox_;
+    std::unique_ptr<DMTextBox> flip_vertical_textbox_;
+    std::unique_ptr<DMSlider> rotation_slider_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;
@@ -85,5 +102,6 @@ private:
     AddCallback on_add_;
     RenameCallback on_rename_;
     DeleteCallback on_delete_;
+    ApplyDetailsCallback on_apply_details_;
     PropagateCallback on_propagate_;
 };

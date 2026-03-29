@@ -123,7 +123,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 105.0
+        "scale_percentage": 107.0
       },
       "start": "default",
       "tags": [],
@@ -2840,39 +2840,97 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -27,
+                "depth_offset": -1,
+                "flip_horizontal": true,
+                "flip_vertical": true,
                 "name": "eyes",
-                "texture_x": 193,
-                "texture_y": 166
+                "rotation_degrees": 0.0,
+                "texture_x": 205,
+                "texture_y": 164
               },
               {
                 "depth_offset": -1,
+                "flip_horizontal": true,
+                "flip_vertical": true,
                 "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
+                "rotation_degrees": 0.0,
+                "texture_x": 199,
+                "texture_y": 136
               },
               {
                 "depth_offset": -2,
+                "flip_horizontal": true,
+                "flip_vertical": true,
                 "name": "mouth",
+                "rotation_degrees": 0.0,
                 "texture_x": 146,
                 "texture_y": 174
               },
               {
                 "depth_offset": -1,
+                "flip_horizontal": true,
+                "flip_vertical": true,
                 "name": "neck",
+                "rotation_degrees": 0.0,
                 "texture_x": 218,
                 "texture_y": 190
               },
               {
                 "depth_offset": 0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
                 "name": "weapon",
+                "rotation_degrees": 0.0,
                 "texture_x": 223,
                 "texture_y": 182
               }
             ]
           ],
+          "box_schema_version": 1,
           "flip_vertical_source": false,
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "locked": false,
           "loop": true,
           "movement": [
@@ -3165,6 +3223,7 @@
             [],
             []
           ],
+          "box_schema_version": 1,
           "derived_modifiers": {
             "flipX": false,
             "flipY": false,
@@ -3173,14 +3232,326 @@
           "flip_vertical_source": false,
           "flipped_source": false,
           "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "inherit_source_geometry": false,
           "loop": true,
@@ -3510,6 +3881,7 @@
             [],
             []
           ],
+          "box_schema_version": 1,
           "derived_modifiers": {
             "flipX": false,
             "flipY": false,
@@ -3518,14 +3890,326 @@
           "flip_vertical_source": false,
           "flipped_source": false,
           "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "inherit_source_geometry": false,
           "loop": true,
@@ -3855,22 +4539,335 @@
             [],
             []
           ],
+          "box_schema_version": 1,
           "derived_modifiers": {
-            "flipX": true,
-            "flipY": true,
+            "flipX": false,
+            "flipY": false,
             "reverse": false
           },
-          "flip_vertical_source": true,
-          "flipped_source": true,
+          "flip_vertical_source": false,
+          "flipped_source": false,
           "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "inherit_source_geometry": false,
           "loop": true,
@@ -4190,8 +5187,331 @@
               }
             ]
           ],
+          "box_schema_version": 1,
           "flip_vertical_source": false,
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "locked": false,
           "loop": true,
           "movement": [
@@ -4276,264 +5596,7 @@
           }
         },
         "right": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ],
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ],
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ],
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ],
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ],
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ],
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ],
-            [
-              {
-                "depth_offset": 2,
-                "name": "eyes",
-                "texture_x": 209,
-                "texture_y": 158
-              },
-              {
-                "depth_offset": -1,
-                "name": "hat",
-                "texture_x": 214,
-                "texture_y": 143
-              },
-              {
-                "depth_offset": -2,
-                "name": "mouth",
-                "texture_x": 212,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": 1,
-                "name": "neck",
-                "texture_x": 214,
-                "texture_y": 178
-              },
-              {
-                "depth_offset": 0,
-                "name": "weapon",
-                "texture_x": 223,
-                "texture_y": 182
-              }
-            ]
-          ],
+          "box_schema_version": 1,
           "derived_modifiers": {
             "flipX": true,
             "flipY": false,
@@ -4812,8 +5875,331 @@
               }
             ]
           ],
+          "box_schema_version": 1,
           "flip_vertical_source": false,
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "locked": false,
           "loop": true,
           "movement": [
@@ -5156,8 +6542,331 @@
               }
             ]
           ],
+          "box_schema_version": 1,
           "flip_vertical_source": false,
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "locked": false,
           "loop": true,
           "movement": [
@@ -5246,31 +6955,46 @@
             [
               {
                 "depth_offset": 2,
+                "flip_horizontal": false,
+                "flip_vertical": false,
                 "name": "eyes",
+                "rotation_degrees": 0.0,
                 "texture_x": 209,
                 "texture_y": 158
               },
               {
                 "depth_offset": -1,
+                "flip_horizontal": false,
+                "flip_vertical": false,
                 "name": "hat",
+                "rotation_degrees": 0.0,
                 "texture_x": 214,
                 "texture_y": 143
               },
               {
                 "depth_offset": -2,
+                "flip_horizontal": false,
+                "flip_vertical": false,
                 "name": "mouth",
+                "rotation_degrees": 0.0,
                 "texture_x": 212,
                 "texture_y": 179
               },
               {
                 "depth_offset": 1,
+                "flip_horizontal": false,
+                "flip_vertical": false,
                 "name": "neck",
+                "rotation_degrees": 0.0,
                 "texture_x": 214,
                 "texture_y": 178
               },
               {
                 "depth_offset": 0,
+                "flip_horizontal": false,
+                "flip_vertical": false,
                 "name": "weapon",
+                "rotation_degrees": 0.0,
                 "texture_x": 223,
                 "texture_y": 182
               }
@@ -5510,6 +7234,7 @@
             [],
             []
           ],
+          "box_schema_version": 1,
           "derived_modifiers": {
             "flipX": true,
             "flipY": false,
@@ -5518,14 +7243,326 @@
           "flip_vertical_source": false,
           "flipped_source": true,
           "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 162,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 162,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 162,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "inherit_source_geometry": false,
           "loop": true,
@@ -5850,19 +7887,19 @@
           {
             "candidates": [
               {
-                "chance": 28,
+                "chance": 53,
                 "name": "null"
               },
               {
-                "chance": 9,
+                "chance": 31,
                 "name": "grass_1_fps_2"
               },
               {
-                "chance": 9,
+                "chance": 24,
                 "name": "grass_fps_2"
               },
               {
-                "chance": 5.4,
+                "chance": 1,
                 "name": "#pretty"
               },
               {
@@ -5875,7 +7912,7 @@
             "execution_mode": "batch_grid",
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 5,
+            "grid_resolution": 6,
             "jitter": 0,
             "locked": false,
             "max_number": 1,
@@ -5969,7 +8006,7 @@
           "display_color": [
             36,
             242,
-            184,
+            141,
             255
           ],
           "edge_smoothness": 2,
@@ -5992,9 +8029,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            139,
             255
           ],
           "edge_smoothness": 85,
@@ -6049,36 +8086,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "vibble"
-                }
-              ],
-              "display_name": "vibble",
-              "dx": -784,
-              "dz": -1180,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6968,
-              "origional_width": 7008,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 4,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-ccbd1c7900a3"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "attack_speed"
                 }
               ],
@@ -6094,7 +8101,7 @@
               "origional_height": 7008,
               "origional_width": 7016,
               "position": "Exact",
-              "priority": 2,
+              "priority": 1,
               "quantity": 1,
               "resolution": 4,
               "resolve_geometry_to_room_size": true,
@@ -6124,12 +8131,72 @@
               "origional_height": 7040,
               "origional_width": 6984,
               "position": "Exact",
-              "priority": 3,
+              "priority": 2,
               "quantity": 1,
               "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-71cb7066a51b"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": 636,
+              "dz": 960,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 7008,
+              "origional_width": 6968,
+              "position": "Exact",
+              "priority": 3,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-db25c76441f1"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble"
+                }
+              ],
+              "display_name": "vibble",
+              "dx": -1168,
+              "dz": 520,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 7024,
+              "origional_width": 6960,
+              "position": "Exact",
+              "priority": 4,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-47ecdeeceabe"
             }
           ]
         }

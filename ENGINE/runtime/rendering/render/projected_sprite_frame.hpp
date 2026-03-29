@@ -31,6 +31,7 @@ struct SpriteProjectionInput {
     int final_width_px = 0;
     int final_height_px = 0;
     SDL_FlipMode flip = SDL_FLIP_NONE;
+    double angle = 0.0;
     SDL_FPoint anchor_uv{0.5f, 1.0f};
 };
 

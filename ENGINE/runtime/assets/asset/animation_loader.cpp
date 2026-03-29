@@ -33,6 +33,7 @@ namespace fs = std::filesystem;
 namespace {
 
 using json_coercion::read_bool_field_like;
+using json_coercion::read_float_field_like;
 using json_coercion::read_int_field_like;
 using json_coercion::read_string_field_like;
 
@@ -159,7 +160,11 @@ fs::path project_root_path() {
 #endif
 }
 
-DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& valid) {
+DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node,
+                                            bool& valid,
+                                            bool default_flip_horizontal,
+                                            bool default_flip_vertical,
+                                            float default_rotation_degrees) {
         DisplacedAssetAnchorPoint anchor{};
         valid = false;
         if (!node.is_object()) {
@@ -183,13 +188,22 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& va
         anchor.texture_x = node["texture_x"].get<int>();
         anchor.texture_y = node["texture_y"].get<int>();
         anchor.depth_offset = node["depth_offset"].get<int>();
+        anchor.flip_horizontal = read_bool_field_like(node, "flip_horizontal", default_flip_horizontal);
+        anchor.flip_vertical = read_bool_field_like(node, "flip_vertical", default_flip_vertical);
+        anchor.rotation_degrees = read_float_field_like(node, "rotation_degrees", default_rotation_degrees);
+        if (!std::isfinite(anchor.rotation_degrees)) {
+                anchor.rotation_degrees = default_rotation_degrees;
+        }
 
         valid = anchor.is_valid();
         return anchor;
 }
 
 std::vector<std::vector<DisplacedAssetAnchorPoint>> parse_anchor_frames(const nlohmann::json& anchor_json,
-                                                                        std::size_t           frame_count) {
+                                                                        std::size_t           frame_count,
+                                                                        bool default_flip_horizontal,
+                                                                        bool default_flip_vertical,
+                                                                        float default_rotation_degrees) {
         std::vector<std::vector<DisplacedAssetAnchorPoint>> anchors(frame_count);
         if (!anchor_json.is_array()) {
                 return anchors;
@@ -201,7 +215,11 @@ std::vector<std::vector<DisplacedAssetAnchorPoint>> parse_anchor_frames(const nl
                 std::unordered_set<std::string> names;
                 for (const auto& node : entry) {
                         bool ok = false;
-                        auto anchor = read_anchor_point(node, ok);
+                        auto anchor = read_anchor_point(node,
+                                                        ok,
+                                                        default_flip_horizontal,
+                                                        default_flip_vertical,
+                                                        default_rotation_degrees);
                         if (!ok) continue;
                         if (names.insert(anchor.name).second) {
                                 anchors[idx].push_back(anchor);
@@ -253,11 +271,17 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
                         }
                 }
                 for (auto& anchor : frame) {
-                        if (flip_x && frame_w > 0) {
-                                anchor.texture_x = frame_w - 1 - anchor.texture_x;
+                        if (flip_x) {
+                                if (frame_w > 0) {
+                                        anchor.texture_x = frame_w - 1 - anchor.texture_x;
+                                }
+                                anchor.flip_horizontal = !anchor.flip_horizontal;
                         }
-                        if (flip_y && frame_h > 0) {
-                                anchor.texture_y = frame_h - 1 - anchor.texture_y;
+                        if (flip_y) {
+                                if (frame_h > 0) {
+                                        anchor.texture_y = frame_h - 1 - anchor.texture_y;
+                                }
+                                anchor.flip_vertical = !anchor.flip_vertical;
                         }
                 }
         }
@@ -1228,7 +1252,12 @@ void AnimationLoader::load(Animation& animation,
         const std::size_t frame_count = animation.frame_cache_.size();
         std::vector<std::vector<DisplacedAssetAnchorPoint>> anchor_frames;
         if (has_anchor_points_json) {
-                anchor_frames = parse_anchor_frames(anchor_points_json, frame_count);
+                const bool is_file_sourced_animation = (animation.source.kind != "animation");
+                anchor_frames = parse_anchor_frames(anchor_points_json,
+                                                    frame_count,
+                                                    is_file_sourced_animation,
+                                                    is_file_sourced_animation,
+                                                    0.0f);
         } else if (source_animation_ptr && use_inherited_geometry) {
                 anchor_frames = collect_anchor_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_anchor_transforms(anchor_frames,

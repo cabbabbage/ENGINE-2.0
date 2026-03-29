@@ -29,4 +29,3 @@ std::uint64_t tag_version();
 void notify_tags_changed();
 
 }
-

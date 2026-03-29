@@ -538,7 +538,7 @@ void Assets::log_camera_fog_state(const char* label) const {
         " room_zoom_percent=" + std::to_string(room ? room->camera_zoom_percent : 0) +
         " base_height_px=" + std::to_string(settings.base_height_px) +
         " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
-        " extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
+        //" extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
         " view_height_world=" + std::to_string(camera_.view_height_world()) +
         " camera_height=" + std::to_string(camera_height) +
         " pitch_deg=" + std::to_string(pitch_deg) +
@@ -621,6 +621,14 @@ bool Assets::boundary_assets_visible() const {
         return true;
     }
     return dev_controls_->boundary_assets_visible();
+}
+
+float Assets::boundary_min_visible_screen_ratio() const {
+    return boundary_min_visible_screen_ratio_;
+}
+
+void Assets::set_boundary_min_visible_screen_ratio(float value) {
+    boundary_min_visible_screen_ratio_ = std::clamp(value, 0.0f, 0.5f);
 }
 
 Assets::~Assets() {

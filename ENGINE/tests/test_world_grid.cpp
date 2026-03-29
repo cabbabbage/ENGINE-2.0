@@ -204,6 +204,11 @@ TEST_CASE("WorldGrid move_asset preserves unique ownership and mapping") {
     const world::GridPoint* start = grid.point_for_asset(raw);
     REQUIRE(start != nullptr);
 
+    raw->clear_composite_dirty();
+    raw->clear_mesh_dirty();
+    CHECK_FALSE(raw->is_composite_dirty());
+    CHECK_FALSE(raw->is_mesh_dirty());
+
     const world::GridPoint old_pos =
         world::GridPoint::make_virtual(start->world_x(), start->world_y(), start->world_z(), start->resolution_layer());
     const world::GridPoint new_pos =
@@ -217,6 +222,8 @@ TEST_CASE("WorldGrid move_asset preserves unique ownership and mapping") {
     CHECK(moved_point->world_x() == new_pos.world_x());
     CHECK(moved_point->world_y() == new_pos.world_y());
     CHECK(moved_point->world_z() == new_pos.world_z());
+    CHECK(raw->is_composite_dirty());
+    CHECK(raw->is_mesh_dirty());
 
     const std::vector<Asset*> listed = grid.all_assets();
     CHECK(std::count(listed.begin(), listed.end(), raw) == 1);

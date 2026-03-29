@@ -836,6 +836,8 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     prune_empty_points();
 
     if (point_changed) {
+        a->mark_composite_dirty();
+        a->mark_mesh_dirty();
         a->mark_anchors_dirty();
     }
 

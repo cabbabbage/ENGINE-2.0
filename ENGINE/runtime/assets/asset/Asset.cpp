@@ -1663,6 +1663,11 @@ void Asset::move_to_world_position(int world_x,
                                    std::optional<int> resolution_layer_override) {
     if (!assets_) return;
 
+    const int previous_world_x = this->world_x();
+    const int previous_world_y = this->world_y();
+    const int previous_world_z = this->world_z();
+    const int previous_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
+
     world::WorldGrid& grid = assets_->world_grid();
     world::GridPoint* current_point = grid.point_for_asset(this);
     const int resolved_layer = resolution_layer_override.has_value()
@@ -1677,6 +1682,17 @@ void Asset::move_to_world_position(int world_x,
     }
 
     grid_resolution = resolved_layer;
+    const bool point_changed =
+        previous_world_x != this->world_x() ||
+        previous_world_y != this->world_y() ||
+        previous_world_z != this->world_z() ||
+        previous_layer != grid_resolution;
+
+    if (point_changed) {
+        mark_composite_dirty();
+        mark_mesh_dirty();
+    }
+
     mark_anchors_dirty();
     assets_->mark_collision_context_dirty();
 }

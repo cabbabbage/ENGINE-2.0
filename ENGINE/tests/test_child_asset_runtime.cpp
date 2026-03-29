@@ -283,6 +283,51 @@ TEST_CASE("Queued anchor flush keeps X-axis child placement stable across sequen
     }
 }
 
+TEST_CASE("Bound child movement marks render package dirty on every horizontal step") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 40, 20, 30, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 2, 1, 0, 0, 0.0f, true});
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    spawned->clear_composite_dirty();
+    spawned->clear_mesh_dirty();
+    CHECK_FALSE(spawned->is_composite_dirty());
+    CHECK_FALSE(spawned->is_mesh_dirty());
+
+    for (int step = 0; step < 8; ++step) {
+        owner->move_to_world_position(41 + step, 20, 30, 0);
+        test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 2, 1, 0, 0, 0.0f, true});
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+        CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+        CHECK_FALSE(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+
+        CHECK(spawned->world_x() == owner->world_x() + 3);
+        CHECK(spawned->world_y() == owner->world_y() + 2);
+        CHECK(spawned->world_z() == owner->world_z() + 1);
+        CHECK(spawned->is_composite_dirty());
+        CHECK(spawned->is_mesh_dirty());
+
+        spawned->clear_composite_dirty();
+        spawned->clear_mesh_dirty();
+        CHECK_FALSE(spawned->is_composite_dirty());
+        CHECK_FALSE(spawned->is_mesh_dirty());
+    }
+}
+
 TEST_CASE("Child anchor residual stays stable across horizontal movement with exact subpixel offsets") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(

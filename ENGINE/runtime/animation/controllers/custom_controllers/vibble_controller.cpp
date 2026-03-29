@@ -10,6 +10,7 @@
 
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
@@ -163,6 +164,12 @@ void vibble_controller::movement(const Input& input) {
     }
 
     player->anim_->move(SDL_Point{ dx_, dy_ }, animation_id);
+
+    if (dx_ != 0 || dy_ != 0) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            player,
+            std::string{});
+    }
 }
 
 void vibble_controller::on_update(const Input& input) {

@@ -1,5 +1,6 @@
 #include "child_asset.hpp"
 
+#include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "assets/asset/Asset.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "core/AssetsManager.hpp"
@@ -192,16 +193,32 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
         return changed;
     }
 
-    const float exact_world_x = parent_anchor.world_pos_2d.x;
-    const float exact_world_y = parent_anchor.world_pos_2d.y;
-    const float exact_world_z = std::isfinite(parent_anchor.world_depth)
-        ? parent_anchor.world_depth
-        : static_cast<float>(parent_anchor.world_z);
+    anchored_child_placement::PlacementInput placement_input{};
+    placement_input.parent.world_x = owner_ ? static_cast<float>(owner_->world_x()) : 0.0f;
+    placement_input.parent.world_y = owner_ ? static_cast<float>(owner_->world_y()) : 0.0f;
+    placement_input.parent.world_z = owner_ ? static_cast<float>(owner_->world_z()) : 0.0f;
+    placement_input.parent.resolution_layer =
+        (owner_ && owner_->grid_point()) ? owner_->grid_point()->resolution_layer() : child_->grid_resolution;
+    placement_input.anchor_definition.anchor = parent_anchor;
 
-    const int target_world_x = static_cast<int>(std::lround(exact_world_x));
-    const int target_world_y = static_cast<int>(std::lround(exact_world_y));
-    const int target_world_z = parent_anchor.world_z;
-    int target_layer = parent_anchor.resolution_layer;
+    anchored_child_placement::PlacementOutput placement{};
+    if (!anchored_child_placement::resolve_child_placement(placement_input, placement) ||
+        !placement.child_world.valid) {
+        auto_hidden_for_anchor_ = true;
+        bool changed = clear_child_render_offset();
+        const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
+        changed = set_child_hidden_state_internal(should_hide) || changed;
+        return changed;
+    }
+
+    const float exact_world_x = placement.child_world.x;
+    const float exact_world_y = placement.child_world.y;
+    const float exact_world_z = placement.child_world.z;
+
+    const int target_world_x = placement.child_world_quantized.x;
+    const int target_world_y = placement.child_world_quantized.y;
+    const int target_world_z = placement.child_world_quantized_z;
+    int target_layer = placement.resolution_layer;
     if (target_layer < 0 && owner_ && owner_->grid_point()) {
         target_layer = owner_->grid_point()->resolution_layer();
     }

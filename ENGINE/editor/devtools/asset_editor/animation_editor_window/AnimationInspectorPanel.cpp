@@ -1321,14 +1321,8 @@ void AnimationInspectorPanel::apply_dependencies() {
     if (movement_summary_) {
         movement_summary_->set_edit_callback(frame_edit_callback_);
         movement_summary_->set_mode_enabled(FrameEditorLaunchMode::Movement, false);
-        movement_summary_->set_mode_enabled(FrameEditorLaunchMode::AnchorPoints, frame_mode_edit_callback_ != nullptr);
-        if (frame_mode_edit_callback_) {
-            movement_summary_->set_mode_launch_callback([this](const std::string& id, FrameEditorLaunchMode mode) {
-                frame_mode_edit_callback_(id, mode);
-            });
-        } else {
-            movement_summary_->set_mode_launch_callback({});
-        }
+        movement_summary_->set_mode_enabled(FrameEditorLaunchMode::AnchorPoints, false);
+        movement_summary_->set_mode_launch_callback({});
         movement_summary_->set_go_to_source_callback(navigate_to_animation_callback_);
     }
 

@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
+#include <vector>
 
 class Asset;
 class ChildAsset;
@@ -11,11 +12,18 @@ namespace anchor_bound_asset_helper {
 
 class AnchorBoundAssetHelper {
 public:
+    struct DebugBinding {
+        Asset* owner = nullptr;
+        Asset* child_asset = nullptr;
+        std::string anchor_name;
+    };
+
     static AnchorBoundAssetHelper& instance();
 
     void register_child(Asset* owner, ChildAsset* child, Asset* child_asset, const std::string& anchor_name);
     void unregister_child(Asset* child_asset);
     bool is_child_bound(const Asset* child_asset) const;
+    std::vector<DebugBinding> debug_bindings_snapshot() const;
     void notify_anchor_changed(Asset* owner, const std::string& anchor_name);
     bool flush_pending_updates();
 

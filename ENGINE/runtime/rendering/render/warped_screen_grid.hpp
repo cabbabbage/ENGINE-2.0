@@ -147,6 +147,7 @@ public:
 
     void set_realism_settings(const RealismSettings& settings);
     void set_screen_center(SDL_Point p, bool snap_immediately = true);
+    void set_screen_dimensions(int screen_width, int screen_height);
     void set_up_rooms(CurrentRoomFinder* finder);
     void apply_camera_settings(const nlohmann::json& data);
     nlohmann::json camera_settings_to_json() const;

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <utility>
 
+#include "rendering/render/screen_space_math.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -22,14 +23,12 @@ bool project_world_point(const WarpedScreenGrid& cam,
 std::pair<double, double> screen_to_ndc_point(const world::CameraProjectionParams& params,
                                                double screen_x,
                                                double screen_y) {
-    const double safe_w = static_cast<double>(std::max(1, params.screen_width));
-    const double safe_h = static_cast<double>(std::max(1, params.screen_height));
-    const double ndc_x_scaled = (screen_x / safe_w) * 2.0 - 1.0;
-    const double ndc_y_scaled = 1.0 - ((screen_y - params.screen_pan_y_px) / safe_h) * 2.0;
-    const double inv_zoom = (params.screen_zoom > 0.0 && std::isfinite(params.screen_zoom))
-        ? (1.0 / params.screen_zoom)
-        : 1.0;
-    return std::pair<double, double>{ndc_x_scaled * inv_zoom, ndc_y_scaled * inv_zoom};
+    return render::screen_space::screen_to_ndc(screen_x,
+                                               screen_y,
+                                               params.screen_width,
+                                               params.screen_height,
+                                               params.screen_zoom,
+                                               params.screen_pan_y_px);
 }
 
 SDL_FPoint sanitize_anchor_uv(SDL_FPoint uv) {

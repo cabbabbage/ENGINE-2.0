@@ -1,6 +1,7 @@
 #include "grid_point.hpp"
 #include "assets/asset/Asset.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/screen_space_math.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -159,10 +160,14 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     }
 
     // NDC to screen (with zoom)
-    const double scaled_x = ndc_x * params.screen_zoom;
-    const double scaled_y = ndc_y * params.screen_zoom;
-    const double screen_x = (scaled_x * 0.5 + 0.5) * static_cast<double>(params.screen_width);
-    const double screen_y = (0.5 - scaled_y * 0.5) * static_cast<double>(params.screen_height) + params.screen_pan_y_px;
+    const SDL_FPoint screen = render::screen_space::ndc_to_screen(ndc_x,
+                                                                   ndc_y,
+                                                                   params.screen_width,
+                                                                   params.screen_height,
+                                                                   params.screen_zoom,
+                                                                   params.screen_pan_y_px);
+    const double screen_x = static_cast<double>(screen.x);
+    const double screen_y = static_cast<double>(screen.y);
 
     // Calculate perspective scale
     const double safe_width = static_cast<double>(std::max(1, params.screen_width));
@@ -190,9 +195,15 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         if (!std::isfinite(ndc_x2) || !std::isfinite(ndc_y2)) {
             return std::nullopt;
         }
-        const double sx2 = (ndc_x2 * params.screen_zoom * 0.5 + 0.5) * safe_width;
-        const double sy2 = (0.5 - ndc_y2 * params.screen_zoom * 0.5) * params.screen_height + params.screen_pan_y_px;
-        const double dx = sx2 - (scaled_x * 0.5 + 0.5) * safe_width;
+        const SDL_FPoint shifted_screen = render::screen_space::ndc_to_screen(ndc_x2,
+                                                                               ndc_y2,
+                                                                               params.screen_width,
+                                                                               params.screen_height,
+                                                                               params.screen_zoom,
+                                                                               params.screen_pan_y_px);
+        const double sx2 = static_cast<double>(shifted_screen.x);
+        const double sy2 = static_cast<double>(shifted_screen.y);
+        const double dx = sx2 - screen_x;
         const double dy = sy2 - screen_y;
         const double dist = std::sqrt(dx * dx + dy * dy);
         if (!std::isfinite(dist) || dist <= 1e-6) {
@@ -346,8 +357,12 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     }
 
     const double zoom = std::max(1e-6, params.screen_zoom);
-    const double ndc_x = (static_cast<double>(screen.x) / static_cast<double>(params.screen_width) * 2.0 - 1.0) / zoom;
-    const double ndc_y = (1.0 - (static_cast<double>(screen.y) - params.screen_pan_y_px) / static_cast<double>(params.screen_height) * 2.0) / zoom;
+    const auto [ndc_x, ndc_y] = render::screen_space::screen_to_ndc(static_cast<double>(screen.x),
+                                                                     static_cast<double>(screen.y),
+                                                                     params.screen_width,
+                                                                     params.screen_height,
+                                                                     zoom,
+                                                                     params.screen_pan_y_px);
 
     const double tan_fov_x = std::max(1e-6, params.tan_half_fov_x);
     const double tan_fov_y = std::max(1e-6, params.tan_half_fov_y);

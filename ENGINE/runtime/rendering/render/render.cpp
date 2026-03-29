@@ -32,6 +32,8 @@
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -480,17 +482,24 @@ void draw_filled_debug_dot(SDL_Renderer* renderer,
 }
 
 void render_anchor_debug_markers(SDL_Renderer* renderer,
+                                 const WarpedScreenGrid& cam,
                                  int screen_width,
                                  int screen_height,
-                                 const std::vector<Asset*>& assets) {
+                                 const std::vector<Asset*>& assets,
+                                 bool dev_mode) {
     if (!renderer) {
         return;
     }
 
     const SDL_Color kFlatColor{255, 32, 32, 220};
     const SDL_Color kFinalColor{48, 128, 255, 255};
+    const SDL_Color kAnchorParityColor{255, 224, 64, 255};
+    const SDL_Color kChildParityColor{64, 255, 160, 255};
+    const SDL_Color kParityLineColor{255, 224, 64, 190};
     constexpr int kFlatRadiusPx = 5;
     constexpr int kFinalRadiusPx = 3;
+    constexpr int kAnchorParityRadiusPx = 4;
+    constexpr int kChildParityRadiusPx = 4;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
@@ -528,6 +537,79 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
                 draw_filled_debug_dot(renderer, sample.final_screen_px, kFinalRadiusPx, kFinalColor);
             }
         }
+    }
+
+    const auto bindings = anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().debug_bindings_snapshot();
+    for (const auto& binding : bindings) {
+        Asset* owner = binding.owner;
+        Asset* child = binding.child_asset;
+        if (!owner || !child || owner->dead || child->dead || binding.anchor_name.empty()) {
+            continue;
+        }
+
+        const auto anchor = owner->anchor_state(binding.anchor_name,
+                                                anchor_points::GridMaterialization::None,
+                                                Asset::AnchorResolveMode::ForceRecompute);
+        if (!anchor.has_value() || !anchor->is_active()) {
+            continue;
+        }
+
+        anchored_child_placement::PlacementInput expected_input{};
+        expected_input.parent.world_x = static_cast<float>(owner->world_x());
+        expected_input.parent.world_y = static_cast<float>(owner->world_y());
+        expected_input.parent.world_z = static_cast<float>(owner->world_z());
+        expected_input.parent.resolution_layer =
+            owner->grid_point() ? owner->grid_point()->resolution_layer() : owner->grid_resolution;
+        expected_input.anchor_definition.anchor = *anchor;
+        expected_input.camera_state.camera = &cam;
+
+        anchored_child_placement::PlacementOutput expected{};
+        if (!anchored_child_placement::resolve_child_placement(expected_input, expected) ||
+            !expected.has_child_screen_px) {
+            continue;
+        }
+
+        SDL_FPoint actual_child_screen{};
+        const bool have_actual_child = anchored_child_placement::project_child_pivot_screen(
+            cam,
+            child->smoothed_translation_x() + child->render_anchor_offset_x(),
+            child->smoothed_translation_y() + child->render_anchor_offset_y(),
+            static_cast<float>(child->world_z()) + child->world_z_offset() + child->render_anchor_offset_z(),
+            actual_child_screen);
+        if (!have_actual_child) {
+            continue;
+        }
+
+        if (is_debug_marker_in_bounds(expected.child_screen_px, screen_width, screen_height)) {
+            draw_filled_debug_dot(renderer, expected.child_screen_px, kAnchorParityRadiusPx, kAnchorParityColor);
+        }
+        if (is_debug_marker_in_bounds(actual_child_screen, screen_width, screen_height)) {
+            draw_filled_debug_dot(renderer, actual_child_screen, kChildParityRadiusPx, kChildParityColor);
+        }
+        if (is_debug_marker_in_bounds(expected.child_screen_px, screen_width, screen_height) ||
+            is_debug_marker_in_bounds(actual_child_screen, screen_width, screen_height)) {
+            SDL_SetRenderDrawColor(renderer,
+                                   kParityLineColor.r,
+                                   kParityLineColor.g,
+                                   kParityLineColor.b,
+                                   kParityLineColor.a);
+            SDL_RenderLine(renderer,
+                           expected.child_screen_px.x,
+                           expected.child_screen_px.y,
+                           actual_child_screen.x,
+                           actual_child_screen.y);
+        }
+
+        const float dx = actual_child_screen.x - expected.child_screen_px.x;
+        const float dy = actual_child_screen.y - expected.child_screen_px.y;
+        const float delta_px = std::sqrt(dx * dx + dy * dy);
+        const std::string mode_label = dev_mode ? "dev" : "normal";
+        vibble::log::debug(std::string("[AnchorParity][") + mode_label + "] owner='" +
+                           (owner->info ? owner->info->name : std::string{"<unknown>"}) +
+                           "' child='" +
+                           (child->info ? child->info->name : std::string{"<unknown>"}) +
+                           "' anchor='" + binding.anchor_name +
+                           "' delta_px=" + std::to_string(delta_px));
     }
 }
 
@@ -999,6 +1081,45 @@ SDL_Renderer* SceneRenderer::get_renderer() const {
     return renderer_;
 }
 
+void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
+    const int safe_w = std::max(1, screen_width);
+    const int safe_h = std::max(1, screen_height);
+    if (safe_w == screen_width_ && safe_h == screen_height_) {
+        return;
+    }
+
+    screen_width_ = safe_w;
+    screen_height_ = safe_h;
+    map_radius_world_ = static_cast<double>(std::max(screen_width_, screen_height_));
+
+    if (scene_composite_tex_) {
+        SDL_DestroyTexture(scene_composite_tex_);
+        scene_composite_tex_ = nullptr;
+    }
+    if (postprocess_tex_) {
+        SDL_DestroyTexture(postprocess_tex_);
+        postprocess_tex_ = nullptr;
+    }
+    if (blur_tex_) {
+        SDL_DestroyTexture(blur_tex_);
+        blur_tex_ = nullptr;
+    }
+}
+
+std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
+    SDL_Texture* target = postprocess_tex_ ? postprocess_tex_
+                                           : (scene_composite_tex_ ? scene_composite_tex_ : blur_tex_);
+    if (!target) {
+        return std::nullopt;
+    }
+    float w = 0.0f;
+    float h = 0.0f;
+    if (!SDL_GetTextureSize(target, &w, &h) || w <= 0.0f || h <= 0.0f) {
+        return std::nullopt;
+    }
+    return SDL_Point{static_cast<int>(std::lround(w)), static_cast<int>(std::lround(h))};
+}
+
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {
     debug_auto_paths_ = enabled;
 }
@@ -1030,6 +1151,8 @@ void SceneRenderer::render() {
         return;
     }
     SDL_SetRenderTarget(renderer_, nullptr);
+    SDL_SetRenderViewport(renderer_, nullptr);
+    SDL_SetRenderClipRect(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
     SDL_RenderClear(renderer_);
@@ -1217,7 +1340,12 @@ void SceneRenderer::render() {
     }
 
     if (anchor_point_debug_enabled_) {
-        render_anchor_debug_markers(renderer_, screen_width_, screen_height_, rendered_assets_for_debug);
+        render_anchor_debug_markers(renderer_,
+                                    cam,
+                                    screen_width_,
+                                    screen_height_,
+                                    rendered_assets_for_debug,
+                                    assets_ ? assets_->is_dev_mode() : false);
     }
 
     // Dev grid overlay is projected against the final scene output.

@@ -68,6 +68,9 @@ bool is_null_candidate_name(std::string_view name) {
     return true;
 }
 
+constexpr int kMapWideGridResolutionMin = 5;
+constexpr int kMapWideGridResolutionMax = 10;
+
 bool ensure_null_candidate_entry(json& entry) {
     if (!entry.is_object()) return false;
     auto it = entry.find("candidates");
@@ -229,9 +232,9 @@ public:
 
     CandidateListPanelImpl() : DockableCollapsible("Spawn Group Candidates", true) {
         set_scroll_enabled(true);
-        set_floating_content_width(480);
-        set_cell_width(420);
-        set_row_gap(8);
+        set_floating_content_width(520);
+        set_cell_width(460);
+        set_row_gap(10);
         set_col_gap(12);
         set_padding(12);
     }
@@ -291,9 +294,20 @@ public:
         }
 
         if (!display_name_widget_) display_name_widget_ = std::make_unique<LabelWidget>();
-        if (!candidates_header_) candidates_header_ = std::make_unique<LabelWidget>("Candidates");
         if (!instructions_label_) {
-            instructions_label_ = std::make_unique<LabelWidget>( "Scroll on a slice to adjust weight. Double-click to remove.", DMStyles::Label().color, true);
+            instructions_label_ = std::make_unique<LabelWidget>(
+                "Adjust the grid resolution and candidate weights for the map-wide batch.", DMStyles::Label().color, true);
+        }
+        if (!candidate_set_header_) {
+            candidate_set_header_ = std::make_unique<LabelWidget>();
+        }
+        if (!regen_button_) {
+            regen_button_ = std::make_unique<DMButton>("Regenerate Map Assets",
+                                                       &DMStyles::AccentButton(),
+                                                       200,
+                                                       DMButton::height());
+            regen_button_widget_ =
+                std::make_unique<ButtonWidget>(regen_button_.get(), [this]() { this->handle_regen(); });
         }
         if (!pie_widget_) {
             pie_widget_ = std::make_unique<CandidateEditorPieGraphWidget>();
@@ -313,10 +327,27 @@ public:
         }
         pie_widget_->set_on_add_candidate([this](const std::string& value) { this->add_candidate_from_search(value); });
 
+        const int resolution = current_grid_resolution();
+        if (!grid_resolution_stepper_) {
+            grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (2^r px)",
+                                                                          kMapWideGridResolutionMin,
+                                                                          kMapWideGridResolutionMax,
+                                                                          resolution);
+            grid_resolution_stepper_->set_step(1);
+            grid_resolution_stepper_->set_on_change([this](int value) { this->update_grid_resolution(value); });
+            grid_resolution_widget_ = std::make_unique<StepperWidget>(grid_resolution_stepper_.get());
+        } else {
+            grid_resolution_stepper_->set_value(resolution);
+        }
+
+        if (entry_) {
+            (*entry_)["grid_resolution"] = resolution;
+        }
+
         if (!ownership_label_.empty()) {
             set_title(ownership_label_ + " Candidates");
         } else {
-            set_title("Spawn Group Candidates");
+            set_title("Map-wide Candidates");
         }
 
         rebuild_rows(true);
@@ -338,20 +369,7 @@ public:
             return true;
         }
 
-        bool used = DockableCollapsible::handle_event(e);
-        if (!entry_ || !expanded_) {
-            return used;
-        }
-
-        if (grid_resolution_slider_ && grid_resolution_slider_->handle_event(e)) {
-            used = true;
-            if (entry_) {
-                (*entry_)["grid_resolution"] = grid_resolution_slider_->value();
-                notify_save(false);
-            }
-        }
-
-        return used;
+        return DockableCollapsible::handle_event(e);
     }
 
     void update(const Input& input, int screen_w, int screen_h) override {
@@ -422,33 +440,25 @@ private:
             rows.push_back({display_name_widget_.get()});
         }
 
-        if (candidates_header_) {
-            candidates_header_->set_subtle(false);
-            rows.push_back({candidates_header_.get()});
-        }
-
         if (instructions_label_) {
             instructions_label_->set_subtle(true);
             rows.push_back({instructions_label_.get()});
         }
 
-        if (!grid_resolution_slider_) {
-            constexpr int kMinResolution = 5;
-            constexpr int kMaxResolution = 10;
-            int current_resolution = kMinResolution;
-            if (entry_ && entry_->contains("grid_resolution")) {
-                current_resolution = std::max(kMinResolution, entry_->value("grid_resolution", kMinResolution));
-            }
-            grid_resolution_slider_ = std::make_unique<DMSlider>("Grid Resolution (2^r px)", kMinResolution, kMaxResolution, current_resolution);
-
-            if (entry_) {
-                (*entry_)["grid_resolution"] = current_resolution;
-            }
+        if (regen_button_widget_) {
+            rows.push_back({regen_button_widget_.get()});
         }
-        if (grid_resolution_slider_) {
-            auto grid_slider_widget = std::make_unique<SliderWidget>(grid_resolution_slider_.get());
-            rows.push_back({grid_slider_widget.get()});
-            widgets_.push_back(std::move(grid_slider_widget));
+
+        if (candidate_set_header_) {
+            candidate_set_header_->set_text("Candidate Set 1");
+            candidate_set_header_->set_subtle(false);
+            rows.push_back({candidate_set_header_.get()});
+        }
+
+        if (grid_resolution_widget_ && grid_resolution_stepper_) {
+            const int resolution = current_grid_resolution();
+            grid_resolution_stepper_->set_value(resolution);
+            rows.push_back({grid_resolution_widget_.get()});
         }
 
         if (pie_widget_) {
@@ -528,6 +538,25 @@ private:
         }
     }
 
+    int current_grid_resolution() const {
+        if (!entry_) return kMapWideGridResolutionMin;
+        int value = entry_->value("grid_resolution", kMapWideGridResolutionMin);
+        return clamp_map_grid_resolution(value);
+    }
+
+    static int clamp_map_grid_resolution(int value) {
+        int clamped = std::clamp(value, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+        clamped = vibble::grid::clamp_resolution(clamped);
+        return std::clamp(clamped, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+    }
+
+    void update_grid_resolution(int value) {
+        if (!entry_) return;
+        const int resolved = clamp_map_grid_resolution(value);
+        (*entry_)["grid_resolution"] = resolved;
+        notify_save(false);
+    }
+
     json* entry_ = nullptr;
     std::string default_display_name_{};
     std::string ownership_label_{};
@@ -542,11 +571,13 @@ private:
 
     std::unique_ptr<LabelWidget> ownership_label_widget_{};
     std::unique_ptr<LabelWidget> display_name_widget_{};
-    std::unique_ptr<LabelWidget> candidates_header_{};
     std::unique_ptr<LabelWidget> instructions_label_{};
+    std::unique_ptr<LabelWidget> candidate_set_header_{};
     std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget_{};
-    std::unique_ptr<DMSlider> grid_resolution_slider_{};
-    std::vector<std::unique_ptr<Widget>> widgets_{};
+    std::unique_ptr<DMButton> regen_button_{};
+    std::unique_ptr<ButtonWidget> regen_button_widget_{};
+    std::unique_ptr<DMNumericStepper> grid_resolution_stepper_{};
+    std::unique_ptr<StepperWidget> grid_resolution_widget_{};
 };
 
 class BoundaryCandidateListPanelImpl : public DockableCollapsible {

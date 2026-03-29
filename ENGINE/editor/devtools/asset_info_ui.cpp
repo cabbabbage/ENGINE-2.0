@@ -721,29 +721,20 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
 
 AssetInfoUI::AssetInfoUI() {
     rebuild_default_sections();
-    if (!configure_btn_) {
-        configure_btn_ = std::make_unique<DMButton>("Configure Animations", &DMStyles::CreateButton(), 220, DMButton::height());
-    }
-    if (!configure_btn_widget_) {
-        configure_btn_widget_ = std::make_unique<ButtonWidget>(configure_btn_.get(), [this]() {
-            if (!animation_editor_window_) {
-                return;
-            }
-            if (animation_editor_window_->is_visible()) {
-                animation_editor_window_->set_visible(false);
-            } else if (info_) {
-                if (animation_editor_rect_.w > 0 && animation_editor_rect_.h > 0) {
-                    animation_editor_window_->set_bounds(animation_editor_rect_);
-                }
-                animation_editor_window_->set_visible(true);
-            }
-        });
-    }
     if (!animation_editor_window_) {
         animation_editor_window_ = std::make_unique<animation_editor::AnimationEditorWindow>();
         if (animation_editor_window_) {
             animation_editor_window_->set_manifest_store(manifest_store_);
             animation_editor_window_->set_on_document_saved([this]() { this->on_animation_document_saved(); });
+            animation_editor_window_->set_on_closed([this]() {
+                if (!animation_editor_fullscreen_mode_) {
+                    return;
+                }
+                animation_editor_fullscreen_mode_ = false;
+                if (on_animation_editor_closed_) {
+                    on_animation_editor_closed_();
+                }
+            });
         }
     }
 
@@ -788,10 +779,6 @@ AssetInfoUI::AssetInfoUI() {
             section->set_rect(rect); // keep event hit-testing aligned with current scroll/layout
             y += measured + ctx.gap;
         }
-        if (configure_btn_widget_) {
-            configure_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
-            y += DMButton::height() + ctx.gap;
-        }
         if (duplicate_btn_widget_) {
             duplicate_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
             y += DMButton::height() + ctx.gap;
@@ -810,7 +797,6 @@ AssetInfoUI::AssetInfoUI() {
             SDL_Rect bounds = (i < section_bounds_.size()) ? section_bounds_[i] : SDL_Rect{0,0,0,0};
             section->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
         }
-        if (configure_btn_) configure_btn_->render(renderer);
         if (duplicate_btn_) duplicate_btn_->render(renderer);
         if (delete_btn_) delete_btn_->render(renderer);
     });
@@ -894,9 +880,6 @@ AssetInfoUI::AssetInfoUI() {
             if (handle_section_event(candidate)) {
                 return true;
             }
-        }
-        if (configure_btn_widget_ && configure_btn_widget_->handle_event(e)) {
-            return true;
         }
         if (duplicate_btn_widget_ && duplicate_btn_widget_->handle_event(e)) return true;
         if (delete_btn_widget_ && delete_btn_widget_->handle_event(e)) return true;
@@ -1074,6 +1057,7 @@ void AssetInfoUI::open()  {
 void AssetInfoUI::close() {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
+    animation_editor_fullscreen_mode_ = false;
     apply_camera_override(false);
     visible_ = false;
     container_.close();
@@ -1117,6 +1101,36 @@ void AssetInfoUI::open_animation_editor_panel() {
     }
 }
 
+void AssetInfoUI::close_animation_editor_panel() {
+    pending_animation_editor_open_ = false;
+    if (animation_editor_window_) {
+        animation_editor_window_->set_visible(false);
+    }
+}
+
+bool AssetInfoUI::is_animation_editor_open() const {
+    return animation_editor_window_ && animation_editor_window_->is_visible();
+}
+
+void AssetInfoUI::set_animation_editor_fullscreen_mode(bool enabled) {
+    if (animation_editor_fullscreen_mode_ == enabled) {
+        return;
+    }
+    animation_editor_fullscreen_mode_ = enabled;
+    if (animation_editor_fullscreen_mode_) {
+        if (last_screen_w_ > 0 && last_screen_h_ > 0) {
+            animation_editor_rect_ = SDL_Rect{0, 0, last_screen_w_, last_screen_h_};
+        }
+    } else {
+        animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
+    container_.request_layout();
+}
+
+void AssetInfoUI::set_on_animation_editor_closed(std::function<void()> callback) {
+    on_animation_editor_closed_ = std::move(callback);
+}
+
 bool AssetInfoUI::is_locked() const {
     for (const auto& section : sections_) {
         if (section && section->isLocked()) {
@@ -1127,6 +1141,15 @@ bool AssetInfoUI::is_locked() const {
 }
 
 void AssetInfoUI::layout_widgets(int screen_w, int screen_h) const {
+    if (animation_editor_fullscreen_mode_) {
+        if (screen_w > 0 && screen_h > 0) {
+            animation_editor_rect_ = SDL_Rect{0, 0, screen_w, screen_h};
+        } else {
+            animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
+        return;
+    }
+
     container_.prepare_layout(screen_w, screen_h);
     const SDL_Rect& panel = container_.panel_rect();
     int editor_width = panel.x;
@@ -1237,6 +1260,27 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
 
     if (!visible_) return false;
 
+    if (animation_editor_fullscreen_mode_) {
+        if (animation_editor_window_ && animation_editor_window_->is_visible() &&
+            animation_editor_window_->handle_event(e)) {
+            return true;
+        }
+        if (pointer_event || wheel_event) {
+            SDL_Point p = pointer;
+            if (wheel_event) {
+                sdl_mouse_util::GetMouseState(&p.x, &p.y);
+            }
+            if (animation_editor_rect_.w > 0 && animation_editor_rect_.h > 0 &&
+                SDL_PointInRect(&p, &animation_editor_rect_)) {
+                return true;
+            }
+        }
+        if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT) {
+            return true;
+        }
+        return false;
+    }
+
     if (showing_delete_popup_) {
         if (handle_delete_modal_event(e)) {
             return true;
@@ -1325,6 +1369,13 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
 
     if (!visible_) return;
 
+    if (animation_editor_fullscreen_mode_) {
+        if (save_coordinator_) {
+            save_coordinator_->tick();
+        }
+        return;
+    }
+
 
     if (info_ && asset_selector_ && asset_selector_->visible()) {
         asset_selector_->update(input);
@@ -1360,9 +1411,14 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     layout_widgets(screen_w, screen_h);
     last_renderer_ = r;
 
-    container_.render(r, screen_w, screen_h);
+    if (!animation_editor_fullscreen_mode_) {
+        container_.render(r, screen_w, screen_h);
+    }
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         animation_editor_window_->render(r);
+    }
+    if (animation_editor_fullscreen_mode_) {
+        return;
     }
 
     if (asset_selector_ && asset_selector_->visible())

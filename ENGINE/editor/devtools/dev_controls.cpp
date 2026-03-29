@@ -3003,7 +3003,6 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
             room_editor_->finalize_asset_drag(spawned, info);
         }
         assets_->open_asset_info_editor(info);
-        assets_->open_animation_editor_for_asset(info);
         assets_->show_dev_notice("Created asset '" + sanitized + "'", 1800);
     }
 

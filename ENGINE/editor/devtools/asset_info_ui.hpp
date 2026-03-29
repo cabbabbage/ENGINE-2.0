@@ -55,6 +55,11 @@ class AssetInfoUI {
     void pulse_header();
 
     void open_animation_editor_panel();
+    void close_animation_editor_panel();
+    bool is_animation_editor_open() const;
+    void set_animation_editor_fullscreen_mode(bool enabled);
+    void set_on_animation_editor_closed(std::function<void()> callback);
+    bool has_info() const { return static_cast<bool>(info_); }
     void set_assets(Assets* a);
     Assets* assets() const { return assets_; }
     void set_manifest_store(devmode::core::ManifestStore* store);
@@ -124,8 +129,8 @@ class AssetInfoUI {
 
     SlidingWindowContainer container_;
 
-    mutable std::unique_ptr<class DMButton> configure_btn_;
-    mutable std::unique_ptr<class ButtonWidget> configure_btn_widget_;
+    bool animation_editor_fullscreen_mode_ = false;
+    std::function<void()> on_animation_editor_closed_ = {};
     bool camera_override_active_ = false;
     bool prev_camera_realism_enabled_ = false;
     bool prev_camera_parallax_enabled_ = false;

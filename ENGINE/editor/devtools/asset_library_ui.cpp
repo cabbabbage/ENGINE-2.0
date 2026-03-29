@@ -1677,7 +1677,6 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
                 auto new_info = library_owner_->get(name);
                 if (new_info) {
                     assets_owner_->open_asset_info_editor(new_info);
-                    assets_owner_->open_animation_editor_for_asset(new_info);
                 }
             }
         }

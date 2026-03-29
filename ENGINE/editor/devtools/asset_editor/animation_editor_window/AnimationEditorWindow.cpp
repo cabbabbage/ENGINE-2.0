@@ -490,6 +490,7 @@ AnimationEditorWindow::~AnimationEditorWindow() {
 }
 
 void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
+    const bool notify_closed = (!visible && visible_ && process_close);
     if (!visible && visible_ && process_close) {
         close_defaults_modal();
 
@@ -511,6 +512,9 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
         }
     }
     visible_ = visible;
+    if (notify_closed && on_closed_) {
+        on_closed_();
+    }
 }
 
 void AnimationEditorWindow::toggle_visible() { set_visible(!visible_); }
@@ -1238,6 +1242,10 @@ void AnimationEditorWindow::delete_animation_with_confirmation(const std::string
 
 void AnimationEditorWindow::set_on_document_saved(std::function<void()> callback) {
     on_document_saved_ = std::move(callback);
+}
+
+void AnimationEditorWindow::set_on_closed(std::function<void()> callback) {
+    on_closed_ = std::move(callback);
 }
 
 void AnimationEditorWindow::set_on_animation_properties_changed(std::function<void(const std::string&, const nlohmann::json&)> callback) {

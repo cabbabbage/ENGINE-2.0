@@ -64,6 +64,7 @@ class AnimationEditorWindow {
     void focus_animation(const std::string& animation_id);
 
     void set_on_document_saved(std::function<void()> callback);
+    void set_on_closed(std::function<void()> callback);
     void set_on_animation_properties_changed(std::function<void(const std::string&, const nlohmann::json&)> callback);
 
     std::shared_ptr<AnimationDocument> document() const { return document_; }
@@ -185,6 +186,7 @@ class AnimationEditorWindow {
     bool auto_save_pending_ = false;
     int auto_save_timer_frames_ = 0;
     std::function<void()> on_document_saved_;
+    std::function<void()> on_closed_;
     std::function<void(const std::string&, const nlohmann::json&)> external_animation_properties_changed_;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::ManifestStore::AssetTransaction manifest_transaction_;

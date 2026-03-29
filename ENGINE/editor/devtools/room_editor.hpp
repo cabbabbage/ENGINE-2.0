@@ -389,6 +389,7 @@ private:
     bool can_enter_asset_editor_subview(AssetEditorSubview subview) const;
     void cycle_asset_editor_subview();
     void set_asset_editor_subview(AssetEditorSubview subview, bool animate);
+    void on_animation_editor_closed();
     void begin_asset_editor_transition(AssetEditorSubview from, AssetEditorSubview to);
     void update_asset_editor_transition();
     void apply_asset_editor_panel_overrides();
@@ -567,6 +568,7 @@ private:
 
     enum class AssetEditorSubview {
         AssetInfo,
+        AnimationEditor,
         Anchor,
         Movement,
         Hitbox,
@@ -667,6 +669,7 @@ private:
         int duration_frames = 12;
     };
     AssetEditorSubview asset_editor_subview_ = AssetEditorSubview::AssetInfo;
+    AssetEditorSubview previous_non_animation_subview_ = AssetEditorSubview::AssetInfo;
     AssetEditorTransitionState asset_editor_transition_{};
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;

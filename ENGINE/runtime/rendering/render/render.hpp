@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -99,6 +100,10 @@ public:
 
     void render();
     SDL_Renderer* get_renderer() const;
+    void set_output_dimensions(int screen_width, int screen_height);
+    int output_width() const { return screen_width_; }
+    int output_height() const { return screen_height_; }
+    std::optional<SDL_Point> postprocess_target_size() const;
 
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return debug_auto_paths_; }

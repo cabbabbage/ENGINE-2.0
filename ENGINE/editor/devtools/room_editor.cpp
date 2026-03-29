@@ -38,6 +38,7 @@
 #include "room_overlay_renderer.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
@@ -588,6 +589,41 @@ constexpr int kMaxScreenCoordMagnitude = 1 << 20;
 constexpr int kAnchorHandlePickRadiusPx = 12;
 constexpr int kShiftAnchorHoverRadiusPx = 20;
 constexpr int kShiftAnchorSelectRadiusPx = 24;
+
+bool is_debug_marker_in_bounds(const SDL_FPoint& point, int screen_width, int screen_height) {
+    if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
+        return false;
+    }
+    constexpr float kMargin = 16.0f;
+    return point.x >= -kMargin &&
+           point.y >= -kMargin &&
+           point.x <= static_cast<float>(screen_width) + kMargin &&
+           point.y <= static_cast<float>(screen_height) + kMargin;
+}
+
+void draw_filled_debug_dot(SDL_Renderer* renderer,
+                           const SDL_FPoint& center,
+                           int radius_px,
+                           const SDL_Color& color) {
+    if (!renderer || radius_px <= 0) {
+        return;
+    }
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    const int cx = static_cast<int>(std::lround(center.x));
+    const int cy = static_cast<int>(std::lround(center.y));
+    for (int dy = -radius_px; dy <= radius_px; ++dy) {
+        const int inside = radius_px * radius_px - dy * dy;
+        if (inside < 0) {
+            continue;
+        }
+        const int dx = static_cast<int>(std::floor(std::sqrt(static_cast<float>(inside))));
+        SDL_RenderLine(renderer,
+                       static_cast<float>(cx - dx),
+                       static_cast<float>(cy + dy),
+                       static_cast<float>(cx + dx),
+                       static_cast<float>(cy + dy));
+    }
+}
 
 int floor_div(int value, int divisor) {
     if (divisor == 0) {
@@ -1923,7 +1959,8 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         if (!info_ui_ || !info_ui_->is_visible()) {
             return result;
         }
-        if (asset_editor_subview_ != AssetEditorSubview::AssetInfo) {
+        if (asset_editor_subview_ != AssetEditorSubview::AssetInfo &&
+            asset_editor_subview_ != AssetEditorSubview::AnimationEditor) {
             return result;
         }
         if (info_ui_->handle_event(event)) {
@@ -2830,6 +2867,90 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
+        if (assets_->anchor_point_debug_enabled()) {
+            const auto bindings =
+                anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().debug_bindings_snapshot();
+            constexpr SDL_Color kAnchorParityColor{255, 224, 64, 255};
+            constexpr SDL_Color kChildParityColor{64, 255, 160, 255};
+            constexpr SDL_Color kParityLineColor{255, 224, 64, 190};
+            constexpr int kMarkerRadiusPx = 4;
+
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            for (const auto& binding : bindings) {
+                Asset* owner = binding.owner;
+                Asset* child = binding.child_asset;
+                if (!owner || !child || owner->dead || child->dead || binding.anchor_name.empty()) {
+                    continue;
+                }
+                if (!asset_belongs_to_room(owner) && !asset_belongs_to_room(child)) {
+                    continue;
+                }
+
+                const auto anchor = owner->anchor_state(binding.anchor_name,
+                                                        anchor_points::GridMaterialization::None,
+                                                        Asset::AnchorResolveMode::ForceRecompute);
+                if (!anchor.has_value() || !anchor->is_active()) {
+                    continue;
+                }
+
+                anchored_child_placement::PlacementInput expected_input{};
+                expected_input.parent.world_x = static_cast<float>(owner->world_x());
+                expected_input.parent.world_y = static_cast<float>(owner->world_y());
+                expected_input.parent.world_z = static_cast<float>(owner->world_z());
+                expected_input.parent.resolution_layer =
+                    owner->grid_point() ? owner->grid_point()->resolution_layer() : owner->grid_resolution;
+                expected_input.anchor_definition.anchor = *anchor;
+                expected_input.camera_state.camera = &cam;
+
+                anchored_child_placement::PlacementOutput expected{};
+                if (!anchored_child_placement::resolve_child_placement(expected_input, expected) ||
+                    !expected.has_child_screen_px) {
+                    continue;
+                }
+
+                SDL_FPoint actual_child_screen{};
+                if (!anchored_child_placement::project_child_pivot_screen(
+                        cam,
+                        child->smoothed_translation_x() + child->render_anchor_offset_x(),
+                        child->smoothed_translation_y() + child->render_anchor_offset_y(),
+                        static_cast<float>(child->world_z()) + child->world_z_offset() +
+                            child->render_anchor_offset_z(),
+                        actual_child_screen)) {
+                    continue;
+                }
+
+                if (is_debug_marker_in_bounds(expected.child_screen_px, screen_w_, screen_h_)) {
+                    draw_filled_debug_dot(renderer, expected.child_screen_px, kMarkerRadiusPx, kAnchorParityColor);
+                }
+                if (is_debug_marker_in_bounds(actual_child_screen, screen_w_, screen_h_)) {
+                    draw_filled_debug_dot(renderer, actual_child_screen, kMarkerRadiusPx, kChildParityColor);
+                }
+                if (is_debug_marker_in_bounds(expected.child_screen_px, screen_w_, screen_h_) ||
+                    is_debug_marker_in_bounds(actual_child_screen, screen_w_, screen_h_)) {
+                    SDL_SetRenderDrawColor(renderer,
+                                           kParityLineColor.r,
+                                           kParityLineColor.g,
+                                           kParityLineColor.b,
+                                           kParityLineColor.a);
+                    SDL_RenderLine(renderer,
+                                   expected.child_screen_px.x,
+                                   expected.child_screen_px.y,
+                                   actual_child_screen.x,
+                                   actual_child_screen.y);
+                }
+
+                const float dx = actual_child_screen.x - expected.child_screen_px.x;
+                const float dy = actual_child_screen.y - expected.child_screen_px.y;
+                const float delta_px = std::sqrt(dx * dx + dy * dy);
+                vibble::log::debug(std::string("[AnchorParity][dev] owner='") +
+                                   (owner->info ? owner->info->name : std::string{"<unknown>"}) +
+                                   "' child='" +
+                                   (child->info ? child->info->name : std::string{"<unknown>"}) +
+                                   "' anchor='" + binding.anchor_name +
+                                   "' delta_px=" + std::to_string(delta_px));
+            }
+        }
+
         render_dynamic_boundary_proxy_overlay(renderer);
 
         const bool has_selected = !selected_assets_.empty();
@@ -3188,6 +3309,7 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
         if (info_ui_) {
             info_ui_->set_save_coordinator(save_coordinator_);
             info_ui_->set_manifest_store(manifest_store_);
+            info_ui_->set_on_animation_editor_closed([this]() { this->on_animation_editor_closed(); });
         }
         info_ui_->set_header_visibility_callback([this](bool visible) {
             asset_info_panel_visible_ = visible;
@@ -3198,6 +3320,8 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
     }
     if (info_ui_) info_ui_->set_assets(assets_);
     if (info_ui_) {
+        info_ui_->set_animation_editor_fullscreen_mode(false);
+        info_ui_->close_animation_editor_panel();
         info_ui_->clear_info();
         info_ui_->set_info(info);
         info_ui_->set_target_asset(nullptr);
@@ -3212,13 +3336,11 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
     hitbox_edit_ = BoxEditState{};
     attack_box_edit_ = BoxEditState{};
     active_modal_ = ActiveModal::AssetInfo;
+    previous_non_animation_subview_ = AssetEditorSubview::AssetInfo;
 }
 
 void RoomEditor::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info) {
     open_asset_info_editor(info);
-    if (info_ui_) {
-        info_ui_->open_animation_editor_panel();
-    }
 }
 
 void RoomEditor::open_asset_info_editor_for_asset(Asset* asset, bool focus_camera) {
@@ -3281,6 +3403,7 @@ void RoomEditor::close_asset_info_editor() {
         active_modal_ = ActiveModal::None;
     }
     asset_editor_subview_ = AssetEditorSubview::AssetInfo;
+    previous_non_animation_subview_ = AssetEditorSubview::AssetInfo;
     asset_editor_transition_.active = false;
 }
 
@@ -6529,12 +6652,14 @@ bool RoomEditor::apply_attack_box_current_frame_to_scope(EditorFramePropagationS
 }
 
 bool RoomEditor::should_show_asset_editor_navigation() const {
-    return enabled_ && asset_editor_tab_scope_active();
+    return enabled_ && asset_editor_tab_scope_active() &&
+           asset_editor_subview_ != AssetEditorSubview::AnimationEditor;
 }
 
 RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditorSubview subview) const {
     switch (subview) {
-        case AssetEditorSubview::AssetInfo: return AssetEditorSubview::Anchor;
+        case AssetEditorSubview::AssetInfo: return AssetEditorSubview::AnimationEditor;
+        case AssetEditorSubview::AnimationEditor: return AssetEditorSubview::Anchor;
         case AssetEditorSubview::Anchor: return AssetEditorSubview::Movement;
         case AssetEditorSubview::Movement: return AssetEditorSubview::Hitbox;
         case AssetEditorSubview::Hitbox: return AssetEditorSubview::AttackBox;
@@ -6546,6 +6671,9 @@ RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditor
 bool RoomEditor::can_enter_asset_editor_subview(AssetEditorSubview subview) const {
     if (subview == AssetEditorSubview::AssetInfo) {
         return info_ui_ != nullptr;
+    }
+    if (subview == AssetEditorSubview::AnimationEditor) {
+        return info_ui_ && info_ui_->has_info();
     }
 
     Asset* target = selected_anchor_mode_asset();
@@ -6566,7 +6694,7 @@ void RoomEditor::cycle_asset_editor_subview() {
     }
 
     AssetEditorSubview candidate = asset_editor_subview_;
-    constexpr int kAssetEditorSubviewCount = 5;
+    constexpr int kAssetEditorSubviewCount = 6;
     for (int i = 0; i < kAssetEditorSubviewCount; ++i) {
         candidate = next_asset_editor_subview(candidate);
         if (!can_enter_asset_editor_subview(candidate)) {
@@ -6595,6 +6723,14 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
         return;
     }
 
+    if (subview == AssetEditorSubview::AnimationEditor && previous != AssetEditorSubview::AnimationEditor) {
+        previous_non_animation_subview_ = previous;
+    }
+
+    if (previous == AssetEditorSubview::AnimationEditor && subview != AssetEditorSubview::AnimationEditor) {
+        info_ui_->set_animation_editor_fullscreen_mode(false);
+        info_ui_->close_animation_editor_panel();
+    }
     if (previous == AssetEditorSubview::Anchor && subview != AssetEditorSubview::Anchor) {
         exit_anchor_edit_mode(true);
     }
@@ -6609,7 +6745,14 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
     }
 
     bool enter_success = true;
-    if (subview == AssetEditorSubview::Anchor) {
+    if (subview == AssetEditorSubview::AnimationEditor) {
+        if (!info_ui_->has_info()) {
+            enter_success = false;
+        } else {
+            info_ui_->set_animation_editor_fullscreen_mode(true);
+            info_ui_->open_animation_editor_panel();
+        }
+    } else if (subview == AssetEditorSubview::Anchor) {
         if (!enter_anchor_edit_mode()) {
             enter_success = false;
         }
@@ -6630,7 +6773,11 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
     }
 
     if (!enter_success) {
-        if (previous == AssetEditorSubview::AssetInfo) {
+        if (previous == AssetEditorSubview::AnimationEditor) {
+            info_ui_->set_animation_editor_fullscreen_mode(true);
+            info_ui_->open_animation_editor_panel();
+            active_modal_ = ActiveModal::AssetInfo;
+        } else if (previous == AssetEditorSubview::AssetInfo) {
             if (!info_ui_->is_visible()) {
                 info_ui_->open();
             }
@@ -6648,7 +6795,16 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
         return;
     }
 
-    if (subview != AssetEditorSubview::AssetInfo) {
+    if (subview == AssetEditorSubview::AnimationEditor) {
+        if (!info_ui_->is_visible()) {
+            info_ui_->open();
+        }
+        info_ui_->clear_panel_bounds_override();
+        info_ui_->set_animation_editor_fullscreen_mode(true);
+        active_modal_ = ActiveModal::AssetInfo;
+    } else if (subview != AssetEditorSubview::AssetInfo) {
+        info_ui_->set_animation_editor_fullscreen_mode(false);
+        info_ui_->close_animation_editor_panel();
         if (info_ui_->is_visible()) {
             info_ui_->close();
         }
@@ -6657,6 +6813,8 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
             active_modal_ = ActiveModal::None;
         }
     } else {
+        info_ui_->set_animation_editor_fullscreen_mode(false);
+        info_ui_->close_animation_editor_panel();
         if (!info_ui_->is_visible()) {
             info_ui_->open();
         }
@@ -6670,6 +6828,17 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
         asset_editor_transition_.active = false;
     }
     update_asset_editor_layout();
+}
+
+void RoomEditor::on_animation_editor_closed() {
+    if (asset_editor_subview_ != AssetEditorSubview::AnimationEditor) {
+        return;
+    }
+    AssetEditorSubview fallback = previous_non_animation_subview_;
+    if (!can_enter_asset_editor_subview(fallback) || fallback == AssetEditorSubview::AnimationEditor) {
+        fallback = AssetEditorSubview::AssetInfo;
+    }
+    set_asset_editor_subview(fallback, true);
 }
 
 void RoomEditor::update_asset_editor_transition() {
@@ -6746,8 +6915,13 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     };
 
     if (asset_editor_subview_ == AssetEditorSubview::AssetInfo) {
+        info_ui_->set_animation_editor_fullscreen_mode(false);
         info_ui_->set_panel_bounds_override(place_rect(AssetEditorSubview::AssetInfo, asset_info_rect));
+    } else if (asset_editor_subview_ == AssetEditorSubview::AnimationEditor) {
+        info_ui_->set_animation_editor_fullscreen_mode(true);
+        info_ui_->clear_panel_bounds_override();
     } else {
+        info_ui_->set_animation_editor_fullscreen_mode(false);
         info_ui_->clear_panel_bounds_override();
     }
 
@@ -6798,7 +6972,7 @@ void RoomEditor::update_asset_editor_layout() {
     anchor_navigation_panel_->set_screen_dimensions(screen_w_, screen_h_);
     anchor_navigation_panel_->set_visible(should_show_asset_editor_navigation());
 
-    if (asset_editor_tab_scope_active()) {
+    if (asset_editor_tab_scope_active() && should_show_asset_editor_navigation()) {
         std::string center_value = "No Animation | Frame";
         std::function<void()> on_up = []() {};
         std::function<void()> on_down = []() {};

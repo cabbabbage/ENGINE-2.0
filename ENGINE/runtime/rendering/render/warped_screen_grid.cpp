@@ -7,6 +7,7 @@
 #include "utils/log.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "rendering/render/render_depth_policy.hpp"
+#include "rendering/render/screen_space_math.hpp"
 
 #include <algorithm>
 #include <array>
@@ -91,14 +92,8 @@ namespace {
                                    double ndc_y,
                                    int screen_width,
                                    int screen_height) {
-        const double scaled_x = ndc_x * cam.screen_zoom;
-        const double scaled_y = ndc_y * cam.screen_zoom;
-        const double screen_x = (scaled_x * 0.5 + 0.5) * static_cast<double>(screen_width);
-        const double screen_y = (0.5 - scaled_y * 0.5) * static_cast<double>(screen_height) + cam.screen_pan_y_px;
-        return SDL_FPoint{
-            static_cast<float>(screen_x),
-            static_cast<float>(screen_y)
-        };
+        return render::screen_space::ndc_to_screen(
+            ndc_x, ndc_y, screen_width, screen_height, cam.screen_zoom, cam.screen_pan_y_px);
     }
 
     std::pair<double, double> screen_to_ndc_point(const CameraState& cam,
@@ -106,14 +101,9 @@ namespace {
                                                   double screen_y,
                                                   int screen_width,
                                                   int screen_height) {
-        const double safe_w = static_cast<double>(std::max(1, screen_width));
-        const double safe_h = static_cast<double>(std::max(1, screen_height));
-        const double ndc_x_scaled = (screen_x / safe_w) * 2.0 - 1.0;
-        const double ndc_y_scaled = 1.0 - ((screen_y - cam.screen_pan_y_px) / safe_h) * 2.0;
-        const double inv_zoom = (cam.inv_screen_zoom > 0.0 && std::isfinite(cam.inv_screen_zoom))
-            ? cam.inv_screen_zoom
-            : 1.0;
-        return std::pair<double, double>{ ndc_x_scaled * inv_zoom, ndc_y_scaled * inv_zoom };
+        (void)cam.inv_screen_zoom;
+        return render::screen_space::screen_to_ndc(
+            screen_x, screen_y, screen_width, screen_height, cam.screen_zoom, cam.screen_pan_y_px);
     }
 
     struct ScreenBounds {
@@ -680,6 +670,23 @@ void WarpedScreenGrid::set_screen_center(SDL_Point p, bool snap_immediately) {
     if (center_changed) {
         invalidate_camera_cache();
     }
+}
+
+void WarpedScreenGrid::set_screen_dimensions(int screen_width, int screen_height) {
+    const int safe_w = std::max(1, screen_width);
+    const int safe_h = std::max(1, screen_height);
+    if (safe_w == screen_width_ && safe_h == screen_height_) {
+        return;
+    }
+
+    screen_width_ = safe_w;
+    screen_height_ = safe_h;
+    aspect_ = static_cast<double>(screen_width_) / static_cast<double>(screen_height_);
+
+    const SDL_Point center = get_screen_center();
+    base_view_ = make_rect_area("base_view", center, screen_width_, screen_height_, 0);
+    invalidate_camera_cache();
+    recompute_current_view();
 }
 
 const CameraState& WarpedScreenGrid::camera_state_cached() const {
@@ -1493,14 +1500,22 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         constexpr float kCullBoundsSafetyInflation = 1.15f;
         authored_scale *= kCullBoundsSafetyInflation;
 
-        const float fw = static_cast<float>(std::max(1, asset->info->original_canvas_width));
-        const float fh = static_cast<float>(std::max(1, asset->info->original_canvas_height));
-        const float width = fw * authored_scale;
-        const float height = fh * authored_scale;
+        float width = asset->runtime_width_px();
+        float height = asset->runtime_height_px();
+        if (!(std::isfinite(width) && width > 0.0f)) {
+            width = static_cast<float>(std::max(1, asset->info->original_canvas_width)) * authored_scale;
+        } else {
+            width *= kCullBoundsSafetyInflation;
+        }
+        if (!(std::isfinite(height) && height > 0.0f)) {
+            height = static_cast<float>(std::max(1, asset->info->original_canvas_height)) * authored_scale;
+        } else {
+            height *= kCullBoundsSafetyInflation;
+        }
         const float half_w = width * 0.5f;
 
-        float center_x = asset->smoothed_translation_x();
-        float bottom = asset->smoothed_translation_y();
+        float center_x = static_cast<float>(asset->world_x()) + asset->render_anchor_offset_x();
+        float bottom = static_cast<float>(asset->world_y()) + asset->render_anchor_offset_y();
         if (!std::isfinite(center_x)) {
             center_x = static_cast<float>(asset->world_x());
         }
@@ -1520,7 +1535,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         if (!asset) {
             return false;
         }
-        const double asset_z = base_world_z;
+        (void)base_world_z;
+        const double asset_z = static_cast<double>(asset->world_z()) +
+                               static_cast<double>(asset->world_z_offset()) +
+                               static_cast<double>(asset->render_anchor_offset_z());
         if (auto bounds = compute_bounds(asset, gp)) {
             const Bounds2D& b = *bounds;
             const std::array<std::pair<double, double>, 4> corners{
@@ -1535,8 +1553,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 }
             }
         }
-        float center_x = asset->smoothed_translation_x();
-        float center_y = asset->smoothed_translation_y();
+        float center_x = static_cast<float>(asset->world_x()) + asset->render_anchor_offset_x();
+        float center_y = static_cast<float>(asset->world_y()) + asset->render_anchor_offset_y();
         if (!std::isfinite(center_x)) {
             center_x = static_cast<float>(asset->world_x());
         }

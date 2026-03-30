@@ -533,6 +533,17 @@ TEST_CASE("ChildAsset anchor binding applies flat-point perspective override and
     CHECK(sample.source == Asset::PerspectiveSource::AnchorBindingOverride);
     CHECK(sample.scale == doctest::Approx(2.4f));
 
+    // Bound-child perspective should follow the parent/grid sample source, not anchor offset drift.
+    anchor_spec.offset_x = 50;
+    anchor_spec.offset_y = -35;
+    anchor_spec.offset_z = 12;
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+    child->update();
+    sample = spawned->runtime_perspective_sample();
+    CHECK(spawned->has_anchor_perspective_override());
+    CHECK(sample.source == Asset::PerspectiveSource::AnchorBindingOverride);
+    CHECK(sample.scale == doctest::Approx(2.4f));
+
     anchor_spec.hidden = true;
     test_child_asset_runtime::set_anchor(*owner, anchor_spec);
     child->update();

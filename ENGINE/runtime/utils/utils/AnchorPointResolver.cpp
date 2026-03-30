@@ -537,54 +537,6 @@ bool build_symmetric_camera_ray_extrusion(const Asset& asset,
     return valid;
 }
 
-bool compute_flat_point_perspective_scale(const WarpedScreenGrid& cam,
-                                          const AnchorWorldPoint3& flat_point,
-                                          float& out_scale) {
-    out_scale = 1.0f;
-    if (!flat_point.valid) {
-        return false;
-    }
-
-    const render_projection::WorldPoint3 origin{
-        flat_point.x,
-        flat_point.y,
-        flat_point.z,
-        true};
-    SDL_FPoint origin_screen{};
-    if (!render_projection::project_world_to_screen(cam, origin, origin_screen)) {
-        return false;
-    }
-
-    auto sample_scale_for_delta = [&](float dx, float dy, float dz) -> std::optional<float> {
-        const render_projection::WorldPoint3 shifted{
-            flat_point.x + dx,
-            flat_point.y + dy,
-            flat_point.z + dz,
-            true};
-        SDL_FPoint shifted_screen{};
-        if (!render_projection::project_world_to_screen(cam, shifted, shifted_screen)) {
-            return std::nullopt;
-        }
-        const double delta_x = static_cast<double>(shifted_screen.x) - static_cast<double>(origin_screen.x);
-        const double delta_y = static_cast<double>(shifted_screen.y) - static_cast<double>(origin_screen.y);
-        const double distance = std::sqrt(delta_x * delta_x + delta_y * delta_y);
-        if (!std::isfinite(distance) || distance <= 1e-6) {
-            return std::nullopt;
-        }
-        return static_cast<float>(distance);
-    };
-
-    if (const auto x_scale = sample_scale_for_delta(1.0f, 0.0f, 0.0f)) {
-        out_scale = std::max(0.0001f, *x_scale);
-        return true;
-    }
-    if (const auto y_scale = sample_scale_for_delta(0.0f, 1.0f, 0.0f)) {
-        out_scale = std::max(0.0001f, *y_scale);
-        return true;
-    }
-    return false;
-}
-
 FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization grid_policy) {
@@ -687,9 +639,8 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.flat_relative_pixel_point.x,
         sample.flat_relative_pixel_point.y};
     sample.resolved.flat_world_exact_z = sample.flat_relative_pixel_point.z;
-    float flat_perspective_scale = 1.0f;
-    if (compute_flat_point_perspective_scale(cam, sample.flat_relative_pixel_point, flat_perspective_scale)) {
-        sample.resolved.flat_perspective_scale = flat_perspective_scale;
+    if (std::isfinite(render_perspective) && render_perspective > 0.0f) {
+        sample.resolved.flat_perspective_scale = std::max(0.0001f, render_perspective);
         sample.resolved.has_flat_perspective_scale = true;
     }
 

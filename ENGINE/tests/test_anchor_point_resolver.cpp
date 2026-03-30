@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <limits>
 #include <memory>
 
 #include "assets/asset/Asset.hpp"
@@ -158,4 +159,51 @@ TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z
     CHECK(sample.resolved.world_depth == doctest::Approx(sample.final_anchor_point.z).epsilon(1e-6));
     CHECK(sample.resolved.world_z == static_cast<int>(std::lround(sample.final_anchor_point.z)));
     CHECK(sample.resolved.depth_offset == doctest::Approx(2.5f).epsilon(1e-6));
+}
+
+TEST_CASE("Resolved anchor flat perspective scale is driven by parent perspective sample, not anchor texture position") {
+    Asset asset = make_test_asset(40, 55);
+    CHECK(asset.set_anchor_perspective_override(2.35f, std::nullopt));
+
+    DisplacedAssetAnchorPoint anchor_a{};
+    anchor_a.name = "a";
+    anchor_a.texture_x = 2;
+    anchor_a.texture_y = 3;
+    anchor_a.depth_offset = 0.0f;
+
+    DisplacedAssetAnchorPoint anchor_b{};
+    anchor_b.name = "b";
+    anchor_b.texture_x = 240;
+    anchor_b.texture_y = -120;
+    anchor_b.depth_offset = 0.0f;
+
+    const auto sample_a = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        anchor_a,
+        anchor_points::GridMaterialization::None);
+    const auto sample_b = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        anchor_b,
+        anchor_points::GridMaterialization::None);
+
+    if (sample_a.resolved.missing || sample_b.resolved.missing) {
+        // This resolver path requires a live runtime camera/assets context in non-world-test builds.
+        CHECK(sample_a.resolved.missing);
+        CHECK(sample_b.resolved.missing);
+        return;
+    }
+
+    REQUIRE_FALSE(sample_a.resolved.missing);
+    REQUIRE_FALSE(sample_b.resolved.missing);
+    REQUIRE(sample_a.resolved.has_flat_perspective_scale);
+    REQUIRE(sample_b.resolved.has_flat_perspective_scale);
+    CHECK(sample_a.resolved.flat_perspective_scale == doctest::Approx(2.35f).epsilon(1e-6));
+    CHECK(sample_b.resolved.flat_perspective_scale == doctest::Approx(2.35f).epsilon(1e-6));
+}
+
+TEST_CASE("Anchor perspective override rejects non-finite input and falls back to non-override source") {
+    Asset asset = make_test_asset(5, 7);
+    CHECK_FALSE(asset.set_anchor_perspective_override(std::numeric_limits<float>::quiet_NaN(), std::nullopt));
+    const Asset::PerspectiveSample sample = asset.runtime_perspective_sample();
+    CHECK(sample.source != Asset::PerspectiveSource::AnchorBindingOverride);
 }

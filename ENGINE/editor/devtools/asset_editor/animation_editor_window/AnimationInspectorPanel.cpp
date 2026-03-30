@@ -938,12 +938,7 @@ void AnimationInspectorPanel::render_preview(SDL_Renderer* renderer) const {
             int draw_h = std::max(1, static_cast<int>(tex_h * scale));
             SDL_Rect dst{preview_rect_.x + (preview_rect_.w - draw_w) / 2,
                          preview_rect_.y + (preview_rect_.h - draw_h) / 2, draw_w, draw_h};
-
-            SDL_FlipMode flip_flags = SDL_FLIP_NONE;
-            if (preview_flip_x_) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
-            if (preview_flip_y_) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
-
-            sdl_render::TextureRotated(renderer, texture, nullptr, &dst, 0.0, nullptr, flip_flags);
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
         } else {
             const DMLabelStyle& style = DMStyles::Label();
             const std::string text = "No Preview Available";
@@ -1132,8 +1127,6 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
     if (!document_ || animation_id_.empty()) {
         self->preview_signature_.clear();
         self->preview_reverse_ = false;
-        self->preview_flip_x_ = false;
-        self->preview_flip_y_ = false;
         return;
     }
 
@@ -1146,8 +1139,6 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
     int previous_frame_count = self->frame_count_;
     self->preview_signature_ = signature;
     self->preview_reverse_ = false;
-    self->preview_flip_x_ = false;
-    self->preview_flip_y_ = false;
     self->frame_count_ = 1;
 
     if (!payload_dump.has_value()) {
@@ -1159,31 +1150,15 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
         return;
     }
 
-    bool derived = false;
+    self->preview_reverse_ = payload.value("reverse_source", false);
     if (payload.contains("source") && payload["source"].is_object()) {
         const nlohmann::json& source = payload["source"];
-        std::string kind = source.value("kind", std::string{});
-        if (kind == "animation") {
-            derived = true;
-        }
-    }
-
-    if (derived) {
-        self->preview_reverse_ = payload.value("reverse_source", false);
-        self->preview_flip_x_ = payload.value("flipped_source", false);
-        self->preview_flip_y_ = payload.value("flip_vertical_source", false);
-        if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
+        if (source.value("kind", std::string{}) == "animation" &&
+            payload.contains("derived_modifiers") &&
+            payload["derived_modifiers"].is_object()) {
             const auto& modifiers = payload["derived_modifiers"];
             self->preview_reverse_ = modifiers.value("reverse", self->preview_reverse_);
-            self->preview_flip_x_ = modifiers.value("flipX", self->preview_flip_x_);
-            self->preview_flip_y_ = modifiers.value("flipY", self->preview_flip_y_);
-        } else {
-            self->preview_flip_y_ = payload.value("flip_vertical_source", false);
         }
-    } else {
-        self->preview_reverse_ = payload.value("reverse_source", false);
-        self->preview_flip_x_ = payload.value("flipped_source", false);
-        self->preview_flip_y_ = false;
     }
 
     if (payload.contains("number_of_frames")) {

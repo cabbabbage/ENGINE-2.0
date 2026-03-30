@@ -167,8 +167,6 @@ class AnimationInspectorPanel {
     mutable bool scrollbar_visible_ = false;
     mutable std::string preview_signature_;
     mutable bool preview_reverse_ = false;
-    mutable bool preview_flip_x_ = false;
-    mutable bool preview_flip_y_ = false;
     bool rename_pending_ = false;
     bool is_start_animation_ = false;
     int focus_index_ = -1;

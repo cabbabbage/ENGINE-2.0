@@ -171,6 +171,7 @@ constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
 constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
+constexpr const char* kDepthEffectsEnabledKey = "dev.depth_effects.enabled";
 constexpr float kLiveDepthWheelStepWorld = 25.0f;
 
 void persist_dev_bool(const char* key, bool value) {
@@ -796,6 +797,10 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     grid_cell_size_px_ = layer_spacing(grid_overlay_resolution_r_);
     movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
     anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
+    const bool persisted_depth_effects_enabled = devmode::ui_settings::load_bool(kDepthEffectsEnabledKey, false);
+    if (assets_) {
+        assets_->set_depth_effects_enabled(persisted_depth_effects_enabled);
+    }
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_manifest_store(&manifest_store_);
@@ -957,10 +962,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                 apply_bool_setting(OtherSettingsAndControls::kDepthEffectsSettingId, enabled, true);
             });
 
-            if (assets_) {
-                assets_->set_depth_effects_enabled(true);
-                footer->set_depth_effects_enabled(true);
-            }
             footer->set_grid_overlay_enabled(grid_overlay_enabled_, false);
             footer->set_grid_resolution(grid_overlay_resolution_r_, false);
             footer->set_grid_controls_callbacks(
@@ -1363,8 +1364,9 @@ void DevControls::rebuild_settings_schema() {
         SettingControl::Toggle,
         0,
         0,
-        [this]() { return assets_ ? assets_->depth_effects_enabled() : true; },
+        [this]() { return assets_ ? assets_->depth_effects_enabled() : false; },
         [this](bool enabled) {
+            persist_dev_bool(kDepthEffectsEnabledKey, enabled);
             if (assets_) {
                 assets_->set_depth_effects_enabled(enabled);
                 assets_->apply_camera_runtime_settings();

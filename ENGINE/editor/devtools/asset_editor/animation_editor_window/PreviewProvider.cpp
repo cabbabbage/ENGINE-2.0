@@ -342,13 +342,11 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
     std::string kind = source ? source->value("kind", std::string{"folder"}) : std::string{"folder"};
 
     bool reverse = payload.value("reverse_source", false);
-    bool flip_x = payload.value("flipped_source", false);
-    bool flip_y = payload.value("flip_vertical_source", false);
+    bool flip_x = payload.value("invert_frames_horizontal", false);
+    bool flip_y = payload.value("invert_frames_vertical", false);
     if (kind == "animation" && payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
         const auto& modifiers = payload["derived_modifiers"];
         reverse = modifiers.value("reverse", reverse);
-        flip_x = modifiers.value("flipX", flip_x);
-        flip_y = modifiers.value("flipY", flip_y);
     }
 
     if (kind == "animation") {

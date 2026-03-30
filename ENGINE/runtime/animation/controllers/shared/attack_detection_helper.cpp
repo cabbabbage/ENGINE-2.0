@@ -1,4 +1,5 @@
 #include "attack_detection_helper.hpp"
+#include "animation/controllers/shared/attack_reaction_helper.hpp"
 
 #include "animation/attack_validation.hpp"
 #include "assets/asset/Asset.hpp"
@@ -80,7 +81,9 @@ void AttackDetectionHelper::process_pending_attacks_default(Asset* self) {
     }
 
     if (self->runtime_health < 0) {
-        self->Delete();
+        if (!animation_update::custom_controllers::AttackReactionHelper::try_play_death_animation(*self)) {
+            self->Delete();
+        }
     }
 }
 

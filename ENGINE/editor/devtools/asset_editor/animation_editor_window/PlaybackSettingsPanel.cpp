@@ -56,6 +56,13 @@ void render_message_lines(SDL_Renderer* renderer, const SDL_Rect& rect, const st
     }
 }
 
+const std::vector<std::string>& invert_frames_help_lines() {
+    static const std::vector<std::string> lines = {
+        "Invert Frames applies to cloned frames even when Source Data is not inherited."
+    };
+    return lines;
+}
+
 std::string lowercase_copy(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
@@ -908,6 +915,11 @@ void PlaybackSettingsPanel::render(SDL_Renderer* renderer) const {
         random_start_checkbox_->render(renderer);
     }
 
+    const auto& helper_lines = invert_frames_help_lines();
+    if (invert_frames_helper_rect_.h > 0) {
+        render_message_lines(renderer, invert_frames_helper_rect_, helper_lines);
+    }
+
     DMWidgetTooltipRender(renderer, bounds_, info_tooltip_);
 }
 
@@ -1003,9 +1015,23 @@ void PlaybackSettingsPanel::layout_widgets() const {
 };
 
     bool placed_any_checkbox = false;
+    const bool show_frame_invert_controls = derived_from_animation_;
     const bool show_flip_controls = inversion_controls_visible();
-    place_checkbox(invert_frames_horizontal_checkbox_.get(), derived_from_animation_, placed_any_checkbox);
-    place_checkbox(invert_frames_vertical_checkbox_.get(), derived_from_animation_, placed_any_checkbox);
+    place_checkbox(invert_frames_horizontal_checkbox_.get(), show_frame_invert_controls, placed_any_checkbox);
+    place_checkbox(invert_frames_vertical_checkbox_.get(), show_frame_invert_controls, placed_any_checkbox);
+    invert_frames_helper_rect_ = SDL_Rect{0, 0, 0, 0};
+    if (show_frame_invert_controls) {
+        const auto& helper_lines = invert_frames_help_lines();
+        const int helper_height = message_block_height(helper_lines);
+        if (helper_height > 0) {
+            if (placed_any_checkbox) {
+                y += gap;
+            }
+            invert_frames_helper_rect_ = SDL_Rect{x, y, width, helper_height};
+            y += helper_height;
+            placed_any_checkbox = true;
+        }
+    }
     place_checkbox(flip_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(flip_vertical_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(inherit_geometry_checkbox_.get(), inherit_controls_visible(), placed_any_checkbox);
@@ -1042,10 +1068,10 @@ void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) 
     const bool show_inherit_controls = inherit_controls_visible_for_state(state);
     const bool show_inversion_controls = inversion_controls_visible_for_state(state);
     if (invert_frames_horizontal_checkbox_) {
-        invert_frames_horizontal_checkbox_->set_value(derived_from_animation_ ? state.invert_frames_horizontal : false);
+        invert_frames_horizontal_checkbox_->set_value(state.invert_frames_horizontal);
     }
     if (invert_frames_vertical_checkbox_) {
-        invert_frames_vertical_checkbox_->set_value(derived_from_animation_ ? state.invert_frames_vertical : false);
+        invert_frames_vertical_checkbox_->set_value(state.invert_frames_vertical);
     }
     if (flip_checkbox_) {
         flip_checkbox_->set_value(show_inversion_controls ? state.flipped_source : false);
@@ -1089,6 +1115,10 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::read_controls() cons
             state.flipped_source = false;
             state.flip_vertical = false;
         }
+    } else {
+        state.flipped_source = false;
+        state.flip_vertical = false;
+        state.inherit_data = false;
     }
 
     if (derived_from_animation_) {
@@ -1098,16 +1128,15 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::read_controls() cons
     }
     if (!derived_from_animation_) {
         if (locked_checkbox_) state.locked = locked_checkbox_->value();
+    } else {
+        state.locked = false;
     }
     if (!derived_from_animation_) {
-        state.flipped_source = false;
-        state.flip_vertical = false;
-        state.inherit_data = false;
-        state.invert_frames_horizontal = false;
-        state.invert_frames_vertical = false;
-    }
-    if (!derived_from_animation_ && random_start_checkbox_ && (!locked_checkbox_ || !locked_checkbox_->value())) {
-        state.random_start = random_start_checkbox_->value();
+        if (random_start_checkbox_ && (!locked_checkbox_ || !locked_checkbox_->value())) {
+            state.random_start = random_start_checkbox_->value();
+        } else {
+            state.random_start = false;
+        }
     } else {
         state.random_start = false;
     }

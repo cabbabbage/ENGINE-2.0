@@ -11,6 +11,7 @@
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/attack_reaction_helper.hpp"
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
@@ -270,5 +271,43 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
         }
     }
 
-    CustomAssetController::on_process_pending_attacks(self);
+    const auto pending_attacks = self.process_pending_attacks();
+    if (pending_attacks.empty()) {
+        return;
+    }
+
+    std::optional<SDL_Point> bump_delta;
+    auto consider_knockback = [&](const animation_update::Attack& attack) {
+        SDL_Point candidate_delta{};
+        if (!animation_update::custom_controllers::AttackReactionHelper::compute_knockback_delta(self, attack, candidate_delta)) {
+            return;
+        }
+        if (!bump_delta.has_value()) {
+            bump_delta = candidate_delta;
+            return;
+        }
+        const int candidate_sq = candidate_delta.x * candidate_delta.x + candidate_delta.y * candidate_delta.y;
+        const int current_sq = bump_delta->x * bump_delta->x + bump_delta->y * bump_delta->y;
+        if (candidate_sq > current_sq) {
+            bump_delta = candidate_delta;
+        }
+    };
+
+    for (const auto& attack : pending_attacks) {
+        self.runtime_health -= attack.damage_amount;
+        if (attack.attacker_asset_name == "spider") {
+            consider_knockback(attack);
+        }
+    }
+
+    if (self.runtime_health < 0) {
+        if (!animation_update::custom_controllers::AttackReactionHelper::try_play_death_animation(self)) {
+            self.Delete();
+        }
+        return;
+    }
+
+    if (bump_delta.has_value()) {
+        animation_update::custom_controllers::AttackReactionHelper::apply_knockback(self, *bump_delta);
+    }
 }

@@ -165,7 +165,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 108.0
+        "scale_percentage": 75.0
       },
       "start": "default",
       "tags": [],
@@ -2847,14 +2847,119 @@
       "update_radius": 0
     },
     "tree_fps_2": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 24,
           "on_end": "default",
           "reverse_source": false,
-          "rnd_start": false,
+          "rnd_start": true,
           "source": {
             "kind": "folder",
             "name": "",
@@ -2871,14 +2976,14 @@
       ],
       "asset_directory": "resources/assets/tree_fps_2",
       "asset_name": "tree_fps_2",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 218.0
+        "scale_percentage": 268.0
       },
       "start": "default",
       "tags": [
@@ -9408,19 +9513,19 @@
       "blur": 0.6799999475479126,
       "brightness": 0.0,
       "contrast": 0.0,
-      "hue": 0.0,
-      "saturation_blue": 0.5399999618530273,
-      "saturation_green": 0.6200000047683716,
-      "saturation_red": -0.7200000286102295
+      "hue": -2.0,
+      "saturation_blue": 0.36000001430511475,
+      "saturation_green": 0.019999980926513672,
+      "saturation_red": -0.2800000309944153
     },
     "foreground": {
       "blur": 0.1799999475479126,
       "brightness": 0.0,
       "contrast": 0.0,
       "hue": 0.0,
-      "saturation_blue": -0.5800000429153442,
-      "saturation_green": -0.6000000238418579,
-      "saturation_red": 0.8199999332427979
+      "saturation_blue": -0.40000003576278687,
+      "saturation_green": -0.2200000286102295,
+      "saturation_red": 0.31999993324279785
     }
   },
   "maps": {
@@ -9440,8 +9545,8 @@
       "content_root": "content/forrest",
       "depth_cue_settings": {
         "background_max_depth_offset": 2380.0,
-        "center_depth_offset": 150.0,
-        "foreground_max_depth_offset": -580.0
+        "center_depth_offset": 425.0,
+        "foreground_max_depth_offset": -1205.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -9587,11 +9692,11 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": -1137,
-          "camera_center_dz": 651,
+          "camera_center_dx": 20,
+          "camera_center_dz": -1474,
           "camera_height_px": 911,
-          "camera_tilt_deg": 57.0,
-          "camera_zoom_percent": 0,
+          "camera_tilt_deg": 33.400001525878906,
+          "camera_zoom_percent": 85,
           "curvyness": 2,
           "display_color": [
             242,
@@ -9625,16 +9730,16 @@
                 }
               ],
               "display_name": "attack_speed",
-              "dx": -1320,
-              "dz": -579,
+              "dx": -900,
+              "dz": -516,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7008,
-              "origional_width": 7016,
+              "origional_height": 6968,
+              "origional_width": 6936,
               "position": "Exact",
               "priority": 0,
               "quantity": 1,
@@ -9685,16 +9790,16 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": 636,
-              "dz": 960,
+              "dx": 892,
+              "dz": 564,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7008,
-              "origional_width": 6968,
+              "origional_height": 6968,
+              "origional_width": 7016,
               "position": "Exact",
               "priority": 2,
               "quantity": 1,

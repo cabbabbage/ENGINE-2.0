@@ -86,6 +86,15 @@ struct DepthCueRenderData {
     bool has_depth_cue = false;
 };
 
+struct DepthCueMergeSignature {
+    SDL_Texture* base_texture = nullptr;
+    SDL_Texture* overlay_texture = nullptr;
+    std::uint8_t overlay_layer = 0; // 0: none, 1: foreground, 2: background
+    Uint8 overlay_alpha = 0;
+    bool overlay_active = false;
+    bool valid = false;
+};
+
 class Asset {
 
         public:
@@ -274,6 +283,17 @@ class Asset {
     void mark_mesh_dirty() { mesh_dirty_ = true; }
     void clear_mesh_dirty() { mesh_dirty_ = false; }
     void refresh_frame_texture_bindings();
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    void test_set_depth_cue_merge_applied_signature(const DepthCueMergeSignature& signature) {
+        depth_cue_merge_applied_signature_ = signature;
+    }
+    const DepthCueMergeSignature& test_depth_cue_merge_applied_signature() const {
+        return depth_cue_merge_applied_signature_;
+    }
+    const DepthCueMergeSignature& test_depth_cue_merge_desired_signature() const {
+        return depth_cue_merge_desired_signature_;
+    }
+#endif
 
 
     float smoothed_translation_x() const;
@@ -522,6 +542,8 @@ private:
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
     std::uint64_t composite_depth_cue_settings_version_ = 0;
+    DepthCueMergeSignature depth_cue_merge_desired_signature_{};
+    DepthCueMergeSignature depth_cue_merge_applied_signature_{};
     float        world_z_offset_    = 0.0f;
     float        render_anchor_offset_x_ = 0.0f;
     float        render_anchor_offset_y_ = 0.0f;

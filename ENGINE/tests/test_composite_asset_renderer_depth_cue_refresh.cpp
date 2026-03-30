@@ -1,101 +1,126 @@
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <memory>
 
-#define private public
-#include "rendering/render/composite_asset_renderer.hpp"
-#undef private
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "core/manifest/depth_cue_settings.hpp"
+#include "rendering/render/composite_asset_renderer.hpp"
 
 namespace {
 
 Asset make_test_asset(int world_x, int world_y) {
-    auto info = std::make_shared<AssetInfo>("depth_cue_overlay_refresh_asset");
-    Area spawn_area("depth_cue_overlay_refresh_area", 0);
+    auto info = std::make_shared<AssetInfo>("depth_cue_merge_refresh_asset");
+    Area spawn_area("depth_cue_merge_refresh_area", 0);
     return Asset(info, spawn_area, SDL_Point{world_x, world_y}, 0);
-}
-
-RenderObject make_base_object() {
-    RenderObject base{};
-    base.texture = reinterpret_cast<SDL_Texture*>(0x1);
-    base.screen_rect = SDL_Rect{320, 180, 96, 64};
-    base.world_anchor_x = 320.0f;
-    base.world_anchor_y = 180.0f;
-    base.color_mod = SDL_Color{255, 255, 255, 255};
-    base.blend_mode = SDL_BLENDMODE_BLEND;
-    base.angle = 0.0;
-    base.flip = SDL_FLIP_NONE;
-    base.world_z_offset = 0.0f;
-    base.texture_w = 96;
-    base.texture_h = 64;
-    base.has_texture_size = true;
-    base.projection_anchor_uv = SDL_FPoint{0.5f, 1.0f};
-    base.is_depth_cue_overlay = false;
-    return base;
-}
-
-RenderObject make_overlay_object(SDL_Texture* texture, Uint8 alpha, int width, int height) {
-    RenderObject overlay{};
-    overlay.texture = texture;
-    overlay.screen_rect = SDL_Rect{320, 180, width, height};
-    overlay.world_anchor_x = 320.0f;
-    overlay.world_anchor_y = 180.0f;
-    overlay.color_mod = SDL_Color{255, 255, 255, alpha};
-    overlay.blend_mode = SDL_BLENDMODE_BLEND;
-    overlay.angle = 0.0;
-    overlay.flip = SDL_FLIP_NONE;
-    overlay.world_z_offset = 0.0f;
-    overlay.texture_w = width;
-    overlay.texture_h = height;
-    overlay.has_texture_size = true;
-    overlay.atlas_w = width;
-    overlay.atlas_h = height;
-    overlay.has_atlas_size = true;
-    overlay.projection_anchor_uv = SDL_FPoint{0.5f, 0.75f};
-    overlay.is_depth_cue_overlay = true;
-    return overlay;
 }
 
 } // namespace
 
-TEST_CASE("depth cue overlay refresh updates render package without composite rebuild") {
-    Asset asset = make_test_asset(0, 0);
-    asset.render_package.clear();
-    asset.render_package.push_back(make_base_object());
-
+TEST_CASE("depth cue merge signature transitions trigger rebuild at expected thresholds") {
     CompositeAssetRenderer renderer(nullptr, nullptr);
-    SDL_Texture* overlay_texture = reinterpret_cast<SDL_Texture*>(0x2);
-    const std::size_t base_index = 0;
+    Asset asset = make_test_asset(0, 0);
 
-    const RenderObject first_overlay = make_overlay_object(overlay_texture, 120, 192, 128);
-    CHECK(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, first_overlay));
-    REQUIRE(asset.render_package.size() == 2);
-    CHECK(asset.render_package[1].is_depth_cue_overlay);
-    CHECK(asset.render_package[1].color_mod.a == 120);
-    CHECK(asset.render_package[1].screen_rect.w == 192);
-    CHECK(asset.render_package[1].screen_rect.h == 128);
+    depth_cue::DepthCueSettings settings{};
+    settings.center_depth_offset = 0.0f;
+    settings.foreground_max_depth_offset = -600.0f;
+    settings.background_max_depth_offset = 600.0f;
 
-    CHECK_FALSE(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, first_overlay));
-    REQUIRE(asset.render_package.size() == 2);
-    CHECK(asset.render_package[1].color_mod.a == 120);
+    SDL_Texture* base_texture = reinterpret_cast<SDL_Texture*>(0x1);
+    SDL_Texture* foreground_texture = reinterpret_cast<SDL_Texture*>(0x2);
+    SDL_Texture* background_texture = reinterpret_cast<SDL_Texture*>(0x3);
 
-    const RenderObject updated_alpha_overlay = make_overlay_object(overlay_texture, 180, 192, 128);
-    CHECK_FALSE(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, updated_alpha_overlay));
-    REQUIRE(asset.render_package.size() == 2);
-    CHECK(asset.render_package[1].color_mod.a == 180);
-    CHECK(asset.render_package[1].screen_rect.w == 192);
-    CHECK(asset.render_package[1].screen_rect.h == 128);
+    const DepthCueMergeSignature neutral_signature = renderer.test_build_depth_cue_merge_signature(
+        base_texture,
+        foreground_texture,
+        background_texture,
+        0.0f,
+        255,
+        true,
+        settings);
+    CHECK(neutral_signature.valid);
+    CHECK_FALSE(neutral_signature.overlay_active);
 
-    const RenderObject resized_overlay = make_overlay_object(overlay_texture, 180, 256, 160);
-    CHECK(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, resized_overlay));
-    REQUIRE(asset.render_package.size() == 2);
-    CHECK(asset.render_package[1].screen_rect.w == 256);
-    CHECK(asset.render_package[1].screen_rect.h == 160);
+    asset.test_set_depth_cue_merge_applied_signature(neutral_signature);
 
-    CHECK(renderer.test_remove_depth_cue_overlay_objects(&asset));
-    REQUIRE(asset.render_package.size() == 1);
-    CHECK_FALSE(asset.render_package[0].is_depth_cue_overlay);
+    const DepthCueMergeSignature foreground_signature = renderer.test_build_depth_cue_merge_signature(
+        base_texture,
+        foreground_texture,
+        background_texture,
+        -900.0f,
+        255,
+        true,
+        settings);
+    CHECK(foreground_signature.overlay_active);
+    CHECK(foreground_signature.overlay_layer == 1);
+    CHECK(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, foreground_signature));
 
-    CHECK_FALSE(renderer.test_remove_depth_cue_overlay_objects(&asset));
+    const DepthCueMergeSignature mid_foreground_signature = renderer.test_build_depth_cue_merge_signature(
+        base_texture,
+        foreground_texture,
+        background_texture,
+        -300.0f,
+        255,
+        true,
+        settings);
+    REQUIRE(mid_foreground_signature.overlay_active);
+    REQUIRE(mid_foreground_signature.overlay_layer == foreground_signature.overlay_layer);
+
+    asset.test_set_depth_cue_merge_applied_signature(mid_foreground_signature);
+
+    const DepthCueMergeSignature small_delta_signature = renderer.test_build_depth_cue_merge_signature(
+        base_texture,
+        foreground_texture,
+        background_texture,
+        -285.0f,
+        255,
+        true,
+        settings);
+    REQUIRE(small_delta_signature.overlay_active);
+    CHECK(small_delta_signature.overlay_layer == mid_foreground_signature.overlay_layer);
+    CHECK(std::abs(static_cast<int>(small_delta_signature.overlay_alpha) -
+                   static_cast<int>(mid_foreground_signature.overlay_alpha)) < 8);
+    CHECK_FALSE(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, small_delta_signature));
+
+    const DepthCueMergeSignature large_delta_signature = renderer.test_build_depth_cue_merge_signature(
+        base_texture,
+        foreground_texture,
+        background_texture,
+        -280.0f,
+        255,
+        true,
+        settings);
+    REQUIRE(large_delta_signature.overlay_active);
+    CHECK(large_delta_signature.overlay_layer == mid_foreground_signature.overlay_layer);
+    CHECK(std::abs(static_cast<int>(large_delta_signature.overlay_alpha) -
+                   static_cast<int>(mid_foreground_signature.overlay_alpha)) >= 8);
+    CHECK(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, large_delta_signature));
+
+    asset.test_set_depth_cue_merge_applied_signature(large_delta_signature);
+
+    const DepthCueMergeSignature neutral_again_signature = renderer.test_build_depth_cue_merge_signature(
+        base_texture,
+        foreground_texture,
+        background_texture,
+        0.0f,
+        255,
+        true,
+        settings);
+    CHECK_FALSE(neutral_again_signature.overlay_active);
+    CHECK(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, neutral_again_signature));
+
+    asset.test_set_depth_cue_merge_applied_signature(neutral_again_signature);
+
+    const DepthCueMergeSignature background_signature = renderer.test_build_depth_cue_merge_signature(
+        base_texture,
+        foreground_texture,
+        background_texture,
+        900.0f,
+        255,
+        true,
+        settings);
+    CHECK(background_signature.overlay_active);
+    CHECK(background_signature.overlay_layer == 2);
+    CHECK(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, background_signature));
 }

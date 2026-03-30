@@ -3,11 +3,13 @@
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
+#include <iostream>
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
 spider_controller::spider_controller(Asset* self)
     : CustomAssetController(self) {
+        std::cout<<"Spider Controller Connected";
     Asset* owner = self_ptr();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);

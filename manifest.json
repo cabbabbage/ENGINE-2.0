@@ -9882,9 +9882,9 @@
       },
       "content_root": "content/forrest",
       "depth_cue_settings": {
-        "background_max_depth_offset": 1255.0,
-        "center_depth_offset": 175.0,
-        "foreground_max_depth_offset": -830.0
+        "background_max_depth_offset": 2380.0,
+        "center_depth_offset": 150.0,
+        "foreground_max_depth_offset": -630.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -10012,9 +10012,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            142,
+            90,
+            242,
             255
           ],
           "edge_smoothness": 49,
@@ -10038,8 +10038,8 @@
           "curvyness": 2,
           "display_color": [
             242,
+            241,
             36,
-            145,
             255
           ],
           "edge_smoothness": 85,

@@ -1181,9 +1181,11 @@ void PlaybackSettingsPanel::commit_changes(const PlaybackState& desired_state) {
     apply_state_to_payload(payload, desired_state);
     document_->replace_animation_payload(animation_id_, payload.dump());
     if (!document_->save_to_file_checked(true)) {
+        const std::string manifest_key = document_->manifest_asset_key_debug();
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "PlaybackSettingsPanel: immediate save failed for animation '%s'.",
-                    animation_id_.c_str());
+                    "PlaybackSettingsPanel: immediate save failed for animation '%s' (manifest key: '%s').",
+                    animation_id_.c_str(),
+                    manifest_key.empty() ? "<unknown>" : manifest_key.c_str());
     }
 
     auto updated_dump = fetch_payload(document_.get(), animation_id_);

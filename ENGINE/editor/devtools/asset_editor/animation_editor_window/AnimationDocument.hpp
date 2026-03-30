@@ -40,6 +40,8 @@ class AnimationDocument {
     std::optional<nlohmann::json> animation_payload_json(const std::string& animation_id) const;
     const std::filesystem::path& info_path() const { return info_path_; }
     const std::filesystem::path& asset_root() const { return asset_root_; }
+    void set_manifest_asset_key_debug(std::string key);
+    const std::string& manifest_asset_key_debug() const { return manifest_asset_key_debug_; }
 
     void set_on_saved_callback(std::function<void()> callback);
 
@@ -63,6 +65,7 @@ class AnimationDocument {
     std::string container_metadata_;
     mutable bool dirty_ = false;
     mutable nlohmann::json base_data_;
+    std::string manifest_asset_key_debug_;
     std::function<bool(const nlohmann::json&)> persist_callback_;
     std::function<void()> on_saved_callback_;
 };

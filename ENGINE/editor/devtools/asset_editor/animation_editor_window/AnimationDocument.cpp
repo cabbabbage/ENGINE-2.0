@@ -1103,6 +1103,7 @@ nlohmann::json AnimationDocument::normalize_payload_for_storage(const std::strin
 void AnimationDocument::load_from_file(const std::filesystem::path& info_path) {
     info_path_ = info_path;
     asset_root_ = info_path.empty() ? std::filesystem::path{} : info_path.parent_path();
+    manifest_asset_key_debug_.clear();
     persist_callback_ = nullptr;
 
     nlohmann::json root = nlohmann::json::object();
@@ -1133,6 +1134,10 @@ void AnimationDocument::load_from_manifest(const nlohmann::json& asset_json,
     persist_callback_ = std::move(persist_callback);
     base_data_ = asset_json.is_object() ? asset_json : nlohmann::json::object();
     load_from_json_object(base_data_);
+}
+
+void AnimationDocument::set_manifest_asset_key_debug(std::string key) {
+    manifest_asset_key_debug_ = std::move(key);
 }
 
 void AnimationDocument::set_on_saved_callback(std::function<void()> callback) {

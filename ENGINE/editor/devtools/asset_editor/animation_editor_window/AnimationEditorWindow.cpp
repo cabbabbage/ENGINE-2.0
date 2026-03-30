@@ -555,6 +555,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     using_manifest_store_ = false;
     manifest_asset_key_.clear();
     manifest_transaction_ = {};
+    if (document_) {
+        document_->set_manifest_asset_key_debug({});
+    }
 
     enum class SnapshotRecoverySource { None, AssetMetadata, AssetFolders, Manifest };
     SnapshotRecoverySource recovery_source = SnapshotRecoverySource::None;
@@ -575,6 +578,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (manifest_transaction_) {
             using_manifest_store_ = true;
+            if (document_) {
+                document_->set_manifest_asset_key_debug(manifest_asset_key_);
+            }
             persist_callback = [this](const nlohmann::json& payload) { return this->persist_manifest_payload(payload); };
             if (log_creation) {
                 std::cerr << "[AnimationEditor] Created manifest entry for '" << info->name << "' as '" << manifest_asset_key_ << "'\n";
@@ -583,6 +589,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
             std::cerr << "[AnimationEditor] Failed to open manifest transaction for '" << manifest_asset_key_ << "'\n";
             manifest_asset_key_.clear();
             manifest_transaction_ = {};
+            if (document_) {
+                document_->set_manifest_asset_key_debug({});
+            }
         }
     };
 
@@ -2027,7 +2036,13 @@ void AnimationEditorWindow::reload_document() {
                           << manifest_asset_key_ << "'\n";
                 manifest_asset_key_.clear();
                 manifest_transaction_ = {};
+                if (document_) {
+                    document_->set_manifest_asset_key_debug({});
+                }
                 return false;
+            }
+            if (document_) {
+                document_->set_manifest_asset_key_debug(manifest_asset_key_);
             }
             if (log_creation) {
                 std::cerr << "[AnimationEditor] Created manifest entry for '" << info_ptr->name
@@ -2123,6 +2138,9 @@ void AnimationEditorWindow::close_manifest_transaction() {
     }
     manifest_asset_key_.clear();
     using_manifest_store_ = false;
+    if (document_) {
+        document_->set_manifest_asset_key_debug({});
+    }
 }
 
 bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& payload, bool finalize) {
@@ -2178,6 +2196,9 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
                 manifest_transaction_ = {};
                 manifest_asset_key_.clear();
                 using_manifest_store_ = false;
+                if (document_) {
+                    document_->set_manifest_asset_key_debug({});
+                }
             }
             return ok;
         };

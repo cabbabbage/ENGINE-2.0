@@ -5162,6 +5162,13 @@ bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
         sdl_mouse_util::GetMouseState(&mx, &my);
         live_depth_selected_line_ = live_depth_line_from_cursor_screen(SDL_Point{mx, my});
 
+        const SDL_Keymod mods = SDL_GetModState();
+        const bool shift_down = (mods & SDL_KMOD_SHIFT) != 0;
+        if (!shift_down) {
+            // Let normal camera wheel handling run when Shift is not held.
+            return false;
+        }
+
         int wheel_steps = event.wheel.integer_y;
         if (wheel_steps == 0 && std::fabs(event.wheel.y) > 1.0e-6f) {
             wheel_steps = (event.wheel.y > 0.0f) ? 1 : -1;
@@ -5173,7 +5180,9 @@ bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
         return true;
     }
 
-    return true;
+    // Keep depth-line hover selection updated, but do not consume general input
+    // so normal camera controls continue to work in live depth mode.
+    return false;
 }
 
 void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
@@ -5341,7 +5350,7 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
 
     DMLabelStyle instruction_style = DMStyles::Label();
     instruction_style.color = SDL_Color{228, 236, 248, 255};
-    DrawLabelText(renderer, "Mouse top third=BG, middle third=Center, bottom third=FG. Wheel adjusts selected world-depth line.", 16, 32, instruction_style);
+    DrawLabelText(renderer, "Top third=BG, middle=Center, bottom=FG. Hold Shift + Wheel to edit line depth; Wheel alone controls camera.", 16, 32, instruction_style);
 
     live_depth_exit_button_->render(renderer);
     SDL_SetRenderDrawBlendMode(renderer, previous_blend);

@@ -264,6 +264,7 @@ Asset::Asset(const Asset& o)
     , flipped(o.flipped)
     , distance_from_camera(o.distance_from_camera)
     , angle_from_camera(o.angle_from_camera)
+    , runtime_camera_metrics(o.runtime_camera_metrics)
     , render_depth_bias_(o.render_depth_bias_)
     , depth(o.depth)
     , dead(o.dead)
@@ -344,6 +345,7 @@ Asset& Asset::operator=(const Asset& o) {
         flipped              = o.flipped;
         distance_from_camera = o.distance_from_camera;
         angle_from_camera = o.angle_from_camera;
+        runtime_camera_metrics = o.runtime_camera_metrics;
         render_depth_bias_   = o.render_depth_bias_;
 	depth                = o.depth;
 	dead                 = o.dead;

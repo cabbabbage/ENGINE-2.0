@@ -440,7 +440,9 @@ private:
     void run_active_runtime_single_pass(bool include_audio_update = true);
     void run_active_runtime_single_pass_for_asset(Asset* asset,
                                                   const SDL_Point& camera_focus,
-                                                  std::uint64_t camera_state_version);
+                                                  std::uint64_t camera_state_version,
+                                                  float camera_anchor_world_z,
+                                                  float depth_axis_sign);
     bool capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out_relative_path);
     bool screenshot_create_task_button_active(Uint32 now_ticks) const;
     void render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32 now_ticks);

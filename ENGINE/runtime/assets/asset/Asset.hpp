@@ -95,6 +95,22 @@ struct DepthCueMergeSignature {
     bool valid = false;
 };
 
+struct RuntimeCameraMetrics {
+    std::uint64_t frame_id = 0;
+    std::uint64_t camera_state_version = 0;
+    bool valid = false;
+    float planar_dx = 0.0f;
+    float planar_dz = 0.0f;
+    float planar_distance = 0.0f;
+    float planar_angle_radians = 0.0f;
+    float anchor_world_z = 0.0f;
+    float depth_axis_sign = 1.0f;
+    float world_z_depth_offset = 0.0f;
+    float effective_world_z_depth_offset = 0.0f;
+    double world_z_depth_from_anchor = 0.0;
+    double effective_world_z_depth_from_anchor = 0.0;
+};
+
 class Asset {
 
         public:
@@ -307,6 +323,7 @@ class Asset {
     bool flipped = false;
     float distance_from_camera = 0.0f;
     float angle_from_camera = 0.0f;
+    RuntimeCameraMetrics runtime_camera_metrics{};
     double render_depth_bias_ = 0.0;
 
 

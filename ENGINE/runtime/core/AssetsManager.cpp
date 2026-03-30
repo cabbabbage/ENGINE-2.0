@@ -21,6 +21,7 @@
 #include "core/manifest/depth_cue_settings.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
@@ -729,9 +730,17 @@ std::uint64_t Assets::next_anchor_invalidation_version() {
 void Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const SDL_Point camera_focus = camera_.get_screen_center();
     const std::uint64_t camera_state_version = camera_.camera_state_version();
+    const float camera_anchor_world_z = static_cast<float>(camera_.anchor_world_z());
+    const world::CameraProjectionParams projection = camera_.projection_params();
+    const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(
+        static_cast<float>(projection.forward_z));
 
     if (asset_matches_focus_filter(player)) {
-        run_active_runtime_single_pass_for_asset(player, camera_focus, camera_state_version);
+        run_active_runtime_single_pass_for_asset(player,
+                                                 camera_focus,
+                                                 camera_state_version,
+                                                 camera_anchor_world_z,
+                                                 depth_axis_sign);
     }
     for (Asset* asset : active_assets) {
         if (asset == player) {
@@ -740,7 +749,11 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
         if (!asset_matches_focus_filter(asset)) {
             continue;
         }
-        run_active_runtime_single_pass_for_asset(asset, camera_focus, camera_state_version);
+        run_active_runtime_single_pass_for_asset(asset,
+                                                 camera_focus,
+                                                 camera_state_version,
+                                                 camera_anchor_world_z,
+                                                 depth_axis_sign);
     }
 
     if (include_audio_update && last_audio_engine_update_frame_id_ != frame_id_) {
@@ -757,7 +770,9 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
 
 void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
                                                       const SDL_Point& camera_focus,
-                                                      std::uint64_t camera_state_version) {
+                                                      std::uint64_t camera_state_version,
+                                                      float camera_anchor_world_z,
+                                                      float depth_axis_sign) {
     if (!asset || asset->dead) {
         return;
     }
@@ -782,13 +797,46 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         state.processed_frame_index = current_frame_index;
     }
 
-    if (state.last_audio_frame_id != frame_id_) {
-        const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
-        const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
-        asset->distance_from_camera = std::sqrt(dx * dx + dz * dz);
-        asset->angle_from_camera = std::atan2(dz, dx);
-        state.last_audio_frame_id = frame_id_;
+    if (state.last_audio_frame_id == frame_id_) {
+        return;
     }
+
+    const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
+    const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
+    const float world_z = static_cast<float>(asset->world_z());
+    const float effective_world_z = world_z + asset->world_z_offset() + asset->render_anchor_offset_z();
+
+    RuntimeCameraMetrics metrics{};
+    metrics.frame_id = frame_id_;
+    metrics.camera_state_version = camera_state_version;
+    metrics.valid = true;
+    metrics.planar_dx = dx;
+    metrics.planar_dz = dz;
+    metrics.planar_distance = std::sqrt(dx * dx + dz * dz);
+    metrics.planar_angle_radians = std::atan2(dz, dx);
+    metrics.anchor_world_z = camera_anchor_world_z;
+    metrics.depth_axis_sign = depth_cue::normalize_depth_axis_sign(depth_axis_sign);
+    metrics.world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+        world_z,
+        camera_anchor_world_z,
+        metrics.depth_axis_sign);
+    metrics.effective_world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+        effective_world_z,
+        camera_anchor_world_z,
+        metrics.depth_axis_sign);
+    metrics.world_z_depth_from_anchor = render_depth::depth_from_anchor(
+        static_cast<double>(camera_anchor_world_z),
+        static_cast<double>(world_z),
+        asset->render_depth_bias());
+    metrics.effective_world_z_depth_from_anchor = render_depth::depth_from_anchor(
+        static_cast<double>(camera_anchor_world_z),
+        static_cast<double>(effective_world_z),
+        asset->render_depth_bias());
+
+    asset->runtime_camera_metrics = metrics;
+    asset->distance_from_camera = metrics.planar_distance;
+    asset->angle_from_camera = metrics.planar_angle_radians;
+    state.last_audio_frame_id = frame_id_;
 }
 
 void Assets::rebuild_frame_collision_context() const {

@@ -1429,7 +1429,16 @@ void SceneRenderer::render() {
             const Asset::PerspectiveSample perspective_sample = asset->runtime_perspective_sample();
             const float perspective_scale = perspective_sample.scale;
             const float base_world_z = static_cast<float>(asset->world_z());
-            const double depth_bias = asset->render_depth_bias();
+            const RuntimeCameraMetrics& camera_metrics = asset->runtime_camera_metrics;
+            const bool has_camera_metrics =
+                camera_metrics.valid &&
+                camera_metrics.frame_id == assets_->frame_id() &&
+                camera_metrics.camera_state_version == cam.camera_state_version();
+            const double asset_depth_from_anchor = has_camera_metrics
+                ? camera_metrics.world_z_depth_from_anchor
+                : render_depth::depth_from_anchor(anchor_depth,
+                                                  static_cast<double>(asset->world_z()),
+                                                  asset->render_depth_bias());
 
             for (RenderObject& obj : asset->render_package) {
                 if (!obj.texture) {
@@ -1443,9 +1452,7 @@ void SceneRenderer::render() {
                 if (!mesh.valid) {
                     continue;
                 }
-                const double draw_depth = render_depth::depth_from_anchor(anchor_depth,
-                                                                          static_cast<double>(effective_world_z),
-                                                                          depth_bias);
+                const double draw_depth = asset_depth_from_anchor - static_cast<double>(obj.world_z_offset);
                 geometry_batcher_->addQuad(obj.texture,
                                            mesh.vertices.data(),
                                            mesh.indices.data(),

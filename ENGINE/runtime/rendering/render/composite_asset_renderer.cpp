@@ -281,20 +281,27 @@ DepthCueMergeSignature CompositeAssetRenderer::evaluate_depth_cue_merge_signatur
     const Uint8 base_alpha = static_cast<Uint8>(std::lround(
         std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
 
-    float signed_depth = 0.0f;
+    float signed_depth = asset->runtime_camera_metrics.effective_world_z_depth_offset;
     bool depth_effects_enabled = false;
     depth_cue::DepthCueSettings depth_settings{};
     if (assets_) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        const world::CameraProjectionParams projection = cam.projection_params();
-        const float effective_world_z =
-            static_cast<float>(asset->world_z()) + asset->world_z_offset() + asset->render_anchor_offset_z();
-        signed_depth = depth_cue::depth_offset_from_world_z(
-            effective_world_z,
-            static_cast<float>(cam.anchor_world_z()),
-            projection.forward_z);
         depth_effects_enabled = assets_->depth_effects_enabled();
         depth_settings = assets_->depth_cue_settings();
+        const RuntimeCameraMetrics& metrics = asset->runtime_camera_metrics;
+        const bool has_cached_camera_metrics =
+            metrics.valid &&
+            metrics.frame_id == assets_->frame_id() &&
+            metrics.camera_state_version == assets_->getView().camera_state_version();
+        if (!has_cached_camera_metrics) {
+            const WarpedScreenGrid& cam = assets_->getView();
+            const world::CameraProjectionParams projection = cam.projection_params();
+            const float effective_world_z =
+                static_cast<float>(asset->world_z()) + asset->world_z_offset() + asset->render_anchor_offset_z();
+            signed_depth = depth_cue::depth_offset_from_world_z(
+                effective_world_z,
+                static_cast<float>(cam.anchor_world_z()),
+                projection.forward_z);
+        }
     }
 
     return build_depth_cue_merge_signature(render_data.base_texture,

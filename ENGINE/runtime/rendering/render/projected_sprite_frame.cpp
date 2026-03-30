@@ -84,6 +84,44 @@ bool calibrate_pixels_per_world_x(const WarpedScreenGrid& cam,
     return true;
 }
 
+bool compute_legacy_anchor_screen_point(const WarpedScreenGrid& cam,
+                                        const render_projection::SpriteProjectionInput& input,
+                                        float safe_perspective,
+                                        float final_width_px,
+                                        SDL_FPoint& out_anchor) {
+    out_anchor = SDL_FPoint{};
+    if (!std::isfinite(safe_perspective) || safe_perspective <= 0.0f ||
+        !std::isfinite(final_width_px) || final_width_px <= 0.0f) {
+        return false;
+    }
+
+    const float legacy_world_width = final_width_px / safe_perspective;
+    const float legacy_half_width = legacy_world_width * 0.5f;
+    if (!std::isfinite(legacy_half_width) || legacy_half_width <= 0.0f) {
+        return false;
+    }
+
+    SDL_FPoint legacy_bl{};
+    SDL_FPoint legacy_br{};
+    if (!project_world_point(cam,
+                             input.world_x - legacy_half_width,
+                             input.world_y,
+                             input.world_z,
+                             legacy_bl) ||
+        !project_world_point(cam,
+                             input.world_x + legacy_half_width,
+                             input.world_y,
+                             input.world_z,
+                             legacy_br)) {
+        return false;
+    }
+
+    out_anchor = SDL_FPoint{
+        0.5f * (legacy_bl.x + legacy_br.x),
+        0.5f * (legacy_bl.y + legacy_br.y)};
+    return std::isfinite(out_anchor.x) && std::isfinite(out_anchor.y);
+}
+
 }  // namespace
 
 namespace render_projection {
@@ -213,9 +251,17 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
     anchor_sample_frame.screen_br = screen_br;
     anchor_sample_frame.screen_bl = screen_bl;
 
-    const SDL_FPoint desired_anchor{
+    SDL_FPoint desired_anchor{
         0.5f * (screen_bl.x + screen_br.x),
         0.5f * (screen_bl.y + screen_br.y)};
+    SDL_FPoint legacy_anchor{};
+    if (compute_legacy_anchor_screen_point(cam,
+                                           input,
+                                           safe_perspective,
+                                           final_width_px,
+                                           legacy_anchor)) {
+        desired_anchor = legacy_anchor;
+    }
     const SDL_FPoint current_anchor =
         anchor_sample_frame.sample_screen_from_uv(sanitize_anchor_uv(input.anchor_uv));
     if (std::isfinite(current_anchor.x) && std::isfinite(current_anchor.y)) {

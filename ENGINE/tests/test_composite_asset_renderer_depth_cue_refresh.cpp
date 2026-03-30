@@ -2,12 +2,11 @@
 
 #include <memory>
 
-#include "assets/asset/Asset.hpp"
-#include "assets/asset/asset_info.hpp"
-
 #define private public
 #include "rendering/render/composite_asset_renderer.hpp"
 #undef private
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_info.hpp"
 
 namespace {
 
@@ -70,33 +69,33 @@ TEST_CASE("depth cue overlay refresh updates render package without composite re
     const std::size_t base_index = 0;
 
     const RenderObject first_overlay = make_overlay_object(overlay_texture, 120, 192, 128);
-    CHECK(renderer.upsert_depth_cue_overlay_object(&asset, base_index, first_overlay));
+    CHECK(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, first_overlay));
     REQUIRE(asset.render_package.size() == 2);
     CHECK(asset.render_package[1].is_depth_cue_overlay);
     CHECK(asset.render_package[1].color_mod.a == 120);
     CHECK(asset.render_package[1].screen_rect.w == 192);
     CHECK(asset.render_package[1].screen_rect.h == 128);
 
-    CHECK_FALSE(renderer.upsert_depth_cue_overlay_object(&asset, base_index, first_overlay));
+    CHECK_FALSE(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, first_overlay));
     REQUIRE(asset.render_package.size() == 2);
     CHECK(asset.render_package[1].color_mod.a == 120);
 
     const RenderObject updated_alpha_overlay = make_overlay_object(overlay_texture, 180, 192, 128);
-    CHECK_FALSE(renderer.upsert_depth_cue_overlay_object(&asset, base_index, updated_alpha_overlay));
+    CHECK_FALSE(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, updated_alpha_overlay));
     REQUIRE(asset.render_package.size() == 2);
     CHECK(asset.render_package[1].color_mod.a == 180);
     CHECK(asset.render_package[1].screen_rect.w == 192);
     CHECK(asset.render_package[1].screen_rect.h == 128);
 
     const RenderObject resized_overlay = make_overlay_object(overlay_texture, 180, 256, 160);
-    CHECK(renderer.upsert_depth_cue_overlay_object(&asset, base_index, resized_overlay));
+    CHECK(renderer.test_upsert_depth_cue_overlay_object(&asset, base_index, resized_overlay));
     REQUIRE(asset.render_package.size() == 2);
     CHECK(asset.render_package[1].screen_rect.w == 256);
     CHECK(asset.render_package[1].screen_rect.h == 160);
 
-    CHECK(renderer.remove_depth_cue_overlay_objects(&asset));
+    CHECK(renderer.test_remove_depth_cue_overlay_objects(&asset));
     REQUIRE(asset.render_package.size() == 1);
     CHECK_FALSE(asset.render_package[0].is_depth_cue_overlay);
 
-    CHECK_FALSE(renderer.remove_depth_cue_overlay_objects(&asset));
+    CHECK_FALSE(renderer.test_remove_depth_cue_overlay_objects(&asset));
 }

@@ -22,6 +22,29 @@ float projected_bottom_edge_length(const render_projection::ProjectedSpriteFrame
     return std::hypot(frame.screen_br.x - frame.screen_bl.x,
                       frame.screen_br.y - frame.screen_bl.y);
 }
+
+SDL_FPoint legacy_anchor_screen_point(const WarpedScreenGrid& grid,
+                                      const render_projection::SpriteProjectionInput& input) {
+    const float safe_perspective =
+        (std::isfinite(input.perspective_scale) && input.perspective_scale > 0.0f)
+            ? input.perspective_scale
+            : 1.0f;
+    const float legacy_half_width =
+        static_cast<float>(input.final_width_px) / safe_perspective * 0.5f;
+    SDL_FPoint left{};
+    SDL_FPoint right{};
+    const bool projected =
+        grid.project_world_point(SDL_FPoint{input.world_x - legacy_half_width, input.world_y},
+                                 input.world_z,
+                                 left) &&
+        grid.project_world_point(SDL_FPoint{input.world_x + legacy_half_width, input.world_y},
+                                 input.world_z,
+                                 right);
+    REQUIRE(projected);
+    return SDL_FPoint{
+        0.5f * (left.x + right.x),
+        0.5f * (left.y + right.y)};
+}
 }  // namespace
 
 TEST_CASE("WarpedScreenGrid updates projection dimensions immediately on resize") {
@@ -175,4 +198,45 @@ TEST_CASE("Projected sprite frame keeps final width stable across depth with fix
     CHECK(farther_width == doctest::Approx(96.0f).epsilon(0.08));
     CHECK(nearer_width == doctest::Approx(96.0f).epsilon(0.08));
     CHECK(nearer_width == doctest::Approx(farther_width).epsilon(0.06));
+}
+
+TEST_CASE("Projected sprite frame preserves legacy anchor placement while applying local width calibration") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const world::CameraProjectionParams params = grid.projection_params();
+    const float depth_sign = (params.forward_z >= 0.0) ? 1.0f : -1.0f;
+    const float anchor_world_z = static_cast<float>(params.anchor_world_z);
+    const float farther_world_z = anchor_world_z + depth_sign * 520.0f;
+    const float nearer_world_z = anchor_world_z + depth_sign * 140.0f;
+
+    const SDL_FPoint ground_center =
+        grid.screen_to_map(SDL_Point{params.screen_width / 2, params.screen_height / 2});
+
+    render_projection::SpriteProjectionInput projection_input{};
+    projection_input.world_x = ground_center.x;
+    projection_input.world_y = 0.0f;
+    projection_input.perspective_scale = 2.4f;
+    projection_input.frame_width_px = 64;
+    projection_input.frame_height_px = 64;
+    projection_input.final_width_px = 96;
+    projection_input.final_height_px = 96;
+    projection_input.anchor_uv = SDL_FPoint{0.2f, 0.35f};
+
+    render_projection::ProjectedSpriteFrame farther_frame{};
+    projection_input.world_z = farther_world_z;
+    REQUIRE(render_projection::build_projected_sprite_frame(grid, projection_input, farther_frame));
+    REQUIRE(farther_frame.valid);
+    const SDL_FPoint farther_anchor = farther_frame.sample_screen_from_uv(projection_input.anchor_uv);
+    const SDL_FPoint farther_legacy_anchor = legacy_anchor_screen_point(grid, projection_input);
+    CHECK(farther_anchor.x == doctest::Approx(farther_legacy_anchor.x).epsilon(1e-4));
+    CHECK(farther_anchor.y == doctest::Approx(farther_legacy_anchor.y).epsilon(1e-4));
+
+    render_projection::ProjectedSpriteFrame nearer_frame{};
+    projection_input.world_z = nearer_world_z;
+    REQUIRE(render_projection::build_projected_sprite_frame(grid, projection_input, nearer_frame));
+    REQUIRE(nearer_frame.valid);
+    const SDL_FPoint nearer_anchor = nearer_frame.sample_screen_from_uv(projection_input.anchor_uv);
+    const SDL_FPoint nearer_legacy_anchor = legacy_anchor_screen_point(grid, projection_input);
+    CHECK(nearer_anchor.x == doctest::Approx(nearer_legacy_anchor.x).epsilon(1e-4));
+    CHECK(nearer_anchor.y == doctest::Approx(nearer_legacy_anchor.y).epsilon(1e-4));
 }

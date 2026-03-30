@@ -98,6 +98,12 @@ class AssetInfo {
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
 
+    struct AnchorChildPointCandidate {
+        std::string anchor_point_name;
+        nlohmann::json candidates = nlohmann::json::object();
+    };
+    std::vector<AnchorChildPointCandidate> anchor_point_child_candidates;
+
     bool moving_asset = false;
     std::vector<float>  scale_variants;
     struct NamedArea {
@@ -178,6 +184,13 @@ class AssetInfo {
 
     void set_spawn_groups_payload(const nlohmann::json& groups);
     nlohmann::json spawn_groups_payload() const;
+    void set_anchor_point_child_candidates_payload(const nlohmann::json& candidates);
+    nlohmann::json anchor_point_child_candidates_payload() const;
+    nlohmann::json anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const;
+    bool upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates);
+    bool rename_anchor_point_child_candidate(const std::string& old_name, const std::string& new_name);
+    bool remove_anchor_point_child_candidate(const std::string& anchor_point_name);
+    bool reconcile_anchor_point_child_candidates(const std::vector<std::string>& canonical_anchor_names);
 
     std::string info_json_path() const { return info_json_path_; }
     std::string asset_dir_path() const { return dir_path_; }
@@ -223,6 +236,7 @@ class AssetInfo {
     nlohmann::json info_json_;
     std::string info_json_path_;
     void initialize_from_json(const nlohmann::json& data);
+    void sync_anchor_point_child_candidates_info_json();
     void rebuild_tag_cache();
     void rebuild_anti_tag_cache();
     static std::uint8_t sanitize_texture_variant_mask(std::uint8_t variants);

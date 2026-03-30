@@ -21,7 +21,6 @@ struct SDL_Renderer;
 #include "PreviewTimeline.hpp"
 #include "AudioPanel.hpp"
 #include "OnEndSelector.hpp"
-#include "MovementSummaryWidget.hpp"
 #include "PlaybackSettingsPanel.hpp"
 #include "SourceConfigPanel.hpp"
 
@@ -38,7 +37,6 @@ namespace animation_editor {
 class AnimationDocument;
 class SourceConfigPanel;
 class PlaybackSettingsPanel;
-class MovementSummaryWidget;
 class OnEndSelector;
 class AudioPanel;
 class PreviewProvider;
@@ -138,7 +136,6 @@ class AnimationInspectorPanel {
     std::shared_ptr<PreviewProvider> preview_provider_;
     std::unique_ptr<SourceConfigPanel> source_config_;
     std::unique_ptr<PlaybackSettingsPanel> playback_settings_;
-    std::unique_ptr<MovementSummaryWidget> movement_summary_;
     std::unique_ptr<OnEndSelector> on_end_selector_;
     std::unique_ptr<AudioPanel> audio_panel_;
     std::unique_ptr<DMTextBox> name_box_;
@@ -155,8 +152,6 @@ class AnimationInspectorPanel {
     mutable SDL_Rect source_section_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect playback_section_rect_{0, 0, 0, 0};
     mutable SDL_Rect playback_header_rect_{0, 0, 0, 0};
-    mutable SDL_Rect movement_section_rect_{0, 0, 0, 0};
-    mutable SDL_Rect movement_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect on_end_section_rect_{0, 0, 0, 0};
     mutable SDL_Rect on_end_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect audio_section_rect_{0, 0, 0, 0};
@@ -164,7 +159,6 @@ class AnimationInspectorPanel {
     mutable SDL_Rect preview_rect_{0, 0, 0, 0};
     mutable SDL_Rect source_rect_{0, 0, 0, 0};
     mutable SDL_Rect playback_rect_{0, 0, 0, 0};
-    mutable SDL_Rect movement_rect_{0, 0, 0, 0};
     mutable SDL_Rect on_end_rect_{0, 0, 0, 0};
     mutable SDL_Rect audio_rect_{0, 0, 0, 0};
     mutable SDL_Rect scrollbar_track_{0, 0, 0, 0};

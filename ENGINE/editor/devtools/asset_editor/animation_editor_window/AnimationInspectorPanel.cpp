@@ -17,7 +17,6 @@
 
 #include "AnimationDocument.hpp"
 #include "AudioPanel.hpp"
-#include "MovementSummaryWidget.hpp"
 #include "OnEndSelector.hpp"
 #include "PlaybackSettingsPanel.hpp"
 #include "PreviewProvider.hpp"
@@ -321,7 +320,6 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     };
 
     add_section(playback_settings_.get());
-    add_section(movement_summary_.get());
     add_section(on_end_selector_.get());
     add_section(audio_panel_.get());
 
@@ -354,7 +352,6 @@ void AnimationInspectorPanel::update() {
     update_preview_playback();
 
     if (playback_settings_) playback_settings_->update();
-    if (movement_summary_) movement_summary_->update();
     if (on_end_selector_) on_end_selector_->update();
     if (audio_panel_) audio_panel_->update();
     notify_payload_change_if_needed();
@@ -392,6 +389,7 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
 
     {
         ClipScope content_clip(renderer, bounds_);
+        ClipScope scroll_clip(renderer, scrollable_bounds_);
 
         draw_section_header(renderer, source_section_header_rect_, "Source");
         if (source_frames_button_) source_frames_button_->render(renderer);
@@ -404,24 +402,17 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
         render_preview_controls(renderer);
         render_preview(renderer);
 
-        {
-            ClipScope scroll_clip(renderer, scrollable_bounds_);
-            if (playback_settings_) {
-                draw_section_header(renderer, playback_header_rect_, "Playback");
-                playback_settings_->render(renderer);
-            }
-            if (movement_summary_) {
-                draw_section_header(renderer, movement_header_rect_, "Geometry");
-                movement_summary_->render(renderer);
-            }
-            if (on_end_selector_) {
-                draw_section_header(renderer, on_end_header_rect_, "On End");
-                on_end_selector_->render(renderer);
-            }
-            if (audio_panel_) {
-                draw_section_header(renderer, audio_header_rect_, "Audio");
-                audio_panel_->render(renderer);
-            }
+        if (playback_settings_) {
+            draw_section_header(renderer, playback_header_rect_, "Playback");
+            playback_settings_->render(renderer);
+        }
+        if (on_end_selector_) {
+            draw_section_header(renderer, on_end_header_rect_, "On End");
+            on_end_selector_->render(renderer);
+        }
+        if (audio_panel_) {
+            draw_section_header(renderer, audio_header_rect_, "Audio");
+            audio_panel_->render(renderer);
         }
     }
 
@@ -557,7 +548,6 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
 
     if (source_config_ && source_config_->handle_event(e)) handled = true;
     if (playback_settings_ && playback_settings_->handle_event(e)) handled = true;
-    if (movement_summary_ && movement_summary_->handle_event(e)) handled = true;
     if (on_end_selector_ && on_end_selector_->handle_event(e)) handled = true;
     if (audio_panel_ && audio_panel_->handle_event(e)) handled = true;
 
@@ -742,12 +732,6 @@ void AnimationInspectorPanel::rebuild_widgets() {
     playback_settings_->set_document(document_);
     playback_settings_->set_animation_id(animation_id_);
 
-    if (!movement_summary_) {
-        movement_summary_ = std::make_unique<MovementSummaryWidget>();
-    }
-    movement_summary_->set_document(document_);
-    movement_summary_->set_animation_id(animation_id_);
-
     if (!on_end_selector_) {
         on_end_selector_ = std::make_unique<OnEndSelector>();
     }
@@ -767,10 +751,6 @@ void AnimationInspectorPanel::rebuild_widgets() {
 }
 
 void AnimationInspectorPanel::refresh_totals() {
-    if (movement_summary_) {
-        movement_summary_->set_document(document_);
-        movement_summary_->set_animation_id(animation_id_);
-    }
 }
 
 void AnimationInspectorPanel::layout_widgets() const {
@@ -815,51 +795,56 @@ void AnimationInspectorPanel::layout_widgets() const {
     const int header_total_height = header_content_height + padding;
     self->header_rect_ = SDL_Rect{bounds_.x, bounds_.y, bounds_.w, header_total_height};
 
-    LayoutCursor static_cursor(bounds_.y + padding + header_content_height + section_gap, 0);
+    const int content_top = bounds_.y + header_total_height + section_gap;
+    const int scroll_height = std::max(0, bounds_.y + bounds_.h - content_top);
+    self->scrollable_bounds_ = SDL_Rect{x, content_top, width, scroll_height};
+    self->scroll_controller_.set_bounds(self->scrollable_bounds_);
+    const int scroll = self->scroll_controller_.scroll();
+    LayoutCursor cursor(content_top, scroll);
 
-    self->source_section_header_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kSectionHeaderHeight};
+    self->source_section_header_rect_ = SDL_Rect{x, cursor.visual_y(), width, kSectionHeaderHeight};
     self->source_section_rect_ = self->source_section_header_rect_;
-    static_cursor.advance(kSectionHeaderHeight);
+    cursor.advance(kSectionHeaderHeight);
 
-    static_cursor.advance(item_gap);
+    cursor.advance(item_gap);
     const int selector_height = DMButton::height();
     const int selector_gap = DMSpacing::small_gap();
-    self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, selector_height};
+    self->source_selector_rect_ = SDL_Rect{x, cursor.visual_y(), width, selector_height};
     int frames_width = std::max(0, (width - selector_gap) / 2);
     int animation_width = std::max(0, width - frames_width - selector_gap);
     if (source_frames_button_) {
-        SDL_Rect rect{x, static_cursor.visual_y(), frames_width, selector_height};
+        SDL_Rect rect{x, cursor.visual_y(), frames_width, selector_height};
         source_frames_button_->set_rect(rect);
     }
     if (source_animation_button_) {
-        SDL_Rect rect{x + frames_width + selector_gap, static_cursor.visual_y(), animation_width, selector_height};
+        SDL_Rect rect{x + frames_width + selector_gap, cursor.visual_y(), animation_width, selector_height};
         source_animation_button_->set_rect(rect);
     }
-    static_cursor.advance(selector_height);
+    cursor.advance(selector_height);
 
     int source_height = source_config_ ? source_config_->preferred_height(width) : 0;
     if (source_height > 0) {
-        static_cursor.advance(item_gap);
-        self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, source_height};
+        cursor.advance(item_gap);
+        self->source_rect_ = SDL_Rect{x, cursor.visual_y(), width, source_height};
         if (source_config_) {
             source_config_->set_bounds(self->source_rect_);
         }
-        static_cursor.advance(source_height);
+        cursor.advance(source_height);
     } else {
-        self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
+        self->source_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
         if (source_config_) {
             source_config_->set_bounds(self->source_rect_);
         }
     }
-    self->source_section_rect_.h = std::max(0, static_cursor.visual_y() - self->source_section_rect_.y);
+    self->source_section_rect_.h = std::max(0, cursor.visual_y() - self->source_section_rect_.y);
 
-    static_cursor.advance(section_gap);
-    self->preview_section_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kSectionHeaderHeight};
-    static_cursor.advance(kSectionHeaderHeight);
-    static_cursor.advance(item_gap);
+    cursor.advance(section_gap);
+    self->preview_section_rect_ = SDL_Rect{x, cursor.visual_y(), width, kSectionHeaderHeight};
+    cursor.advance(kSectionHeaderHeight);
+    cursor.advance(item_gap);
 
     const int controls_height = preview_controls_height();
-    self->preview_controls_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, controls_height};
+    self->preview_controls_rect_ = SDL_Rect{x, cursor.visual_y(), width, controls_height};
     SDL_Rect slider_rect{self->preview_controls_rect_.x, self->preview_controls_rect_.y, self->preview_controls_rect_.w, controls_height};
     if (preview_play_button_) {
         int button_width = std::min(kPreviewControlsButtonWidth, self->preview_controls_rect_.w);
@@ -876,56 +861,47 @@ void AnimationInspectorPanel::layout_widgets() const {
     if (preview_scrub_slider_) {
         preview_scrub_slider_->set_rect(slider_rect);
     }
-    static_cursor.advance(controls_height);
-    static_cursor.advance(item_gap);
+    cursor.advance(controls_height);
+    cursor.advance(item_gap);
 
-    self->preview_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kPreviewHeight};
-    static_cursor.advance(kPreviewHeight);
-
-    const int scroll_start = static_cursor.logical_y;
-    const int scroll_height = std::max(0, bounds_.y + bounds_.h - scroll_start);
-    SDL_Rect scroll_bounds{x, scroll_start, width, scroll_height};
-    self->scrollable_bounds_ = scroll_bounds;
-    self->scroll_controller_.set_bounds(scroll_bounds);
-    int scroll = self->scroll_controller_.scroll();
-    LayoutCursor scroll_cursor(scroll_start, scroll);
+    self->preview_rect_ = SDL_Rect{x, cursor.visual_y(), width, kPreviewHeight};
+    cursor.advance(kPreviewHeight);
 
     auto place_static_section = [&](auto* widget,
                                     SDL_Rect& header_rect,
                                     SDL_Rect& content_rect,
                                     SDL_Rect& section_rect) {
         if (!widget) {
-            auto reset_rect = [&](SDL_Rect& rect) { rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0}; };
+            auto reset_rect = [&](SDL_Rect& rect) { rect = SDL_Rect{x, cursor.visual_y(), width, 0}; };
             reset_rect(header_rect);
             reset_rect(content_rect);
             reset_rect(section_rect);
             return;
         }
 
-        scroll_cursor.advance(section_gap);
-        section_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
-        header_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, kSectionHeaderHeight};
-        scroll_cursor.advance(kSectionHeaderHeight);
+        cursor.advance(section_gap);
+        section_rect = SDL_Rect{x, cursor.visual_y(), width, 0};
+        header_rect = SDL_Rect{x, cursor.visual_y(), width, kSectionHeaderHeight};
+        cursor.advance(kSectionHeaderHeight);
         int content_height = widget->preferred_height(width);
         if (content_height > 0) {
-            scroll_cursor.advance(item_gap);
-            content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, content_height};
+            cursor.advance(item_gap);
+            content_rect = SDL_Rect{x, cursor.visual_y(), width, content_height};
             widget->set_bounds(content_rect);
-            scroll_cursor.advance(content_height);
+            cursor.advance(content_height);
         } else {
-            content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
+            content_rect = SDL_Rect{x, cursor.visual_y(), width, 0};
             widget->set_bounds(content_rect);
         }
 
-        section_rect.h = std::max(0, scroll_cursor.visual_y() - section_rect.y);
+        section_rect.h = std::max(0, cursor.visual_y() - section_rect.y);
     };
 
     place_static_section(playback_settings_.get(), self->playback_header_rect_, self->playback_rect_, self->playback_section_rect_);
-    place_static_section(movement_summary_.get(), self->movement_header_rect_, self->movement_rect_, self->movement_section_rect_);
     place_static_section(on_end_selector_.get(), self->on_end_header_rect_, self->on_end_rect_, self->on_end_section_rect_);
     place_static_section(audio_panel_.get(), self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
 
-    self->content_height_ = scroll_cursor.logical_y + padding - scroll_start;
+    self->content_height_ = cursor.logical_y + padding - content_top;
     const int previous_scroll = scroll;
     self->scroll_controller_.set_content_height(self->content_height_);
     if (self->scroll_controller_.scroll() != previous_scroll) {
@@ -1211,21 +1187,9 @@ void AnimationInspectorPanel::apply_dependencies() {
                 playback_settings_->set_document(document_);
                 playback_settings_->set_animation_id(id);
             }
-            if (movement_summary_) {
-                movement_summary_->set_document(document_);
-                movement_summary_->set_animation_id(id);
-            }
             this->layout_dirty_ = true;
             notify_payload_change_if_needed(true);
         });
-    }
-
-    if (movement_summary_) {
-        movement_summary_->set_edit_callback(frame_edit_callback_);
-        movement_summary_->set_mode_enabled(FrameEditorLaunchMode::Movement, false);
-        movement_summary_->set_mode_enabled(FrameEditorLaunchMode::AnchorPoints, false);
-        movement_summary_->set_mode_launch_callback({});
-        movement_summary_->set_go_to_source_callback(navigate_to_animation_callback_);
     }
 
     if (audio_panel_) {

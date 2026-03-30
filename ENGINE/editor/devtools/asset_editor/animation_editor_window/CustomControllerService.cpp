@@ -257,6 +257,7 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         hpp << "\n";
         hpp << "protected:\n";
         hpp << "    void on_update(const Input& in) override;\n";
+        hpp << "    void on_process_pending_attacks(Asset& self) override;\n";
         hpp << "};\n\n";
         hpp << "#endif\n";
     }
@@ -287,6 +288,10 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         cpp << "        : std::vector<const Room::NamedArea*>{};\n";
         cpp << "    (void)current_room;\n";
         cpp << "    (void)trigger_areas;\n";
+        cpp << "}\n";
+        cpp << "\n";
+        cpp << "void " << class_name << "::on_process_pending_attacks(Asset& self_ref) {\n";
+        cpp << "    (void)self_ref;\n";
         cpp << "}\n";
     }
 }

@@ -139,6 +139,30 @@ bool contains_spawn_candidate_named(const nlohmann::json& node, const std::strin
     return false;
 }
 
+Asset* find_owner_child_named(const Asset* owner, const std::string& child_name) {
+    if (!owner) {
+        return nullptr;
+    }
+    for (Asset* child : owner->children()) {
+        if (!child || !child->info) {
+            continue;
+        }
+        if (child->info->name == child_name) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+AssetInfo::AnchorChildPointCandidate make_anchor_child_candidate_entry(const std::string& anchor_name,
+                                                                       nlohmann::json candidates_array) {
+    AssetInfo::AnchorChildPointCandidate entry{};
+    entry.anchor_point_name = anchor_name;
+    entry.candidates = nlohmann::json::object();
+    entry.candidates["candidates"] = std::move(candidates_array);
+    return entry;
+}
+
 std::filesystem::path repo_root() {
     return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
 }
@@ -595,6 +619,174 @@ TEST_CASE("ChildAsset lifecycle controls visibility, one-shot placement, unbind,
     CHECK(test_child_asset_runtime::asset_count(*assets_scope.assets) == 1);
     child->destroy();
     CHECK(test_child_asset_runtime::asset_count(*assets_scope.assets) == 1);
+}
+
+TEST_CASE("CustomAssetController resolves anchor child candidates in constructor and binds child") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 32, 48, 64, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 5, 7, 3, 0, 0, 0.0f, true});
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_entry(
+            "hat",
+            nlohmann::json::array({nlohmann::json{
+                {"name", "vibble_hat"},
+                {"chance", 100}
+            }}))
+    };
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    Asset* candidate_child = find_owner_child_named(owner, "vibble_hat");
+    REQUIRE(candidate_child != nullptr);
+    CHECK(candidate_child->world_x() == owner->world_x() + 5);
+    CHECK(candidate_child->world_y() == owner->world_y() + 7);
+    CHECK(candidate_child->world_z() == owner->world_z() + 3);
+}
+
+TEST_CASE("CustomAssetController skips null anchor child candidate resolution") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 20, 30, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_entry(
+            "hat",
+            nlohmann::json::array({nlohmann::json{
+                {"name", "null"},
+                {"chance", 100}
+            }}))
+    };
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    CHECK(find_owner_child_named(owner, "vibble_hat") == nullptr);
+}
+
+TEST_CASE("CustomAssetController candidate resolution is deterministic for same anchor and position") {
+    AssetsScope assets_scope;
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+    assets_scope.assets->library().add_asset("vibble_mouth", nlohmann::json::object());
+
+    auto make_owner = [&](int x, int y, int z) {
+        Asset* owner = test_child_asset_runtime::attach_owned_asset(
+            assets_scope.assets,
+            test_child_asset_runtime::make_test_asset("vibble", x, y, z, 0));
+        REQUIRE(owner != nullptr);
+        REQUIRE(owner->info != nullptr);
+        test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 2, 2, 2, 0, 0, 0.0f, true});
+        owner->info->anchor_point_child_candidates = {
+            make_anchor_child_candidate_entry(
+                "hat",
+                nlohmann::json::array({
+                    nlohmann::json{{"name", "vibble_hat"}, {"chance", 50}},
+                    nlohmann::json{{"name", "vibble_mouth"}, {"chance", 50}}
+                }))
+        };
+        return owner;
+    };
+
+    Asset* owner_a = make_owner(40, 50, 60);
+    Asset* owner_b = make_owner(40, 50, 60);
+
+    CustomAssetController controller_a(owner_a);
+    CustomAssetController controller_b(owner_b);
+    Input input;
+    controller_a.update(input);
+    controller_b.update(input);
+
+    Asset* child_a_hat = find_owner_child_named(owner_a, "vibble_hat");
+    Asset* child_a_mouth = find_owner_child_named(owner_a, "vibble_mouth");
+    Asset* child_b_hat = find_owner_child_named(owner_b, "vibble_hat");
+    Asset* child_b_mouth = find_owner_child_named(owner_b, "vibble_mouth");
+
+    const bool a_selected_hat = child_a_hat != nullptr;
+    const bool b_selected_hat = child_b_hat != nullptr;
+    const bool a_selected_mouth = child_a_mouth != nullptr;
+    const bool b_selected_mouth = child_b_mouth != nullptr;
+    CHECK((a_selected_hat && b_selected_hat) || (a_selected_mouth && b_selected_mouth));
+}
+
+TEST_CASE("CustomAssetController anchor candidate retries stop after 60 failed updates") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 1, 1, 1, 0, 0, 0.0f, true});
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_entry(
+            "hat",
+            nlohmann::json::array({nlohmann::json{
+                {"name", "vibble_hat"},
+                {"chance", 100}
+            }}))
+    };
+
+    test_child_asset_runtime::set_spawn_failures(*assets_scope.assets, "vibble_hat", 10'000);
+
+    CustomAssetController controller(owner);
+    Input input;
+    for (int idx = 0; idx < 75; ++idx) {
+        controller.update(input);
+    }
+    CHECK(find_owner_child_named(owner, "vibble_hat") == nullptr);
+
+    test_child_asset_runtime::set_spawn_failures(*assets_scope.assets, "vibble_hat", 0);
+    for (int idx = 0; idx < 10; ++idx) {
+        controller.update(input);
+    }
+    CHECK(find_owner_child_named(owner, "vibble_hat") == nullptr);
+}
+
+TEST_CASE("CustomAssetController anchor candidate recovers when failures stay below retry cap") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 22, 33, 44, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 3, 4, 5, 0, 0, 0.0f, true});
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_entry(
+            "hat",
+            nlohmann::json::array({nlohmann::json{
+                {"name", "vibble_hat"},
+                {"chance", 100}
+            }}))
+    };
+
+    test_child_asset_runtime::set_spawn_failures(*assets_scope.assets, "vibble_hat", 3);
+
+    CustomAssetController controller(owner);
+    Input input;
+    for (int idx = 0; idx < 10; ++idx) {
+        controller.update(input);
+    }
+
+    Asset* candidate_child = find_owner_child_named(owner, "vibble_hat");
+    REQUIRE(candidate_child != nullptr);
+    CHECK(candidate_child->world_x() == owner->world_x() + 3);
+    CHECK(candidate_child->world_y() == owner->world_y() + 4);
+    CHECK(candidate_child->world_z() == owner->world_z() + 5);
 }
 
 TEST_CASE("Manifest no longer authors vibble eyes as a spawn-group child asset") {

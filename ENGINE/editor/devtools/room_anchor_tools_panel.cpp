@@ -56,6 +56,8 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     flip_horizontal_textbox_ = std::make_unique<DMTextBox>("Flip Horizontal (1/0)", "1");
     flip_vertical_textbox_ = std::make_unique<DMTextBox>("Flip Vertical (1/0)", "1");
     rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
+    hidden_checkbox_ = std::make_unique<DMCheckbox>("Hidden", false);
+    resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
     onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
     apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
@@ -151,6 +153,12 @@ void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
         int rotation_degrees = static_cast<int>(std::lround(values.rotation_degrees));
         rotation_slider_->set_value(rotation_degrees);
     }
+    if (hidden_checkbox_) {
+        hidden_checkbox_->set_value(values.hidden);
+    }
+    if (resolve_x_checkbox_) {
+        resolve_x_checkbox_->set_value(values.resolve_x);
+    }
 }
 
 void RoomAnchorToolsPanel::set_onion_skin_enabled(bool enabled) {
@@ -197,6 +205,8 @@ RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values()
     values.flip_horizontal = parse_bool_or(flip_horizontal_textbox_ ? flip_horizontal_textbox_->value() : std::string{}, true);
     values.flip_vertical = parse_bool_or(flip_vertical_textbox_ ? flip_vertical_textbox_->value() : std::string{}, true);
     values.rotation_degrees = rotation_slider_ ? static_cast<float>(rotation_slider_->value()) : 0.0f;
+    values.hidden = hidden_checkbox_ ? hidden_checkbox_->value() : false;
+    values.resolve_x = resolve_x_checkbox_ ? resolve_x_checkbox_->value() : true;
     if (!std::isfinite(values.rotation_degrees)) {
         values.rotation_degrees = 0.0f;
     }
@@ -352,6 +362,14 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
         details_changed = true;
     }
+    if (has_selected_anchor && hidden_checkbox_ && hidden_checkbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && resolve_x_checkbox_ && resolve_x_checkbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
     if (details_changed && on_apply_details_) {
         on_apply_details_(collect_detail_values());
         handled = true;
@@ -443,6 +461,12 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
         if (rotation_slider_) {
             rotation_slider_->render(renderer);
         }
+        if (hidden_checkbox_) {
+            hidden_checkbox_->render(renderer);
+        }
+        if (resolve_x_checkbox_) {
+            resolve_x_checkbox_->render(renderer);
+        }
     }
     if (delete_button_) {
         delete_button_->render(renderer);
@@ -498,6 +522,8 @@ void RoomAnchorToolsPanel::update_layout() const {
     const int flip_h_h = flip_horizontal_textbox_ ? flip_horizontal_textbox_->preferred_height(controls_width) : DMTextBox::height();
     const int flip_v_h = flip_vertical_textbox_ ? flip_vertical_textbox_->preferred_height(controls_width) : DMTextBox::height();
     const int rotation_h = rotation_slider_ ? rotation_slider_->preferred_height(controls_width) : DMSlider::height();
+    const int hidden_h = hidden_checkbox_ ? DMCheckbox::height() : 0;
+    const int resolve_x_h = resolve_x_checkbox_ ? DMCheckbox::height() : 0;
     int controls_height = 0;
     controls_height += DMButton::height();                          // add
     controls_height += kSectionGap;
@@ -515,6 +541,10 @@ void RoomAnchorToolsPanel::update_layout() const {
         controls_height += flip_v_h;
         controls_height += row_gap;
         controls_height += rotation_h;
+        controls_height += row_gap;
+        controls_height += hidden_h;
+        controls_height += row_gap;
+        controls_height += resolve_x_h;
         controls_height += kSectionGap;
     }
     controls_height += DMButton::height();                          // delete
@@ -575,7 +605,15 @@ void RoomAnchorToolsPanel::update_layout() const {
         }
         if (rotation_slider_) {
             rotation_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, rotation_h});
-            row_y += rotation_h + kSectionGap;
+            row_y += rotation_h + row_gap;
+        }
+        if (hidden_checkbox_) {
+            hidden_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, hidden_h});
+            row_y += hidden_h + row_gap;
+        }
+        if (resolve_x_checkbox_) {
+            resolve_x_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, resolve_x_h});
+            row_y += resolve_x_h + kSectionGap;
         }
     } else {
         detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -590,6 +628,12 @@ void RoomAnchorToolsPanel::update_layout() const {
         }
         if (rotation_slider_) {
             rotation_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (hidden_checkbox_) {
+            hidden_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (resolve_x_checkbox_) {
+            resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
 

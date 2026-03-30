@@ -482,6 +482,16 @@ private:
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
     bool delete_selected_anchor_in_current_frame();
     bool apply_anchor_current_frame_to_scope(EditorFramePropagationScope scope);
+    bool normalize_anchor_invariants_for_eligible_animations(Asset* target,
+                                                              const std::shared_ptr<AssetInfo>& target_info,
+                                                              bool& updated_any);
+    bool commit_anchor_bulk_edit(Asset* target,
+                                 const std::shared_ptr<AssetInfo>& target_info,
+                                 devmode::core::DevSaveCoordinator::Priority priority,
+                                 bool flush_now,
+                                 const char* reason,
+                                 const char* flush_tag);
+    std::vector<std::string> eligible_anchor_animation_names(const AssetInfo& info) const;
     int find_hitbox_corner_at_screen_point(SDL_Point screen_point,
                                            int radius_px,
                                            int& out_corner_index,
@@ -604,6 +614,8 @@ private:
         bool flip_horizontal = true;
         bool flip_vertical = true;
         float rotation_degrees = 0.0f;
+        bool hidden = false;
+        bool resolve_x = true;
         SDL_FPoint flat_screen_px{0.0f, 0.0f};
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};

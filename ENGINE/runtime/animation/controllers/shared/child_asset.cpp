@@ -194,8 +194,8 @@ bool ChildAsset::apply_anchor_solution(const AnchorPoint& parent_anchor) {
 }
 
 bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor) {
-    const bool anchor_available = parent_anchor.is_active();
-    if (!anchor_available) {
+    const bool anchor_render_visible = parent_anchor.is_active() && !parent_anchor.hidden;
+    if (!anchor_render_visible) {
         auto_hidden_for_anchor_ = true;
         bool changed = clear_child_render_offset();
         const bool should_hide = manual_hidden_ || !has_successful_sync_ || auto_hidden_for_anchor_;
@@ -288,13 +288,12 @@ bool ChildAsset::place_once(const AnchorPoint& parent_anchor, bool keep_bound) {
         bound_anchor_name_.clear();
     }
 
-    if (!parent_anchor.is_active()) {
-        auto_hidden_for_anchor_ = true;
-        refresh_hidden_state();
+    const bool anchor_render_visible = parent_anchor.is_active() && !parent_anchor.hidden;
+    const bool changed = apply_anchor_solution(parent_anchor);
+    if (!anchor_render_visible) {
         return false;
     }
-
-    return apply_anchor_solution(parent_anchor);
+    return changed;
 }
 
 bool ChildAsset::set_child_hidden_state(bool hidden) {

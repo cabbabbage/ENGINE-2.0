@@ -1529,6 +1529,8 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         resolved.flip_horizontal = resolved.exists ? handle.runtime_flip_horizontal : false;
         resolved.flip_vertical = resolved.exists ? handle.runtime_flip_vertical : false;
         resolved.rotation_degrees = resolved.exists ? handle.runtime_rotation_degrees : 0.0f;
+        resolved.hidden = anchor_present ? frame_anchor->hidden : false;
+        resolved.resolve_x = anchor_present ? frame_anchor->resolve_x : true;
 
         if (resolved.exists) {
                 resolved.world_pos_2d = handle.world_exact_pos_2d;

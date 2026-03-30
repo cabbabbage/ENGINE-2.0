@@ -33,6 +33,8 @@ struct DisplacedAssetAnchorPoint {
     bool        flip_horizontal = true;
     bool        flip_vertical = true;
     float       rotation_degrees = 0.0f;
+    bool        hidden = false;
+    bool        resolve_x = true;
 
     DisplacedAssetAnchorPoint() = default;
     DisplacedAssetAnchorPoint(std::string name_,
@@ -41,14 +43,18 @@ struct DisplacedAssetAnchorPoint {
                               int depth_offset_px = 0,
                               bool flip_horizontal_ = true,
                               bool flip_vertical_ = true,
-                              float rotation_degrees_ = 0.0f)
+                              float rotation_degrees_ = 0.0f,
+                              bool hidden_ = false,
+                              bool resolve_x_ = true)
         : name(std::move(name_))
         , texture_x(tex_x)
         , texture_y(tex_y)
         , depth_offset(depth_offset_px)
         , flip_horizontal(flip_horizontal_)
         , flip_vertical(flip_vertical_)
-        , rotation_degrees(rotation_degrees_) {}
+        , rotation_degrees(rotation_degrees_)
+        , hidden(hidden_)
+        , resolve_x(resolve_x_) {}
 
     bool is_valid() const {
         return !name.empty();
@@ -78,6 +84,8 @@ struct AnchorPoint {
     bool flip_horizontal = false;
     bool flip_vertical = false;
     float rotation_degrees = 0.0f;
+    bool hidden = false;
+    bool resolve_x = true;
     SDL_FPoint screen_pos_2d{0.0f, 0.0f};
     Vec2 relative_pos_2d{};
     Vec2 world_pos_2d{}; // exact world-space anchor position (render-facing)

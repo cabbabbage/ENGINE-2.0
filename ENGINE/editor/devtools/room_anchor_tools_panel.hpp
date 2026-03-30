@@ -25,6 +25,8 @@ public:
         bool flip_horizontal = true;
         bool flip_vertical = true;
         float rotation_degrees = 0.0f;
+        bool hidden = false;
+        bool resolve_x = true;
     };
 
     using SelectCallback = std::function<void(const std::string&)>;
@@ -98,6 +100,8 @@ private:
     std::unique_ptr<DMTextBox> flip_horizontal_textbox_;
     std::unique_ptr<DMTextBox> flip_vertical_textbox_;
     std::unique_ptr<DMSlider> rotation_slider_;
+    std::unique_ptr<DMCheckbox> hidden_checkbox_;
+    std::unique_ptr<DMCheckbox> resolve_x_checkbox_;
     std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;

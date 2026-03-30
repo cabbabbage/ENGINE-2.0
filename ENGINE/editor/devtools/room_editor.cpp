@@ -67,6 +67,7 @@
 #include <cctype>
 #include <limits>
 #include <random>
+#include <set>
 #include <tuple>
 #include <vector>
 #include <unordered_map>
@@ -1154,6 +1155,72 @@ std::vector<std::string> anchor_names_for_frame(const AnimationFrame* frame) {
         }
     }
     return names;
+}
+
+bool anchor_animation_is_eligible_for_edit(const Animation& animation) {
+    if (!animation.has_frames()) {
+        return false;
+    }
+    if (animation.source.kind != "animation") {
+        return true;
+    }
+    return !animation.inherit_source_geometry;
+}
+
+const DisplacedAssetAnchorPoint* find_named_anchor(const AnimationFrame* frame, const std::string& name) {
+    if (!frame || name.empty()) {
+        return nullptr;
+    }
+    return frame->find_anchor(name);
+}
+
+DisplacedAssetAnchorPoint* find_named_anchor_mutable(AnimationFrame* frame, const std::string& name) {
+    if (!frame || name.empty()) {
+        return nullptr;
+    }
+    auto it = std::find_if(frame->anchor_points.begin(),
+                           frame->anchor_points.end(),
+                           [&](const DisplacedAssetAnchorPoint& anchor) {
+                               return anchor.name == name;
+                           });
+    return it != frame->anchor_points.end() ? &(*it) : nullptr;
+}
+
+bool copy_anchor_authoring_fields(DisplacedAssetAnchorPoint& target, const DisplacedAssetAnchorPoint& source) {
+    bool changed = false;
+    if (target.texture_x != source.texture_x) {
+        target.texture_x = source.texture_x;
+        changed = true;
+    }
+    if (target.texture_y != source.texture_y) {
+        target.texture_y = source.texture_y;
+        changed = true;
+    }
+    if (target.depth_offset != source.depth_offset) {
+        target.depth_offset = source.depth_offset;
+        changed = true;
+    }
+    if (target.flip_horizontal != source.flip_horizontal) {
+        target.flip_horizontal = source.flip_horizontal;
+        changed = true;
+    }
+    if (target.flip_vertical != source.flip_vertical) {
+        target.flip_vertical = source.flip_vertical;
+        changed = true;
+    }
+    if (std::fabs(target.rotation_degrees - source.rotation_degrees) > 1e-4f) {
+        target.rotation_degrees = source.rotation_degrees;
+        changed = true;
+    }
+    if (target.hidden != source.hidden) {
+        target.hidden = source.hidden;
+        changed = true;
+    }
+    if (target.resolve_x != source.resolve_x) {
+        target.resolve_x = source.resolve_x;
+        changed = true;
+    }
+    return changed;
 }
 
 static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) {
@@ -8018,6 +8085,8 @@ void RoomEditor::sync_anchor_tools_panel() {
         detail.flip_horizontal = selected_it->flip_horizontal;
         detail.flip_vertical = selected_it->flip_vertical;
         detail.rotation_degrees = selected_it->rotation_degrees;
+        detail.hidden = selected_it->hidden;
+        detail.resolve_x = selected_it->resolve_x;
         anchor_tools_panel_->set_detail_values(detail);
     } else {
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
@@ -8062,6 +8131,8 @@ void RoomEditor::refresh_anchor_mode_handles() {
         handle.flip_horizontal = anchor.flip_horizontal;
         handle.flip_vertical = anchor.flip_vertical;
         handle.rotation_degrees = anchor.rotation_degrees;
+        handle.hidden = anchor.hidden;
+        handle.resolve_x = anchor.resolve_x;
         handle.flat_screen_px = sample.flat_screen_px;
         handle.has_flat_screen_px = sample.has_flat_screen_px;
         handle.final_screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
@@ -8508,6 +8579,8 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
     const bool requested_flip_horizontal = values.flip_horizontal;
     const bool requested_flip_vertical = values.flip_vertical;
     float requested_rotation = values.rotation_degrees;
+    const bool requested_hidden = values.hidden;
+    const bool requested_resolve_x = values.resolve_x;
     if (!std::isfinite(requested_rotation)) {
         requested_rotation = 0.0f;
     }
@@ -8524,7 +8597,9 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
             if (it->depth_offset == requested_depth &&
                 it->flip_horizontal == requested_flip_horizontal &&
                 it->flip_vertical == requested_flip_vertical &&
-                std::fabs(it->rotation_degrees - requested_rotation) < 1e-4f) {
+                std::fabs(it->rotation_degrees - requested_rotation) < 1e-4f &&
+                it->hidden == requested_hidden &&
+                it->resolve_x == requested_resolve_x) {
                 return false;
             }
 
@@ -8532,6 +8607,8 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
             it->flip_horizontal = requested_flip_horizontal;
             it->flip_vertical = requested_flip_vertical;
             it->rotation_degrees = requested_rotation;
+            it->hidden = requested_hidden;
+            it->resolve_x = requested_resolve_x;
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);

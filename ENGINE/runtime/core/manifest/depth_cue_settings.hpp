@@ -15,6 +15,7 @@ inline constexpr const char* kBackgroundMaxDepthOffsetKey = "background_max_dept
 inline constexpr float kMinDepthOffset = -50000.0f;
 inline constexpr float kMaxDepthOffset = 50000.0f;
 inline constexpr float kMinSeparation = 5.0f;
+inline constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
 
 struct DepthCueSettings {
     float center_depth_offset = 0.0f;
@@ -22,12 +23,61 @@ struct DepthCueSettings {
     float background_max_depth_offset = 600.0f;
 };
 
+inline float normalize_depth_axis_sign(float sign) {
+    if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
+        return 1.0f;
+    }
+    return sign >= 0.0f ? 1.0f : -1.0f;
+}
+
+inline float depth_axis_sign_from_forward_z(float forward_z) {
+    if (!std::isfinite(forward_z) || std::fabs(forward_z) < kDepthAxisForwardEpsilon) {
+        return 1.0f;
+    }
+    return forward_z >= 0.0f ? 1.0f : -1.0f;
+}
+
+inline float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth_axis_sign) {
+    if (!std::isfinite(world_z) || !std::isfinite(anchor_world_z)) {
+        return 0.0f;
+    }
+    const float sign = normalize_depth_axis_sign(depth_axis_sign);
+    return (world_z - anchor_world_z) * sign;
+}
+
+inline float depth_offset_from_world_z(float world_z, float anchor_world_z, double camera_forward_z) {
+    return depth_offset_from_world_z(world_z, anchor_world_z, depth_axis_sign_from_forward_z(static_cast<float>(camera_forward_z)));
+}
+
+inline float world_z_from_depth_offset(float depth_offset, float anchor_world_z, float depth_axis_sign) {
+    if (!std::isfinite(depth_offset) || !std::isfinite(anchor_world_z)) {
+        return anchor_world_z;
+    }
+    const float sign = normalize_depth_axis_sign(depth_axis_sign);
+    return anchor_world_z + depth_offset * sign;
+}
+
+inline float world_z_from_depth_offset(float depth_offset, float anchor_world_z, double camera_forward_z) {
+    return world_z_from_depth_offset(depth_offset, anchor_world_z, depth_axis_sign_from_forward_z(static_cast<float>(camera_forward_z)));
+}
+
 inline bool nearly_equal(const DepthCueSettings& a,
                          const DepthCueSettings& b,
                          float epsilon = 1.0e-4f) {
     return std::fabs(a.center_depth_offset - b.center_depth_offset) <= epsilon &&
            std::fabs(a.foreground_max_depth_offset - b.foreground_max_depth_offset) <= epsilon &&
            std::fabs(a.background_max_depth_offset - b.background_max_depth_offset) <= epsilon;
+}
+
+inline bool is_valid_loaded_order(const DepthCueSettings& settings,
+                                  float epsilon = 1.0e-4f) {
+    if (!std::isfinite(settings.center_depth_offset) ||
+        !std::isfinite(settings.foreground_max_depth_offset) ||
+        !std::isfinite(settings.background_max_depth_offset)) {
+        return false;
+    }
+    return settings.foreground_max_depth_offset <= (settings.center_depth_offset - kMinSeparation + epsilon) &&
+           settings.background_max_depth_offset >= (settings.center_depth_offset + kMinSeparation - epsilon);
 }
 
 inline void clamp(DepthCueSettings& settings) {
@@ -54,10 +104,12 @@ inline void clamp(DepthCueSettings& settings) {
 }
 
 inline DepthCueSettings from_json_section(const nlohmann::json* section) {
-    DepthCueSettings settings{};
+    DepthCueSettings defaults{};
+    clamp(defaults);
+
+    DepthCueSettings settings = defaults;
     if (!section || !section->is_object()) {
-        clamp(settings);
-        return settings;
+        return defaults;
     }
 
     settings.center_depth_offset = section->value(kCenterDepthOffsetKey, settings.center_depth_offset);
@@ -65,6 +117,9 @@ inline DepthCueSettings from_json_section(const nlohmann::json* section) {
         section->value(kForegroundMaxDepthOffsetKey, settings.foreground_max_depth_offset);
     settings.background_max_depth_offset =
         section->value(kBackgroundMaxDepthOffsetKey, settings.background_max_depth_offset);
+    if (!is_valid_loaded_order(settings)) {
+        settings = defaults;
+    }
     clamp(settings);
     return settings;
 }
@@ -99,4 +154,3 @@ inline void write_to_map_entry(nlohmann::json& map_entry, const DepthCueSettings
 }
 
 } // namespace depth_cue
-

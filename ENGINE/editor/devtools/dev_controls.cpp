@@ -5074,7 +5074,9 @@ DevControls::LiveDepthLine DevControls::live_depth_line_from_cursor_screen(SDL_P
         return LiveDepthLine::Center;
     }
     const float anchor_world_z = static_cast<float>(cam.anchor_world_z());
-    const float cursor_depth_offset = cursor_world.y - anchor_world_z;
+    const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(cam.projection_params().forward_z);
+    const float cursor_depth_offset =
+        depth_cue::depth_offset_from_world_z(cursor_world.y, anchor_world_z, depth_axis_sign);
 
     struct Candidate {
         LiveDepthLine line = LiveDepthLine::Center;
@@ -5247,6 +5249,8 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
         }
 
         const float anchor_world_z = static_cast<float>(cam->anchor_world_z());
+        const float depth_axis_sign =
+            depth_cue::depth_axis_sign_from_forward_z(cam->projection_params().forward_z);
         constexpr int kSamplesPerLine = 72;
 
         auto build_floor_line = [&](float depth_offset,
@@ -5254,7 +5258,8 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
                                     SDL_Point& out_label_anchor) -> bool {
             out_segments.clear();
             out_label_anchor = SDL_Point{0, 0};
-            const float world_z = anchor_world_z + depth_offset;
+            const float world_z =
+                depth_cue::world_z_from_depth_offset(depth_offset, anchor_world_z, depth_axis_sign);
             std::vector<SDL_Point> current_segment;
             current_segment.reserve(static_cast<std::size_t>(kSamplesPerLine + 1));
             bool have_label_anchor = false;

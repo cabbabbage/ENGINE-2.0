@@ -78,3 +78,55 @@ TEST_CASE("depth cue overlay math responds to effective world-z offset input") {
                    1.0f);
 }
 
+TEST_CASE("depth cue camera-depth conversion keeps FG/BG semantics across forward-z sign") {
+    depth_cue::DepthCueSettings settings{};
+    settings.center_depth_offset = 0.0f;
+    settings.foreground_max_depth_offset = -200.0f;
+    settings.background_max_depth_offset = 200.0f;
+
+    const float anchor_world_z = 1000.0f;
+
+    const float bg_depth = settings.background_max_depth_offset;
+    const float fg_depth = settings.foreground_max_depth_offset;
+    const float center_depth = settings.center_depth_offset;
+
+    const float bg_world_pos = depth_cue::world_z_from_depth_offset(bg_depth, anchor_world_z, +1.0f);
+    const float fg_world_pos = depth_cue::world_z_from_depth_offset(fg_depth, anchor_world_z, +1.0f);
+    const float center_world_pos = depth_cue::world_z_from_depth_offset(center_depth, anchor_world_z, +1.0f);
+
+    check_decision(depth_cue::evaluate_overlay_opacity(
+                       depth_cue::depth_offset_from_world_z(bg_world_pos, anchor_world_z, +1.0f),
+                       settings),
+                   depth_cue::OverlayLayer::Background,
+                   1.0f);
+    check_decision(depth_cue::evaluate_overlay_opacity(
+                       depth_cue::depth_offset_from_world_z(fg_world_pos, anchor_world_z, +1.0f),
+                       settings),
+                   depth_cue::OverlayLayer::Foreground,
+                   1.0f);
+    check_decision(depth_cue::evaluate_overlay_opacity(
+                       depth_cue::depth_offset_from_world_z(center_world_pos, anchor_world_z, +1.0f),
+                       settings),
+                   depth_cue::OverlayLayer::None,
+                   0.0f);
+
+    const float bg_world_neg = depth_cue::world_z_from_depth_offset(bg_depth, anchor_world_z, -1.0f);
+    const float fg_world_neg = depth_cue::world_z_from_depth_offset(fg_depth, anchor_world_z, -1.0f);
+    const float center_world_neg = depth_cue::world_z_from_depth_offset(center_depth, anchor_world_z, -1.0f);
+
+    check_decision(depth_cue::evaluate_overlay_opacity(
+                       depth_cue::depth_offset_from_world_z(bg_world_neg, anchor_world_z, -1.0f),
+                       settings),
+                   depth_cue::OverlayLayer::Background,
+                   1.0f);
+    check_decision(depth_cue::evaluate_overlay_opacity(
+                       depth_cue::depth_offset_from_world_z(fg_world_neg, anchor_world_z, -1.0f),
+                       settings),
+                   depth_cue::OverlayLayer::Foreground,
+                   1.0f);
+    check_decision(depth_cue::evaluate_overlay_opacity(
+                       depth_cue::depth_offset_from_world_z(center_world_neg, anchor_world_z, -1.0f),
+                       settings),
+                   depth_cue::OverlayLayer::None,
+                   0.0f);
+}

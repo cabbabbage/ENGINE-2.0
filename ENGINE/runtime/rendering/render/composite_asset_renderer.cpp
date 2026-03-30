@@ -4,6 +4,7 @@
 #include "assets/asset/animation_frame_variant.hpp"
 #include "core/AssetsManager.hpp"
 #include "core/manifest/depth_cue_settings.hpp"
+#include "gameplay/world/grid_point.hpp"
 #include "rendering/render/depth_cue_overlay_math.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
@@ -276,7 +277,11 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             const depth_cue::DepthCueSettings& depth_settings = assets_->depth_cue_settings();
             const float effective_world_z =
                 static_cast<float>(asset->world_z()) + base_render_object->world_z_offset;
-            const float signed_depth = effective_world_z - static_cast<float>(cam.anchor_world_z());
+            const world::CameraProjectionParams projection = cam.projection_params();
+            const float signed_depth = depth_cue::depth_offset_from_world_z(
+                effective_world_z,
+                static_cast<float>(cam.anchor_world_z()),
+                projection.forward_z);
 
             const DepthCueOverlayDecision overlay_decision = decide_depth_cue_overlay(
                 signed_depth,

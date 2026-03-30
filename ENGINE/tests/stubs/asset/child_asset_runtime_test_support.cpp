@@ -243,6 +243,14 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
         : static_cast<float>(world_y() + spec->offset_y);
     anchor.world_pos_2d = Vec2(exact_world_x, exact_world_y);
     anchor.world_exact_pos_2d = anchor.world_pos_2d;
+    const float flat_world_x = spec->flat_exact_offset_x.has_value()
+        ? static_cast<float>(world_x()) + *spec->flat_exact_offset_x
+        : anchor.world_exact_pos_2d.x;
+    const float flat_world_y = spec->flat_exact_offset_y.has_value()
+        ? static_cast<float>(world_y()) + *spec->flat_exact_offset_y
+        : anchor.world_exact_pos_2d.y;
+    anchor.flat_world_pos_2d = Vec2(flat_world_x, flat_world_y);
+    anchor.flat_world_exact_pos_2d = anchor.flat_world_pos_2d;
     anchor.world_quantized_px = SDL_Point{
         static_cast<int>(std::lround(anchor.world_pos_2d.x)),
         static_cast<int>(std::lround(anchor.world_pos_2d.y))};
@@ -252,7 +260,17 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
         : static_cast<float>(anchor.world_z) + spec->world_depth_offset;
     anchor.world_exact_z = exact_world_z;
     anchor.world_depth = exact_world_z;
+    anchor.flat_world_exact_z = spec->flat_exact_offset_z.has_value()
+        ? static_cast<float>(world_z()) + *spec->flat_exact_offset_z
+        : anchor.world_exact_z;
     anchor.resolution_layer = spec->resolution_layer.value_or(grid_resolution);
+    if (spec->flat_perspective_valid &&
+        spec->flat_perspective_scale.has_value() &&
+        std::isfinite(*spec->flat_perspective_scale) &&
+        *spec->flat_perspective_scale > 0.0001f) {
+        anchor.flat_perspective_scale = std::max(0.0001f, *spec->flat_perspective_scale);
+        anchor.has_flat_perspective_scale = true;
+    }
     anchor.flip_horizontal = spec->flip_horizontal;
     anchor.flip_vertical = spec->flip_vertical;
     anchor.rotation_degrees = spec->rotation_degrees;

@@ -96,6 +96,15 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     sample.resolution_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
     sample.source = PerspectiveSource::Default;
 
+    if (anchor_perspective_override_active_ &&
+        std::isfinite(anchor_perspective_override_scale_) &&
+        anchor_perspective_override_scale_ > 0.0001f) {
+        sample.scale = std::max(0.0001f, anchor_perspective_override_scale_);
+        sample.resolution_layer = anchor_perspective_override_resolution_layer_;
+        sample.source = PerspectiveSource::AnchorBindingOverride;
+        return sample;
+    }
+
     if (grid_point_ &&
         std::isfinite(grid_point_->perspective_scale()) &&
         grid_point_->perspective_scale() > 0.0001f) {
@@ -114,8 +123,44 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     return sample;
 }
 
+bool Asset::set_anchor_perspective_override(float scale,
+                                            std::optional<int> resolution_layer_override) {
+    if (!std::isfinite(scale) || scale <= 0.0001f) {
+        return clear_anchor_perspective_override();
+    }
+
+    const float sanitized_scale = std::max(0.0001f, scale);
+    const int default_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
+    const int resolved_layer = resolution_layer_override.has_value()
+        ? vibble::grid::clamp_resolution(*resolution_layer_override)
+        : default_layer;
+    const bool changed =
+        !anchor_perspective_override_active_ ||
+        std::fabs(anchor_perspective_override_scale_ - sanitized_scale) > 1e-6f ||
+        anchor_perspective_override_resolution_layer_ != resolved_layer;
+    anchor_perspective_override_active_ = true;
+    anchor_perspective_override_scale_ = sanitized_scale;
+    anchor_perspective_override_resolution_layer_ = resolved_layer;
+    mark_anchors_dirty();
+    return changed;
+}
+
+bool Asset::clear_anchor_perspective_override() {
+    const bool changed =
+        anchor_perspective_override_active_ ||
+        std::fabs(anchor_perspective_override_scale_ - 1.0f) > 1e-6f;
+    anchor_perspective_override_active_ = false;
+    anchor_perspective_override_scale_ = 1.0f;
+    anchor_perspective_override_resolution_layer_ =
+        grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
+    mark_anchors_dirty();
+    return changed;
+}
+
 const char* Asset::perspective_source_label(PerspectiveSource source) {
     switch (source) {
+    case PerspectiveSource::AnchorBindingOverride:
+        return "anchor-binding-override";
     case PerspectiveSource::CameraTraversal:
         return "camera-traversal";
     case PerspectiveSource::AssetGridPoint:

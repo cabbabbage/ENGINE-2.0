@@ -499,6 +499,76 @@ TEST_CASE("ChildAsset bind and update follow the owner anchor and recover from m
     CHECK(spawned->world_z() == 80);
 }
 
+TEST_CASE("ChildAsset anchor binding applies flat-point perspective override and clears on invalid paths") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 20, 30, 40, 1));
+    REQUIRE(owner != nullptr);
+
+    AnchorSpec anchor_spec{};
+    anchor_spec.name = "eyes";
+    anchor_spec.offset_x = 5;
+    anchor_spec.offset_y = 6;
+    anchor_spec.offset_z = 7;
+    anchor_spec.resolution_layer = 2;
+    anchor_spec.exists = true;
+    anchor_spec.flat_perspective_scale = 2.4f;
+    anchor_spec.flat_perspective_valid = true;
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    Asset::PerspectiveSample sample = spawned->runtime_perspective_sample();
+    CHECK(spawned->has_anchor_perspective_override());
+    CHECK(sample.source == Asset::PerspectiveSource::AnchorBindingOverride);
+    CHECK(sample.scale == doctest::Approx(2.4f));
+
+    anchor_spec.hidden = true;
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+    child->update();
+    sample = spawned->runtime_perspective_sample();
+    CHECK(child->is_hidden());
+    CHECK_FALSE(spawned->has_anchor_perspective_override());
+    CHECK(sample.source != Asset::PerspectiveSource::AnchorBindingOverride);
+
+    anchor_spec.hidden = false;
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+    child->update();
+    sample = spawned->runtime_perspective_sample();
+    CHECK_FALSE(child->is_hidden());
+    CHECK(spawned->has_anchor_perspective_override());
+    CHECK(sample.source == Asset::PerspectiveSource::AnchorBindingOverride);
+
+    test_child_asset_runtime::clear_anchors(*owner);
+    child->update();
+    sample = spawned->runtime_perspective_sample();
+    CHECK(child->is_hidden());
+    CHECK_FALSE(spawned->has_anchor_perspective_override());
+    CHECK(sample.source != Asset::PerspectiveSource::AnchorBindingOverride);
+
+    test_child_asset_runtime::set_anchor(*owner, anchor_spec);
+    child->update();
+    sample = spawned->runtime_perspective_sample();
+    CHECK_FALSE(child->is_hidden());
+    CHECK(spawned->has_anchor_perspective_override());
+    CHECK(sample.source == Asset::PerspectiveSource::AnchorBindingOverride);
+
+    child->unbind();
+    sample = spawned->runtime_perspective_sample();
+    CHECK_FALSE(spawned->has_anchor_perspective_override());
+    CHECK(sample.source != Asset::PerspectiveSource::AnchorBindingOverride);
+}
+
 TEST_CASE("ChildAsset applies anchor flip and rotation overrides to spawned child") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(

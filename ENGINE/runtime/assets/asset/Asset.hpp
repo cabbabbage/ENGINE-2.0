@@ -158,6 +158,7 @@ class Asset {
     float runtime_width_px() const;
     float runtime_height_px() const;
     enum class PerspectiveSource {
+        AnchorBindingOverride,
         CameraTraversal,
         AssetGridPoint,
         CachedLastFrame,
@@ -170,6 +171,10 @@ class Asset {
     };
     PerspectiveSample runtime_perspective_sample() const;
     static const char* perspective_source_label(PerspectiveSource source);
+    bool set_anchor_perspective_override(float scale,
+                                         std::optional<int> resolution_layer_override = std::nullopt);
+    bool clear_anchor_perspective_override();
+    bool has_anchor_perspective_override() const { return anchor_perspective_override_active_; }
     void move_to_world_position(int world_x, int world_y, int world_z = 0,
                                 std::optional<int> resolution_layer_override = std::nullopt);
     void set_world_z(int world_z);
@@ -356,6 +361,10 @@ class Asset {
         world::GridPoint* grid = nullptr;
         Vec2            world_exact_pos_2d{};
         float           world_exact_z = 0.0f;
+        Vec2            flat_world_exact_pos_2d{};
+        float           flat_world_exact_z = 0.0f;
+        float           flat_perspective_scale = 1.0f;
+        bool            has_flat_perspective_scale = false;
         SDL_Point       world_px{0, 0};
         int             world_z = 0;
         float           world_depth = 0.0f;
@@ -519,6 +528,9 @@ private:
     bool         anchor_sprite_transform_override_active_ = false;
     SDL_FlipMode anchor_sprite_transform_override_flip_ = SDL_FLIP_NONE;
     double       anchor_sprite_transform_override_angle_degrees_ = 0.0;
+    bool         anchor_perspective_override_active_ = false;
+    float        anchor_perspective_override_scale_ = 1.0f;
+    int          anchor_perspective_override_resolution_layer_ = 0;
     bool         mesh_dirty_        = true;
 
     void initialize_anchor_registry_from_animations();

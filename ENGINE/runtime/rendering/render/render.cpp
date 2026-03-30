@@ -1426,12 +1426,8 @@ void SceneRenderer::render() {
 
             rendered_assets_for_debug.push_back(asset);
             composite_renderer_.update(asset, 0.0f);
-            const world::GridPoint* gp = traversal_entry.grid_point ? traversal_entry.grid_point
-                                                                    : cam.grid_point_for_asset(asset);
-            const float perspective_scale =
-                (gp && std::isfinite(gp->perspective_scale()) && gp->perspective_scale() > 0.0f)
-                    ? gp->perspective_scale()
-                    : 1.0f;
+            const Asset::PerspectiveSample perspective_sample = asset->runtime_perspective_sample();
+            const float perspective_scale = perspective_sample.scale;
             const float base_world_z = static_cast<float>(asset->world_z());
             const double depth_bias = asset->render_depth_bias();
 

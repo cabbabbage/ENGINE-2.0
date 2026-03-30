@@ -64,6 +64,10 @@ struct DisplacedAssetAnchorPoint {
 struct ResolvedAnchor {
     Vec2             world_exact_pos_2d{};
     float            world_exact_z = 0.0f;
+    Vec2             flat_world_exact_pos_2d{};
+    float            flat_world_exact_z = 0.0f;
+    float            flat_perspective_scale = 1.0f;
+    bool             has_flat_perspective_scale = false;
     SDL_Point        world_px{0, 0};
     int              world_z = 0;
     float            world_depth = 0.0f;
@@ -90,11 +94,16 @@ struct AnchorPoint {
     Vec2 relative_pos_2d{};
     Vec2 world_pos_2d{}; // exact world-space anchor position (render-facing)
     Vec2 world_exact_pos_2d{};
+    Vec2 flat_world_pos_2d{}; // exact flat texture/world point (pre-depth-offset)
+    Vec2 flat_world_exact_pos_2d{};
     SDL_Point world_quantized_px{0, 0};
     int world_z = 0;
     float world_exact_z = 0.0f;
+    float flat_world_exact_z = 0.0f;
     float world_depth = 0.0f;
     int resolution_layer = 0;
+    float flat_perspective_scale = 1.0f;
+    bool has_flat_perspective_scale = false;
 
     bool is_active() const { return exists; }
     const Vec2& world_pos() const { return world_pos_2d; }

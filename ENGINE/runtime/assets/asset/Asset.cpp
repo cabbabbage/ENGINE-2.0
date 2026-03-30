@@ -658,6 +658,8 @@ void Asset::update_scale_values(bool force) {
  #if !defined(ENGINE_WORLD_TESTS)
 const char* Asset::perspective_source_label(PerspectiveSource source) {
         switch (source) {
+        case PerspectiveSource::AnchorBindingOverride:
+                return "anchor-binding-override";
         case PerspectiveSource::CameraTraversal:
                 return "camera-traversal";
     case PerspectiveSource::AssetGridPoint:
@@ -677,6 +679,15 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     sample.scale = 1.0f;
     sample.resolution_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
     sample.source = PerspectiveSource::Default;
+
+    if (anchor_perspective_override_active_ &&
+        std::isfinite(anchor_perspective_override_scale_) &&
+        anchor_perspective_override_scale_ > 0.0001f) {
+        sample.scale = std::max(0.0001f, anchor_perspective_override_scale_);
+        sample.resolution_layer = anchor_perspective_override_resolution_layer_;
+        sample.source = PerspectiveSource::AnchorBindingOverride;
+        return sample;
+    }
 
     const world::GridPoint* traversal_gp = nullptr;
     if (assets_) {
@@ -711,6 +722,56 @@ Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
     }
 
     return sample;
+}
+#endif // !ENGINE_WORLD_TESTS
+
+#if !defined(ENGINE_WORLD_TESTS)
+bool Asset::set_anchor_perspective_override(float scale,
+                                            std::optional<int> resolution_layer_override) {
+    if (!std::isfinite(scale) || scale <= 0.0001f) {
+        return clear_anchor_perspective_override();
+    }
+
+    const float sanitized_scale = std::max(0.0001f, scale);
+    const int default_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
+    const int resolved_layer = resolution_layer_override.has_value()
+        ? vibble::grid::clamp_resolution(*resolution_layer_override)
+        : default_layer;
+
+    constexpr float kScaleEpsilon = 1e-6f;
+    const bool changed =
+        !anchor_perspective_override_active_ ||
+        std::fabs(anchor_perspective_override_scale_ - sanitized_scale) > kScaleEpsilon ||
+        anchor_perspective_override_resolution_layer_ != resolved_layer;
+    if (!changed) {
+        return false;
+    }
+
+    anchor_perspective_override_active_ = true;
+    anchor_perspective_override_scale_ = sanitized_scale;
+    anchor_perspective_override_resolution_layer_ = resolved_layer;
+    mark_composite_dirty();
+    mark_mesh_dirty();
+    mark_anchors_dirty();
+    return true;
+}
+
+bool Asset::clear_anchor_perspective_override() {
+    const bool changed =
+        anchor_perspective_override_active_ ||
+        std::fabs(anchor_perspective_override_scale_ - 1.0f) > 1e-6f;
+    if (!changed) {
+        return false;
+    }
+
+    anchor_perspective_override_active_ = false;
+    anchor_perspective_override_scale_ = 1.0f;
+    anchor_perspective_override_resolution_layer_ =
+        grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
+    mark_composite_dirty();
+    mark_mesh_dirty();
+    mark_anchors_dirty();
+    return true;
 }
 #endif // !ENGINE_WORLD_TESTS
 
@@ -1535,6 +1596,8 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         if (resolved.exists) {
                 resolved.world_pos_2d = handle.world_exact_pos_2d;
                 resolved.world_exact_pos_2d = handle.world_exact_pos_2d;
+                resolved.flat_world_pos_2d = handle.flat_world_exact_pos_2d;
+                resolved.flat_world_exact_pos_2d = handle.flat_world_exact_pos_2d;
                 resolved.world_quantized_px = handle.world_px;
                 const SDL_Point origin_world = world_xy_point();
                 resolved.relative_pos_2d = Vec2{
@@ -1544,14 +1607,19 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         } else {
                 resolved.world_pos_2d = Vec2{};
                 resolved.world_exact_pos_2d = Vec2{};
+                resolved.flat_world_pos_2d = Vec2{};
+                resolved.flat_world_exact_pos_2d = Vec2{};
                 resolved.world_quantized_px = SDL_Point{0, 0};
                 resolved.relative_pos_2d = Vec2{};
                 resolved.screen_pos_2d = SDL_FPoint{0.0f, 0.0f};
         }
         resolved.world_z = handle.world_z;
         resolved.world_exact_z = handle.world_exact_z;
+        resolved.flat_world_exact_z = handle.flat_world_exact_z;
         resolved.world_depth = handle.world_depth;
         resolved.resolution_layer = handle.resolution_layer;
+        resolved.flat_perspective_scale = handle.flat_perspective_scale;
+        resolved.has_flat_perspective_scale = handle.has_flat_perspective_scale;
 }
 
 AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
@@ -1624,6 +1692,10 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         last_update_key_.set(grid_policy, camera_state_version);
 
         if (!owner) {
+                flat_world_exact_pos_2d = Vec2{};
+                flat_world_exact_z = 0.0f;
+                flat_perspective_scale = 1.0f;
+                has_flat_perspective_scale = false;
                 runtime_flip_horizontal = false;
                 runtime_flip_vertical = false;
                 runtime_rotation_degrees = 0.0f;
@@ -1636,6 +1708,10 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 grid = nullptr;
                 world_exact_pos_2d = Vec2{};
                 world_exact_z = 0.0f;
+                flat_world_exact_pos_2d = Vec2{};
+                flat_world_exact_z = 0.0f;
+                flat_perspective_scale = 1.0f;
+                has_flat_perspective_scale = false;
                 world_px = SDL_Point{0, 0};
                 world_z = 0;
                 world_depth = 0.0f;
@@ -1689,6 +1765,10 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         grid = resolved_sample.resolved.grid_point;
         world_exact_pos_2d = resolved_sample.resolved.world_exact_pos_2d;
         world_exact_z = resolved_sample.resolved.world_exact_z;
+        flat_world_exact_pos_2d = resolved_sample.resolved.flat_world_exact_pos_2d;
+        flat_world_exact_z = resolved_sample.resolved.flat_world_exact_z;
+        flat_perspective_scale = resolved_sample.resolved.flat_perspective_scale;
+        has_flat_perspective_scale = resolved_sample.resolved.has_flat_perspective_scale;
         world_px = resolved_sample.resolved.world_px;
         world_z = resolved_sample.resolved.world_z;
         world_depth = resolved_sample.resolved.world_depth;

@@ -243,6 +243,12 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
     const float residual_y = exact_world_y - static_cast<float>(target_world_y);
     const float residual_z = exact_world_z - static_cast<float>(target_world_z);
     bool changed = false;
+    if (bound_ && parent_anchor.has_flat_perspective_scale) {
+        changed = child_->set_anchor_perspective_override(parent_anchor.flat_perspective_scale,
+                                                          target_layer) || changed;
+    } else {
+        changed = child_->clear_anchor_perspective_override() || changed;
+    }
     const SDL_FlipMode anchor_flip = static_cast<SDL_FlipMode>(
         (parent_anchor.flip_horizontal ? static_cast<int>(SDL_FLIP_HORIZONTAL) : 0) |
         (parent_anchor.flip_vertical ? static_cast<int>(SDL_FLIP_VERTICAL) : 0));
@@ -335,6 +341,7 @@ bool ChildAsset::clear_child_render_offset() {
         return false;
     }
     bool changed = false;
+    changed = child_->clear_anchor_perspective_override() || changed;
     changed = child_->clear_anchor_sprite_transform_override() || changed;
     constexpr float kResidualEpsilon = 1e-5f;
     if (std::fabs(child_->render_anchor_offset_x()) <= kResidualEpsilon &&

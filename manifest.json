@@ -2152,7 +2152,6 @@
               }
             ]
           ],
-          "inherit_source_movement": false,
           "locked": false,
           "movement": [
             [
@@ -2177,139 +2176,14 @@
           }
         },
         "down": {
-          "anchor_points": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "attack_boxes": [
-            [
-              {
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 419,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 419,
-                    "texture_y": 235
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 235
-                  }
-                ],
-                "damage_amount": 0,
-                "extrusion_amount": 0,
-                "name": "attack_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "size": {
-                  "h": 235,
-                  "w": 419
-                }
-              },
-              {
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": -12
-                  },
-                  {
-                    "texture_x": 419,
-                    "texture_y": -12
-                  },
-                  {
-                    "texture_x": 419,
-                    "texture_y": 223
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 223
-                  }
-                ],
-                "damage_amount": 0,
-                "extrusion_amount": 0,
-                "name": "attack_box_2",
-                "position": {
-                  "x": 0,
-                  "y": -12
-                },
-                "size": {
-                  "h": 235,
-                  "w": 419
-                }
-              }
-            ],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
           "derived_modifiers": {
-            "flipX": false,
+            "flipX": true,
             "flipY": false,
             "reverse": false
           },
           "flip_vertical_source": false,
-          "flipped_source": false,
-          "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "inherit_source_geometry": false,
-          "inherit_source_movement": true,
-          "movement": [
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              -54
-            ],
-            [
-              0,
-              0,
-              -54
-            ],
-            [
-              0,
-              0,
-              -54
-            ],
-            [
-              0,
-              0,
-              -54
-            ],
-            [
-              0,
-              0,
-              -54
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": -270
-          },
+          "flipped_source": true,
+          "inherit_source_geometry": true,
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2353,7 +2227,6 @@
             []
           ],
           "inherit_source_geometry": false,
-          "inherit_source_movement": true,
           "movement": [
             [
               0,
@@ -2434,7 +2307,6 @@
             []
           ],
           "inherit_source_geometry": false,
-          "inherit_source_movement": true,
           "movement": [
             [
               0,
@@ -2478,14 +2350,13 @@
           "rnd_start": false,
           "source": {
             "kind": "animation",
-            "name": "up_left",
+            "name": "up",
             "path": ""
           }
         },
         "left": {
           "flip_vertical_source": false,
           "flipped_source": false,
-          "inherit_source_movement": false,
           "locked": false,
           "movement": [
             [
@@ -2535,76 +2406,14 @@
           }
         },
         "right": {
-          "anchor_points": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "attack_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
           "derived_modifiers": {
-            "flipX": false,
+            "flipX": true,
             "flipY": false,
             "reverse": false
           },
           "flip_vertical_source": false,
-          "flipped_source": false,
-          "hit_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "inherit_source_geometry": false,
-          "inherit_source_movement": true,
-          "movement": [
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              -20,
-              0,
-              0
-            ],
-            [
-              -20,
-              0,
-              0
-            ],
-            [
-              -20,
-              0,
-              0
-            ],
-            [
-              -20,
-              0,
-              0
-            ],
-            [
-              -20,
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": -100,
-            "dy": 0,
-            "dz": 0.0
-          },
+          "flipped_source": true,
+          "inherit_source_geometry": true,
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2689,7 +2498,6 @@
             [],
             []
           ],
-          "inherit_source_movement": false,
           "locked": false,
           "movement": [
             [
@@ -2726,7 +2534,7 @@
           "movement_total": {
             "dx": 10,
             "dy": 0,
-            "dz": -175.0
+            "dz": -175
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -2747,8 +2555,8 @@
             [],
             []
           ],
+          "flip_vertical_source": false,
           "flipped_source": false,
-          "inherit_source_movement": false,
           "locked": false,
           "movement": [
             [
@@ -2785,7 +2593,7 @@
           "movement_total": {
             "dx": -55,
             "dy": 0,
-            "dz": -110.0
+            "dz": -110
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -2830,7 +2638,6 @@
             []
           ],
           "inherit_source_geometry": false,
-          "inherit_source_movement": true,
           "movement": [
             [
               0,
@@ -2838,35 +2645,30 @@
               0
             ],
             [
-              -19,
               0,
-              -35
+              0
             ],
             [
-              -32,
               0,
-              -59
+              0
             ],
             [
-              -45,
               0,
-              -82
+              0
             ],
             [
-              -80,
               0,
-              -16
+              0
             ],
             [
-              -80,
               0,
-              -16
+              0
             ]
           ],
           "movement_total": {
-            "dx": -256,
+            "dx": 0,
             "dy": 0,
-            "dz": -208
+            "dz": 0
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -2874,7 +2676,7 @@
           "rnd_start": false,
           "source": {
             "kind": "animation",
-            "name": "up_left",
+            "name": "down_right",
             "path": ""
           }
         }
@@ -10041,9 +9843,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            142,
+            90,
+            242,
             255
           ],
           "edge_smoothness": 49,
@@ -10067,8 +9869,8 @@
           "curvyness": 2,
           "display_color": [
             242,
+            241,
             36,
-            145,
             255
           ],
           "edge_smoothness": 85,
@@ -10127,16 +9929,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -1776,
-              "dz": 164,
+              "dx": -64,
+              "dz": -264,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7000,
-              "origional_width": 6928,
+              "origional_height": 6976,
+              "origional_width": 7024,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -10187,16 +9989,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1492,
-              "dz": 432,
+              "dx": -180,
+              "dz": 1264,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7040,
-              "origional_width": 7000,
+              "origional_height": 6992,
+              "origional_width": 7032,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

@@ -238,6 +238,11 @@ void OnEndSelector::commit_selection() {
 
     std::string updated = payload.dump();
     document_->replace_animation_payload(animation_id_, updated);
+    if (!document_->save_to_file_checked(true)) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "OnEndSelector: immediate save failed for animation '%s'.",
+                    animation_id_.c_str());
+    }
     payload_signature_ = std::move(updated);
 }
 

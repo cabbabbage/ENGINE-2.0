@@ -9848,22 +9848,22 @@
   },
   "image_effects": {
     "background": {
-      "blur": 0.25999999046325684,
+      "blur": 0.6799999475479126,
       "brightness": 0.0,
       "contrast": 0.0,
       "hue": 0.0,
-      "saturation_blue": 0.0,
-      "saturation_green": 0.0,
-      "saturation_red": 0.0
+      "saturation_blue": 0.5399999618530273,
+      "saturation_green": 0.6200000047683716,
+      "saturation_red": -0.7200000286102295
     },
     "foreground": {
       "blur": 0.1799999475479126,
       "brightness": 0.0,
       "contrast": 0.0,
       "hue": 0.0,
-      "saturation_blue": 0.0,
-      "saturation_green": 0.0,
-      "saturation_red": 0.3399999141693115
+      "saturation_blue": -0.5800000429153442,
+      "saturation_green": -0.6000000238418579,
+      "saturation_red": 0.8199999332427979
     }
   },
   "maps": {
@@ -9884,7 +9884,7 @@
       "depth_cue_settings": {
         "background_max_depth_offset": 1255.0,
         "center_depth_offset": 175.0,
-        "foreground_max_depth_offset": -2380.0
+        "foreground_max_depth_offset": -830.0
       },
       "dev_map_settings": {},
       "fog_settings": {

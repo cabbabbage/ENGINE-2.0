@@ -2132,6 +2132,10 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     if (!manifest_transaction_) {
         manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (!manifest_transaction_) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Failed to open manifest transaction for key '%s'.",
+                         manifest_asset_key_.c_str());
+            set_status_message("Failed to save animations for '" + manifest_asset_key_ + "'.", 240);
             return false;
         }
         using_manifest_store_ = true;
@@ -2162,17 +2166,51 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
         draft = payload;
     }
 
-    auto commit_fn = [this, finalize]() -> bool {
+    const nlohmann::json merged_payload = draft;
+
+    auto commit_fn = [this, finalize, merged_payload]() -> bool {
+        auto commit_current_transaction = [this, finalize]() -> bool {
+            if (!manifest_transaction_) {
+                return false;
+            }
+            const bool ok = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
+            if (ok && finalize) {
+                manifest_transaction_ = {};
+                manifest_asset_key_.clear();
+                using_manifest_store_ = false;
+            }
+            return ok;
+        };
+
+        if (commit_current_transaction()) {
+            return true;
+        }
+
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] Manifest commit failed for key '%s'; recreating transaction and retrying.",
+                    manifest_asset_key_.c_str());
+
+        manifest_transaction_ = {};
+        manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (!manifest_transaction_) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Failed to recreate manifest transaction for key '%s' after commit failure.",
+                         manifest_asset_key_.c_str());
+            set_status_message("Failed to save animations for '" + manifest_asset_key_ + "'.", 240);
             return false;
         }
-        bool ok = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
-        if (ok && finalize) {
-            manifest_transaction_ = {};
-            manifest_asset_key_.clear();
-            using_manifest_store_ = false;
+        using_manifest_store_ = true;
+        manifest_transaction_.data() = merged_payload;
+
+        if (commit_current_transaction()) {
+            return true;
         }
-        return ok;
+
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[AnimationEditor] Manifest commit retry failed for key '%s'.",
+                     manifest_asset_key_.c_str());
+        set_status_message("Failed to save animations for '" + manifest_asset_key_ + "'.", 240);
+        return false;
     };
 
     auto on_success = [this, finalize]() {

@@ -117,7 +117,6 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.locked           = source.locked;
     dest.on_end_animation = source.on_end_animation;
     dest.randomize        = source.randomize;
-    dest.loop             = source.loop;
     dest.rnd_start        = source.rnd_start;
     dest.frozen           = source.frozen;
     dest.movment          = source.movment;

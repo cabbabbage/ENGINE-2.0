@@ -227,6 +227,8 @@ class Asset {
     int NeighborSearchRadius;
     void set_hidden(bool state);
     bool is_hidden() const;
+    void set_default_controller_animation_enforced(bool enforced) { enforce_default_controller_animation_ = enforced; }
+    bool default_controller_animation_enforced() const { return enforce_default_controller_animation_; }
     void set_anchor_hidden(bool state);
     bool is_anchor_hidden() const;
     void set_highlighted(bool state);
@@ -453,6 +455,7 @@ private:
     WarpedScreenGrid* window = nullptr;
     bool highlighted = false;
     bool hidden = false;
+    bool enforce_default_controller_animation_ = true;
     bool anchor_hidden_ = false;
     bool selected = false;
     void set_provisional_grid_point(const world::GridPoint& point);

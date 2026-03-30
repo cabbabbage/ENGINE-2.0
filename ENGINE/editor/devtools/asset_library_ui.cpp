@@ -1592,7 +1592,7 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         const std::string asset_dir_str = dir.lexically_normal().generic_string();
 
         nlohmann::json default_anim = {
-            {"loop", true},
+            {"on_end", "default"},
             {"locked", false},
             {"reverse_source", false},
             {"flipped_source", false},

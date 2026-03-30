@@ -321,11 +321,11 @@ nlohmann::json build_folder_payload(const std::filesystem::path& folder) {
             return {};
         }
         nlohmann::json payload = {
-            {"loop", true},
             {"locked", false},
             {"reverse_source", false},
             {"flipped_source", false},
             {"rnd_start", false},
+            {"on_end", "default"},
             {"source",
                 {
                     {"kind", "folder"},
@@ -1737,7 +1737,6 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
     });
     payload["number_of_frames"] = std::max(frame_count, 1);
     payload["movement"] = build_movement_sequence(frame_count, dx, depth_dz);
-    payload["loop"] = true;
     payload["locked"] = false;
     payload["reverse_source"] = false;
     payload["flipped_source"] = false;
@@ -1761,7 +1760,6 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
     });
     payload["number_of_frames"] = std::max(frame_count, 1);
     payload["inherit_source_geometry"] = true;
-    payload["loop"] = true;
     payload["locked"] = false;
     payload["reverse_source"] = false;
     payload["flipped_source"] = false;

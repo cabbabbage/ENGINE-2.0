@@ -125,14 +125,6 @@ void AnimationRuntime::update() {
         return;
     }
 
-    float dt = 1.0f / 60.0f;
-    if (assets_owner_) {
-        dt = assets_owner_->frame_delta_seconds();
-    }
-    if (!(dt > 0.0f)) {
-        dt = 1.0f / 60.0f;
-    }
-
     struct SuppressionDecay {
         AnimationRuntime* runtime = nullptr;
         ~SuppressionDecay() {
@@ -152,12 +144,10 @@ void AnimationRuntime::update() {
             planner_iface_->move_pending_ = false;
             planner_iface_->pending_move_ = {};
         }
-        just_applied_controller_move_ = false;
     }
 
-    bool got_input = false;
     if (!freeze_for_frame_editor) {
-        got_input = planner_iface_->consume_input_event();
+        (void)planner_iface_->consume_input_event();
     }
 
     if (!freeze_for_frame_editor) {
@@ -167,7 +157,6 @@ void AnimationRuntime::update() {
 
         if (has_plan && !plan_deferred &&
             executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_)) {
-            just_applied_controller_move_ = false;
             return;
         }
 
@@ -175,32 +164,9 @@ void AnimationRuntime::update() {
             const auto& req = planner_iface_->pending_move_;
             if (!should_defer_for_non_locked(req.override_non_locked)) {
                 apply_pending_move();
-                just_applied_controller_move_ = true;
                 return;
             }
         }
-
-        if (!got_input && just_applied_controller_move_) {
-            auto it = self_->info->animations.find(self_->current_animation);
-            if (it != self_->info->animations.end()) {
-                Animation& anim = it->second;
-                if (!anim.locked) {
-                    const std::string next_id = anim.on_end_animation.empty()
-                                                  ? std::string{ animation_update::detail::kDefaultAnimation }
-                                                  : anim.on_end_animation;
-                    switch_to(resolve_animation(*self_, next_id), path_index_for(next_id));
-                }
-            }
-            just_applied_controller_move_ = false;
-        }
-    }
-
-    if (self_->get_current_animation() != animation_update::detail::kDefaultAnimation) {
-        if (!advance(self_->current_frame)) {
-            switch_to(animation_update::detail::kDefaultAnimation);
-            advance(self_->current_frame);
-        }
-        return;
     }
 
     advance(self_->current_frame);
@@ -270,24 +236,23 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
         return false;
     }
 
-    Animation& anim = it->second;
+    Animation* anim = &it->second;
     std::size_t path_index = path_index_for(self_->current_animation);
     if (!frame) {
-        frame = anim.get_first_frame(path_index);
+        frame = anim->get_first_frame(path_index);
         if (!frame) {
             return false;
         }
     }
 
     const bool is_player = self_->info && self_->info->type == asset_types::player;
-    bool should_skip = !is_player && (self_->static_frame || anim.locked || anim.is_frozen());
+    bool should_skip = !is_player && (self_->static_frame || anim->locked || anim->is_frozen() || lock_on_end_active_);
     bool has_overriding_plan = planner_iface_ && !planner_iface_->plan_.strides.empty() && planner_iface_->plan_.override_non_locked;
     if (should_skip && !has_overriding_plan) {
-        self_->static_frame = self_->static_frame || anim.is_frozen() || anim.locked;
+        self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || lock_on_end_active_;
         return true;
     }
     if (is_player) {
-
         self_->static_frame = false;
     }
 
@@ -305,17 +270,88 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     bool advanced_any = false;
     while (self_->frame_progress >= frame_interval) {
         self_->frame_progress -= frame_interval;
+
+        if (reverse_playback_active_) {
+            if (frame->prev) {
+                frame = frame->prev;
+                advanced_any = true;
+                continue;
+            }
+
+            reverse_playback_active_ = false;
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+            frame = self_->current_frame;
+            if (!frame) {
+                return false;
+            }
+            advanced_any = true;
+            continue;
+        }
+
         if (frame->next) {
             frame = frame->next;
             advanced_any = true;
-        } else {
-            const bool force_loop_default = self_->current_animation == animation_update::detail::kDefaultAnimation;
-            if (anim.loop || force_loop_default) {
-                frame = anim.get_first_frame(path_index);
-                advanced_any = true;
-            } else {
+            continue;
+        }
+
+        const Animation::OnEndDirective directive = anim->on_end_behavior;
+        switch (directive) {
+        case Animation::OnEndDirective::Loop: {
+            frame = anim->get_first_frame(path_index);
+            if (!frame) {
                 return false;
             }
+            advanced_any = true;
+            break;
+        }
+        case Animation::OnEndDirective::Kill:
+            self_->Delete();
+            return false;
+        case Animation::OnEndDirective::Lock:
+            lock_on_end_active_ = true;
+            self_->static_frame = true;
+            return true;
+        case Animation::OnEndDirective::Reverse:
+            reverse_playback_active_ = true;
+            lock_on_end_active_ = false;
+            self_->static_frame = false;
+            break;
+        case Animation::OnEndDirective::Animation: {
+            const std::string requested = anim->on_end_animation.empty()
+                                              ? std::string{animation_update::detail::kDefaultAnimation}
+                                              : anim->on_end_animation;
+            const std::string resolved = resolve_animation(*self_, requested);
+            switch_to(resolved, path_index_for(requested));
+            frame = self_->current_frame;
+            if (!frame) {
+                return false;
+            }
+            it = self_->info->animations.find(self_->current_animation);
+            if (it == self_->info->animations.end()) {
+                return false;
+            }
+            anim = &it->second;
+            path_index = path_index_for(self_->current_animation);
+            advanced_any = true;
+            break;
+        }
+        case Animation::OnEndDirective::Default:
+        default:
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+            frame = self_->current_frame;
+            if (!frame) {
+                return false;
+            }
+            it = self_->info->animations.find(self_->current_animation);
+            if (it == self_->info->animations.end()) {
+                return false;
+            }
+            anim = &it->second;
+            path_index = path_index_for(self_->current_animation);
+            advanced_any = true;
+            break;
         }
     }
     if (advanced_any) {
@@ -330,7 +366,8 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         return;
     }
 
-    const bool animation_changed = self_->current_animation != anim_id;
+    reverse_playback_active_ = false;
+    lock_on_end_active_ = false;
 
     auto it = self_->info->animations.find(anim_id);
     if (it == self_->info->animations.end()) {

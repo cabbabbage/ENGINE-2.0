@@ -274,6 +274,7 @@ Asset::Asset(const Asset& o)
     , window(o.window)
     , highlighted(o.highlighted)
     , hidden(o.hidden)
+    , enforce_default_controller_animation_(o.enforce_default_controller_animation_)
     , selected(o.selected)
     , current_frame(o.current_frame)
     , frame_progress(o.frame_progress)
@@ -351,6 +352,7 @@ Asset& Asset::operator=(const Asset& o) {
 	window               = o.window;
         highlighted          = o.highlighted;
         hidden               = o.hidden;
+        enforce_default_controller_animation_ = o.enforce_default_controller_animation_;
         selected             = o.selected;
         current_frame        = o.current_frame;
         frame_progress       = o.frame_progress;
@@ -1097,7 +1099,7 @@ bool Asset::is_current_animation_looping() const {
 	auto it = info->animations.find(current_animation);
 	if (it == info->animations.end()) return false;
 	const Animation& anim = it->second;
-	return anim.loop;
+	return anim.on_end_behavior == Animation::OnEndDirective::Loop;
 }
 
 float Asset::frame_delta_seconds_clamped() const {

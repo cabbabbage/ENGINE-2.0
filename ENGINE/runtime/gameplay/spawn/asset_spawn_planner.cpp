@@ -1,7 +1,6 @@
 #include "asset_spawn_planner.hpp"
 #include <random>
 #include <algorithm>
-#include <unordered_set>
 #include <cctype>
 #include <iomanip>
 
@@ -232,195 +231,14 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
             vibble::spawn_group_codec::read_bool_field(asset, "force_flipped", false);
         Asset::SetFlipOverrideForSpawnId(spawn_id, explicit_flip, force_flipped);
 
-        std::vector<nlohmann::json> cand_jsons;
-        if (asset.contains("candidates") && asset["candidates"].is_array()) {
-            for (const auto& c : asset["candidates"]) cand_jsons.push_back(c);
+        if (!asset.contains("candidates") || !asset["candidates"].is_array()) {
+            continue;
         }
-        if (cand_jsons.empty()) continue;
-
-        std::vector<SpawnCandidate> candidates;
-        candidates.reserve(cand_jsons.size());
-
-        struct CandidateDraft {
-            double weight = 0.0;
-            bool use_tag = false;
-            std::string tag;
-            std::string original_name;
-            std::string asset_name;
-            std::string label;
-            bool is_null = false;
-};
-
-        auto extract_chance = [](const nlohmann::json& c) -> double {
-            return vibble::spawn_group_codec::read_candidate_chance(c, 0.0);
-        };
-
-        auto sanitize_key = [](std::string value) {
-            auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
-            auto begin = std::find_if(value.begin(), value.end(), not_space);
-            auto end = std::find_if(value.rbegin(), value.rend(), not_space).base();
-            if (begin >= end) return std::string{};
-            value.assign(begin, end);
-            if (!value.empty() && value.front() == '#') value.erase(0, 1);
-            return value;
-};
-
-        std::vector<CandidateDraft> drafts;
-        drafts.reserve(cand_jsons.size());
-
-        std::unordered_set<std::string> blocked_tags;
-        std::unordered_set<std::string> blocked_assets;
-
-        auto parse_candidate = [&](const nlohmann::json& cj) {
-            CandidateDraft draft{};
-            draft.weight = extract_chance(cj);
-
-            bool is_null = cj.is_null();
-            std::string name;
-            std::string label;
-            bool use_tag = false;
-            std::string tag_value;
-
-            auto detect_tag = [&](const std::string& v) {
-                if (!v.empty() && v.front() == '#') {
-                    use_tag = true;
-                    tag_value = v.substr(1);
-                }
-};
-
-            if (cj.is_object()) {
-                if (cj.contains("name") && cj["name"].is_string()) {
-                    name = cj["name"].get<std::string>();
-                    detect_tag(name);
-                }
-                if (cj.contains("display_name") && cj["display_name"].is_string()) {
-                    label = cj["display_name"].get<std::string>();
-                } else if (cj.contains("label") && cj["label"].is_string()) {
-                    label = cj["label"].get<std::string>();
-                }
-                if (cj.contains("tag")) {
-                    const auto& tj = cj["tag"];
-                    if (tj.is_boolean() && tj.get<bool>()) {
-                        use_tag = true;
-                        if (tag_value.empty() && !name.empty()) {
-                            tag_value = name.front() == '#' ? name.substr(1) : name;
-                        }
-                    } else if (tj.is_string()) {
-                        use_tag = true;
-                        tag_value = tj.get<std::string>();
-                    }
-                }
-                if (cj.contains("tag_name") && cj["tag_name"].is_string()) {
-                    use_tag = true;
-                    tag_value = cj["tag_name"].get<std::string>();
-                }
-            } else if (cj.is_string()) {
-                name = cj.get<std::string>();
-                detect_tag(name);
-                label = name;
-            }
-
-            if (name == "null") is_null = true;
-
-            if (use_tag && tag_value.empty() && !name.empty()) {
-                tag_value = name.front() == '#' ? name.substr(1) : name;
-            }
-
-            draft.use_tag = use_tag;
-            draft.tag = sanitize_key(tag_value);
-            draft.original_name = name;
-            draft.label = label;
-            draft.is_null = is_null;
-
-            if (!draft.use_tag) {
-                std::string sanitized = sanitize_key(name);
-                if (sanitized == "null") {
-                    draft.is_null = true;
-                    sanitized.clear();
-                }
-                draft.asset_name = sanitized;
-            }
-
-            return draft;
-};
-
-        for (const auto& cj : cand_jsons) {
-            CandidateDraft draft = parse_candidate(cj);
-
-            if (draft.weight <= 0.0) {
-                if (draft.use_tag) {
-                    if (!draft.tag.empty()) blocked_tags.insert(draft.tag);
-                } else if (!draft.is_null) {
-                    std::string blocked = !draft.asset_name.empty() ? draft.asset_name : sanitize_key(draft.original_name);
-                    if (!blocked.empty()) blocked_assets.insert(blocked);
-                }
-            }
-
-            drafts.push_back(std::move(draft));
+        vibble::spawn::RuntimeCandidates candidates =
+            vibble::spawn::RuntimeCandidates::from_json(asset["candidates"]);
+        if (candidates.empty()) {
+            continue;
         }
-
-        std::unordered_set<std::string> candidate_tags;
-        for (const auto& d : drafts) {
-            if (d.use_tag && !d.tag.empty() && d.weight > 0.0) {
-                candidate_tags.insert(d.tag);
-            }
-        }
-
-        for (const auto& draft : drafts) {
-            SpawnCandidate c{};
-            c.weight = draft.weight;
-
-            std::string resolved_name;
-            if (draft.use_tag) {
-                std::string tag = !draft.tag.empty() ? draft.tag : sanitize_key(draft.original_name);
-                if (!tag.empty() && draft.weight > 0.0) {
-                    try {
-                        resolved_name = resolve_asset_from_tag( tag, &blocked_tags, &blocked_assets, &candidate_tags );
-                    } catch (...) {
-                        resolved_name.clear();
-                    }
-                }
-            } else {
-                resolved_name = draft.asset_name;
-            }
-
-            bool is_null = draft.is_null;
-            if (draft.use_tag && draft.weight <= 0.0) {
-                is_null = true;
-            }
-
-            if (!resolved_name.empty()) {
-                c.name = resolved_name;
-            } else if (!draft.use_tag) {
-                c.name = draft.asset_name;
-            }
-
-            if (c.name.empty()) {
-                if (!is_null) is_null = true;
-            }
-
-            std::string fallback_display = draft.original_name;
-            if (fallback_display.empty() && !draft.tag.empty()) {
-                fallback_display = "#" + draft.tag;
-            }
-
-            c.display_name = !draft.label.empty() ? draft.label : (!c.name.empty() ? c.name : fallback_display);
-
-            if (c.display_name.empty() && is_null) c.display_name = "null";
-
-            c.is_null = is_null || c.name.empty();
-            if (!c.is_null && !c.name.empty()) {
-                auto info = asset_library_->get(c.name);
-                if (!info) c.is_null = true;
-                else c.info = info;
-            }
-
-            if (c.is_null && c.display_name.empty()) c.display_name = "null";
-            if (c.weight < 0.0) c.weight = 0.0;
-
-            candidates.push_back(std::move(c));
-        }
-        if (candidates.empty()) continue;
 
         auto average_range = [&](const std::string& lo_key, const std::string& hi_key, int fallback) {
             int lo = asset.value(lo_key, fallback);
@@ -505,55 +323,4 @@ nlohmann::json* AssetSpawnPlanner::get_source_entry(int source_index, int entry_
     } catch (...) {
         return nullptr;
     }
-}
-std::string AssetSpawnPlanner::resolve_asset_from_tag(
-    const std::string& tag,
-    const std::unordered_set<std::string>* banned_tags,
-    const std::unordered_set<std::string>* banned_assets,
-    const std::unordered_set<std::string>* candidate_tags)
-{
-    static std::mt19937 rng(std::random_device{}());
-    if (tag.empty()) {
-        throw std::runtime_error("Empty tag provided to resolve_asset_from_tag");
-    }
-
-    std::vector<std::string> matches;
-    for (const auto& [name, info] : asset_library_->all()) {
-        if (!info || !info->has_tag(tag)) continue;
-
-        if (banned_assets && banned_assets->count(name) > 0) continue;
-
-        if (banned_tags && !banned_tags->empty()) {
-            bool skip = false;
-            for (const auto& blocked : *banned_tags) {
-                if (blocked.empty()) continue;
-                if (blocked == tag) continue;
-                if (info->has_tag(blocked)) {
-                    skip = true;
-                    break;
-                }
-            }
-            if (skip) continue;
-        }
-
-        if (candidate_tags && !candidate_tags->empty()) {
-            bool skip = false;
-            for (const auto& anti : info->anti_tags) {
-                if (candidate_tags->count(anti) > 0 && anti != tag) {
-                    skip = true;
-                    break;
-                }
-            }
-            if (skip) continue;
-        }
-
-        matches.push_back(name);
-    }
-
-    if (matches.empty()) {
-        throw std::runtime_error("No assets found for tag: " + tag);
-    }
-
-    std::uniform_int_distribution<size_t> dist(0, matches.size() - 1);
-    return matches[dist(rng)];
 }

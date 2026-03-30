@@ -2949,7 +2949,7 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     }
 
     nlohmann::json default_anim = {
-        {"loop", true},
+        {"on_end", "default"},
         {"locked", false},
         {"reverse_source", false},
         {"flipped_source", false},

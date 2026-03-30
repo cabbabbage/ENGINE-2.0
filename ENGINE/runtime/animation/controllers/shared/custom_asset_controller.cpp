@@ -36,6 +36,9 @@ void CustomAssetController::on_update(const Input&) {
     if (!self || !self->info || !self->anim_) {
         return;
     }
+    if (!self->default_controller_animation_enforced()) {
+        return;
+    }
 
     const std::string default_anim{ animation_update::detail::kDefaultAnimation };
 

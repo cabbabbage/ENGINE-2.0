@@ -97,9 +97,15 @@ void AssetSpawner::spawn(Room& room) {
 
                                 std::vector<std::string> names;
                                 std::vector<double> weights;
-                                for (const auto& cand : item.candidates) {
-                                        if (!cand.name.empty() && room.find_area(cand.name) != nullptr) {
-                                                names.push_back(cand.name);
+                                const auto& entries = item.candidates.entries();
+                                for (const auto& cand : entries) {
+                                        if (cand.kind != vibble::spawn::CandidateKind::Asset ||
+                                            cand.is_null ||
+                                            cand.key.empty()) {
+                                                continue;
+                                        }
+                                        if (room.find_area(cand.key) != nullptr) {
+                                                names.push_back(cand.key);
                                                 double w = cand.weight;
                                                 if (w < 0.0) w = 0.0;
                                                 weights.push_back(w);

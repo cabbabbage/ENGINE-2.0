@@ -403,6 +403,9 @@ bool ChildAsset::spawn_child_asset() {
         return false;
     }
     spawn_warning_logged_ = false;
+    // Child attachments are driven by parent anchor binding and explicit animation requests.
+    // Disable fallback controller auto-reset to "default" so set_animation() remains visible.
+    child_->set_default_controller_animation_enforced(false);
     owner_->add_child(child_);
     return true;
 }

@@ -24,6 +24,7 @@ class Animation {
 public:
     enum class OnEndDirective {
         Default,
+        Loop,
         Kill,
         Lock,
         Reverse,
@@ -99,7 +100,6 @@ public:
     std::string on_end_animation;
     OnEndDirective on_end_behavior = OnEndDirective::Default;
     bool randomize = false;
-    bool loop = true;
     bool frozen = false;
     SDL_Texture* preview_texture = nullptr;
     bool has_frames(std::size_t path_index = 0) const;

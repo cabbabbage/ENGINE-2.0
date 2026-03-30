@@ -3,7 +3,6 @@
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <string>
-#include <unordered_set>
 #include <functional>
 #include <SDL3/SDL.h>
 #include "assets/asset/asset_info.hpp"
@@ -30,7 +29,6 @@ class AssetSpawnPlanner {
         private:
     void parse_asset_spawns(const Area& area);
     void sort_spawn_queue();
-    std::string resolve_asset_from_tag( const std::string& tag, const std::unordered_set<std::string>* banned_tags, const std::unordered_set<std::string>* banned_assets, const std::unordered_set<std::string>* candidate_tags);
     nlohmann::json* get_source_entry(int source_index, int entry_index, const std::string& key);
     void persist_sources();
     nlohmann::json root_json_;

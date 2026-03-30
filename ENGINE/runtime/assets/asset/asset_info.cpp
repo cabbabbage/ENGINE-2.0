@@ -59,6 +59,30 @@ nlohmann::json normalize_animation_payload(nlohmann::json payload) {
     payload.erase("speed_factor");
     payload.erase("speed_multiplier");
     payload.erase("fps");
+    payload.erase("loop");
+
+    std::string on_end = "default";
+    if (payload.contains("on_end")) {
+        if (payload["on_end"].is_string()) {
+            on_end = payload["on_end"].get<std::string>();
+        } else if (payload["on_end"].is_null()) {
+            on_end = "default";
+        }
+    }
+    if (on_end.empty()) {
+        on_end = "default";
+    }
+    std::string lowered = on_end;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (lowered == "default" || lowered == "loop" || lowered == "kill" || lowered == "lock" ||
+        lowered == "reverse") {
+        payload["on_end"] = lowered;
+    } else {
+        payload["on_end"] = on_end;
+    }
+
     return payload;
 }
 

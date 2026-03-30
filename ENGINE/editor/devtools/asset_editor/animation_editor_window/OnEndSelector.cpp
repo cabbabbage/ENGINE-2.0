@@ -18,7 +18,7 @@ namespace {
 
 using animation_editor::kPanelPadding;
 
-constexpr std::array<const char*, 3> kSpecialOnEndOptions = {"kill", "lock", "reverse"};
+constexpr std::array<const char*, 4> kSpecialOnEndOptions = {"loop", "kill", "lock", "reverse"};
 
 std::string payload_signature(const std::optional<std::string>& payload) {
     if (!payload.has_value()) {
@@ -233,6 +233,7 @@ void OnEndSelector::commit_selection() {
             payload = std::move(parsed);
         }
     }
+    payload.erase("loop");
     payload["on_end"] = selected;
 
     std::string updated = payload.dump();

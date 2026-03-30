@@ -248,12 +248,16 @@ bool ensure_animation_metadata(const std::string& asset_name,
                         mutated = true;
                 }
 
-                if (!slot.contains("loop") || !slot["loop"].is_boolean()) {
-                        slot["loop"] = true;
-                        mutated = true;
-                }
                 if (!slot.contains("locked") || !slot["locked"].is_boolean()) {
                         slot["locked"] = false;
+                        mutated = true;
+                }
+                if (slot.contains("loop")) {
+                        slot.erase("loop");
+                        mutated = true;
+                }
+                if (!slot.contains("on_end") || !slot["on_end"].is_string() || slot["on_end"].get<std::string>().empty()) {
+                        slot["on_end"] = "default";
                         mutated = true;
                 }
         }

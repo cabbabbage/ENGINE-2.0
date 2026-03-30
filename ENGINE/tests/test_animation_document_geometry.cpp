@@ -159,3 +159,36 @@ TEST_CASE("AnimationDocument materializes legacy movement-only flips into local 
     CHECK((*payload)["anchor_points"][0].empty());
     CHECK((*payload)["anchor_points"][1].empty());
 }
+
+TEST_CASE("AnimationDocument normalizes missing on_end and strips legacy loop") {
+    animation_editor::AnimationDocument document;
+    const nlohmann::json manifest = {
+        {"animations",
+         {{"default",
+           {{"source", {{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
+            {"number_of_frames", 1},
+            {"loop", true}}}}},
+    };
+
+    document.load_from_manifest(manifest, std::filesystem::path{}, nullptr);
+
+    const auto payload = document.animation_payload_json("default");
+    REQUIRE(payload.has_value());
+    REQUIRE(payload->is_object());
+    CHECK(payload->contains("on_end"));
+    CHECK((*payload)["on_end"] == "default");
+    CHECK_FALSE(payload->contains("loop"));
+}
+
+TEST_CASE("AnimationDocument create_animation emits on_end without loop") {
+    animation_editor::AnimationDocument document;
+    document.load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, nullptr);
+    document.create_animation("swing");
+
+    const auto payload = document.animation_payload_json("swing");
+    REQUIRE(payload.has_value());
+    REQUIRE(payload->is_object());
+    CHECK(payload->contains("on_end"));
+    CHECK((*payload)["on_end"] == "default");
+    CHECK_FALSE(payload->contains("loop"));
+}

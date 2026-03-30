@@ -109,6 +109,9 @@ Animation::OnEndDirective Animation::classify_on_end(std::string_view value) {
     if (lowered.empty() || lowered == "default") {
         return OnEndDirective::Default;
     }
+    if (lowered == "loop") {
+        return OnEndDirective::Loop;
+    }
     if (lowered == "kill") {
         return OnEndDirective::Kill;
     }

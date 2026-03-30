@@ -54,6 +54,15 @@ TEST_CASE("Animation primary_frames aliases movement_path zero") {
     CHECK(animation.frame_count(0) == primary.size());
 }
 
+TEST_CASE("Animation classify_on_end maps loop and reserved directives") {
+    CHECK(Animation::classify_on_end("default") == Animation::OnEndDirective::Default);
+    CHECK(Animation::classify_on_end("loop") == Animation::OnEndDirective::Loop);
+    CHECK(Animation::classify_on_end("kill") == Animation::OnEndDirective::Kill);
+    CHECK(Animation::classify_on_end("lock") == Animation::OnEndDirective::Lock);
+    CHECK(Animation::classify_on_end("reverse") == Animation::OnEndDirective::Reverse);
+    CHECK(Animation::classify_on_end("vibble_attack_2") == Animation::OnEndDirective::Animation);
+}
+
 TEST_CASE("RuntimeWorldContext rebuilds room view and tracks topology generation") {
     RuntimeWorldContext context;
     CHECK(context.topology_generation() == 0);

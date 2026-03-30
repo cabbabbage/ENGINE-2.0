@@ -60,8 +60,8 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     ensure_bool("reverse_source", false);
     ensure_bool("flip_vertical_source", false);
     ensure_bool("locked", false);
-    ensure_bool("loop", true);
     ensure_bool("rnd_start", false);
+    payload.erase("loop");
 
     bool derived_from_animation = (kind == "animation");
     bool derived_reverse = read_bool_field_like(payload, "reverse_source", false);
@@ -258,7 +258,19 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
             on_end = "default";
         }
     }
-    payload["on_end"] = on_end;
+    if (on_end.empty()) {
+        on_end = "default";
+    }
+    std::string lowered_on_end = on_end;
+    std::transform(lowered_on_end.begin(), lowered_on_end.end(), lowered_on_end.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (lowered_on_end == "default" || lowered_on_end == "loop" || lowered_on_end == "kill" ||
+        lowered_on_end == "lock" || lowered_on_end == "reverse") {
+        payload["on_end"] = lowered_on_end;
+    } else {
+        payload["on_end"] = on_end;
+    }
 
 
     if (!derived_from_animation) {

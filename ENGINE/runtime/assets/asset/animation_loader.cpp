@@ -37,6 +37,32 @@ using json_coercion::read_float_field_like;
 using json_coercion::read_int_field_like;
 using json_coercion::read_string_field_like;
 
+std::string read_on_end_value(const nlohmann::json& payload) {
+        if (!payload.is_object() || !payload.contains("on_end")) {
+                return "default";
+        }
+        const nlohmann::json& value = payload["on_end"];
+        if (value.is_null()) {
+                return "default";
+        }
+        if (!value.is_string()) {
+                return "default";
+        }
+        std::string on_end = value.get<std::string>();
+        if (on_end.empty()) {
+                return "default";
+        }
+        std::string lowered = on_end;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+        });
+        if (lowered == "default" || lowered == "loop" || lowered == "kill" || lowered == "lock" ||
+            lowered == "reverse") {
+                return lowered;
+        }
+        return on_end;
+}
+
 bool box_trace_enabled() {
         static const bool enabled = [] {
                 const char* raw = SDL_getenv("VIBBLE_BOX_TRACE");
@@ -967,10 +993,9 @@ void AnimationLoader::load(Animation& animation,
         }
 
         animation.locked = read_bool_field_like(anim_json, "locked", false);
-        animation.loop = read_bool_field_like(anim_json, "loop", true);
         animation.randomize = read_bool_field_like(anim_json, "randomize", false);
         animation.rnd_start = read_bool_field_like(anim_json, "rnd_start", false);
-        animation.on_end_animation = read_string_field_like(anim_json, "on_end", std::string{"default"});
+        animation.on_end_animation = read_on_end_value(anim_json);
         animation.on_end_behavior = Animation::classify_on_end(animation.on_end_animation);
         animation.total_dx = 0;
         animation.total_dy = 0;

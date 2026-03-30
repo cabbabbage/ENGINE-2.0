@@ -8871,6 +8871,275 @@
     "vibble_attack_1": {
       "animations": {
         "attack": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 241,
+                    "texture_y": 119
+                  },
+                  {
+                    "texture_x": 249,
+                    "texture_y": 229
+                  },
+                  {
+                    "texture_x": 231,
+                    "texture_y": 231
+                  },
+                  {
+                    "texture_x": 223,
+                    "texture_y": 121
+                  }
+                ],
+                "damage_amount": 100,
+                "enabled": true,
+                "extrusion_amount": 4,
+                "frame_range": {
+                  "end": 3,
+                  "start": 3
+                },
+                "id": "attack_box_id",
+                "meta": {},
+                "name": "attack_box",
+                "position": {
+                  "x": 181,
+                  "y": 166
+                },
+                "rotation_degrees": 85.44091033935547,
+                "size": {
+                  "h": 18,
+                  "w": 110
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 215,
+                    "texture_y": 213
+                  },
+                  {
+                    "texture_x": 304,
+                    "texture_y": 148
+                  },
+                  {
+                    "texture_x": 315,
+                    "texture_y": 163
+                  },
+                  {
+                    "texture_x": 226,
+                    "texture_y": 228
+                  }
+                ],
+                "damage_amount": 100,
+                "enabled": true,
+                "extrusion_amount": 4,
+                "frame_range": {
+                  "end": 3,
+                  "start": 3
+                },
+                "id": "attack_box_id",
+                "meta": {},
+                "name": "attack_box",
+                "position": {
+                  "x": 210,
+                  "y": 179
+                },
+                "rotation_degrees": -36.495033264160156,
+                "size": {
+                  "h": 18,
+                  "w": 110
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 225,
+                    "texture_y": 198
+                  },
+                  {
+                    "texture_x": 334,
+                    "texture_y": 214
+                  },
+                  {
+                    "texture_x": 331,
+                    "texture_y": 232
+                  },
+                  {
+                    "texture_x": 222,
+                    "texture_y": 216
+                  }
+                ],
+                "damage_amount": 100,
+                "enabled": true,
+                "extrusion_amount": 4,
+                "frame_range": {
+                  "end": 3,
+                  "start": 3
+                },
+                "id": "attack_box_id",
+                "meta": {},
+                "name": "attack_box",
+                "position": {
+                  "x": 223,
+                  "y": 206
+                },
+                "rotation_degrees": 8.326591491699219,
+                "size": {
+                  "h": 18,
+                  "w": 110
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 110,
+                    "texture_y": 165
+                  },
+                  {
+                    "texture_x": 219,
+                    "texture_y": 181
+                  },
+                  {
+                    "texture_x": 216,
+                    "texture_y": 199
+                  },
+                  {
+                    "texture_x": 107,
+                    "texture_y": 183
+                  }
+                ],
+                "damage_amount": 100,
+                "enabled": true,
+                "extrusion_amount": 4,
+                "frame_range": {
+                  "end": 3,
+                  "start": 3
+                },
+                "id": "attack_box_id",
+                "meta": {},
+                "name": "attack_box",
+                "position": {
+                  "x": 108,
+                  "y": 173
+                },
+                "rotation_degrees": 8.326591491699219,
+                "size": {
+                  "h": 18,
+                  "w": 110
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 72,
+                    "texture_y": 182
+                  },
+                  {
+                    "texture_x": 177,
+                    "texture_y": 212
+                  },
+                  {
+                    "texture_x": 172,
+                    "texture_y": 230
+                  },
+                  {
+                    "texture_x": 67,
+                    "texture_y": 200
+                  }
+                ],
+                "damage_amount": 100,
+                "enabled": true,
+                "extrusion_amount": 4,
+                "frame_range": {
+                  "end": 3,
+                  "start": 3
+                },
+                "id": "attack_box_id",
+                "meta": {},
+                "name": "attack_box",
+                "position": {
+                  "x": 67,
+                  "y": 197
+                },
+                "rotation_degrees": 15.802604675292969,
+                "size": {
+                  "h": 18,
+                  "w": 110
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 90,
+                    "texture_y": 149
+                  },
+                  {
+                    "texture_x": 177,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 166,
+                    "texture_y": 231
+                  },
+                  {
+                    "texture_x": 79,
+                    "texture_y": 163
+                  }
+                ],
+                "damage_amount": 100,
+                "enabled": true,
+                "extrusion_amount": 4,
+                "frame_range": {
+                  "end": 3,
+                  "start": 3
+                },
+                "id": "attack_box_id",
+                "meta": {},
+                "name": "attack_box",
+                "position": {
+                  "x": 73,
+                  "y": 181
+                },
+                "rotation_degrees": 37.907920837402344,
+                "size": {
+                  "h": 18,
+                  "w": 110
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
           "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
@@ -8957,6 +9226,7 @@
       },
       "start": "default",
       "tags": [],
+      "tillable": false,
       "update_radius": 0
     },
     "vibble_eyes": {
@@ -9287,7 +9557,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            90,
+            120,
             242,
             255
           ],
@@ -9304,16 +9574,16 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": -1609,
-          "camera_center_dz": -1015,
-          "camera_height_px": 319,
+          "camera_center_dx": -508,
+          "camera_center_dz": -2687,
+          "camera_height_px": 514,
           "camera_tilt_deg": 40.0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
             36,
+            133,
+            242,
             255
           ],
           "edge_smoothness": 85,

@@ -7,7 +7,7 @@
 // CONTROLLER_META_END
 
 #include "vibble_controller.hpp"
-
+#include <iostream>
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
@@ -107,34 +107,31 @@ void vibble_controller::movement(const Input& input) {
     const bool sprint =
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool dash_pressed = input.isScancodeDown(SDL_SCANCODE_SPACE);
-    const bool melee_pressed = input.isScancodeDown(SDL_SCANCODE_E);
+    const bool melee_pressed = input.wasScancodePressed(SDL_SCANCODE_E);
 
     const vibble::player_direction::DirectionIntent direction_intent =
         resolve_direction_intent_for_player(player, input_x, input_y);
     const int world_x = direction_intent.world_x;
     const int world_y = direction_intent.world_y;
 
-    if (world_x == 0 && world_y == 0) {
-        subpixel_x_ = 0.0f;
-        subpixel_y_ = 0.0f;
-        player->anim_->move(SDL_Point{ 0, 0 }, animation_update::detail::kDefaultAnimation);
-        return;
-    }
-
-    const float stride_count = sprint ? kSprintMultiplier : 1.0f;
-
-    if (dash_pressed && canDash) {
-        start_dash();
-    }
-    if (melee_pressed && canMelee) {
+    if (melee_pressed) {
+        std::cout << "Melee attack initiated!" << std::endl;
         canMelee = false;
         isMeleeing = true;
         meleeCooldownEndTime = std::chrono::steady_clock::now()
                                + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                                    std::chrono::duration<float>(meleeCooldown));
-        
-        weapon_child_->set_animation("attack");
+        if (weapon_child_.has_value()) {
+            weapon_child_->set_animation("attack");
+        }
+    }
 
+
+
+    const float stride_count = sprint ? kSprintMultiplier : 1.0f;
+
+    if (dash_pressed && canDash) {
+        start_dash();
     }
 
     float speed_multiplier = kWalkSpeed;
@@ -190,8 +187,9 @@ void vibble_controller::on_update(const Input& input) {
         canDash = true;
     }
 
-    if (!canMelee && !isMeleeing && now >= meleeCooldownEndTime) {
+    if (!canMelee && now >= meleeCooldownEndTime) {
         canMelee = true;
+        isMeleeing = false;
     }
 
     movement(input);

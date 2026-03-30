@@ -40,7 +40,7 @@ inline bool has_numeric_stem(const std::filesystem::path& path) {
 
 inline bool is_reserved_animation_name(std::string_view value) {
     std::string lowered = to_lower_copy(value);
-    return lowered == "kill" || lowered == "lock" || lowered == "reverse";
+    return lowered == "loop" || lowered == "kill" || lowered == "lock" || lowered == "reverse";
 }
 
 }

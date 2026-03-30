@@ -1,22 +1,13 @@
 #pragma once
 
-#include <algorithm>
-#include <memory>
+#include <optional>
 #include <random>
 #include <string>
-#include <vector>
+#include <unordered_set>
 
 #include <SDL3/SDL.h>
-#include "utils/area.hpp"
-#include "assets/asset/asset_info.hpp"
 
-struct SpawnCandidate {
-    std::string name;
-    std::string display_name;
-    double weight = 0.0;
-    std::shared_ptr<AssetInfo> info;
-    bool is_null = false;
-};
+#include "runtime_candidates.hpp"
 
 struct SpawnInfo {
     enum class ExecutionMode {
@@ -46,26 +37,24 @@ struct SpawnInfo {
     bool adjust_geometry_to_room = false;
     ExecutionMode execution_mode = ExecutionMode::Standard;
 
-    std::vector<SpawnCandidate> candidates;
+    vibble::spawn::RuntimeCandidates candidates;
 
     bool has_candidates() const { return !candidates.empty(); }
     bool uses_batch_grid() const { return execution_mode == ExecutionMode::BatchGrid; }
 
-    const SpawnCandidate* select_candidate(std::mt19937& rng) const {
-        if (candidates.empty()) return nullptr;
-        std::vector<double> weights;
-        weights.reserve(candidates.size());
-        double total_positive = 0.0;
-        for (const auto& cand : candidates) {
-            double w = cand.weight;
-            if (w < 0.0) w = 0.0;
-            if (w > 0.0) total_positive += w;
-            weights.push_back(w);
-        }
-        if (total_positive <= 0.0) {
-            std::fill(weights.begin(), weights.end(), 1.0);
-        }
-        std::discrete_distribution<size_t> dist(weights.begin(), weights.end());
-        return &candidates[dist(rng)];
+    std::optional<vibble::spawn::ResolvedCandidate> select_candidate(
+        std::mt19937& rng,
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog) const {
+        return candidates.pick_random(rng, catalog, vibble::spawn::ZeroWeightPolicy::UniformFallback);
+    }
+
+    std::optional<vibble::spawn::ResolvedCandidate> select_candidate_excluding(
+        std::mt19937& rng,
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog,
+        const std::unordered_set<int>& excluded_entry_indices) const {
+        return candidates.pick_random_excluding(rng,
+                                                catalog,
+                                                excluded_entry_indices,
+                                                vibble::spawn::ZeroWeightPolicy::UniformFallback);
     }
 };

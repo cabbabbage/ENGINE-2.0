@@ -88,7 +88,8 @@ private:
     std::unordered_map<std::string, std::size_t> active_paths_{};
 
     bool debug_enabled_ = false;
-    bool just_applied_controller_move_ = false;
+    bool reverse_playback_active_ = false;
+    bool lock_on_end_active_ = false;
     int  suppress_root_motion_frames_ = 0;
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }

@@ -45,7 +45,8 @@ AttemptResult attempt_spawn(const SpawnInfo& item,
         return AttemptResult::PositionRejected;
     }
 
-    const SpawnCandidate* candidate = item.select_candidate(ctx.rng());
+    vibble::spawn::RuntimeCandidates::AssetCatalogView catalog{&ctx.info_library(), false};
+    const auto candidate = item.select_candidate(ctx.rng(), catalog);
     if (!candidate || candidate->is_null || !candidate->info) {
         return AttemptResult::InvalidCandidate;
     }
@@ -65,7 +66,13 @@ AttemptResult attempt_spawn(const SpawnInfo& item,
         return AttemptResult::CheckRejected;
     }
 
-    auto* result = ctx.spawnAsset(candidate->name, candidate->info, area, pos, 0, item.spawn_id, item.position);
+    auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
+                                  candidate->info,
+                                  area,
+                                  pos,
+                                  0,
+                                  item.spawn_id,
+                                  item.position);
     if (!result) {
         return AttemptResult::SpawnFailed;
     }

@@ -115,7 +115,10 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.variant_steps_   = source.variant_steps_;
     render_pipeline::ScalingLogic::NormalizeVariantSteps(dest.variant_steps_);
     dest.locked           = source.locked;
-    dest.on_end_animation = source.on_end_animation;
+    if (opts.inherit_on_end_from_source) {
+        dest.on_end_animation = source.on_end_animation;
+        dest.on_end_behavior = source.on_end_behavior;
+    }
     dest.randomize        = source.randomize;
     dest.rnd_start        = source.rnd_start;
     dest.frozen           = source.frozen;

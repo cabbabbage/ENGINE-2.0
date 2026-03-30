@@ -66,8 +66,10 @@ class PlaybackSettingsPanel {
     void apply_state_to_payload(nlohmann::json& payload, const PlaybackState& state);
     void update_inherited_state(const nlohmann::json& payload);
     void refresh_inherited_message();
+    bool inherit_controls_visible_for_state(const PlaybackState& state) const;
     bool random_start_visible_for_state(const PlaybackState& state) const;
     bool inversion_controls_visible_for_state(const PlaybackState& state) const;
+    bool inherit_controls_visible() const { return inherit_controls_visible_for_state(state_); }
     bool random_start_visible() const { return random_start_visible_for_state(state_); }
     bool inversion_controls_visible() const { return inversion_controls_visible_for_state(state_); }
 
@@ -89,6 +91,7 @@ class PlaybackSettingsPanel {
     mutable bool layout_dirty_ = true;
     bool is_syncing_ui_ = false;
     bool derived_from_animation_ = false;
+    bool source_chain_resolves_to_frames_ = false;
     std::string derived_source_id_;
     std::vector<std::string> inherited_message_lines_;
     std::vector<std::string> inherited_modifiers_;

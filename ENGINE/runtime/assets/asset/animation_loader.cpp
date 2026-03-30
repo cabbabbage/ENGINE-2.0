@@ -1189,6 +1189,7 @@ void AnimationLoader::load(Animation& animation,
                                 opts.flip_horizontal = animation.flipped_source;
                                 opts.flip_vertical   = animation.flip_vertical_source;
                                 opts.reverse_frames  = animation.reverse_source;
+                                opts.inherit_on_end_from_source = animation.inherit_source_geometry;
 
                                 if (!AnimationCloner::Clone(src_anim, animation, opts, renderer, info)) {
                                         flush_diagnostics();
@@ -1227,6 +1228,7 @@ void AnimationLoader::load(Animation& animation,
                         opts.flip_horizontal = animation.flipped_source;
                         opts.flip_vertical   = animation.flip_vertical_source;
                         opts.reverse_frames  = animation.reverse_source;
+                        opts.inherit_on_end_from_source = animation.inherit_source_geometry;
                         std::cout << "[AnimationLoader] " << info.name << "::" << trigger
                                   << " late-cloning from source animation '" << animation.source.name
                                   << "' (flipH=" << opts.flip_horizontal

@@ -20,7 +20,6 @@
 #include "MovementSummaryWidget.hpp"
 #include "OnEndSelector.hpp"
 #include "PlaybackSettingsPanel.hpp"
-#include "AnimationOptionsPanel.hpp"
 #include "PreviewProvider.hpp"
 #include "PreviewTimeline.hpp"
 #include "SourceConfigPanel.hpp"
@@ -89,10 +88,6 @@ class ClipScope {
     bool previous_clip_enabled_ = false;
     bool active_ = false;
 };
-
-int header_toggle_width() {
-    return DMButton::height();
-}
 
 void render_label(SDL_Renderer* renderer, const DMLabelStyle& style, const std::string& text, int x, int y, SDL_Color color) {
     if (!renderer || text.empty()) {
@@ -170,9 +165,7 @@ bool is_pointer_event(const SDL_Event& e) {
 
 void draw_section_header(SDL_Renderer* renderer,
                          const SDL_Rect& rect,
-                         const std::string& title,
-                         bool collapsible,
-                         bool expanded) {
+                         const std::string& title) {
     if (!renderer || rect.w <= 0 || rect.h <= 0) {
         return;
     }
@@ -183,12 +176,6 @@ void draw_section_header(SDL_Renderer* renderer,
     const int text_y = rect.y + std::max(0, (rect.h - DMStyles::Label().font_size) / 2);
     render_label(renderer, title, text_x, text_y, DMStyles::Label().color);
 
-    if (collapsible) {
-        const std::string indicator = expanded ? "−" : "+";
-        const int indicator_w = text_width(DMStyles::Label(), indicator);
-        const int indicator_x = rect.x + rect.w - indicator_w - DMSpacing::small_gap() * 2;
-        render_label(renderer, indicator, indicator_x, text_y, DMStyles::AccentButton().text);
-    }
 }
 
 struct LayoutCursor {
@@ -212,11 +199,13 @@ AnimationInspectorPanel::AnimationInspectorPanel() {
 
 void AnimationInspectorPanel::set_document(std::shared_ptr<AnimationDocument> document) {
     document_ = std::move(document);
+    reset_payload_notification_state();
     rebuild_widgets();
 }
 
 void AnimationInspectorPanel::set_animation_id(const std::string& animation_id) {
     animation_id_ = animation_id;
+    reset_payload_notification_state();
     rebuild_widgets();
 }
 
@@ -303,7 +292,7 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     total += kSectionHeaderHeight;
     total += item_gap;
     total += DMButton::height();
-    if (source_section_open_ && source_config_) {
+    if (source_config_) {
         int source_height = source_config_->preferred_height(content_width);
         if (source_height > 0) {
             total += item_gap;
@@ -318,26 +307,23 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     total += item_gap;
     total += kPreviewHeight;
 
-    auto add_collapsible_section = [&](CollapsibleSection section, auto* widget) {
+    auto add_section = [&](auto* widget) {
         if (!widget) {
             return;
         }
         total += section_gap;
         total += kSectionHeaderHeight;
-        if (expanded_section_ == section) {
-            int height = widget->preferred_height(content_width);
-            if (height > 0) {
-                total += item_gap;
-                total += height;
-            }
+        int height = widget->preferred_height(content_width);
+        if (height > 0) {
+            total += item_gap;
+            total += height;
         }
     };
 
-    add_collapsible_section(CollapsibleSection::kAnimationOptions, animation_options_.get());
-    add_collapsible_section(CollapsibleSection::kPlayback, playback_settings_.get());
-    add_collapsible_section(CollapsibleSection::kMovement, movement_summary_.get());
-    add_collapsible_section(CollapsibleSection::kOnEnd, on_end_selector_.get());
-    add_collapsible_section(CollapsibleSection::kAudio, audio_panel_.get());
+    add_section(playback_settings_.get());
+    add_section(movement_summary_.get());
+    add_section(on_end_selector_.get());
+    add_section(audio_panel_.get());
 
     total += padding;
     return total;
@@ -345,7 +331,6 @@ int AnimationInspectorPanel::height_for_width(int width) const {
 
 void AnimationInspectorPanel::update() {
     refresh_preview_metadata();
-    ensure_preview_controls();
     ensure_preview_controls();
     layout_widgets();
 
@@ -368,18 +353,18 @@ void AnimationInspectorPanel::update() {
 
     update_preview_playback();
 
-    if (animation_options_) animation_options_->update();
     if (playback_settings_) playback_settings_->update();
     if (movement_summary_) movement_summary_->update();
     if (on_end_selector_) on_end_selector_->update();
     if (audio_panel_) audio_panel_->update();
+    notify_payload_change_if_needed();
 }
 
 void AnimationInspectorPanel::apply_dropdown_selections() {
     if (source_config_) {
-
         source_config_->commit_animation_dropdown_selection();
     }
+    notify_payload_change_if_needed();
 }
 
 void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
@@ -408,48 +393,34 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
     {
         ClipScope content_clip(renderer, bounds_);
 
-        draw_section_header(renderer, source_section_header_rect_, "Source", true, source_section_open_);
+        draw_section_header(renderer, source_section_header_rect_, "Source");
         if (source_frames_button_) source_frames_button_->render(renderer);
         if (source_animation_button_) source_animation_button_->render(renderer);
-        if (source_section_open_ && source_config_ && source_rect_.h > 0 && source_rect_.w > 0) {
+        if (source_config_ && source_rect_.h > 0 && source_rect_.w > 0) {
             source_config_->render(renderer);
         }
 
-        draw_section_header(renderer, preview_section_rect_, "Preview", false, true);
+        draw_section_header(renderer, preview_section_rect_, "Preview");
         render_preview_controls(renderer);
         render_preview(renderer);
 
         {
             ClipScope scroll_clip(renderer, scrollable_bounds_);
-            if (animation_options_) {
-                draw_section_header(renderer, animation_options_header_rect_, "Animation", true, expanded_section_ == CollapsibleSection::kAnimationOptions);
-                if (expanded_section_ == CollapsibleSection::kAnimationOptions) {
-                    animation_options_->render(renderer);
-                }
-            }
             if (playback_settings_) {
-                draw_section_header(renderer, playback_header_rect_, "Playback", true, expanded_section_ == CollapsibleSection::kPlayback);
-                if (expanded_section_ == CollapsibleSection::kPlayback) {
-                    playback_settings_->render(renderer);
-                }
+                draw_section_header(renderer, playback_header_rect_, "Playback");
+                playback_settings_->render(renderer);
             }
             if (movement_summary_) {
-                draw_section_header(renderer, movement_header_rect_, "Geometry", true, expanded_section_ == CollapsibleSection::kMovement);
-                if (expanded_section_ == CollapsibleSection::kMovement) {
-                    movement_summary_->render(renderer);
-                }
+                draw_section_header(renderer, movement_header_rect_, "Geometry");
+                movement_summary_->render(renderer);
             }
             if (on_end_selector_) {
-                draw_section_header(renderer, on_end_header_rect_, "On End", true, expanded_section_ == CollapsibleSection::kOnEnd);
-                if (expanded_section_ == CollapsibleSection::kOnEnd) {
-                    on_end_selector_->render(renderer);
-                }
+                draw_section_header(renderer, on_end_header_rect_, "On End");
+                on_end_selector_->render(renderer);
             }
             if (audio_panel_) {
-                draw_section_header(renderer, audio_header_rect_, "Audio", true, expanded_section_ == CollapsibleSection::kAudio);
-                if (expanded_section_ == CollapsibleSection::kAudio) {
-                    audio_panel_->render(renderer);
-                }
+                draw_section_header(renderer, audio_header_rect_, "Audio");
+                audio_panel_->render(renderer);
             }
         }
     }
@@ -565,35 +536,6 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (!handled && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        auto toggle_section = [&](const SDL_Rect& rect, CollapsibleSection section) {
-            if (!SDL_PointInRect(&p, &rect)) {
-                return false;
-            }
-
-            if (section == CollapsibleSection::kSource) {
-                source_section_open_ = !source_section_open_;
-                layout_dirty_ = true;
-                return true;
-            }
-
-            CollapsibleSection new_section = (expanded_section_ == section) ? CollapsibleSection::kNone : section;
-            if (new_section != expanded_section_) {
-                expanded_section_ = new_section;
-                layout_dirty_ = true;
-            }
-            return true;
-        };
-
-        handled = toggle_section(source_section_header_rect_, CollapsibleSection::kSource) ||
-                  toggle_section(animation_options_header_rect_, CollapsibleSection::kAnimationOptions) ||
-                  toggle_section(playback_header_rect_, CollapsibleSection::kPlayback) ||
-                  toggle_section(movement_header_rect_, CollapsibleSection::kMovement) ||
-                  toggle_section(on_end_header_rect_, CollapsibleSection::kOnEnd) ||
-                  toggle_section(audio_header_rect_, CollapsibleSection::kAudio);
-    }
-
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         FocusTarget clicked = FocusTarget::kNone;
@@ -613,13 +555,11 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
         handled = true;
     }
 
-    if (source_section_open_ && source_config_ && source_config_->handle_event(e)) handled = true;
-    if (expanded_section_ == CollapsibleSection::kAnimationOptions && animation_options_ && animation_options_->handle_event(e)) handled = true;
-
-    if (expanded_section_ == CollapsibleSection::kPlayback && playback_settings_ && playback_settings_->handle_event(e)) handled = true;
-    if (expanded_section_ == CollapsibleSection::kMovement && movement_summary_ && movement_summary_->handle_event(e)) handled = true;
-    if (expanded_section_ == CollapsibleSection::kOnEnd && on_end_selector_ && on_end_selector_->handle_event(e)) handled = true;
-    if (expanded_section_ == CollapsibleSection::kAudio && audio_panel_ && audio_panel_->handle_event(e)) handled = true;
+    if (source_config_ && source_config_->handle_event(e)) handled = true;
+    if (playback_settings_ && playback_settings_->handle_event(e)) handled = true;
+    if (movement_summary_ && movement_summary_->handle_event(e)) handled = true;
+    if (on_end_selector_ && on_end_selector_->handle_event(e)) handled = true;
+    if (audio_panel_ && audio_panel_->handle_event(e)) handled = true;
 
     if (was_editing && name_box_ && !name_box_->is_editing()) {
         rename_pending_ = true;
@@ -796,12 +736,6 @@ void AnimationInspectorPanel::rebuild_widgets() {
         });
     }
 
-    if (!animation_options_) {
-        animation_options_ = std::make_unique<AnimationOptionsPanel>();
-    }
-    animation_options_->set_document(document_);
-    animation_options_->set_animation_id(animation_id_);
-
     if (!playback_settings_) {
         playback_settings_ = std::make_unique<PlaybackSettingsPanel>();
     }
@@ -887,39 +821,31 @@ void AnimationInspectorPanel::layout_widgets() const {
     self->source_section_rect_ = self->source_section_header_rect_;
     static_cursor.advance(kSectionHeaderHeight);
 
-    if (source_section_open_) {
-        static_cursor.advance(item_gap);
-        const int selector_height = DMButton::height();
-        const int selector_gap = DMSpacing::small_gap();
-        self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, selector_height};
-        int frames_width = std::max(0, (width - selector_gap) / 2);
-        int animation_width = std::max(0, width - frames_width - selector_gap);
-        if (source_frames_button_) {
-            SDL_Rect rect{x, static_cursor.visual_y(), frames_width, selector_height};
-            source_frames_button_->set_rect(rect);
-        }
-        if (source_animation_button_) {
-            SDL_Rect rect{x + frames_width + selector_gap, static_cursor.visual_y(), animation_width, selector_height};
-            source_animation_button_->set_rect(rect);
-        }
-        static_cursor.advance(selector_height);
+    static_cursor.advance(item_gap);
+    const int selector_height = DMButton::height();
+    const int selector_gap = DMSpacing::small_gap();
+    self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, selector_height};
+    int frames_width = std::max(0, (width - selector_gap) / 2);
+    int animation_width = std::max(0, width - frames_width - selector_gap);
+    if (source_frames_button_) {
+        SDL_Rect rect{x, static_cursor.visual_y(), frames_width, selector_height};
+        source_frames_button_->set_rect(rect);
+    }
+    if (source_animation_button_) {
+        SDL_Rect rect{x + frames_width + selector_gap, static_cursor.visual_y(), animation_width, selector_height};
+        source_animation_button_->set_rect(rect);
+    }
+    static_cursor.advance(selector_height);
 
-        int source_height = source_config_ ? source_config_->preferred_height(width) : 0;
-        if (source_height > 0) {
-            static_cursor.advance(item_gap);
-            self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, source_height};
-            if (source_config_) {
-                source_config_->set_bounds(self->source_rect_);
-            }
-            static_cursor.advance(source_height);
-        } else {
-            self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
-            if (source_config_) {
-                source_config_->set_bounds(self->source_rect_);
-            }
+    int source_height = source_config_ ? source_config_->preferred_height(width) : 0;
+    if (source_height > 0) {
+        static_cursor.advance(item_gap);
+        self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, source_height};
+        if (source_config_) {
+            source_config_->set_bounds(self->source_rect_);
         }
+        static_cursor.advance(source_height);
     } else {
-        self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
         self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
         if (source_config_) {
             source_config_->set_bounds(self->source_rect_);
@@ -964,11 +890,10 @@ void AnimationInspectorPanel::layout_widgets() const {
     int scroll = self->scroll_controller_.scroll();
     LayoutCursor scroll_cursor(scroll_start, scroll);
 
-    auto place_collapsible_section = [&](auto* widget,
-                                         CollapsibleSection section,
-                                         SDL_Rect& header_rect,
-                                         SDL_Rect& content_rect,
-                                         SDL_Rect& section_rect) {
+    auto place_static_section = [&](auto* widget,
+                                    SDL_Rect& header_rect,
+                                    SDL_Rect& content_rect,
+                                    SDL_Rect& section_rect) {
         if (!widget) {
             auto reset_rect = [&](SDL_Rect& rect) { rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0}; };
             reset_rect(header_rect);
@@ -981,18 +906,12 @@ void AnimationInspectorPanel::layout_widgets() const {
         section_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
         header_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, kSectionHeaderHeight};
         scroll_cursor.advance(kSectionHeaderHeight);
-
-        if (expanded_section_ == section) {
-            int content_height = widget->preferred_height(width);
-            if (content_height > 0) {
-                scroll_cursor.advance(item_gap);
-                content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, content_height};
-                widget->set_bounds(content_rect);
-                scroll_cursor.advance(content_height);
-            } else {
-                content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
-                widget->set_bounds(content_rect);
-            }
+        int content_height = widget->preferred_height(width);
+        if (content_height > 0) {
+            scroll_cursor.advance(item_gap);
+            content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, content_height};
+            widget->set_bounds(content_rect);
+            scroll_cursor.advance(content_height);
         } else {
             content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
             widget->set_bounds(content_rect);
@@ -1001,11 +920,10 @@ void AnimationInspectorPanel::layout_widgets() const {
         section_rect.h = std::max(0, scroll_cursor.visual_y() - section_rect.y);
     };
 
-    place_collapsible_section(animation_options_.get(), CollapsibleSection::kAnimationOptions, self->animation_options_header_rect_, self->animation_options_rect_, self->animation_options_section_rect_);
-    place_collapsible_section(playback_settings_.get(), CollapsibleSection::kPlayback, self->playback_header_rect_, self->playback_rect_, self->playback_section_rect_);
-    place_collapsible_section(movement_summary_.get(), CollapsibleSection::kMovement, self->movement_header_rect_, self->movement_rect_, self->movement_section_rect_);
-    place_collapsible_section(on_end_selector_.get(), CollapsibleSection::kOnEnd, self->on_end_header_rect_, self->on_end_rect_, self->on_end_section_rect_);
-    place_collapsible_section(audio_panel_.get(), CollapsibleSection::kAudio, self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
+    place_static_section(playback_settings_.get(), self->playback_header_rect_, self->playback_rect_, self->playback_section_rect_);
+    place_static_section(movement_summary_.get(), self->movement_header_rect_, self->movement_rect_, self->movement_section_rect_);
+    place_static_section(on_end_selector_.get(), self->on_end_header_rect_, self->on_end_rect_, self->on_end_section_rect_);
+    place_static_section(audio_panel_.get(), self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
 
     self->content_height_ = scroll_cursor.logical_y + padding - scroll_start;
     const int previous_scroll = scroll;
@@ -1297,25 +1215,9 @@ void AnimationInspectorPanel::apply_dependencies() {
                 movement_summary_->set_document(document_);
                 movement_summary_->set_animation_id(id);
             }
-
-            if (document_) {
-                auto payload = document_->animation_payload(id);
-                if (payload.has_value()) {
-
-                    if (on_animation_properties_changed_) {
-                        on_animation_properties_changed_(id, *payload);
-                    }
-                }
-            }
-
             this->layout_dirty_ = true;
+            notify_payload_change_if_needed(true);
         });
-    }
-
-    if (animation_options_) {
-        animation_options_->set_document(document_);
-        animation_options_->set_animation_id(animation_id_);
-        animation_options_->set_on_animation_properties_changed(on_animation_properties_changed_);
     }
 
     if (movement_summary_) {
@@ -1331,6 +1233,7 @@ void AnimationInspectorPanel::apply_dependencies() {
         audio_panel_->set_file_picker(audio_file_picker_);
     }
 
+    notify_payload_change_if_needed(true);
 }
 
 void AnimationInspectorPanel::update_source_mode_button_styles() {
@@ -1410,6 +1313,34 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
         self->preview_slider_max_frame_ = -1;
     }
 
+}
+
+void AnimationInspectorPanel::reset_payload_notification_state() {
+    notified_payload_animation_id_.clear();
+    notified_payload_signature_.clear();
+}
+
+void AnimationInspectorPanel::notify_payload_change_if_needed(bool force_notify) {
+    if (!on_animation_properties_changed_ || !document_ || animation_id_.empty()) {
+        return;
+    }
+
+    auto payload_json = document_->animation_payload_json(animation_id_);
+    if (!payload_json.has_value() || !payload_json->is_object()) {
+        return;
+    }
+
+    std::string signature = payload_json->dump();
+    const bool changed = force_notify ||
+                         notified_payload_animation_id_ != animation_id_ ||
+                         notified_payload_signature_ != signature;
+    if (!changed) {
+        return;
+    }
+
+    notified_payload_animation_id_ = animation_id_;
+    notified_payload_signature_ = signature;
+    on_animation_properties_changed_(animation_id_, *payload_json);
 }
 
 std::vector<AnimationInspectorPanel::FocusTarget> AnimationInspectorPanel::focus_order() const {

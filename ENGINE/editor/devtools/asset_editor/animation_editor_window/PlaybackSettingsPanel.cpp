@@ -80,6 +80,60 @@ std::string payload_source_animation_id(const nlohmann::json& payload) {
     return trim_copy(source.value("path", std::string{}));
 }
 
+struct SourceChainClassification {
+    bool derived_from_animation = false;
+    bool frame_sourced_direct_or_upstream = false;
+    std::string direct_source_id;
+};
+
+SourceChainClassification classify_source_chain(const animation_editor::AnimationDocument* document,
+                                                const std::string& animation_id,
+                                                const nlohmann::json& payload) {
+    SourceChainClassification classification;
+    if (!payload.is_object()) {
+        return classification;
+    }
+
+    if (!payload_uses_animation_source(payload)) {
+        classification.frame_sourced_direct_or_upstream = true;
+        return classification;
+    }
+
+    classification.derived_from_animation = true;
+    classification.direct_source_id = payload_source_animation_id(payload);
+    if (!document) {
+        return classification;
+    }
+
+    std::unordered_set<std::string> visited;
+    if (!animation_id.empty()) {
+        visited.insert(animation_id);
+    }
+
+    nlohmann::json current_payload = payload;
+    while (payload_uses_animation_source(current_payload)) {
+        const std::string source_id = payload_source_animation_id(current_payload);
+        if (source_id.empty()) {
+            break;
+        }
+        if (!visited.insert(source_id).second) {
+            break;
+        }
+
+        const auto source_payload = document->animation_payload_json(source_id);
+        if (!source_payload.has_value() || !source_payload->is_object()) {
+            break;
+        }
+        if (!payload_uses_animation_source(*source_payload)) {
+            classification.frame_sourced_direct_or_upstream = true;
+            break;
+        }
+        current_payload = *source_payload;
+    }
+
+    return classification;
+}
+
 bool payload_has_local_frame_data(const nlohmann::json& payload) {
     return (payload.contains("movement") && payload["movement"].is_array()) ||
            (payload.contains("anchor_points") && payload["anchor_points"].is_array()) ||
@@ -790,7 +844,13 @@ int PlaybackSettingsPanel::preferred_height(int width) const {
 };
 
     if (derived_from_animation_) {
-        int count = inversion_controls_visible() ? 4 : 2;
+        int count = 1; // Reverse is always available for animation-sourced entries.
+        if (inherit_controls_visible()) {
+            ++count; // Inherit Source Data
+            if (inversion_controls_visible()) {
+                count += 2; // Invert X/Y
+            }
+        }
         add_checkbox_group(count);
     } else {
         add_checkbox_group(2);
@@ -834,7 +894,7 @@ void PlaybackSettingsPanel::render(SDL_Renderer* renderer) const {
     const bool show_flip_controls = inversion_controls_visible();
     render_checkbox(flip_checkbox_, show_flip_controls);
     render_checkbox(flip_vertical_checkbox_, show_flip_controls);
-    render_checkbox(inherit_geometry_checkbox_, derived_from_animation_);
+    render_checkbox(inherit_geometry_checkbox_, inherit_controls_visible());
 
     render_checkbox(reverse_checkbox_, derived_from_animation_);
     render_checkbox(locked_checkbox_, !derived_from_animation_);
@@ -869,7 +929,7 @@ bool PlaybackSettingsPanel::handle_event(const SDL_Event& e) {
     const bool show_flip = inversion_controls_visible();
     handle_checkbox_if_visible(flip_checkbox_, show_flip);
     handle_checkbox_if_visible(flip_vertical_checkbox_, show_flip);
-    handle_checkbox_if_visible(inherit_geometry_checkbox_, derived_from_animation_);
+    handle_checkbox_if_visible(inherit_geometry_checkbox_, inherit_controls_visible());
 
     handle_checkbox_if_visible(reverse_checkbox_, derived_from_animation_);
     if (!derived_from_animation_) handle_checkbox(locked_checkbox_);
@@ -890,7 +950,7 @@ void PlaybackSettingsPanel::ensure_widgets() {
 
     ensure_checkbox(flip_checkbox_, "Invert Geometry Horizontally");
     ensure_checkbox(flip_vertical_checkbox_, "Invert Geometry Vertically");
-    ensure_checkbox(inherit_geometry_checkbox_, "Inherit Geometry");
+    ensure_checkbox(inherit_geometry_checkbox_, "Inherit Source Data");
     ensure_checkbox(reverse_checkbox_, "Play Frames In Reverse");
     ensure_checkbox(locked_checkbox_, "Locked (animation must finish before another can play)");
     ensure_checkbox(random_start_checkbox_, "Randomize Starting Frame");
@@ -936,7 +996,7 @@ void PlaybackSettingsPanel::layout_widgets() const {
     const bool show_flip_controls = inversion_controls_visible();
     place_checkbox(flip_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(flip_vertical_checkbox_.get(), show_flip_controls, placed_any_checkbox);
-    place_checkbox(inherit_geometry_checkbox_.get(), derived_from_animation_, placed_any_checkbox);
+    place_checkbox(inherit_geometry_checkbox_.get(), inherit_controls_visible(), placed_any_checkbox);
 
     place_checkbox(reverse_checkbox_.get(), derived_from_animation_, placed_any_checkbox);
     place_checkbox(locked_checkbox_.get(), !derived_from_animation_, placed_any_checkbox);
@@ -967,6 +1027,7 @@ void PlaybackSettingsPanel::layout_widgets() const {
 
 void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) {
     ensure_widgets();
+    const bool show_inherit_controls = inherit_controls_visible_for_state(state);
     const bool show_inversion_controls = inversion_controls_visible_for_state(state);
     if (flip_checkbox_) {
         flip_checkbox_->set_value(show_inversion_controls ? state.flipped_source : false);
@@ -974,7 +1035,7 @@ void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) 
     if (flip_vertical_checkbox_) {
         flip_vertical_checkbox_->set_value(show_inversion_controls ? state.flip_vertical : false);
     }
-    if (inherit_geometry_checkbox_) inherit_geometry_checkbox_->set_value(state.inherit_source_geometry);
+    if (inherit_geometry_checkbox_) inherit_geometry_checkbox_->set_value(show_inherit_controls ? state.inherit_source_geometry : false);
     if (reverse_checkbox_) reverse_checkbox_->set_value(state.reverse_source);
     if (locked_checkbox_) locked_checkbox_->set_value(state.locked);
     if (random_start_checkbox_) {
@@ -992,7 +1053,11 @@ void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) 
 PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::read_controls() const {
     PlaybackState state = state_;
     if (derived_from_animation_) {
-        if (inherit_geometry_checkbox_) state.inherit_source_geometry = inherit_geometry_checkbox_->value();
+        if (inherit_controls_visible_for_state(state)) {
+            if (inherit_geometry_checkbox_) state.inherit_source_geometry = inherit_geometry_checkbox_->value();
+        } else {
+            state.inherit_source_geometry = false;
+        }
         if (inversion_controls_visible_for_state(state)) {
             if (flip_checkbox_) state.flipped_source = flip_checkbox_->value();
             if (flip_vertical_checkbox_) state.flip_vertical = flip_vertical_checkbox_->value();
@@ -1074,7 +1139,6 @@ void PlaybackSettingsPanel::sync_from_document() {
             if (!parsed_payload.is_object()) {
                 parsed_payload = nlohmann::json::object();
             }
-            new_state = payload_to_state(parsed_payload);
             found = true;
         }
     }
@@ -1084,6 +1148,9 @@ void PlaybackSettingsPanel::sync_from_document() {
     }
 
     update_inherited_state(parsed_payload);
+    if (found) {
+        new_state = payload_to_state(parsed_payload);
+    }
 
     state_ = new_state;
     document_state_ = new_state;
@@ -1183,6 +1250,10 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
         state.flip_vertical = false;
     }
 
+    if (!inherit_controls_visible_for_state(state)) {
+        state.inherit_source_geometry = false;
+    }
+
     if (!state.inherit_source_geometry) {
         state.flipped_source = false;
         state.flip_vertical = false;
@@ -1195,12 +1266,14 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
     if (!payload.is_object()) {
         payload = nlohmann::json::object();
     }
+    const bool allow_inherit_source_data = inherit_controls_visible_for_state(state);
+    const bool effective_inherit_source_data = allow_inherit_source_data ? state.inherit_source_geometry : false;
     const PlaybackState previous_state = payload_to_state(payload);
-    if (derived_from_animation_ && previous_state.inherit_source_geometry && !state.inherit_source_geometry) {
+    if (derived_from_animation_ && previous_state.inherit_source_geometry && !effective_inherit_source_data) {
         materialize_inherited_geometry(document_.get(), animation_id_, payload);
     }
 
-    const bool allow_geometry_inversion = derived_from_animation_ && state.inherit_source_geometry;
+    const bool allow_geometry_inversion = derived_from_animation_ && effective_inherit_source_data;
     const bool effective_flip_horizontal = allow_geometry_inversion ? state.flipped_source : false;
     const bool effective_flip_vertical = allow_geometry_inversion ? state.flip_vertical : false;
 
@@ -1218,12 +1291,12 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         payload.erase("speed_factor");
         payload.erase("speed_multiplier");
         payload.erase("fps");
-        payload["inherit_source_geometry"] = state.inherit_source_geometry;
+        payload["inherit_source_geometry"] = effective_inherit_source_data;
         nlohmann::json modifiers = nlohmann::json::object();
         modifiers["reverse"] = state.reverse_source;
         modifiers["flipX"] = effective_flip_horizontal;
         modifiers["flipY"] = effective_flip_vertical;
-        if (state.inherit_source_geometry) {
+        if (effective_inherit_source_data) {
             payload.erase("movement");
             payload.erase("movement_total");
             payload.erase("anchor_points");
@@ -1249,53 +1322,51 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
 
 void PlaybackSettingsPanel::update_inherited_state(const nlohmann::json& payload) {
     bool previous_flag = derived_from_animation_;
+    bool previous_frame_chain = source_chain_resolves_to_frames_;
     std::string previous_source = derived_source_id_;
 
-    derived_from_animation_ = false;
-    derived_source_id_.clear();
+    const SourceChainClassification classification = classify_source_chain(document_.get(), animation_id_, payload);
+    derived_from_animation_ = classification.derived_from_animation;
+    source_chain_resolves_to_frames_ = classification.frame_sourced_direct_or_upstream;
+    derived_source_id_ = classification.direct_source_id;
     inherited_modifiers_.clear();
 
-    if (payload.is_object() && payload.contains("source") && payload["source"].is_object()) {
-        const nlohmann::json& source = payload["source"];
-        std::string kind = source.value("kind", std::string{});
-        if (kind == "animation") {
-            derived_from_animation_ = true;
-            if (source.contains("name") && source["name"].is_string()) {
-                derived_source_id_ = trim_copy(source["name"].get<std::string>());
-            }
-            if (derived_source_id_.empty()) {
-                derived_source_id_ = trim_copy(source.value("path", std::string{}));
-            }
-            const bool inherit_geometry = payload_inherits_geometry(payload);
-            bool reverse = read_bool_field_like(payload, "reverse_source", false);
-            bool flip_x = inherit_geometry && read_bool_field_like(payload, "flipped_source", false);
-            bool flip_y = inherit_geometry && read_bool_field_like(payload, "flip_vertical_source", false);
-            if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
-                const auto& modifiers = payload["derived_modifiers"];
-                reverse = read_bool_field_like(modifiers, "reverse", reverse);
-                flip_x = inherit_geometry && read_bool_field_like(modifiers, "flipX", flip_x);
-                flip_y = inherit_geometry && read_bool_field_like(modifiers, "flipY", flip_y);
-            }
-            if (reverse) inherited_modifiers_.push_back("Reverse");
-            if (flip_x) inherited_modifiers_.push_back("Flip X");
-            if (flip_y) inherited_modifiers_.push_back("Flip Y");
-            if (inherit_geometry) {
-                inherited_modifiers_.push_back("Inherit Geometry");
-            } else {
-                inherited_modifiers_.push_back("Local Geometry");
-            }
+    if (derived_from_animation_) {
+        const bool inherit_source_data_enabled = !source_chain_resolves_to_frames_ && payload_inherits_geometry(payload);
+        bool reverse = read_bool_field_like(payload, "reverse_source", false);
+        bool flip_x = inherit_source_data_enabled && read_bool_field_like(payload, "flipped_source", false);
+        bool flip_y = inherit_source_data_enabled && read_bool_field_like(payload, "flip_vertical_source", false);
+        if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
+            const auto& modifiers = payload["derived_modifiers"];
+            reverse = read_bool_field_like(modifiers, "reverse", reverse);
+            flip_x = inherit_source_data_enabled && read_bool_field_like(modifiers, "flipX", flip_x);
+            flip_y = inherit_source_data_enabled && read_bool_field_like(modifiers, "flipY", flip_y);
+        }
+        if (reverse) inherited_modifiers_.push_back("Reverse");
+        if (flip_x) inherited_modifiers_.push_back("Flip X");
+        if (flip_y) inherited_modifiers_.push_back("Flip Y");
+        if (inherit_source_data_enabled) {
+            inherited_modifiers_.push_back("Inherit Source Data");
+        } else {
+            inherited_modifiers_.push_back("Local Source Data");
         }
     }
 
     refresh_inherited_message();
 
-    if (previous_flag != derived_from_animation_ || previous_source != derived_source_id_) {
+    if (previous_flag != derived_from_animation_ ||
+        previous_frame_chain != source_chain_resolves_to_frames_ ||
+        previous_source != derived_source_id_) {
         layout_dirty_ = true;
     }
 }
 
+bool PlaybackSettingsPanel::inherit_controls_visible_for_state(const PlaybackState& /*state*/) const {
+    return derived_from_animation_ && !source_chain_resolves_to_frames_;
+}
+
 bool PlaybackSettingsPanel::inversion_controls_visible_for_state(const PlaybackState& state) const {
-    return derived_from_animation_ && state.inherit_source_geometry;
+    return inherit_controls_visible_for_state(state) && state.inherit_source_geometry;
 }
 
 bool PlaybackSettingsPanel::random_start_visible_for_state(const PlaybackState& state) const {
@@ -1318,7 +1389,11 @@ void PlaybackSettingsPanel::refresh_inherited_message() {
             }
             inherited_message_lines_.push_back("Applied modifiers: " + joined + ".");
         }
-        inherited_message_lines_.push_back("Geometry can inherit from the source or be materialized locally.");
+        if (source_chain_resolves_to_frames_) {
+            inherited_message_lines_.push_back("Inherit Source Data is unavailable because the source chain resolves to frames.");
+        } else {
+            inherited_message_lines_.push_back("Source data can inherit from the source or be materialized locally.");
+        }
     }
 
     if (inherited_message_lines_ != previous_lines) {

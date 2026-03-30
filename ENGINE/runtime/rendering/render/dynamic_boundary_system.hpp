@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include "rendering/render/scaling_logic.hpp"
+#include "gameplay/spawn/runtime_candidates.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -56,12 +57,10 @@ public:
         float frame_duration_ms = 41.67f;
     };
 
-    struct BoundaryCandidate {
-        std::string asset_name;
-        int         chance = 0;
-        bool        is_null = false;
+    struct BoundaryAssetRuntime {
         std::vector<BoundaryFrame> frames;
         std::shared_ptr<AssetInfo> info;
+        bool is_null = false;
         render_pipeline::ScalingLogic::HysteresisState hysteresis_state;
     };
 
@@ -70,8 +69,8 @@ public:
         std::string                 display_name;
         int                         grid_resolution = 5;
         int                         jitter = 0;
-        std::vector<BoundaryCandidate> candidates;
-        int                         total_chance = 0;
+        vibble::spawn::RuntimeCandidates candidates;
+        std::unordered_map<std::string, BoundaryAssetRuntime> candidate_runtime_by_asset;
     };
 
     struct BoundaryKey {
@@ -92,6 +91,12 @@ public:
 
     struct BoundaryKeyHash {
         std::size_t operator()(const BoundaryKey& key) const noexcept;
+    };
+
+    struct BoundaryAssignment {
+        int candidate_entry_index = -1;
+        std::string resolved_asset_name;
+        bool is_null = true;
     };
 
     struct FrameState {
@@ -137,12 +142,12 @@ private:
     std::uint64_t  boundary_regen_seed_ = 0;
 
     std::vector<BoundaryType> boundary_types_;
-    std::unordered_map<BoundaryKey, int, BoundaryKeyHash> boundary_assignments_;
+    std::unordered_map<BoundaryKey, BoundaryAssignment, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
     std::vector<BoundarySprite> active_boundary_sprites_;
     struct StaticCellAssignment {
         BoundaryKey key;
-        int candidate_index = -1;
+        BoundaryAssignment assignment;
         int boundary_type_index = -1;
         SDL_FPoint world_pos{0.0f, 0.0f};
         int world_z = 0;
@@ -244,13 +249,19 @@ private:
     RegionCacheFingerprint region_cache_fingerprint_;
 
     void parse_boundary_config(const nlohmann::json& boundary_data);
-    void build_candidate_frames(BoundaryCandidate& candidate);
+    void build_candidate_frames(BoundaryAssetRuntime& candidate_runtime,
+                                const std::string& asset_name);
+    BoundaryAssetRuntime* ensure_candidate_runtime(BoundaryType& type,
+                                                   const std::string& asset_name);
     bool refresh_boundary_config_revision(const nlohmann::json& map_info);
     void clear_runtime_caches();
 
     BoundaryKey  make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const;
     std::uint64_t hash_key(const BoundaryKey& key) const;
-    int select_candidate_for_key(const BoundaryKey& key, const BoundaryType& btype);
+    const BoundaryAssignment& select_candidate_for_key(
+        const BoundaryKey& key,
+        BoundaryType& btype,
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog);
     SDL_FPoint sample_jitter_offset(const BoundaryKey& key, float max_jitter) const;
     void ensure_region_cache_valid(const world::WorldGrid& grid,
                                    const std::vector<Room*>& rooms,

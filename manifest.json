@@ -5,8 +5,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -37,8 +37,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -72,8 +72,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -117,8 +117,8 @@
           ],
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -150,8 +150,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -198,8 +198,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -253,8 +253,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -285,8 +285,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -337,8 +337,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -369,8 +369,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -401,8 +401,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -433,8 +433,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -472,8 +472,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -504,8 +504,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -536,8 +536,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -568,8 +568,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -600,8 +600,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -632,8 +632,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -664,8 +664,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -696,8 +696,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -728,8 +728,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 12,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -760,8 +760,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 12,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -792,8 +792,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 12,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -824,8 +824,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -856,8 +856,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -888,8 +888,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 6,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -920,8 +920,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -952,8 +952,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -984,8 +984,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 12,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1016,8 +1016,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 12,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1048,8 +1048,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 12,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1096,8 +1096,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 12,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1146,8 +1146,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1178,8 +1178,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1210,8 +1210,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1242,8 +1242,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1274,8 +1274,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1306,8 +1306,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1338,8 +1338,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1370,8 +1370,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1402,8 +1402,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1434,8 +1434,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1466,8 +1466,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1498,8 +1498,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1530,8 +1530,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1562,8 +1562,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1594,8 +1594,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1626,8 +1626,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1658,8 +1658,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1690,8 +1690,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1744,8 +1744,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1776,8 +1776,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1808,8 +1808,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1840,8 +1840,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1872,8 +1872,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1904,8 +1904,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1936,8 +1936,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1968,8 +1968,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2000,8 +2000,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2112,7 +2112,6 @@
           ],
           "inherit_source_movement": false,
           "locked": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -2202,7 +2201,6 @@
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -2346,7 +2344,6 @@
           ],
           "inherit_source_movement": false,
           "locked": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -2406,7 +2403,6 @@
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -2512,8 +2508,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2544,8 +2540,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2576,8 +2572,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2608,8 +2604,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2640,8 +2636,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2672,8 +2668,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2704,8 +2700,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2743,8 +2739,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2783,8 +2779,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 24,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2815,8 +2811,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 24,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -2954,7 +2950,6 @@
             ]
           ],
           "locked": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -3696,7 +3691,6 @@
             ]
           ],
           "inherit_source_geometry": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -4474,7 +4468,6 @@
             ]
           ],
           "inherit_source_geometry": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -5252,7 +5245,6 @@
             ]
           ],
           "inherit_source_geometry": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -6015,7 +6007,6 @@
             ]
           ],
           "locked": false,
-          "loop": true,
           "movement": [
             {
               "dx": 0,
@@ -6485,7 +6476,6 @@
           "flip_vertical_source": false,
           "flipped_source": true,
           "inherit_source_geometry": true,
-          "loop": true,
           "number_of_frames": 8,
           "on_end": "default",
           "reverse_source": false,
@@ -7201,7 +7191,6 @@
             ]
           ],
           "locked": false,
-          "loop": true,
           "movement": [
             {
               "dx": 0,
@@ -7988,7 +7977,6 @@
             ]
           ],
           "locked": false,
-          "loop": true,
           "movement": [
             {
               "dx": 0,
@@ -8790,7 +8778,6 @@
             ]
           ],
           "inherit_source_geometry": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -9143,7 +9130,6 @@
           "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -9189,7 +9175,6 @@
           "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "movement": [
             [
               0,
@@ -9234,8 +9219,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -9267,7 +9252,7 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -9299,7 +9284,7 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -9330,7 +9315,7 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -9362,8 +9347,8 @@
         "default": {
           "flipped_source": false,
           "locked": false,
-          "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -9556,9 +9541,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            120,
             242,
+            36,
+            142,
             255
           ],
           "edge_smoothness": 49,
@@ -9581,9 +9566,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            133,
             242,
+            36,
+            145,
             255
           ],
           "edge_smoothness": 85,
@@ -9702,16 +9687,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -512,
-              "dz": 1028,
+              "dx": -1492,
+              "dz": 764,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6936,
-              "origional_width": 7040,
+              "origional_height": 6952,
+              "origional_width": 6936,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <regex>
 #include <system_error>
+#include <unordered_set>
 
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
@@ -4533,23 +4534,11 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
         ctx.set_trail_areas(std::move(trail_areas));
 
         const auto& queue = planner.get_spawn_queue();
-        ctx.set_spacing_filter(collect_spacing_asset_names(queue));
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView spawn_catalog{&ctx.info_library(), false};
+        ctx.set_spacing_filter(collect_spacing_asset_names(queue, spawn_catalog));
         const Area* area_ptr = room->room_area.get();
         for (const auto& info : queue) {
             if (info.name == "batch_map_assets") {
-                std::vector<double> base_weights;
-                base_weights.reserve(info.candidates.size());
-                double total_weight = 0.0;
-                for (const auto& cand : info.candidates) {
-                    double weight = cand.weight;
-                    if (weight < 0.0) weight = 0.0;
-                    if (weight > 0.0) total_weight += weight;
-                    base_weights.push_back(weight);
-                }
-                if (total_weight <= 0.0 && !base_weights.empty()) {
-                    std::fill(base_weights.begin(), base_weights.end(), 1.0);
-                }
-
                 auto vertices = occupancy.vertices_in_area(*area_ptr);
                 if (vertices.empty()) {
                     continue;
@@ -4561,26 +4550,24 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                     if (!vertex) continue;
                     SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
                     bool placed = false;
-                    std::vector<double> attempt_weights = base_weights;
-                    const size_t max_candidate_attempts = info.candidates.size();
+                    std::unordered_set<int> attempted_entries;
+                    const size_t max_candidate_attempts = info.candidates.entries().size();
                     const bool enforce_spacing = info.check_min_spacing;
                     for (size_t attempt = 0; attempt < max_candidate_attempts; ++attempt) {
-                        double weight_total = std::accumulate(attempt_weights.begin(), attempt_weights.end(), 0.0);
-                        if (weight_total <= 0.0) break;
-                        std::discrete_distribution<size_t> dist(attempt_weights.begin(), attempt_weights.end());
-                        size_t idx = dist(ctx.rng());
-                        if (idx >= info.candidates.size()) break;
-                        if (attempt_weights[idx] <= 0.0) {
-                            attempt_weights[idx] = 0.0;
-                            continue;
+                        const auto candidate = info.select_candidate_excluding(
+                            ctx.rng(), spawn_catalog, attempted_entries);
+                        if (!candidate) {
+                            break;
                         }
-                        const SpawnCandidate& candidate = info.candidates[idx];
-                        if (candidate.is_null || !candidate.info) {
+                        if (candidate->entry_index >= 0) {
+                            attempted_entries.insert(candidate->entry_index);
+                        }
+                        if (candidate->is_null || !candidate->info) {
                             occupancy.set_occupied(vertex, true);
                             placed = true;
                             break;
                         }
-                        if (ctx.checker().check(candidate.info,
+                        if (ctx.checker().check(candidate->info,
                                                 spawn_pos,
                                                 ctx.exclusion_zones(),
                                                 ctx.all_assets(),
@@ -4589,12 +4576,16 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                                                 false,
                                                 false,
                                                 5)) {
-                            attempt_weights[idx] = 0.0;
                             continue;
                         }
-                        auto* result = ctx.spawnAsset(candidate.name, candidate.info, *area_ptr, spawn_pos, 0, info.spawn_id, info.position);
+                        auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
+                                                      candidate->info,
+                                                      *area_ptr,
+                                                      spawn_pos,
+                                                      0,
+                                                      info.spawn_id,
+                                                      info.position);
                         if (!result) {
-                            attempt_weights[idx] = 0.0;
                             continue;
                         }
                         const bool track_spacing = ctx.track_spacing_for(result->info, enforce_spacing);

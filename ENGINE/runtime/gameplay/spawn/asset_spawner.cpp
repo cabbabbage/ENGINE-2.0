@@ -11,7 +11,6 @@
 #include <iostream>
 #include <limits>
 #include <memory>
-#include <numeric>
 #include <sstream>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
@@ -253,14 +252,12 @@ void AssetSpawner::spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
                 return;
         }
 
+        auto asset_info_library = asset_library_->all();
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView catalog_view{&asset_info_library, false};
+
         std::unordered_set<std::string> spacing_names;
         if (spawn_info->check_min_spacing) {
-                for (const auto& cand : spawn_info->candidates) {
-                        if (!cand.info || cand.info->name.empty()) {
-                                continue;
-                        }
-                        spacing_names.insert(cand.info->name);
-                }
+                spawn_info->candidates.append_positive_asset_names(spacing_names, catalog_view);
         }
 
         std::size_t total_existing = 0;
@@ -360,7 +357,6 @@ void AssetSpawner::spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
                 Check checker(false);
                 checker.begin_session(grid_service, resolution);
                 std::vector<Area> local_exclusion_zones;
-                auto asset_info_library = asset_library_->all();
                 std::mt19937 local_rng;
                 SpawnContext context(local_rng, checker, local_exclusion_zones, asset_info_library,
                                      global_assets, asset_library_, grid_service, &occupancy);
@@ -395,7 +391,7 @@ void AssetSpawner::spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
                         std::seed_seq seq{low, high};
                         local_rng.seed(seq);
 
-                        const SpawnCandidate* candidate = spawn_info->select_candidate(local_rng);
+                        const auto candidate = spawn_info->select_candidate(local_rng, catalog_view);
                         if (!candidate || candidate->is_null || !candidate->info) {
                                 occupancy.set_occupied(vertex, true);
                                 continue;
@@ -418,7 +414,7 @@ void AssetSpawner::spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
                                 continue;
                         }
 
-                        Asset* spawned = context.spawnAsset(candidate->name,
+                        Asset* spawned = context.spawnAsset(candidate->resolved_asset_name,
                                                             candidate->info,
                                                             *owner->room_area,
                                                             spawn_pos,
@@ -499,12 +495,13 @@ std::vector<std::unique_ptr<Asset>> AssetSpawner::extract_all_assets() {
 
 void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
         asset_info_library_ = asset_library_->all();
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView spawn_catalog{&asset_info_library_, false};
         spawn_queue_ = planner->get_spawn_queue();
         if (boundary_mode_) {
                 run_edge_spawning(area);
                 return;
         }
-        auto spacing_names = collect_spacing_asset_names(spawn_queue_);
+        auto spacing_names = collect_spacing_asset_names(spawn_queue_, spawn_catalog);
     const int resolution = std::max(0, map_grid_settings_.grid_resolution);
     vibble::grid::Grid& grid_service = vibble::grid::global_grid();
     checker_.begin_session(grid_service, resolution);
@@ -541,10 +538,20 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                 if (current_room_) {
                         bool has_area = false;
                         bool has_asset = false;
-                        for (const auto& c : queue_item.candidates) {
-                                if (c.info) { has_asset = true; break; }
-                                if (!c.name.empty() && current_room_->find_area(c.name) != nullptr) {
+                        for (const auto& c : queue_item.candidates.entries()) {
+                                if (c.kind == vibble::spawn::CandidateKind::Tag) {
+                                        has_asset = true;
+                                        break;
+                                }
+                                if (c.is_null || c.key.empty()) {
+                                        continue;
+                                }
+                                if (current_room_->find_area(c.key) != nullptr) {
                                         has_area = true;
+                                }
+                                if (spawn_catalog.find_info(c.key) != nullptr) {
+                                        has_asset = true;
+                                        break;
                                 }
                         }
                         if (has_area && !has_asset) {
@@ -555,10 +562,20 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                 if (current_room_) {
                         bool has_area = false;
                         bool has_asset = false;
-                        for (const auto& c : queue_item.candidates) {
-                                if (c.info) { has_asset = true; break; }
-                                if (!c.name.empty() && current_room_->find_area(c.name) != nullptr) {
+                        for (const auto& c : queue_item.candidates.entries()) {
+                                if (c.kind == vibble::spawn::CandidateKind::Tag) {
+                                        has_asset = true;
+                                        break;
+                                }
+                                if (c.is_null || c.key.empty()) {
+                                        continue;
+                                }
+                                if (current_room_->find_area(c.key) != nullptr) {
                                         has_area = true;
+                                }
+                                if (spawn_catalog.find_info(c.key) != nullptr) {
+                                        has_asset = true;
+                                        break;
                                 }
                         }
                         if (has_area && !has_asset) {
@@ -579,19 +596,8 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                         batch_checker.begin_session(grid_service, batch_resolution);
                         vibble::grid::Occupancy batch_occupancy(area, batch_resolution, grid_service);
                         SpawnContext batch_ctx(rng_, batch_checker, exclusion_zones, asset_info_library_, all_, asset_library_, grid_service, &batch_occupancy);
-
-                        std::vector<double> base_weights;
-                        base_weights.reserve(queue_item.candidates.size());
-                        double total_weight = 0.0;
-                        for (const auto& cand : queue_item.candidates) {
-                                double weight = cand.weight;
-                                if (weight < 0.0) weight = 0.0;
-                                if (weight > 0.0) total_weight += weight;
-                                base_weights.push_back(weight);
-                        }
-                        if (total_weight <= 0.0 && !base_weights.empty()) {
-                                std::fill(base_weights.begin(), base_weights.end(), 1.0);
-                        }
+                        const vibble::spawn::RuntimeCandidates::AssetCatalogView batch_catalog{
+                            &batch_ctx.info_library(), false};
 
                         auto vertices = batch_occupancy.vertices_in_area(area);
                         if (vertices.empty()) {
@@ -604,28 +610,28 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                 if (!vertex) continue;
                                 SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
                                 bool placed = false;
-                                std::vector<double> attempt_weights = base_weights;
-                                const size_t max_candidate_attempts = queue_item.candidates.size();
+                                std::unordered_set<int> attempted_entries;
+                                const size_t max_candidate_attempts = queue_item.candidates.entries().size();
                                 const bool enforce_spacing = queue_item.check_min_spacing;
                                 for (size_t attempt = 0; attempt < max_candidate_attempts; ++attempt) {
-                                        double total_weight = std::accumulate(attempt_weights.begin(), attempt_weights.end(), 0.0);
-                                        if (total_weight <= 0.0) break;
-                                        std::discrete_distribution<size_t> dist(attempt_weights.begin(), attempt_weights.end());
-                                        size_t idx = dist(batch_ctx.rng());
-                                        if (idx >= queue_item.candidates.size()) break;
-                                        if (attempt_weights[idx] <= 0.0) {
-                                                attempt_weights[idx] = 0.0;
-                                                continue;
+                                        const auto candidate = queue_item.select_candidate_excluding(
+                                            batch_ctx.rng(),
+                                            batch_catalog,
+                                            attempted_entries);
+                                        if (!candidate) {
+                                                break;
                                         }
-                                        const SpawnCandidate& candidate = queue_item.candidates[idx];
+                                        if (candidate->entry_index >= 0) {
+                                                attempted_entries.insert(candidate->entry_index);
+                                        }
 
-                                        if (candidate.is_null || !candidate.info) {
+                                        if (candidate->is_null || !candidate->info) {
                                                 batch_occupancy.set_occupied(vertex, true);
                                                 placed = true;
                                                 break;
                                         }
                                         const auto spawn_gp = batch_ctx.to_grid_point(spawn_pos);
-                                        if (batch_ctx.checker().check(candidate.info,
+                                        if (batch_ctx.checker().check(candidate->info,
                                                                 spawn_gp,
                                                                 batch_ctx.exclusion_zones(),
                                                                 batch_ctx.all_assets(),
@@ -634,12 +640,16 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                                                 false,
                                                                 false,
                                                                 5)) {
-                                                attempt_weights[idx] = 0.0;
                                                 continue;
                                         }
-                                        auto* result = batch_ctx.spawnAsset(candidate.name, candidate.info, area, spawn_pos, 0, queue_item.spawn_id, queue_item.position);
+                                        auto* result = batch_ctx.spawnAsset(candidate->resolved_asset_name,
+                                                                            candidate->info,
+                                                                            area,
+                                                                            spawn_pos,
+                                                                            0,
+                                                                            queue_item.spawn_id,
+                                                                            queue_item.position);
                                         if (!result) {
-                                                attempt_weights[idx] = 0.0;
                                                 continue;
                                         }
                                         const bool track_spacing = batch_ctx.track_spacing_for(result->info, enforce_spacing);
@@ -673,7 +683,8 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
 };
 
         vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-        auto spacing_names = collect_spacing_asset_names(spawn_queue_);
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView edge_catalog{&asset_info_library_, false};
+        auto spacing_names = collect_spacing_asset_names(spawn_queue_, edge_catalog);
         for (auto& queue_item : spawn_queue_) {
                 if (!queue_item.has_candidates()) continue;
 
@@ -700,19 +711,6 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
                         ctx.set_clip_area(nullptr);
                 }
 
-                std::vector<double> base_weights;
-                base_weights.reserve(queue_item.candidates.size());
-                double total_weight = 0.0;
-                for (const auto& cand : queue_item.candidates) {
-                        double weight = cand.weight;
-                        if (weight < 0.0) weight = 0.0;
-                        if (weight > 0.0) total_weight += weight;
-                        base_weights.push_back(weight);
-                }
-                if (total_weight <= 0.0 && !base_weights.empty()) {
-                        std::fill(base_weights.begin(), base_weights.end(), 1.0);
-                }
-
                 auto vertices = occupancy.vertices_in_area(area);
                 std::vector<vibble::grid::Occupancy::Vertex*> eligible;
                 eligible.reserve(vertices.size());
@@ -733,9 +731,9 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
                         SDL_Point spawn_pos = vertex->world;
 
                         const bool enforce_spacing = queue_item.check_min_spacing;
-                        const SpawnCandidate* candidate = queue_item.select_candidate(ctx.rng());
+                        const auto candidate = queue_item.select_candidate(ctx.rng(), edge_catalog);
 
-                        if (!candidate || candidate->is_null) {
+                        if (!candidate || candidate->is_null || !candidate->info) {
                                 occupancy.set_occupied(vertex, true);
                                 continue;
                         }
@@ -754,7 +752,13 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
                                 continue;
                         }
 
-                        auto* result = ctx.spawnAsset(candidate->name, candidate->info, area, spawn_pos, 0, queue_item.spawn_id, queue_item.position);
+                        auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
+                                                      candidate->info,
+                                                      area,
+                                                      spawn_pos,
+                                                      0,
+                                                      queue_item.spawn_id,
+                                                      queue_item.position);
                         if (result) {
                                 ctx.checker().register_asset(result, enforce_spacing, false);
                         }

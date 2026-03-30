@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "spawn_group_codec.hpp"
+#include "assets/asset/asset_info.hpp"
 
 namespace vibble::spawn {
 
@@ -147,7 +148,6 @@ RuntimeCandidates RuntimeCandidates::from_json(const nlohmann::json& candidates_
             name = candidate_json.get<std::string>();
             detect_tag_from_name(name);
             label = name;
-            entry.weight = 1.0;
         } else if (candidate_json.is_number()) {
             entry.weight = candidate_json.get<double>();
         }
@@ -514,4 +514,3 @@ void RuntimeCandidates::append_positive_asset_names(
 }
 
 }  // namespace vibble::spawn
-

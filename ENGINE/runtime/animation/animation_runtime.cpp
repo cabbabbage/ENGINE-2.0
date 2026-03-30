@@ -221,6 +221,9 @@ void AnimationRuntime::apply_pending_move() {
         switch_to(resolved, path_index_for(resolved));
     } else {
         if (!advance(self_->current_frame)) {
+            if (self_->dead) {
+                return;
+            }
             switch_to(resolved, path_index_for(resolved));
         }
     }

@@ -11,7 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "assets/asset/asset_info.hpp"
+class AssetInfo;
 
 namespace vibble::spawn {
 
@@ -120,4 +120,3 @@ private:
 };
 
 }  // namespace vibble::spawn
-

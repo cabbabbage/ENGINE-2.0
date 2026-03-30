@@ -9542,7 +9542,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            120,
+            90,
             242,
             255
           ],
@@ -9566,9 +9566,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            133,
             242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 85,

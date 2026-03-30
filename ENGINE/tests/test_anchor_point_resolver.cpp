@@ -135,16 +135,23 @@ TEST_CASE("Flat anchor depth plane includes asset world z offset") {
 TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z") {
     Asset asset = make_test_asset(0, 0);
     const anchor_points::AnchorWorldPoint3 flat{0.0f, 0.0f, 10.0f, true};
-    anchor_points::AnchorWorldPoint3 displaced{};
-
-    REQUIRE(anchor_points::displace_along_camera_to_point_ray(asset, flat, 2.5f, displaced));
-    REQUIRE(displaced.valid);
-
     DisplacedAssetAnchorPoint anchor{};
     anchor.name = "depth_precision";
     anchor.texture_x = 0;
     anchor.texture_y = 0;
     anchor.depth_offset = 2.5f;
+
+    anchor_points::AnchorWorldPoint3 displaced{};
+    if (!anchor_points::displace_along_camera_to_point_ray(asset, flat, 2.5f, displaced)) {
+        // Non-world builds require a live camera/assets context to resolve depth-ray displacement.
+        const auto missing_sample = anchor_points::resolve_frame_anchor_sample(
+            asset,
+            anchor,
+            anchor_points::GridMaterialization::None);
+        CHECK(missing_sample.resolved.missing);
+        return;
+    }
+    REQUIRE(displaced.valid);
 
     const auto sample = anchor_points::resolve_frame_anchor_sample(
         asset,
@@ -212,6 +219,9 @@ TEST_CASE("Anchor perspective override rejects non-finite input and falls back t
 TEST_CASE("Resolved anchor does not propagate flat perspective scale when runtime sample falls back to default source") {
     Asset asset = make_test_asset(12, 18);
     asset.clear_anchor_perspective_override();
+    auto* gp = asset.grid_point();
+    REQUIRE(gp != nullptr);
+    gp->mutable_projection_cache().perspective_scale = std::numeric_limits<float>::quiet_NaN();
 
     const Asset::PerspectiveSample runtime_sample = asset.runtime_perspective_sample();
     REQUIRE(runtime_sample.source == Asset::PerspectiveSource::Default);

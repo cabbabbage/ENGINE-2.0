@@ -5064,40 +5064,22 @@ void DevControls::exit_live_depth_edit_mode(bool reopen_depth_panel, bool flush_
 }
 
 DevControls::LiveDepthLine DevControls::live_depth_line_from_cursor_screen(SDL_Point cursor_screen) const {
-    if (!assets_) {
+    const int effective_screen_h = std::max(1, screen_h_);
+    if (effective_screen_h <= 1) {
         return LiveDepthLine::Center;
     }
 
-    const WarpedScreenGrid& cam = assets_->getView();
-    const SDL_FPoint cursor_world = cam.screen_to_map(cursor_screen);
-    if (!std::isfinite(cursor_world.y)) {
-        return LiveDepthLine::Center;
+    const int clamped_y = std::clamp(cursor_screen.y, 0, effective_screen_h - 1);
+    const float top_third_end = static_cast<float>(effective_screen_h) / 3.0f;
+    const float bottom_third_begin = top_third_end * 2.0f;
+    const float y = static_cast<float>(clamped_y);
+    if (y < top_third_end) {
+        return LiveDepthLine::BackgroundMax;
     }
-    const float anchor_world_z = static_cast<float>(cam.anchor_world_z());
-    const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(cam.projection_params().forward_z);
-    const float cursor_depth_offset =
-        depth_cue::depth_offset_from_world_z(cursor_world.y, anchor_world_z, depth_axis_sign);
-
-    struct Candidate {
-        LiveDepthLine line = LiveDepthLine::Center;
-        float depth_offset = 0.0f;
-    };
-    const std::array<Candidate, 3> candidates{{
-        {LiveDepthLine::ForegroundMax, live_depth_settings_.foreground_max_depth_offset},
-        {LiveDepthLine::Center, live_depth_settings_.center_depth_offset},
-        {LiveDepthLine::BackgroundMax, live_depth_settings_.background_max_depth_offset},
-    }};
-
-    LiveDepthLine nearest = LiveDepthLine::Center;
-    float best_distance = std::numeric_limits<float>::infinity();
-    for (const Candidate& candidate : candidates) {
-        const float distance = std::fabs(cursor_depth_offset - candidate.depth_offset);
-        if (distance < best_distance) {
-            best_distance = distance;
-            nearest = candidate.line;
-        }
+    if (y >= bottom_third_begin) {
+        return LiveDepthLine::ForegroundMax;
     }
-    return nearest;
+    return LiveDepthLine::Center;
 }
 
 bool DevControls::update_live_depth_setting(LiveDepthLine line, float delta_world) {
@@ -5359,7 +5341,7 @@ void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
 
     DMLabelStyle instruction_style = DMStyles::Label();
     instruction_style.color = SDL_Color{228, 236, 248, 255};
-    DrawLabelText(renderer, "Hover near a floor guide depth (FG/Center/BG), then use mouse wheel to adjust world depth.", 16, 32, instruction_style);
+    DrawLabelText(renderer, "Mouse top third=BG, middle third=Center, bottom third=FG. Wheel adjusts selected world-depth line.", 16, 32, instruction_style);
 
     live_depth_exit_button_->render(renderer);
     SDL_SetRenderDrawBlendMode(renderer, previous_blend);

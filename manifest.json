@@ -118,15 +118,15 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1,
+                "depth_offset": -2,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "surface",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
-                "texture_x": 203,
-                "texture_y": 37
+                "texture_x": 207,
+                "texture_y": 40
               }
             ]
           ],
@@ -456,10 +456,23 @@
       "update_radius": 0
     },
     "book": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -481,7 +494,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 15.0
       },
       "start": "default",
       "tags": [
@@ -9869,8 +9882,8 @@
       },
       "content_root": "content/forrest",
       "depth_cue_settings": {
-        "background_max_depth_offset": 330.0,
-        "center_depth_offset": -850.0,
+        "background_max_depth_offset": 1255.0,
+        "center_depth_offset": 175.0,
         "foreground_max_depth_offset": -2380.0
       },
       "dev_map_settings": {},
@@ -9999,9 +10012,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            120,
             242,
+            36,
+            142,
             255
           ],
           "edge_smoothness": 49,
@@ -10024,9 +10037,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            133,
             242,
+            36,
+            145,
             255
           ],
           "edge_smoothness": 85,

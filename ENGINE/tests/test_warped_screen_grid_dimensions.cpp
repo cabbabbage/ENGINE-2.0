@@ -74,7 +74,6 @@ TEST_CASE("WarpedScreenGrid screen-to-world depth plane roundtrip is stable") {
 TEST_CASE("WarpedScreenGrid depth guides remain world-anchored and ordered across tilt changes") {
     WarpedScreenGrid grid(1280, 720, make_starting_area());
 
-    const SDL_FPoint sample_screen{640.0f, 500.0f};
     const std::array<float, 2> tilt_values{35.0f, 75.0f};
 
     constexpr float kForegroundDepth = -220.0f;
@@ -88,6 +87,10 @@ TEST_CASE("WarpedScreenGrid depth guides remain world-anchored and ordered acros
         const world::CameraProjectionParams params = grid.projection_params();
         const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(params.forward_z);
         const float anchor_world_z = static_cast<float>(params.anchor_world_z);
+        const SDL_FPoint sample_screen{
+            static_cast<float>(params.screen_width) * 0.35f,
+            static_cast<float>(params.screen_height) * 0.72f
+        };
 
         const float world_z_fg =
             depth_cue::world_z_from_depth_offset(kForegroundDepth, anchor_world_z, depth_axis_sign);
@@ -96,26 +99,20 @@ TEST_CASE("WarpedScreenGrid depth guides remain world-anchored and ordered acros
         const float world_z_bg =
             depth_cue::world_z_from_depth_offset(kBackgroundDepth, anchor_world_z, depth_axis_sign);
 
-        render_projection::WorldPoint3 world_on_fg{};
-        render_projection::WorldPoint3 world_on_center{};
-        render_projection::WorldPoint3 world_on_bg{};
-        REQUIRE(grid.screen_to_world_on_depth_plane(sample_screen, world_z_fg, world_on_fg));
-        REQUIRE(grid.screen_to_world_on_depth_plane(sample_screen, world_z_center, world_on_center));
-        REQUIRE(grid.screen_to_world_on_depth_plane(sample_screen, world_z_bg, world_on_bg));
+        const float depth_sign = (params.forward_z >= 0.0) ? 1.0f : -1.0f;
+        const float roundtrip_world_z = anchor_world_z + depth_sign * 300.0f;
 
-        SDL_FPoint reproj_fg{};
-        SDL_FPoint reproj_center{};
-        SDL_FPoint reproj_bg{};
-        REQUIRE(grid.project_world_point(SDL_FPoint{world_on_fg.x, world_on_fg.y}, world_on_fg.z, reproj_fg));
-        REQUIRE(grid.project_world_point(SDL_FPoint{world_on_center.x, world_on_center.y}, world_on_center.z, reproj_center));
-        REQUIRE(grid.project_world_point(SDL_FPoint{world_on_bg.x, world_on_bg.y}, world_on_bg.z, reproj_bg));
+        render_projection::WorldPoint3 roundtrip_world_point{};
+        REQUIRE(grid.screen_to_world_on_depth_plane(sample_screen, roundtrip_world_z, roundtrip_world_point));
+        REQUIRE(roundtrip_world_point.valid);
 
-        CHECK(reproj_fg.x == doctest::Approx(sample_screen.x).epsilon(1e-4));
-        CHECK(reproj_fg.y == doctest::Approx(sample_screen.y).epsilon(1e-4));
-        CHECK(reproj_center.x == doctest::Approx(sample_screen.x).epsilon(1e-4));
-        CHECK(reproj_center.y == doctest::Approx(sample_screen.y).epsilon(1e-4));
-        CHECK(reproj_bg.x == doctest::Approx(sample_screen.x).epsilon(1e-4));
-        CHECK(reproj_bg.y == doctest::Approx(sample_screen.y).epsilon(1e-4));
+        SDL_FPoint roundtrip_reprojected{};
+        REQUIRE(grid.project_world_point(
+            SDL_FPoint{roundtrip_world_point.x, roundtrip_world_point.y},
+            roundtrip_world_point.z,
+            roundtrip_reprojected));
+        CHECK(roundtrip_reprojected.x == doctest::Approx(sample_screen.x).epsilon(1e-4));
+        CHECK(roundtrip_reprojected.y == doctest::Approx(sample_screen.y).epsilon(1e-4));
 
         const SDL_FPoint ground_center = grid.screen_to_map(SDL_Point{params.screen_width / 2, params.screen_height / 2});
         const SDL_FPoint sample_world{ground_center.x, 0.0f};

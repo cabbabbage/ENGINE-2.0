@@ -1,6 +1,7 @@
 #include "child_asset_runtime_test_support.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -21,9 +22,14 @@ struct AssetsState {
     std::vector<std::unique_ptr<Asset>> owned_assets;
     bool active_assets_dirty = false;
     std::unordered_map<std::string, int> spawn_failures_remaining;
+    AssetLibrary* library = nullptr;
 };
 
 std::unordered_map<Assets*, AssetsState> g_assets_states;
+struct AssetLibraryState {
+    std::unordered_map<std::string, std::shared_ptr<AssetInfo>> info_by_name;
+};
+std::unordered_map<AssetLibrary*, AssetLibraryState> g_library_states;
 std::unordered_map<const Asset*, std::vector<AnchorSpec>> g_anchor_specs;
 
 AssetsState& require_assets_state(Assets* assets) {
@@ -53,13 +59,24 @@ namespace test_child_asset_runtime {
 Assets* create_assets_stub() {
     void* memory = ::operator new(sizeof(Assets), std::align_val_t(alignof(Assets)));
     auto* assets = reinterpret_cast<Assets*>(memory);
-    g_assets_states.emplace(assets, AssetsState{});
+    void* library_memory = ::operator new(sizeof(AssetLibrary), std::align_val_t(alignof(AssetLibrary)));
+    auto* library = reinterpret_cast<AssetLibrary*>(library_memory);
+    g_library_states.emplace(library, AssetLibraryState{});
+
+    AssetsState state{};
+    state.library = library;
+    g_assets_states.emplace(assets, std::move(state));
     return assets;
 }
 
 void destroy_assets_stub(Assets* assets) {
     if (!assets) {
         return;
+    }
+    const auto state_it = g_assets_states.find(assets);
+    if (state_it != g_assets_states.end() && state_it->second.library) {
+        g_library_states.erase(state_it->second.library);
+        ::operator delete(state_it->second.library, std::align_val_t(alignof(AssetLibrary)));
     }
     g_assets_states.erase(assets);
     ::operator delete(assets, std::align_val_t(alignof(Assets)));
@@ -87,6 +104,9 @@ Asset* attach_owned_asset(Assets* assets, std::unique_ptr<Asset> asset) {
     AssetsState& state = require_assets_state(assets);
     asset->set_assets(assets);
     asset->active = true;
+    if (state.library && asset->info && !asset->info->name.empty()) {
+        g_library_states[state.library].info_by_name[asset->info->name] = asset->info;
+    }
     Asset* raw = asset.get();
     state.owned_assets.push_back(std::move(asset));
     return raw;
@@ -326,6 +346,16 @@ bool Assets::contains_asset(const Asset* asset) const {
     });
 }
 
+AssetLibrary& Assets::library() {
+    AssetsState& state = require_assets_state(this);
+    return *state.library;
+}
+
+const AssetLibrary& Assets::library() const {
+    const AssetsState& state = require_assets_state(this);
+    return *state.library;
+}
+
 void Assets::schedule_removal(Asset* asset) {
     if (!asset) {
         return;
@@ -341,6 +371,74 @@ void Assets::schedule_removal(Asset* asset) {
                                  return true;
                              });
     state.owned_assets.erase(it, state.owned_assets.end());
+}
+
+AssetLibrary::AssetLibrary(bool) {}
+
+void AssetLibrary::load_all_from_resources() {}
+
+std::vector<std::string> AssetLibrary::sync_missing_from_resources() {
+    return {};
+}
+
+void AssetLibrary::add_asset(const std::string& name, const nlohmann::json&) {
+    if (name.empty()) {
+        return;
+    }
+    auto& state = g_library_states[this];
+    if (state.info_by_name.find(name) == state.info_by_name.end()) {
+        state.info_by_name[name] = std::make_shared<AssetInfo>(name);
+    }
+}
+
+std::shared_ptr<AssetInfo> AssetLibrary::get(const std::string& name) const {
+    const auto lib_it = g_library_states.find(const_cast<AssetLibrary*>(this));
+    if (lib_it == g_library_states.end()) {
+        return nullptr;
+    }
+    const auto info_it = lib_it->second.info_by_name.find(name);
+    if (info_it == lib_it->second.info_by_name.end()) {
+        return nullptr;
+    }
+    return info_it->second;
+}
+
+const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& AssetLibrary::all() const {
+    static const std::unordered_map<std::string, std::shared_ptr<AssetInfo>> kEmpty;
+    const auto it = g_library_states.find(const_cast<AssetLibrary*>(this));
+    if (it == g_library_states.end()) {
+        return kEmpty;
+    }
+    return it->second.info_by_name;
+}
+
+std::vector<std::string> AssetLibrary::names() const {
+    std::vector<std::string> result;
+    for (const auto& [name, info] : all()) {
+        (void)info;
+        result.push_back(name);
+    }
+    return result;
+}
+
+void AssetLibrary::loadAllAnimations(SDL_Renderer*) {}
+
+void AssetLibrary::ensureAllAnimationsLoaded(SDL_Renderer*) {}
+
+void AssetLibrary::ensureAnimationsLoadedFor(SDL_Renderer*, const std::unordered_set<std::string>&) {}
+
+void AssetLibrary::loadAnimationsFor(SDL_Renderer*, const std::unordered_set<std::string>&) {}
+
+AssetLibrary::RefreshMissingResult AssetLibrary::repairAndRefreshMissing(SDL_Renderer*) {
+    return {};
+}
+
+bool AssetLibrary::remove(const std::string& name) {
+    auto it = g_library_states.find(this);
+    if (it == g_library_states.end()) {
+        return false;
+    }
+    return it->second.info_by_name.erase(name) > 0;
 }
 
 #endif // ENGINE_WORLD_TESTS

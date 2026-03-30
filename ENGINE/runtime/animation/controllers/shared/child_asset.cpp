@@ -113,11 +113,11 @@ void ChildAsset::set_grid_point(const AnchorPoint& parent_anchor) {
 }
 
 void ChildAsset::bind(const std::string& parent_anchor_name) {
+    bound_ = true;
+    bound_anchor_name_ = parent_anchor_name;
     if (!ensure_child_alive()) {
         return;
     }
-    bound_ = true;
-    bound_anchor_name_ = parent_anchor_name;
     const auto anchor = resolve_owner_anchor(parent_anchor_name);
     if (anchor.has_value()) {
         (void)place_once(*anchor, true);
@@ -129,15 +129,15 @@ void ChildAsset::bind(const std::string& parent_anchor_name) {
 }
 
 void ChildAsset::bind(const AnchorPoint& parent_anchor) {
-    if (!ensure_child_alive()) {
-        return;
-    }
     if (parent_anchor.name.empty()) {
         vibble::log::warn("[ChildAsset] Cannot bind '" + asset_name_ + "' to an unnamed anchor");
         return;
     }
     bound_ = true;
     bound_anchor_name_ = parent_anchor.name;
+    if (!ensure_child_alive()) {
+        return;
+    }
     (void)place_once(parent_anchor, true);
     register_anchor_binding();
 }

@@ -247,18 +247,16 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
 
         hpp << "#ifndef " << guard << "\n";
         hpp << "#define " << guard << "\n\n";
-        hpp << "#include \"assets/asset/asset_controller.hpp\"\n\n";
-        hpp << "class Assets;\n";
+        hpp << "#include \"animation/controllers/shared/custom_asset_controller.hpp\"\n\n";
         hpp << "class Asset;\n";
         hpp << "class Input;\n\n";
-        hpp << "class " << class_name << " : public AssetController {\n\n";
+        hpp << "class " << class_name << " : public CustomAssetController {\n\n";
         hpp << "public:\n";
-        hpp << "    " << class_name << "(Assets* assets, Asset* self);\n";
+        hpp << "    explicit " << class_name << "(Asset* self);\n";
         hpp << "    ~" << class_name << "() override = default;\n";
-        hpp << "    void update(const Input& in) override;\n\n";
-        hpp << "private:\n";
-        hpp << "    Assets* assets_ = nullptr;\n";
-        hpp << "    Asset*  self_   = nullptr;\n";
+        hpp << "\n";
+        hpp << "protected:\n";
+        hpp << "    void on_update(const Input& in) override;\n";
         hpp << "};\n\n";
         hpp << "#endif\n";
     }
@@ -273,17 +271,19 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         cpp << "#include \"assets/asset/Asset.hpp\"\n";
         cpp << "#include \"core/AssetsManager.hpp\"\n";
         cpp << "#include \"map_generation/room.hpp\"\n\n";
-        cpp << class_name << "::" << class_name << "(Assets* assets, Asset* self)\n";
-        cpp << "    : assets_(assets), self_(self) {\n";
+        cpp << class_name << "::" << class_name << "(Asset* self)\n";
+        cpp << "    : CustomAssetController(self) {\n";
         cpp << "}\n\n";
-        cpp << "void " << class_name << "::update(const Input& ) {\n";
-        cpp << "    if (!self_) {\n";
+        cpp << "void " << class_name << "::on_update(const Input& ) {\n";
+        cpp << "    Asset* self = self_ptr();\n";
+        cpp << "    if (!self) {\n";
         cpp << "        return;\n";
         cpp << "    }\n";
         cpp << "\n";
-        cpp << "    const Room* current_room = assets_ ? assets_->current_room() : nullptr;\n";
-        cpp << "    const auto trigger_areas = assets_\n";
-        cpp << "        ? assets_->current_room_trigger_areas()\n";
+        cpp << "    Assets* owner_assets = assets();\n";
+        cpp << "    const Room* current_room = owner_assets ? owner_assets->current_room() : nullptr;\n";
+        cpp << "    const auto trigger_areas = owner_assets\n";
+        cpp << "        ? owner_assets->current_room_trigger_areas()\n";
         cpp << "        : std::vector<const Room::NamedArea*>{};\n";
         cpp << "    (void)current_room;\n";
         cpp << "    (void)trigger_areas;\n";
@@ -347,7 +347,7 @@ void CustomControllerService::ensure_controller_factory_registration(const std::
     if (!branch_exists) {
         std::vector<std::string> branch_lines = {
             "                if (key == \"" + base_name + "\")",
-            "                        return std::make_unique<" + class_name + ">(assets_, self);"
+            "                        return std::make_unique<" + class_name + ">(self);"
 };
 
         auto catch_it = std::find_if(lines.begin(), lines.end(), [](const std::string& value) {

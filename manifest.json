@@ -100,6 +100,19 @@
       "update_radius": 0
     },
     "barrel": {
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "surface",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "#small"
+              }
+            ]
+          }
+        }
+      ],
       "animations": {
         "default": {
           "anchor_points": [
@@ -108,15 +121,29 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "surface",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 203,
                 "texture_y": 37
               }
             ]
           ],
+          "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -2853,6 +2880,28 @@
       "update_radius": 0
     },
     "vibble": {
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "eyes",
+          "candidates": {}
+        },
+        {
+          "anchor_point_name": "hat",
+          "candidates": {}
+        },
+        {
+          "anchor_point_name": "mouth",
+          "candidates": {}
+        },
+        {
+          "anchor_point_name": "neck",
+          "candidates": {}
+        },
+        {
+          "anchor_point_name": "weapon",
+          "candidates": {}
+        }
+      ],
       "animations": {
         "default": {
           "anchor_points": [
@@ -2861,16 +2910,20 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "hat",
+                "resolve_x": true,
                 "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "texture_x": 198,
+                "texture_y": 129
               },
               {
                 "depth_offset": -2,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "mouth",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 216,
                 "texture_y": 172
@@ -2879,7 +2932,9 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "neck",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 216,
                 "texture_y": 187
@@ -2888,7 +2943,9 @@
                 "depth_offset": 0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "weapon",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 223,
                 "texture_y": 182
@@ -2897,7 +2954,9 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "eyes",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 205,
                 "texture_y": 156
@@ -6096,9 +6155,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6106,7 +6165,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6114,9 +6173,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6124,7 +6183,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6132,9 +6191,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ],
             [
@@ -6143,9 +6202,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6153,7 +6212,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6161,9 +6220,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6171,7 +6230,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6179,9 +6238,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ],
             [
@@ -6190,9 +6249,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6200,7 +6259,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6208,9 +6267,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6218,7 +6277,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6226,9 +6285,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ],
             [
@@ -6237,9 +6296,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6247,7 +6306,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6255,9 +6314,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6265,7 +6324,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6273,9 +6332,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ],
             [
@@ -6284,9 +6343,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6294,7 +6353,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6302,9 +6361,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6312,7 +6371,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6320,9 +6379,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ],
             [
@@ -6331,9 +6390,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6341,7 +6400,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6349,9 +6408,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6359,7 +6418,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6367,9 +6426,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ],
             [
@@ -6378,9 +6437,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6388,7 +6447,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6396,9 +6455,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6406,7 +6465,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6414,9 +6473,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ],
             [
@@ -6425,9 +6484,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "hat",
-                "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "rotation_degrees": 38.0,
+                "texture_x": 204,
+                "texture_y": 145
               },
               {
                 "depth_offset": -2,
@@ -6435,7 +6494,7 @@
                 "flip_vertical": true,
                 "name": "mouth",
                 "rotation_degrees": 0.0,
-                "texture_x": 146,
+                "texture_x": 273,
                 "texture_y": 174
               },
               {
@@ -6443,9 +6502,9 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "neck",
-                "rotation_degrees": 0.0,
-                "texture_x": 217,
-                "texture_y": 177
+                "rotation_degrees": 10.0,
+                "texture_x": 235,
+                "texture_y": 181
               },
               {
                 "depth_offset": 0,
@@ -6453,7 +6512,7 @@
                 "flip_vertical": true,
                 "name": "weapon",
                 "rotation_degrees": 0.0,
-                "texture_x": 223,
+                "texture_x": 196,
                 "texture_y": 182
               },
               {
@@ -6461,11 +6520,21 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "name": "eyes",
-                "rotation_degrees": 0.0,
-                "texture_x": 206,
-                "texture_y": 157
+                "rotation_degrees": 20.0,
+                "texture_x": 237,
+                "texture_y": 159
               }
             ]
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
           ],
           "box_schema_version": 1,
           "derived_modifiers": {
@@ -6475,7 +6544,376 @@
           },
           "flip_vertical_source": false,
           "flipped_source": true,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 197,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 141
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 217
+                  },
+                  {
+                    "texture_x": 197,
+                    "texture_y": 217
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box_main",
+                "position": {
+                  "x": 197,
+                  "y": 141
+                },
+                "size": {
+                  "h": 76,
+                  "w": 60
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "inherit_source_geometry": true,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 7,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 8,
           "on_end": "default",
           "reverse_source": false,
@@ -8065,16 +8503,20 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "hat",
+                "resolve_x": true,
                 "rotation_degrees": -20.0,
-                "texture_x": 200,
-                "texture_y": 133
+                "texture_x": 196,
+                "texture_y": 130
               },
               {
                 "depth_offset": -2,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "mouth",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 216,
                 "texture_y": 173
@@ -8083,7 +8525,9 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "neck",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
                 "texture_y": 188
@@ -8092,7 +8536,9 @@
                 "depth_offset": 0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "weapon",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 223,
                 "texture_y": 182
@@ -8101,7 +8547,9 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "eyes",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 205,
                 "texture_y": 155
@@ -8347,7 +8795,9 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "hat",
+                "resolve_x": true,
                 "rotation_degrees": -20.0,
                 "texture_x": 200,
                 "texture_y": 133
@@ -8356,7 +8806,9 @@
                 "depth_offset": -2,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "mouth",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 216,
                 "texture_y": 173
@@ -8365,7 +8817,9 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "neck",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 217,
                 "texture_y": 188
@@ -8374,7 +8828,9 @@
                 "depth_offset": 0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "weapon",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 223,
                 "texture_y": 182
@@ -8383,7 +8839,9 @@
                 "depth_offset": -1,
                 "flip_horizontal": true,
                 "flip_vertical": true,
+                "hidden": false,
                 "name": "eyes",
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "texture_x": 205,
                 "texture_y": 155
@@ -9424,7 +9882,7 @@
           {
             "candidates": [
               {
-                "chance": 53,
+                "chance": 84,
                 "name": "null"
               },
               {
@@ -9449,7 +9907,7 @@
             "execution_mode": "batch_grid",
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 6,
+            "grid_resolution": 7,
             "jitter": 0,
             "locked": false,
             "max_number": 1,
@@ -9542,7 +10000,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            90,
+            120,
             242,
             255
           ],
@@ -9566,9 +10024,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
             36,
+            133,
+            242,
             255
           ],
           "edge_smoothness": 85,
@@ -9687,16 +10145,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -2040,
-              "dz": -704,
+              "dx": -2020,
+              "dz": -868,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6992,
-              "origional_width": 7008,
+              "origional_height": 7000,
+              "origional_width": 6984,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

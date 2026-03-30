@@ -175,6 +175,34 @@ void draw_section_header(SDL_Renderer* renderer,
 
 }
 
+bool payload_uses_animation_source(const nlohmann::json& payload) {
+    return payload.contains("source") &&
+           payload["source"].is_object() &&
+           payload["source"].value("kind", std::string{}) == "animation";
+}
+
+bool payload_inherits_source_data(const nlohmann::json& payload) {
+    if (!payload_uses_animation_source(payload)) {
+        return false;
+    }
+    const bool legacy_inherit = json_coercion::read_bool_field_like(payload, "inherit_source_movement", true);
+    return json_coercion::read_bool_field_like(payload,
+                                               "inherit_source_geometry",
+                                               legacy_inherit);
+}
+
+bool should_show_on_end_section(const animation_editor::AnimationDocument* document,
+                                const std::string& animation_id) {
+    if (!document || animation_id.empty()) {
+        return true;
+    }
+    const auto payload = document->animation_payload_json(animation_id);
+    if (!payload.has_value() || !payload->is_object()) {
+        return true;
+    }
+    return !payload_inherits_source_data(*payload);
+}
+
 struct LayoutCursor {
     int logical_y = 0;
     int scroll = 0;
@@ -196,12 +224,14 @@ AnimationInspectorPanel::AnimationInspectorPanel() {
 
 void AnimationInspectorPanel::set_document(std::shared_ptr<AnimationDocument> document) {
     document_ = std::move(document);
+    on_end_section_visible_cache_ = should_show_on_end_section(document_.get(), animation_id_);
     reset_payload_notification_state();
     rebuild_widgets();
 }
 
 void AnimationInspectorPanel::set_animation_id(const std::string& animation_id) {
     animation_id_ = animation_id;
+    on_end_section_visible_cache_ = should_show_on_end_section(document_.get(), animation_id_);
     reset_payload_notification_state();
     rebuild_widgets();
 }
@@ -316,7 +346,9 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     };
 
     add_section(playback_settings_.get());
-    add_section(on_end_selector_.get());
+    if (should_show_on_end_section(document_.get(), animation_id_)) {
+        add_section(on_end_selector_.get());
+    }
     add_section(audio_panel_.get());
 
     total += padding;
@@ -326,6 +358,11 @@ int AnimationInspectorPanel::height_for_width(int width) const {
 void AnimationInspectorPanel::update() {
     refresh_preview_metadata();
     ensure_preview_controls();
+    const bool show_on_end = should_show_on_end_section(document_.get(), animation_id_);
+    if (show_on_end != on_end_section_visible_cache_) {
+        on_end_section_visible_cache_ = show_on_end;
+        layout_dirty_ = true;
+    }
     layout_widgets();
 
     if (rename_pending_ && name_box_ && !name_box_->is_editing()) {
@@ -348,7 +385,7 @@ void AnimationInspectorPanel::update() {
     update_preview_playback();
 
     if (playback_settings_) playback_settings_->update();
-    if (on_end_selector_) on_end_selector_->update();
+    if (on_end_selector_ && show_on_end) on_end_selector_->update();
     if (audio_panel_) audio_panel_->update();
     notify_payload_change_if_needed();
 }
@@ -401,7 +438,7 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
             draw_section_header(renderer, playback_header_rect_, "Playback");
             playback_settings_->render(renderer);
         }
-        if (on_end_selector_) {
+        if (on_end_selector_ && should_show_on_end_section(document_.get(), animation_id_)) {
             draw_section_header(renderer, on_end_header_rect_, "On End");
             on_end_selector_->render(renderer);
         }
@@ -460,7 +497,10 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
             if (source_config_ && source_config_->allow_out_of_bounds_pointer_events()) {
                 allow_out_of_bounds = true;
             }
-            if (!allow_out_of_bounds && on_end_selector_ && on_end_selector_->allow_out_of_bounds_pointer_events()) {
+            if (!allow_out_of_bounds &&
+                on_end_selector_ &&
+                should_show_on_end_section(document_.get(), animation_id_) &&
+                on_end_selector_->allow_out_of_bounds_pointer_events()) {
                 allow_out_of_bounds = true;
             }
             if (!allow_out_of_bounds) {
@@ -541,8 +581,13 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
     }
 
     if (source_config_ && source_config_->handle_event(e)) handled = true;
-    if (playback_settings_ && playback_settings_->handle_event(e)) handled = true;
-    if (on_end_selector_ && on_end_selector_->handle_event(e)) handled = true;
+    if (playback_settings_ && playback_settings_->handle_event(e)) {
+        handled = true;
+        layout_dirty_ = true;
+    }
+    if (on_end_selector_ &&
+        should_show_on_end_section(document_.get(), animation_id_) &&
+        on_end_selector_->handle_event(e)) handled = true;
     if (audio_panel_ && audio_panel_->handle_event(e)) handled = true;
 
     if (was_editing && name_box_ && !name_box_->is_editing()) {
@@ -799,7 +844,16 @@ void AnimationInspectorPanel::layout_widgets() const {
     };
 
     place_static_section(playback_settings_.get(), self->playback_header_rect_, self->playback_rect_, self->playback_section_rect_);
-    place_static_section(on_end_selector_.get(), self->on_end_header_rect_, self->on_end_rect_, self->on_end_section_rect_);
+    if (should_show_on_end_section(document_.get(), animation_id_)) {
+        place_static_section(on_end_selector_.get(), self->on_end_header_rect_, self->on_end_rect_, self->on_end_section_rect_);
+    } else {
+        self->on_end_header_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
+        self->on_end_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
+        self->on_end_section_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
+        if (on_end_selector_) {
+            on_end_selector_->set_bounds(self->on_end_rect_);
+        }
+    }
     place_static_section(audio_panel_.get(), self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
 
     self->content_height_ = cursor.logical_y + padding - content_top;

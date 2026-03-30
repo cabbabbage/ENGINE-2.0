@@ -30,6 +30,7 @@ constexpr int kItemGap = 8;
 using animation_editor::kPanelPadding;
 using animation_editor::strings::trim_copy;
 using json_coercion::read_bool_field_like;
+using json_coercion::read_string_field_like;
 
 namespace fs = std::filesystem;
 
@@ -121,6 +122,33 @@ bool payload_inherits_geometry(const nlohmann::json& payload) {
     return read_bool_field_like(payload,
                                 "inherit_source_geometry",
                                 legacy_inherit && !payload_has_local_frame_data(payload));
+}
+
+std::string payload_on_end_value(const nlohmann::json& payload) {
+    if (!payload.is_object()) {
+        return "default";
+    }
+    std::string on_end = trim_copy(read_string_field_like(payload, "on_end", std::string{"default"}));
+    if (on_end.empty()) {
+        on_end = "default";
+    }
+    return on_end;
+}
+
+std::string source_on_end_value(const animation_editor::AnimationDocument* document,
+                                const nlohmann::json& payload) {
+    if (!document) {
+        return "default";
+    }
+    const std::string source_id = payload_source_animation_id(payload);
+    if (source_id.empty()) {
+        return "default";
+    }
+    const auto source_payload = document->animation_payload_json(source_id);
+    if (!source_payload.has_value() || !source_payload->is_object()) {
+        return "default";
+    }
+    return payload_on_end_value(*source_payload);
 }
 
 std::size_t payload_frame_count(const nlohmann::json& payload) {
@@ -1241,6 +1269,10 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
     const bool allow_inherit_source_data = inherit_controls_visible_for_state(state);
     const bool effective_inherit_source_data = allow_inherit_source_data ? state.inherit_source_geometry : false;
     const PlaybackState previous_state = payload_to_state(payload);
+    const bool toggled_to_inherit_source_data =
+        derived_from_animation_ && !previous_state.inherit_source_geometry && effective_inherit_source_data;
+    const bool toggled_to_local_source_data =
+        derived_from_animation_ && previous_state.inherit_source_geometry && !effective_inherit_source_data;
     if (derived_from_animation_ && previous_state.inherit_source_geometry && !effective_inherit_source_data) {
         materialize_inherited_geometry(document_.get(), animation_id_, payload);
     }
@@ -1264,6 +1296,11 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         payload.erase("speed_multiplier");
         payload.erase("fps");
         payload["inherit_source_geometry"] = effective_inherit_source_data;
+        if (toggled_to_inherit_source_data) {
+            payload["on_end"] = source_on_end_value(document_.get(), payload);
+        } else if (toggled_to_local_source_data) {
+            payload["on_end"] = "default";
+        }
         nlohmann::json modifiers = nlohmann::json::object();
         modifiers["reverse"] = state.reverse_source;
         modifiers["flipX"] = effective_flip_horizontal;

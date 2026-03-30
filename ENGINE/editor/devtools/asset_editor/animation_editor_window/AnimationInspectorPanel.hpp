@@ -174,6 +174,7 @@ class AnimationInspectorPanel {
     int focus_index_ = -1;
     FocusTarget current_focus_target_ = FocusTarget::kNone;
     bool source_uses_animation_ = false;
+    bool on_end_section_visible_cache_ = true;
     std::string notified_payload_animation_id_;
     std::string notified_payload_signature_;
 

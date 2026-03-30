@@ -8212,7 +8212,6 @@ void RoomEditor::layout_anchor_candidate_editor_popup() {
     }
 
     constexpr int kPopupMargin = 10;
-    constexpr int kPopupGap = 12;
     const int min_popup_width = 280;
     const int max_popup_width = 420;
     int popup_width = 360;
@@ -8229,18 +8228,18 @@ void RoomEditor::layout_anchor_candidate_editor_popup() {
         popup_height = std::clamp(popup_height, 160, std::max(160, screen_h_ - (kPopupMargin * 2)));
     }
 
-    int popup_x = anchor_candidate_editor_.open_point.x + kPopupGap;
-    if (screen_w_ > 0 && popup_x + popup_width > screen_w_ - kPopupMargin) {
-        popup_x = anchor_candidate_editor_.open_point.x - popup_width - kPopupGap;
+    int popup_x = kPopupMargin;
+    int popup_y = kPopupMargin;
+    if (screen_w_ > 0) {
+        popup_x = (screen_w_ - popup_width) / 2;
     }
     popup_x = std::max(kPopupMargin, popup_x);
     if (screen_w_ > 0) {
         popup_x = std::min(popup_x, std::max(kPopupMargin, screen_w_ - kPopupMargin - popup_width));
     }
 
-    int popup_y = anchor_candidate_editor_.open_point.y;
-    if (screen_h_ > 0 && popup_y + popup_height > screen_h_ - kPopupMargin) {
-        popup_y = screen_h_ - kPopupMargin - popup_height;
+    if (screen_h_ > 0) {
+        popup_y = (screen_h_ - popup_height) / 2;
     }
     popup_y = std::max(kPopupMargin, popup_y);
     if (screen_h_ > 0) {
@@ -8325,7 +8324,8 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
     if (!anchor_candidate_editor_.pie_widget) {
         anchor_candidate_editor_.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
         anchor_candidate_editor_.pie_widget->set_on_request_layout([this]() { layout_anchor_candidate_editor_popup(); });
-        anchor_candidate_editor_.pie_widget->set_defer_adjust_until_release(false);
+        // Match boundary candidate panel interaction feel.
+        anchor_candidate_editor_.pie_widget->set_defer_adjust_until_release(true);
         anchor_candidate_editor_.pie_widget->set_on_regenerate({});
         anchor_candidate_editor_.pie_widget->set_on_adjust([this](int index, double delta) {
             mutate_anchor_candidate_entry(

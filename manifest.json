@@ -9869,9 +9869,9 @@
       },
       "content_root": "content/forrest",
       "depth_cue_settings": {
-        "background_max_depth_offset": 255.0,
-        "center_depth_offset": -750.0,
-        "foreground_max_depth_offset": -1630.0
+        "background_max_depth_offset": 330.0,
+        "center_depth_offset": -850.0,
+        "foreground_max_depth_offset": -2380.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -9999,9 +9999,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            120,
             242,
+            36,
+            142,
             255
           ],
           "edge_smoothness": 49,
@@ -10024,9 +10024,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            133,
             242,
+            36,
+            145,
             255
           ],
           "edge_smoothness": 85,
@@ -10145,7 +10145,7 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -2020,
+              "dx": -1996,
               "dz": -868,
               "enforce_spacing": false,
               "explicit_flip": false,
@@ -10153,8 +10153,8 @@
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7000,
-              "origional_width": 6984,
+              "origional_height": 6984,
+              "origional_width": 6936,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

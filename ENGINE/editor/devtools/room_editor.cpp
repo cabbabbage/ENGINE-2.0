@@ -1989,9 +1989,12 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
     }
     if (anchor_candidate_editor_.pie_widget) {
         anchor_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
-        if (anchor_candidate_editor_.open) {
-            layout_anchor_candidate_editor_popup();
-        }
+    }
+    if (anchor_candidate_editor_.panel) {
+        anchor_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    }
+    if (anchor_candidate_editor_.open) {
+        layout_anchor_candidate_editor_popup();
     }
     update_asset_editor_layout();
 
@@ -2600,9 +2603,10 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         }
 
         if (pointer_based && anchor_candidate_editor_.open && anchor_candidate_editor_.pie_widget) {
-            const SDL_Rect popup_rect = anchor_candidate_editor_.pie_widget->rect();
             SDL_Point point{mx, my};
-            if (SDL_PointInRect(&point, &popup_rect) ||
+            const bool inside_panel = anchor_candidate_editor_.panel && anchor_candidate_editor_.panel->is_visible() &&
+                                      anchor_candidate_editor_.panel->is_point_inside(point.x, point.y);
+            if (inside_panel ||
                 anchor_candidate_editor_.pie_widget->is_search_point_inside(mx, my)) {
                 result.pointer_blocked = true;
             }
@@ -8200,6 +8204,9 @@ void RoomEditor::close_anchor_candidate_editor() {
     if (anchor_candidate_editor_.pie_widget) {
         anchor_candidate_editor_.pie_widget->hide_search();
     }
+    if (anchor_candidate_editor_.panel) {
+        anchor_candidate_editor_.panel->close();
+    }
     anchor_candidate_editor_.open = false;
     anchor_candidate_editor_.anchor_name.clear();
     anchor_candidate_editor_.open_point = SDL_Point{0, 0};
@@ -8207,50 +8214,55 @@ void RoomEditor::close_anchor_candidate_editor() {
 }
 
 void RoomEditor::layout_anchor_candidate_editor_popup() {
-    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget || !anchor_candidate_editor_.panel) {
         return;
     }
 
     constexpr int kPopupMargin = 10;
-    const int min_popup_width = 280;
-    const int max_popup_width = 420;
-    int popup_width = 360;
+    constexpr int kPanelPadding = 12;
+    constexpr int kPanelHeaderReserve = 88;
+    const int min_panel_width = 500;
+    const int max_panel_width = 620;
+    int panel_width = 560;
     if (screen_w_ > 0) {
-        popup_width = std::clamp(popup_width, min_popup_width, std::max(min_popup_width, screen_w_ - (kPopupMargin * 2)));
-        popup_width = std::min(popup_width, max_popup_width);
+        panel_width = std::clamp(panel_width, min_panel_width, std::max(min_panel_width, screen_w_ - (kPopupMargin * 2)));
+        panel_width = std::min(panel_width, max_panel_width);
     }
 
-    int popup_height = anchor_candidate_editor_.pie_widget->height_for_width(popup_width);
-    if (popup_height <= 0) {
-        popup_height = 320;
+    const int pie_width = std::max(320, panel_width - (kPanelPadding * 2));
+    int panel_height = anchor_candidate_editor_.pie_widget->height_for_width(pie_width) + kPanelHeaderReserve;
+    if (panel_height <= 0) {
+        panel_height = 420;
     }
     if (screen_h_ > 0) {
-        popup_height = std::clamp(popup_height, 160, std::max(160, screen_h_ - (kPopupMargin * 2)));
+        panel_height = std::clamp(panel_height, 320, std::max(320, screen_h_ - (kPopupMargin * 2)));
     }
 
-    int popup_x = kPopupMargin;
-    int popup_y = kPopupMargin;
+    int panel_x = kPopupMargin;
+    int panel_y = kPopupMargin;
     if (screen_w_ > 0) {
-        popup_x = (screen_w_ - popup_width) / 2;
+        panel_x = (screen_w_ - panel_width) / 2;
     }
-    popup_x = std::max(kPopupMargin, popup_x);
+    panel_x = std::max(kPopupMargin, panel_x);
     if (screen_w_ > 0) {
-        popup_x = std::min(popup_x, std::max(kPopupMargin, screen_w_ - kPopupMargin - popup_width));
+        panel_x = std::min(panel_x, std::max(kPopupMargin, screen_w_ - kPopupMargin - panel_width));
     }
 
     if (screen_h_ > 0) {
-        popup_y = (screen_h_ - popup_height) / 2;
+        panel_y = (screen_h_ - panel_height) / 2;
     }
-    popup_y = std::max(kPopupMargin, popup_y);
+    panel_y = std::max(kPopupMargin, panel_y);
     if (screen_h_ > 0) {
-        popup_y = std::min(popup_y, std::max(kPopupMargin, screen_h_ - kPopupMargin - popup_height));
+        panel_y = std::min(panel_y, std::max(kPopupMargin, screen_h_ - kPopupMargin - panel_height));
     }
 
-    anchor_candidate_editor_.pie_widget->set_rect(SDL_Rect{popup_x, popup_y, popup_width, popup_height});
+    anchor_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    anchor_candidate_editor_.panel->set_visible_height(panel_height);
+    anchor_candidate_editor_.panel->set_rect(SDL_Rect{panel_x, panel_y, panel_width, panel_height});
 }
 
 void RoomEditor::refresh_anchor_candidate_editor_widget() {
-    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget || !anchor_candidate_editor_.panel) {
         return;
     }
     if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
@@ -8262,6 +8274,7 @@ void RoomEditor::refresh_anchor_candidate_editor_widget() {
     if (!candidate_entry.is_object()) {
         candidate_entry = nlohmann::json::object();
     }
+    anchor_candidate_editor_.panel->set_title(anchor_candidate_editor_.anchor_name + " Candidates");
     anchor_candidate_editor_.pie_widget->set_candidates_from_json(candidate_entry);
     layout_anchor_candidate_editor_popup();
 }
@@ -8319,6 +8332,17 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
                                       false,
                                       "Anchor Candidate Reconcile",
                                       "room-anchor-candidate-reconcile");
+    }
+
+    if (!anchor_candidate_editor_.panel) {
+        anchor_candidate_editor_.panel = std::make_unique<DockableCollapsible>("Anchor Candidates", true);
+        anchor_candidate_editor_.panel->set_scroll_enabled(true);
+        anchor_candidate_editor_.panel->set_floating_content_width(520);
+        anchor_candidate_editor_.panel->set_cell_width(460);
+        anchor_candidate_editor_.panel->set_row_gap(10);
+        anchor_candidate_editor_.panel->set_col_gap(12);
+        anchor_candidate_editor_.panel->set_padding(12);
+        anchor_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
     }
 
     if (!anchor_candidate_editor_.pie_widget) {
@@ -8431,6 +8455,14 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
         });
     }
 
+    DockableCollapsible::Rows panel_rows;
+    panel_rows.push_back({anchor_candidate_editor_.pie_widget.get()});
+    anchor_candidate_editor_.panel->set_rows(panel_rows);
+    anchor_candidate_editor_.panel->set_title(anchor_name + " Candidates");
+    anchor_candidate_editor_.panel->open();
+    anchor_candidate_editor_.panel->set_visible(true);
+    anchor_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+
     anchor_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
     anchor_candidate_editor_.pie_widget->set_manifest_store(manifest_store_);
     anchor_candidate_editor_.pie_widget->set_assets(assets_);
@@ -8484,12 +8516,14 @@ bool RoomEditor::mutate_anchor_candidate_entry(const std::function<bool(nlohmann
 }
 
 bool RoomEditor::handle_anchor_candidate_editor_event(const SDL_Event& event) {
-    if (!anchor_mode_active() || !anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+    if (!anchor_mode_active() || !anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget ||
+        !anchor_candidate_editor_.panel) {
         return false;
     }
 
     CandidateEditorPieGraphWidget* widget = anchor_candidate_editor_.pie_widget.get();
-    if (!widget) {
+    DockableCollapsible* panel = anchor_candidate_editor_.panel.get();
+    if (!widget || !panel) {
         return false;
     }
 
@@ -8500,18 +8534,21 @@ bool RoomEditor::handle_anchor_candidate_editor_event(const SDL_Event& event) {
         return true;
     }
 
-    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        SDL_Point point{event.button.x, event.button.y};
-        const SDL_Rect popup_rect = widget->rect();
-        const bool inside_popup =
-            SDL_PointInRect(&point, &popup_rect) || widget->is_search_point_inside(point.x, point.y);
-        if (!inside_popup) {
-            close_anchor_candidate_editor();
-            return true;
-        }
+    if (widget->is_search_visible() &&
+        (is_pointer_or_wheel_event(event) || is_text_or_key_event(event)) &&
+        widget->handle_event(event)) {
+        return true;
     }
 
-    if ((is_pointer_or_wheel_event(event) || is_text_or_key_event(event)) && widget->handle_event(event)) {
+    if (panel->handle_event(event)) {
+        if (!panel->is_visible()) {
+            close_anchor_candidate_editor();
+        }
+        return true;
+    }
+
+    if (!panel->is_visible()) {
+        close_anchor_candidate_editor();
         return true;
     }
 
@@ -8528,9 +8565,7 @@ bool RoomEditor::handle_anchor_candidate_editor_event(const SDL_Event& event) {
             sdl_mouse_util::GetMouseState(&pointer_x, &pointer_y);
         }
 
-        SDL_Point point{pointer_x, pointer_y};
-        const SDL_Rect popup_rect = widget->rect();
-        if (SDL_PointInRect(&point, &popup_rect) || widget->is_search_point_inside(pointer_x, pointer_y)) {
+        if (panel->is_point_inside(pointer_x, pointer_y) || widget->is_search_point_inside(pointer_x, pointer_y)) {
             return true;
         }
     }
@@ -8539,10 +8574,23 @@ bool RoomEditor::handle_anchor_candidate_editor_event(const SDL_Event& event) {
 }
 
 void RoomEditor::update_anchor_candidate_editor_search(const Input& input) {
-    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget || !anchor_candidate_editor_.panel) {
         return;
     }
     if (!anchor_mode_active()) {
+        close_anchor_candidate_editor();
+        return;
+    }
+    anchor_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    const int min_visible_height = 320;
+    const int height_margin = 200;
+    int visible_height = min_visible_height;
+    if (screen_h_ > 0) {
+        visible_height = std::max(min_visible_height, screen_h_ - height_margin);
+    }
+    anchor_candidate_editor_.panel->set_visible_height(visible_height);
+    anchor_candidate_editor_.panel->update(input, screen_w_, screen_h_);
+    if (!anchor_candidate_editor_.panel->is_visible()) {
         close_anchor_candidate_editor();
         return;
     }
@@ -8552,10 +8600,10 @@ void RoomEditor::update_anchor_candidate_editor_search(const Input& input) {
 }
 
 void RoomEditor::render_anchor_candidate_editor(SDL_Renderer* renderer) const {
-    if (!renderer || !anchor_mode_active() || !anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+    if (!renderer || !anchor_mode_active() || !anchor_candidate_editor_.open || !anchor_candidate_editor_.panel) {
         return;
     }
-    anchor_candidate_editor_.pie_widget->render(renderer);
+    anchor_candidate_editor_.panel->render(renderer);
 }
 
 void RoomEditor::refresh_anchor_mode_handles() {
@@ -12505,9 +12553,9 @@ bool RoomEditor::is_anchor_ui_blocking_point(int x, int y) const {
             return true;
         }
         if (anchor_candidate_editor_.open && anchor_candidate_editor_.pie_widget) {
-            const SDL_Rect popup_rect = anchor_candidate_editor_.pie_widget->rect();
-            SDL_Point point{x, y};
-            if (SDL_PointInRect(&point, &popup_rect) ||
+            const bool inside_panel = anchor_candidate_editor_.panel && anchor_candidate_editor_.panel->is_visible() &&
+                                      anchor_candidate_editor_.panel->is_point_inside(x, y);
+            if (inside_panel ||
                 anchor_candidate_editor_.pie_widget->is_search_point_inside(x, y)) {
                 return true;
             }

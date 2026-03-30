@@ -46,6 +46,7 @@ class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
 class CandidateEditorPieGraphWidget;
+class DockableCollapsible;
 class DevFooterBar;
 class DevControls;
 
@@ -661,6 +662,7 @@ private:
         std::string anchor_name;
         SDL_Point open_point{0, 0};
         SDL_Rect anchor_row_rect{0, 0, 0, 0};
+        std::unique_ptr<DockableCollapsible> panel{};
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
     };
     AnchorCandidateEditorState anchor_candidate_editor_;

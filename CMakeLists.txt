@@ -63,13 +63,15 @@ list(REMOVE_DUPLICATES ENGINE_SRC)
 # Exclude standalone tool entry points from the main engine binary
 list(REMOVE_ITEM ENGINE_SRC
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/asset_tool_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/set_rebuild_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/cache_validator_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/apply_effects_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
 )
 
 add_executable(engine ${ENGINE_SRC})
+target_sources(engine PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/d3d11_effects_backend.cpp
+)
 
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
@@ -203,6 +205,7 @@ target_include_directories(engine
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
           ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+          ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
   )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
@@ -235,6 +238,7 @@ endif()
 # Link Windows COM/Shell libs for modern file dialogs
 if (WIN32)
     target_link_libraries(engine PRIVATE Ole32 Shell32)
+    target_link_libraries(engine PRIVATE d3d11 d3dcompiler)
 endif()
 
 # Faster relinks on MSVC Debug
@@ -252,34 +256,54 @@ endif()
 # ------------------------------------------
 set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
-add_executable(engine_tests
 
+set(ENGINE_TEST_RUNTIME_SRC ${ENGINE_SRC})
+list(REMOVE_ITEM ENGINE_TEST_RUNTIME_SRC
+    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/app/main.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui/ui/menu_ui.cpp"
+)
+list(APPEND ENGINE_TEST_RUNTIME_SRC
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/d3d11_effects_backend.cpp"
+)
+
+add_executable(engine_tests
+    ${ENGINE_TEST_RUNTIME_SRC}
     ENGINE/tests/engine_tests_main.cpp
-    ENGINE/runtime/assets/asset/animation.cpp
-    ENGINE/runtime/assets/asset/surface_utils.cpp
-    ENGINE/runtime/assets/asset/animation_cloner.cpp
-    ENGINE/runtime/animation/attack_validation.cpp
-    ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
-    ENGINE/editor/devtools/dm_styles.cpp
-    ENGINE/editor/devtools/core/dev_json_store.cpp
-    ENGINE/editor/devtools/core/manifest_store.cpp
-    ENGINE/editor/devtools/manifest_asset_utils.cpp
-    ENGINE/editor/devtools/tag_utils.cpp
-    ENGINE/editor/devtools/draw_utils.cpp
-    ENGINE/editor/devtools/font_cache.cpp
-    ENGINE/editor/devtools/widgets.cpp
-    ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp
-    ENGINE/runtime/core/manifest/manifest_loader.cpp
-    ENGINE/runtime/utils/utils/log.cpp
-    ENGINE/runtime/utils/utils/cache_manager.cpp
-    ENGINE/runtime/utils/utils/loading_status_notifier.cpp
-    ENGINE/runtime/gameplay/world/grid_point.cpp
-    ENGINE/runtime/gameplay/world/world_grid.cpp
-    ENGINE/runtime/gameplay/world/chunk.cpp
-    ENGINE/runtime/gameplay/world/chunk_manager.cpp
-    ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
+    ENGINE/tests/stubs/asset/child_asset_runtime_test_support.cpp
+    ENGINE/tests/test_render_object_projection.cpp
+    ENGINE/tests/test_anchor_binding_order.cpp
+    ENGINE/tests/test_anchor_point_resolver.cpp
+    ENGINE/tests/test_animation_document_geometry.cpp
+    ENGINE/tests/test_animation_source_navigation.cpp
+    ENGINE/tests/test_combat_box_geometry.cpp
+    ENGINE/tests/test_combat_attack_pipeline.cpp
     ENGINE/tests/test_map_data.cpp
+    ENGINE/tests/test_map_manifest_normalizer.cpp
+    ENGINE/tests/test_movement_payload_geometry.cpp
+    ENGINE/tests/test_player_direction_intent.cpp
+    ENGINE/tests/test_room_anchor_mode_utils.cpp
+    ENGINE/tests/test_room_selection_filter_utils.cpp
+    ENGINE/tests/test_spawn_group_codec.cpp
+    ENGINE/tests/test_runtime_candidates.cpp
+    ENGINE/tests/test_runtime_ownership.cpp
     ENGINE/tests/test_world_grid.cpp
+    ENGINE/tests/test_input_activity.cpp
+    ENGINE/tests/test_camera_controller.cpp
+    ENGINE/tests/test_asset_perspective_sample.cpp
+    ENGINE/tests/test_animation_runtime_ownership.cpp
+    ENGINE/tests/test_animation_cloner_on_end.cpp
+    ENGINE/tests/test_auto_move_zero_stride_recovery.cpp
+    ENGINE/tests/test_scaling_logic_variants.cpp
+    ENGINE/tests/test_movement_pathing_axis.cpp
+    ENGINE/tests/test_dev_mode_animation_policy.cpp
+    ENGINE/tests/test_playback_settings_inheritance.cpp
+    ENGINE/tests/test_tag_editor_widget_recommendations.cpp
+    ENGINE/tests/test_depth_cue_overlay_math.cpp
+    ENGINE/tests/test_composite_asset_renderer_depth_cue_refresh.cpp
+    ENGINE/tests/test_primary_asset_cache_depth_layers.cpp
+    ENGINE/tests/test_screen_space_math.cpp
+    ENGINE/tests/test_warped_screen_grid_dimensions.cpp
   )
 
 target_include_directories(engine_tests
@@ -287,17 +311,23 @@ target_include_directories(engine_tests
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/app
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/audio
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+          ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
           ${CMAKE_SOURCE_DIR}/external
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core
   )
 
 target_compile_definitions(engine_tests PRIVATE
     DEV_MODE_DISABLE_JSON_DEBOUNCE=1
-    ENGINE_WORLD_TESTS=1
     PROJECT_ROOT="${TEST_ROOT}"
     FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
     FRAME_EDITOR_ACCESS=public
+    ENGINE_WORLD_TESTS=1
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
 )
 
@@ -325,6 +355,7 @@ endif()
 
 if (WIN32)
     target_link_libraries(engine_tests PRIVATE Ole32 Shell32)
+    target_link_libraries(engine_tests PRIVATE d3d11 d3dcompiler)
 endif()
 
 # ------------------------------------------
@@ -336,35 +367,33 @@ function(add_cli_tool target_name entry_point)
     add_executable(${target_name}
         ENGINE/tools/cli/${entry_point}
         ENGINE/tools/cli/image_cache_generator.cpp
+        ENGINE/tools/cli/d3d11_effects_backend.cpp
+        ENGINE/runtime/utils/utils/stb_image_impl.cpp
     )
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
         ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
         ${CMAKE_SOURCE_DIR}/external
     )
-    target_compile_definitions(${target_name} PRIVATE
-        IMGCACHE_STB_IMAGE_IMPL=1
-        IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-    )
     target_link_libraries(${target_name} PRIVATE
         nlohmann_json::nlohmann_json
     )
+    target_compile_definitions(${target_name} PRIVATE
+        PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
+    )
+    if (WIN32)
+        target_link_libraries(${target_name} PRIVATE d3d11 d3dcompiler)
+    endif()
 endfunction()
 
 # Asset Tool CLI - main cache generator
 add_cli_tool(asset_tool_cli asset_tool_cli.cpp)
 
-# Set Rebuild Values CLI - manifest manipulation
-add_cli_tool(set_rebuild_cli set_rebuild_cli.cpp)
-
-# Cache Validator CLI - cache integrity validation
-add_cli_tool(cache_validator_cli cache_validator_cli.cpp)
-
 # Apply Effects CLI - effect preview generation
 add_cli_tool(apply_effects_cli apply_effects_cli.cpp)
 
 # Output all tools to ENGINE/tools directory
-foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_effects_cli)
+foreach(tool_target asset_tool_cli apply_effects_cli)
     set_target_properties(${tool_target} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/ENGINE/tools"
     )

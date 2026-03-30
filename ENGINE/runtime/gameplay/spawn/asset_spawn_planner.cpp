@@ -1,13 +1,13 @@
 #include "asset_spawn_planner.hpp"
 #include <random>
 #include <algorithm>
-#include <unordered_set>
 #include <cctype>
 #include <iomanip>
 
-#include "devtools/spawn_groups/spawn_group_utils.hpp"
 #include "room_relative_size_resolver.hpp"
 #include "assets/asset/Asset.hpp"
+#include "spawn_group_codec.hpp"
+
 AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sources,
                                      const Area& area,
                                      AssetLibrary& asset_library,
@@ -25,7 +25,7 @@ AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sou
     for (size_t si = 0; si < source_jsons_.size(); ++si) {
         try {
             nlohmann::json js = source_jsons_[si];
-            auto& groups = devmode::spawn::ensure_spawn_groups_array(js);
+            auto& groups = vibble::spawn_group_codec::ensure_spawn_groups_array(js);
             if (!groups.is_array()) continue;
             for (size_t ai = 0; ai < groups.size(); ++ai) {
                 merged["spawn_groups"].push_back(groups[ai]);
@@ -59,30 +59,45 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
         return (j.contains(k) && j[k].is_string()) ? j[k].get<std::string>() : std::string{};
 };
 
+    auto mark_source_changed = [&](const SourceRef& ref) {
+        if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
+            source_changed_[static_cast<size_t>(ref.source_index)] = true;
+        }
+    };
+
     for (size_t idx = 0; idx < root_json_["spawn_groups"].size(); ++idx) {
         auto& entry = root_json_["spawn_groups"][idx];
         if (!entry.is_object()) continue;
-        nlohmann::json asset = entry;
 
-        std::string spawn_id = get_opt_str(asset, "spawn_id");
-        if (spawn_id.empty()) {
-            spawn_id = devmode::spawn::generate_spawn_id();
-            entry["spawn_id"] = spawn_id;
-            asset["spawn_id"] = spawn_id;
-            if (idx < assets_provenance_.size()) {
-                const auto& ref = assets_provenance_[idx];
-                if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
-                    (*src)["spawn_id"] = spawn_id;
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
-                }
+        std::string fallback_display_name = get_opt_str(entry, "display_name");
+        if (fallback_display_name.empty()) {
+            fallback_display_name = get_opt_str(entry, "name");
+        }
+        if (fallback_display_name.empty()) {
+            fallback_display_name = "Spawn";
+        }
+
+        vibble::spawn_group_codec::EntryDefaults defaults{};
+        defaults.display_name = fallback_display_name;
+        const std::string fallback_candidate_name = get_opt_str(entry, "name");
+        defaults.default_candidate.name = fallback_candidate_name.empty() ? std::string("null") : fallback_candidate_name;
+        defaults.default_candidate.chance = fallback_candidate_name.empty() ? 0.0 : 100.0;
+
+        if (vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(entry, defaults) &&
+            idx < assets_provenance_.size()) {
+            const auto& ref = assets_provenance_[idx];
+            if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
+                *src = entry;
+                mark_source_changed(ref);
             }
         }
 
+        nlohmann::json asset = entry;
+        std::string spawn_id = get_opt_str(asset, "spawn_id");
+
         int priority = -1;
-        if (asset.contains("priority") && asset["priority"].is_number_integer()) {
-            priority = asset["priority"].get<int>();
+        if (asset.contains("priority")) {
+            priority = vibble::spawn_group_codec::read_int_field(asset, "priority", -1);
         }
         if (priority < 0) {
             priority = static_cast<int>(idx);
@@ -91,16 +106,12 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 const auto& ref = assets_provenance_[idx];
                 if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
                     (*src)["priority"] = priority;
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
+                    mark_source_changed(ref);
                 }
             }
         }
 
-        std::string position = get_opt_str(asset, "position");
-        if (position.empty()) position = "Random";
-        if (position == "Exact Position") position = "Exact";
+        std::string position = vibble::spawn_group_codec::normalize_method_from_entry(asset);
 
         std::string display_name = get_opt_str(asset, "display_name");
         if (display_name.empty()) display_name = get_opt_str(asset, "name");
@@ -146,9 +157,7 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 const auto& ref = assets_provenance_[idx];
                 if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
                     (*src)["execution_mode"] = "batch_grid";
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
+                    mark_source_changed(ref);
                 }
             }
         }
@@ -156,61 +165,24 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
         std::string link_name = get_opt_str(asset, "link");
 
         const bool force_single_quantity = (position == "Exact");
-
-        auto read_bool = [](const nlohmann::json& j, const char* key, bool fallback) {
-            if (!j.is_object() || !j.contains(key)) return fallback;
-            const auto& value = j.at(key);
-            if (value.is_boolean()) return value.get<bool>();
-            if (value.is_number_integer()) return value.get<int>() != 0;
-            if (value.is_string()) {
-                std::string text = value.get<std::string>();
-                std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                if (text == "true" || text == "1" || text == "yes") return true;
-                if (text == "false" || text == "0" || text == "no") return false;
-            }
-            return fallback;
-};
-
-        auto ensure_bool_field = [&](const char* key, bool value) {
-            bool updated = false;
-            if (!entry.contains(key) || !entry[key].is_boolean() || entry[key].get<bool>() != value) {
-                entry[key] = value;
-                updated = true;
-            }
-            if (!asset.contains(key) || !asset[key].is_boolean() || asset[key].get<bool>() != value) {
-                asset[key] = value;
-                updated = true;
-            }
-            if (updated && idx < assets_provenance_.size()) {
-                const auto& ref = assets_provenance_[idx];
-                if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
-                    (*src)[key] = value;
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
-                }
-            }
-};
-
-        const bool default_geometry = (position == "Exact" || position == "Perimeter");
-        const bool resolve_geometry = read_bool(asset, "resolve_geometry_to_room_size", default_geometry);
-        const bool resolve_quantity = read_bool(asset, "resolve_quantity_to_room_size", false);
-
-        ensure_bool_field("resolve_geometry_to_room_size", resolve_geometry);
-        ensure_bool_field("resolve_quantity_to_room_size", resolve_quantity);
+        const bool default_geometry = vibble::spawn_group_codec::uses_geometry_resolution_by_default(position);
+        const bool resolve_geometry =
+            vibble::spawn_group_codec::read_bool_field(asset, "resolve_geometry_to_room_size", default_geometry);
+        const bool resolve_quantity =
+            vibble::spawn_group_codec::read_bool_field(asset, "resolve_quantity_to_room_size", false);
 
         auto [minx, miny, maxx, maxy] = area.get_bounds();
         const int curr_w = std::max(1, maxx - minx);
         const int curr_h = std::max(1, maxy - miny);
 
-        int min_num = asset.value("min_number", 1);
-        int max_num = asset.value("max_number", min_num);
+        int min_num = vibble::spawn_group_codec::read_int_field(asset, "min_number", 1);
+        int max_num = vibble::spawn_group_codec::read_int_field(asset, "max_number", min_num);
         if (min_num < 0) min_num = 0;
         if (max_num < 0) max_num = 0;
         if (max_num < min_num) std::swap(max_num, min_num);
 
-        int orig_w = asset.value("origional_width", curr_w);
-        int orig_h = asset.value("origional_height", curr_h);
+        int orig_w = vibble::spawn_group_codec::read_int_field(asset, "origional_width", curr_w);
+        int orig_h = vibble::spawn_group_codec::read_int_field(asset, "origional_height", curr_h);
 
         const bool need_orig = default_geometry || resolve_geometry || resolve_quantity;
         if (need_orig) {
@@ -221,7 +193,7 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 orig_w = curr_w;
                 set_wh = true;
             } else {
-                orig_w = asset["origional_width"].get<int>();
+                orig_w = vibble::spawn_group_codec::read_int_field(asset, "origional_width", curr_w);
             }
             if (!asset.contains("origional_height") || !asset["origional_height"].is_number_integer()) {
                 entry["origional_height"] = curr_h;
@@ -229,16 +201,14 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 orig_h = curr_h;
                 set_wh = true;
             } else {
-                orig_h = asset["origional_height"].get<int>();
+                orig_h = vibble::spawn_group_codec::read_int_field(asset, "origional_height", curr_h);
             }
             if (set_wh && idx < assets_provenance_.size()) {
                 const auto& ref = assets_provenance_[idx];
                 if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
                     (*src)["origional_width"] = entry["origional_width"];
                     (*src)["origional_height"] = entry["origional_height"];
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
+                    mark_source_changed(ref);
                 }
             }
         }
@@ -255,223 +225,20 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
             quantity = 1;
         }
 
-        bool explicit_flip = false;
-        bool force_flipped = false;
-        try {
-            const auto it_exp = asset.find("explicit_flip");
-            if (it_exp != asset.end()) {
-                if (it_exp->is_boolean()) explicit_flip = it_exp->get<bool>();
-                else if (it_exp->is_number_integer()) explicit_flip = it_exp->get<int>() != 0;
-            }
-            const auto it_force = asset.find("force_flipped");
-            if (it_force != asset.end()) {
-                if (it_force->is_boolean()) force_flipped = it_force->get<bool>();
-                else if (it_force->is_number_integer()) force_flipped = it_force->get<int>() != 0;
-            }
-        } catch (...) {}
+        const bool explicit_flip =
+            vibble::spawn_group_codec::read_bool_field(asset, "explicit_flip", false);
+        const bool force_flipped =
+            vibble::spawn_group_codec::read_bool_field(asset, "force_flipped", false);
         Asset::SetFlipOverrideForSpawnId(spawn_id, explicit_flip, force_flipped);
 
-        std::vector<nlohmann::json> cand_jsons;
-        if (asset.contains("candidates") && asset["candidates"].is_array()) {
-            for (const auto& c : asset["candidates"]) cand_jsons.push_back(c);
-        } else {
-            nlohmann::json fallback;
-            if (asset.contains("name") && asset["name"].is_string()) {
-                fallback["name"] = asset["name"].get<std::string>();
-            }
-            fallback["chance"] = 100;
-            cand_jsons.push_back(std::move(fallback));
+        if (!asset.contains("candidates") || !asset["candidates"].is_array()) {
+            continue;
         }
-        if (cand_jsons.empty()) continue;
-
-        std::vector<SpawnCandidate> candidates;
-        candidates.reserve(cand_jsons.size());
-
-        struct CandidateDraft {
-            double weight = 0.0;
-            bool use_tag = false;
-            std::string tag;
-            std::string original_name;
-            std::string asset_name;
-            std::string label;
-            bool is_null = false;
-};
-
-        auto extract_chance = [](const nlohmann::json& c) -> double {
-            if (!c.contains("chance")) return 0.0;
-            const auto& chance = c["chance"];
-            if (chance.is_number()) {
-                return chance.get<double>();
-            }
-            return 0.0;
-};
-
-        auto sanitize_key = [](std::string value) {
-            auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
-            auto begin = std::find_if(value.begin(), value.end(), not_space);
-            auto end = std::find_if(value.rbegin(), value.rend(), not_space).base();
-            if (begin >= end) return std::string{};
-            value.assign(begin, end);
-            if (!value.empty() && value.front() == '#') value.erase(0, 1);
-            return value;
-};
-
-        std::vector<CandidateDraft> drafts;
-        drafts.reserve(cand_jsons.size());
-
-        std::unordered_set<std::string> blocked_tags;
-        std::unordered_set<std::string> blocked_assets;
-
-        auto parse_candidate = [&](const nlohmann::json& cj) {
-            CandidateDraft draft{};
-            draft.weight = extract_chance(cj);
-
-            bool is_null = cj.is_null();
-            std::string name;
-            std::string label;
-            bool use_tag = false;
-            std::string tag_value;
-
-            auto detect_tag = [&](const std::string& v) {
-                if (!v.empty() && v.front() == '#') {
-                    use_tag = true;
-                    tag_value = v.substr(1);
-                }
-};
-
-            if (cj.is_object()) {
-                if (cj.contains("name") && cj["name"].is_string()) {
-                    name = cj["name"].get<std::string>();
-                    detect_tag(name);
-                }
-                if (cj.contains("display_name") && cj["display_name"].is_string()) {
-                    label = cj["display_name"].get<std::string>();
-                } else if (cj.contains("label") && cj["label"].is_string()) {
-                    label = cj["label"].get<std::string>();
-                }
-                if (cj.contains("tag")) {
-                    const auto& tj = cj["tag"];
-                    if (tj.is_boolean() && tj.get<bool>()) {
-                        use_tag = true;
-                        if (tag_value.empty() && !name.empty()) {
-                            tag_value = name.front() == '#' ? name.substr(1) : name;
-                        }
-                    } else if (tj.is_string()) {
-                        use_tag = true;
-                        tag_value = tj.get<std::string>();
-                    }
-                }
-                if (cj.contains("tag_name") && cj["tag_name"].is_string()) {
-                    use_tag = true;
-                    tag_value = cj["tag_name"].get<std::string>();
-                }
-            } else if (cj.is_string()) {
-                name = cj.get<std::string>();
-                detect_tag(name);
-                label = name;
-            }
-
-            if (name == "null") is_null = true;
-
-            if (use_tag && tag_value.empty() && !name.empty()) {
-                tag_value = name.front() == '#' ? name.substr(1) : name;
-            }
-
-            draft.use_tag = use_tag;
-            draft.tag = sanitize_key(tag_value);
-            draft.original_name = name;
-            draft.label = label;
-            draft.is_null = is_null;
-
-            if (!draft.use_tag) {
-                std::string sanitized = sanitize_key(name);
-                if (sanitized == "null") {
-                    draft.is_null = true;
-                    sanitized.clear();
-                }
-                draft.asset_name = sanitized;
-            }
-
-            return draft;
-};
-
-        for (const auto& cj : cand_jsons) {
-            CandidateDraft draft = parse_candidate(cj);
-
-            if (draft.weight <= 0.0) {
-                if (draft.use_tag) {
-                    if (!draft.tag.empty()) blocked_tags.insert(draft.tag);
-                } else if (!draft.is_null) {
-                    std::string blocked = !draft.asset_name.empty() ? draft.asset_name : sanitize_key(draft.original_name);
-                    if (!blocked.empty()) blocked_assets.insert(blocked);
-                }
-            }
-
-            drafts.push_back(std::move(draft));
+        vibble::spawn::RuntimeCandidates candidates =
+            vibble::spawn::RuntimeCandidates::from_json(asset["candidates"]);
+        if (candidates.empty()) {
+            continue;
         }
-
-        std::unordered_set<std::string> candidate_tags;
-        for (const auto& d : drafts) {
-            if (d.use_tag && !d.tag.empty() && d.weight > 0.0) {
-                candidate_tags.insert(d.tag);
-            }
-        }
-
-        for (const auto& draft : drafts) {
-            SpawnCandidate c{};
-            c.weight = draft.weight;
-
-            std::string resolved_name;
-            if (draft.use_tag) {
-                std::string tag = !draft.tag.empty() ? draft.tag : sanitize_key(draft.original_name);
-                if (!tag.empty() && draft.weight > 0.0) {
-                    try {
-                        resolved_name = resolve_asset_from_tag( tag, &blocked_tags, &blocked_assets, &candidate_tags );
-                    } catch (...) {
-                        resolved_name.clear();
-                    }
-                }
-            } else {
-                resolved_name = draft.asset_name;
-            }
-
-            bool is_null = draft.is_null;
-            if (draft.use_tag && draft.weight <= 0.0) {
-                is_null = true;
-            }
-
-            if (!resolved_name.empty()) {
-                c.name = resolved_name;
-            } else if (!draft.use_tag) {
-                c.name = draft.asset_name;
-            }
-
-            if (c.name.empty()) {
-                if (!is_null) is_null = true;
-            }
-
-            std::string fallback_display = draft.original_name;
-            if (fallback_display.empty() && !draft.tag.empty()) {
-                fallback_display = "#" + draft.tag;
-            }
-
-            c.display_name = !draft.label.empty() ? draft.label : (!c.name.empty() ? c.name : fallback_display);
-
-            if (c.display_name.empty() && is_null) c.display_name = "null";
-
-            c.is_null = is_null || c.name.empty();
-            if (!c.is_null && !c.name.empty()) {
-                auto info = asset_library_->get(c.name);
-                if (!info) c.is_null = true;
-                else c.info = info;
-            }
-
-            if (c.is_null && c.display_name.empty()) c.display_name = "null";
-            if (c.weight < 0.0) c.weight = 0.0;
-
-            candidates.push_back(std::move(c));
-        }
-        if (candidates.empty()) continue;
 
         auto average_range = [&](const std::string& lo_key, const std::string& hi_key, int fallback) {
             int lo = asset.value(lo_key, fallback);
@@ -556,55 +323,4 @@ nlohmann::json* AssetSpawnPlanner::get_source_entry(int source_index, int entry_
     } catch (...) {
         return nullptr;
     }
-}
-std::string AssetSpawnPlanner::resolve_asset_from_tag(
-    const std::string& tag,
-    const std::unordered_set<std::string>* banned_tags,
-    const std::unordered_set<std::string>* banned_assets,
-    const std::unordered_set<std::string>* candidate_tags)
-{
-    static std::mt19937 rng(std::random_device{}());
-    if (tag.empty()) {
-        throw std::runtime_error("Empty tag provided to resolve_asset_from_tag");
-    }
-
-    std::vector<std::string> matches;
-    for (const auto& [name, info] : asset_library_->all()) {
-        if (!info || !info->has_tag(tag)) continue;
-
-        if (banned_assets && banned_assets->count(name) > 0) continue;
-
-        if (banned_tags && !banned_tags->empty()) {
-            bool skip = false;
-            for (const auto& blocked : *banned_tags) {
-                if (blocked.empty()) continue;
-                if (blocked == tag) continue;
-                if (info->has_tag(blocked)) {
-                    skip = true;
-                    break;
-                }
-            }
-            if (skip) continue;
-        }
-
-        if (candidate_tags && !candidate_tags->empty()) {
-            bool skip = false;
-            for (const auto& anti : info->anti_tags) {
-                if (candidate_tags->count(anti) > 0 && anti != tag) {
-                    skip = true;
-                    break;
-                }
-            }
-            if (skip) continue;
-        }
-
-        matches.push_back(name);
-    }
-
-    if (matches.empty()) {
-        throw std::runtime_error("No assets found for tag: " + tag);
-    }
-
-    std::uniform_int_distribution<size_t> dist(0, matches.size() - 1);
-    return matches[dist(rng)];
 }

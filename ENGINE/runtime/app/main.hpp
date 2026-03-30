@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <memory>
 #include <string>
+#include <cstdint>
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
@@ -19,6 +20,7 @@ class Input;
 class LoadingScreen;
 class AssetLibrary;
 class EngineRenderer;
+class RuntimeWorldContext;
 
 class MainApp {
 
@@ -31,6 +33,8 @@ class MainApp {
     SDL_Renderer* raw_renderer() const;
 protected:
     void handle_global_shortcuts(const SDL_Event& e);
+    bool sync_output_dimensions(SDL_Renderer* renderer);
+    void log_render_diagnostics(SDL_Renderer* renderer, const char* loop_label);
     void toggle_fullscreen();
     MapDescriptor map_descriptor_;
     std::string   map_path_;
@@ -38,9 +42,10 @@ protected:
     int           screen_w_   = 0;
     int           screen_h_   = 0;
     std::unique_ptr<AssetLoader> loader_;
-    Assets*        game_assets_      = nullptr;
+    std::shared_ptr<RuntimeWorldContext> world_context_;
+    std::unique_ptr<Assets> game_assets_;
     SceneRenderer* scene_            = nullptr;
-    Input*         input_            = nullptr;
+    std::unique_ptr<Input> input_;
     SDL_Texture* overlay_texture_    = nullptr;
     bool dev_mode_ = false;
     LoadingScreen* loading_screen_   = nullptr;
@@ -51,6 +56,8 @@ protected:
     int            windowed_y_       = SDL_WINDOWPOS_CENTERED;
     int            windowed_width_   = 1280;
     int            windowed_height_  = 720;
+    bool           render_diagnostics_enabled_ = false;
+    std::uint64_t  frame_diagnostics_counter_ = 0;
 };
 
 void run(SDL_Window* window, EngineRenderer& renderer, int screen_w, int screen_h);

@@ -55,6 +55,11 @@ class AssetInfoUI {
     void pulse_header();
 
     void open_animation_editor_panel();
+    void close_animation_editor_panel();
+    bool is_animation_editor_open() const;
+    void set_animation_editor_fullscreen_mode(bool enabled);
+    void set_on_animation_editor_closed(std::function<void()> callback);
+    bool has_info() const { return static_cast<bool>(info_); }
     void set_assets(Assets* a);
     Assets* assets() const { return assets_; }
     void set_manifest_store(devmode::core::ManifestStore* store);
@@ -64,6 +69,8 @@ class AssetInfoUI {
     void set_target_asset(class Asset* a);
     class Asset* get_target_asset() const { return target_asset_; }
     bool is_point_inside(int x, int y) const;
+    void set_panel_bounds_override(const SDL_Rect& bounds);
+    void clear_panel_bounds_override();
     SDL_Renderer* get_last_renderer() const { return last_renderer_; }
     void refresh_target_asset_scale();
     void sync_target_tiling_state();
@@ -100,6 +107,7 @@ class AssetInfoUI {
     DockableCollapsible* section_at_point(SDL_Point p) const;
     bool handle_section_focus_event(const SDL_Event& e);
     std::shared_ptr<animation_editor::AnimationDocument> animation_document() const;
+    void collapse_all_except(DockableCollapsible* keep);
 
   private:
     bool visible_ = false;
@@ -116,11 +124,13 @@ class AssetInfoUI {
     mutable SDL_Rect animation_editor_rect_{0,0,0,0};
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;
+    bool panel_bounds_override_active_ = false;
+    SDL_Rect panel_bounds_override_{0, 0, 0, 0};
 
     SlidingWindowContainer container_;
 
-    mutable std::unique_ptr<class DMButton> configure_btn_;
-    mutable std::unique_ptr<class ButtonWidget> configure_btn_widget_;
+    bool animation_editor_fullscreen_mode_ = false;
+    std::function<void()> on_animation_editor_closed_ = {};
     bool camera_override_active_ = false;
     bool prev_camera_realism_enabled_ = false;
     bool prev_camera_parallax_enabled_ = false;

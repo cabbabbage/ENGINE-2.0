@@ -1,13 +1,12 @@
 #include "ui/menu_ui.hpp"
+#include "app/bootstrap.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
 #include "ui/tinyfiledialogs.h"
 #include "asset_loader.hpp"
-#include "assets/asset/asset_types.hpp"
 #include "AssetsManager.hpp"
 #include "utils/input.hpp"
-#include "gameplay/world/world_grid.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -16,10 +15,26 @@
 #include <random>
 #include <sstream>
 #include <utility>
-#include <nlohmann/json.hpp>
-#include <stdexcept>
 
 namespace fs = std::filesystem;
+
+namespace {
+bool is_resize_or_scale_event(Uint32 event_type) {
+        switch (event_type) {
+        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+#ifdef SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
+        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+#endif
+#ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
+        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+#endif
+                return true;
+        default:
+                return false;
+        }
+}
+} // namespace
 
 MenuUI::MenuUI(EngineRenderer* renderer,
                int screen_w,
@@ -75,6 +90,11 @@ void MenuUI::game_loop() {
                 bool had_events = false;
                 while (SDL_PollEvent(&e)) {
                         had_events = true;
+                        if (renderer && is_resize_or_scale_event(e.type)) {
+                                if (sync_output_dimensions(renderer)) {
+                                        rebuildButtons();
+                                }
+                        }
                         handle_global_shortcuts(e);
                         const bool menu_was_active = menu_active_;
 			if (e.type == SDL_EVENT_QUIT) {
@@ -84,10 +104,7 @@ void MenuUI::game_loop() {
                         if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && e.key.repeat == 0) {
                                 bool esc_consumed = false;
                                 if (game_assets_) {
-                                        if (game_assets_->is_asset_info_editor_open()) {
-                                                game_assets_->close_asset_info_editor();
-                                                esc_consumed = true;
-                                        }
+                                        esc_consumed = game_assets_->consume_escape_for_asset_editor_stack();
                                 }
                                 if (!esc_consumed) {
                                         toggleMenu();
@@ -111,18 +128,15 @@ void MenuUI::game_loop() {
                         if (game_assets_) game_assets_->handle_sdl_event(e);
                 }
 
-                // Compute dev idle condition: skip update+render when in dev mode with no interaction or pending work
-                const bool dev_idle = dev_mode_
-                    && !menu_active_
-                    && game_assets_ && input_
-                    && !game_assets_->should_step_dev_frame(*input_);
-                const bool should_update = !menu_active_ && !dev_idle && game_assets_ && input_;
+                if (sync_output_dimensions(renderer)) {
+                        rebuildButtons();
+                }
 
+                const bool should_update = !menu_active_ && game_assets_ && input_;
                 if (should_update) {
                         game_assets_->update(*input_);
-                } else if (!menu_active_ && dev_idle && game_assets_) {
-                        game_assets_->touch_last_frame_counter();
                 }
+                log_render_diagnostics(renderer, "MenuUI");
 
                 if (menu_active_) {
                         render();
@@ -135,9 +149,7 @@ void MenuUI::game_loop() {
                         }
                 }
 
-                if (!dev_idle) {
-                        SDL_RenderPresent(renderer);
-                }
+                SDL_RenderPresent(renderer);
 
                 if (input_) input_->update();
 
@@ -173,7 +185,6 @@ void MenuUI::toggleMenu() {
 void MenuUI::openMenu() {
         exitDevModeForPause();
         menu_active_ = true;
-        if (menu_active_) Button::refresh_glass_overlay();
         if (game_assets_) game_assets_->set_render_suppressed(menu_active_);
 }
 
@@ -226,7 +237,6 @@ MenuUI::MenuAction MenuUI::consumeAction() {
 
 void MenuUI::rebuildButtons() {
         buttons_.clear();
-        Button::refresh_glass_overlay();
         const int btn_w = Button::width();
         const int btn_h = Button::height();
         const int gap   = 16;
@@ -342,50 +352,42 @@ void MenuUI::doExit() {
 
 void MenuUI::doRestart() {
         std::cout << "[MenuUI] Restarting...\n";
-        if (game_assets_)      { delete game_assets_; game_assets_ = nullptr; }
+        game_assets_.reset();
         SDL_Renderer* renderer = raw_renderer();
         if (!renderer) {
                 std::cerr << "[MenuUI] Cannot restart without a renderer.\n";
                 return;
         }
-        try {
-                if (loader_) {
-                    nlohmann::json manifest_copy = loader_->map_manifest();
-                    std::string content_root = loader_->content_root();
-                    std::string map_id = loader_->map_identifier();
-                    loader_ = std::make_unique<AssetLoader>(map_id, manifest_copy, renderer, content_root, nullptr, asset_library_);
-                }
-                world::WorldGrid world_grid{};
-                loader_->createAssets(world_grid);
-                auto all_assets = world_grid.all_assets();
-                Asset* player_ptr = nullptr;
-                for (Asset* candidate : all_assets) {
-                    if (candidate && candidate->info && candidate->info->type == asset_types::player) { player_ptr = candidate; break; }
-                }
-                int start_px = player_ptr ? player_ptr->world_x() : static_cast<int>(loader_->getMapRadius());
-                int start_pz = player_ptr ? player_ptr->world_z() : static_cast<int>(loader_->getMapRadius());
-                AssetLibrary* restart_library = loader_->getAssetLibrary();
-                if (!restart_library) {
-                        throw std::runtime_error("Asset library unavailable during restart.");
-                }
-                game_assets_ = new Assets(*restart_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_pz, static_cast<int>(loader_->getMapRadius() * 1.2), renderer, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
-                if (!input_) input_ = new Input();
-                game_assets_->set_input(input_);
-                if (game_assets_) {
-                        game_assets_->reload_camera_settings();
-                }
-                if (!player_ptr) {
-                        dev_mode_ = true;
-                        std::cout << "[MenuUI] No player asset found. Launching in Dev Mode.\n";
-                }
-                if (game_assets_) {
-                        game_assets_->set_dev_mode(dev_mode_);
-                        // Apply camera settings AFTER dev_mode is set to ensure correct initialization
-                        game_assets_->apply_camera_runtime_settings();
-                        game_assets_->force_camera_view_refresh();
-                }
-        } catch (const std::exception& ex) {
-                std::cerr << "[MenuUI] Restart failed: " << ex.what() << "\n";
+        if (!loader_) {
+                std::cerr << "[MenuUI] Cannot restart before initial setup has completed.\n";
+                return;
+        }
+        const bool restart_ok = app::bootstrap::run_guarded(
+                [&]() {
+                        app::bootstrap::RuntimeBootstrapRequest bootstrap_request;
+                        bootstrap_request.renderer = renderer;
+                        bootstrap_request.shared_asset_library = asset_library_;
+                        bootstrap_request.source_loader = loader_.get();
+
+                        auto bootstrap_result = app::bootstrap::prepare_runtime_bootstrap(std::move(bootstrap_request));
+                        game_assets_ = app::bootstrap::create_assets_from_bootstrap(bootstrap_result,
+                                                                                    screen_w_,
+                                                                                    screen_h_,
+                                                                                    renderer);
+                        loader_ = std::move(bootstrap_result.loader);
+                        app::bootstrap::finalize_assets_post_init(
+                                *game_assets_,
+                                input_,
+                                dev_mode_,
+                                bootstrap_result.player_ptr,
+                                []() {
+                                        std::cout << "[MenuUI] No player asset found. Launching in Dev Mode.\n";
+                                });
+                },
+                [](const std::exception& ex) {
+                        std::cerr << "[MenuUI] Restart failed: " << ex.what() << "\n";
+                });
+        if (!restart_ok) {
                 return;
         }
 }

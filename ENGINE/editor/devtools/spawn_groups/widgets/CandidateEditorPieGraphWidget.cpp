@@ -5,10 +5,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <iomanip>
 #include <numeric>
 #include <sstream>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,6 +32,20 @@ constexpr double kArrowKeyDelta = 0.5;
 
 double clamp_positive(double value) {
     return value < 0.0 ? 0.0 : value;
+}
+
+constexpr std::string_view kNullCandidateName = "null";
+
+bool is_null_candidate_name(std::string_view name) {
+    if (name.size() != kNullCandidateName.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < name.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(name[i])) != kNullCandidateName[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 }
 
@@ -185,7 +201,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         if (target_index >= 0) {
             hovered_index_ = target_index;
             if (e.button.clicks >= 2) {
-                if (on_delete_) {
+                if (!is_null_candidate_name(candidates_[target_index].name) && on_delete_) {
                     flush_pending_adjustment();
                     on_delete_(target_index);
                 }
@@ -909,7 +925,8 @@ void CandidateEditorPieGraphWidget::render_legend(SDL_Renderer* renderer, const 
     }
 
     if (layout.legend.w > 60) {
-        SDL_Color text_color = DMStyles::Label().color;
+        const SDL_Color normal_label_color = DMStyles::Label().color;
+        const SDL_Color anti_label_color = DMStyles::DeleteButton().text;
         int font_height = TTF_GetFontHeight(font);
         int row_height = std::max(font_height + 6, 20);
         cache_legend_rows(layout, row_height);
@@ -947,7 +964,9 @@ void CandidateEditorPieGraphWidget::render_legend(SDL_Renderer* renderer, const 
             double percent = total > 0.0 ? (clamp_positive(candidates_[i].weight) / total) * 100.0 : 0.0;
             std::ostringstream label;
             label << candidates_[i].name << " - " << std::fixed << std::setprecision(1) << percent << "% (" << static_cast<int>(std::round(clamp_positive(candidates_[i].weight))) << ")";
-            draw_text(renderer, font, label.str(), box.x + box.w + 8, row_rect.y + (row_rect.h - font_height) / 2, text_color, false);
+            const bool is_anti_candidate = candidates_[i].weight <= 0.0;
+            const SDL_Color row_text_color = is_anti_candidate ? anti_label_color : normal_label_color;
+            draw_text(renderer, font, label.str(), box.x + box.w + 8, row_rect.y + (row_rect.h - font_height) / 2, row_text_color, false);
         }
     } else {
         std::ostringstream summary;
@@ -1073,6 +1092,17 @@ void CandidateEditorPieGraphWidget::notify_layout_change() const {
 
 bool CandidateEditorPieGraphWidget::search_visible() const {
     return search_assets_ && search_assets_->visible();
+}
+
+bool CandidateEditorPieGraphWidget::is_search_visible() const {
+    return search_visible();
+}
+
+bool CandidateEditorPieGraphWidget::is_search_point_inside(int x, int y) const {
+    if (!search_assets_ || !search_assets_->visible()) {
+        return false;
+    }
+    return search_assets_->is_point_inside(x, y);
 }
 
 void CandidateEditorPieGraphWidget::apply_live_delta(int index, double delta) {

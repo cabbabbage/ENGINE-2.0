@@ -1,16 +1,18 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 #include "rendering/render/composite_asset_renderer.hpp"
 #include "rendering/render/scaling_logic.hpp"
-#include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
-#include "rendering/render/TextureLoadQueue.hpp"
 #include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
@@ -47,8 +49,34 @@ private:
         double depth = 0.0;
     };
 
+    struct RenderStateKey {
+        SDL_Texture* texture = nullptr;
+        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+        bool operator==(const RenderStateKey& rhs) const noexcept {
+            return texture == rhs.texture && blend_mode == rhs.blend_mode;
+        }
+    };
+
+    struct RenderStateKeyHash {
+        std::size_t operator()(const RenderStateKey& key) const noexcept {
+            const auto ptr_value = reinterpret_cast<std::uintptr_t>(key.texture);
+            return ptr_value ^ (static_cast<std::size_t>(key.blend_mode) + 0x9e3779b97f4a7c15ULL + (ptr_value << 6) + (ptr_value >> 2));
+        }
+    };
+
+    struct RenderStateGroup {
+        RenderStateKey key;
+        std::vector<DrawItem> items;
+    };
+
+    struct DepthBucket {
+        std::vector<RenderStateGroup> groups;
+        std::unordered_map<RenderStateKey, std::size_t, RenderStateKeyHash> group_index;
+    };
+
     SDL_Renderer* renderer_;
-    std::vector<DrawItem> draw_list_;
+    std::map<std::int64_t, DepthBucket> depth_buckets_;
+    DepthBucket invalid_depth_bucket_;
     size_t draw_call_count_ = 0;
     size_t total_vertices_ = 0;
     double last_flush_cpu_ms_ = 0.0;
@@ -84,6 +112,7 @@ public:
     ~SceneRenderer();
 
     void invalidate_dynamic_boundary_system();
+    const std::vector<DynamicBoundarySystem::BoundarySprite>& dynamic_boundary_sprites() const;
 
     static inline bool prerequisites_ready(SDL_Renderer* renderer, Assets* assets, std::string* reason = nullptr) {
         if (!renderer) {
@@ -100,7 +129,10 @@ public:
 
     void render();
     SDL_Renderer* get_renderer() const;
-    texture_loading::TextureLoadQueue* get_texture_load_queue() const;
+    void set_output_dimensions(int screen_width, int screen_height);
+    int output_width() const { return screen_width_; }
+    int output_height() const { return screen_height_; }
+    std::optional<SDL_Point> postprocess_target_size() const;
 
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return debug_auto_paths_; }
@@ -112,6 +144,22 @@ public:
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
 private:
+    struct MovementDebugPathSnapshot {
+        std::vector<SDL_Point> world_points;
+        SDL_Color color{48, 200, 255, 220};
+    };
+
+    struct MovementDebugAssetSnapshot {
+        std::vector<MovementDebugPathSnapshot> paths;
+    };
+
+    struct MovementDebugObservedState {
+        std::string animation_id;
+        const class AnimationFrame* frame = nullptr;
+        bool frame_is_first = false;
+        bool frame_is_last = false;
+    };
+
     struct PrevalidatedTag {};
 
     SceneRenderer(PrevalidatedTag, SDL_Renderer* renderer, Assets* assets, int screen_width, int screen_height, const nlohmann::json& map_manifest, const std::string& map_id);
@@ -120,6 +168,11 @@ private:
     bool ensure_sky_texture();
     void destroy_sky_texture();
     void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
+    void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
+    void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
+                                         int screen_width,
+                                         int screen_height,
+                                         const std::vector<Asset*>& visible_assets) const;
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -128,7 +181,6 @@ private:
 
     std::unique_ptr<GridTileRenderer> tile_renderer_;
     std::unique_ptr<GeometryBatcher> geometry_batcher_;
-    std::unique_ptr<texture_loading::TextureLoadQueue> texture_load_queue_;
 
     bool           debugging = false;
     bool           low_quality_rendering_ = false;
@@ -139,9 +191,10 @@ private:
     bool         debug_auto_paths_ = true;
     bool         movement_debug_visible_ = true;
     bool         anchor_point_debug_enabled_ = false;
+    std::unordered_map<const Asset*, MovementDebugAssetSnapshot> movement_debug_snapshots_;
+    std::unordered_map<const Asset*, MovementDebugObservedState> movement_debug_observed_state_;
 
     CompositeAssetRenderer composite_renderer_;
-    std::unique_ptr<DynamicFogSystem> dynamic_fog_system_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
 
     std::uint32_t depthcue_warmup_frames_ = 8;

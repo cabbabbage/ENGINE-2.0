@@ -18,7 +18,7 @@ namespace {
 
 using animation_editor::kPanelPadding;
 
-constexpr std::array<const char*, 3> kSpecialOnEndOptions = {"kill", "lock", "reverse"};
+constexpr std::array<const char*, 4> kSpecialOnEndOptions = {"loop", "kill", "lock", "reverse"};
 
 std::string payload_signature(const std::optional<std::string>& payload) {
     if (!payload.has_value()) {
@@ -123,15 +123,7 @@ bool OnEndSelector::handle_event(const SDL_Event& e) {
     if (!dropdown_) {
         return false;
     }
-
-    int before = dropdown_->selected();
-    if (dropdown_->handle_event(e)) {
-        if (dropdown_->selected() != before) {
-            commit_selection();
-        }
-        return true;
-    }
-    return false;
+    return dropdown_->handle_event(e);
 }
 
 void OnEndSelector::rebuild_options() {
@@ -189,6 +181,7 @@ void OnEndSelector::sync_from_document() {
     }
 
     dropdown_ = std::make_unique<DMDropdown>("On End", options_, index);
+    dropdown_->set_on_selection_changed([this](int) { this->commit_selection(); });
     layout_dirty_ = true;
     layout_dropdown();
 }
@@ -225,19 +218,19 @@ void OnEndSelector::commit_selection() {
         selected = "default";
     }
 
-    nlohmann::json payload = nlohmann::json::object();
-    auto payload_dump = document_->animation_payload(animation_id_);
-    if (payload_dump && !payload_dump->empty()) {
-        nlohmann::json parsed = nlohmann::json::parse(*payload_dump, nullptr, false);
-        if (!parsed.is_discarded() && parsed.is_object()) {
-            payload = std::move(parsed);
-        }
-    }
+    nlohmann::json payload = document_->animation_payload_json(animation_id_).value_or(nlohmann::json::object());
+    payload.erase("loop");
     payload["on_end"] = selected;
 
-    std::string updated = payload.dump();
-    document_->replace_animation_payload(animation_id_, updated);
-    payload_signature_ = std::move(updated);
+    if (!document_->save_animation_payload_immediately(animation_id_, payload)) {
+        const std::string manifest_key = document_->manifest_asset_key_debug();
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "OnEndSelector: immediate save failed for animation '%s' (manifest key: '%s').",
+                    animation_id_.c_str(),
+                    manifest_key.empty() ? "<unknown>" : manifest_key.c_str());
+    }
+    auto updated = document_->animation_payload(animation_id_);
+    payload_signature_ = updated ? *updated : payload.dump();
 }
 
 int OnEndSelector::find_option_index(const std::string& value) const {

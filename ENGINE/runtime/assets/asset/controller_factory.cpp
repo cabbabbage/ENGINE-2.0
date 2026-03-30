@@ -14,7 +14,9 @@
 #include "animation/controllers/custom_controllers/gary_controller.hpp"
 #include "animation/controllers/custom_controllers/spider_controller.hpp"
 
-#include "animation/controllers/custom_controllers/default_controller.hpp"
+#include "animation/controllers/shared/custom_asset_controller.hpp"
+
+// <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>
 
 namespace {
 
@@ -101,26 +103,28 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
                 }
 
                 if (matches("davey_controller"))
-                        return std::make_unique<davey_controller>(assets_, self);
+                        return std::make_unique<davey_controller>(self);
                 if (matches("frog_controller"))
-                        return std::make_unique<frog_controller>(assets_, self);
+                        return std::make_unique<frog_controller>(self);
                 if (matches("carrie_controller"))
-                        return std::make_unique<carrie_controller>(assets_, self);
+                        return std::make_unique<carrie_controller>(self);
                 if (matches("gary_controller"))
-                        return std::make_unique<gary_controller>(assets_, self);
+                        return std::make_unique<gary_controller>(self);
                 if (matches("bartender_controller"))
-                        return std::make_unique<bartender_controller>(assets_, self);
+                        return std::make_unique<bartender_controller>(self);
                 if (matches("spider_controller"))
-                        return std::make_unique<spider_controller>(assets_, self);
-                if (matches("bomb_controller"))
-                        return std::make_unique<bomb_controller>(assets_, self);
+                        return std::make_unique<spider_controller>(self);
+        if (matches("bomb_controller"))
+                        return std::make_unique<bomb_controller>(self);
 
                 // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
                 // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
+        if (matches("vibble_controller"))
+                        return std::make_unique<vibble_controller>(self);
 
         } catch (...) {
         }
-        return std::make_unique<default_controller>(self);
+        return std::make_unique<CustomAssetController>(self);
 }
 
 std::unique_ptr<AssetController>
@@ -130,10 +134,6 @@ ControllerFactory::create_for_asset(Asset* self) const {
                 return std::make_unique<vibble_controller>(self);
         }
 
-        // Prefer controller derived from asset name; fall back to explicit key for legacy assets.
-        std::string key = canonical_controller_key(self->info->name);
-        if (key.empty()) {
-            key = canonical_controller_key(self->info->custom_controller_key);
-        }
+        const std::string key = canonical_controller_key(self->info->name);
         return create_by_key(key, self);
 }

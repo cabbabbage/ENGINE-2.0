@@ -74,8 +74,6 @@ struct CameraProjectionParams {
     double horizon_screen_y = 0.0, pitch_radians = 0.0;
     // Fade parameters
     float horizon_band_px = 100.0f;
-    float near_camera_max_perspective_scale = 4.0f;
-    float offscreen_fade_amount_px = 200.0f;
     // Screen dimensions
     int screen_width = 0, screen_height = 0;
     // Version for cache invalidation
@@ -85,6 +83,52 @@ struct CameraProjectionParams {
 using GridId = std::uint64_t;
 
 struct GridPoint {
+    struct ProjectionCache {
+        SDL_FPoint screen = SDL_FPoint{0.0f, 0.0f};
+        float parallax_dx = 0.0f;
+        float vertical_scale = 1.0f;
+        float horizon_fade_alpha = 1.0f;
+        float perspective_scale = 1.0f;
+        float distance_to_camera = 0.0f;
+        float tilt_radians = 0.0f;
+        bool on_screen = false;
+        std::uint64_t screen_data_frame_updated = 0;
+        bool screen_data_valid = false;
+        std::uint64_t last_camera_state_version = 0;
+
+        bool needs_projection_update(std::uint64_t current_frame,
+                                     std::uint64_t camera_version) const {
+            return !screen_data_valid ||
+                   screen_data_frame_updated != current_frame ||
+                   last_camera_state_version != camera_version;
+        }
+
+        void reset(std::uint64_t frame_stamp = 0) {
+            screen = SDL_FPoint{0.0f, 0.0f};
+            parallax_dx = 0.0f;
+            vertical_scale = 1.0f;
+            horizon_fade_alpha = 1.0f;
+            perspective_scale = 1.0f;
+            distance_to_camera = 0.0f;
+            tilt_radians = 0.0f;
+            on_screen = false;
+            screen_data_frame_updated = frame_stamp;
+            screen_data_valid = false;
+        }
+
+        void invalidate() {
+            screen_data_valid = false;
+        }
+
+        void mark_updated(std::uint64_t frame) {
+            screen_data_frame_updated = frame;
+            screen_data_valid = true;
+        }
+
+        bool has_valid_data(std::uint64_t current_frame) const {
+            return screen_data_valid && screen_data_frame_updated == current_frame;
+        }
+    };
 
     GridPoint() = delete;
     GridPoint(int world_x,
@@ -96,19 +140,11 @@ struct GridPoint {
               GridId legacy_id,
               Chunk* owning_chunk,
               GridPoint* parent_point = nullptr,
-              bool is_virtual_point = false)
-        : id(legacy_id)
-        , world_pos_{world_x, world_y, world_z}
-        , resolution_layer_(resolution_layer)
-        , parent_(parent_point)
-        , is_virtual_(is_virtual_point)
-        , is_floor(world_y == 0)
-        , grid_index(grid_idx)
-        , chunk_index(chunk_idx)
-        , chunk(owning_chunk) {}
+              bool is_virtual_point = false);
 
     GridPoint(const GridPoint& other);
-    GridPoint(GridPoint&&) = default;
+    ~GridPoint();
+    GridPoint(GridPoint&&) noexcept;
     GridPoint& operator=(const GridPoint&) = delete;
     GridPoint& operator=(GridPoint&& other) noexcept;
 
@@ -138,14 +174,6 @@ struct GridPoint {
     GridPoint* parent() const { return parent_; }
     bool is_virtual() const { return is_virtual_; }
 
-    enum class RegionKind {
-        Boundary = 0,
-        Room,
-        Trail
-    };
-
-    RegionKind region_kind = RegionKind::Boundary;
-    const Room* region_owner = nullptr; // Non-owning; points to Room that contains this point, if any.
     // True when this grid point represents the ground (floor) for its XZ.
     bool is_floor = false;
 
@@ -198,28 +226,21 @@ struct GridPoint {
     GridCoord        chunk_index  = GridCoord{0, 0};
     Chunk*           chunk        = nullptr;
 
-    // Per-frame camera fields; WarpedScreenGrid must refresh these each rebuild.
-    SDL_FPoint screen             = SDL_FPoint{0.0f, 0.0f};
-    float      parallax_dx        = 0.0f;
-    float      vertical_scale     = 1.0f;
-    float      horizon_fade_alpha = 1.0f;
-    float      near_camera_fade_alpha = 1.0f;
-    float      perspective_scale  = 1.0f;
-    float      distance_to_camera = 0.0f;
-    float      tilt_radians       = 0.0f;
-    bool       on_screen          = false;
-
-    mutable std::uint64_t screen_data_frame_updated = 0;
-    mutable bool          screen_data_valid         = false;
-    mutable std::uint64_t last_camera_state_version_ = 0;
-    mutable std::uint64_t last_region_query_stamp = 0;
+    // Per-frame camera projection and screen cache data.
+    const ProjectionCache& projection_cache() const { return projection_; }
+    ProjectionCache& mutable_projection_cache() { return projection_; }
+    SDL_FPoint screen_position() const { return projection_.screen; }
+    float perspective_scale() const { return projection_.perspective_scale; }
+    float vertical_scale() const { return projection_.vertical_scale; }
+    float horizon_fade_alpha() const { return projection_.horizon_fade_alpha; }
+    float distance_to_camera() const { return projection_.distance_to_camera; }
+    float tilt_radians() const { return projection_.tilt_radians; }
+    bool is_on_screen() const { return projection_.on_screen; }
 
     // Smart caching: returns true if projection calculation is needed
     bool needs_projection_update(std::uint64_t current_frame,
                                  std::uint64_t camera_version) const {
-        return !screen_data_valid ||
-               screen_data_frame_updated != current_frame ||
-               last_camera_state_version_ != camera_version;
+        return projection_.needs_projection_update(current_frame, camera_version);
     }
 
     // Self-contained projection: GridPoint calculates its own screen position
@@ -235,31 +256,20 @@ struct GridPoint {
     friend void swap(GridPoint& a, GridPoint& b) noexcept;
 
     void reset_frame_state(std::uint64_t frame_stamp = 0) {
-        screen             = SDL_FPoint{0.0f, 0.0f};
-        parallax_dx        = 0.0f;
-        vertical_scale     = 1.0f;
-        horizon_fade_alpha = 1.0f;
-        near_camera_fade_alpha = 1.0f;
-        perspective_scale  = 1.0f;
-        distance_to_camera = 0.0f;
-        tilt_radians       = 0.0f;
-        on_screen          = false;
         is_floor           = (world_position().y == 0);
-        screen_data_frame_updated = frame_stamp;
-        screen_data_valid  = false;
+        projection_.reset(frame_stamp);
     }
 
     void invalidate_screen_data() {
-        screen_data_valid = false;
+        projection_.invalidate();
     }
 
     void mark_screen_data_updated(std::uint64_t frame) {
-        screen_data_frame_updated = frame;
-        screen_data_valid = true;
+        projection_.mark_updated(frame);
     }
 
     bool has_valid_screen_data(std::uint64_t current_frame) const {
-        return screen_data_valid && screen_data_frame_updated == current_frame;
+        return projection_.has_valid_data(current_frame);
     }
 
     // Asset/branch tracking: occupants remain the canonical list; branch bits mark active 3D children.
@@ -350,19 +360,7 @@ struct GridPoint {
         return !occupants.empty() || children_with_assets > 0 || active_child_mask != 0;
     }
 
-    std::string debug_identity_and_mask() const {
-        // Compact identity + branch state for dev tools / logging.
-        const axis::WorldPos canonical = world_position();
-        return "id=" + std::to_string(id) +
-               " world=(" + std::to_string(canonical.x) + "," + std::to_string(canonical.y) + "," + std::to_string(canonical.z) + ")" +
-               " layer=" + std::to_string(resolution_layer_) +
-               " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.z) + ")" +
-               " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.z) + ")" +
-               (is_virtual_ ? " virtual=1" : " virtual=0") +
-               " assets=" + std::to_string(occupants.size()) +
-               " children_with_assets=" + std::to_string(children_with_assets) +
-               " mask=0x" + to_hex(active_child_mask);
-    }
+    std::string debug_identity_and_mask() const;
 
     std::vector<std::unique_ptr<Asset>> occupants;
     int children_with_assets = 0;       // Count of direct children marked active (assets or active sub-branches).
@@ -394,6 +392,7 @@ private:
     int resolution_layer_ = 0;
     GridPoint* parent_    = nullptr;
     bool is_virtual_      = false;
+    ProjectionCache projection_{};
 
     // Non-owning hierarchy links; Map Grid owns nodes, Screen Grid only references.
     GridPoint* x_child_neg_ = nullptr;

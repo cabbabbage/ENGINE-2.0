@@ -5,7 +5,6 @@
 #include <SDL3/SDL_gpu.h>
 
 #include "assets/asset/Asset.hpp"
-#include "assets/asset_filter_tags.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/dev_ui_settings.hpp"
@@ -61,18 +60,11 @@ constexpr const char* kSettingsMapAssetsKey = "dev.asset_filter.map_assets";
 constexpr const char* kSettingsCurrentRoomKey = "dev.asset_filter.current_room";
 constexpr const char* kSettingsFogKey = "dev.asset_filter.fog";
 constexpr const char* kSettingsFiltersExpandedKey = "dev.asset_filter.filters_expanded";
-constexpr const char* kSettingsMethodPrefix = "dev.asset_filter.methods.";
 
 std::string make_type_setting_key(const std::string& type) {
     std::string canonical = asset_types::canonicalize(type);
     std::string key = "dev.asset_filter.types.";
     key += canonical;
-    return key;
-}
-
-std::string make_method_setting_key(const std::string& method) {
-    std::string key = kSettingsMethodPrefix;
-    key += asset_filters::canonicalize_spawn_method(method);
     return key;
 }
 
@@ -398,34 +390,6 @@ void OtherSettingsAndControls::initialize() {
     }
     entries_.push_back(std::move(fog_entry));
 
-    static const std::vector<std::string> kSpawnMethods = {
-        "Random",
-        "Perimeter",
-        "Edge",
-        "Exact",
-        "Exact Position",
-        "Percent",
-        "Center",
-        "ChildRandom",
-};
-
-    std::unordered_set<std::string> known_methods;
-    known_methods.reserve(kSpawnMethods.size());
-    for (const std::string& method : kSpawnMethods) {
-        const std::string canonical = canonicalize_method(method);
-        FilterEntry entry;
-        entry.id = canonical;
-        entry.kind = FilterKind::SpawnMethod;
-        bool checkbox_value = default_method_enabled(canonical);
-        if (use_saved_state) {
-            checkbox_value = load_method_filter_value(canonical, checkbox_value);
-        }
-        entry.checkbox = std::make_unique<DMCheckbox>(format_method_label(method), checkbox_value);
-        state_ref.method_filters[canonical] = checkbox_value;
-        known_methods.insert(canonical);
-        entries_.push_back(std::move(entry));
-    }
-
     const auto all_types = asset_types::all_as_strings();
     std::unordered_set<std::string> known_types;
     known_types.reserve(all_types.size());
@@ -449,13 +413,6 @@ void OtherSettingsAndControls::initialize() {
         for (auto it = state_ref.type_filters.begin(); it != state_ref.type_filters.end();) {
             if (known_types.find(it->first) == known_types.end()) {
                 it = state_ref.type_filters.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        for (auto it = state_ref.method_filters.begin(); it != state_ref.method_filters.end();) {
-            if (known_methods.find(it->first) == known_methods.end()) {
-                it = state_ref.method_filters.erase(it);
             } else {
                 ++it;
             }
@@ -1154,9 +1111,6 @@ void OtherSettingsAndControls::reset() {
             case FilterKind::Type:
                 entry.checkbox->set_value(default_type_enabled(entry.id));
                 break;
-            case FilterKind::SpawnMethod:
-                entry.checkbox->set_value(default_method_enabled(entry.id));
-                break;
         }
     }
     FilterState& state_ref = mutable_state();
@@ -1166,19 +1120,11 @@ void OtherSettingsAndControls::reset() {
     for (auto& kv : state_ref.type_filters) {
         kv.second = default_type_enabled(kv.first);
     }
-    for (auto& kv : state_ref.method_filters) {
-        kv.second = default_method_enabled(kv.first);
-    }
     sync_state_from_ui();
     notify_state_changed();
 }
 
 bool OtherSettingsAndControls::default_type_enabled(const std::string& type) const {
-    return true;
-}
-
-bool OtherSettingsAndControls::default_method_enabled(const std::string& method) const {
-    (void)method;
     return true;
 }
 
@@ -1200,11 +1146,11 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
     if (!type.empty() && !type_filter_enabled(type)) {
         return false;
     }
-    const std::string& method = asset.filter_method_tag();
-    if (!method.empty() && !method_filter_enabled(method)) {
-        return false;
-    }
-    const bool is_map_asset = !asset.spawn_id.empty() && map_spawn_ids_.find(asset.spawn_id) != map_spawn_ids_.end();
+    const std::string& method_tag = asset.filter_method_tag();
+    const bool is_map_wide_method = (method_tag == "mapwide");
+    const bool is_map_asset = is_map_wide_method ||
+                              (!asset.spawn_id.empty() &&
+                               map_spawn_ids_.find(asset.spawn_id) != map_spawn_ids_.end());
     const FilterState& state_ref = state();
     if (is_map_asset && !state_ref.map_assets) {
         return false;
@@ -1265,9 +1211,6 @@ void OtherSettingsAndControls::sync_state_from_ui() {
             break;
         case FilterKind::Type:
             state_ref.type_filters[entry.id] = value;
-            break;
-        case FilterKind::SpawnMethod:
-            state_ref.method_filters[entry.id] = value;
             break;
         }
     }
@@ -1966,27 +1909,11 @@ bool OtherSettingsAndControls::type_filter_enabled(const std::string& type) cons
     return it->second;
 }
 
-bool OtherSettingsAndControls::method_filter_enabled(const std::string& method) const {
-    const FilterState& state_ref = state();
-    auto it = state_ref.method_filters.find(method);
-    if (it == state_ref.method_filters.end()) {
-        return true;
-    }
-    return it->second;
-}
-
 bool OtherSettingsAndControls::load_type_filter_value(const std::string& type, bool default_value) const {
     if (!has_saved_state_) {
         return default_value;
     }
     return devmode::ui_settings::load_bool(make_type_setting_key(type), default_value);
-}
-
-bool OtherSettingsAndControls::load_method_filter_value(const std::string& method, bool default_value) const {
-    if (!has_saved_state_) {
-        return default_value;
-    }
-    return devmode::ui_settings::load_bool(make_method_setting_key(method), default_value);
 }
 
 std::string OtherSettingsAndControls::format_type_label(const std::string& type) const {
@@ -1999,49 +1926,6 @@ std::string OtherSettingsAndControls::format_type_label(const std::string& type)
     });
     label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
     return label;
-}
-
-std::string OtherSettingsAndControls::format_method_label(const std::string& method) const {
-    if (method.empty()) {
-        return std::string{};
-    }
-    std::string label;
-    label.reserve(method.size() + 4);
-    char prev = '\0';
-    for (unsigned char ch : method) {
-        if (ch == '_' || ch == '-') {
-            if (!label.empty() && label.back() != ' ') {
-                label.push_back(' ');
-            }
-            prev = ch;
-            continue;
-        }
-        if (std::isupper(ch) && !label.empty() &&
-            (std::islower(static_cast<unsigned char>(prev)) || std::isdigit(static_cast<unsigned char>(prev)))) {
-            label.push_back(' ');
-        }
-        label.push_back(static_cast<char>(ch));
-        prev = static_cast<char>(ch);
-    }
-    bool start = true;
-    for (char& ch : label) {
-        unsigned char uch = static_cast<unsigned char>(ch);
-        if (std::isspace(uch)) {
-            start = true;
-            continue;
-        }
-        if (start) {
-            ch = static_cast<char>(std::toupper(uch));
-            start = false;
-        } else {
-            ch = static_cast<char>(std::tolower(uch));
-        }
-    }
-    return label;
-}
-
-std::string OtherSettingsAndControls::canonicalize_method(const std::string& method) {
-    return asset_filters::canonicalize_spawn_method(method);
 }
 
 void OtherSettingsAndControls::collect_spawn_ids(const nlohmann::json& node, std::unordered_set<std::string>& out) const {
@@ -2075,7 +1959,6 @@ void OtherSettingsAndControls::load_persisted_state() {
     ensure_persistent_state_loaded();
     FilterState& state_ref = mutable_state();
     state_ref.type_filters.clear();
-    state_ref.method_filters.clear();
     has_saved_state_ = persistent_state_initialized_flag();
     if (!has_saved_state_) {
         state_ref.map_assets = true;
@@ -2098,9 +1981,6 @@ void OtherSettingsAndControls::persist_state() {
     devmode::ui_settings::save_bool(kSettingsFogKey, state_ref.fog);
     for (const auto& kv : state_ref.type_filters) {
         devmode::ui_settings::save_bool(make_type_setting_key(kv.first), kv.second);
-    }
-    for (const auto& kv : state_ref.method_filters) {
-        devmode::ui_settings::save_bool(make_method_setting_key(kv.first), kv.second);
     }
     has_saved_state_ = true;
     persistent_state_initialized_flag() = true;

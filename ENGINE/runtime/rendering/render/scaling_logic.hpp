@@ -82,10 +82,37 @@ struct ScalingLogic {
         bool has_custom_steps() const { return !steps.empty(); }
 };
 
-    static constexpr ::std::size_t kMaxVariantCount     = 5;
-    static constexpr ::std::size_t kDefaultVariantCount = 4;
+    static inline ScaleSteps EvenScaleSteps(::std::size_t count, float max_scale = 1.0f, float min_scale = 0.1f) {
+        ScaleSteps steps;
+        if (count == 0) {
+            return steps;
+        }
+        if (!::std::isfinite(max_scale) || max_scale <= 0.0f) {
+            max_scale = 1.0f;
+        }
+        if (!::std::isfinite(min_scale) || min_scale <= 0.0f) {
+            min_scale = 0.1f;
+        }
+        if (min_scale > max_scale) {
+            ::std::swap(min_scale, max_scale);
+        }
+        if (count == 1) {
+            steps.push_back(max_scale);
+            return steps;
+        }
+        const float delta = (max_scale - min_scale) / static_cast<float>(count - 1);
+        steps.reserve(count);
+        for (::std::size_t idx = 0; idx < count; ++idx) {
+            const float value = max_scale - static_cast<float>(idx) * delta;
+            steps.push_back(::std::clamp(value, min_scale, max_scale));
+        }
+        return steps;
+    }
+
+    static constexpr ::std::size_t kMaxVariantCount     = 10;
+    static constexpr ::std::size_t kDefaultVariantCount = 10;
     static inline const ScaleSteps& DefaultScaleSteps() {
-        static const ScaleSteps kDefaultSteps = {0.75f, 0.50f, 0.25f, 0.10f};
+        static const ScaleSteps kDefaultSteps = EvenScaleSteps(kDefaultVariantCount, 1.0f, 0.1f);
         return kDefaultSteps;
     }
 

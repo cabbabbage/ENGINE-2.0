@@ -13,7 +13,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - SDL3-based 2D engine; content lives in external JSON-driven files for maps, assets, lighting, and animations.
 - Manifest-driven loading keeps game data out of the executable so asset changes do not require recompiles.
 - Dev Mode ships in-engine for editing rooms, lighting, assets, and spawns with immediate write-through to content files.
-- Asset tools regenerate animation and lighting caches from manifest flags to keep generated art in sync.
+- Asset tools regenerate animation and lighting caches from explicit requests and missing-file repair.
 
 ## Project Layout
 - `ENGINE/runtime/`: Runtime source for assets, controllers, rendering, UI, and shared utilities.
@@ -22,7 +22,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - `cache/`: Generated texture/cache exports produced by cache tooling.
 - `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
 - `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
-- `ENGINE/tools/`: C++ cache utilities like `asset_tool_cli`, `set_rebuild_cli`, and `apply_effects_cli`.
+- `ENGINE/tools/`: C++ cache utilities like `asset_tool_cli` and `apply_effects_cli`.
 - `vcpkg/`, `external/`: Dependency management and bundled libs.
 
 ## Running
@@ -36,7 +36,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 
 ## Custom Controllers
 - Add new controllers under `ENGINE/runtime/animation/controllers/custom_controllers/` and register them in `ControllerFactory::create_by_key`.
-- Link from content with `"custom_controller_key": "YourController"` in an asset `info.json` or via the Dev Mode editors.
+- Controllers are linked by asset name (for example, asset `spider` maps to `spider_controller`).
 
 ## Testing
 - Build tests: `cmake --build --preset windows-vcpkg-release --target engine_tests`

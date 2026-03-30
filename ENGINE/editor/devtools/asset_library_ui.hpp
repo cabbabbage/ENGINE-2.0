@@ -102,11 +102,14 @@ private:
     void begin_bulk_delete(std::vector<PendingDeleteInfo> requests);
     void execute_bulk_delete_queue();
     void perform_delete(const PendingDeleteInfo& pending, bool defer_multi_select_refresh = false);
+    void handle_repair_refresh_button_pressed();
 
 private:
     std::unique_ptr<DockableCollapsible> floating_;
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<class ButtonWidget> add_button_widget_;
+    std::unique_ptr<DMButton> repair_refresh_button_;
+    std::unique_ptr<class ButtonWidget> repair_refresh_button_widget_;
     std::unique_ptr<DMButton> multi_select_button_;
     std::unique_ptr<class ButtonWidget> multi_select_button_widget_;
     std::unique_ptr<DMButton> delete_all_button_;

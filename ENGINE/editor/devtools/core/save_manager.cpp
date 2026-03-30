@@ -1,7 +1,6 @@
 #include "save_manager.hpp"
 
 #include <algorithm>
-#include <cstdint>
 #include <iostream>
 #include <unordered_set>
 
@@ -12,30 +11,9 @@
 namespace devmode::core {
 
 namespace {
-const char* map_write_path_name(SaveManager::MapWritePath path) {
-    switch (path) {
-        case SaveManager::MapWritePath::FrameEditorTag: return "frame-editor-tag";
-        case SaveManager::MapWritePath::Default:
-        default: return "default";
-    }
-}
-
-const char* map_write_reason(SaveManager::MapWritePath path) {
-    switch (path) {
-        case SaveManager::MapWritePath::FrameEditorTag: return "SaveManager::persist_map_entry(frame-editor-tag)";
-        case SaveManager::MapWritePath::Default:
-        default: return "SaveManager::persist_map_entry";
-    }
-}
-
-std::uint64_t extract_save_manager_version(const nlohmann::json& entry) {
-    const auto it = entry.find("_save_manager_version");
-    if (it == entry.end() || !it->is_number_unsigned()) {
-        return 0;
-    }
-    return it->get<std::uint64_t>();
-}
-
+constexpr const char* kMapPersistGuardReason = "SaveManager::persist_map_entry";
+constexpr const char* kManifestFlushIntentKey = "save-manager:manifest-flush";
+constexpr const char* kManifestFlushLabel = "Manifest flush";
 }
 
 void SaveManager::set_manifest_store(ManifestStore* store) {
@@ -92,11 +70,31 @@ bool SaveManager::has_dirty_saveables() const {
     return false;
 }
 
-bool SaveManager::flush_manifest_stage(const std::string& reason) {
-    if (!store_ || !coordinator_) {
+bool SaveManager::request_manifest_flush(DevSaveCoordinator::Priority priority,
+                                         const std::string& reason) {
+    if (!store_) {
         return false;
     }
-    coordinator_->flush_now(reason.empty() ? "SaveManager manifest stage" : reason);
+
+    if (priority == DevSaveCoordinator::Priority::Immediate) {
+        // Immediate flushes happen at one explicit exit point in save_dirty().
+        return true;
+    }
+
+    if (coordinator_) {
+        coordinator_->enqueue_custom(
+            DevSaveCoordinator::IntentKind::Custom,
+            kManifestFlushIntentKey,
+            [](ManifestStore& store) {
+                // Count as a write only when there is dirty manifest state to flush.
+                return store.dirty();
+            },
+            DevSaveCoordinator::Priority::Debounced,
+            reason.empty() ? kManifestFlushLabel : reason);
+        return true;
+    }
+
+    store_->flush();
     return true;
 }
 
@@ -127,71 +125,59 @@ bool SaveManager::save_dirty(DevSaveCoordinator::Priority priority, const std::s
     manifest_success.reserve(dirty.size());
 
     batch_save_active_ = true;
+    struct BatchResetGuard {
+        bool& active;
+        ~BatchResetGuard() { active = false; }
+    } reset_guard{batch_save_active_};
 
     // Stage 1: Manifest
-    {
-        const auto suppression = coordinator_ ? coordinator_->scoped_flush_suppression()
-                                              : DevSaveCoordinator::ScopedFlushSuppression{};
-        for (const auto& ref : dirty) {
-            const Saveable& saveable = ref.get();
-            if (saveable.stage != Stage::Manifest) {
-                continue;
-            }
-            if (saveable.save && saveable.save(priority)) {
-                manifest_success.insert(saveable.id);
-                any_saved = true;
-            }
+    for (const auto& ref : dirty) {
+        const Saveable& saveable = ref.get();
+        if (saveable.stage != Stage::Manifest) {
+            continue;
+        }
+        if (saveable.save && saveable.save(priority)) {
+            manifest_success.insert(saveable.id);
+            any_saved = true;
         }
     }
 
     if (!manifest_success.empty()) {
-        if (coordinator_) {
-            flush_manifest_stage(reason.empty() ? "SaveManager manifest flush" : reason);
-        } else if (store_) {
-            store_->flush();
-        }
+        request_manifest_flush(priority, reason.empty() ? "SaveManager manifest flush" : reason);
     }
 
     // Stage 2: Cache (only entries with successful manifest stage)
-    {
-        const auto suppression = coordinator_ ? coordinator_->scoped_flush_suppression()
-                                              : DevSaveCoordinator::ScopedFlushSuppression{};
-        for (const auto& ref : dirty) {
-            const Saveable& saveable = ref.get();
-            if (saveable.stage != Stage::Cache) {
-                continue;
-            }
-            if (manifest_success.find(saveable.id) == manifest_success.end()) {
-                continue;
-            }
-            if (saveable.save && saveable.save(priority)) {
-                any_saved = true;
-            }
+    for (const auto& ref : dirty) {
+        const Saveable& saveable = ref.get();
+        if (saveable.stage != Stage::Cache) {
+            continue;
+        }
+        if (manifest_success.find(saveable.id) == manifest_success.end()) {
+            continue;
+        }
+        if (saveable.save && saveable.save(priority)) {
+            any_saved = true;
         }
     }
 
     // Stage 3: Post
-    {
-        const auto suppression = coordinator_ ? coordinator_->scoped_flush_suppression()
-                                              : DevSaveCoordinator::ScopedFlushSuppression{};
-        for (const auto& ref : dirty) {
-            const Saveable& saveable = ref.get();
-            if (saveable.stage != Stage::Post) {
-                continue;
-            }
-            if (saveable.save && saveable.save(priority)) {
-                any_saved = true;
-            }
+    for (const auto& ref : dirty) {
+        const Saveable& saveable = ref.get();
+        if (saveable.stage != Stage::Post) {
+            continue;
+        }
+        if (saveable.save && saveable.save(priority)) {
+            any_saved = true;
         }
     }
 
-    batch_save_active_ = false;
-
     if (priority == DevSaveCoordinator::Priority::Immediate) {
+        // Explicit immediate flush path for SaveManager-driven writes.
+        if (store_) {
+            store_->flush();
+        }
         if (coordinator_) {
             coordinator_->flush_now(reason.empty() ? "SaveManager immediate completion" : reason);
-        } else if (store_) {
-            store_->flush();
         }
     }
 
@@ -202,69 +188,10 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
                                     nlohmann::json payload,
                                     DevSaveCoordinator::Priority priority,
                                     const std::string& label,
-                                    std::function<void()> on_success,
-                                    MapWritePath path) {
+                                    std::function<void()> on_success) {
     if (map_id.empty()) {
         std::cerr << "[SaveManager] Map identifier is empty; cannot persist map entry\n";
         return false;
-    }
-
-    std::cerr << "[SaveManager] Persist map entry requested: map='" << map_id
-              << "' path='" << map_write_path_name(path) << "' label='" << label << "'"
-              << (batch_save_active_ ? " during batch save" : "") << "\n";
-
-    if (path == MapWritePath::FrameEditorTag) {
-        const std::uint64_t next_version = extract_save_manager_version(payload) + 1;
-        payload["_save_manager_version"] = next_version;
-        std::cerr << "[SaveManager] FRAME-EDITOR EXCEPTION PATH: map '" << map_id
-                  << "' assigned version " << next_version << "\n";
-    }
-
-    if (batch_save_active_) {
-        if (!store_) {
-            std::cerr << "[SaveManager] Manifest store unavailable; cannot persist map entry\n";
-            return false;
-        }
-
-        if (path != MapWritePath::FrameEditorTag) {
-            if (const nlohmann::json* latest = store_->find_map_entry(map_id)) {
-                const std::uint64_t payload_version = extract_save_manager_version(payload);
-                const std::uint64_t latest_version = extract_save_manager_version(*latest);
-                if (latest_version > payload_version) {
-                    std::cerr << "[SaveManager] FRAME-EDITOR EXCEPTION PATH: stale batch payload for '"
-                              << map_id << "' (payload=" << payload_version
-                              << ", manifest=" << latest_version
-                              << ") - preserving newer manifest entry\n";
-                    payload = *latest;
-                }
-            }
-        }
-
-        if (!store_->update_map_entry(map_id, payload)) {
-            return false;
-        }
-        if (on_success) {
-            on_success();
-        }
-        return true;
-    }
-
-    if (coordinator_) {
-        coordinator_->enqueue_custom(
-            DevSaveCoordinator::IntentKind::MapEntry,
-            "map:" + map_id,
-            [map_id, payload = std::move(payload), path](ManifestStore& store) {
-                auto guard = store.scoped_guard(map_write_reason(path));
-                (void)guard;
-                return store.update_map_entry(map_id, payload);
-            },
-            priority,
-            label.empty() ? std::string("Map ") + map_id : label,
-            std::move(on_success));
-        if (priority == DevSaveCoordinator::Priority::Immediate) {
-            coordinator_->flush_now(label);
-        }
-        return true;
     }
 
     if (!store_) {
@@ -272,17 +199,31 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         return false;
     }
 
-    if (!store_->update_map_entry(map_id, payload)) {
+    ManifestStore::MapPersistOptions write_options;
+    write_options.flush = false;
+    write_options.guard_reason = kMapPersistGuardReason;
+    if (!store_->persist_map_entry(map_id, payload, write_options)) {
         return false;
     }
-    if (priority == DevSaveCoordinator::Priority::Immediate) {
-        auto immediate_guard = store_->scoped_guard(map_write_reason(path));
-        (void)immediate_guard;
-        store_->flush();
-    }
+
     if (on_success) {
         on_success();
     }
+
+    if (batch_save_active_) {
+        return true;
+    }
+
+    const std::string flush_reason = label.empty() ? std::string("Map ") + map_id : label;
+    if (priority == DevSaveCoordinator::Priority::Immediate) {
+        store_->flush();
+        if (coordinator_) {
+            coordinator_->flush_now(flush_reason);
+        }
+    } else {
+        request_manifest_flush(priority, flush_reason);
+    }
+
     return true;
 }
 

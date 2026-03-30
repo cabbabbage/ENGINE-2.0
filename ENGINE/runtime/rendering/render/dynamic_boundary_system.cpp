@@ -52,11 +52,12 @@ struct BoundaryScaleResult {
     int variant_index = 0;
 };
 
-BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::BoundaryCandidate& candidate,
+BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::BoundaryAssetRuntime& candidate,
                                                  const WarpedScreenGrid& cam,
                                                  const Assets* assets,
                                                  const SDL_FPoint& world_pos,
                                                  int world_z) {
+    (void)assets;
     if (!candidate.info) {
         return BoundaryScaleResult{};
     }
@@ -71,27 +72,19 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
         : 1.0f;
     const float current_scale = base_scale * perspective_scale;
 
-    float camera_scale = 1.0f;
-    if (assets) {
-        camera_scale = static_cast<float>(std::max(0.0001, assets->getView().get_scale()));
-        if (!std::isfinite(camera_scale) || camera_scale <= 0.0f) {
-            camera_scale = 1.0f;
-        }
-    }
-
-    float desired_variant_scale = current_scale / camera_scale;
+    // Match runtime assets: pick the nearest larger variant for this draw scale
+    // and only upscale if every variant is smaller than the target.
+    float desired_variant_scale = current_scale;
     if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
-        desired_variant_scale = current_scale;
+        desired_variant_scale = 1.0f;
     }
 
-    const auto& steps = (!candidate.info->scale_variants.empty())
-        ? candidate.info->scale_variants
-        : render_pipeline::ScalingLogic::DefaultScaleSteps();
+    const auto& steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
 
     auto selection = render_pipeline::ScalingLogic::Choose(desired_variant_scale,
                                                            steps,
                                                            candidate.hysteresis_state,
-                                                           current_scale,
+                                                           desired_variant_scale,
                                                            render_pipeline::ScalingLogic::HysteresisOptions{});
     candidate.hysteresis_state.last_index = selection.index;
     candidate.hysteresis_state.min_scale = selection.hysteresis_min;
@@ -139,7 +132,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                                    world::WorldGrid& grid,
                                    Assets* assets,
                                    float delta_ms) {
-    static int s_debug_frame_counter = 0;
     active_boundary_sprites_.clear();
     if (!initialized_ || !renderer_ || !asset_library_ || !assets) {
         return;
@@ -181,6 +173,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const world::GridPoint grid_origin = grid.origin();
     const float spacing_multiplier = render_overlay::clamp_spacing_multiplier(config().grid_spacing_multiplier);
     const std::vector<Room*>& rooms = assets->rooms();
+    const auto& asset_catalog = asset_library_->all();
+    const vibble::spawn::RuntimeCandidates::AssetCatalogView boundary_catalog{&asset_catalog, true};
     const std::size_t rooms_hash = compute_rooms_topology_hash(assets);
     ensure_region_cache_valid(grid, rooms, rooms_hash, spacing_multiplier);
 
@@ -261,12 +255,14 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 for (int iy = start_idx_y; iy <= end_idx_y; ++iy) {
                     const int world_z = grid_origin.world_z() + iy * grid_spacing;
                     const BoundaryKey key = make_key(static_cast<int>(type_idx), resolution_layer, ix, iy, world_z);
-                    const int candidate_idx = select_candidate_for_key(key, btype);
-                    if (candidate_idx < 0 || candidate_idx >= static_cast<int>(btype.candidates.size())) {
+                    const BoundaryAssignment& assignment =
+                        select_candidate_for_key(key, btype, boundary_catalog);
+                    if (assignment.is_null || assignment.resolved_asset_name.empty()) {
                         continue;
                     }
-                    BoundaryCandidate& candidate = btype.candidates[candidate_idx];
-                    if (candidate.is_null || candidate.frames.empty()) {
+                    BoundaryAssetRuntime* candidate_runtime =
+                        ensure_candidate_runtime(btype, assignment.resolved_asset_name);
+                    if (!candidate_runtime || candidate_runtime->is_null || candidate_runtime->frames.empty()) {
                         continue;
                     }
 
@@ -282,7 +278,13 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                         continue;
                     }
 
-                    static_assignments_.push_back(StaticCellAssignment{key, candidate_idx, static_cast<int>(type_idx), world_pos, static_cast<int>(std::lround(jittered_z))});
+                    static_assignments_.push_back(StaticCellAssignment{
+                        key,
+                        assignment,
+                        static_cast<int>(type_idx),
+                        world_pos,
+                        static_cast<int>(std::lround(jittered_z))
+                    });
                 }
             }
         }
@@ -294,24 +296,13 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             continue;
         }
         BoundaryType& btype = boundary_types_[assignment.boundary_type_index];
-        if (assignment.candidate_index < 0 || assignment.candidate_index >= static_cast<int>(btype.candidates.size())) {
+        if (assignment.assignment.is_null || assignment.assignment.resolved_asset_name.empty()) {
             continue;
         }
-        BoundaryCandidate& candidate = btype.candidates[assignment.candidate_index];
-        if (candidate.is_null || candidate.frames.empty()) {
+        BoundaryAssetRuntime* candidate =
+            ensure_candidate_runtime(btype, assignment.assignment.resolved_asset_name);
+        if (!candidate || candidate->is_null || candidate->frames.empty()) {
             continue;
-        }
-
-        const world::GridPoint virtual_point =
-            world::GridPoint::make_virtual(static_cast<int>(std::lround(assignment.world_pos.x)),
-                                           static_cast<int>(std::lround(assignment.world_pos.y)),
-                                           assignment.world_z,
-                                           assignment.key.resolution_layer);
-        const world::GridKey virtual_key =
-            grid.grid_key_from_world(virtual_point, assignment.key.resolution_layer);
-        if (world::GridPoint* gp = grid.find_grid_point(virtual_key)) {
-            gp->region_kind = world::GridPoint::RegionKind::Boundary;
-            gp->region_owner = nullptr;
         }
 
         SDL_FPoint screen_pos{};
@@ -324,13 +315,13 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
 
         auto& frame_state = animation_states_[assignment.key];
         frame_state.elapsed_ms += delta_ms;
-        const int total_frames = static_cast<int>(candidate.frames.size());
+        const int total_frames = static_cast<int>(candidate->frames.size());
         if (total_frames <= 0) {
             continue;
         }
 
         int current_index = frame_state.frame_index % total_frames;
-        float frame_duration = candidate.frames[current_index].duration_ms;
+        float frame_duration = candidate->frames[current_index].duration_ms;
         if (!(frame_duration > 0.0f)) {
             frame_duration = kDefaultAnimationFrameMs;
         }
@@ -338,16 +329,16 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             frame_state.elapsed_ms -= frame_duration;
             current_index = (current_index + 1) % total_frames;
             frame_state.frame_index = current_index;
-            frame_duration = candidate.frames[current_index].duration_ms;
+            frame_duration = candidate->frames[current_index].duration_ms;
             if (!(frame_duration > 0.0f)) {
                 frame_duration = kDefaultAnimationFrameMs;
             }
         }
 
         frame_state.frame_index = current_index;
-        const BoundaryFrame& active_frame = candidate.frames[current_index];
+        const BoundaryFrame& active_frame = candidate->frames[current_index];
         const BoundaryScaleResult scale_result =
-            compute_boundary_asset_scale(candidate, cam, assets, assignment.world_pos, assignment.world_z);
+            compute_boundary_asset_scale(*candidate, cam, assets, assignment.world_pos, assignment.world_z);
         const int variant_index = scale_result.variant_index;
         const auto& variants = active_frame.variants;
         const BoundaryFrameVariant* frame_variant = nullptr;
@@ -371,6 +362,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         SDL_Texture* texture = frame_variant->texture;
         BoundarySprite sprite;
         sprite.texture = texture;
+        sprite.spawn_id = btype.spawn_id;
+        sprite.asset_name = assignment.assignment.resolved_asset_name;
         sprite.world_pos = assignment.world_pos;
         sprite.screen_pos = screen_pos;
         sprite.world_z = assignment.world_z;
@@ -396,7 +389,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             continue;
         }
         sprite.boundary_type_index = assignment.boundary_type_index;
-        sprite.candidate_index = assignment.candidate_index;
+        sprite.candidate_index = assignment.assignment.candidate_entry_index;
         sprite.current_frame_index = current_index;
         sprite.total_frames = total_frames;
         sprite.frame_duration_ms = frame_duration;
@@ -414,13 +407,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             return a.world_pos.x < b.world_pos.x;
         });
 
-    ++s_debug_frame_counter;
-    if ((s_debug_frame_counter % 120) == 0) {
-        vibble::log::info(std::string{"[DynamicBoundarySystem] frame stats: types="} +
-                          std::to_string(boundary_types_.size()) +
-                          " static_assignments=" + std::to_string(static_assignments_.size()) +
-                          " active_sprites=" + std::to_string(active_boundary_sprites_.size()));
-    }
 }
 
 std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const DynamicBoundarySystem::BoundaryKey& key) const noexcept {
@@ -451,51 +437,55 @@ std::uint64_t DynamicBoundarySystem::hash_key(const BoundaryKey& key) const {
                                           boundary_regen_seed_);
 }
 
-int DynamicBoundarySystem::select_candidate_for_key(const BoundaryKey& key, const BoundaryType& btype) {
+const DynamicBoundarySystem::BoundaryAssignment& DynamicBoundarySystem::select_candidate_for_key(
+    const BoundaryKey& key,
+    BoundaryType& btype,
+    const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog) {
+    static const BoundaryAssignment kNullAssignment{};
     auto it = boundary_assignments_.find(key);
     if (it != boundary_assignments_.end()) {
         return it->second;
     }
-    if (btype.total_chance <= 0 || btype.candidates.empty()) {
-        boundary_assignments_.emplace(key, -1);
-        return -1;
-    }
-    const int roll = render_overlay::hashed_roll(hash_key(key), btype.total_chance);
-    if (roll < 0) {
-        boundary_assignments_.emplace(key, -1);
-        return -1;
+
+    BoundaryAssignment assignment{};
+    const auto resolved = btype.candidates.pick_hashed(
+        hash_key(key), catalog, vibble::spawn::ZeroWeightPolicy::NoSelection);
+    if (resolved && !resolved->is_null && !resolved->resolved_asset_name.empty() && resolved->info) {
+        assignment.candidate_entry_index = resolved->entry_index;
+        assignment.resolved_asset_name = resolved->resolved_asset_name;
+        assignment.is_null = false;
     }
 
-    int cumulative = 0;
-    for (int idx = 0; idx < static_cast<int>(btype.candidates.size()); ++idx) {
-        cumulative += btype.candidates[idx].chance;
-        if (roll < cumulative) {
-            boundary_assignments_.emplace(key, idx);
-            return idx;
-        }
+    auto [inserted_it, inserted] = boundary_assignments_.emplace(key, std::move(assignment));
+    if (!inserted) {
+        return inserted_it->second;
     }
-
-    boundary_assignments_.emplace(key, static_cast<int>(btype.candidates.size()) - 1);
-    return static_cast<int>(btype.candidates.size()) - 1;
+    if (inserted_it == boundary_assignments_.end()) {
+        return kNullAssignment;
+    }
+    return inserted_it->second;
 }
 
 SDL_FPoint DynamicBoundarySystem::sample_jitter_offset(const BoundaryKey& key, float max_jitter) const {
     return render_overlay::jitter_from_hash(hash_key(key), max_jitter);
 }
 
-void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate) {
-    candidate.frames.clear();
-    candidate.is_null = false;
-    if (candidate.asset_name.empty() || candidate.asset_name == "null") {
-        candidate.is_null = true;
+void DynamicBoundarySystem::build_candidate_frames(BoundaryAssetRuntime& candidate_runtime,
+                                                   const std::string& asset_name) {
+    candidate_runtime.frames.clear();
+    candidate_runtime.info.reset();
+    candidate_runtime.hysteresis_state = {};
+    candidate_runtime.is_null = false;
+    if (asset_name.empty() || asset_name == "null") {
+        candidate_runtime.is_null = true;
         return;
     }
     if (!asset_library_) {
-        candidate.is_null = true;
+        candidate_runtime.is_null = true;
         return;
     }
 
-    auto info = asset_library_->get(candidate.asset_name);
+    auto info = asset_library_->get(asset_name);
     if (!info) {
         auto normalize = [](std::string value) {
             std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -503,7 +493,7 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
             });
             return value;
         };
-        const std::string wanted = normalize(candidate.asset_name);
+        const std::string wanted = normalize(asset_name);
         for (const auto& [asset_key, asset_info] : asset_library_->all()) {
             if (!asset_info) {
                 continue;
@@ -512,16 +502,15 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
             const std::string display_name = normalize(asset_info->name);
             if (wanted == key_name || (!display_name.empty() && wanted == display_name)) {
                 info = asset_info;
-                candidate.asset_name = asset_key;
                 break;
             }
         }
     }
     if (!info) {
-        candidate.is_null = true;
+        candidate_runtime.is_null = true;
         return;
     }
-    candidate.info = info;
+    candidate_runtime.info = info;
 
     std::string animation_id = !info->start_animation.empty() ? info->start_animation : "default";
     auto anim_it = info->animations.find(animation_id);
@@ -531,15 +520,15 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
 
     if (anim_it != info->animations.end()) {
         const Animation& animation = anim_it->second;
-        for (const AnimationFrame* frame : animation.frames) {
-            if (!frame || frame->variants.empty()) {
+        for (const AnimationFrame& frame : animation.primary_frames()) {
+            if (frame.variants.empty()) {
                 continue;
             }
             BoundaryFrame boundary_frame;
             boundary_frame.duration_ms = kDefaultAnimationFrameMs;
-            boundary_frame.variants.reserve(frame->variants.size());
+            boundary_frame.variants.reserve(frame.variants.size());
             bool has_texture = false;
-            for (const FrameVariant& variant : frame->variants) {
+            for (const FrameVariant& variant : frame.variants) {
                 if (!variant.base_texture) {
                     boundary_frame.variants.push_back(BoundaryFrameVariant{nullptr, 0, 0});
                     continue;
@@ -556,12 +545,12 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
                 has_texture = true;
             }
             if (has_texture) {
-                candidate.frames.push_back(boundary_frame);
+                candidate_runtime.frames.push_back(boundary_frame);
             }
         }
     }
 
-    if (candidate.frames.empty() && info->preview_texture) {
+    if (candidate_runtime.frames.empty() && info->preview_texture) {
         BoundaryFrame boundary_frame;
         boundary_frame.duration_ms = kDefaultAnimationFrameMs;
         BoundaryFrameVariant frame_variant;
@@ -573,12 +562,33 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
             frame_variant.height = static_cast<int>(std::lround(hf));
         }
         boundary_frame.variants.push_back(frame_variant);
-        candidate.frames.push_back(boundary_frame);
+        candidate_runtime.frames.push_back(boundary_frame);
     }
 
-    if (candidate.frames.empty()) {
-        candidate.is_null = true;
+    if (candidate_runtime.frames.empty()) {
+        candidate_runtime.is_null = true;
     }
+}
+
+DynamicBoundarySystem::BoundaryAssetRuntime* DynamicBoundarySystem::ensure_candidate_runtime(
+    BoundaryType& type,
+    const std::string& asset_name) {
+    if (asset_name.empty()) {
+        return nullptr;
+    }
+    auto it = type.candidate_runtime_by_asset.find(asset_name);
+    if (it != type.candidate_runtime_by_asset.end()) {
+        return &it->second;
+    }
+
+    BoundaryAssetRuntime runtime{};
+    build_candidate_frames(runtime, asset_name);
+    auto [inserted_it, inserted] =
+        type.candidate_runtime_by_asset.emplace(asset_name, std::move(runtime));
+    if (!inserted) {
+        return &inserted_it->second;
+    }
+    return &inserted_it->second;
 }
 
 void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& boundary_data) {
@@ -631,32 +641,13 @@ void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& boundary
         }
         jitter_px = static_cast<int>(render_overlay::clamp_random_jitter(static_cast<float>(jitter_px)));
         type.jitter = jitter_px;
-
-        int total_chance = 0;
         const auto candidates_it = selector.find("candidates");
         if (candidates_it == selector.end() || !candidates_it->is_array()) {
             continue;
         }
-        for (const auto& candidate_json : *candidates_it) {
-            if (!candidate_json.is_object()) {
-                continue;
-            }
-            BoundaryCandidate candidate;
-            candidate.asset_name = candidate_json.value("name",
-                                                       candidate_json.value("asset_name", std::string{}));
-            candidate.chance = candidate_json.value("chance", 0);
-            if (candidate.chance <= 0) {
-                continue;
-            }
-            build_candidate_frames(candidate);
-            if (!candidate.is_null && candidate.frames.empty()) {
-                continue;
-            }
-            total_chance += candidate.chance;
-            type.candidates.push_back(std::move(candidate));
-        }
-        type.total_chance = total_chance;
-        if (!type.candidates.empty() && type.total_chance > 0) {
+        type.candidates = vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
+        type.candidate_runtime_by_asset.clear();
+        if (!type.candidates.empty()) {
             parsed_types.push_back(std::move(type));
         }
     }

@@ -416,7 +416,7 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(
                                            auto& trail_room = trail_rooms.back();
                                            const nlohmann::json& config = asset_ref->data ? *asset_ref->data : nlohmann::json::object();
                                            trail_room->camera_height_px = std::clamp(config.value("camera_height_px", 1000), 1, 2000);
-                                           trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 150.0f);
+                                           trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 360.0f);
                                            trail_room->camera_zoom_percent = std::clamp(config.value("camera_zoom_percent", 0), 0, 100);
                                            trail_room->camera_center_dx = config.value("camera_center_dx", 0);
                                            trail_room->camera_center_dz = config.value("camera_center_dz", 0);

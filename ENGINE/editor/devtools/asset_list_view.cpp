@@ -416,8 +416,9 @@ SDL_Texture* AssetListView::default_frame_texture(const AssetInfo& info) const {
     auto find_frame = [](const AssetInfo& inf, const std::string& key) -> SDL_Texture* {
         if (key.empty()) return nullptr;
         auto it = inf.animations.find(key);
-        if (it != inf.animations.end() && !it->second.frames.empty()) {
-            return (!it->second.frames.empty() && !it->second.frames.front()->variants.empty()) ? it->second.frames.front()->variants[0].base_texture : nullptr;
+        if (it != inf.animations.end() && it->second.has_frames()) {
+            const AnimationFrame* first = it->second.primary_frame_at(0);
+            return (first && !first->variants.empty()) ? first->variants[0].base_texture : nullptr;
         }
         return nullptr;
     };
@@ -432,21 +433,30 @@ SDL_Texture* AssetListView::default_frame_texture(const AssetInfo& info) const {
         return tex;
     }
     for (const auto& kv : info.animations) {
-        if (!kv.second.frames.empty() && !kv.second.frames.front()->variants.empty()) {
-            return kv.second.frames.front()->variants[0].base_texture;
+        const AnimationFrame* first = kv.second.primary_frame_at(0);
+        if (first && !first->variants.empty()) {
+            return first->variants[0].base_texture;
         }
     }
+
+    if (info.preview_texture) {
+        return info.preview_texture;
+    }
+
     return nullptr;
 }
 
 SDL_Texture* AssetListView::preview_texture_for(const Entry& entry) const {
-    if (entry.is_tag || !assets_) {
+    if (entry.is_tag) {
         return nullptr;
     }
 
     std::string key = entry.manifest_name.empty() ? entry.value : entry.manifest_name;
     if (key.empty() && entry.info) {
         key = entry.info->name;
+    }
+    if (key.empty() && !entry.info) {
+        return nullptr;
     }
     auto it = preview_cache_.find(key);
     if (it != preview_cache_.end()) {
@@ -456,21 +466,6 @@ SDL_Texture* AssetListView::preview_texture_for(const Entry& entry) const {
     SDL_Texture* tex = nullptr;
     if (entry.info) {
         tex = default_frame_texture(*entry.info);
-    }
-
-    if (!tex) {
-        AssetLibrary& lib = assets_->library();
-        auto info = lib.get(key);
-        if (!info && !entry.value.empty() && entry.value != key) {
-            info = lib.get(entry.value);
-        }
-        if (info) {
-            if (SDL_Renderer* renderer = assets_->renderer()) {
-                std::unordered_set<std::string> names{key};
-                lib.loadAnimationsFor(renderer, names);
-            }
-            tex = default_frame_texture(*info);
-        }
     }
 
     preview_cache_[key] = tex;

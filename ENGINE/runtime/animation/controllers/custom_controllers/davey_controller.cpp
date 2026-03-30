@@ -1,33 +1,36 @@
 #include "davey_controller.hpp"
-#include "animation/controllers/custom_controllers/attack_helpers.hpp"
+#include "animation/controllers/shared/attack_helpers.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
-davey_controller::davey_controller(Assets* assets, Asset* self)
-    : assets_(assets), self_(self) {
-    if (self_ && self_->anim_) {
-        self_->anim_->set_debug_enabled(false);
-        self_->needs_target = true;
+davey_controller::davey_controller(Asset* self)
+    : CustomAssetController(self) {
+    Asset* owner = self_ptr();
+    if (owner && owner->anim_) {
+        owner->anim_->set_debug_enabled(false);
+        owner->needs_target = true;
     }
 }
 
-void davey_controller::update(const Input&) {
-    if (!self_ || !self_->anim_ || !assets_) {
+void davey_controller::on_update(const Input&) {
+    Asset* self = self_ptr();
+    Assets* assets = this->assets();
+    if (!self || !self->anim_ || !assets) {
         return;
     }
 
-    Asset* player = assets_->player;
-    if (!player || player == self_ || player->dead || !player->active) {
+    Asset* player = assets->player;
+    if (!player || player == self || player->dead || !player->active) {
         return;
     }
 
-    self_->anim_->auto_move(player);
+    self->anim_->auto_move(player);
 
-    attack_helpers::send_attack_if_hit(self_, player);
+    attack_helpers::send_attack_if_hit(self, player);
 }
 
-void davey_controller::process_pending_attacks(Asset& self) {
-    (void)self.process_pending_attacks();
+void davey_controller::on_process_pending_attacks(Asset& self) {
+    CustomAssetController::on_process_pending_attacks(self);
 }

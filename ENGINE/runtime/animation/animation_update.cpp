@@ -17,6 +17,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
+#include "movement_target_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/grid_point.hpp"
@@ -70,6 +71,27 @@ bool is_playable_room_cached(const Room& room, PlayableRoomsCacheEntry& entry) {
         it->second = compute_is_playable_room(room);
     }
     return it->second;
+}
+
+int resolve_effective_grid_resolution(const Asset* self,
+                                      const vibble::grid::Grid& grid_service,
+                                      std::optional<int> override_resolution) {
+    if (override_resolution.has_value()) {
+        return vibble::grid::clamp_resolution(*override_resolution);
+    }
+    if (self) {
+        return vibble::grid::clamp_resolution(self->grid_resolution);
+    }
+    return grid_service.default_resolution();
+}
+
+int bounded_step_toward(int delta, int max_step) {
+    if (delta == 0) {
+        return 0;
+    }
+    const int positive_step = std::max(1, max_step);
+    const int magnitude = std::min(std::abs(delta), positive_step);
+    return (delta > 0) ? magnitude : -magnitude;
 }
 
 }
@@ -175,7 +197,7 @@ SDL_Point frame_world_delta(const AnimationFrame& frame,
     (void)asset;
     (void)grid;
 
-    return SDL_Point{ frame.dx, frame.dy };
+    return SDL_Point{ frame.dx, frame.dz };
 }
 
 bool bottom_point_inside_playable_area(const Assets* assets, const world::GridPoint& bottom_point) {
@@ -280,7 +302,7 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
-    SDL_Point delta{ world_checkpoint.x - self_->world_x(), world_checkpoint.y - self_->world_z() };
+    SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
         self_->needs_target = true;
@@ -299,7 +321,8 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     if (self_) {
         self_->target_reached = false;
     }
-    SDL_Point delta{ target_asset->world_x() - self_->world_x(), target_asset->world_z() - self_->world_z() };
+    const SDL_Point checkpoint = animation_update::movement_targets::world_checkpoint(*target_asset);
+    SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         if (self_) {
             self_->target_reached = true;
@@ -307,7 +330,7 @@ void AnimationUpdate::auto_move(Asset* target_asset,
         }
         return;
     }
-    auto_move(delta, visited_thresh_px, std::nullopt, override_non_locked);
+    auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked);
 }
 
 void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
@@ -346,7 +369,9 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
         absolute.push_back(next_world);
     }
 
-    plan_      = planner_(*self_, sanitizer_.sanitize(*self_, absolute, visited_thresh_), visited_thresh_, grid());
+    const std::vector<SDL_Point> requested_absolute = absolute;
+    const std::vector<SDL_Point> sanitized_checkpoints = sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_);
+    plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid());
     final_dest = plan_.final_dest;
     plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
@@ -359,6 +384,51 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     if (plan_.strides.empty()) {
+        bool queued_fallback = false;
+        SDL_Point fallback_target{0, 0};
+        if (!plan_.sanitized_checkpoints.empty()) {
+            fallback_target = plan_.sanitized_checkpoints.front();
+            queued_fallback = true;
+        } else if (!requested_absolute.empty()) {
+            fallback_target = requested_absolute.front();
+            queued_fallback = true;
+        }
+
+        if (queued_fallback) {
+            SDL_Point fallback_delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, fallback_target);
+            int fallback_step = vibble::grid::delta(resolution);
+            if (fallback_step <= 0) {
+                fallback_step = vibble::grid::delta(grid().default_resolution());
+            }
+            if (fallback_step <= 0) {
+                fallback_step = 1;
+            }
+
+            SDL_Point bounded_delta{
+                bounded_step_toward(fallback_delta.x, fallback_step),
+                bounded_step_toward(fallback_delta.y, fallback_step)
+            };
+
+            if (bounded_delta.x != 0 || bounded_delta.y != 0) {
+                move(bounded_delta,
+                     animation_update::detail::kDefaultAnimation,
+                     true,
+                     override_non_locked);
+                if (self_) {
+                    self_->needs_target = false;
+                }
+                if (debug_logging) {
+                    std::ostringstream oss;
+                    oss << "[AnimationUpdate] auto_move fallback asset=" << asset_name
+                        << " target=(" << fallback_target.x << "," << fallback_target.y << ")"
+                        << " delta=(" << bounded_delta.x << "," << bounded_delta.y << ")"
+                        << " step=" << fallback_step;
+                    vibble::log::info(oss.str());
+                }
+                return;
+            }
+        }
+
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move plan produced no strides for asset=" + asset_name);
         }
@@ -461,15 +531,16 @@ vibble::grid::Grid& AnimationUpdate::grid() const {
 }
 
 int AnimationUpdate::effective_grid_resolution(std::optional<int> override_resolution) const {
-    (void)override_resolution;
-
-    return 0;
+    return resolve_effective_grid_resolution(self_, grid(), override_resolution);
 }
 
 void AnimationUpdate::set_animation(const std::string& animation_id) {
-    if (!self_ || !self_->info) return;
+    if (!self_ || !self_->info || !runtime_) {
+        return;
+    }
     auto it = self_->info->animations.find(animation_id);
-    if (it == self_->info->animations.end()) return;
-    const Animation& anim = it->second;
-    player_.m_animation = const_cast<Animation*>(&anim);
+    if (it == self_->info->animations.end()) {
+        return;
+    }
+    runtime_->switch_to(animation_id, path_index_for(animation_id));
 }

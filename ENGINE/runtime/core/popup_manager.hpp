@@ -4,8 +4,6 @@
 #include <memory>
 #include <string>
 
-#include "devtools/dm_styles.hpp"
-
 class SDL_Renderer;
 
 class PopupManager {
@@ -48,12 +46,17 @@ private:
         int height = 0;
     };
 
+    struct PopupTextStyle {
+        int font_size = 16;
+        SDL_Color color{255, 255, 255, 255};
+    };
+
     void rebuild_toast_texture(SDL_Renderer* renderer);
     void rebuild_indicator_texture(SDL_Renderer* renderer);
     float compute_indicator_alpha(Uint32 now) const;
 
     ToastState toast_;
     IndicatorState indicator_;
-    DMLabelStyle toast_style_;
-    DMLabelStyle indicator_style_;
+    PopupTextStyle toast_style_;
+    PopupTextStyle indicator_style_;
 };

@@ -1,6 +1,7 @@
 #include "grid_point.hpp"
 #include "assets/asset/Asset.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/screen_space_math.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -35,6 +36,26 @@ std::size_t GridKeyHash::operator()(const GridKey& key) const noexcept {
     return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1) ^ (h4 << 3);
 }
 
+GridPoint::GridPoint(int world_x,
+                     int world_y,
+                     int world_z,
+                     int resolution_layer,
+                     GridCoord grid_idx,
+                     GridCoord chunk_idx,
+                     GridId legacy_id,
+                     Chunk* owning_chunk,
+                     GridPoint* parent_point,
+                     bool is_virtual_point)
+    : id(legacy_id)
+    , world_pos_{world_x, world_y, world_z}
+    , resolution_layer_(resolution_layer)
+    , parent_(parent_point)
+    , is_virtual_(is_virtual_point)
+    , is_floor(world_y == 0)
+    , grid_index(grid_idx)
+    , chunk_index(chunk_idx)
+    , chunk(owning_chunk) {}
+
 GridPoint::GridPoint(const GridPoint& other)
     : id(other.id)
     , world_pos_(other.world_pos_)
@@ -42,24 +63,10 @@ GridPoint::GridPoint(const GridPoint& other)
     , parent_(other.parent_)
     , is_virtual_(other.is_virtual_)
     , is_floor(other.is_floor)
-    , region_kind(other.region_kind)
-    , region_owner(other.region_owner)
     , grid_index(other.grid_index)
     , chunk_index(other.chunk_index)
     , chunk(other.chunk)
-    , screen(other.screen)
-    , parallax_dx(other.parallax_dx)
-    , vertical_scale(other.vertical_scale)
-    , horizon_fade_alpha(other.horizon_fade_alpha)
-    , near_camera_fade_alpha(other.near_camera_fade_alpha)
-    , perspective_scale(other.perspective_scale)
-    , distance_to_camera(other.distance_to_camera)
-    , tilt_radians(other.tilt_radians)
-    , on_screen(other.on_screen)
-    , screen_data_frame_updated(other.screen_data_frame_updated)
-    , screen_data_valid(other.screen_data_valid)
-    , last_camera_state_version_(other.last_camera_state_version_)
-    , last_region_query_stamp(other.last_region_query_stamp)
+    , projection_(other.projection_)
     , occupants()  // Leave empty - unique_ptrs cannot be copied
     , children_with_assets(0)  // Reset - no assets copied
     , active_child_mask(0)  // Reset - no child state copied
@@ -75,9 +82,27 @@ GridPoint::GridPoint(const GridPoint& other)
     // Real points with assets should use move semantics, not copy
 }
 
+GridPoint::GridPoint(GridPoint&&) noexcept = default;
+
+GridPoint::~GridPoint() = default;
+
+std::string GridPoint::debug_identity_and_mask() const {
+    // Compact identity + branch state for dev tools / logging.
+    const axis::WorldPos canonical = world_position();
+    return "id=" + std::to_string(id) +
+           " world=(" + std::to_string(canonical.x) + "," + std::to_string(canonical.y) + "," + std::to_string(canonical.z) + ")" +
+           " layer=" + std::to_string(resolution_layer_) +
+           " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.z) + ")" +
+           " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.z) + ")" +
+           (is_virtual_ ? " virtual=1" : " virtual=0") +
+           " assets=" + std::to_string(occupants.size()) +
+           " children_with_assets=" + std::to_string(children_with_assets) +
+           " mask=0x" + to_hex(active_child_mask);
+}
+
 void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     // Track which camera state we're using
-    last_camera_state_version_ = params.state_version;
+    projection_.last_camera_state_version = params.state_version;
 
     // Convert world position to meters
     const axis::WorldPos canonical_world = world_position();
@@ -106,10 +131,10 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         distance_sq < near_plane_sq ||
         distance_sq > far_plane_sq ||
         !std::isfinite(distance_sq)) {
-        screen = SDL_FPoint{0.0f, 0.0f};
-        parallax_dx = 0.0f;
-        on_screen = false;
-        screen_data_valid = true;
+        projection_.screen = SDL_FPoint{0.0f, 0.0f};
+        projection_.parallax_dx = 0.0f;
+        projection_.on_screen = false;
+        projection_.screen_data_valid = true;
         return;
     }
 
@@ -127,18 +152,22 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     const double ndc_y = (cam_y / depth_along_forward) / tan_fov_y;
 
     if (!std::isfinite(ndc_x) || !std::isfinite(ndc_y)) {
-        screen = SDL_FPoint{0.0f, 0.0f};
-        parallax_dx = 0.0f;
-        on_screen = false;
-        screen_data_valid = true;
+        projection_.screen = SDL_FPoint{0.0f, 0.0f};
+        projection_.parallax_dx = 0.0f;
+        projection_.on_screen = false;
+        projection_.screen_data_valid = true;
         return;
     }
 
     // NDC to screen (with zoom)
-    const double scaled_x = ndc_x * params.screen_zoom;
-    const double scaled_y = ndc_y * params.screen_zoom;
-    const double screen_x = (scaled_x * 0.5 + 0.5) * static_cast<double>(params.screen_width);
-    const double screen_y = (0.5 - scaled_y * 0.5) * static_cast<double>(params.screen_height) + params.screen_pan_y_px;
+    const SDL_FPoint screen = render::screen_space::ndc_to_screen(ndc_x,
+                                                                   ndc_y,
+                                                                   params.screen_width,
+                                                                   params.screen_height,
+                                                                   params.screen_zoom,
+                                                                   params.screen_pan_y_px);
+    const double screen_x = static_cast<double>(screen.x);
+    const double screen_y = static_cast<double>(screen.y);
 
     // Calculate perspective scale
     const double safe_width = static_cast<double>(std::max(1, params.screen_width));
@@ -166,9 +195,15 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         if (!std::isfinite(ndc_x2) || !std::isfinite(ndc_y2)) {
             return std::nullopt;
         }
-        const double sx2 = (ndc_x2 * params.screen_zoom * 0.5 + 0.5) * safe_width;
-        const double sy2 = (0.5 - ndc_y2 * params.screen_zoom * 0.5) * params.screen_height + params.screen_pan_y_px;
-        const double dx = sx2 - (scaled_x * 0.5 + 0.5) * safe_width;
+        const SDL_FPoint shifted_screen = render::screen_space::ndc_to_screen(ndc_x2,
+                                                                               ndc_y2,
+                                                                               params.screen_width,
+                                                                               params.screen_height,
+                                                                               params.screen_zoom,
+                                                                               params.screen_pan_y_px);
+        const double sx2 = static_cast<double>(shifted_screen.x);
+        const double sy2 = static_cast<double>(shifted_screen.y);
+        const double dx = sx2 - screen_x;
         const double dy = sy2 - screen_y;
         const double dist = std::sqrt(dx * dx + dy * dy);
         if (!std::isfinite(dist) || dist <= 1e-6) {
@@ -186,10 +221,6 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         }
     }
 
-    // Clamp perspective scale
-    if (params.near_camera_max_perspective_scale > 0.0f) {
-        scale = std::min(scale, static_cast<double>(params.near_camera_max_perspective_scale));
-    }
     if (!std::isfinite(scale) || scale <= 0.0) {
         scale = 1.0;
     }
@@ -213,50 +244,23 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         }
     }
 
-    // Calculate near-camera fade
-    float near_fade = 1.0f;
-    if (std::isfinite(screen_y) && params.screen_height > 0) {
-        const float screen_h = static_cast<float>(params.screen_height);
-        const float offscreen_amount = std::max(0.0f, params.offscreen_fade_amount_px);
-        if (static_cast<float>(screen_y) >= screen_h) {
-            if (offscreen_amount <= 0.0f) {
-                near_fade = 0.0f;
-            } else {
-                const float t = (static_cast<float>(screen_y) - screen_h) / offscreen_amount;
-                near_fade = std::clamp(1.0f - t, 0.0f, 1.0f);
-            }
-        }
-    }
-
     // Store results
-    screen = SDL_FPoint{static_cast<float>(screen_x), static_cast<float>(screen_y)};
-    parallax_dx = 0.0f;
-    vertical_scale = vert_scale;
-    perspective_scale = static_cast<float>(std::max(0.0001, scale));
-    horizon_fade_alpha = h_fade;
-    near_camera_fade_alpha = near_fade;
-    distance_to_camera = static_cast<float>(distance);
-    tilt_radians = static_cast<float>(params.pitch_radians);
-    on_screen = std::isfinite(screen_x) && std::isfinite(screen_y);
-    screen_data_valid = true;
+    projection_.screen = SDL_FPoint{static_cast<float>(screen_x), static_cast<float>(screen_y)};
+    projection_.parallax_dx = 0.0f;
+    projection_.vertical_scale = vert_scale;
+    projection_.perspective_scale = static_cast<float>(std::max(0.0001, scale));
+    projection_.horizon_fade_alpha = h_fade;
+    projection_.distance_to_camera = static_cast<float>(distance);
+    projection_.tilt_radians = static_cast<float>(params.pitch_radians);
+    projection_.on_screen = std::isfinite(screen_x) && std::isfinite(screen_y);
+    projection_.screen_data_valid = true;
 }
 
 GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     if (this == &other) return *this;
 
-    // Transfer screen data (mutable per-frame state)
-    screen = other.screen;
-    parallax_dx = other.parallax_dx;
-    vertical_scale = other.vertical_scale;
-    horizon_fade_alpha = other.horizon_fade_alpha;
-    near_camera_fade_alpha = other.near_camera_fade_alpha;
-    perspective_scale = other.perspective_scale;
-    distance_to_camera = other.distance_to_camera;
-    tilt_radians = other.tilt_radians;
-    on_screen = other.on_screen;
-    screen_data_frame_updated = other.screen_data_frame_updated;
-    screen_data_valid = other.screen_data_valid;
-    last_camera_state_version_ = other.last_camera_state_version_;
+    // Transfer projection cache state.
+    projection_ = other.projection_;
     is_floor = other.is_floor;
 
     // Transfer occupants (ownership)
@@ -284,6 +288,7 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     other.children_with_assets = 0;
     other.active_child_mask = 0;
     other.is_floor = false;
+    other.projection_.reset();
 
     return *this;
 }
@@ -332,8 +337,12 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     }
 
     const double zoom = std::max(1e-6, params.screen_zoom);
-    const double ndc_x = (static_cast<double>(screen.x) / static_cast<double>(params.screen_width) * 2.0 - 1.0) / zoom;
-    const double ndc_y = (1.0 - (static_cast<double>(screen.y) - params.screen_pan_y_px) / static_cast<double>(params.screen_height) * 2.0) / zoom;
+    const auto [ndc_x, ndc_y] = render::screen_space::screen_to_ndc(static_cast<double>(screen.x),
+                                                                     static_cast<double>(screen.y),
+                                                                     params.screen_width,
+                                                                     params.screen_height,
+                                                                     zoom,
+                                                                     params.screen_pan_y_px);
 
     const double tan_fov_x = std::max(1e-6, params.tan_half_fov_x);
     const double tan_fov_y = std::max(1e-6, params.tan_half_fov_y);
@@ -402,7 +411,7 @@ void GridPoint::update_world_position(const axis::WorldPos& new_pos) {
     world_pos_ = new_pos;
     is_floor = (new_pos.y == 0);
     // Invalidate screen data since position changed
-    screen_data_valid = false;
+    projection_.invalidate();
 }
 
 void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
@@ -418,22 +427,9 @@ void GridPoint::set_world_z(int new_z) {
 void swap(GridPoint& a, GridPoint& b) noexcept {
     using std::swap;
 
-    // Swap screen data
-    swap(a.screen, b.screen);
-    swap(a.parallax_dx, b.parallax_dx);
-    swap(a.vertical_scale, b.vertical_scale);
-    swap(a.horizon_fade_alpha, b.horizon_fade_alpha);
-    swap(a.near_camera_fade_alpha, b.near_camera_fade_alpha);
-    swap(a.perspective_scale, b.perspective_scale);
-    swap(a.distance_to_camera, b.distance_to_camera);
-    swap(a.tilt_radians, b.tilt_radians);
-    swap(a.region_kind, b.region_kind);
-    swap(a.region_owner, b.region_owner);
+    // Swap projection cache.
+    swap(a.projection_, b.projection_);
     swap(a.is_floor, b.is_floor);
-    swap(a.on_screen, b.on_screen);
-    swap(a.screen_data_frame_updated, b.screen_data_frame_updated);
-    swap(a.screen_data_valid, b.screen_data_valid);
-    swap(a.last_camera_state_version_, b.last_camera_state_version_);
 
     // Swap occupants
     swap(a.occupants, b.occupants);

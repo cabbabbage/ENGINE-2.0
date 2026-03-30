@@ -88,7 +88,6 @@ MainMenu::~MainMenu() {
 void MainMenu::buildButtons() {
         buttons_.clear();
         map_lookup_.clear();
-        Button::refresh_glass_overlay();
         const int btn_w = Button::width();
         const int btn_h = Button::height();
         const int gap   = 18;
@@ -135,14 +134,6 @@ std::string MainMenu::uppercase_label(std::string label) const {
 }
 
 std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {
-        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_E &&
-            (e.key.mod & SDL_KMOD_CTRL)) {
-                button_tweaker_.toggle();
-                return std::nullopt;
-        }
-        if (button_tweaker_.is_active() && button_tweaker_.handle_event(e, screen_w_, screen_h_)) {
-                return std::nullopt;
-        }
         for (auto& entry : buttons_) {
                 if (entry.button.handle_event(e)) {
                         Selection selection;
@@ -174,7 +165,6 @@ void MainMenu::render() {
 	for (auto& entry : buttons_) {
 		entry.button.render(renderer_);
 	}
-	button_tweaker_.render(renderer_, screen_w_, screen_h_);
 }
 
 void MainMenu::showLoadingScreen() {
@@ -220,48 +210,58 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
                 return nullptr;
         }
 
-        // Clamp oversized textures to avoid D3D OUTOFVIDEOMEMORY errors.
+        // Clamp aggressively and retry smaller sizes to avoid D3D OUTOFVIDEOMEMORY errors.
         const int max_dim = std::clamp(
-                static_cast<int>(std::max(screen_w_, screen_h_) * 1.2),
-                1024,
-                2048);
+                static_cast<int>(std::max(screen_w_, screen_h_) * 0.8),
+                256,
+                1024);
         const int src_w = loaded->w;
         const int src_h = loaded->h;
-        int target_w = src_w;
-        int target_h = src_h;
-        SDL_Surface* to_upload = loaded;
-        if (src_w > max_dim || src_h > max_dim) {
-                const double scale = static_cast<double>(max_dim) / static_cast<double>(std::max(src_w, src_h));
-                target_w = std::max(1, static_cast<int>(std::round(static_cast<double>(src_w) * scale)));
-                target_h = std::max(1, static_cast<int>(std::round(static_cast<double>(src_h) * scale)));
-                SDL_Surface* scaled = SDL_CreateSurface(target_w, target_h, SDL_PIXELFORMAT_ARGB8888);
-                if (!scaled) {
-                        std::cerr << "[MainMenu] Failed to allocate scaled surface ("
-                                  << target_w << "x" << target_h << ") for " << abs_utf8_path
-                                  << " | " << SDL_GetError() << "\n";
-                        SDL_DestroySurface(loaded);
-                        return nullptr;
-                }
-                if (!SDL_BlitSurfaceScaled(loaded, nullptr, scaled, nullptr, SDL_SCALEMODE_LINEAR)) {
-                        std::cerr << "[MainMenu] SDL_BlitScaled failed while downscaling "
-                                  << abs_utf8_path << " | " << SDL_GetError() << "\n";
-                        SDL_DestroySurface(loaded);
-                        SDL_DestroySurface(scaled);
-                        return nullptr;
-                }
-                SDL_DestroySurface(loaded);
-                to_upload = scaled;
-        }
+        int attempt_dim = std::min(max_dim, std::max(src_w, src_h));
+        while (attempt_dim >= 32 && !tex) {
+                const double scale = std::min(1.0, static_cast<double>(attempt_dim) /
+                                                     static_cast<double>(std::max(src_w, src_h)));
+                const int target_w = std::max(1, static_cast<int>(std::round(static_cast<double>(src_w) * scale)));
+                const int target_h = std::max(1, static_cast<int>(std::round(static_cast<double>(src_h) * scale)));
 
-        tex = SDL_CreateTextureFromSurface(renderer_, to_upload);
-        if (!tex) {
-                std::cerr << "[MainMenu] SDL_CreateTextureFromSurface failed: " << abs_utf8_path
-                          << " | " << SDL_GetError() << "\n";
-        } else if (to_upload->w != src_w || to_upload->h != src_h) {
-                std::cerr << "[MainMenu] Loaded downscaled texture (" << to_upload->w << "x" << to_upload->h
-                          << ") after renderer failure for " << abs_utf8_path << "\n";
+                SDL_Surface* to_upload = loaded;
+                if (target_w != src_w || target_h != src_h) {
+                        to_upload = SDL_CreateSurface(target_w, target_h, SDL_PIXELFORMAT_ARGB8888);
+                        if (!to_upload) {
+                                std::cerr << "[MainMenu] Failed to allocate scaled surface ("
+                                          << target_w << "x" << target_h << ") for " << abs_utf8_path
+                                          << " | " << SDL_GetError() << "\n";
+                                break;
+                        }
+                        if (!SDL_BlitSurfaceScaled(loaded, nullptr, to_upload, nullptr, SDL_SCALEMODE_LINEAR)) {
+                                std::cerr << "[MainMenu] SDL_BlitScaled failed while downscaling "
+                                          << abs_utf8_path << " | " << SDL_GetError() << "\n";
+                                SDL_DestroySurface(to_upload);
+                                break;
+                        }
+                }
+
+                tex = SDL_CreateTextureFromSurface(renderer_, to_upload);
+                if (!tex) {
+                        std::cerr << "[MainMenu] SDL_CreateTextureFromSurface failed at "
+                                  << target_w << "x" << target_h << ": "
+                                  << abs_utf8_path << " | " << SDL_GetError() << "\n";
+                } else if (target_w != src_w || target_h != src_h) {
+                        std::cerr << "[MainMenu] Loaded downscaled texture (" << target_w << "x" << target_h
+                                  << ") after renderer failure for " << abs_utf8_path << "\n";
+                }
+
+                if (to_upload != loaded) {
+                        SDL_DestroySurface(to_upload);
+                }
+
+                attempt_dim /= 2;
         }
-        SDL_DestroySurface(to_upload);
+        if (!tex) {
+                std::cerr << "[MainMenu] Failed to upload background texture after aggressive downscale retries: "
+                          << abs_utf8_path << "\n";
+        }
+        SDL_DestroySurface(loaded);
         return tex;
 }
 

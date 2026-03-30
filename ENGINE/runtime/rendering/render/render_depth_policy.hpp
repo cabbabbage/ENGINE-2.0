@@ -2,6 +2,8 @@
 
 #include "core/axis_convention.hpp"
 
+#include <cmath>
+
 // Render depth policy constants and helpers.
 //
 // The engine treats world space as a right-handed system: X moves right, Y is height and upward displacement,
@@ -18,6 +20,13 @@ static constexpr axis::Axis kOrderingAxis = axis::Axis::Z;
 
 inline double depth_from_anchor(double anchor_depth, double object_depth, double bias = 0.0) {
     return anchor_depth - object_depth + bias;
+}
+
+inline double bias_for_quantized_depth(double exact_object_depth, double quantized_object_depth) {
+    if (!std::isfinite(exact_object_depth) || !std::isfinite(quantized_object_depth)) {
+        return 0.0;
+    }
+    return quantized_object_depth - exact_object_depth;
 }
 
 } // namespace render_depth

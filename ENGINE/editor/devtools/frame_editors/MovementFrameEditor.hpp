@@ -49,6 +49,7 @@ private:
     bool apply_movement_to_all_animations();
     void copy_movement_fields(MovementFrame& dest, const MovementFrame& src) const;
     void refresh_selection_state();
+    void apply_selected_frame_to_target();
     SDL_Point asset_anchor_world() const;
     SDL_FPoint screen_to_world_relative(const SDL_Point& screen) const;
     float base_world_z() const;
@@ -76,6 +77,8 @@ private:
     std::unique_ptr<FrameNavigator> frame_navigator_;
     bool smooth_enabled_ = false;
     bool curve_enabled_ = false;
+    bool had_previous_static_frame_ = false;
+    bool previous_static_frame_ = false;
 
     std::unique_ptr<FrameToolPanel> tool_panel_;
     std::unique_ptr<ButtonWidget> back_widget_;

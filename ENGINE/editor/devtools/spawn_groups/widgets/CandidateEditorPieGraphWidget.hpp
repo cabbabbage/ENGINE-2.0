@@ -40,6 +40,8 @@ public:
     void hide_search();
     void update_search(const Input& input);
     void set_search_extra_results_provider(SearchAssets::ExtraResultsProvider provider);
+    bool is_search_visible() const;
+    bool is_search_point_inside(int x, int y) const;
 
 private:
     struct CandidateInfo {

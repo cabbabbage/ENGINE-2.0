@@ -8,6 +8,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "gameplay/spawn/spawn_group_codec.hpp"
+
 namespace vibble::dev_mode::room_config::model {
 
 using SpawnMethodId = std::string;
@@ -19,25 +21,25 @@ struct Candidate {
 
 struct MethodConfig {
     struct None {
-};
+    };
 
     struct Random {
-};
+    };
 
     struct Perimeter {
         int min_number = 2;
         int max_number = 2;
-};
+    };
 
     struct Edge {
         int min_number = 1;
         int max_number = 1;
         int inset_percent = 100;
-};
+    };
 
     struct Exact {
         int quantity = 1;
-};
+    };
 
     using Variant = std::variant<None, Random, Perimeter, Edge, Exact>;
 
@@ -99,7 +101,7 @@ struct SpawnGroup {
 };
 
 inline void switch_method(SpawnGroup& group, SpawnMethodId method) {
-    group.method = std::move(method);
+    group.method = vibble::spawn_group_codec::normalize_method(std::move(method));
     if (group.method == "Random") {
         group.method_config = MethodConfig::make_random();
     } else if (group.method == "Perimeter") {
@@ -113,112 +115,50 @@ inline void switch_method(SpawnGroup& group, SpawnMethodId method) {
     }
 }
 
-namespace detail {
-
-inline std::string read_string(const nlohmann::json& obj, const char* key) {
-    if (!obj.is_object()) return {};
-    const auto it = obj.find(key);
-    if (it == obj.end() || !it->is_string()) return {};
-    return it->get<std::string>();
-}
-
-inline int read_int(const nlohmann::json& obj, const char* key, int fallback) {
-    if (!obj.is_object()) return fallback;
-    const auto it = obj.find(key);
-    if (it == obj.end()) return fallback;
-    if (it->is_number_integer()) return it->get<int>();
-    if (it->is_number_float()) return static_cast<int>(it->get<double>());
-    if (it->is_string()) {
-        try {
-            const std::string text = it->get<std::string>();
-            size_t consumed = 0;
-            const int parsed = std::stoi(text, &consumed);
-            if (consumed == text.size()) {
-                return parsed;
-            }
-        } catch (...) {
-        }
-    }
-    return fallback;
-}
-
-inline float read_number(const nlohmann::json& value, float fallback) {
-    if (value.is_number_float()) return static_cast<float>(value.get<double>());
-    if (value.is_number_integer()) return static_cast<float>(value.get<int>());
-    if (value.is_string()) {
-        try {
-            const std::string text = value.get<std::string>();
-            size_t consumed = 0;
-            const float parsed = std::stof(text, &consumed);
-            if (consumed == text.size()) {
-                return parsed;
-            }
-        } catch (...) {
-        }
-    }
-    return fallback;
-}
-
-}
-
 inline float read_candidate_weight(const nlohmann::json& candidate) {
-    if (!candidate.is_object()) return 0.0f;
-    const auto chance_it = candidate.find("chance");
-    if (chance_it != candidate.end()) {
-        return detail::read_number(*chance_it, 0.0f);
-    }
-    const auto weight_it = candidate.find("weight");
-    if (weight_it != candidate.end()) {
-        return detail::read_number(*weight_it, 0.0f);
-    }
-    return 0.0f;
+    return static_cast<float>(vibble::spawn_group_codec::read_candidate_chance(candidate, 0.0));
 }
 
 inline SpawnGroup spawn_group_from_json(const nlohmann::json& entry) {
     SpawnGroup group{};
-    if (!entry.is_object()) {
-        switch_method(group, "Random");
-        return group;
-    }
 
-    group.id = detail::read_string(entry, "spawn_id");
-    group.display_name = detail::read_string(entry, "display_name");
-    group.area_name = detail::read_string(entry, "area");
+    nlohmann::json normalized = entry;
+    vibble::spawn_group_codec::EntryDefaults defaults{};
+    defaults.display_name = vibble::spawn_group_codec::read_string_field(entry, "display_name");
+    if (defaults.display_name.empty()) {
+        defaults.display_name = vibble::spawn_group_codec::read_string_field(entry, "name", "Spawn Group");
+    }
+    vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(normalized, defaults);
 
-    std::string method = detail::read_string(entry, "position");
-    if (method == "Exact Position") {
-        method = "Exact";
-    }
-    if (method.empty()) {
-        method = "Random";
-    }
-    switch_method(group, method);
+    group.id = vibble::spawn_group_codec::read_string_field(normalized, "spawn_id");
+    group.display_name = vibble::spawn_group_codec::read_string_field(normalized, "display_name");
+    group.area_name = vibble::spawn_group_codec::read_string_field(normalized, "area");
+
+    switch_method(group, vibble::spawn_group_codec::normalize_method_from_entry(normalized));
 
     if (auto* perimeter = group.method_config.as_perimeter()) {
-        const int min_number = detail::read_int(entry, "min_number", perimeter->min_number);
-        const int max_number = detail::read_int(entry, "max_number", perimeter->max_number);
-        perimeter->min_number = std::max(1, min_number);
-        perimeter->max_number = std::max(perimeter->min_number, max_number);
+        perimeter->min_number =
+            vibble::spawn_group_codec::read_int_field(normalized, "min_number", perimeter->min_number);
+        perimeter->max_number =
+            vibble::spawn_group_codec::read_int_field(normalized, "max_number", perimeter->max_number);
     } else if (auto* edge = group.method_config.as_edge()) {
-        const int min_number = detail::read_int(entry, "min_number", edge->min_number);
-        const int max_number = detail::read_int(entry, "max_number", edge->max_number);
-        const int inset = detail::read_int(entry, "edge_inset_percent", edge->inset_percent);
-        edge->min_number = std::max(1, min_number);
-        edge->max_number = std::max(edge->min_number, max_number);
-        edge->inset_percent = std::clamp(inset, 0, 200);
+        edge->min_number =
+            vibble::spawn_group_codec::read_int_field(normalized, "min_number", edge->min_number);
+        edge->max_number =
+            vibble::spawn_group_codec::read_int_field(normalized, "max_number", edge->max_number);
+        edge->inset_percent = vibble::spawn_group_codec::read_int_field(
+            normalized, "edge_inset_percent", edge->inset_percent);
     } else if (auto* exact = group.method_config.as_exact()) {
-        int quantity = detail::read_int(entry, "quantity", detail::read_int(entry, "min_number", exact->quantity));
-        if (quantity < 1) quantity = 1;
-        exact->quantity = quantity;
+        exact->quantity = vibble::spawn_group_codec::read_int_field(normalized, "quantity", exact->quantity);
     }
 
     group.candidates.clear();
-    const auto it = entry.find("candidates");
-    if (it != entry.end() && it->is_array()) {
+    const auto it = normalized.find("candidates");
+    if (it != normalized.end() && it->is_array()) {
         for (const auto& candidate : *it) {
             if (!candidate.is_object()) continue;
             Candidate parsed{};
-            parsed.asset_id = detail::read_string(candidate, "name");
+            parsed.asset_id = vibble::spawn_group_codec::read_string_field(candidate, "name");
             parsed.weight = read_candidate_weight(candidate);
             if (!parsed.asset_id.empty() || parsed.weight != 0.0f) {
                 group.candidates.push_back(std::move(parsed));
@@ -243,7 +183,8 @@ inline void apply_spawn_group_to_json(const SpawnGroup& group, nlohmann::json& e
         entry.erase("area");
     }
 
-    const std::string method = group.method.empty() ? std::string{"Random"} : group.method;
+    const std::string method =
+        vibble::spawn_group_codec::normalize_method(group.method.empty() ? std::string{"Random"} : group.method);
     entry["position"] = method;
 
     if (const auto* perimeter = group.method_config.as_perimeter()) {
@@ -274,6 +215,10 @@ inline void apply_spawn_group_to_json(const SpawnGroup& group, nlohmann::json& e
         candidates.push_back(std::move(candidate_json));
     }
     entry["candidates"] = std::move(candidates);
+
+    vibble::spawn_group_codec::EntryDefaults defaults{};
+    defaults.display_name = group.display_name.empty() ? std::string("New Spawn") : group.display_name;
+    vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(entry, defaults);
 }
 
-}
+} // namespace vibble::dev_mode::room_config::model

@@ -60,12 +60,14 @@ public:
     void set_extra_results_provider(ExtraResultsProvider provider);
     void set_asset_filter(AssetFilter filter);
 private:
+    std::size_t columns_per_row() const;
     struct Asset {
         std::string name;
         std::string manifest_name;
         std::vector<std::string> tags;
+        std::shared_ptr<AssetInfo> info;
         const nlohmann::json* payload = nullptr;
-};
+    };
     void load_assets();
     void filter_assets();
     void activate_result(const Result& result);

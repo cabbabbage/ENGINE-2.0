@@ -576,17 +576,26 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
     const float height_y = world_pos.y;
     const float depth_z = world_z;
 
-    // Get camera settings for realism warping
-    const auto& settings = cam->get_settings();
-    const float base_height = settings.base_height_px;
-    const float depth_near = settings.depth_near_world;
-    const float depth_far = settings.depth_far_world;
+    // Calculate perspective scaling from true camera-space forward depth.
+    const world::CameraProjectionParams projection = cam->projection_params();
+    const double meters_scale = std::max(1e-6, projection.meters_scale);
+    const double world_m_x = (static_cast<double>(world_pos.x) - projection.anchor_world_x) * meters_scale;
+    const double world_m_y = (static_cast<double>(world_pos.y) - projection.anchor_world_y) * meters_scale;
+    const double world_m_z = (static_cast<double>(depth_z) - projection.anchor_world_z) * meters_scale;
+    const double to_x = world_m_x - projection.position_x;
+    const double to_y = world_m_y - projection.position_y;
+    const double to_z = world_m_z - projection.position_z;
+    const double forward_depth =
+        to_x * projection.forward_x + to_y * projection.forward_y + to_z * projection.forward_z;
 
-    // Calculate perspective scale based on depth
-    // Objects further away (larger Z) should appear smaller
     float depth_ratio = 0.5f;
-    if (depth_far > depth_near) {
-        depth_ratio = std::clamp((depth_z - depth_near) / (depth_far - depth_near), 0.0f, 1.0f);
+    const double near_depth = std::max(1e-4, projection.near_plane);
+    const double far_depth = std::max(near_depth + 1e-4, projection.far_plane);
+    if (std::isfinite(forward_depth)) {
+        depth_ratio = std::clamp(
+            static_cast<float>((forward_depth - near_depth) / (far_depth - near_depth)),
+            0.0f,
+            1.0f);
     }
 
     // Apply perspective scaling (further = smaller)
@@ -790,7 +799,10 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
 bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
                                       const std::vector<bool>& point_selectable) {
-    if (!selection_ || !selection_->has_target()) {
+    // Allow initial click-selection when no target is active yet.
+    // MovementFrameEditor starts with SelectionTarget::None and promotes
+    // to MovementPoint via on_point_selected_ once a point is clicked.
+    if (!selection_) {
         return false;
     }
 

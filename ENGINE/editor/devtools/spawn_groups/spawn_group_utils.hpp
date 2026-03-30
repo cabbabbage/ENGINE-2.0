@@ -5,9 +5,11 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include "gameplay/spawn/spawn_group_codec.hpp"
+
 namespace devmode::spawn {
 
-constexpr int kPerimeterRadiusDefault = 200;
+constexpr int kPerimeterRadiusDefault = vibble::spawn_group_codec::kPerimeterRadiusDefault;
 
 std::string generate_spawn_id();
 

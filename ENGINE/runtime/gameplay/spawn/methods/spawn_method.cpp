@@ -12,6 +12,7 @@
 #include "spawn_info.hpp"
 #include "check.hpp"
 #include "asset_spawn_planner.hpp"
+#include "spawn_group_codec.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
@@ -44,7 +45,8 @@ AttemptResult attempt_spawn(const SpawnInfo& item,
         return AttemptResult::PositionRejected;
     }
 
-    const SpawnCandidate* candidate = item.select_candidate(ctx.rng());
+    vibble::spawn::RuntimeCandidates::AssetCatalogView catalog{&ctx.info_library(), false};
+    const auto candidate = item.select_candidate(ctx.rng(), catalog);
     if (!candidate || candidate->is_null || !candidate->info) {
         return AttemptResult::InvalidCandidate;
     }
@@ -64,7 +66,13 @@ AttemptResult attempt_spawn(const SpawnInfo& item,
         return AttemptResult::CheckRejected;
     }
 
-    auto* result = ctx.spawnAsset(candidate->name, candidate->info, area, pos, 0, item.spawn_id, item.position);
+    auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
+                                  candidate->info,
+                                  area,
+                                  pos,
+                                  0,
+                                  item.spawn_id,
+                                  item.position);
     if (!result) {
         return AttemptResult::SpawnFailed;
     }
@@ -410,16 +418,16 @@ void spawn_edge(const SpawnInfo& item, const Area* area, SpawnContext& ctx) {
 } // namespace
 
 void SpawnMethod::spawn(const SpawnInfo& item, const Area* area, SpawnContext& ctx) const {
-    const std::string& pos = item.position;
-    if (pos == "Exact" || pos == "Exact Position") {
+    const std::string method = vibble::spawn_group_codec::normalize_method(item.position);
+    if (method == "Exact") {
         spawn_exact(item, area, ctx);
-    } else if (pos == "Center") {
+    } else if (method == "Center") {
         spawn_center(item, area, ctx);
-    } else if (pos == "Perimeter") {
+    } else if (method == "Perimeter") {
         spawn_perimeter(item, area, ctx);
-    } else if (pos == "Edge") {
+    } else if (method == "Edge") {
         spawn_edge(item, area, ctx);
-    } else if (pos == "Percent") {
+    } else if (method == "Percent") {
         spawn_percent(item, area, ctx);
     } else {
         spawn_random(item, area, ctx);

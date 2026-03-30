@@ -3,8 +3,8 @@
 #include "asset_types.hpp"
 #include "assets/asset/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
+#include "utils/log.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
-#include "utils/rebuild_queue.hpp"
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
@@ -50,102 +50,129 @@ std::vector<std::string> parse_string_array(const nlohmann::json& json_value) {
     return values;
 }
 
+constexpr const char* kAnchorPointChildCandidatesKey = "anchor_point_child_candidates";
+constexpr const char* kAnchorPointChildCandidatesLegacyKey = "anchor_point_child_cndidates";
+
+std::vector<AssetInfo::AnchorChildPointCandidate> parse_anchor_point_child_candidates_payload(
+    const nlohmann::json& payload) {
+    std::vector<AssetInfo::AnchorChildPointCandidate> parsed;
+    if (!payload.is_array()) {
+        return parsed;
+    }
+
+    std::unordered_set<std::string> seen_names;
+    parsed.reserve(payload.size());
+    for (const auto& entry : payload) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        const std::string anchor_point_name = entry.value("anchor_point_name", std::string{});
+        if (anchor_point_name.empty()) {
+            continue;
+        }
+        if (!seen_names.insert(anchor_point_name).second) {
+            continue;
+        }
+
+        AssetInfo::AnchorChildPointCandidate candidate{};
+        candidate.anchor_point_name = anchor_point_name;
+        if (entry.contains("candidates") && entry["candidates"].is_object()) {
+            candidate.candidates = entry["candidates"];
+        } else {
+            candidate.candidates = nlohmann::json::object();
+        }
+        parsed.push_back(std::move(candidate));
+    }
+
+    return parsed;
+}
+
+nlohmann::json build_anchor_point_child_candidates_payload(
+    const std::vector<AssetInfo::AnchorChildPointCandidate>& candidates) {
+    nlohmann::json payload = nlohmann::json::array();
+    std::unordered_set<std::string> seen_names;
+    for (const auto& candidate : candidates) {
+        if (candidate.anchor_point_name.empty()) {
+            continue;
+        }
+        if (!seen_names.insert(candidate.anchor_point_name).second) {
+            continue;
+        }
+        nlohmann::json encoded = nlohmann::json::object();
+        encoded["anchor_point_name"] = candidate.anchor_point_name;
+        encoded["candidates"] = candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+        payload.push_back(std::move(encoded));
+    }
+    return payload;
+}
+
 const nlohmann::json* locate_animation_payloads(const nlohmann::json& root);
 
-float read_float_field(const nlohmann::json& data, const char* key, float fallback) {
-    if (!key) {
-        return fallback;
-    }
-    try {
-        auto it = data.find(key);
-        if (it == data.end()) {
-            return fallback;
-        }
-        if (it->is_number_float() || it->is_number_integer()) {
-            return static_cast<float>(it->get<double>());
-        }
-        if (it->is_string()) {
-            const std::string text = it->get<std::string>();
-            if (!text.empty()) {
-                try {
-                    size_t consumed = 0;
-                    float parsed = std::stof(text, &consumed);
-                    if (consumed > 0) {
-                        return parsed;
-                    }
-                } catch (...) {
-                }
-            }
-        }
-    } catch (...) {
-    }
-    return fallback;
-}
-
-bool read_bool_like(const nlohmann::json& value, bool fallback) {
-    try {
-        if (value.is_boolean()) {
-            return value.get<bool>();
-        }
-        if (value.is_number_integer()) {
-            return value.get<int>() != 0;
-        }
-        if (value.is_number_float()) {
-            return std::fabs(value.get<double>()) > 0.0;
-        }
-        if (value.is_string()) {
-            std::string text = value.get<std::string>();
-            std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::tolower(ch));
-            });
-            if (text == "true" || text == "1" || text == "yes" || text == "on") {
-                return true;
-            }
-            if (text == "false" || text == "0" || text == "no" || text == "off") {
-                return false;
-            }
-        }
-    } catch (...) {
-    }
-    return fallback;
-}
-
-std::optional<bool> extract_legacy_crop_frames(const nlohmann::json& data) {
-    const nlohmann::json* payloads = locate_animation_payloads(data);
-    if (!payloads || !payloads->is_object()) {
-        return std::nullopt;
-    }
-
-    bool found_any = false;
-    bool found_true = false;
-    for (auto it = payloads->begin(); it != payloads->end(); ++it) {
-        if (!it.value().is_object()) {
-            continue;
-        }
-        auto crop_it = it.value().find("crop_frames");
-        if (crop_it == it.value().end()) {
-            continue;
-        }
-        found_any = true;
-        if (read_bool_like(*crop_it, false)) {
-            found_true = true;
-            break;
-        }
-    }
-
-    if (!found_any) {
-        return std::nullopt;
-    }
-    return found_true;
-}
-
-nlohmann::json strip_per_animation_crop_fields(nlohmann::json payload) {
+nlohmann::json normalize_animation_payload(nlohmann::json payload) {
     if (!payload.is_object()) {
         return nlohmann::json::object();
     }
-    payload.erase("crop_frames");
-    payload.erase("crop_bounds");
+    payload.erase("speed");
+    payload.erase("speed_factor");
+    payload.erase("speed_multiplier");
+    payload.erase("fps");
+    payload.erase("loop");
+
+    std::string on_end = "default";
+    if (payload.contains("on_end")) {
+        if (payload["on_end"].is_string()) {
+            on_end = payload["on_end"].get<std::string>();
+        } else if (payload["on_end"].is_null()) {
+            on_end = "default";
+        }
+    }
+    if (on_end.empty()) {
+        on_end = "default";
+    }
+    std::string lowered = on_end;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (lowered == "default" || lowered == "loop" || lowered == "kill" || lowered == "lock" ||
+        lowered == "reverse") {
+        payload["on_end"] = lowered;
+    } else {
+        payload["on_end"] = on_end;
+    }
+
     return payload;
+}
+
+std::string source_value_string(const nlohmann::json& payload, const char* key) {
+    if (!payload.is_object()) {
+        return {};
+    }
+    if (!payload.contains("source") || !payload["source"].is_object()) {
+        return {};
+    }
+    const nlohmann::json& source = payload["source"];
+    if (!source.contains(key) || source[key].is_null()) {
+        return {};
+    }
+    try {
+        if (source[key].is_string()) {
+            return source[key].get<std::string>();
+        }
+        return source[key].dump();
+    } catch (...) {
+        return {};
+    }
+}
+
+const nlohmann::json* snapshot_animations_object(const nlohmann::json& snapshot) {
+    if (!snapshot.is_object()) {
+        return nullptr;
+    }
+    auto it = snapshot.find("animations");
+    if (it == snapshot.end() || !it->is_object()) {
+        return nullptr;
+    }
+    return &(*it);
 }
 
 std::filesystem::path assets_root_for(const std::string& asset_name) {
@@ -647,6 +674,7 @@ AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json&
         }
 }
 
+
 std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& asset_folder_name,
                                                          const nlohmann::json& metadata) {
     nlohmann::json meta = metadata.is_object() ? metadata : nlohmann::json::object();
@@ -659,8 +687,9 @@ std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& ass
             meta = bundle.metadata_snapshot;
         }
     }
-    return std::make_shared<AssetInfo>(asset_folder_name, meta);
+return std::make_shared<AssetInfo>(asset_folder_name, meta);
 }
+
 
 void AssetInfo::set_manifest_store_provider(ManifestStoreProvider provider) {
     manifest_store_provider_slot() = std::move(provider);
@@ -700,20 +729,10 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                         tillable = info_json_.value("tileable", false);
                 }
         }
-        if (data.contains("crop_frames")) {
-                crop_frames = read_bool_like(data.at("crop_frames"), true);
-        } else if (auto legacy_crop = extract_legacy_crop_frames(data); legacy_crop.has_value()) {
-                crop_frames = *legacy_crop;
-        } else if (info_json_.contains("crop_frames")) {
-                crop_frames = read_bool_like(info_json_.at("crop_frames"), true);
-        } else {
-                crop_frames = true;
-        }
         min_same_type_distance = data.value("min_same_type_distance", 0);
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
         info_json_["tillable"] = tillable;
-        info_json_["crop_frames"] = crop_frames;
         NeighborSearchRadius = std::clamp( data.value("neighbor_search_distance", NeighborSearchRadius), 20, 1000);
         info_json_["neighbor_search_distance"] = NeighborSearchRadius;
         if (info_json_.is_object()) {
@@ -726,15 +745,319 @@ bool AssetInfo::has_tag(const std::string &tag) const {
     return tag_lookup_.find(tag) != tag_lookup_.end();
 }
 
+bool AssetInfo::AnimationTextureRebuildRequest::empty() const {
+    return all_frames_variants == kTextureVariantNone && frame_variants.empty();
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::clear() {
+    all_frames_variants = kTextureVariantNone;
+    frame_variants.clear();
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::mark_animation(std::uint8_t variants) {
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    all_frames_variants = static_cast<std::uint8_t>(all_frames_variants | variants);
+    if (all_frames_variants == kTextureVariantAll) {
+        frame_variants.clear();
+        return;
+    }
+
+    for (auto it = frame_variants.begin(); it != frame_variants.end();) {
+        it->second = AssetInfo::sanitize_texture_variant_mask(
+            static_cast<std::uint8_t>(it->second & static_cast<std::uint8_t>(~all_frames_variants)));
+        if (it->second == kTextureVariantNone) {
+            it = frame_variants.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::mark_frame(int frame_index, std::uint8_t variants) {
+    if (frame_index < 0) {
+        return;
+    }
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    variants = static_cast<std::uint8_t>(variants & static_cast<std::uint8_t>(~all_frames_variants));
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    auto& frame_mask = frame_variants[frame_index];
+    frame_mask = AssetInfo::sanitize_texture_variant_mask(static_cast<std::uint8_t>(frame_mask | variants));
+    if (frame_mask == kTextureVariantNone) {
+        frame_variants.erase(frame_index);
+    }
+}
+
+void AssetInfo::AnimationTextureRebuildRequest::merge(const AnimationTextureRebuildRequest& other) {
+    mark_animation(other.all_frames_variants);
+    for (const auto& entry : other.frame_variants) {
+        mark_frame(entry.first, entry.second);
+    }
+}
+
+bool AssetInfo::TextureRebuildBucket::empty() const {
+    if (bundle_refresh_required) {
+        return false;
+    }
+    for (const auto& entry : animations) {
+        if (!entry.second.empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void AssetInfo::TextureRebuildBucket::clear() {
+    bundle_refresh_required = false;
+    animations.clear();
+}
+
+void AssetInfo::TextureRebuildBucket::mark_bundle_refresh() {
+    bundle_refresh_required = true;
+}
+
+void AssetInfo::TextureRebuildBucket::mark_animation(const std::string& animation_name, std::uint8_t variants) {
+    if (animation_name.empty()) {
+        return;
+    }
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    animations[animation_name].mark_animation(variants);
+    bundle_refresh_required = true;
+}
+
+void AssetInfo::TextureRebuildBucket::mark_frame(const std::string& animation_name, int frame_index, std::uint8_t variants) {
+    if (animation_name.empty() || frame_index < 0) {
+        return;
+    }
+    variants = AssetInfo::sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+    animations[animation_name].mark_frame(frame_index, variants);
+    bundle_refresh_required = true;
+}
+
+void AssetInfo::TextureRebuildBucket::merge(const TextureRebuildBucket& other) {
+    bundle_refresh_required = bundle_refresh_required || other.bundle_refresh_required;
+    for (const auto& entry : other.animations) {
+        if (entry.first.empty()) {
+            continue;
+        }
+        animations[entry.first].merge(entry.second);
+        if (animations[entry.first].empty()) {
+            animations.erase(entry.first);
+        }
+    }
+}
+
+void AssetInfo::RuntimeTextureRebuildState::clear() {
+    pending_on_load.clear();
+    pending_on_close.clear();
+}
+
+std::uint8_t AssetInfo::sanitize_texture_variant_mask(std::uint8_t variants) {
+    return static_cast<std::uint8_t>(variants & kTextureVariantAll);
+}
+
+std::uint8_t AssetInfo::classify_texture_rebuild_variants(const nlohmann::json& before_payload,
+                                                          const nlohmann::json& after_payload) {
+    const std::string before_kind = source_value_string(before_payload, "kind");
+    const std::string before_path = source_value_string(before_payload, "path");
+    const std::string before_name = source_value_string(before_payload, "name");
+    const std::string after_kind = source_value_string(after_payload, "kind");
+    const std::string after_path = source_value_string(after_payload, "path");
+    const std::string after_name = source_value_string(after_payload, "name");
+
+    const bool source_changed =
+        before_kind != after_kind || before_path != after_path || before_name != after_name;
+    if (source_changed) {
+        return kTextureVariantAll;
+    }
+
+    auto read_frame_count = [](const nlohmann::json& payload) -> int {
+        if (!payload.is_object() || !payload.contains("number_of_frames")) {
+            return -1;
+        }
+        const auto& value = payload["number_of_frames"];
+        try {
+            if (value.is_number_integer()) {
+                return value.get<int>();
+            }
+            if (value.is_number_float()) {
+                return static_cast<int>(std::lround(value.get<double>()));
+            }
+            if (value.is_string()) {
+                return std::stoi(value.get<std::string>());
+            }
+        } catch (...) {
+            return -1;
+        }
+        return -1;
+    };
+
+    const int before_frames = read_frame_count(before_payload);
+    const int after_frames = read_frame_count(after_payload);
+    const bool has_source_hint =
+        !before_kind.empty() || !after_kind.empty() || !before_path.empty() || !after_path.empty();
+    if (has_source_hint && before_frames != after_frames) {
+        return kTextureVariantAll;
+    }
+
+    return kTextureVariantNone;
+}
+
+void AssetInfo::clear_runtime_texture_rebuild_state() {
+    runtime_texture_rebuild_state_.clear();
+}
+
+void AssetInfo::mark_texture_rebuild_on_close(const std::string& animation_name, std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_close.mark_animation(animation_name, variants);
+}
+
+void AssetInfo::mark_texture_frame_rebuild_on_close(const std::string& animation_name,
+                                                    int frame_index,
+                                                    std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_close.mark_frame(animation_name, frame_index, variants);
+}
+
+void AssetInfo::mark_all_animation_textures_on_close(std::uint8_t variants) {
+    variants = sanitize_texture_variant_mask(variants);
+    if (variants == kTextureVariantNone) {
+        return;
+    }
+
+    bool marked_any = false;
+    if (anims_json_.is_object()) {
+        for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+            if (!it.value().is_object() || it.key().empty()) {
+                continue;
+            }
+            runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), variants);
+            marked_any = true;
+        }
+    }
+
+    if (!marked_any) {
+        if (const auto* payloads = locate_animation_payloads(info_json_)) {
+            if (payloads->is_object()) {
+                for (auto it = payloads->begin(); it != payloads->end(); ++it) {
+                    if (!it.value().is_object() || it.key().empty()) {
+                        continue;
+                    }
+                    runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), variants);
+                    marked_any = true;
+                }
+            }
+        }
+    }
+
+    if (!marked_any) {
+        runtime_texture_rebuild_state_.pending_on_close.mark_bundle_refresh();
+    }
+}
+
+void AssetInfo::mark_bundle_refresh_on_close() {
+    runtime_texture_rebuild_state_.pending_on_close.mark_bundle_refresh();
+}
+
+void AssetInfo::mark_texture_rebuild_on_load(const std::string& animation_name, std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_load.mark_animation(animation_name, variants);
+}
+
+void AssetInfo::mark_texture_frame_rebuild_on_load(const std::string& animation_name,
+                                                   int frame_index,
+                                                   std::uint8_t variants) {
+    runtime_texture_rebuild_state_.pending_on_load.mark_frame(animation_name, frame_index, variants);
+}
+
+AssetInfo::TextureRebuildBucket AssetInfo::consume_pending_texture_rebuild_on_close() {
+    TextureRebuildBucket pending = runtime_texture_rebuild_state_.pending_on_close;
+    runtime_texture_rebuild_state_.pending_on_close.clear();
+    return pending;
+}
+
+AssetInfo::TextureRebuildBucket AssetInfo::consume_pending_texture_rebuild_on_load() {
+    TextureRebuildBucket pending = runtime_texture_rebuild_state_.pending_on_load;
+    runtime_texture_rebuild_state_.pending_on_load.clear();
+    return pending;
+}
+
+void AssetInfo::merge_pending_texture_rebuild_on_close(const TextureRebuildBucket& pending) {
+    runtime_texture_rebuild_state_.pending_on_close.merge(pending);
+}
+
+void AssetInfo::merge_pending_texture_rebuild_on_load(const TextureRebuildBucket& pending) {
+    runtime_texture_rebuild_state_.pending_on_load.merge(pending);
+}
+
+void AssetInfo::classify_animation_snapshot_rebuilds(const nlohmann::json& before_snapshot,
+                                                     const nlohmann::json& after_snapshot) {
+    const nlohmann::json* before_anims = snapshot_animations_object(before_snapshot);
+    const nlohmann::json* after_anims = snapshot_animations_object(after_snapshot);
+    if ((!before_anims || !before_anims->is_object()) && (!after_anims || !after_anims->is_object())) {
+        return;
+    }
+
+    std::unordered_set<std::string> animation_names;
+    if (before_anims && before_anims->is_object()) {
+        for (auto it = before_anims->begin(); it != before_anims->end(); ++it) {
+            animation_names.insert(it.key());
+        }
+    }
+    if (after_anims && after_anims->is_object()) {
+        for (auto it = after_anims->begin(); it != after_anims->end(); ++it) {
+            animation_names.insert(it.key());
+        }
+    }
+
+    for (const auto& animation_name : animation_names) {
+        const bool in_before = before_anims && before_anims->is_object() &&
+                               before_anims->contains(animation_name) &&
+                               (*before_anims)[animation_name].is_object();
+        const bool in_after = after_anims && after_anims->is_object() &&
+                              after_anims->contains(animation_name) &&
+                              (*after_anims)[animation_name].is_object();
+
+        if (!in_before && in_after) {
+            mark_texture_rebuild_on_close(animation_name, kTextureVariantAll);
+            continue;
+        }
+        if (in_before && !in_after) {
+            mark_bundle_refresh_on_close();
+            continue;
+        }
+        if (!in_before || !in_after) {
+            continue;
+        }
+
+        const auto variants = classify_texture_rebuild_variants((*before_anims)[animation_name],
+                                                                (*after_anims)[animation_name]);
+        if (variants != kTextureVariantNone) {
+            mark_texture_rebuild_on_close(animation_name, variants);
+        }
+    }
+}
+
 nlohmann::json AssetInfo::manifest_payload() const {
         nlohmann::json payload = info_json_;
         if (!payload.is_object()) {
                 payload = nlohmann::json::object();
         }
+        payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
+        payload.erase(kAnchorPointChildCandidatesLegacyKey);
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
                 payload["asset_name"] = name;
         }
-        payload["crop_frames"] = crop_frames;
         return payload;
 }
 
@@ -787,27 +1110,15 @@ bool AssetInfo::save_self_to_manifest(devmode::core::ManifestStore* store) {
 }
 
 bool AssetInfo::save_self_to_cache_if_dirty(SDL_Renderer* renderer) {
+        (void)renderer;
         if (!dirty_) {
                 return true;
         }
 
-        bool bundle_saved = false;
-        try {
-                PrimaryAssetCache cache(renderer);
-                bundle_saved = cache.save_current(*this);
-                if (!bundle_saved) {
-                        std::cerr << "[AssetInfo] Failed to save bundle for '" << name << "'\n";
-                }
-        } catch (const std::exception& ex) {
-                std::cerr << "[AssetInfo] Exception during bundle save for '" << name << "': " << ex.what() << "\n";
-        } catch (...) {
-                std::cerr << "[AssetInfo] Unknown error saving bundle for '" << name << "'\n";
-        }
-
-        if (bundle_saved) {
-                dirty_ = false;
-        }
-        return bundle_saved;
+        // Cache regeneration is runtime-flag driven (pending_on_close / pending_on_load).
+        // Dirty here tracks manifest/session mutation only.
+        dirty_ = false;
+        return true;
 }
 
 bool AssetInfo::commit_manifest() {
@@ -816,7 +1127,7 @@ bool AssetInfo::commit_manifest() {
                 return false;
         }
         mark_dirty();
-        return save_self_to_cache_if_dirty(nullptr);
+        return true;
 }
 
 void AssetInfo::set_asset_type(const std::string &t) {
@@ -969,11 +1280,6 @@ void AssetInfo::set_tillable(bool v) {
         info_json_["tileable"] = v;
 }
 
-void AssetInfo::set_crop_frames(bool enabled) {
-        crop_frames = enabled;
-        info_json_["crop_frames"] = enabled;
-}
-
 Area* AssetInfo::find_area(const std::string& name) {
 	for (auto& na : areas) {
 		if (na.name == name) return na.area.get();
@@ -1108,9 +1414,10 @@ void AssetInfo::load_animations(const nlohmann::json& data) {
                 converted.erase("lock_until_done");
                 converted.erase("speed");
                 converted.erase("speed_factor");
+                converted.erase("speed_multiplier");
                 converted.erase("fps");
             }
-            new_anim[it.key()] = strip_per_animation_crop_fields(std::move(converted));
+            new_anim[it.key()] = normalize_animation_payload(std::move(converted));
         }
     }
 
@@ -1136,6 +1443,13 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         }
         if (!info_json_.contains("anti_tags") || !info_json_["anti_tags"].is_array()) {
                 info_json_["anti_tags"] = nlohmann::json::array();
+        }
+        if (data.contains(kAnchorPointChildCandidatesKey)) {
+                set_anchor_point_child_candidates_payload(data[kAnchorPointChildCandidatesKey]);
+        } else if (data.contains(kAnchorPointChildCandidatesLegacyKey)) {
+                set_anchor_point_child_candidates_payload(data[kAnchorPointChildCandidatesLegacyKey]);
+        } else {
+                set_anchor_point_child_candidates_payload(nlohmann::json::array());
         }
         load_animations(data);
 
@@ -1198,43 +1512,8 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
 
         }
 
-        try {
-                if (data.contains("custom_controller_key") && data["custom_controller_key"].is_string()) {
-                        custom_controller_key = data["custom_controller_key"].get<std::string>();
-                } else {
-                        custom_controller_key.clear();
-                }
-        } catch (...) {
-                custom_controller_key.clear();
-        }
-
-        try {
-                if (data.contains("follower_binding") && data["follower_binding"].is_object()) {
-                        const auto& binding = data["follower_binding"];
-                        FollowerBindingSpec spec;
-                        if (binding.contains("controller_asset_id") && binding["controller_asset_id"].is_string()) {
-                                spec.controller_asset_id = binding["controller_asset_id"].get<std::string>();
-                        }
-                        if (binding.contains("anchor_name") && binding["anchor_name"].is_string()) {
-                                spec.anchor_name = binding["anchor_name"].get<std::string>();
-                        }
-                        if (binding.contains("follower_anchor_name") && binding["follower_anchor_name"].is_string()) {
-                                spec.follower_anchor_name = binding["follower_anchor_name"].get<std::string>();
-                        }
-                        if (binding.contains("depth_policy") && binding["depth_policy"].is_string()) {
-                                spec.depth_policy = binding["depth_policy"].get<std::string>();
-                        }
-                        if (binding.contains("layer_policy") && binding["layer_policy"].is_string()) {
-                                spec.layer_policy = binding["layer_policy"].get<std::string>();
-                        }
-                        follower_binding = spec.is_valid() ? std::optional<FollowerBindingSpec>(std::move(spec)) : std::nullopt;
-                } else {
-                        follower_binding.reset();
-                }
-        } catch (...) {
-                follower_binding.reset();
-        }
 }
+
 
 void AssetInfo::set_spawn_groups_payload(const nlohmann::json& groups) {
     if (!info_json_.is_object()) {
@@ -1265,6 +1544,182 @@ void AssetInfo::set_spawn_groups(const nlohmann::json& groups) {
     }
 
     info_json_["spawn_groups"] = std::move(sanitized);
+}
+
+void AssetInfo::sync_anchor_point_child_candidates_info_json() {
+    if (!info_json_.is_object()) {
+        info_json_ = nlohmann::json::object();
+    }
+    info_json_[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
+    info_json_.erase(kAnchorPointChildCandidatesLegacyKey);
+}
+
+void AssetInfo::set_anchor_point_child_candidates_payload(const nlohmann::json& candidates) {
+    anchor_point_child_candidates = parse_anchor_point_child_candidates_payload(candidates);
+    sync_anchor_point_child_candidates_info_json();
+}
+
+nlohmann::json AssetInfo::anchor_point_child_candidates_payload() const {
+    return build_anchor_point_child_candidates_payload(anchor_point_child_candidates);
+}
+
+nlohmann::json AssetInfo::anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const {
+    if (anchor_point_name.empty()) {
+        return nlohmann::json::object();
+    }
+    for (const auto& candidate : anchor_point_child_candidates) {
+        if (candidate.anchor_point_name == anchor_point_name) {
+            return candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+        }
+    }
+    return nlohmann::json::object();
+}
+
+bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates) {
+    if (anchor_point_name.empty()) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> updated =
+        parse_anchor_point_child_candidates_payload(before_payload);
+
+    const nlohmann::json normalized_candidates = candidates.is_object() ? candidates : nlohmann::json::object();
+    auto existing = std::find_if(updated.begin(),
+                                 updated.end(),
+                                 [&](const AnchorChildPointCandidate& candidate) {
+                                     return candidate.anchor_point_name == anchor_point_name;
+                                 });
+    if (existing != updated.end()) {
+        existing->candidates = normalized_candidates;
+    } else {
+        AnchorChildPointCandidate created{};
+        created.anchor_point_name = anchor_point_name;
+        created.candidates = normalized_candidates;
+        updated.push_back(std::move(created));
+    }
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(updated);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(updated);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
+}
+
+bool AssetInfo::rename_anchor_point_child_candidate(const std::string& old_name, const std::string& new_name) {
+    if (old_name.empty() || new_name.empty() || old_name == new_name) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> updated =
+        parse_anchor_point_child_candidates_payload(before_payload);
+
+    auto old_it = std::find_if(updated.begin(),
+                               updated.end(),
+                               [&](const AnchorChildPointCandidate& candidate) {
+                                   return candidate.anchor_point_name == old_name;
+                               });
+    if (old_it == updated.end()) {
+        return false;
+    }
+
+    auto new_it = std::find_if(updated.begin(),
+                               updated.end(),
+                               [&](const AnchorChildPointCandidate& candidate) {
+                                   return candidate.anchor_point_name == new_name;
+                               });
+
+    if (new_it != updated.end()) {
+        updated.erase(old_it);
+    } else {
+        old_it->anchor_point_name = new_name;
+    }
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(updated);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(updated);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
+}
+
+bool AssetInfo::remove_anchor_point_child_candidate(const std::string& anchor_point_name) {
+    if (anchor_point_name.empty()) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> updated =
+        parse_anchor_point_child_candidates_payload(before_payload);
+    const auto erase_it = std::remove_if(updated.begin(),
+                                         updated.end(),
+                                         [&](const AnchorChildPointCandidate& candidate) {
+                                             return candidate.anchor_point_name == anchor_point_name;
+                                         });
+    if (erase_it == updated.end()) {
+        return false;
+    }
+    updated.erase(erase_it, updated.end());
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(updated);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(updated);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
+}
+
+bool AssetInfo::reconcile_anchor_point_child_candidates(const std::vector<std::string>& canonical_anchor_names) {
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> current =
+        parse_anchor_point_child_candidates_payload(before_payload);
+
+    std::vector<std::string> canonical_order;
+    canonical_order.reserve(canonical_anchor_names.size());
+    std::unordered_set<std::string> seen_names;
+    for (const std::string& name : canonical_anchor_names) {
+        if (name.empty()) {
+            continue;
+        }
+        if (seen_names.insert(name).second) {
+            canonical_order.push_back(name);
+        }
+    }
+
+    std::vector<AnchorChildPointCandidate> reconciled;
+    reconciled.reserve(canonical_order.size());
+    for (const std::string& name : canonical_order) {
+        auto it = std::find_if(current.begin(),
+                               current.end(),
+                               [&](const AnchorChildPointCandidate& candidate) {
+                                   return candidate.anchor_point_name == name;
+                               });
+        if (it != current.end()) {
+            reconciled.push_back(*it);
+        } else {
+            AnchorChildPointCandidate created{};
+            created.anchor_point_name = name;
+            created.candidates = nlohmann::json::object();
+            reconciled.push_back(std::move(created));
+        }
+    }
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(reconciled);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(reconciled);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
 }
 
 bool AssetInfo::remove_area(const std::string& name) {
@@ -1364,7 +1819,21 @@ nlohmann::json AssetInfo::animation_payload(const std::string& name) const {
 bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& payload) {
 	if (name.empty()) return false;
 	try {
-		nlohmann::json clean_payload = strip_per_animation_crop_fields(payload);
+		nlohmann::json existing_payload = nlohmann::json::object();
+		bool has_existing = false;
+		if (anims_json_.is_object() && anims_json_.contains(name) && anims_json_[name].is_object()) {
+			existing_payload = normalize_animation_payload(anims_json_[name]);
+			has_existing = true;
+		} else if (info_json_.is_object() &&
+		           info_json_.contains("animations") &&
+		           info_json_["animations"].is_object() &&
+		           info_json_["animations"].contains(name) &&
+		           info_json_["animations"][name].is_object()) {
+			existing_payload = normalize_animation_payload(info_json_["animations"][name]);
+			has_existing = true;
+		}
+
+		nlohmann::json clean_payload = normalize_animation_payload(payload);
 		if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
 			info_json_["animations"] = nlohmann::json::object();
 		}
@@ -1372,6 +1841,15 @@ bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& 
 
 		if (anims_json_.is_null() || !anims_json_.is_object()) anims_json_ = nlohmann::json::object();
 		anims_json_[name] = clean_payload;
+
+		if (!has_existing) {
+			mark_texture_rebuild_on_close(name, kTextureVariantAll);
+		} else {
+			const auto variants = classify_texture_rebuild_variants(existing_payload, clean_payload);
+			if (variants != kTextureVariantNone) {
+				mark_texture_rebuild_on_close(name, variants);
+			}
+		}
 		return true;
 	} catch (...) {
 		return false;
@@ -1393,6 +1871,9 @@ bool AssetInfo::remove_animation(const std::string& name) {
 		}
 	} catch (...) {
 		removed = false;
+	}
+	if (removed) {
+		mark_bundle_refresh_on_close();
 	}
 	return removed;
 }
@@ -1417,6 +1898,8 @@ bool AssetInfo::rename_animation(const std::string& old_name, const std::string&
 			start_animation = new_name;
 		 info_json_["start"] = start_animation;
 		}
+		mark_texture_rebuild_on_close(new_name, kTextureVariantAll);
+		mark_bundle_refresh_on_close();
 		return true;
 	} catch (...) {
 		return false;
@@ -1481,22 +1964,39 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
     }
 
     try {
-
         if (!anims_json_.is_object()) {
             anims_json_ = nlohmann::json::object();
         }
 
-        nlohmann::json updated_animation = strip_per_animation_crop_fields(properties);
+        nlohmann::json existing_animation = nlohmann::json::object();
+        bool has_existing_animation = false;
         if (anims_json_.contains(animation_name) && anims_json_[animation_name].is_object()) {
+            existing_animation = normalize_animation_payload(anims_json_[animation_name]);
+            has_existing_animation = true;
+        } else if (info_json_.is_object() &&
+                   info_json_.contains("animations") &&
+                   info_json_["animations"].is_object() &&
+                   info_json_["animations"].contains(animation_name) &&
+                   info_json_["animations"][animation_name].is_object()) {
+            existing_animation = normalize_animation_payload(info_json_["animations"][animation_name]);
+            has_existing_animation = true;
+        }
 
-            for (auto& [key, value] : anims_json_[animation_name].items()) {
-                if (key == "crop_frames" || key == "crop_bounds") {
-                    continue;
-                }
+        nlohmann::json updated_animation = normalize_animation_payload(properties);
+        if (has_existing_animation) {
+            for (auto& [key, value] : existing_animation.items()) {
                 if (!updated_animation.contains(key)) {
                     updated_animation[key] = value;
                 }
             }
+        }
+
+        const bool should_set_start =
+            properties.contains("start") && properties["start"].is_boolean() && properties["start"].get<bool>();
+        const bool animation_changed = !has_existing_animation || existing_animation != updated_animation;
+        const bool start_changed = should_set_start && start_animation != animation_name;
+        if (!animation_changed && !start_changed) {
+            return false;
         }
 
         anims_json_[animation_name] = updated_animation;
@@ -1509,9 +2009,20 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
         }
         info_json_["animations"][animation_name] = updated_animation;
 
-        if (properties.contains("start") && properties["start"].is_boolean() && properties["start"].get<bool>()) {
+        if (should_set_start) {
             start_animation = animation_name;
             info_json_["start"] = start_animation;
+        }
+
+        if (animation_changed) {
+            if (!has_existing_animation) {
+                mark_texture_rebuild_on_close(animation_name, kTextureVariantAll);
+            } else {
+                const auto variants = classify_texture_rebuild_variants(existing_animation, updated_animation);
+                if (variants != kTextureVariantNone) {
+                    mark_texture_rebuild_on_close(animation_name, variants);
+                }
+            }
         }
 
         return true;
@@ -1521,18 +2032,8 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
     }
 }
 
-void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
+void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations, bool assume_cache_ready) {
     if (!anims_json_.is_object()) return;
-
-    SDL_Texture* dummy_base_sprite = nullptr;
-    int dummy_w = 0;
-    int dummy_h = 0;
-    std::unordered_map<std::string, PrebuiltAnimationFrames> prebuilt_frames;
-    CacheManager::BundleData bundle_data;
-    if (renderer) {
-        PrimaryAssetCache primary_cache(renderer);
-        primary_cache.load_or_build(*this, prebuilt_frames, bundle_data);
-    }
 
     auto parse_source_animation = [](const nlohmann::json& payload) -> std::optional<std::string> {
         if (!payload.contains("source") || !payload["source"].is_object()) {
@@ -1552,7 +2053,153 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
         } catch (...) {
             return std::nullopt;
         }
-};
+    };
+
+    std::unordered_set<std::string> selected_animation_names;
+    if (include_all_animations) {
+        for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+            selected_animation_names.insert(it.key());
+        }
+    } else {
+        if (!start_animation.empty() && anims_json_.contains(start_animation)) {
+            selected_animation_names.insert(start_animation);
+        }
+        if (anims_json_.contains("default")) {
+            selected_animation_names.insert("default");
+        }
+        if (selected_animation_names.empty() && !anims_json_.empty()) {
+            selected_animation_names.insert(anims_json_.begin().key());
+        }
+
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            std::vector<std::string> snapshot(selected_animation_names.begin(),
+                                              selected_animation_names.end());
+            for (const auto& anim_name : snapshot) {
+                auto it = anims_json_.find(anim_name);
+                if (it == anims_json_.end() || !it->is_object()) {
+                    continue;
+                }
+                auto source_name = parse_source_animation(*it);
+                if (source_name && !source_name->empty()) {
+                    if (selected_animation_names.insert(*source_name).second) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    auto should_include_animation = [&](const std::string& anim_name) {
+        if (include_all_animations) {
+            return true;
+        }
+        return selected_animation_names.find(anim_name) != selected_animation_names.end();
+    };
+    auto is_folder_source_animation = [](const nlohmann::json& payload) {
+        if (!payload.is_object()) {
+            return false;
+        }
+        if (!payload.contains("source") || !payload["source"].is_object()) {
+            return false;
+        }
+        try {
+            return payload["source"].value("kind", std::string{}) == "folder";
+        } catch (...) {
+            return false;
+        }
+    };
+    auto prebuilt_frames_are_usable_for_folder_animation = [](const PrebuiltAnimationFrames& prebuilt) {
+        if (prebuilt.frames.empty()) {
+            return false;
+        }
+        for (const auto& frame : prebuilt.frames) {
+            for (SDL_Texture* texture : frame.textures) {
+                if (texture) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    auto join_animation_names = [](const std::vector<std::string>& names) {
+        if (names.empty()) {
+            return std::string{};
+        }
+        std::ostringstream joined;
+        const std::size_t limit = std::min<std::size_t>(names.size(), 6);
+        for (std::size_t idx = 0; idx < limit; ++idx) {
+            if (idx != 0) {
+                joined << ", ";
+            }
+            joined << names[idx];
+        }
+        if (names.size() > limit) {
+            joined << ", ...";
+        }
+        return joined.str();
+    };
+    auto cached_prebuilt_covers_selected_folder_animations =
+        [&](const std::unordered_map<std::string, PrebuiltAnimationFrames>& prebuilt_frames_map,
+            std::vector<std::string>* unusable_animations = nullptr) {
+            bool all_usable = true;
+            for (const auto& animation_name : selected_animation_names) {
+                auto it = anims_json_.find(animation_name);
+                if (it == anims_json_.end() || !it->is_object()) {
+                    continue;
+                }
+                if (!is_folder_source_animation(*it)) {
+                    continue;
+                }
+
+                auto prebuilt_it = prebuilt_frames_map.find(animation_name);
+                if (prebuilt_it == prebuilt_frames_map.end() ||
+                    !prebuilt_frames_are_usable_for_folder_animation(prebuilt_it->second)) {
+                    all_usable = false;
+                    if (unusable_animations) {
+                        unusable_animations->push_back(animation_name);
+                    }
+                }
+            }
+            return all_usable;
+        };
+
+    SDL_Texture* dummy_base_sprite = nullptr;
+    int dummy_w = 0;
+    int dummy_h = 0;
+    std::unordered_map<std::string, PrebuiltAnimationFrames> prebuilt_frames;
+    CacheManager::BundleData bundle_data;
+    bool prebuilt_cache_ready = false;
+    if (renderer) {
+        PrimaryAssetCache primary_cache(renderer);
+        const std::unordered_set<std::string>* filter =
+            include_all_animations ? nullptr : &selected_animation_names;
+        if (assume_cache_ready) {
+            prebuilt_cache_ready = primary_cache.load_cached_only(*this, prebuilt_frames, bundle_data, filter);
+            if (prebuilt_cache_ready) {
+                std::vector<std::string> unusable_animations;
+                if (!cached_prebuilt_covers_selected_folder_animations(prebuilt_frames, &unusable_animations)) {
+                    vibble::log::warn("[AssetInfo] Cached-only preload produced incomplete frame caches for '" + name +
+                                      "'; forcing rebuild-capable load. Missing/invalid animations: " +
+                                      join_animation_names(unusable_animations));
+                    prebuilt_cache_ready = false;
+                    prebuilt_frames.clear();
+                    bundle_data = CacheManager::BundleData{};
+                }
+            }
+            if (!prebuilt_cache_ready) {
+                vibble::log::warn("[AssetInfo] Cached-only animation preload failed integrity checks for '" + name +
+                                  "'; falling back to rebuild-capable cache load.");
+                prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+                if (!prebuilt_cache_ready) {
+                    vibble::log::warn("[AssetInfo] Rebuild-capable cache load also failed for '" + name + "'.");
+                }
+            }
+        } else {
+            prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+        }
+    }
 
     auto animation_ready = [this](const std::string& name) {
         auto it = animations.find(name);
@@ -1560,10 +2207,13 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
             return false;
         }
         const Animation& anim = it->second;
-        return anim.number_of_frames > 0 && !anim.frames.empty();
+        return anim.number_of_frames > 0 && anim.has_frames();
 };
 
     for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+        if (!should_include_animation(it.key())) {
+            continue;
+        }
         animations[it.key()];
     }
 
@@ -1583,6 +2233,9 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
     for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
         const std::string name = it.key();
         const auto& json       = it.value();
+        if (!should_include_animation(name)) {
+            continue;
+        }
 
         auto source_name = parse_source_animation(json);
         const bool needs_source = source_name.has_value() && *source_name != name;

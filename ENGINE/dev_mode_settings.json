@@ -1,0 +1,15 @@
+{
+    "render": {
+        "smoothing": {
+            "asset": {
+                "alpha": {
+                    "lerp_rate": 8.0,
+                    "max_step": 2.0,
+                    "method": 1.0,
+                    "snap_threshold": 0.009999999776482582,
+                    "spring_frequency": 0.0
+                }
+            }
+        }
+    }
+}

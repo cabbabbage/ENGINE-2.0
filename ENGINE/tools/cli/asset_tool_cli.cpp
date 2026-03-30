@@ -1,7 +1,6 @@
 // asset_tool_cli.cpp
 //
-// CLI wrapper for ImageCacheGenerator - replaces asset_tool.py
-// Processes animation frames marked with needs_rebuild=true in cache/rebuild_queue.json
+// CLI wrapper for ImageCacheGenerator.
 // Generates cache structure: cache/<asset>/animations/<anim>/scale_<pct>/{normal,foreground,background}/<idx>.png
 
 #include "image_cache_generator.hpp"
@@ -9,6 +8,8 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
 
 // Simple console logger implementation
 class ConsoleLogger : public imgcache::ILogger {
@@ -34,15 +35,18 @@ void print_usage(const char* prog_name) {
     std::cout << "OPTIONS:\n";
     std::cout << "  --manifest <path>       Path to manifest.json (default: auto-discover)\n";
     std::cout << "  --cache-root <path>     Override cache directory (default: <repo>/cache)\n";
-    std::cout << "  --force-rebuild         Force rebuild all frames regardless of needs_rebuild\n";
+    std::cout << "  --force-rebuild         Force rebuild all frames/variants in selected scope\n";
+    std::cout << "  --missing-only          Rebuild only missing output files in selected scope\n";
     std::cout << "  --dry-run               Plan without executing (show what would be done)\n";
     std::cout << "  --asset <name>          Only process specified asset\n";
     std::cout << "  --animation <name>      Only process specified animation (requires --asset)\n";
     std::cout << "  --frame <idx>           Only process specified frame index (requires --asset and --animation)\n";
     std::cout << "  --workers <N>           Number of worker threads (default: CPU count - 1)\n";
+    std::cout << "  --effects-backend <B>   Effects backend: auto|cpu|d3d11 (default: auto)\n";
+    std::cout << "  --verbose-tasks         Enable per-task progress logs (default: quiet aggregate logs)\n";
     std::cout << "  --help                  Show this help message\n\n";
     std::cout << "Examples:\n";
-    std::cout << "  " << prog_name << "                                  # Process all flagged frames\n";
+    std::cout << "  " << prog_name << " --missing-only                   # Repair missing files only\n";
     std::cout << "  " << prog_name << " --force-rebuild                 # Rebuild everything\n";
     std::cout << "  " << prog_name << " --asset player                  # Process only player asset\n";
     std::cout << "  " << prog_name << " --asset player --animation idle # Process only player/idle\n";
@@ -75,6 +79,9 @@ int main(int argc, char** argv) {
         }
         else if (arg == "--force-rebuild") {
             opts.force_rebuild = true;
+        }
+        else if (arg == "--missing-only") {
+            opts.missing_only = true;
         }
         else if (arg == "--dry-run") {
             opts.dry_run = true;
@@ -129,6 +136,29 @@ int main(int argc, char** argv) {
                 return 2;
             }
         }
+        else if (arg == "--effects-backend") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --effects-backend requires an argument: auto|cpu|d3d11\n";
+                return 2;
+            }
+            std::string value = argv[++i];
+            std::transform(value.begin(), value.end(), value.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (value == "auto") {
+                opts.effects_backend = imgcache::EffectsBackend::Auto;
+            } else if (value == "cpu") {
+                opts.effects_backend = imgcache::EffectsBackend::Cpu;
+            } else if (value == "d3d11") {
+                opts.effects_backend = imgcache::EffectsBackend::D3D11;
+            } else {
+                std::cerr << "Error: invalid --effects-backend value '" << value
+                          << "' (expected auto|cpu|d3d11)\n";
+                return 2;
+            }
+        }
+        else if (arg == "--verbose-tasks") {
+            opts.quiet_task_logs = false;
+        }
         else {
             std::cerr << "Error: unknown argument: " << arg << "\n";
             print_usage(argv[0]);
@@ -159,7 +189,8 @@ int main(int argc, char** argv) {
         std::cout << "  Tasks succeeded: " << result.stats.tasks_succeeded
                   << " / " << result.stats.tasks_total << "\n";
         std::cout << "  PNGs written: " << result.stats.pngs_written << "\n";
-        std::cout << "  Rebuild queue updated: " << (result.rebuild_queue_written ? "yes" : "no") << "\n";
+        std::cout << "  Assets touched: " << result.stats.assets_touched << "\n";
+        std::cout << "  Animations touched: " << result.stats.animations_touched << "\n";
 
         if (result.stats.tasks_total == 0) {
             logger.info("No work required - all cache files up to date");
@@ -172,7 +203,7 @@ int main(int argc, char** argv) {
         std::cerr << "  Error: " << result.error << "\n";
         std::cerr << "  Tasks succeeded: " << result.stats.tasks_succeeded
                   << " / " << result.stats.tasks_total << "\n";
-        std::cerr << "  Rebuild queue updated: " << (result.rebuild_queue_written ? "yes" : "no") << "\n";
+        std::cerr << "  PNGs written: " << result.stats.pngs_written << "\n";
 
         return 1;
     }

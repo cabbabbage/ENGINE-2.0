@@ -19,9 +19,12 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <tuple>
 #include <unordered_set>
 #include <vector>
 
@@ -38,7 +41,6 @@
 #include "PreviewProvider.hpp"
 #include "string_utils.hpp"
 #include "ui/tinyfiledialogs.h"
-#include "utils/rebuild_queue.hpp"
 #ifdef _WIN32
 #  ifndef NOMINMAX
 #    define NOMINMAX
@@ -56,7 +58,6 @@
 #include "devtools/widgets.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_paths.hpp"
-#include "devtools/animation_runtime_refresh.hpp"
 #include "devtools/dev_mode_utils.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -204,6 +205,61 @@ std::vector<std::filesystem::path> split_paths(const std::string& raw) {
     return paths;
 }
 
+std::string lowercase_copy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+bool has_extension_ci(const std::filesystem::path& path, std::string_view extension) {
+    return lowercase_copy(path.extension().string()) == lowercase_copy(std::string(extension));
+}
+
+std::vector<std::filesystem::path> normalize_sequence_paths(const std::vector<std::filesystem::path>& files) {
+    std::vector<std::filesystem::path> normalized = files;
+    auto numeric_key = [](const std::filesystem::path& path) {
+        std::string stem = path.stem().string();
+        try {
+            return std::make_tuple(0, std::stoi(stem), lowercase_copy(stem), lowercase_copy(path.filename().string()));
+        } catch (...) {
+            std::smatch match;
+            static const std::regex number_regex("(\\d+)", std::regex::icase);
+            if (std::regex_search(stem, match, number_regex)) {
+                try {
+                    return std::make_tuple(0, std::stoi(match.str(1)), lowercase_copy(stem), lowercase_copy(path.filename().string()));
+                } catch (...) {
+                }
+            }
+        }
+        return std::make_tuple(1, 0, lowercase_copy(stem), lowercase_copy(path.filename().string()));
+    };
+    std::sort(normalized.begin(), normalized.end(), [&](const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
+        return numeric_key(lhs) < numeric_key(rhs);
+    });
+    return normalized;
+}
+
+nlohmann::json build_movement_sequence(int frame_count, int dx, int depth_dz) {
+    nlohmann::json movement = nlohmann::json::array();
+    const int safe_frames = std::max(frame_count, 1);
+    movement.get_ref<nlohmann::json::array_t&>().reserve(static_cast<std::size_t>(safe_frames));
+    for (int i = 0; i < safe_frames; ++i) {
+        const bool first = (i == 0);
+        const int frame_dx = first ? 0 : dx;
+        const int frame_dz = first ? 0 : depth_dz;
+        movement.push_back(nlohmann::json::object({
+            {"x", frame_dx},
+            {"y", 0},
+            {"z", frame_dz},
+            {"dx", frame_dx},
+            {"dy", 0},
+            {"dz", frame_dz},
+        }));
+    }
+    return movement;
+}
+
 std::string default_audio_subdir() { return "audio"; }
 
 std::string manifest_key_fallback(const AssetInfo& info) {
@@ -265,11 +321,11 @@ nlohmann::json build_folder_payload(const std::filesystem::path& folder) {
             return {};
         }
         nlohmann::json payload = {
-            {"loop", true},
             {"locked", false},
             {"reverse_source", false},
             {"flipped_source", false},
             {"rnd_start", false},
+            {"on_end", "default"},
             {"source",
                 {
                     {"kind", "folder"},
@@ -420,8 +476,9 @@ AnimationEditorWindow::AnimationEditorWindow() {
     list_context_menu_ = std::make_unique<AnimationListContextMenu>();
 
     add_button_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 160, DMButton::height());
-    build_button_ = std::make_unique<DMButton>("Build Now", &DMStyles::CreateButton(), 120, DMButton::height());
     controller_button_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 140, DMButton::height());
+    create_defaults_button_ = std::make_unique<DMButton>("Create Defaults", &DMStyles::CreateButton(), 170, DMButton::height());
+    ensure_defaults_modal_widgets();
     layout_dirty_ = true;
 }
 
@@ -433,7 +490,9 @@ AnimationEditorWindow::~AnimationEditorWindow() {
 }
 
 void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
+    const bool notify_closed = (!visible && visible_ && process_close);
     if (!visible && visible_ && process_close) {
+        close_defaults_modal();
 
         if (document_ && document_->consume_dirty_flag()) {
             auto_save_pending_ = true;
@@ -453,6 +512,9 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
         }
     }
     visible_ = visible;
+    if (notify_closed && on_closed_) {
+        on_closed_();
+    }
 }
 
 void AnimationEditorWindow::toggle_visible() { set_visible(!visible_); }
@@ -493,6 +555,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     using_manifest_store_ = false;
     manifest_asset_key_.clear();
     manifest_transaction_ = {};
+    if (document_) {
+        document_->set_manifest_asset_key_debug({});
+    }
 
     enum class SnapshotRecoverySource { None, AssetMetadata, AssetFolders, Manifest };
     SnapshotRecoverySource recovery_source = SnapshotRecoverySource::None;
@@ -513,6 +578,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (manifest_transaction_) {
             using_manifest_store_ = true;
+            if (document_) {
+                document_->set_manifest_asset_key_debug(manifest_asset_key_);
+            }
             persist_callback = [this](const nlohmann::json& payload) { return this->persist_manifest_payload(payload); };
             if (log_creation) {
                 std::cerr << "[AnimationEditor] Created manifest entry for '" << info->name << "' as '" << manifest_asset_key_ << "'\n";
@@ -521,6 +589,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
             std::cerr << "[AnimationEditor] Failed to open manifest transaction for '" << manifest_asset_key_ << "'\n";
             manifest_asset_key_.clear();
             manifest_transaction_ = {};
+            if (document_) {
+                document_->set_manifest_asset_key_debug({});
+            }
         }
     };
 
@@ -660,6 +731,7 @@ void AnimationEditorWindow::clear_info() {
     info_.reset();
     asset_root_path_.clear();
     close_manifest_transaction();
+    close_defaults_modal();
     live_frame_editor_session_active_ = false;
     document_->load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, {});
     document_->consume_dirty_flag();
@@ -693,14 +765,14 @@ void AnimationEditorWindow::layout_children() {
         left_x += add_button_->rect().w + button_gap;
     }
 
-    if (build_button_) {
-        build_button_->set_rect(SDL_Rect{left_x, y, build_button_->rect().w, DMButton::height()});
-        left_x += build_button_->rect().w + button_gap;
-    }
-
     if (controller_button_) {
         controller_button_->set_rect(SDL_Rect{left_x, y, controller_button_->rect().w, DMButton::height()});
         left_x += controller_button_->rect().w + button_gap;
+    }
+
+    if (create_defaults_button_) {
+        create_defaults_button_->set_rect(SDL_Rect{left_x, y, create_defaults_button_->rect().w, DMButton::height()});
+        left_x += create_defaults_button_->rect().w + button_gap;
     }
 
     const int status_padding = DMSpacing::panel_padding();
@@ -742,6 +814,7 @@ void AnimationEditorWindow::layout_children() {
     if (inspector_panel_) inspector_panel_->set_bounds(inspector_rect_);
 
     invalidate_inspector_background_cache();
+    layout_defaults_modal();
 
 }
 
@@ -779,7 +852,7 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_source_gif_picker([this]() { return this->pick_gif(); });
     inspector_panel_->set_source_png_sequence_picker([this]() { return this->pick_png_sequence(); });
     inspector_panel_->set_source_status_callback([this](const std::string& message) { this->set_status_message(message); });
-    inspector_panel_->set_frame_edit_callback([this](const std::string& id) { this->open_frame_editor(id, FrameEditorLaunchMode::Movement); });
+    inspector_panel_->set_frame_edit_callback({});
     inspector_panel_->set_frame_mode_edit_callback([this](const std::string& id, FrameEditorLaunchMode mode) { this->open_frame_editor(id, mode); });
     inspector_panel_->set_navigate_to_animation_callback([this](const std::string& id) {
         this->select_animation(std::optional<std::string>{id}, true);
@@ -941,12 +1014,26 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     }
 
     DMDropdown::render_active_options(renderer);
+    if (defaults_modal_visible_) {
+        render_defaults_modal(renderer);
+    }
 }
 
 bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
     if (!visible_) return false;
 
     ensure_layout();
+
+    if (defaults_modal_visible_) {
+        if (handle_defaults_modal_event(e)) {
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
+            e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_WHEEL ||
+            e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT) {
+            return true;
+        }
+    }
 
     if (auto* active_dd = DMDropdown::active_dropdown()) {
         if (active_dd->handle_event(e)) {
@@ -1166,6 +1253,10 @@ void AnimationEditorWindow::set_on_document_saved(std::function<void()> callback
     on_document_saved_ = std::move(callback);
 }
 
+void AnimationEditorWindow::set_on_closed(std::function<void()> callback) {
+    on_closed_ = std::move(callback);
+}
+
 void AnimationEditorWindow::set_on_animation_properties_changed(std::function<void(const std::string&, const nlohmann::json&)> callback) {
     external_animation_properties_changed_ = std::move(callback);
     refresh_inspector_animation_callback();
@@ -1222,18 +1313,18 @@ void AnimationEditorWindow::render_header(SDL_Renderer* renderer) const {
     }
 
     if (add_button_) add_button_->render(renderer);
-    if (build_button_) build_button_->render(renderer);
     if (controller_button_) controller_button_->render(renderer);
+    if (create_defaults_button_) create_defaults_button_->render(renderer);
 
     int label_x = header_rect_.x + DMSpacing::panel_padding();
     if (add_button_) {
         label_x = std::max(label_x, add_button_->rect().x + add_button_->rect().w + DMSpacing::small_gap());
     }
-    if (build_button_) {
-        label_x = std::max(label_x, build_button_->rect().x + build_button_->rect().w + DMSpacing::small_gap());
-    }
     if (controller_button_) {
         label_x = std::max(label_x, controller_button_->rect().x + controller_button_->rect().w + DMSpacing::small_gap());
+    }
+    if (create_defaults_button_) {
+        label_x = std::max(label_x, create_defaults_button_->rect().x + create_defaults_button_->rect().w + DMSpacing::small_gap());
     }
     render_label(renderer, title, label_x, header_rect_.y + DMSpacing::small_gap());
 }
@@ -1314,19 +1405,8 @@ bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
 };
 
     handle_button(add_button_, [this]() { create_animation_via_prompt(); });
-    handle_button(build_button_, [this]() {
-        auto info_ptr = info_.lock();
-        if (!info_ptr) {
-            set_status_message("No asset selected.", 180);
-            return;
-        }
-        if (!rebuild_all_animations_via_pipeline(info_ptr)) {
-            set_status_message("Build failed; see logs.", 240);
-        } else {
-            set_status_message("Rebuilt all animations.", 240);
-        }
-    });
     handle_button(controller_button_, [this]() { handle_controller_button_click(); });
+    handle_button(create_defaults_button_, [this]() { open_defaults_modal(); });
 
     return consumed;
 }
@@ -1334,6 +1414,502 @@ bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
 void AnimationEditorWindow::set_status_message(const std::string& message, int frames) {
     status_message_ = message;
     status_timer_frames_ = std::max(frames, 0);
+}
+
+void AnimationEditorWindow::ensure_defaults_modal_widgets() {
+    if (!defaults_diagonals_checkbox_) {
+        defaults_diagonals_checkbox_ = std::make_unique<DMCheckbox>("Diagonals", true);
+    }
+    if (!defaults_basic_movement_checkbox_) {
+        defaults_basic_movement_checkbox_ = std::make_unique<DMCheckbox>("Basic Movement", true);
+    }
+    if (!defaults_distance_box_) {
+        defaults_distance_box_ = std::make_unique<DMTextBox>("Distance per frame", "5");
+    }
+    if (!defaults_base_frames_button_) {
+        defaults_base_frames_button_ = std::make_unique<DMButton>("Add Base Movement Animation", &DMStyles::AccentButton(), 260, DMButton::height());
+    }
+    if (!defaults_create_button_) {
+        defaults_create_button_ = std::make_unique<DMButton>("Create", &DMStyles::CreateButton(), 120, DMButton::height());
+    }
+    if (!defaults_cancel_button_) {
+        defaults_cancel_button_ = std::make_unique<DMButton>("Cancel", &DMStyles::HeaderButton(), 120, DMButton::height());
+    }
+}
+
+void AnimationEditorWindow::open_defaults_modal() {
+    ensure_defaults_modal_widgets();
+    defaults_modal_visible_ = true;
+    if (list_context_menu_) {
+        list_context_menu_->close();
+    }
+    layout_defaults_modal();
+}
+
+void AnimationEditorWindow::close_defaults_modal() {
+    defaults_modal_visible_ = false;
+    defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+}
+
+void AnimationEditorWindow::layout_defaults_modal() {
+    if (!defaults_modal_visible_) {
+        defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+        return;
+    }
+
+    ensure_defaults_modal_widgets();
+
+    const int modal_width = std::clamp(bounds_.w - 120, 460, 720);
+    const int modal_height = 360;
+    defaults_modal_rect_ = SDL_Rect{
+        bounds_.x + std::max(0, (bounds_.w - modal_width) / 2),
+        bounds_.y + std::max(0, (bounds_.h - modal_height) / 2),
+        modal_width,
+        modal_height
+    };
+
+    const int padding = DMSpacing::panel_padding();
+    const int row_gap = DMSpacing::small_gap();
+    const int content_x = defaults_modal_rect_.x + padding;
+    const int content_w = std::max(0, defaults_modal_rect_.w - padding * 2);
+    int y = defaults_modal_rect_.y + padding + DMStyles::Label().font_size + row_gap + 6;
+
+    if (defaults_diagonals_checkbox_) {
+        defaults_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
+        y += DMCheckbox::height() + row_gap;
+    }
+    if (defaults_basic_movement_checkbox_) {
+        defaults_basic_movement_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
+        y += DMCheckbox::height() + row_gap;
+    }
+    if (defaults_distance_box_) {
+        const int distance_h = defaults_distance_box_->preferred_height(content_w);
+        defaults_distance_box_->set_rect(SDL_Rect{content_x, y, content_w, distance_h});
+        y += distance_h + row_gap;
+    }
+
+    if (defaults_base_frames_button_) {
+        if (defaults_base_frame_paths_.empty()) {
+            defaults_base_frames_button_->set_text("Add Base Movement Animation");
+        } else {
+            defaults_base_frames_button_->set_text("Base Frames (" + std::to_string(defaults_base_frame_paths_.size()) + ")");
+        }
+        const int button_w = std::min(content_w, std::max(280, defaults_base_frames_button_->preferred_width() + 24));
+        defaults_base_frames_button_->set_rect(SDL_Rect{content_x, y, button_w, DMButton::height()});
+    }
+
+    const int footer_y = defaults_modal_rect_.y + defaults_modal_rect_.h - padding - DMButton::height();
+    if (defaults_cancel_button_ && defaults_create_button_) {
+        const int button_gap = DMSpacing::small_gap();
+        const int cancel_w = 120;
+        const int create_w = 130;
+        const int create_x = defaults_modal_rect_.x + defaults_modal_rect_.w - padding - create_w;
+        const int cancel_x = create_x - button_gap - cancel_w;
+        defaults_cancel_button_->set_rect(SDL_Rect{cancel_x, footer_y, cancel_w, DMButton::height()});
+        defaults_create_button_->set_rect(SDL_Rect{create_x, footer_y, create_w, DMButton::height()});
+    }
+}
+
+bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
+    if (!defaults_modal_visible_) {
+        return false;
+    }
+
+    ensure_defaults_modal_widgets();
+    layout_defaults_modal();
+
+    bool consumed = false;
+    if (defaults_diagonals_checkbox_ && defaults_diagonals_checkbox_->handle_event(e)) {
+        consumed = true;
+    }
+    if (defaults_basic_movement_checkbox_ && defaults_basic_movement_checkbox_->handle_event(e)) {
+        consumed = true;
+    }
+    if (defaults_distance_box_ && defaults_distance_box_->handle_event(e)) {
+        consumed = true;
+    }
+
+    auto handle_button = [&](const std::unique_ptr<DMButton>& button, auto&& callback) {
+        if (!button) return;
+        if (!button->handle_event(e)) return;
+        consumed = true;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            callback();
+        }
+    };
+
+    handle_button(defaults_base_frames_button_, [this]() { handle_pick_defaults_base_frames(); });
+    handle_button(defaults_create_button_, [this]() { handle_create_defaults(); });
+    handle_button(defaults_cancel_button_, [this]() { close_defaults_modal(); });
+
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        if (e.key.key == SDLK_ESCAPE) {
+            close_defaults_modal();
+            return true;
+        }
+        if (e.key.key == SDLK_RETURN && (!defaults_distance_box_ || !defaults_distance_box_->is_editing())) {
+            handle_create_defaults();
+            return true;
+        }
+        return true;
+    }
+    if (e.type == SDL_EVENT_TEXT_INPUT) {
+        return true;
+    }
+
+    SDL_Point point{0, 0};
+    bool pointer_event = false;
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        point = SDL_Point{static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
+        pointer_event = true;
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        point = SDL_Point{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+        pointer_event = true;
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        point = SDL_Point{mx, my};
+        pointer_event = true;
+    }
+
+    if (pointer_event) {
+        if (SDL_PointInRect(&point, &defaults_modal_rect_)) {
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+            return true;
+        }
+    }
+
+    return consumed;
+}
+
+void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const {
+    if (!defaults_modal_visible_ || !renderer || defaults_modal_rect_.w <= 0 || defaults_modal_rect_.h <= 0) {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
+    SDL_Rect scrim = bounds_;
+    sdl_render::FillRect(renderer, &scrim);
+
+    dm_draw::DrawBeveledRect(renderer,
+                             defaults_modal_rect_,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    dm_draw::DrawRoundedOutline(renderer, defaults_modal_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
+
+    const int padding = DMSpacing::panel_padding();
+    const int title_x = defaults_modal_rect_.x + padding;
+    int title_y = defaults_modal_rect_.y + padding;
+    render_label(renderer, "Create Defaults", title_x, title_y);
+    title_y += DMStyles::Label().font_size + DMSpacing::small_gap();
+    render_label(renderer, "Generate or replace movement animations from selected base frames.", title_x, title_y);
+
+    if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
+    if (defaults_basic_movement_checkbox_) defaults_basic_movement_checkbox_->render(renderer);
+    if (defaults_distance_box_) defaults_distance_box_->render(renderer);
+    if (defaults_base_frames_button_) defaults_base_frames_button_->render(renderer);
+    if (defaults_create_button_) defaults_create_button_->render(renderer);
+    if (defaults_cancel_button_) defaults_cancel_button_->render(renderer);
+
+    const int info_x = defaults_modal_rect_.x + padding;
+    const int info_y = defaults_modal_rect_.y + defaults_modal_rect_.h - padding - DMButton::height() - DMSpacing::small_gap() - DMStyles::Label().font_size;
+    if (defaults_base_frame_paths_.empty()) {
+        render_label(renderer, "Base frames: none selected.", info_x, info_y);
+    } else {
+        std::string summary = "Base frames: " + std::to_string(defaults_base_frame_paths_.size()) +
+                              " selected (" + defaults_base_frame_paths_.front().filename().string();
+        if (defaults_base_frame_paths_.size() > 1) {
+            summary += " ...";
+        }
+        summary += ")";
+        render_label(renderer, summary, info_x, info_y);
+    }
+}
+
+void AnimationEditorWindow::handle_pick_defaults_base_frames() {
+    std::vector<std::filesystem::path> picked = pick_png_sequence();
+    if (picked.empty()) {
+        set_status_message("Base frame selection cancelled.", 120);
+        return;
+    }
+
+    std::vector<std::filesystem::path> filtered;
+    filtered.reserve(picked.size());
+    for (const auto& path : picked) {
+        if (has_extension_ci(path, ".png")) {
+            filtered.push_back(path);
+        }
+    }
+    if (filtered.empty()) {
+        set_status_message("No PNG frames selected.", 180);
+        return;
+    }
+
+    defaults_base_frame_paths_ = normalize_sequence_paths(filtered);
+    layout_defaults_modal();
+    set_status_message("Selected " + std::to_string(defaults_base_frame_paths_.size()) + " base frame(s).", 180);
+}
+
+std::optional<int> AnimationEditorWindow::parse_defaults_distance_per_frame() const {
+    if (!defaults_distance_box_) {
+        return std::nullopt;
+    }
+    std::string raw = animation_editor::strings::trim_copy(defaults_distance_box_->value());
+    if (raw.empty()) {
+        return std::nullopt;
+    }
+
+    std::size_t index = 0;
+    int value = 0;
+    try {
+        value = std::stoi(raw, &index);
+    } catch (...) {
+        return std::nullopt;
+    }
+    if (index != raw.size() || value <= 0) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& animation_id,
+                                                            const std::vector<std::filesystem::path>& frames) {
+    if (asset_root_path_.empty() || animation_id.empty() || frames.empty()) {
+        return false;
+    }
+
+    std::filesystem::path output_dir = asset_root_path_ / animation_id;
+    std::error_code ec;
+    std::filesystem::create_directories(output_dir, ec);
+    if (ec) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[AnimationEditor] Failed to prepare output folder '%s': %s",
+                     output_dir.generic_string().c_str(),
+                     ec.message().c_str());
+        return false;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(output_dir, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        if (!has_extension_ci(entry.path(), ".png")) continue;
+        std::error_code remove_ec;
+        std::filesystem::remove(entry.path(), remove_ec);
+    }
+    ec.clear();
+
+    int copied = 0;
+    for (const auto& source : frames) {
+        if (!std::filesystem::exists(source, ec) || !std::filesystem::is_regular_file(source, ec)) {
+            ec.clear();
+            continue;
+        }
+        if (!has_extension_ci(source, ".png")) {
+            continue;
+        }
+        std::filesystem::path destination = output_dir / (std::to_string(copied) + ".png");
+        std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing, ec);
+        if (!ec) {
+            ++copied;
+        } else {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[AnimationEditor] Failed to copy '%s' -> '%s': %s",
+                        source.generic_string().c_str(),
+                        destination.generic_string().c_str(),
+                        ec.message().c_str());
+            ec.clear();
+        }
+    }
+
+    return copied > 0;
+}
+
+nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const std::string& animation_id,
+                                                                          int frame_count,
+                                                                          int dx,
+                                                                          int depth_dz) const {
+    nlohmann::json payload = nlohmann::json::object();
+    payload["source"] = nlohmann::json::object({
+        {"kind", "folder"},
+        {"path", animation_id},
+        {"name", ""}
+    });
+    payload["number_of_frames"] = std::max(frame_count, 1);
+    payload["movement"] = build_movement_sequence(frame_count, dx, depth_dz);
+    payload["locked"] = false;
+    payload["reverse_source"] = false;
+    payload["flipped_source"] = false;
+    payload["flip_vertical_source"] = false;
+    payload["rnd_start"] = false;
+    payload["on_end"] = "default";
+    return payload;
+}
+
+nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::string& animation_id,
+                                                                     const std::string& source_animation_id,
+                                                                     int frame_count,
+                                                                     bool flip_x,
+                                                                     bool flip_y) const {
+    (void)animation_id;
+    nlohmann::json payload = nlohmann::json::object();
+    payload["source"] = nlohmann::json::object({
+        {"kind", "animation"},
+        {"path", ""},
+        {"name", source_animation_id}
+    });
+    payload["number_of_frames"] = std::max(frame_count, 1);
+    payload["inherit_data"] = true;
+    payload["locked"] = false;
+    payload["reverse_source"] = false;
+    payload["flipped_source"] = false;
+    payload["flip_vertical_source"] = flip_y;
+    payload["rnd_start"] = false;
+    payload["on_end"] = "default";
+    payload["derived_modifiers"] = nlohmann::json::object({
+        {"reverse", false},
+        {"flipX", flip_x},
+        {"flipY", flip_y}
+    });
+    return payload;
+}
+
+bool AnimationEditorWindow::ensure_animation_exists(const std::string& animation_id) {
+    if (!document_ || animation_id.empty()) {
+        return false;
+    }
+    auto ids = document_->animation_ids();
+    if (std::find(ids.begin(), ids.end(), animation_id) != ids.end()) {
+        return true;
+    }
+
+    document_->create_animation(animation_id);
+    ids = document_->animation_ids();
+    return std::find(ids.begin(), ids.end(), animation_id) != ids.end();
+}
+
+bool AnimationEditorWindow::create_or_replace_animation_payload(const std::string& animation_id,
+                                                                const nlohmann::json& payload) {
+    if (!document_ || animation_id.empty() || !payload.is_object()) {
+        return false;
+    }
+    if (!ensure_animation_exists(animation_id)) {
+        return false;
+    }
+
+    bool changed = document_->update_animation_payload(animation_id, payload);
+    if (changed) {
+        return true;
+    }
+    return document_->animation_payload(animation_id).has_value();
+}
+
+void AnimationEditorWindow::handle_create_defaults() {
+    if (!document_) {
+        set_status_message("Animation document is unavailable.", 180);
+        return;
+    }
+    if (asset_root_path_.empty()) {
+        set_status_message("Asset directory is unavailable.", 180);
+        return;
+    }
+
+    const bool create_diagonals = defaults_diagonals_checkbox_ && defaults_diagonals_checkbox_->value();
+    const bool create_basic = defaults_basic_movement_checkbox_ && defaults_basic_movement_checkbox_->value();
+    if (!create_diagonals && !create_basic) {
+        set_status_message("Select at least one defaults group.", 180);
+        return;
+    }
+
+    std::vector<std::filesystem::path> base_frames;
+    base_frames.reserve(defaults_base_frame_paths_.size());
+    for (const auto& path : defaults_base_frame_paths_) {
+        if (has_extension_ci(path, ".png")) {
+            base_frames.push_back(path);
+        }
+    }
+    if (base_frames.empty()) {
+        set_status_message("Select at least one base PNG frame.", 180);
+        return;
+    }
+    base_frames = normalize_sequence_paths(base_frames);
+
+    std::optional<int> distance_per_frame = parse_defaults_distance_per_frame();
+    if (!distance_per_frame.has_value()) {
+        set_status_message("Distance per frame must be a positive integer.", 180);
+        return;
+    }
+
+    const int d = *distance_per_frame;
+    const int frame_count = static_cast<int>(base_frames.size());
+    bool ok = true;
+    std::vector<std::string> created_ids;
+
+    auto create_file_based = [&](const std::string& id, int dx, int depth_dz) {
+        if (!ok) return;
+        if (!copy_frames_to_animation_folder(id, base_frames)) {
+            ok = false;
+            return;
+        }
+        nlohmann::json payload = build_file_sourced_movement_payload(id, frame_count, dx, depth_dz);
+        if (!create_or_replace_animation_payload(id, payload)) {
+            ok = false;
+            return;
+        }
+        created_ids.push_back(id);
+    };
+
+    auto create_derived = [&](const std::string& id,
+                              const std::string& source,
+                              bool flip_x,
+                              bool flip_y) {
+        if (!ok) return;
+        nlohmann::json payload = build_derived_movement_payload(id, source, frame_count, flip_x, flip_y);
+        if (!create_or_replace_animation_payload(id, payload)) {
+            ok = false;
+            return;
+        }
+        created_ids.push_back(id);
+    };
+
+    if (create_diagonals) {
+        create_file_based("up_left", -d, -d);
+        create_derived("up_right", "up_left", true, false);
+        create_derived("down_left", "up_left", false, true);
+        create_derived("down_right", "up_left", true, true);
+    }
+
+    if (create_basic) {
+        create_file_based("up", 0, -d);
+        create_file_based("left", -d, 0);
+        create_derived("down", "up", false, true);
+        create_derived("right", "left", true, false);
+    }
+
+    if (!ok) {
+        set_status_message("Failed to create one or more default animations.", 240);
+        return;
+    }
+
+    if (preview_provider_) {
+        preview_provider_->invalidate_all();
+    }
+    if (!created_ids.empty()) {
+        select_animation(std::optional<std::string>{created_ids.front()}, false);
+    } else {
+        ensure_selection_valid();
+    }
+    set_status_message("Created default movement animations.", 300);
+    close_defaults_modal();
 }
 
 Asset* AnimationEditorWindow::resolve_frame_editor_asset() {
@@ -1388,6 +1964,10 @@ void AnimationEditorWindow::open_frame_editor(const std::string& animation_id, F
     if (animation_id.empty() || !document_) {
         return;
     }
+    if (mode == FrameEditorLaunchMode::Movement) {
+        set_status_message("Movement editing moved to the in-room asset stack. Open Asset Info on a room asset and press Tab.", 300);
+        return;
+    }
     if (!assets_) {
         set_status_message("Live Frame Editor is only available inside the room editor.", 240);
         return;
@@ -1415,7 +1995,7 @@ void AnimationEditorWindow::on_live_frame_editor_closed(const std::string& anima
     if (!animation_id.empty()) {
         focus_animation(animation_id);
     }
-    set_status_message("Movement updated.", 180);
+    set_status_message("Frame editor updated.", 180);
 }
 
 void AnimationEditorWindow::create_animation_via_prompt() {
@@ -1456,7 +2036,13 @@ void AnimationEditorWindow::reload_document() {
                           << manifest_asset_key_ << "'\n";
                 manifest_asset_key_.clear();
                 manifest_transaction_ = {};
+                if (document_) {
+                    document_->set_manifest_asset_key_debug({});
+                }
                 return false;
+            }
+            if (document_) {
+                document_->set_manifest_asset_key_debug(manifest_asset_key_);
             }
             if (log_creation) {
                 std::cerr << "[AnimationEditor] Created manifest entry for '" << info_ptr->name
@@ -1552,6 +2138,9 @@ void AnimationEditorWindow::close_manifest_transaction() {
     }
     manifest_asset_key_.clear();
     using_manifest_store_ = false;
+    if (document_) {
+        document_->set_manifest_asset_key_debug({});
+    }
 }
 
 bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& payload, bool finalize) {
@@ -1561,6 +2150,10 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     if (!manifest_transaction_) {
         manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (!manifest_transaction_) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Failed to open manifest transaction for key '%s'.",
+                         manifest_asset_key_.c_str());
+            set_status_message("Failed to save animations for '" + manifest_asset_key_ + "'.", 240);
             return false;
         }
         using_manifest_store_ = true;
@@ -1591,17 +2184,54 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
         draft = payload;
     }
 
-    auto commit_fn = [this, finalize]() -> bool {
+    const nlohmann::json merged_payload = draft;
+
+    auto commit_fn = [this, finalize, merged_payload]() -> bool {
+        auto commit_current_transaction = [this, finalize]() -> bool {
+            if (!manifest_transaction_) {
+                return false;
+            }
+            const bool ok = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
+            if (ok && finalize) {
+                manifest_transaction_ = {};
+                manifest_asset_key_.clear();
+                using_manifest_store_ = false;
+                if (document_) {
+                    document_->set_manifest_asset_key_debug({});
+                }
+            }
+            return ok;
+        };
+
+        if (commit_current_transaction()) {
+            return true;
+        }
+
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] Manifest commit failed for key '%s'; recreating transaction and retrying.",
+                    manifest_asset_key_.c_str());
+
+        manifest_transaction_ = {};
+        manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (!manifest_transaction_) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Failed to recreate manifest transaction for key '%s' after commit failure.",
+                         manifest_asset_key_.c_str());
+            set_status_message("Failed to save animations for '" + manifest_asset_key_ + "'.", 240);
             return false;
         }
-        bool ok = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
-        if (ok && finalize) {
-            manifest_transaction_ = {};
-            manifest_asset_key_.clear();
-            using_manifest_store_ = false;
+        using_manifest_store_ = true;
+        manifest_transaction_.data() = merged_payload;
+
+        if (commit_current_transaction()) {
+            return true;
         }
-        return ok;
+
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[AnimationEditor] Manifest commit retry failed for key '%s'.",
+                     manifest_asset_key_.c_str());
+        set_status_message("Failed to save animations for '" + manifest_asset_key_ + "'.", 240);
+        return false;
     };
 
     auto on_success = [this, finalize]() {
@@ -1891,17 +2521,23 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
     bool modified = false;
     const std::string include_line = "#include \"animation/controllers/custom_controllers/" + key + ".hpp\"";
     if (content.find(include_line) == std::string::npos) {
-        auto include_pos = content.find("#include \"animation/controllers/custom_controllers/default_controller.hpp\"");
+        const std::string include_marker = "// <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>";
+        auto include_pos = content.find(include_marker);
         if (include_pos != std::string::npos) {
             content.insert(include_pos, include_line + "\n");
         } else {
-            content = include_line + "\n" + content;
+            include_pos = content.find("#include \"animation/controllers/custom_controllers/default_controller.hpp\"");
+            if (include_pos != std::string::npos) {
+                content.insert(include_pos, include_line + "\n");
+            } else {
+                content = include_line + "\n" + content;
+            }
         }
         modified = true;
     }
 
     const std::string branch = "                if (matches(\"" + key + "\"))\n"
-                               "                        return std::make_unique<" + class_name + ">(assets_, self);\n";
+                               "                        return std::make_unique<" + class_name + ">(self);\n";
 
     const std::string marker = "// <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>";
     auto marker_pos = content.find(marker);
@@ -1954,24 +2590,19 @@ void AnimationEditorWindow::add_controller() {
     std::ostringstream hpp_builder;
     hpp_builder << metadata
                 << "#pragma once\n"
-                << "#include \"assets/asset/asset_controller.hpp\"\n"
+                << "#include \"animation/controllers/shared/custom_asset_controller.hpp\"\n"
                 << "\n"
-                << "class Assets;\n"
                 << "class Asset;\n"
                 << "class Input;\n"
                 << "\n"
-                << "class " << class_name << " : public AssetController {\n"
+                << "class " << class_name << " : public CustomAssetController {\n"
                 << "public:\n"
-                << "    " << class_name << "(Assets* assets, Asset* self);\n"
+                << "    explicit " << class_name << "(Asset* self);\n"
                 << "    ~" << class_name << "() override = default;\n"
                 << "\n"
-                << "    void init();\n"
-                << "    void update(const Input& in) override;\n"
-                << "    void process_pending_attacks(Asset& self) override;\n"
-                << "\n"
-                << "private:\n"
-                << "    Assets* assets_ = nullptr;\n"
-                << "    Asset*  self_   = nullptr;\n"
+                << "protected:\n"
+                << "    void on_update(const Input& in) override;\n"
+                << "    void on_process_pending_attacks(Asset& self) override;\n"
                 << "};\n";
     std::string hpp_content = hpp_builder.str();
 
@@ -1986,49 +2617,34 @@ void AnimationEditorWindow::add_controller() {
                 << "#include \"utils/input.hpp\"\n"
                 << "#include <string>\n"
                 << "\n"
-                << class_name << "::" << class_name << "(Assets* assets, Asset* self)\n"
-                << "    : assets_(assets), self_(self) {}\n"
+                << class_name << "::" << class_name << "(Asset* self)\n"
+                << "    : CustomAssetController(self) {}\n"
                 << "\n"
-                << "void " << class_name << "::init() {\n"
-                << "    if (!self_ || !self_->info || !self_->anim_) return;\n"
-                << "\n"
-                << "    const std::string default_anim{ animation_update::detail::kDefaultAnimation };\n"
-                << "\n"
-                << "    auto it = self_->info->animations.find(default_anim);\n"
-                << "    if (it != self_->info->animations.end() && !it->second.frames.empty()) {\n"
-                << "        self_->anim_->move(SDL_Point{0, 0}, default_anim);\n"
-                << "        return;\n"
-                << "    }\n"
-                << "\n"
-                << "    if (!self_->info->animations.empty()) {\n"
-                << "        const auto& first = *self_->info->animations.begin();\n"
-                << "        self_->anim_->move(SDL_Point{0, 0}, first.first);\n"
-                << "    }\n"
-                << "}\n"
-                << "\n"
-                << "void " << class_name << "::update(const Input& ) {\n"
-                << "    if (!self_ || !self_->info || !self_->anim_) return;\n"
+                << "void " << class_name << "::on_update(const Input& ) {\n"
+                << "    Asset* self = self_ptr();\n"
+                << "    if (!self || !self->info || !self->anim_) return;\n"
                 << "\n"
                 << "    const std::string default_anim{ animation_update::detail::kDefaultAnimation };\n"
-                << "    auto it = self_->info->animations.find(default_anim);\n"
-                << "    if (it != self_->info->animations.end() && !it->second.frames.empty()) {\n"
-                << "        if (self_->current_animation != default_anim || self_->current_frame == nullptr) {\n"
-                << "            self_->anim_->move(SDL_Point{0, 0}, default_anim);\n"
+                << "    auto it = self->info->animations.find(default_anim);\n"
+                << "    if (it != self->info->animations.end() && it->second.has_frames()) {\n"
+                << "        if (self->current_animation != default_anim || self->current_frame == nullptr) {\n"
+                << "            self->anim_->move(SDL_Point{0, 0}, default_anim);\n"
                 << "        }\n"
                 << "        return;\n"
                 << "    }\n"
                 << "\n"
-                << "    if (!self_->info->animations.empty()) {\n"
-                << "        const auto& first = *self_->info->animations.begin();\n"
-                << "        if (self_->current_animation != first.first || self_->current_frame == nullptr) {\n"
-                << "            self_->anim_->move(SDL_Point{0, 0}, first.first);\n"
+                << "    if (!self->info->animations.empty()) {\n"
+                << "        const auto& first = *self->info->animations.begin();\n"
+                << "        if (self->current_animation != first.first || self->current_frame == nullptr) {\n"
+                << "            self->anim_->move(SDL_Point{0, 0}, first.first);\n"
                 << "        }\n"
                 << "    }\n"
                 << "}\n"
                 << "\n"
-                << "void " << class_name << "::process_pending_attacks(Asset& self_ref) {\n"
+                << "void " << class_name << "::on_process_pending_attacks(Asset& self_ref) {\n"
                 << "    (void)self_ref;\n"
-                << "    if (!self_ || !self_->info || !self_->anim_) return;\n"
+                << "    Asset* self = self_ptr();\n"
+                << "    if (!self || !self->info || !self->anim_) return;\n"
                 << "    // TODO: implement attack handling if this asset uses attack queues.\n"
                 << "}\n";
     std::string cpp_content = cpp_builder.str();
@@ -2090,101 +2706,6 @@ void AnimationEditorWindow::open_controller() {
     }
 }
 
-bool AnimationEditorWindow::rebuild_animation_from_sources(const std::shared_ptr<AssetInfo>& info,
-                                                           const std::string& animation_id) {
-    return rebuild_animation_via_pipeline(info, animation_id);
-}
-
-bool AnimationEditorWindow::rebuild_animation_via_pipeline(const std::shared_ptr<AssetInfo>& info,
-                                                           const std::string& animation_id) {
-    if (!info) {
-        set_status_message("No asset selected.", 180);
-        return false;
-    }
-    if (animation_id.empty()) {
-        set_status_message("No animation id provided.", 180);
-        return false;
-    }
-
-    vibble::RebuildQueueCoordinator coordinator;
-    coordinator.request_animation(info->name, animation_id);
-    if (!coordinator.has_pending_asset_work()) {
-        return true;
-    }
-    if (!coordinator.run_asset_tool()) {
-        set_status_message("asset_tool_cli failed; see logs for details.", 240);
-        return false;
-    }
-
-    SDL_Renderer* renderer = assets_ ? assets_->renderer() : nullptr;
-    if (!renderer) {
-        set_status_message("No renderer available to reload animations.", 240);
-        return false;
-    }
-
-    info->reload_animations_from_disk();
-    info->loadAnimations(renderer);
-
-    auto it = info->animations.find(animation_id);
-    if (it == info->animations.end()) {
-        set_status_message("Animation not found after rebuild.", 240);
-        return false;
-    }
-
-    if (!it->second.rebuild_animation(renderer, *info, animation_id)) {
-        set_status_message("Failed to rebuild animation textures.", 240);
-        return false;
-    }
-
-    if (assets_) {
-        devmode::refresh_loaded_animation_instances(assets_, info);
-    }
-    if (preview_provider_) {
-        preview_provider_->invalidate_all();
-    }
-    return true;
-}
-
-bool AnimationEditorWindow::rebuild_all_animations_via_pipeline(const std::shared_ptr<AssetInfo>& info) {
-    if (!info) {
-        set_status_message("No asset selected.", 180);
-        return false;
-    }
-
-    vibble::RebuildQueueCoordinator coordinator;
-    coordinator.request_asset(info->name);
-    if (!coordinator.has_pending_asset_work()) {
-        return true;
-    }
-    if (!coordinator.run_asset_tool()) {
-        set_status_message("asset_tool_cli failed; see logs for details.", 240);
-        return false;
-    }
-
-    SDL_Renderer* renderer = assets_ ? assets_->renderer() : nullptr;
-    if (!renderer) {
-        set_status_message("No renderer available to reload animations.", 240);
-        return false;
-    }
-
-    info->reload_animations_from_disk();
-    info->loadAnimations(renderer);
-
-    bool ok = true;
-    for (auto& [anim_id, anim] : info->animations) {
-        ok = anim.rebuild_animation(renderer, *info, anim_id) && ok;
-    }
-
-    if (assets_) {
-        devmode::refresh_loaded_animation_instances(assets_, info);
-    }
-    if (preview_provider_) {
-        preview_provider_->invalidate_all();
-    }
-    return ok;
-
-}
-
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_gif() const {
     std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
 #ifdef _WIN32
@@ -2238,12 +2759,12 @@ std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() co
     std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
 #ifdef _WIN32
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileDialog* pfd = nullptr;
+    IFileOpenDialog* pfd = nullptr;
     std::vector<std::filesystem::path> picked;
     if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
         DWORD options = 0;
         if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_FORCEFILESYSTEM;
+            options |= FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT;
             pfd->SetOptions(options);
         }
         pfd->SetTitle(L"Upload PNG");
@@ -2259,14 +2780,34 @@ std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() co
             }
         }
         if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(pfd->GetResult(&item))) {
-                PWSTR psz = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                    picked.emplace_back(std::wstring(psz));
-                    CoTaskMemFree(psz);
+            IShellItemArray* items = nullptr;
+            if (SUCCEEDED(pfd->GetResults(&items)) && items) {
+                DWORD count = 0;
+                if (SUCCEEDED(items->GetCount(&count))) {
+                    for (DWORD i = 0; i < count; ++i) {
+                        IShellItem* item = nullptr;
+                        if (!SUCCEEDED(items->GetItemAt(i, &item)) || !item) {
+                            continue;
+                        }
+                        PWSTR psz = nullptr;
+                        if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
+                            picked.emplace_back(std::wstring(psz));
+                            CoTaskMemFree(psz);
+                        }
+                        item->Release();
+                    }
                 }
-                item->Release();
+                items->Release();
+            } else {
+                IShellItem* item = nullptr;
+                if (SUCCEEDED(pfd->GetResult(&item)) && item) {
+                    PWSTR psz = nullptr;
+                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
+                        picked.emplace_back(std::wstring(psz));
+                        CoTaskMemFree(psz);
+                    }
+                    item->Release();
+                }
             }
         }
         pfd->Release();
@@ -2275,7 +2816,7 @@ std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() co
     return picked;
 #else
     const char* filters[] = {"*.png"};
-    const char* result = tinyfd_openFileDialog("Upload PNG", default_path.c_str(), 1, filters, "PNG Images", 0);
+    const char* result = tinyfd_openFileDialog("Upload PNG", default_path.c_str(), 1, filters, "PNG Images", 1);
     if (!result || std::string(result).empty()) {
         return {};
     }
@@ -2286,8 +2827,8 @@ std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() co
 std::optional<std::string> AnimationEditorWindow::pick_animation_reference() const {
     if (!document_) return std::nullopt;
     auto ids = document_->animation_ids();
-    std::vector<std::string> frame_based;
-    frame_based.reserve(ids.size());
+    std::vector<std::string> selectable;
+    selectable.reserve(ids.size());
     for (const auto& id : ids) {
         if (selected_animation_id_ && id == *selected_animation_id_) {
             continue;
@@ -2304,32 +2845,39 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
         if (payload.contains("source") && payload["source"].is_object()) {
             kind = payload["source"].value("kind", std::string{"folder"});
         }
-        if (animation_editor::strings::to_lower_copy(kind) == std::string{"animation"}) {
-            continue;
+        const bool sourced_from_animation =
+            animation_editor::strings::to_lower_copy(kind) == std::string{"animation"};
+        bool inherits_data = false;
+        if (payload.contains("inherit_data")) {
+            inherits_data = payload.value("inherit_data", false);
+        } else {
+            inherits_data = payload.value("inherit_source_geometry", false);
         }
-        frame_based.push_back(id);
+        if (!sourced_from_animation || !inherits_data) {
+        selectable.push_back(id);
+    }
     }
 
-    if (frame_based.empty()) return std::nullopt;
+    if (selectable.empty()) return std::nullopt;
 
     std::ostringstream oss;
-    oss << "Animations sourced from frames:\n";
-    for (const auto& id : frame_based) {
+    oss << "Animations with editable geometry:\n";
+    for (const auto& id : selectable) {
         oss << " - " << id << "\n";
     }
 
-    const char* result = tinyfd_inputBox("Select Animation", oss.str().c_str(), frame_based.front().c_str());
+    const char* result = tinyfd_inputBox("Select Animation", oss.str().c_str(), selectable.front().c_str());
     if (!result) return std::nullopt;
     std::string choice = animation_editor::strings::trim_copy(result);
     if (choice.empty()) return std::nullopt;
 
-    auto match_it = std::find(frame_based.begin(), frame_based.end(), choice);
-    if (match_it == frame_based.end()) {
+    auto match_it = std::find(selectable.begin(), selectable.end(), choice);
+    if (match_it == selectable.end()) {
         std::string lowered = animation_editor::strings::to_lower_copy(choice);
-        match_it = std::find_if(frame_based.begin(), frame_based.end(), [&](const std::string& value) {
+        match_it = std::find_if(selectable.begin(), selectable.end(), [&](const std::string& value) {
             return animation_editor::strings::to_lower_copy(value) == lowered;
         });
-        if (match_it == frame_based.end()) {
+        if (match_it == selectable.end()) {
             return std::nullopt;
         }
         choice = *match_it;

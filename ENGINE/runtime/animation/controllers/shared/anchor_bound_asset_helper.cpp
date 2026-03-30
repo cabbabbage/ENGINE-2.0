@@ -1,0 +1,109 @@
+#include "anchor_bound_asset_helper.hpp"
+
+#include "assets/asset/Asset.hpp"
+#include "animation/controllers/shared/child_asset.hpp"
+
+#include <algorithm>
+#include <vector>
+
+namespace anchor_bound_asset_helper {
+
+AnchorBoundAssetHelper& AnchorBoundAssetHelper::instance() {
+    static AnchorBoundAssetHelper helper;
+    return helper;
+}
+
+void AnchorBoundAssetHelper::register_child(Asset* owner,
+                                            ChildAsset* child,
+                                            Asset* child_asset,
+                                            const std::string& anchor_name) {
+    if (!owner || !child || !child_asset || anchor_name.empty()) {
+        return;
+    }
+    bindings_[child_asset] = BindingRecord{owner, child, child_asset, anchor_name};
+}
+
+void AnchorBoundAssetHelper::unregister_child(Asset* child_asset) {
+    if (!child_asset) {
+        return;
+    }
+    auto it = bindings_.find(child_asset);
+    if (it != bindings_.end() && it->second.child) {
+        pending_children_.erase(it->second.child);
+    }
+    bindings_.erase(child_asset);
+}
+
+bool AnchorBoundAssetHelper::is_child_bound(const Asset* child_asset) const {
+    if (!child_asset) {
+        return false;
+    }
+    return bindings_.find(const_cast<Asset*>(child_asset)) != bindings_.end();
+}
+
+std::vector<AnchorBoundAssetHelper::DebugBinding> AnchorBoundAssetHelper::debug_bindings_snapshot() const {
+    std::vector<DebugBinding> snapshot;
+    snapshot.reserve(bindings_.size());
+    for (const auto& [child_asset, record] : bindings_) {
+        (void)child_asset;
+        if (!record.owner || !record.child_asset || record.anchor_name.empty()) {
+            continue;
+        }
+        snapshot.push_back(DebugBinding{record.owner, record.child_asset, record.anchor_name});
+    }
+    std::sort(snapshot.begin(), snapshot.end(), [](const DebugBinding& lhs, const DebugBinding& rhs) {
+        if (lhs.owner != rhs.owner) {
+            return lhs.owner < rhs.owner;
+        }
+        if (lhs.child_asset != rhs.child_asset) {
+            return lhs.child_asset < rhs.child_asset;
+        }
+        return lhs.anchor_name < rhs.anchor_name;
+    });
+    return snapshot;
+}
+
+void AnchorBoundAssetHelper::notify_anchor_changed(Asset* owner, const std::string& anchor_name) {
+    if (!owner) {
+        return;
+    }
+    for (const auto& [child_asset, record] : bindings_) {
+        (void)child_asset;
+        if (record.owner != owner) {
+            continue;
+        }
+        if (!anchor_name.empty() && record.anchor_name != anchor_name) {
+            continue;
+        }
+        if (record.child) {
+            pending_children_.insert(record.child);
+        }
+    }
+}
+
+bool AnchorBoundAssetHelper::flush_pending_updates() {
+    if (flush_in_progress_ || pending_children_.empty()) {
+        return false;
+    }
+
+    flush_in_progress_ = true;
+    bool changed = false;
+    std::vector<ChildAsset*> to_update;
+    to_update.reserve(pending_children_.size());
+    for (ChildAsset* child : pending_children_) {
+        if (child) {
+            to_update.push_back(child);
+        }
+    }
+    pending_children_.clear();
+    std::sort(to_update.begin(), to_update.end());
+
+    for (ChildAsset* child : to_update) {
+        changed = child->update() || changed;
+    }
+
+    flush_in_progress_ = false;
+    return changed;
+}
+
+} // namespace anchor_bound_asset_helper

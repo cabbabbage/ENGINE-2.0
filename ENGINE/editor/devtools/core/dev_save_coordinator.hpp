@@ -36,24 +36,6 @@ public:
 
     using NoticeSink = std::function<void(bool /*success*/, const std::string& /*message*/)>;
 
-    class ScopedFlushSuppression {
-    public:
-        ScopedFlushSuppression() = default;
-        ScopedFlushSuppression(DevSaveCoordinator* coordinator, bool active)
-            : coordinator_(coordinator), active_(active) {}
-        ScopedFlushSuppression(const ScopedFlushSuppression&) = delete;
-        ScopedFlushSuppression& operator=(const ScopedFlushSuppression&) = delete;
-        ScopedFlushSuppression(ScopedFlushSuppression&& other) noexcept;
-        ScopedFlushSuppression& operator=(ScopedFlushSuppression&& other) noexcept;
-        ~ScopedFlushSuppression();
-
-    private:
-        friend class DevSaveCoordinator;
-        void release();
-        DevSaveCoordinator* coordinator_ = nullptr;
-        bool active_ = false;
-    };
-
     DevSaveCoordinator();
 
     void set_manifest_store(ManifestStore* store);
@@ -62,7 +44,6 @@ public:
     void begin_frame();
     void tick();
     void flush_now(const std::string& reason = {});
-    ScopedFlushSuppression scoped_flush_suppression();
 
     void enqueue_manifest_asset(const std::string& asset_key,
                                 nlohmann::json payload,
@@ -109,7 +90,6 @@ private:
     std::optional<Clock::time_point> next_deadline_;
     Telemetry telemetry_;
     bool processing_ = false;
-    std::uint32_t flush_suppression_depth_ = 0;
 };
 
 }

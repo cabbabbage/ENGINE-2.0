@@ -13,8 +13,8 @@
 // Where:
 //   cache_root default: <repo_root>/cache
 //   variant in: normal, foreground, background
-//   pct is integer like 75, 50, 25, 10
-//   out_index is integer frame index of the speed-expanded output sequence
+//   pct is one of 100, 90, 80, 70, 60, 50, 40, 30, 20, 10
+//   out_index is integer frame index of the source sequence
 //
 // This tool will live next to the existing Python scripts, so it must follow the same
 // manifest discovery and default path resolution rules (repo root search for manifest.json).
@@ -24,6 +24,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -45,23 +46,23 @@ enum class Variant : std::uint8_t {
     Background
 };
 
-struct CropBounds {
-    // Mirrors Python compute_crop_bounds storage:
-    // margins plus original dimensions.
-    int left = 0;
-    int top = 0;
-    int right_margin = 0;
-    int bottom_margin = 0;
-    int src_w = 0;
-    int src_h = 0;
-
-    bool valid() const { return src_w > 0 && src_h > 0; }
+enum class EffectLayerMode : std::uint8_t {
+    Foreground = 0,
+    Background
 };
 
-struct FrameMeta {
-    // Mirrors manifest frames[*].needs_rebuild
-    bool needs_rebuild = false;
+enum class EffectsBackend : std::uint8_t {
+    Auto = 0,
+    Cpu,
+    D3D11
 };
+
+inline constexpr std::uint8_t kTextureVariantMaskNone = 0u;
+inline constexpr std::uint8_t kTextureVariantMaskNormal = 1u << 0;
+inline constexpr std::uint8_t kTextureVariantMaskForeground = 1u << 1;
+inline constexpr std::uint8_t kTextureVariantMaskBackground = 1u << 2;
+inline constexpr std::uint8_t kTextureVariantMaskAll = static_cast<std::uint8_t>(
+    kTextureVariantMaskNormal | kTextureVariantMaskForeground | kTextureVariantMaskBackground);
 
 struct EffectsParams {
     // Mirrors effects.py / apply_color_effects.py semantics.
@@ -158,7 +159,7 @@ struct GeneratorFilters {
     std::unordered_set<std::string> assets;
     std::unordered_set<std::string> animations;
 
-    // If non-empty: only rebuild these source frame indices (pre speed expansion).
+    // If non-empty: only rebuild these source frame indices.
     std::set<int> source_frames;
 
     bool matches_asset(const std::string& a) const {
@@ -180,19 +181,36 @@ struct GeneratorOptions {
     fs::path cache_root_override;
 
     bool force_rebuild = false;
+    bool missing_only = false;
     bool dry_run = false;
 
-    // Must remain true for safety unless you intentionally diverge from Python.
-    bool clear_needs_rebuild_on_success_only = true;
+    struct AnimationRebuildRequest {
+        std::string asset_name;
+        std::string animation_name;
+        std::uint8_t all_frames_variant_mask = kTextureVariantMaskNone;
+        std::unordered_map<int, std::uint8_t> frame_variant_masks;
+    };
+    std::vector<AnimationRebuildRequest> explicit_rebuild_requests;
 
-    // Default scales (Python parity): 75, 50, 25, 10
-    // If empty: use defaults
+    // Legacy compatibility option. Runtime generation enforces canonical
+    // scales: 100, 90, 80, 70, 60, 50, 40, 30, 20, 10.
     std::vector<int> scale_percents;
 
     // If 0: generator chooses (hardware_concurrency - 1, minimum 1)
     std::uint32_t worker_count_override = 0;
 
+    // Preferred effects backend.
+    // - Auto: attempt D3D11 on Windows and fall back to CPU.
+    // - Cpu: force CPU effects path.
+    // - D3D11: prefer D3D11; falls back to CPU if unavailable.
+    EffectsBackend effects_backend = EffectsBackend::Auto;
+
+    // Reduce per-task logging noise/IO overhead by default.
+    bool quiet_task_logs = true;
+
     GeneratorFilters filters;
+
+    bool has_explicit_rebuild_requests() const { return !explicit_rebuild_requests.empty(); }
 };
 
 // -----------------------------
@@ -204,11 +222,6 @@ struct AnimPayload {
 
     fs::path src_anim_dir;
     std::vector<fs::path> src_frames;
-
-    std::vector<FrameMeta> frames_meta;
-
-    float speed_multiplier = 1.0f;
-    std::vector<int> out_to_src; // output index -> source index mapping
 
     EffectsParams fx_foreground;
     EffectsParams fx_background;
@@ -224,13 +237,16 @@ struct WorkItem {
     int scale_pct = 100;
     float scale_factor = 1.0f;
 
-    std::optional<CropBounds> crop_bounds_scaled;
-
     fs::path src_png_path;
 
     fs::path out_normal_dir;
     fs::path out_foreground_dir;
     fs::path out_background_dir;
+
+    // Per-task write mask. Legacy/full rebuilds write all variants.
+    bool write_normal = true;
+    bool write_foreground = true;
+    bool write_background = true;
 
     EffectsParams fx_foreground;
     EffectsParams fx_background;
@@ -255,8 +271,10 @@ struct GenResult {
     bool ok = false;
     std::string error;
 
-    bool rebuild_queue_written = false;
     GenStats stats;
+    std::vector<std::string> touched_assets;
+    std::vector<std::string> touched_animations;
+    std::vector<fs::path> written_files;
 };
 
 // -----------------------------
@@ -265,16 +283,10 @@ struct GenResult {
 class ImageCacheGenerator final {
 public:
     // Entry point.
-    // Must reproduce Python behavior:
-    // - Manifest parsing (for global effects) and asset iteration
-    // - Animation discovery (subdirs vs default)
-    // - Source frame enumeration: 0.png..N.png stopping at first missing
-    // - Speed multiplier expansion mapping output frames to source frames
-    // - Crop bounds union behavior when enabled
-    // - Rebuild decision: needs_rebuild true OR output missing, plus force option
-    // - Write output PNGs into the exact cache structure
-    // - Clear rebuild queue flags only after full successful generation
-    // - Never write the rebuild queue if any frame fails
+    // Runtime behavior:
+    // - explicit_rebuild_requests: rebuild only requested animations/frames/variants
+    // - missing_only: rebuild only missing output files in selected scope
+    // - no queue persistence and no metadata-hash stale checks
     static GenResult Run(const GeneratorOptions& opt, ILogger& log);
 
     // -------------------------
@@ -301,24 +313,6 @@ public:
     // Only numeric enumeration 0.png.. until first missing.
     static std::vector<fs::path> EnumerateSourceFrames(const fs::path& anim_src_dir);
 
-    // -------------------------
-    // Manifest parsing and planning
-    // -------------------------
-    // Ensure frames_meta is at least source_frame_count long (default needs_rebuild=false).
-    static void EnsureFrameMetadata(std::vector<FrameMeta>& frames_meta, int source_frame_count);
-
-    // Build output mapping for speed multiplier:
-    // returns out_to_src where index is output frame index and value is source frame index.
-    static std::vector<int> BuildSpeedFrameSequence(int source_frame_count, float speed_multiplier);
-
-    // Crop bounds:
-    // Compute a single shared crop bound from all provided frames (asset-wide when crop is enabled).
-    static std::optional<CropBounds> ComputeCropBoundsForFrames(const std::vector<fs::path>& src_frames,
-                                                                ILogger& log);
-
-    // Scale bounds using Python rounding rules.
-    static CropBounds ScaleCropBounds(const CropBounds& b, float scale_factor);
-
     // Decide whether output should be built:
     // - if force_rebuild -> true
     // - else if any expected output file is missing -> true
@@ -336,11 +330,10 @@ public:
     static bool SavePngRGBA(const fs::path& path, const ImageRGBA& img, std::string& err);
 
     static std::optional<ImageRGBA> ResizeRGBA(const ImageRGBA& src, int dst_w, int dst_h, std::string& err);
-    static std::optional<ImageRGBA> ApplyCrop(const ImageRGBA& src, const CropBounds& b, std::string& err);
 
-    // Normal variant is unchanged (just scaled/cropped).
+    // Normal variant is unchanged (just scaled).
     // Foreground/background apply effects.
-    static std::optional<ImageRGBA> ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, std::string& err);
+    static std::optional<ImageRGBA> ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, EffectLayerMode mode, std::string& err);
 
 private:
     ImageCacheGenerator() = delete;

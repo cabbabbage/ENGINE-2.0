@@ -25,6 +25,7 @@ namespace animation_editor {
 struct ResolvedMovement {
     float total_dx = 0.0f;
     float total_dy = 0.0f;
+    float total_dz = 0.0f;
     bool derived = false;
     std::string source_id;
     std::vector<std::string> modifiers;
@@ -35,9 +36,37 @@ namespace {
 
 const int kButtonHeight = DMButton::height();
 const int kButtonWidth = 160;
-constexpr std::size_t kModeButtonCount = 4;
+constexpr std::size_t kModeButtonCount = 2;
+
+std::size_t mode_index(FrameEditorLaunchMode mode) {
+    switch (mode) {
+        case FrameEditorLaunchMode::Movement: return 0;
+        case FrameEditorLaunchMode::AnchorPoints: return 1;
+    }
+    return 0;
+}
 
 using animation_editor::strings::trim_copy;
+
+bool payload_inherits_geometry(const nlohmann::json& payload) {
+    const bool source_is_animation =
+        payload.contains("source") &&
+        payload["source"].is_object() &&
+        payload["source"].value("kind", std::string{}) == "animation";
+    if (!source_is_animation) {
+        return false;
+    }
+    const bool has_local_frame_data =
+        (payload.contains("movement") && payload["movement"].is_array()) ||
+        (payload.contains("anchor_points") && payload["anchor_points"].is_array()) ||
+        (payload.contains("hit_boxes") && payload["hit_boxes"].is_array()) ||
+        (payload.contains("attack_boxes") && payload["attack_boxes"].is_array());
+    const bool default_inherit = !has_local_frame_data;
+    if (payload.contains("inherit_data")) {
+        return payload.value("inherit_data", default_inherit);
+    }
+    return payload.value("inherit_source_geometry", default_inherit);
+}
 
 void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x, int y, SDL_Color color) {
     if (!renderer || text.empty()) {
@@ -69,16 +98,60 @@ void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x
 
 float read_movement_component(const nlohmann::json& entry, int index) {
     if (entry.is_array()) {
+        // Canonical arrays are [dx, y(height), z(depth)].
+        // Legacy arrays may have [dx, depth].
+        if (index == 2 && entry.size() == 2 && entry[1].is_number()) {
+            return entry[1].get<float>();
+        }
+        if (index == 1 && entry.size() == 2 && entry[1].is_number()) {
+            return 0.0f;
+        }
         if (index < static_cast<int>(entry.size()) && entry[index].is_number()) {
             return entry[index].get<float>();
         }
         return 0.0f;
     }
     if (entry.is_object()) {
-        const char* keys[] = {"dx", "dy"};
-        const char* key = (index == 0) ? keys[0] : keys[1];
-        if (entry.contains(key) && entry[key].is_number()) {
-            return entry[key].get<float>();
+        if (index == 0) {
+            if (entry.contains("dx") && entry["dx"].is_number()) return entry["dx"].get<float>();
+            if (entry.contains("x") && entry["x"].is_number()) return entry["x"].get<float>();
+            return 0.0f;
+        }
+        if (index == 1) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const float legacy_height = entry.contains("dy") && entry["dy"].is_number()
+                ? entry["dy"].get<float>()
+                : (entry.contains("y") && entry["y"].is_number() ? entry["y"].get<float>() : 0.0f);
+            const float explicit_depth = entry.contains("dz") && entry["dz"].is_number()
+                ? entry["dz"].get<float>()
+                : (entry.contains("z") && entry["z"].is_number() ? entry["z"].get<float>() : 0.0f);
+            if (has_xy_keys && has_dxyz_keys && std::abs(explicit_depth) < 1e-5f && std::abs(legacy_height) > 1e-5f) {
+                return 0.0f;
+            }
+            if (entry.contains("dy") && entry["dy"].is_number()) return entry["dy"].get<float>();
+            if (entry.contains("y") && entry["y"].is_number()) return entry["y"].get<float>();
+            return 0.0f;
+        }
+        if (index == 2) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const float legacy_depth = entry.contains("dy") && entry["dy"].is_number()
+                ? entry["dy"].get<float>()
+                : (entry.contains("y") && entry["y"].is_number() ? entry["y"].get<float>() : 0.0f);
+            const float explicit_depth = entry.contains("dz") && entry["dz"].is_number()
+                ? entry["dz"].get<float>()
+                : (entry.contains("z") && entry["z"].is_number() ? entry["z"].get<float>() : 0.0f);
+            if (has_xy_keys && has_dxyz_keys && std::abs(explicit_depth) < 1e-5f && std::abs(legacy_depth) > 1e-5f) {
+                return legacy_depth;
+            }
+            if (entry.contains("dz") && entry["dz"].is_number()) return entry["dz"].get<float>();
+            if (entry.contains("z") && entry["z"].is_number()) return entry["z"].get<float>();
+            if (!entry.contains("dz") && !entry.contains("z")) {
+                // Legacy object movement stored depth in y/dy.
+                if (entry.contains("dy") && entry["dy"].is_number()) return entry["dy"].get<float>();
+                if (entry.contains("y") && entry["y"].is_number()) return entry["y"].get<float>();
+            }
         }
     }
     return 0.0f;
@@ -107,28 +180,19 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
     const nlohmann::json* source = payload.contains("source") && payload["source"].is_object() ? &payload["source"] : nullptr;
     std::string kind = source ? source->value("kind", std::string{"folder"}) : std::string{"folder"};
 
-    if (kind == "animation") {
-
-        bool inherit_movement = payload.value("inherit_source_movement", true);
-        if (!inherit_movement) {
-
-            kind = "folder";
-        }
+    if (kind == "animation" && !payload_inherits_geometry(payload)) {
+        kind = "folder";
     }
 
     if (kind == "animation") {
         bool reverse = payload.value("reverse_source", false);
         bool flip_x = payload.value("flipped_source", false);
-        bool flip_y = false;
-        bool flip_movement_x = false;
-        bool flip_movement_y = false;
+        bool flip_y = payload.value("flip_vertical_source", false);
         if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
             const auto& modifiers = payload["derived_modifiers"];
             reverse = modifiers.value("reverse", reverse);
             flip_x = modifiers.value("flipX", flip_x);
-            flip_y = modifiers.value("flipY", false);
-            flip_movement_x = modifiers.value("flipMovementX", flip_movement_x);
-            flip_movement_y = modifiers.value("flipMovementY", flip_movement_y);
+            flip_y = modifiers.value("flipY", flip_y);
         }
 
         std::string reference = source ? source->value("name", std::string{}) : std::string{};
@@ -145,24 +209,22 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
         ResolvedMovement nested = resolve_movement(document, reference, depth + 1);
         result.total_dx = nested.total_dx;
         result.total_dy = nested.total_dy;
+        result.total_dz = nested.total_dz;
         result.signature = payload_signature + "|child{" + nested.signature + "}";
         result.derived = true;
         result.source_id = reference;
 
-        if (flip_movement_x) result.total_dx = -result.total_dx;
-        if (flip_movement_y) result.total_dy = -result.total_dy;
+        if (flip_x) result.total_dx = -result.total_dx;
+        if (flip_y) result.total_dz = -result.total_dz;
         if (reverse) result.modifiers.push_back("Reverse");
         if (flip_x) result.modifiers.push_back("Flip X");
         if (flip_y) result.modifiers.push_back("Flip Y");
-        if (flip_movement_x) result.modifiers.push_back("Flip Movement X");
-        if (flip_movement_y) result.modifiers.push_back("Flip Movement Y");
+        result.modifiers.push_back("Inherit Geometry");
 
         result.signature += "|mods:";
         result.signature.push_back(reverse ? '1' : '0');
         result.signature.push_back(flip_x ? '1' : '0');
         result.signature.push_back(flip_y ? '1' : '0');
-        result.signature.push_back(flip_movement_x ? '1' : '0');
-        result.signature.push_back(flip_movement_y ? '1' : '0');
         return result;
     }
 
@@ -174,13 +236,16 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
 
     float dx = 0.0f;
     float dy = 0.0f;
+    float dz = 0.0f;
     for (size_t i = 1; i < movement.size(); ++i) {
         const nlohmann::json& entry = movement[i];
         dx += read_movement_component(entry, 0);
         dy += read_movement_component(entry, 1);
+        dz += read_movement_component(entry, 2);
     }
     result.total_dx = dx;
     result.total_dy = dy;
+    result.total_dz = dz;
     result.signature = payload_signature + "|movement";
     return result;
 }
@@ -210,14 +275,33 @@ void MovementSummaryWidget::set_bounds(const SDL_Rect& bounds) {
             const int y = bounds_.y + bounds_.h - padding - kButtonHeight;
             button_rect_ = SDL_Rect{x, y, width, kButtonHeight};
         } else {
+            int enabled_count = 0;
+            for (bool enabled : mode_enabled_) {
+                if (enabled) {
+                    ++enabled_count;
+                }
+            }
+            if (enabled_count <= 0) {
+                button_rect_ = SDL_Rect{0, 0, 0, 0};
+                for (auto& r : mode_button_rects_) {
+                    r = SDL_Rect{0, 0, 0, 0};
+                }
+                return;
+            }
             const int gap = DMSpacing::small_gap();
-            const int available = std::max(0, bounds_.w - padding * 2 - gap * static_cast<int>(kModeButtonCount - 1));
-            const int width = std::clamp(available / static_cast<int>(kModeButtonCount), 90, kButtonWidth);
+            const int available = std::max(0, bounds_.w - padding * 2 - gap * (enabled_count - 1));
+            const int width = std::clamp(available / enabled_count, 90, kButtonWidth);
             const int height = kButtonHeight;
             const int y = bounds_.y + bounds_.h - padding - height;
+            int slot = 0;
             for (std::size_t i = 0; i < kModeButtonCount; ++i) {
-                const int x = bounds_.x + padding + static_cast<int>(i) * (width + gap);
+                if (!mode_enabled_[i]) {
+                    mode_button_rects_[i] = SDL_Rect{0, 0, 0, 0};
+                    continue;
+                }
+                const int x = bounds_.x + padding + slot * (width + gap);
                 mode_button_rects_[i] = SDL_Rect{x, y, width, height};
+                ++slot;
             }
             button_rect_ = SDL_Rect{0, 0, 0, 0};
         }
@@ -241,6 +325,11 @@ void MovementSummaryWidget::set_mode_launch_callback(ModeLaunchCallback callback
     refresh_totals();
 }
 
+void MovementSummaryWidget::set_mode_enabled(FrameEditorLaunchMode mode, bool enabled) {
+    mode_enabled_[mode_index(mode)] = enabled;
+    set_bounds(bounds_);
+}
+
 void MovementSummaryWidget::set_go_to_source_callback(GoToSourceCallback callback) {
     go_to_source_callback_ = std::move(callback);
     refresh_totals();
@@ -250,7 +339,7 @@ int MovementSummaryWidget::preferred_height(int) const {
     const int padding = kPanelPadding;
     const int label_height = DMStyles::Label().font_size + DMSpacing::small_gap();
     int height = padding;
-    int text_lines = derived_from_animation_ ? static_cast<int>(inherited_message_lines_.empty() ? 1 : inherited_message_lines_.size()) : 2;
+    int text_lines = derived_from_animation_ ? static_cast<int>(inherited_message_lines_.empty() ? 1 : inherited_message_lines_.size()) : 3;
     height += label_height * std::max(1, text_lines);
     if (show_button_) {
         height += DMSpacing::small_gap();
@@ -295,7 +384,9 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
     } else {
         render_summary_label(renderer, "Total X: " + std::to_string(static_cast<int>(std::lround(total_dx_))), text_x, text_y, text_color);
         text_y += label_stride;
-        render_summary_label(renderer, "Total Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))), text_x, text_y, text_color);
+        render_summary_label(renderer, "Total Z (Depth): " + std::to_string(static_cast<int>(std::lround(total_dz_))), text_x, text_y, text_color);
+        text_y += label_stride;
+        render_summary_label(renderer, "Total Y (Height): " + std::to_string(static_cast<int>(std::lround(total_dy_))), text_x, text_y, text_color);
         text_y += label_stride;
     }
 
@@ -320,8 +411,11 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
             int label_y = button_rect_.y + (button_rect_.h - button_style.label.font_size) / 2;
             render_summary_label(renderer, button_text, label_x, label_y, button_style.text);
         } else {
-            static const char* kLabels[4] = {"Movement", "Attack Geo", "Hit Geo", "Anchors"};
+            static const char* kLabels[2] = {"Movement", "Anchors"};
             for (std::size_t i = 0; i < kModeButtonCount; ++i) {
+                if (!mode_enabled_[i]) {
+                    continue;
+                }
                 const SDL_Rect rect = mode_button_rects_[i];
                 SDL_Color button_color = button_style.bg;
                 if (mode_button_pressed_[i]) {
@@ -353,6 +447,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
     }
     auto handle_mode_button_event = [&](FrameEditorLaunchMode mode, std::size_t idx, const SDL_Point& p, bool pressed_only) -> bool {
         if (idx >= mode_button_rects_.size()) return false;
+        if (!mode_enabled_[idx]) return false;
         const SDL_Rect& rect = mode_button_rects_[idx];
         if (rect.w <= 0 || rect.h <= 0) return false;
         const bool inside = SDL_PointInRect(&p, &rect) != 0;
@@ -377,7 +472,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             }
             bool handled = false;
             for (std::size_t i = 0; i < mode_button_rects_.size(); ++i) {
-                mode_button_hovered_[i] = SDL_PointInRect(&p, &mode_button_rects_[i]) != 0;
+                mode_button_hovered_[i] = mode_enabled_[i] && SDL_PointInRect(&p, &mode_button_rects_[i]) != 0;
                 handled = handled || mode_button_hovered_[i];
             }
             return handled;
@@ -396,9 +491,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             }
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 1, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 2, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AnchorPoints, 3, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AnchorPoints, 1, p, true) || handled;
             return handled;
         }
         case SDL_EVENT_MOUSE_BUTTON_UP: {
@@ -424,9 +517,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             }
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 1, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 2, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AnchorPoints, 3, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AnchorPoints, 1, p, false) || handled;
             return handled;
         }
         default:
@@ -444,6 +535,7 @@ void MovementSummaryWidget::refresh_totals() {
 void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolved) {
     total_dx_ = resolved.total_dx;
     total_dy_ = resolved.total_dy;
+    total_dz_ = resolved.total_dz;
     derived_from_animation_ = resolved.derived;
     inherited_source_id_ = resolved.source_id;
     inherited_message_lines_.clear();
@@ -453,7 +545,7 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
 
     if (derived_from_animation_) {
         std::string target = inherited_source_id_.empty() ? std::string("the source animation") : "animation '" + inherited_source_id_ + "'";
-        inherited_message_lines_.push_back("Movement inherits from " + target + ".");
+        inherited_message_lines_.push_back("Geometry inherits from " + target + ".");
         if (!resolved.modifiers.empty()) {
             std::string joined;
             for (size_t i = 0; i < resolved.modifiers.size(); ++i) {
@@ -465,7 +557,9 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
             inherited_message_lines_.push_back("Modifiers: (none).");
         }
         inherited_message_lines_.push_back("Edit the source animation to change it.");
-        inherited_message_lines_.push_back("Totals X: " + std::to_string(static_cast<int>(std::lround(total_dx_))) + ", Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))) + ".");
+        inherited_message_lines_.push_back("Totals X: " + std::to_string(static_cast<int>(std::lround(total_dx_))) +
+                                           ", Z: " + std::to_string(static_cast<int>(std::lround(total_dz_))) +
+                                           ", Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))) + ".");
         show_button_ = go_to_source_callback_ && !inherited_source_id_.empty();
         button_is_go_to_ = show_button_;
     } else {

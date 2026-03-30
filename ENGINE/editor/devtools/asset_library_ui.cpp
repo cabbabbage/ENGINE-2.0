@@ -612,6 +612,11 @@ AssetLibraryUI::AssetLibraryUI() {
     add_button_widget_ = std::make_unique<ButtonWidget>(add_button_.get(), [this](){
         handle_create_button_pressed();
     });
+
+    repair_refresh_button_ = std::make_unique<DMButton>("Repair / Refresh Missing", &DMStyles::AccentButton(), 220, DMButton::height());
+    repair_refresh_button_widget_ = std::make_unique<ButtonWidget>(repair_refresh_button_.get(), [this](){
+        handle_repair_refresh_button_pressed();
+    });
 }
 
 AssetLibraryUI::~AssetLibraryUI() = default;
@@ -759,6 +764,9 @@ void AssetLibraryUI::rebuild_rows_impl() {
     }
     if (!current_row.empty()) {
         rows.push_back(current_row);
+    }
+    if (!picker_mode_.enabled && repair_refresh_button_widget_) {
+        rows.push_back({ repair_refresh_button_widget_.get() });
     }
 
     floating_->set_cell_width(210);
@@ -1101,7 +1109,6 @@ bool AssetLibraryUI::remove_tag_from_manifest_maps(const std::string& tag) {
         return false;
     }
 
-    auto guard = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_hashtag");
     for (auto it = maps_it->begin(); it != maps_it->end(); ++it) {
         nlohmann::json map_entry = *it;
         bool updated = false;
@@ -1112,7 +1119,10 @@ bool AssetLibraryUI::remove_tag_from_manifest_maps(const std::string& tag) {
             updated |= devmode::manifest_utils::remove_asset_from_spawn_groups(map_entry, tag);
         }
         if (updated) {
-            if (!manifest_store_owner_->update_map_entry(it.key(), map_entry)) {
+            devmode::core::ManifestStore::MapPersistOptions options;
+            options.flush = false;
+            options.guard_reason = "AssetLibraryUI::remove_hashtag";
+            if (!manifest_store_owner_->persist_map_entry(it.key(), map_entry, options)) {
                 std::cerr << "[AssetLibraryUI] Failed to update spawn groups for map '" << it.key() << "'\n";
             } else {
                 manifest_changed = true;
@@ -1334,14 +1344,16 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
             if (references_remaining) {
                 auto maps_it = manifest.find("maps");
                 if (maps_it != manifest.end() && maps_it->is_object()) {
-                    auto guard = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_asset");
                     for (auto it = maps_it->begin(); it != maps_it->end(); ++it) {
                         nlohmann::json map_entry = *it;
                         bool updated = false;
                         updated |= devmode::manifest_utils::remove_asset_from_spawn_groups(map_entry, asset_name);
                         updated |= remove_asset_from_required_children(map_entry, asset_name);
                         if (updated) {
-                            if (!manifest_store_owner_->update_map_entry(it.key(), map_entry)) {
+                            devmode::core::ManifestStore::MapPersistOptions options;
+                            options.flush = false;
+                            options.guard_reason = "AssetLibraryUI::remove_asset";
+                            if (!manifest_store_owner_->persist_map_entry(it.key(), map_entry, options)) {
                                 std::cerr << "[AssetLibraryUI] Failed to update manifest map entry '"
                                           << it.key() << "' while removing '" << asset_name << "'\n";
                             } else {
@@ -1580,7 +1592,7 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         const std::string asset_dir_str = dir.lexically_normal().generic_string();
 
         nlohmann::json default_anim = {
-            {"loop", true},
+            {"on_end", "default"},
             {"locked", false},
             {"reverse_source", false},
             {"flipped_source", false},
@@ -1659,13 +1671,12 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
             library_owner_->add_asset(name, manifest_entry);
             if (assets_owner_) {
                 if (SDL_Renderer* renderer = assets_owner_->renderer()) {
-                    library_owner_->ensureAllAnimationsLoaded(renderer);
+                    library_owner_->ensureAnimationsLoadedFor(renderer, std::unordered_set<std::string>{name});
                 }
 
                 auto new_info = library_owner_->get(name);
                 if (new_info) {
                     assets_owner_->open_asset_info_editor(new_info);
-                    assets_owner_->open_animation_editor_for_asset(new_info);
                 }
             }
         }
@@ -1681,6 +1692,38 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         std::error_code ec;
         fs::remove_all(dir, ec);
         return CreateAssetResult::Failed;
+    }
+}
+
+void AssetLibraryUI::handle_repair_refresh_button_pressed() {
+    if (picker_mode_.enabled || !library_owner_) {
+        return;
+    }
+
+    SDL_Renderer* renderer = assets_owner_ ? assets_owner_->renderer() : nullptr;
+    const auto result = library_owner_->repairAndRefreshMissing(renderer);
+
+    items_cached_ = false;
+    filter_dirty_ = true;
+    extra_tiles_.clear();
+
+    if (assets_owner_) {
+        refresh_tiles(*assets_owner_);
+        std::ostringstream notice;
+        if (result.added_assets.empty() && result.repaired_assets.empty() && result.loaded_assets.empty() && result.failed_assets.empty()) {
+            notice << "Asset Library: nothing missing";
+        } else {
+            notice << "Asset Library refreshed: added " << result.added_assets.size()
+                   << ", repaired " << result.repaired_assets.size()
+                   << ", loaded " << result.loaded_assets.size();
+            if (!result.failed_assets.empty()) {
+                notice << ", failed " << result.failed_assets.size();
+            }
+        }
+        assets_owner_->show_dev_notice(notice.str(), result.failed_assets.empty() ? 1800u : 2400u);
+    } else {
+        mark_rows_dirty();
+        ensure_rows_layout();
     }
 }
 

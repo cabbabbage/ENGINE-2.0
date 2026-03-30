@@ -1,8 +1,5 @@
 #include "get_best_path.hpp"
 
-#include <algorithm>
-#include <cstdio>
-#include <cmath>
 #include <limits>
 #include <string>
 
@@ -13,49 +10,28 @@
 #include "assets/asset/asset_types.hpp"
 #include "animation_update.hpp"
 #include "core/AssetsManager.hpp"
-#include "core/asset_list.hpp"
 #include "utils/area.hpp"
 #include "gameplay/world/grid_point.hpp"
 
 namespace {
-struct CollisionEntry {
-    const Asset* asset = nullptr;
-    Area         area{ "impassable" };
-};
+using CollisionEntryRef = const Assets::FrameCollisionEntry*;
 
-std::vector<CollisionEntry> gather_collision_entries(const Asset& self) {
-    std::vector<CollisionEntry> entries;
-    const AssetList* list = self.get_impassable_naighbors();
-    if (!list) {
+std::vector<CollisionEntryRef> gather_collision_entries(const Asset& self) {
+    std::vector<CollisionEntryRef> entries;
+    const Assets* assets = self.get_assets();
+    if (!assets) {
         return entries;
     }
-
-    std::vector<Asset*> neighbors;
-    list->full_list(neighbors);
-    entries.reserve(neighbors.size());
-
-    for (Asset* neighbor : neighbors) {
-        if (!neighbor || neighbor == &self || !neighbor->info) {
-            continue;
-        }
-
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) {
-            area = neighbor->get_area("collision_area");
-        }
-        if (area.get_points().empty()) {
-            continue;
-        }
-
-        entries.push_back(CollisionEntry{ neighbor, std::move(area) });
-    }
-
+    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
+        ? self.info->NeighborSearchRadius
+        : 0;
+    assets->query_impassable_entries(self, search_radius, entries);
     return entries;
 }
 
 bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
-                  const std::vector<CollisionEntry>& collisions,
+                  const std::vector<CollisionEntryRef>& collisions,
                   const Asset& self,
                   const Assets* assets_owner) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
@@ -65,21 +41,23 @@ bool blocked_step(const world::GridPoint& from,
         return true;
     }
 
-    for (const CollisionEntry& entry : collisions) {
-        const Asset* other = entry.asset;
+    for (const CollisionEntryRef entry : collisions) {
+        if (!entry) {
+            continue;
+        }
+        const Asset* other = entry->asset;
         if (!other || other == &self || !other->info) {
             continue;
         }
 
-        if (animation_update::detail::segment_hits_area(from, to, entry.area)) {
+        if (animation_update::detail::segment_hits_area(from, to, entry->area)) {
             return true;
         }
 
         bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
 
         if (overlap_check) {
-            const world::GridPoint other_bottom = animation_update::detail::bottom_middle_for(*other, world::grid_math::from_sdl(other->world_xz_point(), other->world_y(), other->grid_resolution));
-            if (animation_update::detail::distance_sq(dest_bottom, other_bottom) <
+            if (animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) <
                 animation_update::detail::kOverlapDistanceSq) {
                 return true;
             }
@@ -90,12 +68,12 @@ bool blocked_step(const world::GridPoint& from,
 }
 
 struct AnimationDescriptor {
-    std::string                     id;
-    const Animation*                animation   = nullptr;
-    std::size_t                     path_index  = 0;
+    std::string id;
+    const Animation* animation = nullptr;
+    std::size_t path_index = 0;
     const std::vector<AnimationFrame>* frames    = nullptr;
-    bool                            locked      = false;
-    int                             frame_count = 0;
+    bool locked = false;
+    int frame_count = 0;
 };
 
 std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
@@ -107,15 +85,18 @@ std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
     for (const auto& [id, anim] : self.info->animations) {
         const std::size_t path_count = anim.movement_path_count();
         for (std::size_t path_index = 0; path_index < path_count; ++path_index) {
-            const auto& frames = anim.movement_path(path_index);
-            const int   frame_count = static_cast<int>(frames.size());
+            const auto* frames = &anim.movement_path(path_index);
+            if (!frames) {
+                continue;
+            }
+            const int   frame_count = static_cast<int>(frames->size());
             if (frame_count <= 0) {
                 continue;
             }
 
             bool has_motion = false;
-            for (const auto& frame : frames) {
-                if (frame.dx != 0 || frame.dy != 0) {
+            for (const auto& frame : *frames) {
+                if (frame.dx != 0 || frame.dz != 0) {
                     has_motion = true;
                     break;
                 }
@@ -124,7 +105,7 @@ std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
                 continue;
             }
 
-            result.push_back(AnimationDescriptor{ id, &anim, path_index, &frames, anim.locked, frame_count });
+            result.push_back(AnimationDescriptor{ id, &anim, path_index, frames, anim.locked, frame_count });
         }
     }
 
@@ -132,20 +113,18 @@ std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
 }
 
 struct CandidateStride {
-    std::string       animation_id;
-    world::GridPoint  end_position = world::GridPoint::make_virtual(0, 0, 0, 0);
-    int               frames   = 0;
-    int               dist_sq  = std::numeric_limits<int>::max();
-    bool              reaches  = false;
-    bool              valid    = false;
-    std::size_t       path_index = 0;
+    std::string animation_id;
+    world::GridPoint end_position = world::GridPoint::make_virtual(0, 0, 0, 0);
+    int frames = 0;
+    int dist_sq = std::numeric_limits<int>::max();
+    bool reaches = false;
+    bool valid = false;
+    std::size_t path_index = 0;
 };
 
-struct SmallestStride {
-    std::string      anim_id;
-    std::size_t      path_index = 0;
-    world::GridPoint delta      = world::GridPoint::make_virtual(0, 0, 0, 0);
-};
+void copy_position(world::GridPoint& dst, const world::GridPoint& src) {
+    dst.update_world_position(src.world_x(), src.world_y(), src.world_z());
+}
 
 }
 
@@ -177,23 +156,6 @@ Plan GetBestPath::operator()(const Asset& self,
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
     auto movement_anims    = gather_movement_animations(self);
 
-    SmallestStride min_stride;
-    int min_sum = std::numeric_limits<int>::max();
-    for (const auto& descriptor : movement_anims) {
-        const auto* frames_path = descriptor.frames;
-        if (!frames_path) {
-            continue;
-        }
-        for (const auto& frame : *frames_path) {
-            SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
-            int sum = std::abs(delta.x) + std::abs(delta.y);
-            if (sum > 0 && sum < min_sum) {
-                min_sum = sum;
-                min_stride = { descriptor.id, descriptor.path_index, world::GridPoint::make_virtual(delta.x, 0, delta.y, layer) };
-            }
-        }
-    }
-
     bool aborted = false;
     for (const world::GridPoint& checkpoint : checkpoints) {
         if (visited_sq > 0 && animation_update::detail::distance_sq(cursor, checkpoint) <= visited_sq) {
@@ -203,7 +165,7 @@ Plan GetBestPath::operator()(const Asset& self,
         int safeguard = 0;
         while (animation_update::detail::distance_sq(cursor, checkpoint) > visited_sq) {
             CandidateStride best;
-            const int       current_dist_sq = animation_update::detail::distance_sq(cursor, checkpoint);
+            const int current_dist_sq = animation_update::detail::distance_sq(cursor, checkpoint);
 
             for (const auto& descriptor : movement_anims) {
                 if (!descriptor.animation) {
@@ -223,7 +185,7 @@ Plan GetBestPath::operator()(const Asset& self,
                 const int min_frames = descriptor.locked ? max_frames : 1;
                 for (int frames = min_frames; frames <= max_frames; ++frames) {
                     world::GridPoint simulated = cursor;
-                    bool             blocked   = false;
+                    bool blocked = false;
 
                     for (int i = 0; i < frames; ++i) {
                         const AnimationFrame& frame = (*frames_path)[i];
@@ -233,7 +195,7 @@ Plan GetBestPath::operator()(const Asset& self,
                             blocked = true;
                             break;
                         }
-                        simulated = std::move(next);
+                        copy_position(simulated, next);
                     }
 
                     if (blocked) {
@@ -266,32 +228,82 @@ Plan GetBestPath::operator()(const Asset& self,
                         best.animation_id = descriptor.id;
                         best.frames       = frames;
                         best.dist_sq      = dist_sq;
-                        best.end_position = std::move(simulated);
+                        copy_position(best.end_position, simulated);
                         best.path_index   = descriptor.path_index;
                     }
                 }
             }
 
             if (!best.valid) {
-                if (min_sum != std::numeric_limits<int>::max()) {
-                    const SDL_Point delta_pt{ min_stride.delta.world_x(), min_stride.delta.world_z() };
-                    world::GridPoint fallback_next = world::grid_math::offset(cursor, delta_pt);
-                    const int       fallback_dist_sq = animation_update::detail::distance_sq(fallback_next, checkpoint);
-                    if (fallback_dist_sq < current_dist_sq) {
-                        plan.strides.push_back(Stride{ min_stride.anim_id, 1, min_stride.path_index });
-                        cursor = std::move(fallback_next);
-                        plan.final_dest = cursor.to_sdl_point();
-                    } else {
-                        aborted = true;
-                        break;
+                CandidateStride fallback;
+                for (const auto& descriptor : movement_anims) {
+                    if (!descriptor.animation) {
+                        continue;
                     }
+
+                    const auto* frames_path = descriptor.frames;
+                    if (!frames_path) {
+                        continue;
+                    }
+
+                    const int max_frames = descriptor.frame_count;
+                    if (max_frames <= 0) {
+                        continue;
+                    }
+
+                    const int min_frames = descriptor.locked ? max_frames : 1;
+                    for (int frames = min_frames; frames <= max_frames; ++frames) {
+                        world::GridPoint simulated = cursor;
+                        for (int i = 0; i < frames; ++i) {
+                            const AnimationFrame& frame = (*frames_path)[i];
+                            SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
+                            world::GridPoint next = world::grid_math::offset(simulated, delta);
+                            copy_position(simulated, next);
+                        }
+
+                        const int dist_sq = animation_update::detail::distance_sq(simulated, checkpoint);
+                        const bool reaches = (visited_sq == 0) ? (dist_sq == 0) : (dist_sq <= visited_sq);
+                        const bool progress = dist_sq < current_dist_sq;
+                        if (!reaches && !progress) {
+                            continue;
+                        }
+
+                        bool use_candidate = false;
+                        if (!fallback.valid) {
+                            use_candidate = true;
+                        } else if (reaches != fallback.reaches) {
+                            use_candidate = reaches;
+                        } else if (reaches && frames < fallback.frames) {
+                            use_candidate = true;
+                        } else if (!reaches && dist_sq < fallback.dist_sq) {
+                            use_candidate = true;
+                        } else if (!reaches && dist_sq == fallback.dist_sq && frames < fallback.frames) {
+                            use_candidate = true;
+                        }
+
+                        if (use_candidate) {
+                            fallback.valid        = true;
+                            fallback.reaches      = reaches;
+                            fallback.animation_id = descriptor.id;
+                            fallback.frames       = frames;
+                            fallback.dist_sq      = dist_sq;
+                            copy_position(fallback.end_position, simulated);
+                            fallback.path_index   = descriptor.path_index;
+                        }
+                    }
+                }
+
+                if (fallback.valid) {
+                    plan.strides.push_back(Stride{ fallback.animation_id, fallback.frames, fallback.path_index });
+                    copy_position(cursor, fallback.end_position);
+                    plan.final_dest = cursor.to_sdl_point();
                 } else {
                     aborted = true;
                     break;
                 }
             } else {
                 plan.strides.push_back(Stride{ best.animation_id, best.frames, best.path_index });
-                cursor = std::move(best.end_position);
+                copy_position(cursor, best.end_position);
                 plan.final_dest = cursor.to_sdl_point();
             }
 

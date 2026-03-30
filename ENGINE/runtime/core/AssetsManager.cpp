@@ -9,11 +9,17 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_utils.hpp"
 #include "assets/asset/asset_types.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/animation_runtime.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
-#include "devtools/depth_cue_settings.hpp"
-#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
+#include "devtools/dm_styles.hpp"
+#include "devtools/core/manifest_store.hpp"
+#include "devtools/font_cache.hpp"
+#include "core/manifest/map_data.hpp"
+#include "core/manifest/depth_cue_settings.hpp"
+#include "core/dev_mode_animation_policy.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/world/chunk.hpp"
@@ -23,9 +29,10 @@
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
 #include "utils/map_grid_settings.hpp"
-#include "utils/quick_task_popup.hpp"
 #include "utils/log.hpp"
+#include "utils/task_editor.hpp"
 
+#include <filesystem>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -49,34 +56,14 @@
 #include <array>
 #include <sstream>
 #include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 namespace {
 
-constexpr int kQualityOptions[] = {100, 75, 50, 25, 10};
-constexpr int kMinRenderQuality = kQualityOptions[sizeof(kQualityOptions) / sizeof(kQualityOptions[0]) - 1];
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
-
-int align_render_quality_percent(int percent) {
-    int best = kQualityOptions[0];
-    int best_diff = std::abs(percent - best);
-    for (int option : kQualityOptions) {
-        const int diff = std::abs(percent - option);
-        if (diff < best_diff) {
-            best_diff = diff;
-            best = option;
-        }
-    }
-    return best;
-}
-
-int halved_render_quality_percent(int percent) {
-    if (percent <= kMinRenderQuality) {
-        return kMinRenderQuality;
-    }
-    const int halved = static_cast<int>(std::lround(percent * 0.5));
-    return std::max(kMinRenderQuality, align_render_quality_percent(halved));
-}
+constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
+constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
 
 struct AssetWorldBounds {
     float left = 0.0f;
@@ -119,11 +106,36 @@ bool compute_asset_world_bounds(const Asset* asset,
     return true;
 }
 
+bool vibble_scale_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_SCALE_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" ||
+               value == "true" ||
+               value == "TRUE" ||
+               value == "on" ||
+               value == "ON";
+    }();
+    return enabled;
+}
+
+}
+
+float Assets::frame_delta_seconds_clamped() const {
+    constexpr float kFallbackDt = 1.0f / 60.0f;
+    const float dt = last_frame_dt_seconds_;
+    if (std::isfinite(dt) && dt > 0.0f) {
+        return std::min(dt, 0.1f);
+    }
+    return kFallbackDt;
 }
 
 Assets::Assets(AssetLibrary& library,
                Asset*,
-               std::vector<Room*> rooms,
+               std::shared_ptr<RuntimeWorldContext> world_context,
                int screen_width_,
                int screen_height_,
                int screen_center_x,
@@ -152,9 +164,13 @@ Assets::Assets(AssetLibrary& library,
       screen_height(screen_height_),
       world_grid_(std::move(world_grid)),
       library_(library),
+      world_context_(std::move(world_context)),
       map_id_(map_id),
       map_path_(std::move(content_root))
 {
+    if (!world_context_) {
+        world_context_ = std::make_shared<RuntimeWorldContext>();
+    }
     perf_counter_frequency_ = static_cast<double>(SDL_GetPerformanceFrequency());
     last_frame_counter_     = SDL_GetPerformanceCounter();
     map_info_json_ = map_manifest;
@@ -166,10 +182,11 @@ Assets::Assets(AssetLibrary& library,
     depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
-    InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
+    InitializeAssets::initialize(*this, screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
     vibble::log::info("[Assets] Constructor: InitializeAssets complete");
 
-    finder_ = new CurrentRoomFinder(rooms_, player);
+    auto& room_refs = rooms();
+    finder_ = new CurrentRoomFinder(room_refs, player);
     if (finder_) {
         camera_.set_up_rooms(finder_);
     }
@@ -199,6 +216,7 @@ Assets::Assets(AssetLibrary& library,
     last_camera_center_for_grid_ = world::GridPoint::make_virtual(center_px.x, 0, center_px.y, 0);
     last_camera_scale_for_grid_ = camera_.get_scale();
     last_camera_pitch_for_grid_ = camera_.current_pitch_radians();
+    last_camera_projection_state_version_for_grid_ = camera_.camera_state_version();
     if (player) {
         last_known_player_pos_ = world::GridPoint::make_virtual(player->world_x(), player->world_y(), player->world_z(), player->grid_resolution);
         last_player_pos_valid_ = true;
@@ -213,14 +231,14 @@ Assets::Assets(AssetLibrary& library,
     } else {
         vibble::log::info("[Assets] Constructor: Creating SceneRenderer");
         try {
-            scene = new SceneRenderer(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
+            scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
             vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
         } catch (const std::exception& ex) {
             vibble::log::error(std::string{"[Assets] SceneRenderer initialization failed: "} + ex.what());
-            scene = nullptr;
+            scene.reset();
         } catch (...) {
             vibble::log::error("[Assets] SceneRenderer initialization failed with unknown exception");
-            scene = nullptr;
+            scene.reset();
         }
     }
     if (scene) {
@@ -238,22 +256,54 @@ Assets::Assets(AssetLibrary& library,
     movement_commands_buffer_.reserve(all.size());
     grid_registration_buffer_.clear();
     grid_registration_buffer_.reserve(4);
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_queue_.reserve(all.size());
-    anchor_basis_dirty_lookup_.clear();
+    runtime_traversal_state_.clear();
+    runtime_traversal_state_.reserve(all.size());
     vibble::log::info("[Assets] Constructor: Setting up assets (" + std::to_string(all.size()) + " total)");
     for (Asset* a : all) {
         if (!a) continue;
         a->set_assets(this);
     }
     vibble::log::info("[Assets] Constructor: Asset finalization complete");
+
     register_pending_static_assets();
 
     update_filtered_active_assets();
 
-    quick_task_popup_ = std::make_unique<QuickTaskPopup>();
+    const std::filesystem::path manifest_root =
+        std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()).parent_path());
+    task_editor_ = std::make_unique<TaskEditor>(manifest_root);
 
     vibble::log::info("[Assets] Constructor: Initialization complete");
+}
+
+void Assets::set_output_dimensions(int width, int height) {
+    const int safe_w = std::max(1, width);
+    const int safe_h = std::max(1, height);
+    if (screen_width == safe_w && screen_height == safe_h) {
+        return;
+    }
+
+    screen_width = safe_w;
+    screen_height = safe_h;
+
+    camera_.set_screen_dimensions(screen_width, screen_height);
+    if (scene) {
+        scene->set_output_dimensions(screen_width, screen_height);
+    }
+    if (dev_controls_) {
+        dev_controls_->set_screen_dimensions(screen_width, screen_height);
+    }
+
+    mark_grid_dirty();
+    camera_view_dirty_ = true;
+    needs_filtered_active_refresh_ = true;
+}
+
+std::optional<SDL_Point> Assets::scene_postprocess_target_size() const {
+    if (!scene) {
+        return std::nullopt;
+    }
+    return scene->postprocess_target_size();
 }
 
 std::vector<const Room::NamedArea*> Assets::current_room_trigger_areas() const {
@@ -302,25 +352,34 @@ void Assets::save_map_info_json() {
         std::cerr << "[Assets] Unable to persist map manifest entry: manifest store unavailable.\n";
         return;
     }
-    auto guard = store->scoped_guard("Assets::save_map_info_json");
-    if (!store->update_map_entry(map_id_, map_info_json_)) {
+    devmode::core::ManifestStore::MapPersistOptions options;
+    options.flush = true;
+    options.guard_reason = "Assets::save_map_info_json";
+    if (!store->persist_map_entry(map_id_, map_info_json_, options)) {
         std::cerr << "[Assets] Failed to persist map manifest entry for " << map_id_ << "\n";
         return;
     }
-    store->flush();
 }
 
 bool Assets::mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator) {
     if (!mutator) {
         return false;
     }
-    manifest::MapData map_data = manifest::MapData::from_manifest_entry(map_id_, map_info_json_);
-    if (!mutator(map_data)) {
+    try {
+        manifest::MapData map_data = manifest::MapData::from_manifest_entry(map_id_, map_info_json_);
+        if (!mutator(map_data)) {
+            return false;
+        }
+        map_info_json_ = map_data.to_manifest_entry();
+        mark_map_data_dirty();
+        return true;
+    } catch (const std::exception& ex) {
+        std::cerr << "[Assets] mutate_map_data failed: " << ex.what() << "\n";
+        return false;
+    } catch (...) {
+        std::cerr << "[Assets] mutate_map_data failed with unknown exception\n";
         return false;
     }
-    map_info_json_ = map_data.to_manifest_entry();
-    mark_map_data_dirty();
-    return true;
 }
 
 void Assets::mark_map_data_dirty() {
@@ -331,7 +390,7 @@ void Assets::snapshot_rooms_to_map_info() {
     if (!map_info_json_.is_object()) {
         map_info_json_ = nlohmann::json::object();
     }
-    for (Room* room : rooms_) {
+    for (Room* room : rooms()) {
         if (!room) {
             continue;
         }
@@ -347,6 +406,9 @@ void Assets::persist_map_info_json() {
 void Assets::hydrate_map_info_sections() {
     if (!map_info_json_.is_object()) {
         return;
+    }
+    if (!map_info_json_.contains("schema_version") || !map_info_json_["schema_version"].is_number_integer()) {
+        map_info_json_["schema_version"] = manifest::kMapSchemaVersion;
     }
 
     const auto ensure_object = [&](const char* key) {
@@ -368,6 +430,8 @@ void Assets::hydrate_map_info_sections() {
 
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
+    depth_cue_settings_ = depth_cue::from_map_entry(map_info_json_);
+    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
 
 }
 
@@ -398,6 +462,7 @@ void Assets::on_camera_settings_changed() {
 
 void Assets::mark_camera_dirty() {
     camera_settings_dirty_ = true;
+    note_frame_rebuild_request();
 }
 
 void Assets::reload_camera_settings() {
@@ -439,34 +504,19 @@ void Assets::force_camera_view_refresh() {
         last_active_rebuild_frame_id_ = static_cast<std::uint32_t>(~frame_id_);
     }
 
-    rebuild_world_grid_and_active_assets(center_point, current_scale, current_pitch);
+    const std::uint64_t current_projection_version = camera_.camera_state_version();
+    rebuild_world_grid_and_active_assets(center_point,
+                                         current_scale,
+                                         current_pitch,
+                                         current_projection_version);
     pending_initial_rebuild_ = false;
     active_assets_dirty_.store(false, std::memory_order_release);
     last_active_rebuild_frame_id_ = frame_id_;
     needs_filtered_active_refresh_ = true;
 }
 
-int Assets::saved_render_quality_percent() const {
-    return 100;
-}
-
-int Assets::effective_render_quality_percent() const {
-    int percent = saved_render_quality_percent();
-    if (dev_mode && !force_high_quality_rendering_) {
-        percent = halved_render_quality_percent(percent);
-    }
-    return percent;
-}
-
 void Assets::apply_camera_runtime_settings() {
-    const int effective_percent = effective_render_quality_percent();
-    const float quality_cap = static_cast<float>(effective_percent) / 100.0f;
-    render_pipeline::ScalingLogic::SetQualityCap(quality_cap);
-    if (scene) {
-        const bool low_quality = (effective_percent < 100) && !force_high_quality_rendering_;
-
-    }
-
+    render_pipeline::ScalingLogic::SetQualityCap(1.0f);
 }
 
 void Assets::log_camera_fog_state(const char* label) const {
@@ -489,10 +539,7 @@ void Assets::log_camera_fog_state(const char* label) const {
         " room_zoom_percent=" + std::to_string(room ? room->camera_zoom_percent : 0) +
         " base_height_px=" + std::to_string(settings.base_height_px) +
         " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
-        " meters_per_100_world_px=" + std::to_string(settings.meters_per_100_world_px) +
-        " extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
-        " near_camera_max_perspective_scale=" + std::to_string(settings.near_camera_max_perspective_scale) +
-        " offscreen_fade_amount_px=" + std::to_string(settings.offscreen_fade_amount_px) +
+        //" extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
         " view_height_world=" + std::to_string(camera_.view_height_world()) +
         " camera_height=" + std::to_string(camera_height) +
         " pitch_deg=" + std::to_string(pitch_deg) +
@@ -507,6 +554,30 @@ void Assets::set_depth_effects_enabled(bool enabled) {
         return;
     }
     depth_effects_enabled_ = enabled;
+}
+
+void Assets::set_depth_cue_settings(const depth_cue::DepthCueSettings& settings) {
+    depth_cue::DepthCueSettings sanitized = settings;
+    depth_cue::clamp(sanitized);
+    if (depth_cue::nearly_equal(sanitized, depth_cue_settings_)) {
+        return;
+    }
+
+    depth_cue_settings_ = sanitized;
+    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
+    mark_map_data_dirty();
+
+    for (Asset* asset : all) {
+        if (!asset) {
+            continue;
+        }
+        asset->mark_composite_dirty();
+    }
+
+    ++depth_cue_settings_version_;
+    if (depth_cue_settings_version_ == 0) {
+        ++depth_cue_settings_version_;
+    }
 }
 
 void Assets::set_movement_debug_enabled(bool enabled) {
@@ -553,19 +624,24 @@ bool Assets::boundary_assets_visible() const {
     return dev_controls_->boundary_assets_visible();
 }
 
+float Assets::boundary_min_visible_screen_ratio() const {
+    return boundary_min_visible_screen_ratio_;
+}
+
+void Assets::set_boundary_min_visible_screen_ratio(float value) {
+    boundary_min_visible_screen_ratio_ = std::clamp(value, 0.0f, 0.5f);
+}
+
 Assets::~Assets() {
     run_exit_save_sequence("assets_shutdown");
 
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_lookup_.clear();
+    runtime_traversal_state_.clear();
 
     if (input) {
         input->clear_screen_to_world_mapper();
     }
-    delete scene;
-    scene = nullptr;
     delete finder_;
     delete dev_controls_;
 
@@ -579,37 +655,40 @@ const AssetLibrary& Assets::library() const {
     return library_;
 }
 
-void Assets::set_rooms(std::vector<Room*> rooms) {
-    rooms_ = std::move(rooms);
-    mark_camera_dirty();
-    notify_rooms_changed();
-}
-
 void Assets::ensure_light_textures_loaded(Asset* /*asset*/) {
 }
 
 std::vector<Room*>& Assets::rooms() {
-    return rooms_;
+    static std::vector<Room*> empty_rooms;
+    return world_context_ ? world_context_->rooms() : empty_rooms;
 }
 
 const std::vector<Room*>& Assets::rooms() const {
-    return rooms_;
+    static const std::vector<Room*> empty_rooms;
+    return world_context_ ? world_context_->rooms() : empty_rooms;
+}
+
+std::size_t Assets::rooms_generation() const {
+    return world_context_ ? world_context_->topology_generation() : 0;
 }
 
 void Assets::notify_rooms_changed() {
-    ++rooms_generation_;
+    if (world_context_) {
+        world_context_->notify_topology_changed();
+    }
     if (finder_) {
-        finder_->setRooms(rooms_);
+        auto& room_refs = rooms();
+        finder_->setRooms(room_refs);
     }
     if (dev_controls_) {
-        dev_controls_->set_rooms(&rooms_, rooms_generation_);
+        auto& room_refs = rooms();
+        dev_controls_->set_rooms(&room_refs, rooms_generation());
     }
 }
 
 void Assets::refresh_active_asset_lists() {
-    maybe_rebuild_world_grid();
-
-    update_audio_camera_metrics();
+    run_frame_rebuild_stage();
+    run_active_runtime_single_pass();
     update_filtered_active_assets();
 }
 
@@ -617,57 +696,300 @@ void Assets::mark_anchor_basis_dirty(Asset* asset) {
     if (!asset || asset->dead) {
         return;
     }
-    if (anchor_basis_dirty_lookup_.insert(asset).second) {
-        anchor_basis_dirty_queue_.push_back(asset);
-    }
+    RuntimeTraversalState& state = runtime_traversal_state_[asset];
+    state.pending_anchor_invalidation_version = next_anchor_invalidation_version();
 }
 
 void Assets::mark_anchor_bases_dirty_for_active_assets() {
-    for (Asset* asset : active_assets) {
-        mark_anchor_basis_dirty(asset);
-    }
-}
-
-void Assets::refresh_dirty_anchor_bases() {
-    for (Asset* asset : anchor_basis_dirty_queue_) {
+    const std::uint64_t version = next_anchor_invalidation_version();
+    auto mark_with_version = [&](Asset* asset) {
         if (!asset || asset->dead) {
+            return;
+        }
+        RuntimeTraversalState& state = runtime_traversal_state_[asset];
+        state.pending_anchor_invalidation_version = version;
+    };
+
+    mark_with_version(player);
+    for (Asset* asset : active_assets) {
+        if (asset == player) {
             continue;
         }
-        asset->update_anchor_basis_if_needed();
+        mark_with_version(asset);
     }
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_lookup_.clear();
 }
 
-void Assets::update_audio_camera_metrics() {
+std::uint64_t Assets::next_anchor_invalidation_version() {
+    ++anchor_invalidation_version_counter_;
+    if (anchor_invalidation_version_counter_ == 0) {
+        ++anchor_invalidation_version_counter_;
+    }
+    return anchor_invalidation_version_counter_;
+}
 
-    SDL_Point camera_focus = camera_.get_screen_center();
-    auto update_audio_metrics = [&](Asset* asset) {
-        if (!asset) return;
-        const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
-        const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
-        asset->distance_from_camera = std::sqrt(dx * dx + dz * dz);
-        asset->angle_from_camera = std::atan2(dz, dx);
-};
+void Assets::run_active_runtime_single_pass(bool include_audio_update) {
+    const SDL_Point camera_focus = camera_.get_screen_center();
+    const std::uint64_t camera_state_version = camera_.camera_state_version();
+    const float camera_anchor_world_z = static_cast<float>(camera_.anchor_world_z());
+    const world::CameraProjectionParams projection = camera_.projection_params();
+    const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(
+        static_cast<float>(projection.forward_z));
 
-    if (player) {
-        update_audio_metrics(player);
+    if (asset_matches_focus_filter(player)) {
+        run_active_runtime_single_pass_for_asset(player,
+                                                 camera_focus,
+                                                 camera_state_version,
+                                                 camera_anchor_world_z,
+                                                 depth_axis_sign);
     }
     for (Asset* asset : active_assets) {
-        update_audio_metrics(asset);
+        if (asset == player) {
+            continue;
+        }
+        if (!asset_matches_focus_filter(asset)) {
+            continue;
+        }
+        run_active_runtime_single_pass_for_asset(asset,
+                                                 camera_focus,
+                                                 camera_state_version,
+                                                 camera_anchor_world_z,
+                                                 depth_axis_sign);
     }
 
-    AudioEngine::instance().update();
+    if (include_audio_update && last_audio_engine_update_frame_id_ != frame_id_) {
+        AudioEngine::instance().update();
+        last_audio_engine_update_frame_id_ = frame_id_;
+    }
+
+    const bool child_transforms_changed =
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+    if (child_transforms_changed) {
+        run_post_flush_traversal_refresh_once();
+    }
+}
+
+void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
+                                                      const SDL_Point& camera_focus,
+                                                      std::uint64_t camera_state_version,
+                                                      float camera_anchor_world_z,
+                                                      float depth_axis_sign) {
+    if (!asset || asset->dead) {
+        return;
+    }
+
+    RuntimeTraversalState& state = runtime_traversal_state_[asset];
+    const bool invalidation_pending =
+        state.pending_anchor_invalidation_version != state.processed_anchor_invalidation_version;
+    const bool anchor_revision_changed =
+        state.processed_anchor_revision != asset->anchor_world_revision_;
+    const bool camera_anchor_state_changed =
+        state.processed_camera_state_version != camera_state_version;
+    const int current_frame_index = asset->current_frame ? asset->current_frame->frame_index : -1;
+    const bool frame_index_changed = state.processed_frame_index != current_frame_index;
+
+    if (invalidation_pending || anchor_revision_changed || camera_anchor_state_changed || frame_index_changed) {
+        asset->update_anchor_basis_if_needed();
+        asset->refresh_anchor_point_cache_from_frame();
+        asset->refresh_runtime_box_cache_from_frame();
+        state.processed_anchor_invalidation_version = state.pending_anchor_invalidation_version;
+        state.processed_anchor_revision = asset->anchor_world_revision_;
+        state.processed_camera_state_version = camera_state_version;
+        state.processed_frame_index = current_frame_index;
+    }
+
+    if (state.last_audio_frame_id == frame_id_) {
+        return;
+    }
+
+    const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
+    const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
+    const float world_z = static_cast<float>(asset->world_z());
+    const float effective_world_z = world_z + asset->world_z_offset() + asset->render_anchor_offset_z();
+
+    RuntimeCameraMetrics metrics{};
+    metrics.frame_id = frame_id_;
+    metrics.camera_state_version = camera_state_version;
+    metrics.valid = true;
+    metrics.planar_dx = dx;
+    metrics.planar_dz = dz;
+    metrics.planar_distance = std::sqrt(dx * dx + dz * dz);
+    metrics.planar_angle_radians = std::atan2(dz, dx);
+    metrics.anchor_world_z = camera_anchor_world_z;
+    metrics.depth_axis_sign = depth_cue::normalize_depth_axis_sign(depth_axis_sign);
+    metrics.world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+        world_z,
+        camera_anchor_world_z,
+        metrics.depth_axis_sign);
+    metrics.effective_world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+        effective_world_z,
+        camera_anchor_world_z,
+        metrics.depth_axis_sign);
+    metrics.world_z_depth_from_anchor = render_depth::depth_from_anchor(
+        static_cast<double>(camera_anchor_world_z),
+        static_cast<double>(world_z),
+        asset->render_depth_bias());
+    metrics.effective_world_z_depth_from_anchor = render_depth::depth_from_anchor(
+        static_cast<double>(camera_anchor_world_z),
+        static_cast<double>(effective_world_z),
+        asset->render_depth_bias());
+
+    asset->runtime_camera_metrics = metrics;
+    asset->distance_from_camera = metrics.planar_distance;
+    asset->angle_from_camera = metrics.planar_angle_radians;
+    state.last_audio_frame_id = frame_id_;
+}
+
+void Assets::rebuild_frame_collision_context() const {
+    if (!frame_collision_context_dirty_ && frame_collision_context_frame_id_ == frame_id_) {
+        return;
+    }
+
+    frame_collision_entries_.clear();
+    frame_collision_entries_.reserve(active_assets.size());
+
+    for (Asset* asset : active_assets) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+
+        const std::string canonical_type = asset_types::canonicalize(asset->info->type);
+        const bool impassable =
+            canonical_type == asset_types::boundary ||
+            canonical_type == asset_types::enemy ||
+            canonical_type == asset_types::npc ||
+            asset->info->moving_asset ||
+            !asset->info->passable;
+        if (!impassable || canonical_type == asset_types::player) {
+            continue;
+        }
+
+        Area collision = asset->get_area("impassable");
+        if (collision.get_points().empty()) {
+            collision = asset->get_area("collision_area");
+        }
+        if (collision.get_points().empty()) {
+            continue;
+        }
+
+        const world::GridPoint center = world::grid_math::from_sdl(
+            asset->world_xz_point(),
+            asset->world_y(),
+            asset->grid_resolution);
+        const world::GridPoint bottom_middle =
+            animation_update::detail::bottom_middle_for(*asset, center);
+
+        frame_collision_entries_.push_back(FrameCollisionEntry{
+            asset,
+            std::move(collision),
+            bottom_middle
+        });
+    }
+
+    frame_collision_context_frame_id_ = frame_id_;
+    frame_collision_context_dirty_ = false;
+}
+
+void Assets::query_impassable_entries(const Asset& self,
+                                      int search_radius,
+                                      std::vector<const FrameCollisionEntry*>& out) const {
+    rebuild_frame_collision_context();
+
+    out.clear();
+    if (frame_collision_entries_.empty()) {
+        return;
+    }
+
+    const int radius = std::max(0, search_radius);
+    const std::int64_t radius_sq = static_cast<std::int64_t>(radius) * static_cast<std::int64_t>(radius);
+    const SDL_Point self_center = self.world_xz_point();
+
+    out.reserve(frame_collision_entries_.size());
+    for (const FrameCollisionEntry& entry : frame_collision_entries_) {
+        if (!entry.asset || entry.asset == &self || !entry.asset->info) {
+            continue;
+        }
+        if (radius > 0) {
+            const SDL_Point candidate = entry.asset->world_xz_point();
+            const std::int64_t dx = static_cast<std::int64_t>(candidate.x) - static_cast<std::int64_t>(self_center.x);
+            const std::int64_t dy = static_cast<std::int64_t>(candidate.y) - static_cast<std::int64_t>(self_center.y);
+            const std::int64_t dist_sq = dx * dx + dy * dy;
+            if (dist_sq > radius_sq) {
+                continue;
+            }
+        }
+        out.push_back(&entry);
+    }
 }
 
 void Assets::refresh_filtered_active_assets() {
     update_filtered_active_assets();
 }
 
+bool Assets::asset_matches_focus_filter(const Asset* asset) const {
+    if (!focus_filter_active_) {
+        return true;
+    }
+    if (!asset || asset->dead) {
+        return false;
+    }
+    if (focus_filter_asset_) {
+        return asset == focus_filter_asset_;
+    }
+    if (!focus_filter_spawn_id_.empty()) {
+        return asset->spawn_id == focus_filter_spawn_id_;
+    }
+    return true;
+}
+
+void Assets::set_focus_filter(Asset* asset, const std::string& spawn_id) {
+    const bool next_active = (asset != nullptr) || !spawn_id.empty();
+    const bool same_state =
+        focus_filter_active_ == next_active &&
+        focus_filter_asset_ == asset &&
+        focus_filter_spawn_id_ == (asset ? std::string{} : spawn_id);
+    if (same_state) {
+        return;
+    }
+
+    focus_filter_active_ = next_active;
+    focus_filter_asset_ = asset;
+    focus_filter_spawn_id_ = asset ? std::string{} : spawn_id;
+    ++focus_filter_version_;
+    if (focus_filter_version_ == 0) {
+        ++focus_filter_version_;
+    }
+
+    needs_filtered_active_refresh_ = true;
+    touch_dev_active_state_version();
+    note_frame_rebuild_request();
+}
+
+void Assets::clear_focus_filter() {
+    set_focus_filter(nullptr, std::string{});
+}
+
+bool Assets::is_asset_in_focus_filter(const Asset* asset) const {
+    return asset_matches_focus_filter(asset);
+}
+
+bool Assets::is_spawn_id_in_focus_filter(const std::string& spawn_id) const {
+    if (!focus_filter_active_) {
+        return true;
+    }
+    if (focus_filter_asset_) {
+        return false;
+    }
+    if (focus_filter_spawn_id_.empty()) {
+        return true;
+    }
+    return spawn_id == focus_filter_spawn_id_;
+}
+
 void Assets::update_filtered_active_assets() {
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
     const std::uint64_t current_generation = active_assets_generation_;
-    const std::uint64_t filter_version = dev_controls_enabled ? dev_controls_->other_settings_state_version() : 0;
+    const std::uint64_t base_filter_version = dev_controls_enabled ? dev_controls_->other_settings_state_version() : 0;
+    const std::uint64_t filter_version = base_filter_version ^ (focus_filter_version_ * 1099511628211ULL);
 
     if (dev_controls_enabled) {
         if (filtered_active_assets_source_generation_ == current_generation &&
@@ -686,6 +1008,9 @@ void Assets::update_filtered_active_assets() {
                 continue;
             }
             if (!dev_controls_->passes_asset_filters(asset)) {
+                continue;
+            }
+            if (!asset_matches_focus_filter(asset)) {
                 continue;
             }
             filtered_active_assets.push_back(asset);
@@ -719,6 +1044,10 @@ void Assets::log_asset_movement(Asset* asset, const world::GridPoint& previous, 
     if (previous.world_x() == current.world_x() &&
         previous.world_y() == current.world_y() &&
         previous.world_z() == current.world_z()) {
+        return;
+    }
+    if (!world_grid_.point_for_asset(asset)) {
+        vibble::log::error("[Assets] Ignoring movement for asset that is not currently owned by WorldGrid.");
         return;
     }
     movement_commands_buffer_.push_back(GridMovementCommand{
@@ -783,14 +1112,11 @@ void Assets::ensure_dev_controls() {
         dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
         sync_dev_controls_current_room(current_room_, true);
         dev_controls_->set_screen_dimensions(screen_width, screen_height);
-        dev_controls_->set_rooms(&rooms_, rooms_generation_);
+        auto& room_refs = rooms();
+        dev_controls_->set_rooms(&room_refs, rooms_generation());
         dev_controls_->set_input(input);
         dev_controls_->set_map_info(&map_info_json_);
         dev_controls_->set_map_context(&map_info_json_, map_path_);
-        if (quick_task_popup_) {
-            quick_task_popup_->set_manifest_store(&dev_controls_->manifest_store());
-        }
-
         suppress_dev_renderer_ = false;
     } catch (const std::exception& ex) {
         std::cout << "[Assets] Failed to wire Dev Controls: " << ex.what() << "\n";
@@ -825,95 +1151,56 @@ void Assets::set_input(Input* m) {
             dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
             sync_dev_controls_current_room(current_room_);
             dev_controls_->set_screen_dimensions(screen_width, screen_height);
-            dev_controls_->set_rooms(&rooms_, rooms_generation_);
+            auto& room_refs = rooms();
+            dev_controls_->set_rooms(&room_refs, rooms_generation());
             dev_controls_->set_map_context(&map_info_json_, map_path_);
         }
     }
 }
 
-void Assets::update(const Input& input)
-{
-    const std::uint64_t now_counter = SDL_GetPerformanceCounter();
-    if (!should_step_dev_frame(input)) {
-        last_frame_dt_seconds_ = 0.0f;
-        last_frame_counter_    = now_counter;
-        return;
-    }
+void Assets::run_idle_frame_pipeline(const Input& input) {
+    refresh_visible_asset_scaling_only();
+    run_visibility_build_stage();
+    refresh_visible_asset_scaling_only();
+    run_active_runtime_single_pass(false);
+    sync_dev_controls_for_frame(input);
+    refresh_filtered_active_assets_if_needed();
+    render_runtime_frame();
+    finalize_dev_frame_state();
+}
 
-    ++frame_id_;
-    float dt = 1.0f / 60.0f;
-    if (last_frame_counter_ != 0 && perf_counter_frequency_ > 0.0) {
-        const double elapsed = static_cast<double>(now_counter - last_frame_counter_) / perf_counter_frequency_;
-        if (std::isfinite(elapsed) && elapsed > 0.0) {
-            dt = static_cast<float>(std::clamp(elapsed, 0.0, 0.25));
-        }
-    }
-    last_frame_counter_    = now_counter;
-    last_frame_dt_seconds_ = dt;
-
-    const bool ctrl_down = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
-    const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
-    if (scene && ctrl_down && input.wasScancodePressed(SDL_SCANCODE_Q)) {
-
-    }
-
-    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_B)) {
-        asset_boundary_box_display_enabled_ = !asset_boundary_box_display_enabled_;
-        std::cout << "[Assets] Asset boundary box display "
-                  << (asset_boundary_box_display_enabled_ ? "enabled" : "disabled") << " (Ctrl+B).\n";
-    }
-
-    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_T) && quick_task_popup_) {
-        if (quick_task_popup_->is_open()) {
-            quick_task_popup_->close();
-        } else {
-            quick_task_popup_->open();
-        }
-        std::cout << "[Assets] Quick Task popup "
-                  << (quick_task_popup_->is_open() ? "opened" : "closed") << " (Ctrl+T).\n";
-    }
-
-    if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
-        const bool enable = !anchor_point_debug_enabled_;
-        set_anchor_point_debug_enabled(enable);
-        std::cout << "[Assets] Anchor point overlay "
-                  << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
-    }
-
-    if (quick_task_popup_) {
-        quick_task_popup_->update();
-    }
-
+void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved) {
     Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
     Room* active_room = detected_room;
     if (dev_controls_ && dev_controls_->is_enabled()) {
         active_room = dev_controls_->resolve_current_room(detected_room);
     }
-    const bool room_changed = (current_room_ != active_room);
+    room_changed = (current_room_ != active_room);
     current_room_ = active_room;
 
     delta_x_ = delta_z_ = 0;
 
     // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
     const bool runtime_updates_enabled = should_run_runtime_updates();
+    const auto should_process_asset = [this](const Asset* asset) {
+        return asset_matches_focus_filter(asset);
+    };
 
     int start_px = player ? player->world_x() : 0;
     int start_pz = player ? player->world_z() : 0;
 
-    if (player) {
+    if (player && should_process_asset(player)) {
         player->active = true;
         if (runtime_updates_enabled) {
-
             player->update();
         } else {
-
             if (player->info) {
                 player->update_scale_values();
             }
         }
     }
 
-    bool player_moved = false;
+    player_moved = false;
     if (player) {
         delta_x_ = player->world_x() - start_px;
         delta_z_ = player->world_z() - start_pz;
@@ -945,6 +1232,10 @@ void Assets::update(const Input& input)
 
     for (Asset* asset : non_player_update_buffer_) {
         if (!asset) continue;
+        if (!should_process_asset(asset)) {
+            asset->active = false;
+            continue;
+        }
         world::GridPoint previous_pos = world::GridPoint::make_virtual(asset->world_x(),
                                                                        asset->world_y(),
                                                                        asset->world_z(),
@@ -952,7 +1243,6 @@ void Assets::update(const Input& input)
         asset->active = true;
 
         if (runtime_updates_enabled) {
-
             asset->update();
             if (previous_pos.world_x() != asset->world_x() ||
                 previous_pos.world_y() != asset->world_y() ||
@@ -965,7 +1255,6 @@ void Assets::update(const Input& input)
                                                                   asset->grid_resolution));
             }
         } else {
-
             if (asset->info) {
                 asset->update_scale_values();
             }
@@ -976,9 +1265,13 @@ void Assets::update(const Input& input)
         if (!movement_commands_buffer_.empty()) {
             for (const GridMovementCommand& cmd : movement_commands_buffer_) {
                 if (!cmd.asset) continue;
-                world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
-                cmd.asset->cache_grid_residency(cmd.current);
-                mark_anchor_basis_dirty(cmd.asset);
+                Asset* moved = world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
+                if (!moved) {
+                    vibble::log::error("[Assets] Skipping post-move cache updates because WorldGrid::move_asset failed.");
+                    continue;
+                }
+                moved->cache_grid_residency(cmd.current);
+                mark_anchor_basis_dirty(moved);
             }
             movement_commands_buffer_.clear();
 
@@ -1000,36 +1293,77 @@ void Assets::update(const Input& input)
         dev_controls_->sync_camera_tilt_override();
     }
     camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
+    if (camera_refresh_needed) {
+        note_frame_rebuild_request();
+    }
     camera_settings_dirty_ = false;
 
     update_max_asset_dimensions();
 
     culled_debug_rects_.clear();
 
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        sync_dev_controls_current_room(current_room_);
-        dev_controls_->update(input);
-        dev_controls_->update_ui(input);
-    }
+    sync_dev_controls_for_frame(input);
 
     register_pending_static_assets();
     if (process_removals()) {
         mark_active_assets_dirty();
     }
+}
 
-    maybe_rebuild_world_grid();
+void Assets::run_visibility_build_stage() {
+    run_frame_rebuild_stage();
+}
 
-    refresh_dirty_anchor_bases();
-
-    // Run binding follow updates after anchors are refreshed so children see latest transforms.
-    for (auto* helper : binding_helpers_) {
-        if (helper) {
-            helper->tick_for_frame();
-        }
+void Assets::run_post_flush_traversal_refresh_once() {
+    if (last_post_flush_refresh_frame_id_ == frame_id_) {
+        return;
     }
+    last_post_flush_refresh_frame_id_ = frame_id_;
 
-    update_audio_camera_metrics();
+    const SDL_Point center_px = camera_.get_screen_center();
+    const world::GridPoint current_center = world::GridPoint::make_virtual(
+        center_px.x,
+        0,
+        center_px.y,
+        world_grid_.max_resolution_layers());
+    const double current_scale = camera_.get_scale();
+    const double current_pitch = camera_.current_pitch_radians();
+    const std::uint64_t current_projection_version = camera_.camera_state_version();
 
+    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_, frame_id_);
+    world_grid_.update_active_chunks(screen_world_rect(), 0);
+    rebuild_active_from_screen_grid();
+    refresh_visible_asset_scaling_only();
+
+    grid_dirty_ = false;
+    camera_view_dirty_ = false;
+    last_grid_rebuild_frame_ = frame_id_;
+    last_camera_center_for_grid_ = world::GridPoint::make_virtual(
+        current_center.world_x(),
+        current_center.world_y(),
+        current_center.world_z(),
+        current_center.resolution_layer());
+    last_camera_scale_for_grid_ = current_scale;
+    last_camera_pitch_for_grid_ = current_pitch;
+    last_camera_projection_state_version_for_grid_ = current_projection_version;
+}
+
+void Assets::run_runtime_effects_stage() {
+    // Rebuild traversal after controller-driven child updates and other runtime changes.
+    run_visibility_build_stage();
+    refresh_visible_asset_scaling_only();
+    run_active_runtime_single_pass();
+}
+
+void Assets::sync_dev_controls_for_frame(const Input& input) {
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        sync_dev_controls_current_room(current_room_);
+        dev_controls_->update(input);
+        dev_controls_->update_ui(input);
+    }
+}
+
+void Assets::refresh_filtered_active_assets_if_needed() {
     bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
     std::uint64_t dev_filter_version = 0;
@@ -1052,16 +1386,113 @@ void Assets::update(const Input& input)
             sync_dev_controls_current_room(current_room_);
         }
     }
+}
 
+void Assets::render_runtime_frame() {
     if (!suppress_render_ && scene) {
         scene->render();
     }
 
     render_overlays(renderer());
+}
 
+void Assets::finalize_dev_frame_state() {
     last_camera_state_version_for_dev_ = camera_.camera_state_version();
     last_dev_active_state_version_snapshot_ = dev_active_state_version_;
     dev_frame_initialized_ = true;
+}
+
+void Assets::update(const Input& input)
+{
+    const std::uint64_t now_counter = SDL_GetPerformanceCounter();
+    const bool should_step_frame = should_step_dev_frame(input);
+
+    ++frame_id_;
+    reset_frame_rebuild_stage();
+
+    if (!should_step_frame) {
+        run_idle_frame_pipeline(input);
+        last_frame_dt_seconds_ = 0.0f;
+        last_frame_counter_    = now_counter;
+        return;
+    }
+
+    float dt = 1.0f / 60.0f;
+    if (last_frame_counter_ != 0 && perf_counter_frequency_ > 0.0) {
+        const double elapsed = static_cast<double>(now_counter - last_frame_counter_) / perf_counter_frequency_;
+        if (std::isfinite(elapsed) && elapsed > 0.0) {
+            dt = static_cast<float>(std::clamp(elapsed, 0.0, 0.25));
+        }
+    }
+    last_frame_counter_    = now_counter;
+    last_frame_dt_seconds_ = dt;
+
+    const bool ctrl_down = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
+    const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    if (scene && ctrl_down && input.wasScancodePressed(SDL_SCANCODE_Q)) {
+
+    }
+
+    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_B)) {
+        asset_boundary_box_display_enabled_ = !asset_boundary_box_display_enabled_;
+        std::cout << "[Assets] Asset boundary box display "
+                  << (asset_boundary_box_display_enabled_ ? "enabled" : "disabled") << " (Ctrl+B).\n";
+    }
+
+    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_T) && task_editor_) {
+        if (task_editor_->is_open()) {
+            task_editor_->close();
+        } else {
+            task_editor_->open();
+        }
+        std::cout << "[Assets] Task editor "
+                  << (task_editor_->is_open() ? "opened" : "closed") << " (Ctrl+T).\n";
+    }
+
+    if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_S)) {
+        screenshot_capture_pending_ = true;
+        std::cout << "[Assets] Screenshot requested (Ctrl+S).\n";
+    }
+
+    if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
+        const bool enable = !anchor_point_debug_enabled_;
+        set_anchor_point_debug_enabled(enable);
+        std::cout << "[Assets] Anchor point overlay "
+                  << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
+    }
+
+    if (task_editor_) {
+        task_editor_->update();
+    }
+    bool room_changed = false;
+    bool player_moved = false;
+    run_world_update_stage(input, room_changed, player_moved);
+
+    // Stage: visibility or traversal build from movement/controller updates.
+    run_visibility_build_stage();
+
+    // Stage: runtime effects + traversal refresh.
+    run_runtime_effects_stage();
+
+    // Stage: render + UI refresh.
+    refresh_filtered_active_assets_if_needed();
+    render_runtime_frame();
+    finalize_dev_frame_state();
+}
+
+void Assets::refresh_visible_asset_scaling_only() {
+    if (player && player->info && asset_matches_focus_filter(player)) {
+        player->update_scale_values();
+    }
+
+    rebuild_non_player_update_buffer_if_needed();
+
+    for (Asset* asset : non_player_update_buffer_) {
+        if (!asset || !asset->info || !asset_matches_focus_filter(asset)) {
+            continue;
+        }
+        asset->update_scale_values();
+    }
 }
 
 void Assets::rebuild_non_player_update_buffer_if_needed() {
@@ -1070,28 +1501,13 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     }
 
     constexpr std::size_t kMaxBufferEntries = 250000;
+    const auto& active_traversal = camera_.visible_traversal_entries();
 
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(
-        std::min<std::size_t>(kMaxBufferEntries,
-                              std::max(active_traversal_.size(), active_assets.size())));
+        std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
     std::unordered_set<const Asset*> buffer_set;
-    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries,
-                                             std::max(active_traversal_.size(), active_assets.size())));
-
-    const auto append_unique_assets = [&](const std::vector<Asset*>& source) {
-        for (Asset* asset : source) {
-            if (!asset || asset == player || asset->dead) {
-                continue;
-            }
-            if (buffer_set.insert(asset).second) {
-                non_player_update_buffer_.push_back(asset);
-                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
-                    break;
-                }
-            }
-        }
-    };
+    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
     const auto append_unique_traversal = [&](const std::vector<ActiveTraversalEntry>& source) {
         for (const ActiveTraversalEntry& entry : source) {
             Asset* asset = entry.asset;
@@ -1107,18 +1523,11 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         }
     };
 
-    if (active_traversal_.empty()) {
-        append_unique_assets(active_assets);
-    } else if (active_traversal_.size() > kMaxBufferEntries) {
+    if (active_traversal.size() > kMaxBufferEntries) {
         std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
-                  << active_traversal_.size() << "); falling back to active_assets\n";
-        append_unique_assets(active_assets);
-    } else {
-        append_unique_traversal(active_traversal_);
-        if (non_player_update_buffer_.empty() && !active_assets.empty()) {
-            append_unique_assets(active_assets);
-        }
+                  << active_traversal.size() << "); truncating to cap\n";
     }
+    append_unique_traversal(active_traversal);
 
     non_player_update_buffer_dirty_.store(false, std::memory_order_release);
 }
@@ -1358,6 +1767,7 @@ void Assets::set_dev_mode(bool mode) {
         } else {
 
             dev_mode = false;
+            clear_focus_filter();
             if (dev_controls_) {
                 try { dev_controls_->set_enabled(false); } catch (...) {}
             }
@@ -1371,6 +1781,7 @@ void Assets::set_dev_mode(bool mode) {
             }
         } catch (...) {
         }
+        clear_focus_filter();
         dev_mode = false;
         dev_frame_initialized_ = false;
         last_camera_state_version_for_dev_ = camera_.camera_state_version();
@@ -1379,6 +1790,20 @@ void Assets::set_dev_mode(bool mode) {
     }
 
     apply_camera_runtime_settings();
+    try {
+        force_camera_view_refresh();
+        if (vibble_scale_trace_enabled()) {
+            vibble::log::debug(std::string("[ScaleTrace][ModeToggle] mode=") +
+                               (dev_mode ? "dev" : "normal") +
+                               " camera_state=" + std::to_string(camera_.camera_state_version()) +
+                               " active_generation=" + std::to_string(active_assets_generation_));
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "[Assets] force_camera_view_refresh failed after mode toggle: "
+                  << ex.what() << "\n";
+    } catch (...) {
+        std::cerr << "[Assets] force_camera_view_refresh failed after mode toggle: unknown error\n";
+    }
     log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
 }
 
@@ -1455,6 +1880,7 @@ void Assets::initialize_active_assets(const world::GridPoint& ) {
     filtered_active_assets_filter_version_ = 0;
 
     mark_non_player_update_buffer_dirty();
+    mark_collision_context_dirty();
     needs_filtered_active_refresh_ = true;
     ++active_assets_generation_;
     if (active_assets_generation_ == 0) {
@@ -1472,14 +1898,30 @@ void Assets::touch_dev_active_state_version() {
 void Assets::mark_active_assets_dirty() {
     active_assets_dirty_.store(true, std::memory_order_release);
     needs_filtered_active_refresh_ = true;
+    mark_collision_context_dirty();
     mark_anchor_bases_dirty_for_active_assets();
+    note_frame_rebuild_request();
 }
 
 std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
     if (!asset) {
         return nullptr;
     }
-    return world_grid_.extract_asset(asset);
+    const world::GridPoint detached_pos = world::GridPoint::make_virtual(
+        asset->world_x(),
+        asset->world_y(),
+        asset->world_z(),
+        asset->grid_resolution);
+
+    std::unique_ptr<Asset> extracted = world_grid_.extract_asset(asset);
+    if (!extracted) {
+        return nullptr;
+    }
+
+    extracted->set_provisional_grid_point(detached_pos);
+    extracted->cache_grid_residency(detached_pos);
+    runtime_traversal_state_.erase(extracted.get());
+    return extracted;
 }
 
 world::GridPoint Assets::resolve_floor_world_point(SDL_Point world_pos, int resolution_layer) const {
@@ -1500,11 +1942,22 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     const bool already_tracked = std::find(all.begin(), all.end(), raw) != all.end();
 
     const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : world_grid_.default_resolution_layer();
-    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(raw->world_xz_point(), resolved_layer).world_z();
+    SDL_Point source_world_xz{0, 0};
+    if (world::GridPoint* point = raw->grid_point()) {
+        source_world_xz = SDL_Point{point->world_x(), point->world_z()};
+    } else if (raw->has_grid_residency_cache()) {
+        const world::GridKey cached = raw->grid_residency_cache();
+        source_world_xz = SDL_Point{cached.x, cached.z};
+        raw->set_provisional_grid_point(cached.x, cached.y, cached.z, cached.layer);
+    }
+    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(source_world_xz, resolved_layer).world_z();
 
     raw = world_grid_.attach_asset(std::move(asset), resolved_z, resolved_layer);
     if (!raw) {
         return nullptr;
+    }
+    if (world::GridPoint* attached_point = world_grid_.point_for_asset(raw)) {
+        raw->cache_grid_residency(*attached_point);
     }
 
     if (!already_tracked) {
@@ -1520,18 +1973,6 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     return raw;
 }
 
-void Assets::register_binding_helper(AnchorBoundAssetHelper* helper) {
-    if (!helper) return;
-    if (std::find(binding_helpers_.begin(), binding_helpers_.end(), helper) == binding_helpers_.end()) {
-        binding_helpers_.push_back(helper);
-    }
-}
-
-void Assets::unregister_binding_helper(AnchorBoundAssetHelper* helper) {
-    if (!helper) return;
-    auto it = std::remove(binding_helpers_.begin(), binding_helpers_.end(), helper);
-    binding_helpers_.erase(it, binding_helpers_.end());
-}
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
 
     std::shared_ptr<AssetInfo> info = library_.get(name);
@@ -1559,6 +2000,9 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     const world::GridPoint floor_point = resolve_floor_world_point(world_pos);
     raw = world_grid_.create_asset_at_point(std::move(uptr), floor_point.world_z(), floor_point.resolution_layer());
     all.push_back(raw);
+    if (world::GridPoint* registered_point = world_grid_.point_for_asset(raw)) {
+        raw->cache_grid_residency(*registered_point);
+    }
 
     queue_asset_dimension_update(raw);
     mark_grid_dirty();
@@ -1636,6 +2080,42 @@ void Assets::track_asset_for_grid(Asset* asset) {
 
 }
 
+void Assets::reset_frame_rebuild_stage() {
+    frame_rebuild_metrics_frame_ = frame_id_;
+    frame_rebuild_request_count_ = 0;
+    frame_rebuild_execution_count_ = 0;
+    frame_rebuild_metrics_initialized_ = true;
+}
+
+void Assets::note_frame_rebuild_request() {
+    if (!frame_rebuild_metrics_initialized_ || frame_rebuild_metrics_frame_ != frame_id_) {
+        reset_frame_rebuild_stage();
+    }
+    ++frame_rebuild_request_count_;
+}
+
+bool Assets::run_frame_rebuild_stage() {
+    if (!frame_rebuild_metrics_initialized_ || frame_rebuild_metrics_frame_ != frame_id_) {
+        reset_frame_rebuild_stage();
+    }
+
+    if (frame_rebuild_execution_count_ > 0 &&
+        frame_rebuild_execution_count_ >= frame_rebuild_request_count_) {
+        return false;
+    }
+
+    const bool rebuilt = maybe_rebuild_world_grid();
+    if (rebuilt) {
+        ++frame_rebuild_execution_count_;
+        if (frame_rebuild_request_count_ > 1 && frame_rebuild_execution_count_ == 1) {
+            vibble::log::debug(std::string("[Assets] Coalesced ") +
+                               std::to_string(frame_rebuild_request_count_) +
+                               " rebuild requests into frame rebuild passes.");
+        }
+    }
+    return rebuilt;
+}
+
 bool Assets::maybe_rebuild_world_grid() {
     if (frame_id_ == last_grid_rebuild_frame_) {
         return false;
@@ -1649,13 +2129,15 @@ bool Assets::maybe_rebuild_world_grid() {
         world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
+    const std::uint64_t current_projection_version = camera_.camera_state_version();
     constexpr double kCameraGridEpsilon = 1e-4;
     const bool active_dirty = active_assets_dirty_.load(std::memory_order_acquire) || pending_initial_rebuild_;
     const bool camera_changed =
         current_center.world_x() != last_camera_center_for_grid_.world_x() ||
         current_center.world_z() != last_camera_center_for_grid_.world_z() ||
         std::fabs(current_scale - last_camera_scale_for_grid_) > kCameraGridEpsilon ||
-        std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
+        std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon ||
+        current_projection_version != last_camera_projection_state_version_for_grid_;
 
     const bool camera_dirty = camera_view_dirty_ || camera_changed;
     if (!grid_dirty_ && !camera_dirty && !active_dirty) {
@@ -1670,13 +2152,17 @@ bool Assets::maybe_rebuild_world_grid() {
     }
 
     camera_view_dirty_ = camera_dirty;
-    rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
+    rebuild_world_grid_and_active_assets(current_center,
+                                         current_scale,
+                                         current_pitch,
+                                         current_projection_version);
     return true;
 }
 
 void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                                   double current_scale,
-                                                  double current_pitch) {
+                                                  double current_pitch,
+                                                  std::uint64_t current_projection_version) {
     last_grid_rebuild_frame_ = frame_id_;
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
@@ -1694,6 +2180,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
         current_center.resolution_layer());
     last_camera_scale_for_grid_ = current_scale;
     last_camera_pitch_for_grid_ = current_pitch;
+    last_camera_projection_state_version_for_grid_ = current_projection_version;
 }
 
 void Assets::untrack_asset_for_grid(Asset* asset) {
@@ -1705,6 +2192,7 @@ void Assets::untrack_asset_for_grid(Asset* asset) {
 
 void Assets::mark_grid_dirty() {
     grid_dirty_ = true;
+    note_frame_rebuild_request();
 }
 
 void Assets::register_pending_static_assets() {
@@ -1713,6 +2201,9 @@ void Assets::register_pending_static_assets() {
 
 void Assets::rebuild_all_assets_from_grid() {
     all.clear();
+    runtime_traversal_state_.clear();
+    frame_collision_entries_.clear();
+    frame_collision_context_dirty_ = true;
     auto collected = world_grid_.all_assets();
     std::sort(collected.begin(), collected.end(),
               [](Asset* lhs, Asset* rhs) { return lhs < rhs; });
@@ -1910,17 +2401,6 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
         return 0;
     }
 
-    // Purge anchor bindings that reference assets slated for removal (parents or children).
-    if (!binding_helpers_.empty()) {
-        for (Asset* victim : unique_removals) {
-            for (auto* helper : binding_helpers_) {
-                if (helper) {
-                    helper->purge_bindings_for_asset(victim);
-                }
-            }
-        }
-    }
-
     for (Asset* asset : all) {
         if (!asset || unique_removals.find(asset) != unique_removals.end()) {
             continue;
@@ -1935,6 +2415,7 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
             continue;
         }
         remove_asset_dimension_cache(asset);
+        runtime_traversal_state_.erase(asset);
         asset->clear_grid_residency_cache();
         (void)world_grid_.remove_asset(asset);
     }
@@ -1944,9 +2425,7 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     filtered_active_assets.clear();
     moving_assets_for_grid_.clear();
     pending_static_grid_registration_.clear();
-    active_points_.clear();
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_lookup_.clear();
+    runtime_traversal_state_.clear();
     mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();
@@ -2015,15 +2494,22 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
 }
 
 void Assets::render_overlays(SDL_Renderer* renderer) {
+    const Uint32 now = SDL_GetTicks();
+
+    if (renderer) {
+        SDL_SetRenderTarget(renderer, nullptr);
+        SDL_SetRenderViewport(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
+    }
+
     if (renderer && dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->render_overlays(renderer);
     }
 
-    if (quick_task_popup_) {
-        quick_task_popup_->render(renderer);
+    if (task_editor_) {
+        task_editor_->render(renderer);
     }
 
-    const Uint32 now = SDL_GetTicks();
     popup_manager_.update(now);
     if (!renderer) {
         return;
@@ -2068,6 +2554,162 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
     }
 
     popup_manager_.render(renderer, screen_width, screen_height, now);
+
+    if (screenshot_create_task_button_active(now)) {
+        render_screenshot_create_task_button(renderer, now);
+    }
+
+    if (screenshot_capture_pending_) {
+        std::string screenshot_relative_path;
+        if (capture_screenshot_to_root(renderer, screenshot_relative_path)) {
+            latest_screenshot_relative_path_ = std::move(screenshot_relative_path);
+            screenshot_create_task_start_ticks_ = now;
+            popup_manager_.show_toast("Screenshot saved", 2200);
+        } else {
+            latest_screenshot_relative_path_.clear();
+            screenshot_create_task_start_ticks_ = 0;
+            popup_manager_.show_toast("Screenshot failed", 2200);
+        }
+        screenshot_capture_pending_ = false;
+    }
+}
+
+bool Assets::capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out_relative_path) {
+    out_relative_path.clear();
+    if (!renderer) {
+        return false;
+    }
+
+    const std::filesystem::path root = std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()).parent_path());
+    const std::filesystem::path screenshot_dir = root / "screen_shots";
+    std::error_code ec;
+    std::filesystem::create_directories(screenshot_dir, ec);
+    if (ec) {
+        std::cerr << "[Assets] Failed to create screenshot directory: " << ec.message() << "\n";
+        return false;
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    std::ostringstream stem;
+    stem << "screenshot_" << ms;
+    const std::filesystem::path png_path = screenshot_dir / (stem.str() + ".png");
+    const std::filesystem::path bmp_path = screenshot_dir / (stem.str() + ".bmp");
+
+    int out_w = 0;
+    int out_h = 0;
+    if (!SDL_GetCurrentRenderOutputSize(renderer, &out_w, &out_h)) {
+        return false;
+    }
+    if (out_w <= 0 || out_h <= 0) {
+        return false;
+    }
+
+    SDL_Rect capture_rect{0, 0, out_w, out_h};
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &capture_rect);
+    if (!captured) {
+        std::cerr << "[Assets] Failed to capture screenshot: " << SDL_GetError() << "\n";
+        return false;
+    }
+
+    const int png_save_ok = IMG_SavePNG(captured, png_path.string().c_str());
+    if (png_save_ok == 0) {
+        SDL_DestroySurface(captured);
+        out_relative_path = (std::filesystem::path("screen_shots") / png_path.filename()).generic_string();
+        return true;
+    }
+
+    const bool bmp_save_ok = SDL_SaveBMP(captured, bmp_path.string().c_str());
+    SDL_DestroySurface(captured);
+    if (bmp_save_ok) {
+        out_relative_path = (std::filesystem::path("screen_shots") / bmp_path.filename()).generic_string();
+        return true;
+    }
+
+    std::cerr << "[Assets] Failed to save screenshot (PNG and BMP): " << SDL_GetError() << "\n";
+    return false;
+}
+
+bool Assets::screenshot_create_task_button_active(Uint32 now_ticks) const {
+    if (latest_screenshot_relative_path_.empty() || screenshot_create_task_start_ticks_ == 0) {
+        return false;
+    }
+    if (task_editor_ && task_editor_->is_open()) {
+        return false;
+    }
+    const Uint32 elapsed = now_ticks - screenshot_create_task_start_ticks_;
+    return elapsed < kCreateTaskButtonLifetimeMs;
+}
+
+void Assets::render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32 now_ticks) {
+    if (!renderer || !screenshot_create_task_button_active(now_ticks)) {
+        return;
+    }
+
+    int output_w = 0;
+    int output_h = 0;
+    if (!SDL_GetCurrentRenderOutputSize(renderer, &output_w, &output_h)) {
+        return;
+    }
+
+    constexpr int kButtonW = 138;
+    constexpr int kButtonH = 34;
+    constexpr int kLeftMargin = 16;
+    constexpr int kBottomSafePadding = 92;
+
+    screenshot_create_task_button_rect_ = SDL_Rect{
+        kLeftMargin,
+        std::max(0, output_h - kBottomSafePadding - kButtonH),
+        kButtonW,
+        kButtonH
+    };
+
+    Uint8 alpha = 230;
+    const Uint32 elapsed = now_ticks - screenshot_create_task_start_ticks_;
+    if (elapsed > (kCreateTaskButtonLifetimeMs - kCreateTaskButtonFadeMs)) {
+        const Uint32 fade_elapsed = elapsed - (kCreateTaskButtonLifetimeMs - kCreateTaskButtonFadeMs);
+        const float t = static_cast<float>(fade_elapsed) / static_cast<float>(kCreateTaskButtonFadeMs);
+        const float keep = std::clamp(1.0f - t, 0.0f, 1.0f);
+        alpha = static_cast<Uint8>(std::lround(230.0f * keep));
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 42, 42, 48, alpha);
+    sdl_render::FillRect(renderer, &screenshot_create_task_button_rect_);
+    SDL_SetRenderDrawColor(renderer, 170, 170, 185, alpha);
+    sdl_render::Rect(renderer, &screenshot_create_task_button_rect_);
+
+    DMLabelStyle label_style = DMStyles::Label();
+    label_style.color.a = alpha;
+    const std::string label = "Create Task";
+    SDL_Point size = DMFontCache::instance().measure_text(label_style, label);
+    const int text_x = screenshot_create_task_button_rect_.x + (screenshot_create_task_button_rect_.w - size.x) / 2;
+    const int text_y = screenshot_create_task_button_rect_.y + (screenshot_create_task_button_rect_.h - size.y) / 2;
+    DMFontCache::instance().draw_text(renderer, label_style, label, text_x, text_y);
+}
+
+bool Assets::handle_screenshot_create_task_button_event(const SDL_Event& e, Uint32 now_ticks) {
+    if (!screenshot_create_task_button_active(now_ticks)) {
+        return false;
+    }
+    if (e.type != SDL_EVENT_MOUSE_BUTTON_UP || e.button.button != SDL_BUTTON_LEFT) {
+        return false;
+    }
+
+    SDL_Point point{
+        static_cast<int>(std::lround(e.button.x)),
+        static_cast<int>(std::lround(e.button.y))
+    };
+    if (!SDL_PointInRect(&point, &screenshot_create_task_button_rect_)) {
+        return false;
+    }
+
+    if (task_editor_) {
+        task_editor_->open_with_new_task_attachment(latest_screenshot_relative_path_);
+    }
+    screenshot_create_task_start_ticks_ = 0;
+    latest_screenshot_relative_path_.clear();
+    return true;
 }
 
 SDL_Renderer* Assets::renderer() const {
@@ -2305,6 +2947,11 @@ void Assets::close_asset_info_editor() {
     }
 }
 
+bool Assets::consume_escape_for_asset_editor_stack() {
+    return dev_controls_ && dev_controls_->is_enabled() &&
+           dev_controls_->consume_escape_for_asset_editor_stack();
+}
+
 bool Assets::is_asset_info_editor_open() const {
     return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_asset_info_editor_open();
 }
@@ -2316,9 +2963,23 @@ void Assets::clear_editor_selection() {
 }
 
 void Assets::handle_sdl_event(const SDL_Event& e) {
+    if (e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_S) {
+        const bool ctrl_down = (e.key.mod & SDL_KMOD_CTRL) != 0;
+        if (ctrl_down) {
+            screenshot_capture_pending_ = true;
+        }
+    }
 
-    if (quick_task_popup_ && quick_task_popup_->is_open()) {
-        if (quick_task_popup_->handle_event(e)) {
+    const Uint32 now = SDL_GetTicks();
+    if (handle_screenshot_create_task_button_event(e, now)) {
+        if (input) {
+            input->consumeEvent(e);
+        }
+        return;
+    }
+
+    if (task_editor_ && task_editor_->is_open()) {
+        if (task_editor_->handle_event(e)) {
 
             if (input) {
                 input->consumeEvent(e);
@@ -2385,6 +3046,14 @@ void Assets::invalidate_dynamic_boundary_system() {
     }
 }
 
+const std::vector<DynamicBoundarySystem::BoundarySprite>& Assets::dynamic_boundary_sprites() const {
+    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
+    if (!scene) {
+        return kEmptyBoundarySprites;
+    }
+    return scene->dynamic_boundary_sprites();
+}
+
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {
     popup_manager_.show_toast(message, duration_ms);
 }
@@ -2409,48 +3078,6 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
     }
 }
 
-namespace {
-inline bool is_trail_string(const std::string& text) {
-    if (text.size() != 5) return false;
-    return std::tolower(static_cast<unsigned char>(text[0])) == 't' &&
-           std::tolower(static_cast<unsigned char>(text[1])) == 'r' &&
-           std::tolower(static_cast<unsigned char>(text[2])) == 'a' &&
-           std::tolower(static_cast<unsigned char>(text[3])) == 'i' &&
-           std::tolower(static_cast<unsigned char>(text[4])) == 'l';
-}
-}
-
-void Assets::classify_region(world::GridPoint& point) {
-    point.region_kind = world::GridPoint::RegionKind::Boundary;
-    point.region_owner = nullptr;
-
-    const SDL_Point pt{point.world_x(), point.world_z()};
-    for (Room* room : rooms_) {
-        if (!room) continue;
-        const bool room_is_trail = is_trail_string(room->type);
-        if (room->room_area && room->room_area->contains_point(pt)) {
-            point.region_kind = room_is_trail ? world::GridPoint::RegionKind::Trail
-                                              : world::GridPoint::RegionKind::Room;
-            point.region_owner = room;
-            return;
-        }
-        // Named areas that are marked as trail
-        for (const auto& named : room->areas) {
-            if (!named.area) continue;
-            if (!(is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name))) {
-                continue;
-            }
-            try {
-                if (named.area->contains_point(pt)) {
-                    point.region_kind = world::GridPoint::RegionKind::Trail;
-                    point.region_owner = room;
-                    return;
-                }
-            } catch (...) {
-            }
-        }
-    }
-}
 void Assets::rebuild_active_from_screen_grid() {
     const std::uint32_t current_frame_id = frame_id_;
     if (current_frame_id == last_active_rebuild_frame_id_) {
@@ -2460,65 +3087,34 @@ void Assets::rebuild_active_from_screen_grid() {
     bool active_changed = false;
     std::vector<Asset*> previous_active = std::move(active_assets);
 
-    active_points_.clear();
-    active_traversal_.clear();
     active_assets.clear();
-    active_assets.reserve(camera_.get_visible_points().size() * 4);
-    visible_candidate_buffer_.clear();
-    visible_candidate_buffer_.reserve(camera_.get_visible_points().size() * 2);
+
+    const auto& visible_traversal = camera_.visible_traversal_entries();
+    active_assets.reserve(visible_traversal.size());
     std::unordered_set<Asset*> seen_assets;
-    seen_assets.reserve(camera_.get_visible_points().size() * 2);
+    seen_assets.reserve(visible_traversal.size() * 2);
 
-    const double anchor_depth = camera_.anchor_world_z();
-
-    // Screen Grid traversal: use per-frame visible nodes (already filtered by region + branch masks).
-    for (world::GridPoint* point : camera_.get_visible_points()) {
-        if (!point || !point->on_screen) {
+    for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : visible_traversal) {
+        Asset* asset = source_entry.asset;
+        if (!asset || asset->dead) {
             continue;
         }
-        const float point_alpha = point->horizon_fade_alpha * point->near_camera_fade_alpha;
-        if (!std::isfinite(point_alpha)) {
+        if (!seen_assets.insert(asset).second) {
             continue;
         }
-        if (!point->has_assets_or_active_children()) {
-            continue;
+
+        const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
+        if (!was_active) {
+            active_changed = true;
         }
-        classify_region(*point);
-        active_points_.push_back(point);
-        for (const auto& occ : point->occupants) {
-            Asset* asset = occ.get();
-            if (!asset || asset->dead) {
-                continue;
-            }
-            if (!seen_assets.insert(asset).second) {
-                continue; // already handled this frame
-            }
 
-            const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
-            if (!was_active) {
-                active_changed = true;
-            }
+        asset->last_active_frame_id = current_frame_id;
+        asset->last_visible_frame_id = current_frame_id;
+        asset->active = true;
 
-            asset->last_active_frame_id = current_frame_id;
-            asset->last_visible_frame_id = current_frame_id;
-            asset->active = true;
-
-            active_assets.push_back(asset);
-            mark_anchor_basis_dirty(asset);
-            active_traversal_.push_back(ActiveTraversalEntry{
-                asset,
-                point,
-                render_depth::depth_from_anchor(anchor_depth, static_cast<double>(asset->world_z()), asset->render_depth_bias())
-            });
-        }
+        active_assets.push_back(asset);
+        mark_anchor_basis_dirty(asset);
     }
-    // Depth-sort traversal so rendering can interleave with fog/boundary sprites in a single pass.
-    std::stable_sort(
-        active_traversal_.begin(),
-        active_traversal_.end(),
-        [](const ActiveTraversalEntry& a, const ActiveTraversalEntry& b) {
-            return a.depth_from_anchor > b.depth_from_anchor;
-        });
 
     // Deactivate assets no longer visible this frame.
     for (Asset* asset : previous_active) {
@@ -2542,6 +3138,8 @@ void Assets::rebuild_active_from_screen_grid() {
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
     }
+
+    mark_collision_context_dirty();
 
     // Update scale values for ALL active assets after grid rebuild
     // to ensure scales reflect current perspective (fixes single-frame asset scaling)
@@ -2593,7 +3191,7 @@ bool Assets::should_step_dev_frame(const Input& input) const {
         return true;
     }
 
-    if (has_pending_dev_work(false)) {
+    if (has_pending_dev_work(movement_debug_enabled_)) {
         return true;
     }
 
@@ -2603,7 +3201,9 @@ bool Assets::should_step_dev_frame(const Input& input) const {
 bool Assets::has_pending_dev_work(bool include_animation_plans) const {
     if (pending_initial_rebuild_) return true;
     if (popup_manager_.has_active_content()) return true;
-    if (quick_task_popup_ && quick_task_popup_->is_open()) return true;
+    if (task_editor_ && task_editor_->is_open()) return true;
+    if (screenshot_capture_pending_) return true;
+    if (screenshot_create_task_button_active(SDL_GetTicks())) return true;
 
     if (!include_animation_plans) {
         return false;
@@ -2634,6 +3234,9 @@ bool Assets::should_run_runtime_updates() const {
     if (!dev_mode) {
         return true;
     }
+    if (movement_debug_enabled_ && movement_debug_visible_) {
+        return true;
+    }
     if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {
         return true;
     }
@@ -2644,11 +3247,13 @@ bool Assets::should_advance_animation_for(const Asset* asset) const {
     if (!asset) {
         return false;
     }
-    if (!dev_mode) {
-        return true;
-    }
-    if (is_frame_editor_target_active(asset)) {
-        return true;
-    }
-    return false;
+
+    const bool frame_editor_session_active =
+        dev_controls_ && dev_controls_->is_frame_editor_session_active();
+
+    return runtime::dev_mode_policy::should_advance_animation_for_asset(
+        dev_mode,
+        should_run_runtime_updates(),
+        frame_editor_session_active,
+        is_frame_editor_target_active(asset));
 }

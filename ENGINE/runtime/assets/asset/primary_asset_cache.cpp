@@ -2,54 +2,128 @@
 
 #include "asset_info.hpp"
 #include "rendering/render/scaling_logic.hpp"
+#include "image_cache_generator.hpp"
 #include "utils/log.hpp"
 
 #include <SDL3_image/SDL_image.h>
 #include <filesystem>
-#include <fstream>
 #include <unordered_set>
 #include <algorithm>
-#include <array>
+#include <cctype>
 #include <cmath>
+#include <chrono>
 #include <cstring>
+#include <initializer_list>
+#include <iterator>
+#include <limits>
+#include <unordered_map>
 #include <optional>
+#include <sstream>
+#include <system_error>
+#include <utility>
 
 namespace fs = std::filesystem;
 
 namespace {
 
-std::uint64_t fnv1a64(const void* data, std::size_t len, std::uint64_t seed = 14695981039346656037ull) {
-    const auto* bytes = static_cast<const unsigned char*>(data);
-    std::uint64_t hash = seed;
-    for (std::size_t i = 0; i < len; ++i) {
-        hash ^= static_cast<std::uint64_t>(bytes[i]);
-        hash *= 1099511628211ull;
+class GeneratorLogBridge final : public imgcache::ILogger {
+public:
+    void info(const std::string& msg) override {
+        vibble::log::info("[PrimaryAssetCache] " + msg);
     }
-    return hash;
+
+    void warn(const std::string& msg) override {
+        vibble::log::warn("[PrimaryAssetCache] " + msg);
+    }
+
+    void error(const std::string& msg) override {
+        vibble::log::warn("[PrimaryAssetCache] " + msg);
+    }
+};
+
+std::optional<int> parse_frame_index_from_filename(const fs::path& path) {
+    try {
+        return std::stoi(path.stem().string());
+    } catch (...) {
+        return std::nullopt;
+    }
 }
 
-std::uint64_t fnv1a64(const std::string& text, std::uint64_t seed = 14695981039346656037ull) {
-    return fnv1a64(text.data(), text.size(), seed);
+std::uint8_t variant_mask_for_directory(const std::string& variant_dir) {
+    if (variant_dir == "normal") {
+        return AssetInfo::kTextureVariantNormal;
+    }
+    if (variant_dir == "foreground") {
+        return AssetInfo::kTextureVariantForeground;
+    }
+    if (variant_dir == "background") {
+        return AssetInfo::kTextureVariantBackground;
+    }
+    return AssetInfo::kTextureVariantNone;
 }
 
-void hash_file_signature(const fs::path& path, std::uint64_t& hash) {
-    std::error_code ec;
-    if (!fs::exists(path, ec) || ec) {
-        return;
-    }
+void record_load_repairs_from_written_files(AssetInfo& info, const std::vector<fs::path>& written_files) {
+    const fs::path cache_root = fs::path("cache");
+    const fs::path asset_root = cache_root / info.name / "animations";
+    for (const auto& file_path : written_files) {
+        std::error_code ec;
+        if (!fs::exists(file_path, ec) || ec) {
+            continue;
+        }
 
-    hash = fnv1a64(path.generic_string(), hash);
-    const auto ftime = fs::last_write_time(path, ec);
-    if (!ec) {
-        const auto stamp = ftime.time_since_epoch().count();
-        hash = fnv1a64(&stamp, sizeof(stamp), hash);
-    }
+        const fs::path normalized = file_path.lexically_normal();
+        auto rel = normalized.lexically_relative(asset_root);
+        const std::string rel_text = rel.generic_string();
+        if (rel.empty() || rel_text == ".." || rel_text.rfind("../", 0) == 0) {
+            continue;
+        }
 
-    ec.clear();
-    const auto size = fs::file_size(path, ec);
-    if (!ec) {
-        hash = fnv1a64(&size, sizeof(size), hash);
+        std::vector<std::string> parts;
+        parts.reserve(8);
+        for (const auto& part : rel) {
+            parts.push_back(part.string());
+        }
+        if (parts.size() < 4) {
+            continue;
+        }
+
+        const std::string animation_name = parts[0];
+        const std::string variant_name = parts[2];
+        const auto frame_index = parse_frame_index_from_filename(parts.back());
+        const std::uint8_t variants = variant_mask_for_directory(variant_name);
+        if (animation_name.empty() || !frame_index.has_value() || variants == AssetInfo::kTextureVariantNone) {
+            continue;
+        }
+        info.mark_texture_frame_rebuild_on_load(animation_name, *frame_index, variants);
     }
+}
+
+std::unordered_map<std::string, std::vector<fs::path>> group_written_files_by_asset(
+    const std::vector<fs::path>& written_files) {
+    std::unordered_map<std::string, std::vector<fs::path>> grouped;
+    for (const auto& file_path : written_files) {
+        const fs::path normalized = file_path.lexically_normal();
+        std::vector<std::string> parts;
+        parts.reserve(8);
+        for (const auto& part : normalized) {
+            parts.push_back(part.string());
+        }
+        auto cache_it = std::find(parts.begin(), parts.end(), "cache");
+        if (cache_it == parts.end()) {
+            continue;
+        }
+        const auto asset_it = std::next(cache_it);
+        if (asset_it == parts.end() || asset_it->empty()) {
+            continue;
+        }
+        grouped[*asset_it].push_back(file_path);
+    }
+    return grouped;
+}
+
+PrimaryAssetCache::WarmupOutcome warmup_outcome_from_bundle_state(bool bundle_loaded) {
+    return bundle_loaded ? PrimaryAssetCache::WarmupOutcome::Rebuilt
+                         : PrimaryAssetCache::WarmupOutcome::Created;
 }
 
 int count_sequential_png(const fs::path& folder) {
@@ -83,6 +157,9 @@ CacheManager::BundleFrameLayer make_layer(SDL_Surface* surface) {
         rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
         SDL_DestroySurface(surface);
     }
+    if (!rgba) {
+        return layer;
+    }
     layer.width = rgba->w;
     layer.height = rgba->h;
     layer.pitch = rgba->pitch;
@@ -96,6 +173,30 @@ CacheManager::BundleFrameLayer make_layer(SDL_Surface* surface) {
     return layer;
 }
 
+CacheManager::BundleFrameLayer make_transparent_layer(int width, int height) {
+    CacheManager::BundleFrameLayer layer;
+    layer.width = std::max(1, width);
+    layer.height = std::max(1, height);
+    layer.format = SDL_PIXELFORMAT_RGBA8888;
+    layer.pitch = layer.width * 4;
+    const std::size_t byte_count =
+        static_cast<std::size_t>(layer.pitch) * static_cast<std::size_t>(layer.height);
+    layer.pixels.assign(byte_count, static_cast<std::uint8_t>(0));
+    return layer;
+}
+
+CacheManager::BundleFrame make_placeholder_frame(const std::vector<float>& variant_steps) {
+    CacheManager::BundleFrame frame;
+    frame.variants.reserve(variant_steps.empty() ? 1u : variant_steps.size());
+    const std::size_t variant_count = variant_steps.empty() ? 1u : variant_steps.size();
+    for (std::size_t idx = 0; idx < variant_count; ++idx) {
+        CacheManager::BundleFrameVariant variant;
+        variant.base = make_transparent_layer(1, 1);
+        frame.variants.push_back(std::move(variant));
+    }
+    return frame;
+}
+
 SDL_Surface* surface_from_layer(const CacheManager::BundleFrameLayer& layer) {
     if (layer.empty()) {
         return nullptr;
@@ -107,21 +208,49 @@ SDL_Surface* surface_from_layer(const CacheManager::BundleFrameLayer& layer) {
                                  layer.pitch);
 }
 
-std::vector<float> normalized_variant_steps(const AssetInfo& info) {
-    std::vector<float> steps = info.scale_variants;
-    if (steps.empty()) {
-        render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
-    }
-    if (std::find_if(steps.begin(), steps.end(), [](float v) { return std::fabs(v - 1.0f) < 1e-4f; }) == steps.end()) {
-        steps.insert(steps.begin(), 1.0f);
-    }
+std::vector<float> normalized_variant_steps(const AssetInfo& /*info*/) {
+    std::vector<float> steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
     steps.erase(std::remove_if(steps.begin(), steps.end(), [](float v) { return !(v > 0.0f) || !std::isfinite(v); }), steps.end());
     std::sort(steps.begin(), steps.end(), std::greater<float>());
     steps.erase(std::unique(steps.begin(), steps.end(), [](float a, float b) { return std::fabs(a - b) < 1e-4f; }), steps.end());
     if (steps.empty()) {
-        steps.push_back(1.0f);
+        steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
     }
     return steps;
+}
+
+bool steps_match_canonical(const std::vector<float>& steps) {
+    const auto& canonical = render_pipeline::ScalingLogic::DefaultScaleSteps();
+    if (steps.size() != canonical.size()) {
+        return false;
+    }
+    for (std::size_t idx = 0; idx < canonical.size(); ++idx) {
+        if (!std::isfinite(steps[idx])) {
+            return false;
+        }
+        if (std::fabs(steps[idx] - canonical[idx]) > 1e-4f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool bundle_variant_layout_is_valid(const CacheManager::BundleData& bundle) {
+    const std::size_t expected_variant_count = render_pipeline::ScalingLogic::DefaultScaleSteps().size();
+    for (const auto& animation : bundle.animations) {
+        if (animation.frames.empty()) {
+            continue;
+        }
+        if (!steps_match_canonical(animation.variant_steps)) {
+            return false;
+        }
+        for (const auto& frame : animation.frames) {
+            if (frame.variants.size() != expected_variant_count) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 CacheManager::BundleFrameLayer scale_layer(const CacheManager::BundleFrameLayer& src, float scale) {
@@ -142,211 +271,439 @@ CacheManager::BundleFrameLayer scale_layer(const CacheManager::BundleFrameLayer&
     return layer;
 }
 
-struct UniformCropMargins {
-    int left = 0;
-    int top = 0;
-    int right = 0;
-    int bottom = 0;
-};
-
-bool compute_visible_margins(SDL_Surface* surface, UniformCropMargins& out) {
-    if (!surface || surface->w <= 0 || surface->h <= 0 || !surface->pixels) {
-        return false;
-    }
-
-    const bool locked = SDL_MUSTLOCK(surface);
-    if (locked && !SDL_LockSurface(surface)) {
-        return false;
-    }
-
-    const int width = surface->w;
-    const int height = surface->h;
-    const int pitch = surface->pitch;
-    const auto* pixels = static_cast<const std::uint8_t*>(surface->pixels);
-
-    int left = width;
-    int top = height;
-    int right = -1;
-    int bottom = -1;
-
-    for (int y = 0; y < height; ++y) {
-        const std::uint8_t* row = pixels + static_cast<std::size_t>(y) * static_cast<std::size_t>(pitch);
-        for (int x = 0; x < width; ++x) {
-            const std::uint8_t alpha = row[static_cast<std::size_t>(x) * 4u + 3u];
-            if (alpha == 0) {
-                continue;
-            }
-            if (x < left) left = x;
-            if (y < top) top = y;
-            if (x > right) right = x;
-            if (y > bottom) bottom = y;
-        }
-    }
-
-    if (locked) {
-        SDL_UnlockSurface(surface);
-    }
-
-    if (right < left || bottom < top) {
-        return false;
-    }
-
-    out.left = left;
-    out.top = top;
-    out.right = std::max(0, width - (right + 1));
-    out.bottom = std::max(0, height - (bottom + 1));
-    return true;
-}
-
-SDL_Surface* crop_surface_with_margins(SDL_Surface* surface, const UniformCropMargins& margins) {
-    if (!surface || surface->w <= 0 || surface->h <= 0) {
-        return surface;
-    }
-
-    const int src_w = surface->w;
-    const int src_h = surface->h;
-
-    const int left = std::clamp(margins.left, 0, std::max(0, src_w - 1));
-    const int top = std::clamp(margins.top, 0, std::max(0, src_h - 1));
-
-    const int max_right = std::max(0, src_w - left - 1);
-    const int max_bottom = std::max(0, src_h - top - 1);
-
-    const int right = std::clamp(margins.right, 0, max_right);
-    const int bottom = std::clamp(margins.bottom, 0, max_bottom);
-
-    const int crop_w = src_w - left - right;
-    const int crop_h = src_h - top - bottom;
-    if (crop_w <= 0 || crop_h <= 0) {
-        return surface;
-    }
-    if (left == 0 && top == 0 && crop_w == src_w && crop_h == src_h) {
-        return surface;
-    }
-
-    SDL_Surface* cropped = SDL_CreateSurface(crop_w, crop_h, SDL_PIXELFORMAT_RGBA8888);
-    if (!cropped) {
-        return surface;
-    }
-
-    SDL_Rect src_rect{left, top, crop_w, crop_h};
-    SDL_Rect dst_rect{0, 0, crop_w, crop_h};
-    if (!SDL_BlitSurface(surface, &src_rect, cropped, &dst_rect)) {
-        SDL_DestroySurface(cropped);
-        return surface;
-    }
-
-    SDL_DestroySurface(surface);
-    return cropped;
-}
-
-std::optional<UniformCropMargins> compute_uniform_crop_margins(const AssetInfo& info, const nlohmann::json& anims_json) {
-    if (!info.crop_frames || !anims_json.is_object()) {
-        return std::nullopt;
-    }
-
-    bool have_union = false;
-    UniformCropMargins union_margins{};
-
-    for (auto it = anims_json.begin(); it != anims_json.end(); ++it) {
-        if (!it.value().is_object()) {
+CacheManager::BundleFrameLayer load_layer_from_candidates(std::initializer_list<fs::path> candidates) {
+    for (const auto& candidate : candidates) {
+        std::error_code ec;
+        if (!fs::exists(candidate, ec) || ec) {
             continue;
         }
-        const nlohmann::json& anim_json = it.value();
+        if (SDL_Surface* surface = load_rgba_surface(candidate)) {
+            auto layer = make_layer(surface);
+            SDL_DestroySurface(surface);
+            return layer;
+        }
+    }
+    return CacheManager::BundleFrameLayer{};
+}
+
+fs::path cache_variant_root(const fs::path& animation_cache_root,
+                            const std::vector<float>& variant_steps,
+                            std::size_t variant_idx) {
+    return fs::path(render_pipeline::ScalingLogic::VariantFolder(
+        animation_cache_root.string(),
+        variant_steps,
+        variant_idx));
+}
+
+bool animation_is_selected(const std::string& animation_name,
+                           const std::unordered_set<std::string>* animation_filter) {
+    if (!animation_filter || animation_filter->empty()) {
+        return true;
+    }
+    return animation_filter->find(animation_name) != animation_filter->end();
+}
+
+struct FolderAnimationCacheState {
+    std::unordered_set<std::string> required_folder_animations;
+    std::unordered_set<std::string> animations_with_foreground_cache;
+    std::unordered_set<std::string> animations_with_background_cache;
+    std::optional<fs::file_time_type> newest_overlay_cache_timestamp;
+};
+
+std::string lowercase_copy(const std::string& value) {
+    std::string lowered = value;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return lowered;
+}
+
+bool is_png_path(const fs::path& path) {
+    const std::string extension = lowercase_copy(path.extension().string());
+    return extension == ".png";
+}
+
+bool directory_contains_png(const fs::path& directory,
+                            std::optional<fs::file_time_type>* newest_timestamp = nullptr) {
+    std::error_code ec;
+    if (!fs::exists(directory, ec) || ec || !fs::is_directory(directory, ec)) {
+        return false;
+    }
+
+    bool found_png = false;
+    for (const auto& entry : fs::directory_iterator(directory, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_regular_file(ec) || ec) {
+            continue;
+        }
+        const fs::path file_path = entry.path();
+        if (!is_png_path(file_path)) {
+            continue;
+        }
+
+        found_png = true;
+        if (newest_timestamp) {
+            const fs::file_time_type file_time = fs::last_write_time(file_path, ec);
+            if (!ec) {
+                if (!newest_timestamp->has_value() || file_time > newest_timestamp->value()) {
+                    *newest_timestamp = file_time;
+                }
+            }
+        }
+    }
+    return found_png;
+}
+
+const CacheManager::BundleAnimation* find_bundle_animation(const CacheManager::BundleData& bundle,
+                                                           const std::string& animation_name) {
+    for (const auto& animation : bundle.animations) {
+        if (animation.name == animation_name) {
+            return &animation;
+        }
+    }
+    return nullptr;
+}
+
+bool bundle_animation_has_any_foreground_layer(const CacheManager::BundleAnimation& animation) {
+    for (const auto& frame : animation.frames) {
+        for (const auto& variant : frame.variants) {
+            if (!variant.foreground.empty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool bundle_animation_has_any_background_layer(const CacheManager::BundleAnimation& animation) {
+    for (const auto& frame : animation.frames) {
+        for (const auto& variant : frame.variants) {
+            if (!variant.background.empty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+FolderAnimationCacheState collect_folder_animation_cache_state(
+    const AssetInfo& info,
+    const std::unordered_set<std::string>* animation_filter) {
+    FolderAnimationCacheState state{};
+    const std::vector<std::string> animation_names = info.animation_names();
+    const fs::path cache_animation_root = fs::path("cache") / info.name / "animations";
+    for (const std::string& animation_name : animation_names) {
+        if (!animation_is_selected(animation_name, animation_filter)) {
+            continue;
+        }
+
+        const nlohmann::json anim_json = info.animation_payload(animation_name);
+        if (!anim_json.is_object()) {
+            continue;
+        }
         if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
             continue;
         }
-
         const auto& source = anim_json["source"];
-        const std::string kind = source.value("kind", std::string{});
-        if (kind != "folder") {
+        if (source.value("kind", std::string{}) != "folder") {
             continue;
         }
 
-        const fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
-        const fs::path fg_folder = folder / "foreground";
-        const fs::path bg_folder = folder / "background";
-        const int frame_count = count_sequential_png(folder);
-        if (frame_count <= 0) {
-            continue;
+        state.required_folder_animations.insert(animation_name);
+
+        const fs::path scale_100_root = cache_animation_root / animation_name / "scale_100";
+        const fs::path foreground_dir = scale_100_root / "foreground";
+        const fs::path background_dir = scale_100_root / "background";
+
+        if (directory_contains_png(foreground_dir, &state.newest_overlay_cache_timestamp)) {
+            state.animations_with_foreground_cache.insert(animation_name);
         }
-
-        for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
-            const std::string frame_name = std::to_string(frame_idx) + ".png";
-            const std::array<fs::path, 3> layer_paths = {
-                folder / frame_name,
-                fg_folder / frame_name,
-                bg_folder / frame_name
-            };
-
-            for (const fs::path& layer_path : layer_paths) {
-                std::error_code ec;
-                if (!fs::exists(layer_path, ec) || ec) {
-                    continue;
-                }
-
-                SDL_Surface* layer_surface = load_rgba_surface(layer_path);
-                if (!layer_surface) {
-                    continue;
-                }
-
-                UniformCropMargins local{};
-                const bool has_visible = compute_visible_margins(layer_surface, local);
-                SDL_DestroySurface(layer_surface);
-                if (!has_visible) {
-                    continue;
-                }
-
-                if (!have_union) {
-                    union_margins = local;
-                    have_union = true;
-                } else {
-                    union_margins.left = std::min(union_margins.left, local.left);
-                    union_margins.top = std::min(union_margins.top, local.top);
-                    union_margins.right = std::min(union_margins.right, local.right);
-                    union_margins.bottom = std::min(union_margins.bottom, local.bottom);
-                }
-            }
+        if (directory_contains_png(background_dir, &state.newest_overlay_cache_timestamp)) {
+            state.animations_with_background_cache.insert(animation_name);
         }
     }
 
-    if (!have_union) {
-        return std::nullopt;
+    return state;
+}
+
+bool bundle_contains_required_folder_animations(const CacheManager::BundleData& bundle,
+                                                const FolderAnimationCacheState& cache_state) {
+    for (const auto& animation_name : cache_state.required_folder_animations) {
+        const CacheManager::BundleAnimation* animation = find_bundle_animation(bundle, animation_name);
+        if (!animation || animation->frames.empty()) {
+            return false;
+        }
     }
-    return union_margins;
+    return true;
+}
+
+bool bundle_has_required_overlay_layers(const CacheManager::BundleData& bundle,
+                                        const FolderAnimationCacheState& cache_state) {
+    for (const auto& animation_name : cache_state.animations_with_foreground_cache) {
+        const CacheManager::BundleAnimation* animation = find_bundle_animation(bundle, animation_name);
+        if (!animation || !bundle_animation_has_any_foreground_layer(*animation)) {
+            return false;
+        }
+    }
+    for (const auto& animation_name : cache_state.animations_with_background_cache) {
+        const CacheManager::BundleAnimation* animation = find_bundle_animation(bundle, animation_name);
+        if (!animation || !bundle_animation_has_any_background_layer(*animation)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool bundle_overlay_cache_is_stale(const fs::path& bundle_path,
+                                   const FolderAnimationCacheState& cache_state) {
+    if (!cache_state.newest_overlay_cache_timestamp.has_value()) {
+        return false;
+    }
+
+    std::error_code ec;
+    if (!fs::exists(bundle_path, ec) || ec) {
+        return false;
+    }
+
+    const fs::file_time_type bundle_timestamp = fs::last_write_time(bundle_path, ec);
+    if (ec) {
+        return false;
+    }
+
+    return cache_state.newest_overlay_cache_timestamp.value() > bundle_timestamp;
+}
+
+struct BundleValidationResult {
+    bool variant_layout_ok = true;
+    bool required_animations_ok = true;
+    bool overlay_integrity_ok = true;
+    bool overlay_freshness_ok = true;
+
+    bool ready() const {
+        return variant_layout_ok &&
+               required_animations_ok &&
+               overlay_integrity_ok &&
+               overlay_freshness_ok;
+    }
+};
+
+BundleValidationResult validate_loaded_bundle(const CacheManager::BundleData& bundle,
+                                              const fs::path& bundle_path,
+                                              const FolderAnimationCacheState& cache_state) {
+    BundleValidationResult result{};
+    result.variant_layout_ok = bundle_variant_layout_is_valid(bundle);
+    result.required_animations_ok = bundle_contains_required_folder_animations(bundle, cache_state);
+    result.overlay_integrity_ok = bundle_has_required_overlay_layers(bundle, cache_state);
+    result.overlay_freshness_ok = !bundle_overlay_cache_is_stale(bundle_path, cache_state);
+    return result;
+}
+
+std::string describe_bundle_validation_failure(const BundleValidationResult& validation) {
+    std::vector<std::string> reasons;
+    if (!validation.required_animations_ok) {
+        reasons.emplace_back("missing required folder animation entries");
+    }
+    if (!validation.variant_layout_ok) {
+        reasons.emplace_back("missing full-resolution or inconsistent variant metadata");
+    }
+    if (!validation.overlay_integrity_ok) {
+        reasons.emplace_back("missing foreground/background layer data");
+    }
+    if (!validation.overlay_freshness_ok) {
+        reasons.emplace_back("overlay cache files are newer than bundle");
+    }
+
+    if (reasons.empty()) {
+        return "unknown";
+    }
+
+    std::ostringstream out;
+    for (std::size_t idx = 0; idx < reasons.size(); ++idx) {
+        if (idx != 0) {
+            out << "; ";
+        }
+        out << reasons[idx];
+    }
+    return out.str();
 }
 
 } // namespace
 
 PrimaryAssetCache::PrimaryAssetCache(SDL_Renderer* renderer) : renderer_(renderer) {}
 
-std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info) const {
-    std::uint64_t hash = fnv1a64(info.info_json_.dump());
+bool PrimaryAssetCache::load_cached_only(AssetInfo& info,
+                                         std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
+                                         CacheManager::BundleData& raw_bundle,
+                                         const std::unordered_set<std::string>* animation_filter) {
+    const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
+    const FolderAnimationCacheState cache_state =
+        collect_folder_animation_cache_state(info, animation_filter);
 
-    if (info.anims_json_.is_object()) {
-        for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
-            if (!it.value().is_object()) continue;
-            const nlohmann::json& anim_json = it.value();
-            if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
-                continue;
-            }
-            const auto& source = anim_json["source"];
-            if (source.value("kind", std::string{}) != "folder") {
-                continue;
-            }
-            fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
-            const int frame_count = count_sequential_png(folder);
-            for (int i = 0; i < frame_count; ++i) {
-                fs::path frame_path = folder / (std::to_string(i) + ".png");
-                hash_file_signature(frame_path, hash);
+    auto try_populate = [&](const CacheManager::BundleData& bundle) {
+        out_frames.clear();
+        return populate_runtime_frames(info, bundle, out_frames, animation_filter);
+    };
 
-                const std::string frame_name = std::to_string(i) + ".png";
-                hash_file_signature(folder / "foreground" / frame_name, hash);
-                hash_file_signature(folder / "background" / frame_name, hash);
-            }
+    CacheManager::BundleData bundle;
+    const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
+    if (!bundle_loaded) {
+        return false;
+    }
+
+    const BundleValidationResult validation =
+        validate_loaded_bundle(bundle, bundle_path, cache_state);
+    if (!validation.ready()) {
+        vibble::log::info("[PrimaryAssetCache] Cached-only bundle rejected for " + info.name +
+                          " (" + describe_bundle_validation_failure(validation) + ").");
+        out_frames.clear();
+        return false;
+    }
+
+    const bool populated = try_populate(bundle);
+    if (!populated) {
+        out_frames.clear();
+        return false;
+    }
+
+    raw_bundle = std::move(bundle);
+    return true;
+}
+
+bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
+                                           CacheManager::BundleData* out_bundle,
+                                           const std::unordered_set<std::string>* animation_filter,
+                                           WarmupOutcome* out_outcome) {
+    const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
+    const bool has_animation_filter = animation_filter && !animation_filter->empty();
+    const FolderAnimationCacheState cache_state =
+        collect_folder_animation_cache_state(info, animation_filter);
+    if (out_outcome) {
+        *out_outcome = WarmupOutcome::Failed;
+    }
+
+    CacheManager::BundleData bundle;
+    const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
+    BundleValidationResult validation{};
+    const bool bundle_ready = bundle_loaded
+        ? (validation = validate_loaded_bundle(bundle, bundle_path, cache_state), validation.ready())
+        : false;
+    if (bundle_ready) {
+        if (out_outcome) {
+            *out_outcome = WarmupOutcome::Reused;
+        }
+        if (out_bundle) {
+            *out_bundle = std::move(bundle);
+        }
+        return true;
+    }
+
+    if (bundle_loaded) {
+        vibble::log::info("[PrimaryAssetCache] Rebuilding bundle cache for " + info.name +
+                          " (" + describe_bundle_validation_failure(validation) + ").");
+    } else {
+        vibble::log::info("[PrimaryAssetCache] Missing cached bundle for " + info.name +
+                          "; building cache from source frames.");
+    }
+
+    CacheManager::BundleData rebuilt;
+    if (!build_bundle_from_sources(info, rebuilt, animation_filter)) {
+        vibble::log::warn("[PrimaryAssetCache] Failed to build bundle cache from source for " + info.name + ".");
+        return false;
+    }
+
+    rebuilt.content_hash = 0;
+    const bool should_persist_rebuilt_bundle = !has_animation_filter;
+    if (should_persist_rebuilt_bundle) {
+        if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
+            vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");
         }
     }
-    return hash;
+
+    if (out_bundle) {
+        *out_bundle = std::move(rebuilt);
+    }
+    if (out_outcome) {
+        *out_outcome = warmup_outcome_from_bundle_state(bundle_loaded);
+    }
+    return true;
+}
+
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::detect_missing_cache_files(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter) const {
+    return run_missing_cache_file_batch(infos, animation_filter, true);
+}
+
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::repair_missing_cache_files(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter) const {
+    return run_missing_cache_file_batch(infos, animation_filter, false);
+}
+
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::run_missing_cache_file_batch(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter,
+    bool dry_run) const {
+    BatchRepairResult batch_result;
+    batch_result.ok = true;
+
+    std::vector<AssetInfo*> selected_infos;
+    selected_infos.reserve(infos.size());
+    for (AssetInfo* info : infos) {
+        if (!info || info->name.empty()) {
+            continue;
+        }
+        selected_infos.push_back(info);
+    }
+    if (selected_infos.empty()) {
+        return batch_result;
+    }
+
+    imgcache::GeneratorOptions options;
+#if defined(PROJECT_ROOT)
+    const fs::path manifest_path = fs::path(PROJECT_ROOT) / "manifest.json";
+    std::error_code manifest_ec;
+    if (fs::exists(manifest_path, manifest_ec) && !manifest_ec) {
+        options.manifest_path = manifest_path;
+    }
+#endif
+    options.missing_only = true;
+    options.force_rebuild = false;
+    options.dry_run = dry_run;
+    options.quiet_task_logs = true;
+    options.effects_backend = imgcache::EffectsBackend::Auto;
+    for (const AssetInfo* info : selected_infos) {
+        options.filters.assets.insert(info->name);
+    }
+    if (animation_filter && !animation_filter->empty()) {
+        options.filters.animations = *animation_filter;
+    }
+
+    GeneratorLogBridge logger;
+    auto result = imgcache::ImageCacheGenerator::Run(options, logger);
+    if (!result.ok) {
+        batch_result.ok = false;
+        batch_result.error = result.error;
+        return batch_result;
+    }
+
+    batch_result.touched_assets = std::move(result.touched_assets);
+    if (dry_run || result.written_files.empty()) {
+        return batch_result;
+    }
+
+    batch_result.written_files_by_asset = group_written_files_by_asset(result.written_files);
+    for (AssetInfo* info : selected_infos) {
+        auto it = batch_result.written_files_by_asset.find(info->name);
+        if (it == batch_result.written_files_by_asset.end() || it->second.empty()) {
+            continue;
+        }
+        record_load_repairs_from_written_files(*info, it->second);
+        info->consume_pending_texture_rebuild_on_load();
+    }
+    return batch_result;
 }
 
 bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& animation,
@@ -427,17 +784,18 @@ bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& ani
     return animation.uses_atlas;
 }
 
-bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheManager::BundleData& out_data) {
+bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
+                                                  CacheManager::BundleData& out_data,
+                                                  const std::unordered_set<std::string>* animation_filter) {
     out_data = CacheManager::BundleData{};
     out_data.version = 1;
     out_data.metadata_snapshot = info.info_json_;
 
     std::vector<float> variant_steps = normalized_variant_steps(info);
-    const std::optional<UniformCropMargins> uniform_crop = compute_uniform_crop_margins(info, info.anims_json_);
-
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
             if (!it.value().is_object()) continue;
+            if (!animation_is_selected(it.key(), animation_filter)) continue;
             const nlohmann::json& anim_json = it.value();
             if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
                 continue;
@@ -454,8 +812,19 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
             }
 
             const fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
-            const int frame_count = count_sequential_png(folder);
+            const fs::path cache_anim_root = fs::path("cache") / info.name / "animations" / bundle_anim.name;
+            const fs::path cache_scale_100 = cache_anim_root / "scale_100";
+            const fs::path cache_normal_100 = cache_scale_100 / "normal";
+            const fs::path cache_foreground_100 = cache_scale_100 / "foreground";
+            const fs::path cache_background_100 = cache_scale_100 / "background";
+            const int source_frame_count = count_sequential_png(folder);
+            const int cached_frame_count = count_sequential_png(cache_normal_100);
+            const int frame_count = std::max(source_frame_count, cached_frame_count);
             if (frame_count <= 0) {
+                vibble::log::warn("[PrimaryAssetCache] No source frames found for " + info.name +
+                                  "::" + bundle_anim.name + " in '" + folder.generic_string() +
+                                  "'; injecting a transparent placeholder frame.");
+                bundle_anim.frames.push_back(make_placeholder_frame(bundle_anim.variant_steps));
                 out_data.animations.push_back(std::move(bundle_anim));
                 continue;
             }
@@ -464,48 +833,66 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
             const fs::path bg_folder = folder / "background";
 
             bundle_anim.frames.reserve(static_cast<std::size_t>(frame_count));
+            bool warned_missing_base_frame = false;
 
             for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
                 CacheManager::BundleFrame frame;
                 frame.variants.reserve(bundle_anim.variant_steps.size());
+                const std::string frame_name = std::to_string(frame_idx) + ".png";
 
-                const fs::path base_path = folder / (std::to_string(frame_idx) + ".png");
-                SDL_Surface* base_surface = load_rgba_surface(base_path);
-
-                SDL_Surface* fg_surface = nullptr;
-                SDL_Surface* bg_surface = nullptr;
-                if (fs::exists(fg_folder / (std::to_string(frame_idx) + ".png"))) {
-                    fg_surface = load_rgba_surface(fg_folder / (std::to_string(frame_idx) + ".png"));
+                CacheManager::BundleFrameLayer base_layer = load_layer_from_candidates({
+                    cache_normal_100 / frame_name,
+                    folder / frame_name,
+                });
+                if (base_layer.empty()) {
+                    if (!warned_missing_base_frame) {
+                        vibble::log::warn("[PrimaryAssetCache] Missing base frame data for " + info.name +
+                                          "::" + bundle_anim.name +
+                                          "; injecting transparent fallback for unavailable frame(s).");
+                        warned_missing_base_frame = true;
+                    }
+                    base_layer = make_transparent_layer(1, 1);
                 }
-                if (fs::exists(bg_folder / (std::to_string(frame_idx) + ".png"))) {
-                    bg_surface = load_rgba_surface(bg_folder / (std::to_string(frame_idx) + ".png"));
-                }
+                CacheManager::BundleFrameLayer fg_layer = load_layer_from_candidates({
+                    cache_foreground_100 / frame_name,
+                    fg_folder / frame_name,
+                });
+                CacheManager::BundleFrameLayer bg_layer = load_layer_from_candidates({
+                    cache_background_100 / frame_name,
+                    bg_folder / frame_name,
+                });
 
-                if (uniform_crop.has_value()) {
-                    base_surface = crop_surface_with_margins(base_surface, *uniform_crop);
-                    fg_surface = crop_surface_with_margins(fg_surface, *uniform_crop);
-                    bg_surface = crop_surface_with_margins(bg_surface, *uniform_crop);
-                }
-
-                CacheManager::BundleFrameLayer base_layer = make_layer(base_surface);
-                CacheManager::BundleFrameLayer fg_layer = make_layer(fg_surface);
-                CacheManager::BundleFrameLayer bg_layer = make_layer(bg_surface);
-
-                for (float step : bundle_anim.variant_steps) {
+                for (std::size_t variant_idx = 0; variant_idx < bundle_anim.variant_steps.size(); ++variant_idx) {
+                    const float step = bundle_anim.variant_steps[variant_idx];
                     CacheManager::BundleFrameVariant variant;
-                    variant.base = scale_layer(base_layer, step);
-                    if (!fg_layer.empty()) {
+                    const fs::path variant_root = cache_variant_root(cache_anim_root,
+                                                                     bundle_anim.variant_steps,
+                                                                     variant_idx);
+                    variant.base = load_layer_from_candidates({
+                        variant_root / "normal" / frame_name,
+                    });
+                    if (variant.base.empty()) {
+                        variant.base = scale_layer(base_layer, step);
+                    }
+                    if (variant.base.empty()) {
+                        variant.base = make_transparent_layer(1, 1);
+                    }
+
+                    variant.foreground = load_layer_from_candidates({
+                        variant_root / "foreground" / frame_name,
+                    });
+                    if (variant.foreground.empty() && !fg_layer.empty()) {
                         variant.foreground = scale_layer(fg_layer, step);
                     }
-                    if (!bg_layer.empty()) {
+
+                    variant.background = load_layer_from_candidates({
+                        variant_root / "background" / frame_name,
+                    });
+                    if (variant.background.empty() && !bg_layer.empty()) {
                         variant.background = scale_layer(bg_layer, step);
                     }
                     frame.variants.push_back(std::move(variant));
                 }
-
-                if (base_surface) SDL_DestroySurface(base_surface);
-                if (fg_surface) SDL_DestroySurface(fg_surface);
-                if (bg_surface) SDL_DestroySurface(bg_surface);
 
                 bundle_anim.frames.push_back(std::move(frame));
             }
@@ -525,12 +912,42 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
 
 bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                                                 const CacheManager::BundleData& bundle,
-                                                std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames) {
+                                                std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
+                                                const std::unordered_set<std::string>* animation_filter) {
     if (!renderer_) {
         return false;
     }
+    auto apply_texture_scale_mode = [&info](SDL_Texture* texture) {
+        if (!texture) {
+            return;
+        }
+        SDL_SetTextureScaleMode(texture, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+    };
+    auto load_texture_from_cache_png = [&](const fs::path& path) -> SDL_Texture* {
+        std::error_code ec;
+        if (!fs::exists(path, ec) || ec) {
+            return nullptr;
+        }
+        SDL_Surface* surface = CacheManager::load_surface(path.generic_string());
+        if (!surface) {
+            return nullptr;
+        }
+        SDL_Texture* texture = CacheManager::surface_to_texture(renderer_, surface);
+        SDL_DestroySurface(surface);
+        apply_texture_scale_mode(texture);
+        return texture;
+    };
+
     out_frames.clear();
+    std::size_t repaired_foreground_layers = 0;
+    std::size_t repaired_background_layers = 0;
+    std::size_t repaired_variants = 0;
+    std::unordered_set<std::string> repaired_animations;
     for (const auto& anim : bundle.animations) {
+        if (animation_filter && !animation_filter->empty() &&
+            animation_filter->find(anim.name) == animation_filter->end()) {
+            continue;
+        }
         if (anim.frames.empty()) {
             continue;
         }
@@ -543,6 +960,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
         }
         const std::size_t frame_count = anim.frames.size();
         prepared.frames.reserve(frame_count);
+        const fs::path cache_animation_root = fs::path("cache") / info.name / "animations" / anim.name;
 
         std::unordered_map<std::size_t, SDL_Texture*> atlas_by_variant;
         std::unordered_map<std::size_t, SDL_Point> atlas_sizes;
@@ -553,6 +971,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                 if (!atlas_surface) continue;
                 SDL_Texture* atlas_tex = CacheManager::surface_to_texture(renderer_, atlas_surface);
                 if (atlas_tex) {
+                    apply_texture_scale_mode(atlas_tex);
                     atlas_by_variant[idx] = atlas_tex;
                     atlas_sizes[idx] = SDL_Point{atlas_surface->w, atlas_surface->h};
                 }
@@ -567,6 +986,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
             cache_entry.resize(variant_count);
 
             for (std::size_t variant_idx = 0; variant_idx < variant_count && variant_idx < frame.variants.size(); ++variant_idx) {
+                bool repaired_any_layer = false;
                 const auto& variant = frame.variants[variant_idx];
 
                 if (variant.use_atlas && atlas_by_variant.count(variant_idx)) {
@@ -578,6 +998,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                 } else if (!variant.base.empty()) {
                     SDL_Surface* base_surface = surface_from_layer(variant.base);
                     SDL_Texture* tex = CacheManager::surface_to_texture(renderer_, base_surface);
+                    apply_texture_scale_mode(tex);
                     cache_entry.textures[variant_idx] = tex;
                     cache_entry.widths[variant_idx] = variant.base.width;
                     cache_entry.heights[variant_idx] = variant.base.height;
@@ -589,13 +1010,44 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                 if (!variant.foreground.empty()) {
                     SDL_Surface* fg_surface = surface_from_layer(variant.foreground);
                     cache_entry.foreground_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, fg_surface);
+                    apply_texture_scale_mode(cache_entry.foreground_textures[variant_idx]);
                     SDL_DestroySurface(fg_surface);
                 }
 
                 if (!variant.background.empty()) {
                     SDL_Surface* bg_surface = surface_from_layer(variant.background);
                     cache_entry.background_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, bg_surface);
+                    apply_texture_scale_mode(cache_entry.background_textures[variant_idx]);
                     SDL_DestroySurface(bg_surface);
+                }
+
+                const fs::path variant_root =
+                    cache_variant_root(cache_animation_root, prepared.variant_steps, variant_idx);
+                const std::string frame_file = std::to_string(frame_idx) + ".png";
+
+                if (!cache_entry.foreground_textures[variant_idx]) {
+                    const fs::path foreground_path = variant_root / "foreground" / frame_file;
+                    SDL_Texture* recovered_fg = load_texture_from_cache_png(foreground_path);
+                    if (recovered_fg) {
+                        cache_entry.foreground_textures[variant_idx] = recovered_fg;
+                        ++repaired_foreground_layers;
+                        repaired_any_layer = true;
+                    }
+                }
+
+                if (!cache_entry.background_textures[variant_idx]) {
+                    const fs::path background_path = variant_root / "background" / frame_file;
+                    SDL_Texture* recovered_bg = load_texture_from_cache_png(background_path);
+                    if (recovered_bg) {
+                        cache_entry.background_textures[variant_idx] = recovered_bg;
+                        ++repaired_background_layers;
+                        repaired_any_layer = true;
+                    }
+                }
+
+                if (repaired_any_layer) {
+                    ++repaired_variants;
+                    repaired_animations.insert(anim.name);
                 }
             }
 
@@ -609,56 +1061,29 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
 
         out_frames[anim.name] = std::move(prepared);
     }
+    if (repaired_foreground_layers > 0 || repaired_background_layers > 0) {
+        vibble::log::warn(
+            "[PrimaryAssetCache] Repaired missing bundle overlay layers for asset '" + info.name +
+            "': animations=" + std::to_string(repaired_animations.size()) +
+            " variants=" + std::to_string(repaired_variants) +
+            " fg=" + std::to_string(repaired_foreground_layers) +
+            " bg=" + std::to_string(repaired_background_layers));
+    }
     return !out_frames.empty();
 }
 
 bool PrimaryAssetCache::load_or_build(AssetInfo& info,
                                       std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
-                                      CacheManager::BundleData& raw_bundle) {
-    const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
-    const std::uint64_t expected_hash = compute_hash(info);
-
-    auto try_populate = [&](const CacheManager::BundleData& bundle) {
-        out_frames.clear();
-        return populate_runtime_frames(info, bundle, out_frames);
-    };
-
-    CacheManager::BundleData bundle;
-    const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
-    if (bundle_loaded) {
-        const bool hash_matches = bundle.content_hash == expected_hash;
-        const bool populated = try_populate(bundle);
-        if (hash_matches && populated) {
-            raw_bundle = bundle;
-            return true;
-        }
-
-        if (!hash_matches) {
-            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + ".");
-        } else {
-            vibble::log::warn("[PrimaryAssetCache] Cached bundle for " + info.name +
-                              " could not populate runtime frames; rebuilding from source.");
-        }
-    } else {
-        vibble::log::info("[PrimaryAssetCache] Missing cached bundle for " + info.name +
-                          "; building cache from source frames.");
-    }
-
-    CacheManager::BundleData rebuilt;
-    if (!build_bundle_from_sources(info, rebuilt)) {
-        vibble::log::warn("[PrimaryAssetCache] Failed to build bundle cache from source for " + info.name + ".");
+                                      CacheManager::BundleData& raw_bundle,
+                                      const std::unordered_set<std::string>* animation_filter) {
+    if (!ensure_cache_ready(info, &raw_bundle, animation_filter)) {
         return false;
     }
 
-    rebuilt.content_hash = expected_hash;
-    if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
-        vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");
-    }
-
-    const bool populated = try_populate(rebuilt);
-    raw_bundle = std::move(rebuilt);
+    out_frames.clear();
+    const bool populated = populate_runtime_frames(info, raw_bundle, out_frames, animation_filter);
     if (!populated) {
-        vibble::log::warn("[PrimaryAssetCache] Rebuilt bundle cache for " + info.name +
+        vibble::log::warn("[PrimaryAssetCache] Bundle cache for " + info.name +
                           " did not produce runtime frames.");
     }
     return populated;
@@ -669,7 +1094,7 @@ bool PrimaryAssetCache::save_current(const AssetInfo& info) {
     if (!build_bundle_from_sources(info, bundle)) {
         return false;
     }
-    bundle.content_hash = compute_hash(info);
+    bundle.content_hash = 0;
     const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
     return CacheManager::save_bundle(bundle_path.generic_string(), bundle);
 }

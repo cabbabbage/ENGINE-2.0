@@ -8,7 +8,9 @@
 #include <nlohmann/json.hpp>
 
 class Input;
- struct SDL_Renderer;
+struct SDL_Renderer;
+class Assets;
+namespace devmode::core { class ManifestStore; }
 class CandidateListPanel;
 class BoundaryCandidateListPanel;
 
@@ -31,6 +33,8 @@ class SingleSpawnGroupModal {
     bool is_point_inside(int x, int y) const;
 
     void set_screen_dimensions(int width, int height);
+    void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_assets(Assets* assets);
     void set_floating_stack_key(std::string key);
     void set_on_open_area(std::function<void(const std::string&, const std::string&)> cb);
     void set_on_close(std::function<void()> cb);
@@ -50,6 +54,8 @@ class SingleSpawnGroupModal {
     int screen_w_ = 1920;
     int screen_h_ = 1080;
     bool position_initialized_ = false;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
     std::string stack_key_;
     std::function<void(const std::string&, const std::string&)> on_open_area_{};
     std::function<void()> on_close_{};
@@ -80,6 +86,8 @@ class BoundarySpawnGroupModal {
     bool is_point_inside(int x, int y) const;
 
     void set_screen_dimensions(int width, int height);
+    void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_assets(Assets* assets);
     void set_floating_stack_key(std::string key);
     void set_on_open_area(std::function<void(const std::string&, const std::string&)> cb);
     void set_on_close(std::function<void()> cb);
@@ -97,6 +105,8 @@ class BoundarySpawnGroupModal {
     int screen_w_ = 1920;
     int screen_h_ = 1080;
     bool position_initialized_ = false;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
     std::string stack_key_;
     std::function<void(const std::string&, const std::string&)> on_open_area_{};
     std::function<void()> on_close_{};

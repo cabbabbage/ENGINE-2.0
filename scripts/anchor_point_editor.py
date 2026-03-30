@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 import argparse
 import copy
 import json
@@ -29,6 +29,8 @@ PALETTE = {
     "entry_bg": "#10141f",
     "entry_border": "#2c3445",
     "danger": "#d95c5c",
+    "hit_box": "#f4b860",
+    "attack_box": "#ff6c6c",
 }
 
 FONTS = {
@@ -40,7 +42,9 @@ FONTS = {
 }
 
 ANCHOR_MARKER_RADIUS = 8
+CORNER_MARKER_RADIUS = 6
 SELECT_RADIUS_PX = 16
+
 
 def _create_styled_button(parent, text, command, accent=False, **kwargs):
     bg_color = PALETTE["accent"] if accent else PALETTE["button_bg"]
@@ -90,9 +94,9 @@ def _read_int(value, default=0):
     except Exception:
         return default
 
-def _normalize_unique_anchor_name(desired_name, existing_names):
-    """Return a unique anchor name using deterministic numeric suffixing."""
-    base = str(desired_name or "").strip() or "anchor"
+
+def _normalize_unique_name(desired_name, existing_names, default_prefix):
+    base = str(desired_name or "").strip() or default_prefix
     candidate = base
     suffix = 2
     while candidate in existing_names:
@@ -102,13 +106,12 @@ def _normalize_unique_anchor_name(desired_name, existing_names):
 
 
 def _infer_frame_count(payload):
-    """Infer frame count from manifest fields that already describe the animation."""
     if not isinstance(payload, dict):
         return 1
     counts = [1]
     for key in ("number_of_frames",):
         counts.append(max(0, _read_int(payload.get(key, 0), 0)))
-    for key in ("movement", "frames", "anchor_points"):
+    for key in ("movement", "frames", "anchor_points", "hit_boxes", "attack_boxes"):
         value = payload.get(key)
         if isinstance(value, list):
             counts.append(len(value))
@@ -116,10 +119,6 @@ def _infer_frame_count(payload):
 
 
 def _frame_count_from_source(manifest_root: Path, asset, asset_key, payload):
-    """
-    Try to infer the frame count from the on-disk sprite sheet folder.
-    Looks for PNG files named with zero-based numeric stems (0.png, 1.png, ...).
-    """
     if not isinstance(payload, dict):
         return None
     source = payload.get("source")
@@ -143,12 +142,10 @@ def _frame_count_from_source(manifest_root: Path, asset, asset_key, payload):
                 max_index = max(max_index, int(child.stem))
         return max_index + 1 if max_index >= 0 else None
     except Exception:
-        # Fallback to manifest-derived counts on any unexpected filesystem issue.
         return None
 
 
 def _frame_count_with_disk(payload, manifest_root=None, asset=None, asset_key=None):
-    """Combine manifest-derived frame count with an on-disk probe, preferring the larger value."""
     manifest_count = _infer_frame_count(payload)
     disk_count = None
     if manifest_root is not None and asset is not None:
@@ -191,13 +188,53 @@ def _normalize_anchor_points(payload, frame_count_override=None):
                 normalized = _normalize_anchor(anchor, fallback_name=fallback_name)
                 if not normalized:
                     continue
-                normalized_name = _normalize_unique_anchor_name(normalized["name"], used_names)
+                normalized_name = _normalize_unique_name(normalized["name"], used_names, fallback_name)
                 used_names.add(normalized_name)
                 normalized["name"] = normalized_name
                 normalized_frame.append(normalized)
             out[idx] = normalized_frame
     return out
 
+
+def _normalize_corner(corner):
+    if not isinstance(corner, dict):
+        return {"texture_x": 0, "texture_y": 0}
+    return {
+        "texture_x": max(0, _read_int(corner.get("texture_x", 0), 0)),
+        "texture_y": max(0, _read_int(corner.get("texture_y", 0), 0)),
+    }
+
+
+def _normalize_boxes(payload, key, frame_count_override=None, attack=False):
+    inferred = _infer_frame_count(payload)
+    frame_count = max(frame_count_override or 0, inferred)
+    source = payload.get(key) if isinstance(payload, dict) else None
+    out = [[] for _ in range(frame_count)]
+    if isinstance(source, list):
+        for idx in range(min(frame_count, len(source))):
+            frame = source[idx]
+            if not isinstance(frame, list):
+                continue
+            used_names = set()
+            normalized = []
+            for box_idx, box in enumerate(frame):
+                if not isinstance(box, dict):
+                    continue
+                default_name = ("attack_box" if attack else "hit_box") + f"_{box_idx + 1}"
+                name = _normalize_unique_name(box.get("name"), used_names, default_name)
+                used_names.add(name)
+                corners_in = box.get("corners") if isinstance(box.get("corners"), list) else []
+                corners = [_normalize_corner(corners_in[i] if i < len(corners_in) else {}) for i in range(4)]
+                item = {
+                    "name": name,
+                    "extrusion_amount": max(0, _read_int(box.get("extrusion_amount", 0), 0)),
+                    "corners": corners,
+                }
+                if attack:
+                    item["damage_amount"] = _read_int(box.get("damage_amount", box.get("damage", 0)), 0)
+                normalized.append(item)
+            out[idx] = normalized
+    return out
 
 class AnchorEditorApp:
     def __init__(self, root, manifest_path: Path, asset_id: str, animation_id: str):
@@ -207,18 +244,20 @@ class AnchorEditorApp:
         self.animation_id = animation_id
         self.loading = False
         self.current_frame = 0
-        self.current_anchor = -1
         self.manifest_root = self.manifest_path.parent
         self._frame_pil_image = None
         self._preview_photo = None
         self._preview_scale = 1.0
         self._preview_offset = (0, 0)
         self._preview_flip = (False, False)
-        self._preview_canvas_size = (0, 0)
         self._frame_image_size = (0, 0)
-        self._dragging_anchor = False
-        self._drag_active = False
-        self._anchor_dirty = False
+        self._dragging = False
+        self._dirty_drag = False
+        self._entity_map = []
+
+        self.selected_kind = None
+        self.selected_index = -1
+        self.selected_corner = 0
 
         self.manifest = load_manifest(self.manifest_path)
         self.asset_key, self.asset = self._resolve_asset()
@@ -227,25 +266,56 @@ class AnchorEditorApp:
         if not isinstance(self.payload, dict):
             self.payload = {}
             self.animations[self.animation_id] = self.payload
+
         frame_count = _frame_count_with_disk(self.payload, self.manifest_root, self.asset, self.asset_key)
-        self.frames = _normalize_anchor_points(self.payload, frame_count_override=frame_count)
-        self.payload["anchor_points"] = self.frames
-        self.payload["number_of_frames"] = len(self.frames)
+        self.anchor_frames = _normalize_anchor_points(self.payload, frame_count_override=frame_count)
+        self.hit_box_frames = _normalize_boxes(self.payload, "hit_boxes", frame_count_override=frame_count, attack=False)
+        self.attack_box_frames = _normalize_boxes(self.payload, "attack_boxes", frame_count_override=frame_count, attack=True)
+        self._ensure_frame_count(frame_count)
 
         self.root.title(f"Anchor Point Editor - {self.asset_key}:{self.animation_id}")
-        self.root.geometry("860x520")
+        self.root.geometry("980x560")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self.frame_label_var = tk.StringVar()
-        self.anchor_name_var = tk.StringVar()
-        self.anchor_x_var = tk.StringVar()
-        self.anchor_y_var = tk.StringVar()
-        self.anchor_depth_offset_var = tk.StringVar(value="0")
+        self.name_var = tk.StringVar()
+        self.x_var = tk.StringVar()
+        self.y_var = tk.StringVar()
+        self.depth_var = tk.StringVar(value="0")
+        self.extrusion_var = tk.StringVar(value="0")
+        self.damage_var = tk.StringVar(value="0")
+        self.detail_title_var = tk.StringVar(value="Selection Details")
+        self.detail_note_var = tk.StringVar(value="Select an anchor or a box corner.")
 
         self._build_ui()
         self._wire_traces()
         self._refresh_frame_ui()
         self._save_manifest()
+
+    def _styled_button(self, parent, text, command, accent=False):
+        return _create_styled_button(parent, text, command, accent=accent)
+
+    def _resolve_asset(self):
+        assets = self.manifest.setdefault("assets", {})
+        if not isinstance(assets, dict):
+            raise RuntimeError("manifest.json assets must be an object")
+        asset_key = resolve_asset_key(assets, self.asset_id)
+        if asset_key is None:
+            raise KeyError(f"Asset '{self.asset_id}' not found in manifest")
+        asset_value = assets.get(asset_key)
+        if not isinstance(asset_value, dict):
+            raise RuntimeError(f"Asset '{asset_key}' must be an object")
+        return asset_key, asset_value
+
+    def _ensure_frame_count(self, frame_count):
+        for data in (self.anchor_frames, self.hit_box_frames, self.attack_box_frames):
+            if len(data) < frame_count:
+                data.extend([[] for _ in range(frame_count - len(data))])
+            elif len(data) > frame_count:
+                del data[frame_count:]
+
+    def _frame_count(self):
+        return len(self.anchor_frames)
 
     def _build_ui(self):
         self.root.configure(bg=PALETTE["bg"])
@@ -269,8 +339,8 @@ class AnchorEditorApp:
 
         left = tk.Frame(main, bg=PALETTE["panel"])
         left.pack(side="left", fill="y", padx=(12, 6), pady=12)
-        tk.Label(left, text="Anchors (current frame)", font=FONTS["section"], fg=PALETTE["text"], bg=PALETTE["panel"]).pack(anchor="w")
-        self.anchor_list = tk.Listbox(
+        tk.Label(left, text="Entities (current frame)", font=FONTS["section"], fg=PALETTE["text"], bg=PALETTE["panel"]).pack(anchor="w")
+        self.entity_list = tk.Listbox(
             left,
             exportselection=False,
             bg=PALETTE["entry_bg"],
@@ -280,72 +350,63 @@ class AnchorEditorApp:
             bd=0,
             highlightthickness=0,
             font=FONTS["body"],
+            width=28,
         )
-        self.anchor_list.pack(fill="both", expand=True, pady=(4, 8))
-        self.anchor_list.bind("<<ListboxSelect>>", self._on_anchor_select)
+        self.entity_list.pack(fill="both", expand=True, pady=(4, 8))
+        self.entity_list.bind("<<ListboxSelect>>", self._on_entity_select)
 
-        list_buttons = tk.Frame(left, bg=PALETTE["panel"])
-        list_buttons.pack(fill="x", pady=(0, 4))
-        self._styled_button(list_buttons, "Add Anchor", self._add_anchor, accent=True).pack(side="left", fill="x", expand=True)
-        self._styled_button(list_buttons, "Delete Anchor", self._delete_anchor).pack(side="left", fill="x", expand=True, padx=4)
-        self._styled_button(list_buttons, "Rnd All", self._randomize_all_anchors).pack(side="left", fill="x", expand=True, padx=4)
+        btn_col = tk.Frame(left, bg=PALETTE["panel"])
+        btn_col.pack(fill="x")
+        self._styled_button(btn_col, "Add Anchor Point", self._add_anchor, accent=True).pack(fill="x", pady=(0, 4))
+        row = tk.Frame(btn_col, bg=PALETTE["panel"])
+        row.pack(fill="x", pady=(0, 4))
+        self._styled_button(row, "Add Attack Box", self._add_attack_box).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        self._styled_button(row, "Add Hit Box", self._add_hit_box).pack(side="left", fill="x", expand=True, padx=(2, 0))
+        row2 = tk.Frame(btn_col, bg=PALETTE["panel"])
+        row2.pack(fill="x")
+        self._styled_button(row2, "Delete Selected", self._delete_selected).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        self._styled_button(row2, "Rnd Anchors", self._randomize_all_anchors).pack(side="left", fill="x", expand=True, padx=(2, 0))
 
         center = tk.Frame(main, bg=PALETTE["panel"])
         center.pack(side="left", fill="both", expand=True, padx=(0, 6), pady=12)
         tk.Label(center, text="Frame Preview", font=FONTS["section"], fg=PALETTE["text"], bg=PALETTE["panel"]).pack(anchor="w", padx=8)
-        self.preview_canvas = tk.Canvas(
-            center,
-            bg=PALETTE["canvas_bg"],
-            highlightthickness=0,
-            bd=0,
-            relief="flat",
-        )
+        self.preview_canvas = tk.Canvas(center, bg=PALETTE["canvas_bg"], highlightthickness=0, bd=0, relief="flat")
         self.preview_canvas.pack(fill="both", expand=True, padx=8, pady=(6, 0))
         self.preview_canvas.bind("<Button-1>", self._on_preview_click)
         self.preview_canvas.bind("<B1-Motion>", self._on_preview_drag)
         self.preview_canvas.bind("<ButtonRelease-1>", self._on_preview_release)
         self.preview_canvas.bind("<Configure>", self._on_preview_configure)
-        tk.Label(
-            center,
-            text="Click or drag anchors directly on the preview to move them.",
-            font=FONTS["body"],
-            fg=PALETTE["muted"],
-            bg=PALETTE["panel"],
-            anchor="w",
-            justify="left",
-            wraplength=320,
-        ).pack(fill="x", padx=8, pady=(8, 0))
 
-        right = tk.Frame(main, bg=PALETTE["panel"], width=220)
+        right = tk.Frame(main, bg=PALETTE["panel"], width=235)
         right.pack(side="left", fill="y", padx=(6, 12), pady=12)
         right.pack_propagate(False)
-        tk.Label(right, text="Anchor Details", font=FONTS["section"], fg=PALETTE["text"], bg=PALETTE["panel"]).pack(anchor="w")
+        tk.Label(right, textvariable=self.detail_title_var, font=FONTS["section"], fg=PALETTE["text"], bg=PALETTE["panel"]).pack(anchor="w")
+        self.row_name = self._detail_row(right, "Name", self.name_var)
+        self.row_x = self._detail_row(right, "Texture X", self.x_var)
+        self.row_y = self._detail_row(right, "Texture Y", self.y_var)
+        self.row_depth = self._detail_row(right, "Depth Offset", self.depth_var)
+        self.row_extrusion = self._detail_row(right, "Extrusion", self.extrusion_var)
+        self.row_damage = self._detail_row(right, "Damage", self.damage_var)
+        self.detail_note_label = tk.Label(right, textvariable=self.detail_note_var, font=FONTS["body"], fg=PALETTE["muted"], bg=PALETTE["panel"], wraplength=220, justify="left")
+        self.detail_note_label.pack(fill="x", pady=(6, 0))
 
-        def row(label, var):
-            container = tk.Frame(right, bg=PALETTE["panel"])
-            container.pack(fill="x", pady=4)
-            tk.Label(container, text=label, width=10, anchor="w", fg=PALETTE["text"], bg=PALETTE["panel"], font=FONTS["label"]).pack(side="left")
-            entry = tk.Entry(
-                container,
-                textvariable=var,
-                bg=PALETTE["entry_bg"],
-                fg=PALETTE["text"],
-                insertbackground=PALETTE["text"],
-                bd=1,
-                relief="solid",
-                highlightthickness=0,
-                font=FONTS["body"],
-            )
-            entry.pack(side="left", fill="x", expand=True)
-            return entry
+    def _detail_row(self, parent, label, var):
+        row = tk.Frame(parent, bg=PALETTE["panel"])
+        lbl = tk.Label(row, text=label, width=11, anchor="w", fg=PALETTE["text"], bg=PALETTE["panel"], font=FONTS["label"])
+        lbl.pack(side="left")
+        entry = tk.Entry(row, textvariable=var, bg=PALETTE["entry_bg"], fg=PALETTE["text"], insertbackground=PALETTE["text"], bd=1, relief="solid", highlightthickness=0, font=FONTS["body"])
+        entry.pack(side="left", fill="x", expand=True)
+        row.label_widget = lbl
+        row.pack(fill="x", pady=4)
+        return row
 
-        row("Name", self.anchor_name_var)
-        row("Texture X", self.anchor_x_var)
-        row("Texture Y", self.anchor_y_var)
-        row("Depth Offset", self.anchor_depth_offset_var)
-
-    def _styled_button(self, parent, text, command, accent=False):
-        return _create_styled_button(parent, text, command, accent=accent)
+    def _wire_traces(self):
+        self.name_var.trace_add("write", lambda *_: self._on_value_change())
+        self.x_var.trace_add("write", lambda *_: self._on_value_change())
+        self.y_var.trace_add("write", lambda *_: self._on_value_change())
+        self.depth_var.trace_add("write", lambda *_: self._on_value_change())
+        self.extrusion_var.trace_add("write", lambda *_: self._on_value_change())
+        self.damage_var.trace_add("write", lambda *_: self._on_value_change())
 
     def _get_source_folder(self):
         source = self.payload.get("source")
@@ -377,8 +438,6 @@ class AnchorEditorApp:
     def _load_frame_image(self):
         self._frame_pil_image = None
         self._frame_image_size = (0, 0)
-        self._preview_scale = 1.0
-        self._preview_offset = (0, 0)
         self._preview_photo = None
         path = self._get_frame_image_path(self.current_frame)
         if not path or not path.exists() or Image is None or ImageTk is None:
@@ -390,82 +449,6 @@ class AnchorEditorApp:
         self._frame_pil_image = image
         self._frame_image_size = (image.width, image.height)
 
-    def _render_preview(self):
-        if not hasattr(self, "preview_canvas"):
-            return
-        width = self.preview_canvas.winfo_width()
-        height = self.preview_canvas.winfo_height()
-        if width < 10 or height < 10:
-            return
-        self._preview_canvas_size = (width, height)
-        self.preview_canvas.delete("image")
-        self.preview_canvas.delete("anchor")
-        self.preview_canvas.delete("placeholder")
-        self._preview_flip = self._preview_flip_flags()
-        if not self._frame_pil_image:
-            message = "Image preview unavailable"
-            if Image is None:
-                message = "Install Pillow to preview animation frames"
-            self.preview_canvas.create_text(
-                width // 2,
-                height // 2,
-                text=message,
-                fill=PALETTE["muted"],
-                font=FONTS["body"],
-                tags=("placeholder",),
-            )
-            return
-        scale = min(width / self._frame_pil_image.width, height / self._frame_pil_image.height)
-        if scale <= 0:
-            return
-        display_w = max(1, int(self._frame_pil_image.width * scale))
-        display_h = max(1, int(self._frame_pil_image.height * scale))
-        image = self._frame_pil_image
-        if scale != 1:
-            image = image.resize((display_w, display_h), Image.LANCZOS)
-        flip_x, flip_y = self._preview_flip
-        transpose_enum = getattr(Image, "Transpose", None)
-        if flip_x:
-            image = image.transpose(transpose_enum.FLIP_LEFT_RIGHT if transpose_enum else Image.FLIP_LEFT_RIGHT)
-        if flip_y:
-            image = image.transpose(transpose_enum.FLIP_TOP_BOTTOM if transpose_enum else Image.FLIP_TOP_BOTTOM)
-        self._preview_photo = ImageTk.PhotoImage(image)
-        offset_x = (width - display_w) // 2
-        offset_y = (height - display_h) // 2
-        self.preview_canvas.create_image(offset_x, offset_y, image=self._preview_photo, anchor="nw", tags=("image",))
-        self._preview_scale = scale
-        self._preview_offset = (offset_x, offset_y)
-        self._draw_anchor_overlays()
-
-    def _draw_anchor_overlays(self):
-        if not self._frame_pil_image:
-            return
-        self.preview_canvas.delete("anchor")
-        anchors = self.frames[self.current_frame]
-        for idx, anchor in enumerate(anchors):
-            canvas_x, canvas_y = self._texture_to_canvas(anchor["texture_x"], anchor["texture_y"])
-            radius = ANCHOR_MARKER_RADIUS
-            fill_color = PALETTE["accent"] if idx == self.current_anchor else PALETTE["button_bg"]
-            self.preview_canvas.create_oval(
-                canvas_x - radius,
-                canvas_y - radius,
-                canvas_x + radius,
-                canvas_y + radius,
-                outline=PALETTE["canvas_bg"],
-                width=2,
-                fill=fill_color,
-                tags=("anchor",),
-            )
-            self.preview_canvas.create_text(
-                canvas_x,
-                canvas_y - radius - 6,
-                text=anchor["name"],
-                fill=PALETTE["text"],
-                font=("Segoe UI", 8),
-                tags=("anchor",),
-            )
-
-    # Keep mapping in sync with runtime anchor_pixel_to_uv semantics (pixel centers, then optional flip).
     def _texture_to_canvas(self, texture_x, texture_y):
         scale = self._preview_scale or 1.0
         offset_x, offset_y = self._preview_offset
@@ -506,194 +489,369 @@ class AnchorEditorApp:
                 ty = max(0.0, min(ty, float(height - 1)))
         return tx, ty
 
-    def _find_anchor_near(self, canvas_x, canvas_y):
-        best_idx = -1
-        best_dist_sq = SELECT_RADIUS_PX * SELECT_RADIUS_PX
-        for idx, anchor in enumerate(self.frames[self.current_frame]):
-            ax, ay = self._texture_to_canvas(anchor["texture_x"], anchor["texture_y"])
-            dx = ax - canvas_x
-            dy = ay - canvas_y
-            dist_sq = dx * dx + dy * dy
-            if dist_sq <= best_dist_sq:
-                best_dist_sq = dist_sq
-                best_idx = idx
-        return best_idx
+    def _render_preview(self):
+        if not hasattr(self, "preview_canvas"):
+            return
+        width = self.preview_canvas.winfo_width()
+        height = self.preview_canvas.winfo_height()
+        if width < 10 or height < 10:
+            return
+        self.preview_canvas.delete("image")
+        self.preview_canvas.delete("overlay")
+        self.preview_canvas.delete("placeholder")
+        self._preview_flip = self._preview_flip_flags()
+        if not self._frame_pil_image:
+            message = "Image preview unavailable" if Image is not None else "Install Pillow to preview animation frames"
+            self.preview_canvas.create_text(width // 2, height // 2, text=message, fill=PALETTE["muted"], font=FONTS["body"], tags=("placeholder",))
+            return
+        scale = min(width / self._frame_pil_image.width, height / self._frame_pil_image.height)
+        if scale <= 0:
+            return
+        display_w = max(1, int(self._frame_pil_image.width * scale))
+        display_h = max(1, int(self._frame_pil_image.height * scale))
+        image = self._frame_pil_image
+        if scale != 1:
+            image = image.resize((display_w, display_h), Image.LANCZOS)
+        flip_x, flip_y = self._preview_flip
+        transpose_enum = getattr(Image, "Transpose", None)
+        if flip_x:
+            image = image.transpose(transpose_enum.FLIP_LEFT_RIGHT if transpose_enum else Image.FLIP_LEFT_RIGHT)
+        if flip_y:
+            image = image.transpose(transpose_enum.FLIP_TOP_BOTTOM if transpose_enum else Image.FLIP_TOP_BOTTOM)
+        self._preview_photo = ImageTk.PhotoImage(image)
+        offset_x = (width - display_w) // 2
+        offset_y = (height - display_h) // 2
+        self.preview_canvas.create_image(offset_x, offset_y, image=self._preview_photo, anchor="nw", tags=("image",))
+        self._preview_scale = scale
+        self._preview_offset = (offset_x, offset_y)
+        self._draw_overlays()
 
-    def _move_selected_anchor_to_canvas(self, canvas_x, canvas_y):
-        if self.current_anchor < 0:
+    def _draw_box(self, box, kind, idx, color):
+        points = []
+        for corner in box.get("corners", [])[:4]:
+            points.append(self._texture_to_canvas(corner.get("texture_x", 0), corner.get("texture_y", 0)))
+        if len(points) != 4:
             return
-        frame = self.frames[self.current_frame]
-        if self.current_anchor >= len(frame):
+        selected = self.selected_kind == kind and self.selected_index == idx
+        width = 3 if selected else 2
+        for i in range(4):
+            x1, y1 = points[i]
+            x2, y2 = points[(i + 1) % 4]
+            self.preview_canvas.create_line(x1, y1, x2, y2, fill=color, width=width, tags=("overlay",))
+        for cidx, (cx, cy) in enumerate(points):
+            fill = PALETTE["accent"] if selected and cidx == self.selected_corner else color
+            self.preview_canvas.create_oval(cx - CORNER_MARKER_RADIUS, cy - CORNER_MARKER_RADIUS, cx + CORNER_MARKER_RADIUS, cy + CORNER_MARKER_RADIUS, fill=fill, outline=PALETTE["canvas_bg"], width=2, tags=("overlay",))
+
+    def _draw_overlays(self):
+        if not self._frame_pil_image:
             return
-        tx, ty = self._canvas_to_texture(canvas_x, canvas_y, clamp=True)
-        anchor = frame[self.current_anchor]
-        anchor["texture_x"] = max(0, int(round(tx)))
-        anchor["texture_y"] = max(0, int(round(ty)))
+        for idx, anchor in enumerate(self.anchor_frames[self.current_frame]):
+            cx, cy = self._texture_to_canvas(anchor["texture_x"], anchor["texture_y"])
+            fill = PALETTE["accent"] if self.selected_kind == "anchor" and self.selected_index == idx else PALETTE["button_bg"]
+            self.preview_canvas.create_oval(cx - ANCHOR_MARKER_RADIUS, cy - ANCHOR_MARKER_RADIUS, cx + ANCHOR_MARKER_RADIUS, cy + ANCHOR_MARKER_RADIUS, fill=fill, outline=PALETTE["canvas_bg"], width=2, tags=("overlay",))
+            self.preview_canvas.create_text(cx, cy - ANCHOR_MARKER_RADIUS - 6, text=anchor["name"], fill=PALETTE["text"], font=("Segoe UI", 8), tags=("overlay",))
+        for idx, box in enumerate(self.hit_box_frames[self.current_frame]):
+            self._draw_box(box, "hit_box", idx, PALETTE["hit_box"])
+        for idx, box in enumerate(self.attack_box_frames[self.current_frame]):
+            self._draw_box(box, "attack_box", idx, PALETTE["attack_box"])
+
+    def _current_boxes(self, kind):
+        return self.hit_box_frames[self.current_frame] if kind == "hit_box" else self.attack_box_frames[self.current_frame]
+
+    def _set_selection(self, kind=None, index=-1, corner=0):
+        self.selected_kind = kind
+        self.selected_index = index
+        self.selected_corner = max(0, min(3, corner))
+
+    def _refresh_entity_list(self):
+        self.entity_list.delete(0, tk.END)
+        self._entity_map = []
+        for idx, anchor in enumerate(self.anchor_frames[self.current_frame]):
+            self.entity_list.insert(tk.END, f"Anchor: {anchor['name']}")
+            self._entity_map.append(("anchor", idx))
+        for idx, box in enumerate(self.hit_box_frames[self.current_frame]):
+            self.entity_list.insert(tk.END, f"Hit Box: {box['name']}")
+            self._entity_map.append(("hit_box", idx))
+        for idx, box in enumerate(self.attack_box_frames[self.current_frame]):
+            self.entity_list.insert(tk.END, f"Attack Box: {box['name']}")
+            self._entity_map.append(("attack_box", idx))
+        if self.selected_kind:
+            for list_index, entry in enumerate(self._entity_map):
+                if entry[0] == self.selected_kind and entry[1] == self.selected_index:
+                    self.entity_list.selection_set(list_index)
+                    self.entity_list.see(list_index)
+                    break
+
+    def _show_rows(self, rows):
+        all_rows = (self.row_name, self.row_x, self.row_y, self.row_depth, self.row_extrusion, self.row_damage)
+        for row in all_rows:
+            row.pack_forget()
+        for row in rows:
+            row.pack(fill="x", pady=4)
+
+    def _load_form(self):
         prev_loading = self.loading
         self.loading = True
-        self.anchor_x_var.set(str(anchor["texture_x"]))
-        self.anchor_y_var.set(str(anchor["texture_y"]))
+        if self.selected_kind == "anchor" and 0 <= self.selected_index < len(self.anchor_frames[self.current_frame]):
+            anchor = self.anchor_frames[self.current_frame][self.selected_index]
+            self.detail_title_var.set("Anchor Details")
+            self.name_var.set(anchor["name"])
+            self.x_var.set(str(anchor["texture_x"]))
+            self.y_var.set(str(anchor["texture_y"]))
+            self.depth_var.set(str(anchor.get("depth_offset", 0)))
+            self.extrusion_var.set("0")
+            self.damage_var.set("0")
+            self.row_x.label_widget.config(text="Texture X")
+            self.row_y.label_widget.config(text="Texture Y")
+            self._show_rows((self.row_name, self.row_x, self.row_y, self.row_depth))
+            self.detail_note_var.set("Anchor fields include depth offset.")
+        elif self.selected_kind in ("hit_box", "attack_box") and 0 <= self.selected_index < len(self._current_boxes(self.selected_kind)):
+            box = self._current_boxes(self.selected_kind)[self.selected_index]
+            corners = box.setdefault("corners", [])
+            while len(corners) < 4:
+                corners.append({"texture_x": 0, "texture_y": 0})
+            corner = corners[self.selected_corner]
+            self.detail_title_var.set("Attack Box Details" if self.selected_kind == "attack_box" else "Hit Box Details")
+            self.name_var.set(box.get("name", ""))
+            self.extrusion_var.set(str(box.get("extrusion_amount", 0)))
+            self.x_var.set(str(corner.get("texture_x", 0)))
+            self.y_var.set(str(corner.get("texture_y", 0)))
+            self.depth_var.set("0")
+            self.damage_var.set(str(box.get("damage_amount", 0)))
+            self.row_x.label_widget.config(text=f"Corner {self.selected_corner + 1} X")
+            self.row_y.label_widget.config(text=f"Corner {self.selected_corner + 1} Y")
+            rows = [self.row_name, self.row_extrusion, self.row_x, self.row_y]
+            if self.selected_kind == "attack_box":
+                rows.append(self.row_damage)
+            self._show_rows(rows)
+            self.detail_note_var.set("Corner values edit only the selected corner.")
+        else:
+            self.detail_title_var.set("Selection Details")
+            self.name_var.set("")
+            self.x_var.set("0")
+            self.y_var.set("0")
+            self.depth_var.set("0")
+            self.extrusion_var.set("0")
+            self.damage_var.set("0")
+            self._show_rows(())
+            self.detail_note_var.set("Select an anchor or a box corner.")
         self.loading = prev_loading
-        self._anchor_dirty = True
-        self._render_preview()
-        self._save_manifest()
-        self._anchor_dirty = False
-
-    def _on_preview_click(self, event):
-        self._drag_active = False
-        anchor_idx = self._find_anchor_near(event.x, event.y)
-        if anchor_idx >= 0:
-            prev_loading = self.loading
-            self.loading = True
-            self.current_anchor = anchor_idx
-            self.anchor_list.selection_clear(0, tk.END)
-            self.anchor_list.selection_set(anchor_idx)
-            self.anchor_list.see(anchor_idx)
-            self._load_anchor_form()
-            self.loading = prev_loading
-            self._render_preview()
-        self._dragging_anchor = self.current_anchor >= 0
-
-    def _on_preview_drag(self, event):
-        if not self._dragging_anchor:
-            return
-        self._drag_active = True
-        self._move_selected_anchor_to_canvas(event.x, event.y)
-
-    def _on_preview_release(self, _event=None):
-        if self._anchor_dirty:
-            self._save_manifest()
-            self._anchor_dirty = False
-        self._dragging_anchor = False
-        self._drag_active = False
-
-    def _on_preview_configure(self, _event=None):
-        self._render_preview()
-    def _wire_traces(self):
-        self.anchor_name_var.trace_add("write", lambda *_: self._on_value_change())
-        self.anchor_x_var.trace_add("write", lambda *_: self._on_value_change())
-        self.anchor_y_var.trace_add("write", lambda *_: self._on_value_change())
-        self.anchor_depth_offset_var.trace_add("write", lambda *_: self._on_value_change())
-
-    def _unique_name_for_current_frame(self, desired_name, skip_index=None):
-        frame = self.frames[self.current_frame] if self.frames else []
-        existing = {anchor["name"] for idx, anchor in enumerate(frame) if idx != skip_index}
-        return _normalize_unique_anchor_name(desired_name, existing)
-
-    def _resolve_asset(self):
-        assets = self.manifest.setdefault("assets", {})
-        if not isinstance(assets, dict):
-            raise RuntimeError("manifest.json assets must be an object")
-        asset_key = resolve_asset_key(assets, self.asset_id)
-        if asset_key is None:
-            raise KeyError(f"Asset '{self.asset_id}' not found in manifest")
-        asset_value = assets.get(asset_key)
-        if not isinstance(asset_value, dict):
-            raise RuntimeError(f"Asset '{asset_key}' must be an object")
-        return asset_key, asset_value
-
-    def _save_manifest(self):
-        self.payload["anchor_points"] = self.frames
-        self.payload["number_of_frames"] = self._frame_count()
-        with self.manifest_path.open("w", encoding="utf-8") as fh:
-            json.dump(self.manifest, fh, indent=2)
-            fh.write("\n")
-
-    def _frame_count(self):
-        return len(self.frames)
 
     def _refresh_frame_ui(self):
         self.loading = True
         self.current_frame = max(0, min(self.current_frame, self._frame_count() - 1))
         self.frame_label_var.set(f"Frame {self.current_frame + 1} / {self._frame_count()}")
-
-        self.anchor_list.delete(0, tk.END)
-        anchors = self.frames[self.current_frame]
-        for idx, anchor in enumerate(anchors):
-            self.anchor_list.insert(tk.END, f"{idx + 1}. {anchor['name']}")
-
-        if anchors:
-            self.current_anchor = max(0, min(self.current_anchor, len(anchors) - 1))
-            self.anchor_list.selection_set(self.current_anchor)
-            self._load_anchor_form()
-        else:
-            self.current_anchor = -1
-            self.anchor_name_var.set("")
-            self.anchor_x_var.set("0")
-            self.anchor_y_var.set("0")
-            self.anchor_depth_offset_var.set("0")
+        self._refresh_entity_list()
+        self._load_form()
         self._load_frame_image()
         self._render_preview()
         self.loading = False
 
-    def _load_anchor_form(self):
-        if self.current_anchor < 0:
-            return
-        anchor = self.frames[self.current_frame][self.current_anchor]
-        self.anchor_name_var.set(anchor["name"])
-        self.anchor_x_var.set(str(anchor["texture_x"]))
-        self.anchor_y_var.set(str(anchor["texture_y"]))
-        self.anchor_depth_offset_var.set(str(anchor.get("depth_offset", 0)))
+    def _save_manifest(self):
+        self.payload["anchor_points"] = self.anchor_frames
+        self.payload["hit_boxes"] = self.hit_box_frames
+        self.payload["attack_boxes"] = self.attack_box_frames
+        self.payload["number_of_frames"] = self._frame_count()
+        self.payload.pop("hit_geometry", None)
+        self.payload.pop("attack_geometry", None)
+        with self.manifest_path.open("w", encoding="utf-8") as fh:
+            json.dump(self.manifest, fh, indent=2)
+            fh.write("\n")
 
-    def _on_anchor_select(self, _event=None):
+    def _find_nearest(self, canvas_x, canvas_y):
+        best = None
+        best_dist_sq = SELECT_RADIUS_PX * SELECT_RADIUS_PX
+        for idx, anchor in enumerate(self.anchor_frames[self.current_frame]):
+            ax, ay = self._texture_to_canvas(anchor["texture_x"], anchor["texture_y"])
+            dist_sq = (ax - canvas_x) * (ax - canvas_x) + (ay - canvas_y) * (ay - canvas_y)
+            if dist_sq <= best_dist_sq:
+                best_dist_sq = dist_sq
+                best = ("anchor", idx, 0)
+        for kind in ("hit_box", "attack_box"):
+            for box_index, box in enumerate(self._current_boxes(kind)):
+                for corner_index, corner in enumerate(box.get("corners", [])[:4]):
+                    cx, cy = self._texture_to_canvas(corner.get("texture_x", 0), corner.get("texture_y", 0))
+                    dist_sq = (cx - canvas_x) * (cx - canvas_x) + (cy - canvas_y) * (cy - canvas_y)
+                    if dist_sq <= best_dist_sq:
+                        best_dist_sq = dist_sq
+                        best = (kind, box_index, corner_index)
+        return best
+
+    def _move_selected_to(self, canvas_x, canvas_y):
+        tx, ty = self._canvas_to_texture(canvas_x, canvas_y, clamp=True)
+        px = max(0, int(round(tx)))
+        py = max(0, int(round(ty)))
+        if self.selected_kind == "anchor" and 0 <= self.selected_index < len(self.anchor_frames[self.current_frame]):
+            anchor = self.anchor_frames[self.current_frame][self.selected_index]
+            anchor["texture_x"] = px
+            anchor["texture_y"] = py
+        elif self.selected_kind in ("hit_box", "attack_box"):
+            boxes = self._current_boxes(self.selected_kind)
+            if 0 <= self.selected_index < len(boxes):
+                corners = boxes[self.selected_index].setdefault("corners", [])
+                while len(corners) < 4:
+                    corners.append({"texture_x": 0, "texture_y": 0})
+                corners[self.selected_corner]["texture_x"] = px
+                corners[self.selected_corner]["texture_y"] = py
+        else:
+            return
+        self._dirty_drag = True
+        prev_loading = self.loading
+        self.loading = True
+        self.x_var.set(str(px))
+        self.y_var.set(str(py))
+        self.loading = prev_loading
+        self._render_preview()
+
+    def _on_preview_click(self, event):
+        found = self._find_nearest(event.x, event.y)
+        if found:
+            self._set_selection(found[0], found[1], found[2])
+        else:
+            self._set_selection()
+        self._refresh_entity_list()
+        self._load_form()
+        self._render_preview()
+        self._dragging = self.selected_kind is not None
+
+    def _on_preview_drag(self, event):
+        if not self._dragging:
+            return
+        self._move_selected_to(event.x, event.y)
+        self._save_manifest()
+
+    def _on_preview_release(self, _event=None):
+        if self._dirty_drag:
+            self._save_manifest()
+            self._dirty_drag = False
+        self._dragging = False
+
+    def _on_preview_configure(self, _event=None):
+        self._render_preview()
+
+    def _on_entity_select(self, _event=None):
         if self.loading:
             return
-        sel = self.anchor_list.curselection()
-        self.current_anchor = sel[0] if sel else -1
-        if self.current_anchor >= 0:
-            self.loading = True
-            self._load_anchor_form()
-            self.loading = False
+        selection = self.entity_list.curselection()
+        if not selection:
+            self._set_selection()
+            self._load_form()
+            self._render_preview()
+            return
+        kind, index = self._entity_map[selection[0]]
+        corner = self.selected_corner if self.selected_kind == kind and self.selected_index == index else 0
+        self._set_selection(kind, index, corner)
+        self._load_form()
+        self._render_preview()
+
+    def _unique_anchor_name(self, desired, skip_index=None):
+        existing = {a["name"] for i, a in enumerate(self.anchor_frames[self.current_frame]) if i != skip_index}
+        return _normalize_unique_name(desired, existing, "anchor")
+
+    def _unique_box_name(self, kind, desired, skip_index=None):
+        existing = {b["name"] for i, b in enumerate(self._current_boxes(kind)) if i != skip_index}
+        default_name = "attack_box" if kind == "attack_box" else "hit_box"
+        return _normalize_unique_name(desired, existing, default_name)
 
     def _on_value_change(self):
-        if self.loading or self.current_anchor < 0:
+        if self.loading:
             return
-        frame = self.frames[self.current_frame]
-        if self.current_anchor >= len(frame):
+        if self.selected_kind == "anchor" and 0 <= self.selected_index < len(self.anchor_frames[self.current_frame]):
+            anchor = self.anchor_frames[self.current_frame][self.selected_index]
+            desired_name = (self.name_var.get() or "").strip() or f"anchor_{self.selected_index + 1}"
+            unique_name = self._unique_anchor_name(desired_name, skip_index=self.selected_index)
+            if unique_name != self.name_var.get():
+                prev_loading = self.loading
+                self.loading = True
+                self.name_var.set(unique_name)
+                self.loading = prev_loading
+            anchor["name"] = unique_name
+            anchor["texture_x"] = max(0, _read_int(self.x_var.get(), anchor.get("texture_x", 0)))
+            anchor["texture_y"] = max(0, _read_int(self.y_var.get(), anchor.get("texture_y", 0)))
+            anchor["depth_offset"] = _read_int(self.depth_var.get(), anchor.get("depth_offset", 0))
+        elif self.selected_kind in ("hit_box", "attack_box"):
+            boxes = self._current_boxes(self.selected_kind)
+            if 0 <= self.selected_index < len(boxes):
+                box = boxes[self.selected_index]
+                default_name = f"{'attack' if self.selected_kind == 'attack_box' else 'hit'}_box_{self.selected_index + 1}"
+                desired_name = (self.name_var.get() or "").strip() or default_name
+                unique_name = self._unique_box_name(self.selected_kind, desired_name, skip_index=self.selected_index)
+                if unique_name != self.name_var.get():
+                    prev_loading = self.loading
+                    self.loading = True
+                    self.name_var.set(unique_name)
+                    self.loading = prev_loading
+                box["name"] = unique_name
+                box["extrusion_amount"] = max(0, _read_int(self.extrusion_var.get(), box.get("extrusion_amount", 0)))
+                corners = box.setdefault("corners", [])
+                while len(corners) < 4:
+                    corners.append({"texture_x": 0, "texture_y": 0})
+                corner = corners[self.selected_corner]
+                corner["texture_x"] = max(0, _read_int(self.x_var.get(), corner.get("texture_x", 0)))
+                corner["texture_y"] = max(0, _read_int(self.y_var.get(), corner.get("texture_y", 0)))
+                if self.selected_kind == "attack_box":
+                    box["damage_amount"] = _read_int(self.damage_var.get(), box.get("damage_amount", 0))
+        else:
             return
-        desired_name = (self.anchor_name_var.get() or "").strip()
-        fallback_name = f"anchor_{self.current_anchor + 1}"
-        desired_name = desired_name or fallback_name
-        unique_name = self._unique_name_for_current_frame(desired_name, skip_index=self.current_anchor)
-        if unique_name != self.anchor_name_var.get():
-            prev_loading = self.loading
-            self.loading = True
-            self.anchor_name_var.set(unique_name)
-            self.loading = prev_loading
-        anchor = frame[self.current_anchor]
-        anchor["name"] = unique_name
-        anchor["texture_x"] = max(0, _read_int(self.anchor_x_var.get(), anchor.get("texture_x", 0)))
-        anchor["texture_y"] = max(0, _read_int(self.anchor_y_var.get(), anchor.get("texture_y", 0)))
-        anchor["depth_offset"] = _read_int(self.anchor_depth_offset_var.get(), anchor.get("depth_offset", 0))
-        self.anchor_list.delete(self.current_anchor)
-        self.anchor_list.insert(self.current_anchor, f"{self.current_anchor + 1}. {anchor['name']}")
-        self.anchor_list.selection_set(self.current_anchor)
-        self.anchor_list.see(self.current_anchor)
+        self._refresh_entity_list()
+        self._load_form()
         self._render_preview()
         self._save_manifest()
 
     def _add_anchor(self):
-        frame = self.frames[self.current_frame]
-        new_anchor = {
-            "name": self._unique_name_for_current_frame(f"anchor_{len(frame) + 1}"),
+        frame = self.anchor_frames[self.current_frame]
+        frame.append({
+            "name": self._unique_anchor_name(f"anchor_{len(frame) + 1}"),
             "texture_x": 0,
             "texture_y": 0,
             "depth_offset": 0,
-        }
-        frame.append(new_anchor)
-        self.current_anchor = len(frame) - 1
+        })
+        self._set_selection("anchor", len(frame) - 1, 0)
         self._refresh_frame_ui()
         self._save_manifest()
 
-    def _delete_anchor(self):
-        if self.current_anchor < 0:
+    def _new_box(self, kind):
+        default = f"{'attack' if kind == 'attack_box' else 'hit'}_box_{len(self._current_boxes(kind)) + 1}"
+        box = {
+            "name": self._unique_box_name(kind, default),
+            "extrusion_amount": 0,
+            "corners": [
+                {"texture_x": 0, "texture_y": 0},
+                {"texture_x": 16, "texture_y": 0},
+                {"texture_x": 16, "texture_y": 16},
+                {"texture_x": 0, "texture_y": 16},
+            ],
+        }
+        if kind == "attack_box":
+            box["damage_amount"] = 0
+        return box
+
+    def _add_hit_box(self):
+        frame = self.hit_box_frames[self.current_frame]
+        frame.append(self._new_box("hit_box"))
+        self._set_selection("hit_box", len(frame) - 1, 0)
+        self._refresh_frame_ui()
+        self._save_manifest()
+
+    def _add_attack_box(self):
+        frame = self.attack_box_frames[self.current_frame]
+        frame.append(self._new_box("attack_box"))
+        self._set_selection("attack_box", len(frame) - 1, 0)
+        self._refresh_frame_ui()
+        self._save_manifest()
+
+    def _delete_selected(self):
+        if self.selected_kind == "anchor" and 0 <= self.selected_index < len(self.anchor_frames[self.current_frame]):
+            self.anchor_frames[self.current_frame].pop(self.selected_index)
+        elif self.selected_kind in ("hit_box", "attack_box"):
+            boxes = self._current_boxes(self.selected_kind)
+            if 0 <= self.selected_index < len(boxes):
+                boxes.pop(self.selected_index)
+            else:
+                return
+        else:
             return
-        frame = self.frames[self.current_frame]
-        if self.current_anchor >= len(frame):
-            return
-        frame.pop(self.current_anchor)
-        if self.current_anchor >= len(frame):
-            self.current_anchor = len(frame) - 1
+        self._set_selection()
         self._refresh_frame_ui()
         self._save_manifest()
 
@@ -706,60 +864,79 @@ class AnchorEditorApp:
             for frame in anchors:
                 for anchor in frame:
                     angle = random.uniform(0.0, 2.0 * math.pi)
-                    delta_x = int(round(12.0 * math.cos(angle)))
-                    delta_y = int(round(12.0 * math.sin(angle)))
-                    anchor["texture_x"] = max(0, anchor["texture_x"] + delta_x)
-                    anchor["texture_y"] = max(0, anchor["texture_y"] + delta_y)
+                    anchor["texture_x"] = max(0, anchor["texture_x"] + int(round(12.0 * math.cos(angle))))
+                    anchor["texture_y"] = max(0, anchor["texture_y"] + int(round(12.0 * math.sin(angle))))
             payload["anchor_points"] = anchors
             payload["number_of_frames"] = len(anchors)
+            payload.pop("hit_geometry", None)
+            payload.pop("attack_geometry", None)
             if anim_id == self.animation_id:
-                self.frames = anchors
+                self.anchor_frames = anchors
+                self._ensure_frame_count(frame_count)
         self._save_manifest()
         self._refresh_frame_ui()
+
+    def _frame_snapshot(self, idx):
+        return {
+            "anchor_points": copy.deepcopy(self.anchor_frames[idx]),
+            "hit_boxes": copy.deepcopy(self.hit_box_frames[idx]),
+            "attack_boxes": copy.deepcopy(self.attack_box_frames[idx]),
+        }
+
+    def _apply_snapshot_to_frame(self, idx, snapshot):
+        self.anchor_frames[idx] = copy.deepcopy(snapshot["anchor_points"])
+        self.hit_box_frames[idx] = copy.deepcopy(snapshot["hit_boxes"])
+        self.attack_box_frames[idx] = copy.deepcopy(snapshot["attack_boxes"])
 
     def _prev_frame(self):
         if self.current_frame > 0:
             self.current_frame -= 1
-            self.current_anchor = -1
+            self._set_selection()
             self._refresh_frame_ui()
 
     def _next_frame(self):
         if self.current_frame + 1 < self._frame_count():
             self.current_frame += 1
-            self.current_anchor = -1
+            self._set_selection()
             self._refresh_frame_ui()
 
     def _apply_to_next(self):
         if self.current_frame + 1 >= self._frame_count():
             return
-        self.frames[self.current_frame + 1] = copy.deepcopy(self.frames[self.current_frame])
+        snapshot = self._frame_snapshot(self.current_frame)
+        self._apply_snapshot_to_frame(self.current_frame + 1, snapshot)
         self._save_manifest()
 
     def _apply_to_animation(self):
-        source = copy.deepcopy(self.frames[self.current_frame])
+        snapshot = self._frame_snapshot(self.current_frame)
         for idx in range(self._frame_count()):
-            self.frames[idx] = copy.deepcopy(source)
+            self._apply_snapshot_to_frame(idx, snapshot)
         self._refresh_frame_ui()
         self._save_manifest()
 
     def _apply_to_all_animations(self):
-        source = copy.deepcopy(self.frames[self.current_frame])
+        snapshot = self._frame_snapshot(self.current_frame)
         for anim_id, payload in self.animations.items():
             if not isinstance(payload, dict):
                 continue
             frame_count = _frame_count_with_disk(payload, self.manifest_root, self.asset, self.asset_key)
             anchors = _normalize_anchor_points(payload, frame_count_override=frame_count)
-            if len(anchors) < frame_count:
-                anchors.extend([[] for _ in range(frame_count - len(anchors))])
-            # Apply the current frame's anchor data to every frame in this animation.
+            hit_boxes = _normalize_boxes(payload, "hit_boxes", frame_count_override=frame_count, attack=False)
+            attack_boxes = _normalize_boxes(payload, "attack_boxes", frame_count_override=frame_count, attack=True)
             for idx in range(frame_count):
-                if idx >= len(anchors):
-                    anchors.append([])
-                anchors[idx] = copy.deepcopy(source)
+                anchors[idx] = copy.deepcopy(snapshot["anchor_points"])
+                hit_boxes[idx] = copy.deepcopy(snapshot["hit_boxes"])
+                attack_boxes[idx] = copy.deepcopy(snapshot["attack_boxes"])
             payload["anchor_points"] = anchors
+            payload["hit_boxes"] = hit_boxes
+            payload["attack_boxes"] = attack_boxes
             payload["number_of_frames"] = frame_count
+            payload.pop("hit_geometry", None)
+            payload.pop("attack_geometry", None)
             if anim_id == self.animation_id:
-                self.frames = anchors
+                self.anchor_frames = anchors
+                self.hit_box_frames = hit_boxes
+                self.attack_box_frames = attack_boxes
         self._refresh_frame_ui()
         self._save_manifest()
 
@@ -770,7 +947,6 @@ class AnchorEditorApp:
             messagebox.showerror("Save failed", str(exc))
             return
         self.root.destroy()
-
 
 class AssetSelectionApp:
     def __init__(self, root, manifest_path: Path, default_asset_id=None):
@@ -807,7 +983,7 @@ class AssetSelectionApp:
         header.pack(fill="x", padx=8, pady=(8, 4))
         tk.Label(
             header,
-            text="Choose an asset to edit anchor points",
+            text="Choose an asset to edit anchors, hit boxes, and attack boxes",
             font=FONTS["title"],
             fg=PALETTE["accent"],
             bg=PALETTE["nav_bg"],
@@ -879,7 +1055,7 @@ class AssetSelectionApp:
         self.animation_list.bind("<Return>", self._on_animation_select)
         tk.Label(
             animation_frame,
-            text="Click an animation to open the anchor editor.",
+            text="Click an animation to open the editor.",
             font=FONTS["body"],
             fg=PALETTE["muted"],
             bg=PALETTE["panel"],
@@ -990,8 +1166,9 @@ class AssetSelectionApp:
             return
         editor_window.focus_set()
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Anchor point editor for manifest animations")
+    parser = argparse.ArgumentParser(description="Anchor/hit-box/attack-box editor for manifest animations")
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST_PATH))
     parser.add_argument("--asset")
     parser.add_argument("--animation")

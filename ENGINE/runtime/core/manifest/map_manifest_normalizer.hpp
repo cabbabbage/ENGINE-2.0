@@ -29,7 +29,6 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
 nlohmann::json build_default_map_manifest(const std::string& map_name);
 
 MapManifestBootstrapResult bootstrap_map_manifest(const ManifestData& manifest_data,
-                                                  const std::string& map_id,
-                                                  const nlohmann::json* fallback_manifest = nullptr);
+                                                  const std::string& map_id);
 
 }

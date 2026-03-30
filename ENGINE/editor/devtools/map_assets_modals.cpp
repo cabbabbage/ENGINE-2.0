@@ -3,10 +3,12 @@
 #include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <unordered_set>
@@ -50,6 +52,70 @@ double read_candidate_weight(const json& candidate) {
         return static_cast<double>(candidate.get<int>());
     }
     return 0.0;
+}
+
+constexpr std::string_view kNullCandidateName = "null";
+
+bool is_null_candidate_name(std::string_view name) {
+    if (name.size() != kNullCandidateName.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < name.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(name[i])) != kNullCandidateName[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+constexpr int kMapWideGridResolutionMin = 5;
+constexpr int kMapWideGridResolutionMax = 10;
+
+bool ensure_null_candidate_entry(json& entry) {
+    if (!entry.is_object()) return false;
+    auto it = entry.find("candidates");
+    if (it == entry.end() || !it->is_array()) {
+        entry["candidates"] = json::array();
+        it = entry.find("candidates");
+    }
+    if (it == entry.end() || !it->is_array()) {
+        return false;
+    }
+    for (const auto& candidate : *it) {
+        if (candidate.is_object()) {
+            if (is_null_candidate_name(candidate.value("name", std::string{}))) {
+                return false;
+            }
+        }
+    }
+    json null_candidate = json::object();
+    null_candidate["name"] = std::string{kNullCandidateName};
+    null_candidate["chance"] = 0;
+    it->push_back(std::move(null_candidate));
+    return true;
+}
+
+bool is_pointer_or_wheel_event(const SDL_Event& e) {
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_WHEEL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_text_or_key_event(const SDL_Event& e) {
+    switch (e.type) {
+        case SDL_EVENT_TEXT_INPUT:
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
+            return true;
+        default:
+            return false;
+    }
 }
 
 class LabelWidget : public Widget {
@@ -166,9 +232,9 @@ public:
 
     CandidateListPanelImpl() : DockableCollapsible("Spawn Group Candidates", true) {
         set_scroll_enabled(true);
-        set_floating_content_width(480);
-        set_cell_width(420);
-        set_row_gap(8);
+        set_floating_content_width(520);
+        set_cell_width(460);
+        set_row_gap(10);
         set_col_gap(12);
         set_padding(12);
     }
@@ -186,6 +252,20 @@ public:
         set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
         if (pie_widget_) {
             pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
+        }
+    }
+
+    void set_manifest_store(devmode::core::ManifestStore* store) {
+        manifest_store_ = store;
+        if (pie_widget_) {
+            pie_widget_->set_manifest_store(manifest_store_);
+        }
+    }
+
+    void set_assets(Assets* assets) {
+        assets_ = assets;
+        if (pie_widget_) {
+            pie_widget_->set_assets(assets_);
         }
     }
 
@@ -214,14 +294,27 @@ public:
         }
 
         if (!display_name_widget_) display_name_widget_ = std::make_unique<LabelWidget>();
-        if (!candidates_header_) candidates_header_ = std::make_unique<LabelWidget>("Candidates");
         if (!instructions_label_) {
-            instructions_label_ = std::make_unique<LabelWidget>( "Scroll on a slice to adjust weight. Double-click to remove.", DMStyles::Label().color, true);
+            instructions_label_ = std::make_unique<LabelWidget>(
+                "Adjust the grid resolution and candidate weights for the map-wide batch.", DMStyles::Label().color, true);
+        }
+        if (!candidate_set_header_) {
+            candidate_set_header_ = std::make_unique<LabelWidget>();
+        }
+        if (!regen_button_) {
+            regen_button_ = std::make_unique<DMButton>("Regenerate Map Assets",
+                                                       &DMStyles::AccentButton(),
+                                                       200,
+                                                       DMButton::height());
+            regen_button_widget_ =
+                std::make_unique<ButtonWidget>(regen_button_.get(), [this]() { this->handle_regen(); });
         }
         if (!pie_widget_) {
             pie_widget_ = std::make_unique<CandidateEditorPieGraphWidget>();
         }
         pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
+        pie_widget_->set_manifest_store(manifest_store_);
+        pie_widget_->set_assets(assets_);
         pie_widget_->set_on_request_layout([this]() { this->layout(); });
         // Regular modal writes directly to the section; apply immediately
         pie_widget_->set_defer_adjust_until_release(false);
@@ -234,10 +327,27 @@ public:
         }
         pie_widget_->set_on_add_candidate([this](const std::string& value) { this->add_candidate_from_search(value); });
 
+        const int resolution = current_grid_resolution();
+        if (!grid_resolution_stepper_) {
+            grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (2^r px)",
+                                                                          kMapWideGridResolutionMin,
+                                                                          kMapWideGridResolutionMax,
+                                                                          resolution);
+            grid_resolution_stepper_->set_step(1);
+            grid_resolution_stepper_->set_on_change([this](int value) { this->update_grid_resolution(value); });
+            grid_resolution_widget_ = std::make_unique<StepperWidget>(grid_resolution_stepper_.get());
+        } else {
+            grid_resolution_stepper_->set_value(resolution);
+        }
+
+        if (entry_) {
+            (*entry_)["grid_resolution"] = resolution;
+        }
+
         if (!ownership_label_.empty()) {
             set_title(ownership_label_ + " Candidates");
         } else {
-            set_title("Spawn Group Candidates");
+            set_title("Map-wide Candidates");
         }
 
         rebuild_rows(true);
@@ -255,20 +365,11 @@ public:
     }
 
     bool handle_event(const SDL_Event& e) override {
-        bool used = DockableCollapsible::handle_event(e);
-        if (!entry_ || !expanded_) {
-            return used;
+        if (route_embedded_search_event(e)) {
+            return true;
         }
 
-        if (grid_resolution_slider_ && grid_resolution_slider_->handle_event(e)) {
-            used = true;
-            if (entry_) {
-                (*entry_)["grid_resolution"] = grid_resolution_slider_->value();
-                notify_save(false);
-            }
-        }
-
-        return used;
+        return DockableCollapsible::handle_event(e);
     }
 
     void update(const Input& input, int screen_w, int screen_h) override {
@@ -277,7 +378,16 @@ public:
         if (pie_widget_) {
             pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
         }
+        const SDL_Point pointer{input.getX(), input.getY()};
+        const bool suppress_parent_scroll =
+            pie_widget_ && pie_widget_->is_search_point_inside(pointer.x, pointer.y);
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(false);
+        }
         DockableCollapsible::update(input, screen_w, screen_h);
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(true);
+        }
         if (pie_widget_) {
             pie_widget_->update_search(input);
         }
@@ -288,6 +398,16 @@ protected:
     std::string_view lock_settings_id() const override { return "candidates"; }
 
 private:
+    bool route_embedded_search_event(const SDL_Event& e) {
+        if (!pie_widget_ || !pie_widget_->is_search_visible()) {
+            return false;
+        }
+        if (!is_pointer_or_wheel_event(e) && !is_text_or_key_event(e)) {
+            return false;
+        }
+        return pie_widget_->handle_event(e);
+    }
+
     bool sanitize_entry() {
         if (!entry_) return false;
         bool changed = devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
@@ -320,33 +440,25 @@ private:
             rows.push_back({display_name_widget_.get()});
         }
 
-        if (candidates_header_) {
-            candidates_header_->set_subtle(false);
-            rows.push_back({candidates_header_.get()});
-        }
-
         if (instructions_label_) {
             instructions_label_->set_subtle(true);
             rows.push_back({instructions_label_.get()});
         }
 
-        if (!grid_resolution_slider_) {
-            constexpr int kMinResolution = 5;
-            constexpr int kMaxResolution = 10;
-            int current_resolution = kMinResolution;
-            if (entry_ && entry_->contains("grid_resolution")) {
-                current_resolution = std::max(kMinResolution, entry_->value("grid_resolution", kMinResolution));
-            }
-            grid_resolution_slider_ = std::make_unique<DMSlider>("Grid Resolution (2^r px)", kMinResolution, kMaxResolution, current_resolution);
-
-            if (entry_) {
-                (*entry_)["grid_resolution"] = current_resolution;
-            }
+        if (regen_button_widget_) {
+            rows.push_back({regen_button_widget_.get()});
         }
-        if (grid_resolution_slider_) {
-            auto grid_slider_widget = std::make_unique<SliderWidget>(grid_resolution_slider_.get());
-            rows.push_back({grid_slider_widget.get()});
-            widgets_.push_back(std::move(grid_slider_widget));
+
+        if (candidate_set_header_) {
+            candidate_set_header_->set_text("Candidate Set 1");
+            candidate_set_header_->set_subtle(false);
+            rows.push_back({candidate_set_header_.get()});
+        }
+
+        if (grid_resolution_widget_ && grid_resolution_stepper_) {
+            const int resolution = current_grid_resolution();
+            grid_resolution_stepper_->set_value(resolution);
+            rows.push_back({grid_resolution_widget_.get()});
         }
 
         if (pie_widget_) {
@@ -426,6 +538,25 @@ private:
         }
     }
 
+    int current_grid_resolution() const {
+        if (!entry_) return kMapWideGridResolutionMin;
+        int value = entry_->value("grid_resolution", kMapWideGridResolutionMin);
+        return clamp_map_grid_resolution(value);
+    }
+
+    static int clamp_map_grid_resolution(int value) {
+        int clamped = std::clamp(value, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+        clamped = vibble::grid::clamp_resolution(clamped);
+        return std::clamp(clamped, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+    }
+
+    void update_grid_resolution(int value) {
+        if (!entry_) return;
+        const int resolved = clamp_map_grid_resolution(value);
+        (*entry_)["grid_resolution"] = resolved;
+        notify_save(false);
+    }
+
     json* entry_ = nullptr;
     std::string default_display_name_{};
     std::string ownership_label_{};
@@ -435,14 +566,18 @@ private:
 
     int screen_w_ = 1920;
     int screen_h_ = 1080;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
 
     std::unique_ptr<LabelWidget> ownership_label_widget_{};
     std::unique_ptr<LabelWidget> display_name_widget_{};
-    std::unique_ptr<LabelWidget> candidates_header_{};
     std::unique_ptr<LabelWidget> instructions_label_{};
+    std::unique_ptr<LabelWidget> candidate_set_header_{};
     std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget_{};
-    std::unique_ptr<DMSlider> grid_resolution_slider_{};
-    std::vector<std::unique_ptr<Widget>> widgets_{};
+    std::unique_ptr<DMButton> regen_button_{};
+    std::unique_ptr<ButtonWidget> regen_button_widget_{};
+    std::unique_ptr<DMNumericStepper> grid_resolution_stepper_{};
+    std::unique_ptr<StepperWidget> grid_resolution_widget_{};
 };
 
 class BoundaryCandidateListPanelImpl : public DockableCollapsible {
@@ -473,6 +608,24 @@ public:
         for (auto& group : group_widgets_) {
             if (group.pie_widget) {
                 group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+            }
+        }
+    }
+
+    void set_manifest_store(devmode::core::ManifestStore* store) {
+        manifest_store_ = store;
+        for (auto& group : group_widgets_) {
+            if (group.pie_widget) {
+                group.pie_widget->set_manifest_store(manifest_store_);
+            }
+        }
+    }
+
+    void set_assets(Assets* assets) {
+        assets_ = assets;
+        for (auto& group : group_widgets_) {
+            if (group.pie_widget) {
+                group.pie_widget->set_assets(assets_);
             }
         }
     }
@@ -550,6 +703,9 @@ public:
     }
 
     bool handle_event(const SDL_Event& e) override {
+        if (route_embedded_search_event(e)) {
+            return true;
+        }
         return DockableCollapsible::handle_event(e);
     }
 
@@ -561,7 +717,22 @@ public:
                 group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
             }
         }
+        const SDL_Point pointer{input.getX(), input.getY()};
+        bool suppress_parent_scroll = false;
+        for (const auto& group : group_widgets_) {
+            if (!group.pie_widget) continue;
+            if (group.pie_widget->is_search_point_inside(pointer.x, pointer.y)) {
+                suppress_parent_scroll = true;
+                break;
+            }
+        }
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(false);
+        }
         DockableCollapsible::update(input, screen_w, screen_h);
+        if (suppress_parent_scroll) {
+            set_scroll_enabled(true);
+        }
         for (auto& group : group_widgets_) {
             if (group.pie_widget) {
                 group.pie_widget->update_search(input);
@@ -597,6 +768,26 @@ private:
         BoundaryCandidateListPanelImpl* owner_;
     };
 
+    CandidateEditorPieGraphWidget* active_search_widget() {
+        for (auto& group : group_widgets_) {
+            if (group.pie_widget && group.pie_widget->is_search_visible()) {
+                return group.pie_widget.get();
+            }
+        }
+        return nullptr;
+    }
+
+    bool route_embedded_search_event(const SDL_Event& e) {
+        CandidateEditorPieGraphWidget* widget = active_search_widget();
+        if (!widget) {
+            return false;
+        }
+        if (!is_pointer_or_wheel_event(e) && !is_text_or_key_event(e)) {
+            return false;
+        }
+        return widget->handle_event(e);
+    }
+
     json& ensure_candidate_selectors() {
         if (!section_) {
             static json empty = json::array();
@@ -630,14 +821,20 @@ private:
         return nullptr;
     }
 
-    int resolve_unique_resolution(int desired, const std::unordered_set<int>& used) const {
+    int resolve_unique_resolution(int desired, const std::unordered_set<int>& used, int current) const {
         const int clamped = vibble::grid::clamp_resolution(desired);
         if (used.find(clamped) == used.end()) return clamped;
+        const bool prefer_down = clamped < current;
         for (int offset = 1; offset <= vibble::grid::kMaxResolution; ++offset) {
             int up = clamped + offset;
-            if (up <= vibble::grid::kMaxResolution && used.find(up) == used.end()) return up;
             int down = clamped - offset;
-            if (down >= 0 && used.find(down) == used.end()) return down;
+            if (prefer_down) {
+                if (down >= 0 && used.find(down) == used.end()) return down;
+                if (up <= vibble::grid::kMaxResolution && used.find(up) == used.end()) return up;
+            } else {
+                if (up <= vibble::grid::kMaxResolution && used.find(up) == used.end()) return up;
+                if (down >= 0 && used.find(down) == used.end()) return down;
+            }
         }
         return clamped;
     }
@@ -665,6 +862,7 @@ private:
                 changed = true;
             }
             changed = devmode::spawn::ensure_spawn_group_entry_defaults(entry, default_display_name_) || changed;
+            if (ensure_null_candidate_entry(entry)) changed = true;
             int grid_resolution = entry.value("grid_resolution", 5);
             grid_resolution = vibble::grid::clamp_resolution(grid_resolution);
             if (!entry.contains("grid_resolution") || !entry["grid_resolution"].is_number_integer() ||
@@ -685,7 +883,7 @@ private:
         for (auto& entry : selectors) {
             if (!entry.is_object()) continue;
             int grid_resolution = entry.value("grid_resolution", 5);
-            int unique = resolve_unique_resolution(grid_resolution, used);
+            int unique = resolve_unique_resolution(grid_resolution, used, grid_resolution);
             if (unique != grid_resolution) {
                 entry["grid_resolution"] = unique;
                 changed = true;
@@ -778,6 +976,8 @@ private:
 
             group.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
             group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+            group.pie_widget->set_manifest_store(manifest_store_);
+            group.pie_widget->set_assets(assets_);
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
             // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
             group.pie_widget->set_defer_adjust_until_release(true);
@@ -792,6 +992,7 @@ private:
             });
             // Single regen button at panel level; keep per-group regen disabled.
             group.pie_widget->set_on_regenerate({});
+            ensure_null_candidate_entry(entry);
             group.pie_widget->set_candidates_from_json(entry);
             rows.push_back({group.pie_widget.get()});
 
@@ -815,6 +1016,7 @@ private:
             if (!group.pie_widget) continue;
             json* entry = find_group_by_spawn_id(group.spawn_id);
             if (!entry) continue;
+            ensure_null_candidate_entry(*entry);
             group.pie_widget->set_candidates_from_json(*entry);
         }
     }
@@ -824,13 +1026,15 @@ private:
         auto& selectors = ensure_candidate_selectors();
         json entry = json::object();
         devmode::spawn::ensure_spawn_group_entry_defaults(entry, default_display_name_);
+        ensure_null_candidate_entry(entry);
 
         std::unordered_set<int> used;
         for (const auto& existing : selectors) {
             if (!existing.is_object()) continue;
             used.insert(existing.value("grid_resolution", 5));
         }
-        int resolution = resolve_unique_resolution(entry.value("grid_resolution", 5), used);
+        const int desired_resolution = entry.value("grid_resolution", 5);
+        int resolution = resolve_unique_resolution(desired_resolution, used, desired_resolution);
         entry["grid_resolution"] = resolution;
         entry["jitter"] = 0;
 
@@ -868,7 +1072,7 @@ private:
             used.insert(other.value("grid_resolution", 5));
         }
 
-        int resolved = resolve_unique_resolution(desired, used);
+        int resolved = resolve_unique_resolution(desired, used, current);
         (*entry)["grid_resolution"] = resolved;
         notify_save(false);
 
@@ -1038,6 +1242,8 @@ private:
 
     int screen_w_ = 1920;
     int screen_h_ = 1080;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
 
     std::unique_ptr<LabelWidget> ownership_label_widget_{};
     std::unique_ptr<LabelWidget> instructions_label_{};
@@ -1126,6 +1332,8 @@ void SingleSpawnGroupModal::open(json& map_info,
 
     if (!panel_) panel_ = std::make_unique<CandidateListPanel>();
     panel_->set_screen_dimensions(screen_w_, screen_h_);
+    panel_->set_manifest_store(manifest_store_);
+    panel_->set_assets(assets_);
     panel_->bind(entry_,
                  default_display_name,
                  ownership_label,
@@ -1181,6 +1389,20 @@ void SingleSpawnGroupModal::set_screen_dimensions(int width, int height) {
     if (panel_) panel_->set_screen_dimensions(screen_w_, screen_h_);
     position_initialized_ = false;
     ensure_visible_position();
+}
+
+void SingleSpawnGroupModal::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    if (panel_) {
+        panel_->set_manifest_store(manifest_store_);
+    }
+}
+
+void SingleSpawnGroupModal::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (panel_) {
+        panel_->set_assets(assets_);
+    }
 }
 
 void SingleSpawnGroupModal::set_floating_stack_key(std::string key) {
@@ -1245,6 +1467,8 @@ void BoundarySpawnGroupModal::open(nlohmann::json& map_info,
 
     if (!panel_) panel_ = std::make_unique<BoundaryCandidateListPanel>();
     panel_->set_screen_dimensions(screen_w_, screen_h_);
+    panel_->set_manifest_store(manifest_store_);
+    panel_->set_assets(assets_);
     panel_->bind(section_,
                  default_display_name,
                  ownership_label,
@@ -1300,6 +1524,20 @@ void BoundarySpawnGroupModal::set_screen_dimensions(int width, int height) {
     if (panel_) panel_->set_screen_dimensions(screen_w_, screen_h_);
     position_initialized_ = false;
     ensure_visible_position();
+}
+
+void BoundarySpawnGroupModal::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    if (panel_) {
+        panel_->set_manifest_store(manifest_store_);
+    }
+}
+
+void BoundarySpawnGroupModal::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (panel_) {
+        panel_->set_assets(assets_);
+    }
 }
 
 void BoundarySpawnGroupModal::set_floating_stack_key(std::string key) {

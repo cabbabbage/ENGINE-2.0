@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <regex>
 #include <system_error>
+#include <unordered_set>
 
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
@@ -41,6 +42,7 @@
 #include "devtools/dev_footer_bar.hpp"
 #include "devtools/camera_ui.hpp"
 #include "devtools/depth_cue_settings.hpp"
+#include "core/manifest/depth_cue_settings.hpp"
 #include "devtools/foreground_background_effect_panel.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/sdl_pointer_utils.hpp"
@@ -72,11 +74,12 @@
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"
 #include "utils/input.hpp"
-#include "utils/rebuild_queue.hpp"
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
 #include "utils/string_utils.hpp"
 #include "utils/display_color.hpp"
+#include "assets/asset/primary_asset_cache.hpp"
+#include "image_cache_generator.hpp"
 
 #include <algorithm>
 #include <unordered_map>
@@ -168,6 +171,7 @@ constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
 constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
+constexpr float kLiveDepthWheelStepWorld = 25.0f;
 
 void persist_dev_bool(const char* key, bool value) {
     devmode::ui_settings::save_bool(key, value);
@@ -302,6 +306,24 @@ bool has_any_extension_ci(const std::filesystem::path& path, std::initializer_li
     return false;
 }
 
+bool is_supported_image_file(const std::filesystem::path& path) {
+    return has_any_extension_ci(path, {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"});
+}
+
+std::vector<std::filesystem::path> collect_existing_drop_items(const std::vector<std::filesystem::path>& raw_items) {
+    std::vector<std::filesystem::path> items;
+    items.reserve(raw_items.size());
+    for (const auto& path : raw_items) {
+        try {
+            if (std::filesystem::exists(path)) {
+                items.push_back(path);
+            }
+        } catch (...) {
+        }
+    }
+    return items;
+}
+
 std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) {
     std::vector<std::filesystem::path> normalized = files;
 
@@ -340,6 +362,73 @@ std::string sanitize_asset_name_local(const std::string& name) {
     return devmode::utils::normalize_asset_name(name);
 }
 
+std::vector<std::filesystem::path> collect_images_from_directory(const std::filesystem::path& directory) {
+    std::vector<std::filesystem::path> images;
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+            if (!entry.is_regular_file()) continue;
+            if (is_supported_image_file(entry.path())) {
+                images.push_back(entry.path());
+            }
+        }
+    } catch (...) {
+    }
+    return images;
+}
+
+std::filesystem::path find_frames_subfolder(const std::filesystem::path& folder) {
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(folder)) {
+            if (!entry.is_directory()) continue;
+            const std::string name = vibble::strings::to_lower_copy(entry.path().filename().string());
+            if (name == "frames") {
+                return entry.path();
+            }
+        }
+    } catch (...) {
+    }
+    return {};
+}
+
+DropValidationResult validate_dropped_folder(const std::filesystem::path& folder) {
+    DropValidationResult result;
+    result.kind = DropKind::PngFolder;
+    result.folder = folder;
+
+    const std::filesystem::path frames_dir = find_frames_subfolder(folder);
+    const bool has_frames_subfolder = !frames_dir.empty();
+    const std::filesystem::path image_source_dir = has_frames_subfolder ? frames_dir : folder;
+    std::vector<std::filesystem::path> images = collect_images_from_directory(image_source_dir);
+
+    if (images.empty()) {
+        const std::string folder_name = folder.filename().string();
+        if (has_frames_subfolder) {
+            result.reason = "Folder '" + folder_name + "' has a 'frames' folder but it contains no images.";
+        } else {
+            result.reason = "Folder '" + folder_name + "' has no images and no 'frames' folder.";
+        }
+        return result;
+    }
+
+    result.files = normalize_sequence(images);
+    result.valid = true;
+    return result;
+}
+
+bool is_multi_folder_drop(const std::vector<std::filesystem::path>& raw_items) {
+    std::vector<std::filesystem::path> items = collect_existing_drop_items(raw_items);
+    if (items.size() < 2) {
+        return false;
+    }
+    for (const auto& item : items) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(item, ec) || ec) {
+            return false;
+        }
+    }
+    return true;
+}
+
 DropValidationResult validate_drop_items(const std::vector<std::filesystem::path>& raw_items) {
     DropValidationResult result;
     if (raw_items.empty()) {
@@ -347,49 +436,18 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
         return result;
     }
 
-    std::vector<std::filesystem::path> items;
-    items.reserve(raw_items.size());
-    for (const auto& path : raw_items) {
-        try {
-            if (std::filesystem::exists(path)) {
-                items.push_back(path);
-            }
-        } catch (...) {
-        }
-    }
+    std::vector<std::filesystem::path> items = collect_existing_drop_items(raw_items);
     if (items.empty()) {
         result.reason = "Dropped items missing";
         return result;
     }
-
-    auto is_image = [](const std::filesystem::path& p) {
-        return has_any_extension_ci(p, {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"});
-    };
 
     if (items.size() == 1) {
         const auto& only = items.front();
         std::error_code ec;
         const bool is_dir = std::filesystem::is_directory(only, ec);
         if (is_dir && !ec) {
-            std::vector<std::filesystem::path> pngs;
-            try {
-                for (const auto& entry : std::filesystem::directory_iterator(only)) {
-                    if (!entry.is_regular_file()) continue;
-                    if (has_extension_ci(entry.path(), ".png")) {
-                        pngs.push_back(entry.path());
-                    }
-                }
-            } catch (...) {
-            }
-            if (pngs.empty()) {
-                result.reason = "Folder contains no PNG images";
-                return result;
-            }
-            result.kind = DropKind::PngFolder;
-            result.folder = only;
-            result.files = normalize_sequence(pngs);
-            result.valid = true;
-            return result;
+            return validate_dropped_folder(only);
         }
 
         if (has_extension_ci(only, ".gif")) {
@@ -404,7 +462,7 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
             result.valid = true;
             return result;
         }
-        if (is_image(only)) {
+        if (is_supported_image_file(only)) {
             result.reason = "Only PNG or GIF files are accepted";
             return result;
         }
@@ -414,7 +472,7 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
 
     for (const auto& item : items) {
         std::error_code ec;
-        if (!std::filesystem::is_regular_file(item, ec) || !is_image(item)) {
+        if (!std::filesystem::is_regular_file(item, ec) || !is_supported_image_file(item)) {
             result.reason = "All dropped items must be image files";
             return result;
         }
@@ -822,20 +880,10 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                         if (assets_) {
                             assets_->clear_map_data_dirty();
                         }
-                        map_write_path_ = devmode::core::SaveManager::MapWritePath::Default;
                         if (map_mode_ui_) map_mode_ui_->mark_layers_clean();
                         if (map_mode_ui_) map_mode_ui_->notify_saved();
                         if (room_editor_) room_editor_->notify_room_assets_saved();
-                    },
-                    map_write_path_);
-                if (ok && priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
-                    save_coordinator_.flush_now("Map session save");
-                }
-                if (ok && priority != devmode::core::DevSaveCoordinator::Priority::Immediate) {
-                    // Clear flag here; success callback will also clear but that's fine.
-                    map_dirty_ = false;
-                    map_write_path_ = devmode::core::SaveManager::MapWritePath::Default;
-                }
+                    });
                 return ok;
             },
             devmode::core::SaveManager::Stage::Manifest});
@@ -877,13 +925,13 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     if (camera_panel_) {
         camera_panel_->close();
     }
-    image_effect_panel_ = std::make_unique<ForegroundBackgroundEffectPanel>(assets_, 96, 160);
-    if (image_effect_panel_) {
-        image_effect_panel_->close();
+    ensure_image_effect_panel();
+    if (assets_) {
+        live_depth_settings_ = assets_->depth_cue_settings();
+    } else {
+        live_depth_settings_ = depth_cue::DepthCueSettings{};
     }
-    if (camera_panel_) {
-        camera_panel_->set_image_effects_panel_callback([this]() { this->toggle_image_effect_panel(); });
-    }
+    depth_cue::clamp(live_depth_settings_);
     if (map_editor_) {
         map_editor_->set_ui_blocker([this](int x, int y) { return is_pointer_over_dev_ui(x, y); });
     }
@@ -1026,21 +1074,127 @@ bool DevControls::run_exit_save_sequence(const std::string& reason) {
 
     const bool batch_saved =
         save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, reason);
-    save_coordinator_.flush_now(reason);
-    manifest_store_.flush();
 
     const bool has_dirty_after = save_manager_.has_dirty_saveables();
     bool cache_rebuild_attempted = false;
     bool cache_rebuild_ok = true;
     bool cache_pending_after = false;
 
-    if (!has_dirty_after) {
-        vibble::RebuildQueueCoordinator coordinator;
-        if (coordinator.has_pending_asset_work()) {
+    if (!has_dirty_after && assets_) {
+        struct PendingAssetRebuild {
+            std::shared_ptr<AssetInfo> info;
+            AssetInfo::TextureRebuildBucket pending;
+        };
+
+        class ExitRebuildLogger final : public imgcache::ILogger {
+        public:
+            void info(const std::string& msg) override {
+                vibble::log::info("[ExitRebuild] " + msg);
+            }
+            void warn(const std::string& msg) override {
+                vibble::log::warn("[ExitRebuild] " + msg);
+            }
+            void error(const std::string& msg) override {
+                vibble::log::warn("[ExitRebuild] " + msg);
+            }
+        };
+
+        std::vector<PendingAssetRebuild> pending_by_asset;
+        pending_by_asset.reserve(assets_->library().all().size());
+
+        imgcache::GeneratorOptions generator_options;
+#if defined(PROJECT_ROOT)
+        generator_options.manifest_path = std::filesystem::path(PROJECT_ROOT) / "manifest.json";
+#endif
+        generator_options.effects_backend = imgcache::EffectsBackend::Auto;
+        generator_options.quiet_task_logs = true;
+        generator_options.missing_only = false;
+        generator_options.force_rebuild = false;
+
+        std::unordered_set<std::string> assets_requiring_bundle_refresh;
+
+        for (const auto& [asset_name, info] : assets_->library().all()) {
+            if (asset_name.empty() || !info) {
+                continue;
+            }
+
+            auto pending = info->consume_pending_texture_rebuild_on_close();
+            if (pending.empty()) {
+                continue;
+            }
+
+            if (pending.bundle_refresh_required) {
+                assets_requiring_bundle_refresh.insert(asset_name);
+            }
+
+            for (const auto& [animation_name, animation_request] : pending.animations) {
+                imgcache::GeneratorOptions::AnimationRebuildRequest request;
+                request.asset_name = asset_name;
+                request.animation_name = animation_name;
+                request.all_frames_variant_mask =
+                    static_cast<std::uint8_t>(animation_request.all_frames_variants &
+                                              imgcache::kTextureVariantMaskAll);
+                for (const auto& [frame_index, frame_mask] : animation_request.frame_variants) {
+                    request.frame_variant_masks[frame_index] =
+                        static_cast<std::uint8_t>(frame_mask & imgcache::kTextureVariantMaskAll);
+                }
+                generator_options.explicit_rebuild_requests.push_back(std::move(request));
+            }
+
+            pending_by_asset.push_back(PendingAssetRebuild{info, std::move(pending)});
+        }
+
+        if (!pending_by_asset.empty()) {
             cache_rebuild_attempted = true;
-            std::cout << "[DevControls] Exit save sequence running pending asset cache rebuilds.\n";
-            cache_rebuild_ok = coordinator.run_asset_tool();
-            cache_pending_after = coordinator.has_pending_asset_work();
+
+            auto restore_pending_flags = [&pending_by_asset]() {
+                for (auto& entry : pending_by_asset) {
+                    if (!entry.info) {
+                        continue;
+                    }
+                    entry.info->merge_pending_texture_rebuild_on_close(entry.pending);
+                }
+            };
+
+            if (!generator_options.explicit_rebuild_requests.empty()) {
+                ExitRebuildLogger logger;
+                auto generation_result = imgcache::ImageCacheGenerator::Run(generator_options, logger);
+                if (!generation_result.ok) {
+                    cache_rebuild_ok = false;
+                    cache_pending_after = true;
+                    restore_pending_flags();
+                } else {
+                    assets_requiring_bundle_refresh.insert(generation_result.touched_assets.begin(),
+                                                           generation_result.touched_assets.end());
+                }
+            }
+
+            if (cache_rebuild_ok && !assets_requiring_bundle_refresh.empty()) {
+                PrimaryAssetCache bundle_cache(assets_->renderer());
+                for (const auto& asset_name : assets_requiring_bundle_refresh) {
+                    auto info = assets_->library().get(asset_name);
+                    if (!info) {
+                        continue;
+                    }
+                    if (!bundle_cache.save_current(*info)) {
+                        cache_rebuild_ok = false;
+                        cache_pending_after = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!cache_rebuild_ok && !cache_pending_after) {
+                cache_pending_after = true;
+            }
+            if (!cache_rebuild_ok) {
+                for (auto& entry : pending_by_asset) {
+                    if (!entry.info) {
+                        continue;
+                    }
+                    entry.info->merge_pending_texture_rebuild_on_close(entry.pending);
+                }
+            }
         }
     }
 
@@ -1078,6 +1232,10 @@ void DevControls::set_input(Input* input) {
 
 void DevControls::set_map_info(nlohmann::json* map_info) {
     map_info_json_ = map_info;
+    if (assets_) {
+        live_depth_settings_ = assets_->depth_cue_settings();
+        depth_cue::clamp(live_depth_settings_);
+    }
     if (map_mode_ui_) {
         map_mode_ui_->set_map_context(map_info_json_, map_path_);
     }
@@ -1483,6 +1641,10 @@ void DevControls::set_camera_override_for_testing(WarpedScreenGrid* camera_overr
 void DevControls::set_map_context(nlohmann::json* map_info, const std::string& map_path) {
     map_info_json_ = map_info;
     map_path_ = map_path;
+    if (assets_) {
+        live_depth_settings_ = assets_->depth_cue_settings();
+        depth_cue::clamp(live_depth_settings_);
+    }
     if (map_mode_ui_) {
         map_mode_ui_->set_map_context(map_info, map_path);
     }
@@ -1506,6 +1668,12 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
 }
 
 bool DevControls::is_pointer_over_dev_ui(int x, int y) const {
+    if (live_depth_edit_mode_active_) {
+        return true;
+    }
+    if (image_effect_panel_ && image_effect_panel_->is_visible()) {
+        return true;
+    }
     if (camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_point_inside(x, y)) {
         return true;
     }
@@ -1583,14 +1751,32 @@ void DevControls::set_enabled(bool enabled) {
 
         const char* msg = "[DevControls] preparing enable flow";
         std::cout << msg << "\n";
+        struct CameraPoseSnapshot {
+            bool valid = false;
+            SDL_Point center{0, 0};
+            double height_px = 1.0;
+            double zoom_percent = 0.0;
+            float pitch_deg = camera_math::kDefaultCameraTiltDeg;
+            bool has_focus_override = false;
+            SDL_Point focus_override{0, 0};
+            bool manual_height_override = false;
+            bool manual_zoom_override = false;
+        };
+
         WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
-        SDL_Point preserved_center{0, 0};
-        float preserved_scale = 1.0f;
-        bool should_restore_camera = false;
+        CameraPoseSnapshot preserved_camera{};
         if (camera_ptr) {
-            preserved_center = camera_ptr->get_screen_center();
-            preserved_scale = camera_ptr->get_scale();
-            should_restore_camera = true;
+            preserved_camera.valid = true;
+            preserved_camera.center = camera_ptr->get_screen_center();
+            preserved_camera.height_px = std::max(1.0, static_cast<double>(camera_ptr->get_scale()));
+            preserved_camera.zoom_percent = camera_ptr->get_zoom_percent();
+            preserved_camera.pitch_deg = camera_ptr->current_pitch_degrees();
+            preserved_camera.has_focus_override = camera_ptr->has_focus_override();
+            if (preserved_camera.has_focus_override) {
+                preserved_camera.focus_override = camera_ptr->get_focus_override_point();
+            }
+            preserved_camera.manual_height_override = camera_ptr->is_manual_height_override();
+            preserved_camera.manual_zoom_override = camera_ptr->is_manual_zoom_override();
         }
         const bool camera_was_visible = camera_panel_ && camera_panel_->is_visible();
         close_all_floating_panels();
@@ -1612,11 +1798,21 @@ void DevControls::set_enabled(bool enabled) {
             map_mode_ui_->set_map_mode_active(false);
             map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
         }
-        if (should_restore_camera && camera_ptr) {
+        if (preserved_camera.valid && camera_ptr) {
+            camera_ptr->set_scale(preserved_camera.height_px);
+            camera_ptr->set_zoom_percent(preserved_camera.zoom_percent);
+            camera_ptr->set_tilt_override(preserved_camera.pitch_deg);
+            if (preserved_camera.has_focus_override) {
+                camera_ptr->set_focus_override(preserved_camera.focus_override);
+            } else {
+                camera_ptr->clear_focus_override();
+            }
+            camera_ptr->set_screen_center(preserved_camera.center);
+            camera_ptr->set_manual_height_override(preserved_camera.manual_height_override);
+            camera_ptr->set_manual_zoom_override(preserved_camera.manual_zoom_override);
+            // Preserve the exact camera pose on dev entry.
             camera_ptr->set_manual_height_override(true);
-            camera_ptr->set_focus_override(preserved_center);
-            camera_ptr->set_screen_center(preserved_center);
-            camera_ptr->set_scale(preserved_scale);
+            camera_ptr->set_manual_zoom_override(true);
             camera_ptr->update();
         }
         if (camera_was_visible && camera_panel_) {
@@ -1627,6 +1823,7 @@ void DevControls::set_enabled(bool enabled) {
     } else {
         const char* msg_disable = "[DevControls] preparing disable flow";
         std::cout << msg_disable << "\n";
+        WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
         grid_overlay_enabled_ = false;
         other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, false);
         if (map_mode_ui_) {
@@ -1647,6 +1844,13 @@ void DevControls::set_enabled(bool enabled) {
         if (room_editor_) {
             room_editor_->set_enabled(false);
         }
+        if (camera_ptr) {
+            camera_ptr->set_manual_height_override(false);
+            camera_ptr->set_manual_zoom_override(false);
+            camera_ptr->clear_focus_override();
+            camera_ptr->clear_tilt_override();
+            camera_ptr->update();
+        }
         close_camera_panel();
         restore_filter_hidden_assets();
         const char* msg_disable_done = "[DevControls] disable flow complete";
@@ -1658,6 +1862,7 @@ void DevControls::set_enabled(bool enabled) {
         other_settings_.ensure_layout();
     }
     mark_layout_dirty();
+    update_movement_debug_visibility();
     {
         std::ostringstream oss;
         oss << "[DevControls] set_enabled(" << (enabled ? "true" : "false") << ") done";
@@ -1697,6 +1902,10 @@ void DevControls::sync_camera_tilt_override() {
 void DevControls::update(const Input& input) {
     save_coordinator_.begin_frame();
     if (!enabled_) return;
+    if (map_info_dirty_ && assets_) {
+        other_settings_.set_map_info(&assets_->map_info_json());
+        map_info_dirty_ = false;
+    }
     const bool ctrl = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
     const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool shift_blocks_headers = shift_down && mode_ == Mode::RoomEditor;
@@ -1726,8 +1935,10 @@ void DevControls::update(const Input& input) {
     }
 
     pointer_over_camera_panel_ =
+        !live_depth_edit_mode_active_ &&
         camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_point_inside(input.getX(), input.getY());
     pointer_over_image_effect_panel_ =
+        !live_depth_edit_mode_active_ &&
         image_effect_panel_ && image_effect_panel_->is_visible() && image_effect_panel_->is_point_inside(input.getX(), input.getY());
     if (map_mode_ui_ && input.wasScancodePressed(SDL_SCANCODE_F8)) {
         const bool was_visible = map_mode_ui_->is_layers_panel_visible();
@@ -1740,9 +1951,11 @@ void DevControls::update(const Input& input) {
     if (room_editor_ && room_editor_->is_enabled()) {
 
         const bool frame_editing = frame_editor_session_ && frame_editor_session_->is_active();
-        if (!frame_editing) {
-            const bool camera_panel_blocking = camera_panel_ && camera_panel_->is_visible() && (pointer_over_camera_panel_ || pointer_over_image_effect_panel_);
-            if (!camera_panel_blocking) {
+        if (!frame_editing && !live_depth_edit_mode_active_) {
+            const bool image_effect_modal_open = image_effect_panel_ && image_effect_panel_->is_visible();
+            const bool camera_panel_blocking =
+                camera_panel_ && camera_panel_->is_visible() && (pointer_over_camera_panel_ || pointer_over_image_effect_panel_);
+            if (!image_effect_modal_open && !camera_panel_blocking) {
                 room_editor_->update(input);
             }
         } else {
@@ -1822,6 +2035,10 @@ void DevControls::update(const Input& input) {
 void DevControls::update_ui(const Input& input) {
     if (!enabled_) return;
     if (!room_editor_) return;
+    if (live_depth_edit_mode_active_ ||
+        (image_effect_panel_ && image_effect_panel_->is_visible())) {
+        return;
+    }
 
     const bool room_editor_active = (mode_ == Mode::RoomEditor) && room_editor_->is_enabled();
     const bool spawn_panel_visible = room_editor_->is_spawn_group_panel_visible();
@@ -2012,11 +2229,76 @@ void DevControls::open_drop_modal(const DropImportRequest& request) {
 void DevControls::begin_multi_asset_import(const DropImportRequest& request) {
     multi_asset_import_ = MultiAssetImportState{};
     multi_asset_import_.active = true;
-    multi_asset_import_.request = request;
-    multi_asset_import_.files = request.files;
     multi_asset_import_.index = 0;
     multi_asset_import_.waiting_for_rename = false;
+    multi_asset_import_.imported_count = 0;
+
+    multi_asset_import_.items.reserve(request.files.size());
+    for (const auto& file : request.files) {
+        MultiAssetImportState::Item item;
+        item.request = request;
+        item.request.kind = DropContentKind::SinglePng;
+        item.request.files = {file};
+        item.request.folder.clear();
+        item.suggested_name = sanitize_asset_name_local(vibble::strings::to_lower_copy(file.stem().string()));
+        if (item.suggested_name.empty()) {
+            item.error_message = "Invalid filename for asset: " + file.filename().string();
+        }
+        multi_asset_import_.items.push_back(std::move(item));
+    }
+
     process_next_multi_asset_item();
+}
+
+void DevControls::begin_multi_folder_import(const std::vector<std::filesystem::path>& folders, SDL_Point drop_screen) {
+    multi_asset_import_ = MultiAssetImportState{};
+    multi_asset_import_.active = true;
+    multi_asset_import_.index = 0;
+    multi_asset_import_.waiting_for_rename = false;
+    multi_asset_import_.imported_count = 0;
+
+    for (const auto& folder : folders) {
+        std::error_code ec;
+        if (!std::filesystem::exists(folder, ec) || ec || !std::filesystem::is_directory(folder, ec) || ec) {
+            continue;
+        }
+
+        MultiAssetImportState::Item item;
+        DropValidationResult validation = validate_drop_items({folder});
+        if (!validation.valid) {
+            item.error_message = validation.reason.empty()
+                                     ? "Failed to import folder '" + folder.filename().string() + "'."
+                                     : validation.reason;
+            multi_asset_import_.items.push_back(std::move(item));
+            continue;
+        }
+
+        DropImportRequest request;
+        request.kind = validation.kind;
+        request.files = validation.files;
+        request.folder = validation.folder;
+        request.drop_screen = drop_screen;
+        item.request = std::move(request);
+        item.suggested_name = sanitize_asset_name_local(folder.filename().string());
+        if (item.suggested_name.empty()) {
+            item.error_message = "Invalid folder name for asset: " + folder.filename().string();
+        }
+        multi_asset_import_.items.push_back(std::move(item));
+    }
+
+    if (multi_asset_import_.items.empty()) {
+        reset_multi_asset_import();
+        return;
+    }
+
+    process_next_multi_asset_item();
+}
+
+const DevControls::MultiAssetImportState::Item* DevControls::current_multi_asset_import_item() const {
+    if (!multi_asset_import_.active || multi_asset_import_.index >= multi_asset_import_.items.size()) {
+        return nullptr;
+    }
+    return &multi_asset_import_.items[multi_asset_import_.index];
 }
 
 void DevControls::process_next_multi_asset_item() {
@@ -2030,11 +2312,20 @@ void DevControls::process_next_multi_asset_item() {
             SDL_RenderPresent(r);
         }
     }
-    while (multi_asset_import_.index < multi_asset_import_.files.size()) {
-        const std::filesystem::path file = multi_asset_import_.files[multi_asset_import_.index];
-        std::string candidate = sanitize_asset_name_local(vibble::strings::to_lower_copy(file.stem().string()));
+    while (multi_asset_import_.index < multi_asset_import_.items.size()) {
+        const MultiAssetImportState::Item& item = multi_asset_import_.items[multi_asset_import_.index];
+        if (!item.error_message.empty()) {
+            open_drop_error_popup(item.error_message);
+            ++multi_asset_import_.index;
+            return;
+        }
+
+        const std::filesystem::path source_file =
+            !item.request.files.empty() ? item.request.files.front() : std::filesystem::path{};
+        std::string candidate = sanitize_asset_name_local(item.suggested_name);
         if (candidate.empty()) {
-            open_drop_error_popup("Invalid filename for asset: " + file.filename().string());
+            const std::string fallback_name = !source_file.empty() ? source_file.filename().string() : std::string{"(unknown)"};
+            open_drop_error_popup("Invalid name for dropped asset: " + fallback_name);
             ++multi_asset_import_.index;
             return;
         }
@@ -2046,20 +2337,22 @@ void DevControls::process_next_multi_asset_item() {
         }
 
         std::string error;
-        DropImportRequest single_request = multi_asset_import_.request;
-        single_request.kind = DropContentKind::SinglePng;
-        single_request.files = {file};
-        single_request.folder.clear();
-        if (!create_drop_asset(candidate, {file}, single_request, false, error)) {
-            open_drop_error_popup(error.empty() ? "Import failed for " + file.filename().string() : error);
+        if (!create_drop_asset(candidate, item.request.files, item.request, false, error)) {
+            const std::string fallback_error =
+                !source_file.empty()
+                    ? "Import failed for " + source_file.filename().string()
+                    : "Import failed for dropped item.";
+            open_drop_error_popup(error.empty() ? fallback_error : error);
             ++multi_asset_import_.index;
             return;
         }
+        ++multi_asset_import_.imported_count;
         ++multi_asset_import_.index;
     }
 
-    if (assets_) {
-        assets_->show_dev_notice("Imported dropped PNG assets", 1800);
+    if (assets_ && multi_asset_import_.imported_count > 0) {
+        const std::string notice = "Imported " + std::to_string(multi_asset_import_.imported_count) + " dropped assets";
+        assets_->show_dev_notice(notice, 1800);
     }
     reset_multi_asset_import();
 }
@@ -2099,17 +2392,23 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
             drop_state_.items.push_back(path);
         }
         DropValidationResult validation = validate_drop_items(drop_state_.items);
-        drop_state_.valid = validation.valid;
+        drop_state_.valid = validation.valid || is_multi_folder_drop(drop_state_.items);
         return true;
     }
     case SDL_EVENT_DROP_COMPLETE: {
+        if (is_multi_folder_drop(drop_state_.items)) {
+            begin_multi_folder_import(collect_existing_drop_items(drop_state_.items), drop_point_from_event(event));
+            reset_drop_preview();
+            return true;
+        }
+
         DropValidationResult validation = validate_drop_items(drop_state_.items);
         if (validation.valid) {
-    DropImportRequest req;
-    req.kind = validation.kind;
-    req.files = validation.files;
-    req.folder = validation.folder;
-    req.drop_screen = drop_point_from_event(event);
+            DropImportRequest req;
+            req.kind = validation.kind;
+            req.files = validation.files;
+            req.folder = validation.folder;
+            req.drop_screen = drop_point_from_event(event);
             if (req.kind == DropContentKind::MultiImages) {
                 bool all_png = !req.files.empty();
                 for (const auto& p : req.files) {
@@ -2171,12 +2470,22 @@ bool DevControls::handle_drop_modal_event(const SDL_Event& event) {
         consumed = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
             reset_drop_modal();
+            if (multi_asset_import_.active) {
+                multi_asset_import_.waiting_for_rename = false;
+                ++multi_asset_import_.index;
+                process_next_multi_asset_item();
+            }
         }
     }
 
     if (event.type == SDL_EVENT_KEY_DOWN) {
         if (event.key.key == SDLK_ESCAPE) {
             reset_drop_modal();
+            if (multi_asset_import_.active) {
+                multi_asset_import_.waiting_for_rename = false;
+                ++multi_asset_import_.index;
+                process_next_multi_asset_item();
+            }
             consumed = true;
         } else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
             const std::string desired = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
@@ -2272,13 +2581,16 @@ bool DevControls::handle_drop_conflict_modal_event(const SDL_Event& event) {
     if (drop_conflict_modal_.rename_button && drop_conflict_modal_.rename_button->handle_event(event)) {
         consumed = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
-            DropImportRequest request = multi_asset_import_.request;
-            if (multi_asset_import_.index < multi_asset_import_.files.size()) {
-                const auto& file = multi_asset_import_.files[multi_asset_import_.index];
-                request.kind = DropContentKind::SinglePng;
-                request.files = {file};
-                request.folder.clear();
+            DropImportRequest request;
+            const MultiAssetImportState::Item* item = current_multi_asset_import_item();
+            if (!item) {
+                reset_drop_conflict_modal();
+                multi_asset_import_.waiting_for_rename = false;
+                ++multi_asset_import_.index;
+                process_next_multi_asset_item();
+                return true;
             }
+            request = item->request;
             reset_drop_conflict_modal();
             multi_asset_import_.waiting_for_rename = false;
             open_drop_modal(request);
@@ -2547,8 +2859,29 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         for (size_t i = 0; i < seq_files.size(); ++i) {
             std::filesystem::path dst = default_dir / (std::to_string(i) + ".png");
             try {
-                std::filesystem::copy_file(seq_files[i], dst, std::filesystem::copy_options::overwrite_existing);
-                ++frames_written;
+                const std::filesystem::path& src = seq_files[i];
+                bool wrote = false;
+                if (has_extension_ci(src, ".png")) {
+                    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing);
+                    wrote = true;
+                } else {
+                    int w = 0;
+                    int h = 0;
+                    int comp = 0;
+                    stbi_uc* pixels = stbi_load(src.string().c_str(), &w, &h, &comp, STBI_rgb_alpha);
+                    if (pixels && w > 0 && h > 0) {
+                        wrote = stbi_write_png(dst.string().c_str(), w, h, STBI_rgb_alpha, pixels, w * STBI_rgb_alpha) != 0;
+                    }
+                    if (pixels) {
+                        stbi_image_free(pixels);
+                    }
+                }
+                if (wrote) {
+                    ++frames_written;
+                } else {
+                    SDL_Log("[DevControls] Failed to convert/copy frame %s -> %s",
+                            src.string().c_str(), dst.string().c_str());
+                }
             } catch (const std::exception& ex) {
                 SDL_Log("[DevControls] Failed to copy %s -> %s: %s",
                         seq_files[i].string().c_str(), dst.string().c_str(), ex.what());
@@ -2617,7 +2950,7 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     }
 
     nlohmann::json default_anim = {
-        {"loop", true},
+        {"on_end", "default"},
         {"locked", false},
         {"reverse_source", false},
         {"flipped_source", false},
@@ -2662,7 +2995,7 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         auto& lib = assets_->library();
         lib.add_asset(sanitized, manifest_entry);
         if (SDL_Renderer* r = assets_->renderer()) {
-            lib.loadAnimationsFor(r, std::unordered_set<std::string>{sanitized});
+            lib.ensureAnimationsLoadedFor(r, std::unordered_set<std::string>{sanitized});
         }
         info = lib.get(sanitized);
     }
@@ -2675,7 +3008,6 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
             room_editor_->finalize_asset_drag(spawned, info);
         }
         assets_->open_asset_info_editor(info);
-        assets_->open_animation_editor_for_asset(info);
         assets_->show_dev_notice("Created asset '" + sanitized + "'", 1800);
     }
 
@@ -2741,6 +3073,14 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
+    if (live_depth_edit_mode_active_) {
+        const bool handled_live_depth = handle_live_depth_edit_event(event);
+        if (handled_live_depth && input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
     other_settings_.ensure_layout();
     SDL_Rect header_rect{0, 0, 0, 0};
     SDL_Rect layout_rect = other_settings_.layout_bounds();
@@ -2752,16 +3092,19 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     if (layout_rect.w > 0 && layout_rect.h > 0) {
         sliding_rects.push_back(layout_rect);
     }
-    if (map_mode_ui_) {
-        DevFooterBar* footer = map_mode_ui_->get_footer_bar();
-        if (footer && footer->visible()) {
-            footer_rect = footer->rect();
-        }
-    }
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active || shift_block_headers_footers_;
+    const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
+    if (map_mode_ui_) {
+        DevFooterBar* footer = map_mode_ui_->get_footer_bar();
+        if (footer && footer->visible() && !asset_stack_editor_active) {
+            footer_rect = footer->rect();
+        }
+    }
+    const bool hide_headers_pre =
+        modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre ||
+        frame_editor_active || asset_stack_editor_active || shift_block_headers_footers_;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = DockManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
@@ -2785,7 +3128,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide = is_modal_blocking_panels();
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     modal_headers_hidden_ = modal_hide;
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active || shift_block_headers_footers_;
+    const bool hide_headers =
+        modal_hide || sliding_headers_hidden_ || layers_panel_open ||
+        frame_editor_active || asset_stack_editor_active || shift_block_headers_footers_;
     other_settings_.set_enabled(enabled_);
     other_settings_.set_header_suppressed(hide_headers);
     apply_header_suppression();
@@ -2854,8 +3199,10 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
     if (!other_settings_.header_suppressed()) {
         const bool pointer_inside_header = pointer_relevant && enabled_ && other_settings_.contains_point(pointer.x, pointer.y);
-        if (pointer_event && consume_if_handled(other_settings_.handle_event(event), pointer_inside_header)) {
-            return;
+        if (!asset_stack_editor_active) {
+            if (pointer_event && consume_if_handled(other_settings_.handle_event(event), pointer_inside_header)) {
+                return;
+            }
         }
         if (pointer_inside_header) {
             return;
@@ -2889,9 +3236,10 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
-    if (map_mode_ui_) {
+    const bool image_effect_panel_open = image_effect_panel_ && image_effect_panel_->is_visible();
+    if (map_mode_ui_ && !image_effect_panel_open) {
         if (DevFooterBar* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !frame_editor_active) {
+            if (footer->visible() && !frame_editor_active && !asset_stack_editor_active) {
                 const bool pointer_in_footer = pointer_relevant && footer->contains(pointer.x, pointer.y);
                 if (consume_if_handled(footer->handle_event(event), pointer_in_footer)) {
                     return;
@@ -2987,10 +3335,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
         return;
     }
-    const bool block_image_effect = pointer_event_inside_image_effect_panel ||
-        (keyboard_like_event && pointer_over_image_effect_panel_);
-    if (block_image_effect) {
-        if (!pointer_relevant && input_) {
+    const bool image_effect_modal_open = image_effect_panel_ && image_effect_panel_->is_visible();
+    if (image_effect_modal_open) {
+        if (input_) {
             input_->consumeEvent(event);
         }
         return;
@@ -3006,8 +3353,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (!(frame_editor_session_ && frame_editor_session_->is_active()) && can_route_room_editor &&
-        (camera_panel_->is_visible() || keyboard_like_event)) {
+    if (!(frame_editor_session_ && frame_editor_session_->is_active()) && can_route_room_editor) {
         const bool handled = room_editor_ && room_editor_->handle_sdl_event(event);
         if (handled && input_) {
             const bool pointer_inside_room_ui = pointer_relevant && room_editor_ && room_editor_->is_room_ui_blocking_point(pointer.x, pointer.y);
@@ -3026,8 +3372,10 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
+    const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
 
-    const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
+    const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open ||
+                              frame_editor_active || asset_stack_editor_active;
     other_settings_.set_header_suppressed(hide_headers);
 
     if (!renderer) {
@@ -3056,7 +3404,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         return true;
     };
 
-    const bool show_depth_guides = camera_panel_ && camera_panel_->is_depth_section_visible();
+    const bool show_depth_guides = camera_panel_ && camera_panel_->is_visible();
     const bool show_grid_overlay = false; // Grid is now rendered in SceneRenderer
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
@@ -3260,36 +3608,26 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
 
         if (cam && floor_depth_params && floor_depth_params->enabled) {
-            const WarpedScreenGrid::RealismSettings& settings = cam->realism_settings();
-            const float meters_per_100 = std::max(0.0001f, settings.meters_per_100_world_px);
-            const float pixels_per_world_unit = 100.0f / meters_per_100;
-            const float margin_world_units = std::max(0.0f, settings.extra_cull_margin);
-            const float margin_world_px = margin_world_units * pixels_per_world_unit;
-            const SDL_FPoint center_world_f = cam->get_view_center_f();
-            const float cos_pitch = std::max(0.0f, std::cos(static_cast<float>(floor_depth_params->pitch_radians)));
-            const float depth_offset_px = margin_world_px * cos_pitch;
-            SDL_Point cull_world{
-                static_cast<int>(std::lround(center_world_f.x)),
-                static_cast<int>(std::lround(center_world_f.y - depth_offset_px))
-            };
-            SDL_FPoint cull_screen{};
-            if (try_floor_warped_screen_position(*cam, cull_world, cull_screen)) {
-                const float clamped_y = std::clamp(cull_screen.y, 0.0f, static_cast<float>(screen_h_));
-                const int line_y = static_cast<int>(std::lround(clamped_y));
-                const SDL_Color cull_color{0, 255, 255, 220};
-                SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
-                SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
-                const int marker_x = screen_w_ / 2;
-                SDL_RenderLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
-                DMLabelStyle style = DMStyles::Label();
-                style.color = cull_color;
-                const int label_y = std::max(0, line_y - style.font_size - 2);
-                DrawLabelText(renderer, "Cull Limit", marker_x + 12, label_y, style);
-            }
+            const WarpedScreenGrid::GridBounds cull_bounds = cam->get_bounds();
+            const float clamped_y = std::clamp(cull_bounds.bottom, 0.0f, static_cast<float>(screen_h_));
+            const int line_y = static_cast<int>(std::lround(clamped_y));
+            const SDL_Color cull_color{0, 255, 255, 220};
+            SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
+            SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
+            const int marker_x = screen_w_ / 2;
+            SDL_RenderLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
+            DMLabelStyle style = DMStyles::Label();
+            style.color = cull_color;
+            const int label_y = std::max(0, line_y - style.font_size - 2);
+            DrawLabelText(renderer, "Cull Bottom", marker_x + 12, label_y, style);
         }
 
         SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
         SDL_SetRenderDrawBlendMode(renderer, prev_mode);
+    }
+
+    if (renderer && live_depth_edit_mode_active_) {
+        render_live_depth_edit_overlay(renderer);
     }
 
     if (renderer && room_editor_) {
@@ -3299,61 +3637,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             frame_editor_session_->render(renderer);
         }
     }
-    if (renderer && camera_panel_ && camera_panel_->is_blur_section_visible() && assets_ && screen_w_ > 0 && screen_h_ > 0) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        const WarpedScreenGrid::RealismSettings& settings = cam.realism_settings();
-        SDL_FPoint center_world_f = cam.get_view_center_f();
-        SDL_FPoint center_screen_f = cam.map_to_screen_f(center_world_f);
-        float center_y = std::isfinite(center_screen_f.y) ? std::clamp(center_screen_f.y, 0.0f, static_cast<float>(screen_h_)) : static_cast<float>(screen_h_) * 0.5f;
-        auto clamp_line = [&](float value) {
-            if (!std::isfinite(value)) {
-                return center_y;
-            }
-            return std::clamp(value, 0.0f, static_cast<float>(screen_h_));
-};
-
-
-        SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
-        SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
-        Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
-        SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-        const SDL_Color accent = DMStyles::AccentButton().hover_bg;
-        SDL_Color fg_color = dm_draw::LightenColor(accent, 0.2f);
-        fg_color.a = 220;
-        SDL_Color bg_color = dm_draw::LightenColor(accent, 0.05f);
-        bg_color.a = 220;
-        SDL_Color center_color = DMStyles::AccentButton().text;
-        center_color.a = 230;
-
-        DMLabelStyle base_label = DMStyles::Label();
-        base_label.font_size = std::max(12, base_label.font_size - 2);
-
-        auto draw_line = [&](float y, const SDL_Color& color, bool is_hover_or_drag = false) {
-            const int yi = static_cast<int>(std::lround(y));
-            SDL_Color actual_color = is_hover_or_drag ? SDL_Color{255, 255, 255, 220} : color;
-            SDL_SetRenderDrawColor(renderer, actual_color.r, actual_color.g, actual_color.b, actual_color.a);
-            SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
-};
-        auto draw_label = [&](float line_y, const SDL_Color& color, const std::string& text) {
-            DMLabelStyle style = base_label;
-            style.color = color;
-            const int yi = static_cast<int>(std::lround(line_y));
-            int text_y = yi - style.font_size - DMSpacing::small_gap();
-            if (text_y < 0) {
-                text_y = yi + DMSpacing::small_gap();
-            }
-            DrawLabelText(renderer, text, DMSpacing::panel_padding(), text_y, style);
-};
-        auto make_depthcue_label = [](const char* prefix, int opacity_max) {
-            char buffer[160];
-            std::snprintf(buffer, sizeof(buffer), "%s Max Opacity: %d / 255", prefix, opacity_max);
-            return std::string(buffer);
-};
-
-}
-
     if (renderer && camera_panel_ && camera_panel_->is_visible() && assets_) {
         const WarpedScreenGrid& cam = assets_->getView();
         SDL_FPoint center_world_f = cam.get_view_center_f();
@@ -3475,7 +3758,7 @@ void DevControls::begin_frame_editor_session(Asset* asset,
         this->apply_header_suppression();
     },
     [this]() {
-        this->persist_map_info_to_disk(devmode::core::SaveManager::MapWritePath::FrameEditorTag);
+        this->persist_map_info_to_disk();
     });
     apply_header_suppression();
 }
@@ -3553,6 +3836,17 @@ void DevControls::close_asset_info_editor() {
     end_frame_editor_session();
 }
 
+bool DevControls::consume_escape_for_asset_editor_stack() {
+    if (!can_use_room_editor_ui() || !room_editor_) {
+        return false;
+    }
+    const bool consumed = room_editor_->consume_escape_for_asset_editor_stack();
+    if (consumed) {
+        end_frame_editor_session();
+    }
+    return consumed;
+}
+
 bool DevControls::is_asset_info_editor_open() const {
     if (!room_editor_) return false;
     return room_editor_->is_asset_info_editor_open();
@@ -3624,20 +3918,14 @@ void DevControls::notify_spawn_group_removed(const std::string& spawn_id) {
     Asset::ClearFlipOverrideForSpawnId(spawn_id);
 }
 
-void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority,
-                                devmode::core::SaveManager::MapWritePath path) {
+void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority) {
     if (assets_) {
         assets_->mark_map_data_dirty();
     }
     map_dirty_ = true;
-    map_write_path_ = path;
+    map_info_dirty_ = true;
     if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
         save_manager_.save_dirty(priority, "Immediate map change");
-        const std::string reason =
-            path == devmode::core::SaveManager::MapWritePath::FrameEditorTag
-                ? "Immediate map change (frame-editor-tag)"
-                : "Immediate map change";
-        save_manager_.save_dirty(priority, reason);
     }
 }
 
@@ -3731,12 +4019,37 @@ void DevControls::configure_header_button_sets() {
             sync_header_button_states();
 };
         return layers_btn;
-};
+    };
+
+    auto make_depth_cue_fx_button = [this]() {
+        MapModeUI::HeaderButtonConfig depth_cue_btn;
+        depth_cue_btn.id = "depth_cue_fx";
+        depth_cue_btn.label = "Depth Cue FX";
+        depth_cue_btn.active = image_effect_panel_ && image_effect_panel_->is_visible();
+        depth_cue_btn.group = FooterButtonGroup::Primary;
+        depth_cue_btn.style_override = &DMStyles::HeaderButton();
+        depth_cue_btn.active_style_override = &DMStyles::AccentButton();
+        depth_cue_btn.on_toggle = [this](bool active) {
+            ensure_image_effect_panel();
+            if (!image_effect_panel_) {
+                sync_header_button_states();
+                return;
+            }
+            image_effect_panel_->set_assets(assets_);
+            if (image_effect_panel_->is_visible() != active) {
+                toggle_image_effect_panel();
+            } else {
+                sync_header_button_states();
+            }
+        };
+        return depth_cue_btn;
+    };
 
     std::vector<MapModeUI::HeaderButtonConfig> room_buttons;
 
     room_buttons.push_back(make_camera_button());
     room_buttons.push_back(make_layers_button());
+    room_buttons.push_back(make_depth_cue_fx_button());
 
     {
         MapModeUI::HeaderButtonConfig map_assets_btn;
@@ -3876,6 +4189,8 @@ void DevControls::sync_header_button_states() {
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "camera", camera_open);
     const bool layers_open = map_mode_ui_->is_layers_panel_visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "layers", layers_open);
+    const bool depth_cue_fx_open = image_effect_panel_ && image_effect_panel_->is_visible();
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "depth_cue_fx", depth_cue_fx_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "regenerate", false);
 
     const bool map_assets_open = map_assets_modal_ && map_assets_modal_->visible();
@@ -3893,6 +4208,9 @@ void DevControls::sync_header_button_states() {
 }
 
 void DevControls::close_all_floating_panels() {
+    if (live_depth_edit_mode_active_) {
+        exit_live_depth_edit_mode(false, true);
+    }
     if (room_editor_) {
         room_editor_->close_room_config();
         room_editor_->close_asset_library();
@@ -3928,7 +4246,9 @@ void DevControls::close_all_floating_panels() {
 void DevControls::maybe_update_mode_from_height() {}
 
 bool DevControls::is_modal_blocking_panels() const {
-    return room_editor_ && room_editor_->has_active_modal();
+    const bool room_modal = room_editor_ && room_editor_->has_active_modal();
+    const bool image_effect_modal = image_effect_panel_ && image_effect_panel_->is_visible();
+    return room_modal || image_effect_modal || live_depth_edit_mode_active_;
 }
 
 void DevControls::pulse_modal_header() {
@@ -3941,12 +4261,13 @@ void DevControls::apply_header_suppression() {
     if (map_mode_ui_) {
 
         const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-        const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
+        const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
+        const bool modal_hide = is_modal_blocking_panels() || frame_editor_active || asset_stack_editor_active;
         const bool header_block = modal_hide || shift_block_headers_footers_;
         map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            const bool footer_enabled = !frame_editor_active && !shift_block_headers_footers_;
+            const bool footer_enabled = !frame_editor_active && !asset_stack_editor_active && !shift_block_headers_footers_;
             footer->set_visible(footer_enabled);
             footer->set_input_enabled(footer_enabled);
         }
@@ -3972,7 +4293,8 @@ void DevControls::mark_layout_dirty() {
 
 void DevControls::update_header_and_footer_bounds() {
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-    const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
+    const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
+    const bool modal_hide = is_modal_blocking_panels() || frame_editor_active || asset_stack_editor_active;
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || shift_block_headers_footers_;
@@ -3983,7 +4305,7 @@ void DevControls::update_header_and_footer_bounds() {
     }
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !shift_block_headers_footers_) {
+            if (footer->visible() && !asset_stack_editor_active && !shift_block_headers_footers_) {
                 last_footer_rect_ = footer->rect();
             } else {
                 last_footer_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -4212,23 +4534,11 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
         ctx.set_trail_areas(std::move(trail_areas));
 
         const auto& queue = planner.get_spawn_queue();
-        ctx.set_spacing_filter(collect_spacing_asset_names(queue));
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView spawn_catalog{&ctx.info_library(), false};
+        ctx.set_spacing_filter(collect_spacing_asset_names(queue, spawn_catalog));
         const Area* area_ptr = room->room_area.get();
         for (const auto& info : queue) {
             if (info.name == "batch_map_assets") {
-                std::vector<double> base_weights;
-                base_weights.reserve(info.candidates.size());
-                double total_weight = 0.0;
-                for (const auto& cand : info.candidates) {
-                    double weight = cand.weight;
-                    if (weight < 0.0) weight = 0.0;
-                    if (weight > 0.0) total_weight += weight;
-                    base_weights.push_back(weight);
-                }
-                if (total_weight <= 0.0 && !base_weights.empty()) {
-                    std::fill(base_weights.begin(), base_weights.end(), 1.0);
-                }
-
                 auto vertices = occupancy.vertices_in_area(*area_ptr);
                 if (vertices.empty()) {
                     continue;
@@ -4240,26 +4550,24 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                     if (!vertex) continue;
                     SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
                     bool placed = false;
-                    std::vector<double> attempt_weights = base_weights;
-                    const size_t max_candidate_attempts = info.candidates.size();
+                    std::unordered_set<int> attempted_entries;
+                    const size_t max_candidate_attempts = info.candidates.entries().size();
                     const bool enforce_spacing = info.check_min_spacing;
                     for (size_t attempt = 0; attempt < max_candidate_attempts; ++attempt) {
-                        double weight_total = std::accumulate(attempt_weights.begin(), attempt_weights.end(), 0.0);
-                        if (weight_total <= 0.0) break;
-                        std::discrete_distribution<size_t> dist(attempt_weights.begin(), attempt_weights.end());
-                        size_t idx = dist(ctx.rng());
-                        if (idx >= info.candidates.size()) break;
-                        if (attempt_weights[idx] <= 0.0) {
-                            attempt_weights[idx] = 0.0;
-                            continue;
+                        const auto candidate = info.select_candidate_excluding(
+                            ctx.rng(), spawn_catalog, attempted_entries);
+                        if (!candidate) {
+                            break;
                         }
-                        const SpawnCandidate& candidate = info.candidates[idx];
-                        if (candidate.is_null || !candidate.info) {
+                        if (candidate->entry_index >= 0) {
+                            attempted_entries.insert(candidate->entry_index);
+                        }
+                        if (candidate->is_null || !candidate->info) {
                             occupancy.set_occupied(vertex, true);
                             placed = true;
                             break;
                         }
-                        if (ctx.checker().check(candidate.info,
+                        if (ctx.checker().check(candidate->info,
                                                 spawn_pos,
                                                 ctx.exclusion_zones(),
                                                 ctx.all_assets(),
@@ -4268,12 +4576,16 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                                                 false,
                                                 false,
                                                 5)) {
-                            attempt_weights[idx] = 0.0;
                             continue;
                         }
-                        auto* result = ctx.spawnAsset(candidate.name, candidate.info, *area_ptr, spawn_pos, 0, info.spawn_id, info.position);
+                        auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
+                                                      candidate->info,
+                                                      *area_ptr,
+                                                      spawn_pos,
+                                                      0,
+                                                      info.spawn_id,
+                                                      info.position);
                         if (!result) {
-                            attempt_weights[idx] = 0.0;
                             continue;
                         }
                         const bool track_spacing = ctx.track_spacing_for(result->info, enforce_spacing);
@@ -4334,6 +4646,8 @@ void DevControls::ensure_map_assets_modal_open() {
     } else {
         map_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
     }
+    map_assets_modal_->set_manifest_store(&manifest_store_);
+    map_assets_modal_->set_assets(assets_);
     map_assets_modal_->set_on_close([this]() {
         if (room_editor_) room_editor_->clear_selection();
         this->sync_header_button_states();
@@ -4398,7 +4712,8 @@ void DevControls::update_movement_debug_visibility() {
     if (!assets_) {
         return;
     }
-    assets_->set_movement_debug_visible(false);
+    const bool visible = enabled_ && movement_debug_enabled_;
+    assets_->set_movement_debug_visible(visible);
 }
 
 void DevControls::restore_filter_hidden_assets() const {
@@ -4420,6 +4735,8 @@ void DevControls::ensure_boundary_assets_modal_open() {
     } else {
         boundary_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
     }
+    boundary_assets_modal_->set_manifest_store(&manifest_store_);
+    boundary_assets_modal_->set_assets(assets_);
     boundary_assets_modal_->set_on_close([this]() {
         if (room_editor_) room_editor_->clear_selection();
         this->sync_header_button_states();
@@ -4497,6 +4814,9 @@ void DevControls::create_trail_template() {
     });
 
     if (!created || key.empty()) {
+        if (assets_) {
+            assets_->show_dev_notice("Unable to create trail: invalid map manifest data");
+        }
         sync_header_button_states();
         return;
     }
@@ -4539,7 +4859,7 @@ void DevControls::create_trail_template() {
     mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
 
     if (trail_suite_) {
-        trail_suite_->open(pending_trail_template_.get());
+        trail_suite_->open(pending_trail_template_.get(), true);
     }
 
     if (assets_) {
@@ -4627,13 +4947,25 @@ void DevControls::close_camera_panel() {
     }
 }
 
+void DevControls::ensure_image_effect_panel() {
+    if (image_effect_panel_) {
+        return;
+    }
+    image_effect_panel_ = std::make_unique<ForegroundBackgroundEffectPanel>(assets_, 96, 160);
+    image_effect_panel_->close();
+    image_effect_panel_->set_close_callback([this]() { this->sync_header_button_states(); });
+    image_effect_panel_->set_edit_depth_settings_callback([this]() { this->enter_live_depth_edit_mode(); });
+}
+
 void DevControls::toggle_image_effect_panel() {
+    ensure_image_effect_panel();
     if (!image_effect_panel_) {
-        image_effect_panel_ = std::make_unique<ForegroundBackgroundEffectPanel>(assets_, 96, 160);
-        image_effect_panel_->close();
+        return;
+    }
+    if (live_depth_edit_mode_active_) {
+        exit_live_depth_edit_mode(false, true);
     }
     if (image_effect_panel_->is_visible()) {
-        image_effect_panel_->set_close_callback({});
         image_effect_panel_->close();
     } else {
         if (is_modal_blocking_panels()) {
@@ -4641,26 +4973,387 @@ void DevControls::toggle_image_effect_panel() {
             sync_header_button_states();
             return;
         }
-
-        if (camera_panel_ && camera_panel_->is_visible()) {
-            camera_panel_->close();
-        }
         image_effect_panel_->set_assets(assets_);
-
-        image_effect_panel_->set_close_callback([this]() {
-            if (camera_panel_) {
-                camera_panel_->open();
-            }
-        });
         image_effect_panel_->open();
     }
     sync_header_button_states();
 }
 
 void DevControls::close_image_effect_panel() {
+    if (live_depth_edit_mode_active_) {
+        exit_live_depth_edit_mode(false, true);
+    }
     if (image_effect_panel_) {
         image_effect_panel_->close();
     }
+}
+
+void DevControls::enter_live_depth_edit_mode() {
+    if (!assets_) {
+        return;
+    }
+    ensure_image_effect_panel();
+    if (image_effect_panel_ && image_effect_panel_->is_visible()) {
+        image_effect_panel_->close();
+    }
+
+    live_depth_settings_ = assets_->depth_cue_settings();
+    depth_cue::clamp(live_depth_settings_);
+    const nlohmann::json* depth_section = nullptr;
+    if (map_info_json_ && map_info_json_->is_object()) {
+        auto it = map_info_json_->find(depth_cue::kMapEntryKey);
+        if (it != map_info_json_->end() && it->is_object()) {
+            depth_section = &(*it);
+        }
+    }
+    const bool has_foreground_max =
+        depth_section && depth_section->contains(depth_cue::kForegroundMaxDepthOffsetKey) &&
+        (*depth_section)[depth_cue::kForegroundMaxDepthOffsetKey].is_number();
+    const bool has_background_max =
+        depth_section && depth_section->contains(depth_cue::kBackgroundMaxDepthOffsetKey) &&
+        (*depth_section)[depth_cue::kBackgroundMaxDepthOffsetKey].is_number();
+    bool injected_default_min_spacing = false;
+    if (!has_foreground_max) {
+        live_depth_settings_.foreground_max_depth_offset =
+            live_depth_settings_.center_depth_offset - depth_cue::kMinSeparation;
+        injected_default_min_spacing = true;
+    }
+    if (!has_background_max) {
+        live_depth_settings_.background_max_depth_offset =
+            live_depth_settings_.center_depth_offset + depth_cue::kMinSeparation;
+        injected_default_min_spacing = true;
+    }
+    depth_cue::clamp(live_depth_settings_);
+
+    live_depth_selected_line_ = LiveDepthLine::Center;
+    live_depth_settings_dirty_ = injected_default_min_spacing;
+    live_depth_edit_mode_active_ = true;
+    assets_->set_depth_cue_settings(live_depth_settings_);
+    if (injected_default_min_spacing) {
+        mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    }
+    if (!live_depth_exit_button_) {
+        live_depth_exit_button_ =
+            std::make_unique<DMButton>("Exit", &DMStyles::WarnButton(), 0, DMButton::height());
+    }
+    apply_header_suppression();
+    sync_header_button_states();
+}
+
+void DevControls::exit_live_depth_edit_mode(bool reopen_depth_panel, bool flush_immediately) {
+    if (!live_depth_edit_mode_active_) {
+        return;
+    }
+
+    live_depth_edit_mode_active_ = false;
+    if (flush_immediately && live_depth_settings_dirty_) {
+        mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
+        live_depth_settings_dirty_ = false;
+    }
+
+    if (reopen_depth_panel) {
+        ensure_image_effect_panel();
+        if (image_effect_panel_ && !image_effect_panel_->is_visible()) {
+            image_effect_panel_->set_assets(assets_);
+            image_effect_panel_->open();
+        }
+    }
+
+    apply_header_suppression();
+    sync_header_button_states();
+}
+
+DevControls::LiveDepthLine DevControls::live_depth_line_from_cursor_screen(SDL_Point cursor_screen) const {
+    const int effective_screen_h = std::max(1, screen_h_);
+    if (effective_screen_h <= 1) {
+        return LiveDepthLine::Center;
+    }
+
+    const int clamped_y = std::clamp(cursor_screen.y, 0, effective_screen_h - 1);
+    const float top_third_end = static_cast<float>(effective_screen_h) / 3.0f;
+    const float bottom_third_begin = top_third_end * 2.0f;
+    const float y = static_cast<float>(clamped_y);
+    if (y < top_third_end) {
+        return LiveDepthLine::BackgroundMax;
+    }
+    if (y >= bottom_third_begin) {
+        return LiveDepthLine::ForegroundMax;
+    }
+    return LiveDepthLine::Center;
+}
+
+bool DevControls::update_live_depth_setting(LiveDepthLine line, float delta_world) {
+    if (!assets_ || !std::isfinite(delta_world) || std::abs(delta_world) <= 1.0e-6f) {
+        return false;
+    }
+
+    depth_cue::DepthCueSettings next = live_depth_settings_;
+    switch (line) {
+    case LiveDepthLine::Center: {
+        const float min_center = next.foreground_max_depth_offset + depth_cue::kMinSeparation;
+        const float max_center = next.background_max_depth_offset - depth_cue::kMinSeparation;
+        next.center_depth_offset = std::clamp(next.center_depth_offset + delta_world, min_center, max_center);
+        break;
+    }
+    case LiveDepthLine::ForegroundMax:
+        next.foreground_max_depth_offset = std::clamp(next.foreground_max_depth_offset + delta_world,
+                                                      depth_cue::kMinDepthOffset,
+                                                      next.center_depth_offset - depth_cue::kMinSeparation);
+        break;
+    case LiveDepthLine::BackgroundMax:
+        next.background_max_depth_offset = std::clamp(next.background_max_depth_offset + delta_world,
+                                                      next.center_depth_offset + depth_cue::kMinSeparation,
+                                                      depth_cue::kMaxDepthOffset);
+        break;
+    }
+    depth_cue::clamp(next);
+    if (depth_cue::nearly_equal(next, live_depth_settings_)) {
+        return false;
+    }
+
+    live_depth_settings_ = next;
+    assets_->set_depth_cue_settings(live_depth_settings_);
+    live_depth_settings_dirty_ = true;
+    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    return true;
+}
+
+bool DevControls::handle_live_depth_edit_event(const SDL_Event& event) {
+    if (!live_depth_edit_mode_active_) {
+        return false;
+    }
+    if (!live_depth_exit_button_) {
+        live_depth_exit_button_ =
+            std::make_unique<DMButton>("Exit", &DMStyles::WarnButton(), 0, DMButton::height());
+    }
+    if (live_depth_exit_button_) {
+        constexpr int kButtonWidth = 128;
+        const int button_height = DMButton::height();
+        const SDL_Rect button_rect{
+            std::max(12, screen_w_ - kButtonWidth - 20),
+            std::max(12, screen_h_ - button_height - 20),
+            kButtonWidth,
+            button_height
+        };
+        live_depth_exit_button_->set_rect(button_rect);
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+        exit_live_depth_edit_mode(true, true);
+        return true;
+    }
+
+    if (live_depth_exit_button_ && live_depth_exit_button_->handle_event(event)) {
+        exit_live_depth_edit_mode(true, true);
+        return true;
+    }
+
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        live_depth_selected_line_ = live_depth_line_from_cursor_screen(
+            SDL_Point{static_cast<int>(event.motion.x), static_cast<int>(event.motion.y)});
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        live_depth_selected_line_ = live_depth_line_from_cursor_screen(
+            SDL_Point{static_cast<int>(event.button.x), static_cast<int>(event.button.y)});
+    }
+
+    if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        live_depth_selected_line_ = live_depth_line_from_cursor_screen(SDL_Point{mx, my});
+
+        const SDL_Keymod mods = SDL_GetModState();
+        const bool shift_down = (mods & SDL_KMOD_SHIFT) != 0;
+        if (!shift_down) {
+            // Let normal camera wheel handling run when Shift is not held.
+            return false;
+        }
+
+        int wheel_steps = event.wheel.integer_y;
+        if (wheel_steps == 0 && std::fabs(event.wheel.y) > 1.0e-6f) {
+            wheel_steps = (event.wheel.y > 0.0f) ? 1 : -1;
+        }
+        if (wheel_steps != 0) {
+            update_live_depth_setting(live_depth_selected_line_,
+                                      static_cast<float>(wheel_steps) * kLiveDepthWheelStepWorld);
+        }
+        return true;
+    }
+
+    // Keep depth-line hover selection updated, but do not consume general input
+    // so normal camera controls continue to work in live depth mode.
+    return false;
+}
+
+void DevControls::render_live_depth_edit_overlay(SDL_Renderer* renderer) {
+    if (!renderer || !live_depth_edit_mode_active_) {
+        return;
+    }
+    if (!live_depth_exit_button_) {
+        live_depth_exit_button_ =
+            std::make_unique<DMButton>("Exit", &DMStyles::WarnButton(), 0, DMButton::height());
+    }
+    if (!live_depth_exit_button_) {
+        return;
+    }
+
+    constexpr int kButtonWidth = 128;
+    const int button_height = DMButton::height();
+    const SDL_Rect button_rect{
+        std::max(12, screen_w_ - kButtonWidth - 20),
+        std::max(12, screen_h_ - button_height - 20),
+        kButtonWidth,
+        button_height
+    };
+    live_depth_exit_button_->set_rect(button_rect);
+    int mouse_x = 0;
+    int mouse_y = 0;
+    sdl_mouse_util::GetMouseState(&mouse_x, &mouse_y);
+    live_depth_selected_line_ = live_depth_line_from_cursor_screen(SDL_Point{mouse_x, mouse_y});
+
+    struct LineInfo {
+        LiveDepthLine line = LiveDepthLine::Center;
+        float depth_offset = 0.0f;
+        bool valid = false;
+        const char* label = "";
+        SDL_Color color{255, 255, 255, 255};
+        SDL_Point label_anchor{0, 0};
+        std::vector<std::vector<SDL_Point>> segments;
+    };
+    std::array<LineInfo, 3> lines{{
+        {LiveDepthLine::ForegroundMax, live_depth_settings_.foreground_max_depth_offset, false, "Foreground Max", SDL_Color{255, 184, 84, 200}},
+        {LiveDepthLine::Center, live_depth_settings_.center_depth_offset, false, "Center", SDL_Color{232, 238, 250, 220}},
+        {LiveDepthLine::BackgroundMax, live_depth_settings_.background_max_depth_offset, false, "Background Max", SDL_Color{96, 192, 255, 200}},
+    }};
+
+    const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+    if (cam) {
+        auto [view_min_x, view_min_z, view_max_x, view_max_z] = cam->get_current_view().get_bounds();
+        (void)view_min_z;
+        (void)view_max_z;
+        float min_world_x = static_cast<float>(std::min(view_min_x, view_max_x));
+        float max_world_x = static_cast<float>(std::max(view_min_x, view_max_x));
+        if (max_world_x - min_world_x < 1.0f) {
+            const float center_world_x = static_cast<float>((view_min_x + view_max_x) * 0.5);
+            min_world_x = center_world_x - 200.0f;
+            max_world_x = center_world_x + 200.0f;
+        }
+
+        const float anchor_world_z = static_cast<float>(cam->anchor_world_z());
+        const float depth_axis_sign =
+            depth_cue::depth_axis_sign_from_forward_z(cam->projection_params().forward_z);
+        constexpr int kSamplesPerLine = 72;
+
+        auto build_floor_line = [&](float depth_offset,
+                                    std::vector<std::vector<SDL_Point>>& out_segments,
+                                    SDL_Point& out_label_anchor) -> bool {
+            out_segments.clear();
+            out_label_anchor = SDL_Point{0, 0};
+            const float world_z =
+                depth_cue::world_z_from_depth_offset(depth_offset, anchor_world_z, depth_axis_sign);
+            std::vector<SDL_Point> current_segment;
+            current_segment.reserve(static_cast<std::size_t>(kSamplesPerLine + 1));
+            bool have_label_anchor = false;
+            bool have_segment = false;
+            auto flush_segment = [&]() {
+                if (current_segment.size() >= 2) {
+                    out_segments.push_back(current_segment);
+                    have_segment = true;
+                }
+                current_segment.clear();
+            };
+
+            for (int s = 0; s <= kSamplesPerLine; ++s) {
+                const float t = static_cast<float>(s) / static_cast<float>(kSamplesPerLine);
+                const float world_x = min_world_x + (max_world_x - min_world_x) * t;
+                SDL_FPoint projected{};
+                const SDL_FPoint floor_world{world_x, 0.0f};
+                if (!cam->project_world_point(floor_world, world_z, projected)) {
+                    flush_segment();
+                    continue;
+                }
+                const float warped_y = cam->warp_floor_screen_y(0.0f, projected.y);
+                if (!std::isfinite(projected.x) || !std::isfinite(warped_y)) {
+                    flush_segment();
+                    continue;
+                }
+                const SDL_Point screen_point{
+                    static_cast<int>(std::lround(projected.x)),
+                    static_cast<int>(std::lround(warped_y))
+                };
+                if (!have_label_anchor) {
+                    out_label_anchor = screen_point;
+                    have_label_anchor = true;
+                }
+                current_segment.push_back(screen_point);
+            }
+            flush_segment();
+            return have_segment;
+        };
+
+        for (LineInfo& line : lines) {
+            line.valid = build_floor_line(line.depth_offset, line.segments, line.label_anchor);
+        }
+    }
+
+    SDL_BlendMode previous_blend = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(renderer, &previous_blend);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    auto draw_segments = [&](const std::vector<std::vector<SDL_Point>>& segments,
+                             SDL_Color color,
+                             int thickness) {
+        if (segments.empty()) {
+            return;
+        }
+        const int half = std::max(0, thickness / 2);
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        for (int dy = -half; dy <= half; ++dy) {
+            for (const std::vector<SDL_Point>& segment : segments) {
+                if (segment.size() < 2) {
+                    continue;
+                }
+                if (dy == 0) {
+                    sdl_render::Lines(renderer, segment.data(), static_cast<int>(segment.size()));
+                    continue;
+                }
+                std::vector<SDL_Point> shifted = segment;
+                for (SDL_Point& point : shifted) {
+                    point.y += dy;
+                }
+                sdl_render::Lines(renderer, shifted.data(), static_cast<int>(shifted.size()));
+            }
+        }
+    };
+
+    DMLabelStyle label_style = DMStyles::Label();
+    label_style.font_size = std::max(12, label_style.font_size - 1);
+
+    for (const LineInfo& line : lines) {
+        if (!line.valid || line.segments.empty()) {
+            continue;
+        }
+        const bool selected = (line.line == live_depth_selected_line_);
+        SDL_Color draw_color = line.color;
+        const int thickness = selected ? 5 : 2;
+        if (selected) {
+            draw_color = SDL_Color{255, 245, 168, 240};
+            draw_segments(line.segments, SDL_Color{255, 245, 168, 96}, 10);
+        }
+        draw_segments(line.segments, draw_color, thickness);
+
+        label_style.color = selected ? SDL_Color{255, 245, 168, 255} : line.color;
+        const int label_x = std::clamp(line.label_anchor.x + 10, 12, std::max(12, screen_w_ - 220));
+        const int label_y = std::clamp(line.label_anchor.y - 18, 6, std::max(6, screen_h_ - 22));
+        DrawLabelText(renderer, line.label, label_x, label_y, label_style);
+    }
+
+    DMLabelStyle instruction_style = DMStyles::Label();
+    instruction_style.color = SDL_Color{228, 236, 248, 255};
+    DrawLabelText(renderer, "Top third=BG, middle=Center, bottom=FG. Hold Shift + Wheel to edit line depth; Wheel alone controls camera.", 16, 32, instruction_style);
+
+    live_depth_exit_button_->render(renderer);
+    SDL_SetRenderDrawBlendMode(renderer, previous_blend);
 }
 
 bool DevControls::can_use_room_editor_ui() const {
@@ -4701,7 +5394,7 @@ void DevControls::handle_map_selection() {
     }
     if (is_trail_room(selected)) {
         if (trail_suite_) {
-            trail_suite_->open(selected);
+            trail_suite_->open(selected, false);
         }
         pending_trail_template_.reset();
         return;
@@ -4784,6 +5477,7 @@ void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
         if (!still_active || !should_hide) {
             if (asset && still_active) {
                 asset->set_hidden(it->second);
+                asset->active = true;
             }
             it = filter_hidden_assets_.erase(it);
         } else {
@@ -4798,6 +5492,7 @@ void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
         }
         auto [entry, inserted] = filter_hidden_assets_.emplace(asset, asset->is_hidden());
         asset->set_hidden(true);
+        asset->active = false;
         asset->set_highlighted(false);
         asset->set_selected(false);
         (void)inserted;
@@ -4851,7 +5546,7 @@ bool DevControls::boundary_assets_visible() const {
 }
 
 
-bool DevControls::persist_map_info_to_disk(devmode::core::SaveManager::MapWritePath path) {
+bool DevControls::persist_map_info_to_disk() {
     if (!assets_) {
         std::cerr << "[DevControls] Cannot persist map info: assets manager not set\n";
         return false;
@@ -4861,7 +5556,7 @@ bool DevControls::persist_map_info_to_disk(devmode::core::SaveManager::MapWriteP
         std::cerr << "[DevControls] Cannot persist map info: map id empty\n";
         return false;
     }
-    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, path);
+    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
     return true;
 }
 

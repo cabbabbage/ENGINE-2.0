@@ -52,6 +52,8 @@ SDL_FPoint sample_quadratic_by_arclen(const SDL_FPoint& p0,
 
 void MovementFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
+    had_previous_static_frame_ = false;
+    previous_static_frame_ = false;
     selection_state_ = context.selection_state;
     point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
     if (selection_state_) {
@@ -79,6 +81,10 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     }
     if (frames_.empty()) {
         frames_.push_back(MovementFrame{});
+    }
+    if (context_.target) {
+        had_previous_static_frame_ = true;
+        previous_static_frame_ = context_.target->static_frame;
     }
     rebuild_rel_positions();
     refresh_selection_state();
@@ -226,9 +232,19 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             refresh_selection_state();
         });
     }
+
+    apply_selected_frame_to_target();
 }
 
 void MovementFrameEditor::end() {
+    if (had_previous_static_frame_ && context_.target) {
+        context_.target->static_frame = previous_static_frame_;
+        if (context_.assets) {
+            context_.assets->mark_active_assets_dirty();
+        }
+    }
+    had_previous_static_frame_ = false;
+    previous_static_frame_ = false;
     wants_close_ = false;
     dirty_ = false;
     frames_.clear();
@@ -434,6 +450,8 @@ void MovementFrameEditor::select_frame(int index) {
     if (frame_navigator_) {
         frame_navigator_->set_current_frame(selected_index_);
     }
+
+    apply_selected_frame_to_target();
 }
 
 void MovementFrameEditor::rebuild_rel_positions() {
@@ -757,6 +775,44 @@ SDL_FPoint MovementFrameEditor::screen_to_world_relative(const SDL_Point& screen
 bool MovementFrameEditor::ui_contains_point(const SDL_Point& pt) const {
     if (SDL_PointInRect(&pt, &nav_rect_)) return true;
     return tool_panel_ && tool_panel_->contains_point(pt);
+}
+
+void MovementFrameEditor::apply_selected_frame_to_target() {
+    if (!context_.target || !context_.target->info || context_.animation_id.empty()) {
+        return;
+    }
+
+    context_.target->set_current_animation(context_.animation_id);
+    auto anim_it = context_.target->info->animations.find(context_.target->current_animation);
+    if (anim_it == context_.target->info->animations.end()) {
+        anim_it = context_.target->info->animations.find(context_.animation_id);
+    }
+    if (anim_it == context_.target->info->animations.end() || !anim_it->second.has_frames()) {
+        return;
+    }
+
+    const int frame_count = static_cast<int>(anim_it->second.frame_count());
+    if (frame_count <= 0) {
+        return;
+    }
+
+    const int frame_index = clamp_index(selected_index_, frame_count);
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
+    if (!frame) {
+        frame = anim_it->second.get_first_frame();
+    }
+    if (!frame) {
+        return;
+    }
+
+    context_.target->current_animation = anim_it->first;
+    context_.target->current_frame = frame;
+    context_.target->set_frame_progress(0.0f);
+    context_.target->static_frame = true;
+    context_.target->refresh_frame_texture_bindings();
+    if (context_.assets) {
+        context_.assets->mark_active_assets_dirty();
+    }
 }
 
 }  // namespace devmode::frame_editors

@@ -17,7 +17,14 @@
 #include <vector>
 
 #include "devtools/dev_camera_controls.hpp"
+#include "devtools/animation_source_navigation.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/room_anchor_tools_panel.hpp"
+#include "devtools/room_box_tools_panel.hpp"
+#include "devtools/room_movement_payload.hpp"
+#include "devtools/room_selection_filter_utils.hpp"
+#include "assets/asset/anchor_point.hpp"
+#include "animation/combat_geometry.hpp"
 #include "utils/input.hpp"
 
 class Asset;
@@ -35,7 +42,11 @@ namespace vibble::grid {
 class Occupancy;
 class Grid;
 }
-class DMButton;
+class BottomNavigationPanel;
+class RoomAnchorToolsPanel;
+class RoomMovementToolsPanel;
+class CandidateEditorPieGraphWidget;
+class DockableCollapsible;
 class DevFooterBar;
 class DevControls;
 
@@ -67,6 +78,8 @@ public:
 
     void set_enabled(bool enabled, bool preserve_camera_state = false);
     bool is_enabled() const { return enabled_; }
+    bool is_anchor_edit_mode_active() const;
+    bool is_asset_stack_editor_active() const;
 
     void update(const Input& input);
     void update_ui(const Input& input);
@@ -90,8 +103,9 @@ public:
 
     void open_asset_info_editor(const std::shared_ptr<AssetInfo>& info);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
-    void open_asset_info_editor_for_asset(Asset* asset);
+    void open_asset_info_editor_for_asset(Asset* asset, bool focus_camera = true);
     void close_asset_info_editor();
+    bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;
     bool has_active_modal() const;
     void pulse_active_modal_header();
@@ -131,6 +145,7 @@ protected:
     void handle_spawn_config_change(const nlohmann::json& entry);
 
 private:
+    enum class AssetEditorSubview;
 
     void begin_area_drag_session(const std::string& area_name, const SDL_Point& world_mouse);
     void update_area_drag_session(const SDL_Point& world_mouse);
@@ -207,6 +222,8 @@ private:
     Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
     bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
+    bool asset_anchor_screen_position(const WarpedScreenGrid& cam, const Asset* asset, SDL_Point& out_screen) const;
+    Asset* hit_test_asset_anchor(SDL_Point screen_point, int pick_radius_px) const;
     void update_hover_state(Asset* hit);
     void handle_click(const Input& input);
     std::optional<std::string> find_room_area_at_point(SDL_Point world_point);
@@ -215,6 +232,12 @@ private:
     bool should_enable_mouse_controls() const;
     void handle_shortcuts(const Input& input);
     void handle_delete_shortcut(const Input& input);
+    void set_focus_asset(Asset* asset, bool from_asset_info);
+    void set_focus_spawn_group(const std::string& spawn_id);
+    void clear_focus();
+    void validate_focus_state();
+    void apply_focus_filter();
+    bool focus_selection_matches_snapshot() const;
     void ensure_room_configurator();
     void ensure_spawn_group_config_ui();
     void update_room_config_bounds();
@@ -316,9 +339,215 @@ private:
     static bool asset_info_contains_spawn_group(const class AssetInfo* info, const std::string& spawn_id);
     void mark_highlight_dirty();
     bool spawn_group_locked(const std::string& spawn_id) const;
+    devmode::room_selection_filter::SelectionFilter effective_selection_filter() const;
+    devmode::room_selection_filter::SpawnOwnership classify_spawn_group_ownership(const std::string& spawn_id) const;
+    devmode::room_selection_filter::SpawnOwnership classify_asset_ownership(const Asset* asset) const;
+    bool owner_array_matches_map_section(const nlohmann::json* owner_array, const char* section_key) const;
     bool asset_matches_selection_filter(const Asset* asset) const;
+    struct DynamicBoundaryProxyKey {
+        std::string spawn_id;
+        std::string asset_name;
+        int boundary_type_index = -1;
+        int candidate_index = -1;
+        int world_x = 0;
+        int world_z = 0;
+
+        bool valid() const { return !spawn_id.empty(); }
+        bool operator==(const DynamicBoundaryProxyKey& other) const {
+            return spawn_id == other.spawn_id &&
+                   asset_name == other.asset_name &&
+                   boundary_type_index == other.boundary_type_index &&
+                   candidate_index == other.candidate_index &&
+                   world_x == other.world_x &&
+                   world_z == other.world_z;
+        }
+        bool operator!=(const DynamicBoundaryProxyKey& other) const {
+            return !(*this == other);
+        }
+    };
+    struct DynamicBoundaryProxyHit {
+        DynamicBoundaryProxyKey key{};
+        SDL_FRect screen_rect{0.0f, 0.0f, 0.0f, 0.0f};
+        int world_z = 0;
+    };
+    std::optional<DynamicBoundaryProxyHit> hit_test_dynamic_boundary_sprite(SDL_Point screen_point) const;
+    std::optional<SDL_FRect> dynamic_boundary_proxy_rect(const DynamicBoundaryProxyKey& key) const;
+    void clear_dynamic_boundary_proxy_selection();
+    bool open_asset_info_for_dynamic_boundary(const DynamicBoundaryProxyHit& hit);
+    void render_dynamic_boundary_proxy_overlay(SDL_Renderer* renderer) const;
     void cycle_selection_filter();
     void reset_selection_filter();
+    void ensure_anchor_editor_widgets();
+    void ensure_movement_editor_widgets();
+    void ensure_hitbox_editor_widgets();
+    void ensure_attack_box_editor_widgets();
+    void update_asset_editor_layout();
+    bool should_show_asset_editor_navigation() const;
+    bool anchor_mode_active() const;
+    bool movement_mode_active() const;
+    bool hitbox_mode_active() const;
+    bool attack_box_mode_active() const;
+    Asset* selected_anchor_mode_asset() const;
+    AssetEditorSubview next_asset_editor_subview(AssetEditorSubview subview) const;
+    bool can_enter_asset_editor_subview(AssetEditorSubview subview) const;
+    void cycle_asset_editor_subview();
+    void set_asset_editor_subview(AssetEditorSubview subview, bool animate);
+    void on_animation_editor_closed();
+    void begin_asset_editor_transition(AssetEditorSubview from, AssetEditorSubview to);
+    void update_asset_editor_transition();
+    void apply_asset_editor_panel_overrides();
+    bool asset_editor_tab_scope_active() const;
+    void toggle_anchor_edit_mode();
+    bool enter_anchor_edit_mode();
+    void exit_anchor_edit_mode(bool flush_immediately);
+    bool enter_movement_edit_mode();
+    void exit_movement_edit_mode(bool persist_changes);
+    bool enter_hitbox_edit_mode();
+    void exit_hitbox_edit_mode(bool persist_changes);
+    bool enter_attack_box_edit_mode();
+    void exit_attack_box_edit_mode(bool persist_changes);
+    void validate_anchor_edit_target();
+    void validate_movement_edit_target();
+    void validate_hitbox_edit_target();
+    void validate_attack_box_edit_target();
+    bool is_anchor_ui_blocking_point(int x, int y) const;
+    bool is_movement_ui_blocking_point(int x, int y) const;
+    bool is_hitbox_ui_blocking_point(int x, int y) const;
+    bool is_attack_box_ui_blocking_point(int x, int y) const;
+    bool any_editor_point_selected() const;
+    enum class EditorFramePropagationScope {
+        NextFrame,
+        Animation,
+        Asset,
+    };
+    void navigate_anchor_animation(int delta);
+    void navigate_anchor_frame(int delta);
+    void navigate_movement_animation(int delta);
+    void navigate_movement_frame(int delta);
+    void navigate_hitbox_animation(int delta);
+    void navigate_hitbox_frame(int delta);
+    void navigate_attack_box_animation(int delta);
+    void navigate_attack_box_frame(int delta);
+    void navigate_asset_info_preview_animation(int delta);
+    void navigate_asset_info_preview_frame(int delta);
+    bool apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_movement_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_hitbox_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_asset_preview_animation_and_frame(Asset* target, const std::string& animation_id, int frame_index);
+    std::vector<std::string> anchor_mode_animation_names() const;
+    std::vector<std::string> movement_mode_animation_names() const;
+    std::vector<std::string> hitbox_mode_animation_names() const;
+    std::vector<std::string> attack_box_mode_animation_names() const;
+    int resolve_anchor_mode_frame_index() const;
+    int resolve_movement_mode_frame_index() const;
+    int resolve_hitbox_mode_frame_index() const;
+    int resolve_attack_box_mode_frame_index() const;
+    void refresh_anchor_mode_handles();
+    void sync_anchor_tools_panel();
+    void sync_anchor_candidate_editor();
+    void refresh_anchor_candidate_editor_widget();
+    void update_anchor_candidate_editor_search(const Input& input);
+    void layout_anchor_candidate_editor_popup();
+    void open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect);
+    void close_anchor_candidate_editor();
+    bool handle_anchor_candidate_editor_event(const SDL_Event& event);
+    void render_anchor_candidate_editor(SDL_Renderer* renderer) const;
+    bool mutate_anchor_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
+                                       devmode::core::DevSaveCoordinator::Priority priority,
+                                       bool flush_now,
+                                       const char* reason,
+                                       const char* flush_tag);
+    std::vector<std::string> canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const;
+    bool reconcile_anchor_child_candidates_with_eligible_names(const std::shared_ptr<AssetInfo>& target_info,
+                                                               bool& changed);
+    void sync_hitbox_tools_panel();
+    void sync_attack_box_tools_panel();
+    void ensure_anchor_selection_valid();
+    void rebuild_movement_rel_positions();
+    void rebuild_movement_frames_from_positions();
+    void normalize_movement_frames_to_current_animation();
+    void refresh_movement_runtime_animation();
+    bool persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority priority);
+    void refresh_movement_editor_selection(bool reset_drag_state);
+    int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
+    bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;
+    bool handle_movement_mode_mouse_input(const Input& input);
+    void apply_movement_linear_smoothing(int adjusted_index,
+                                         std::vector<SDL_FPoint>& redistributed_xy,
+                                         std::vector<float>& redistributed_z,
+                                         int last_index) const;
+    void apply_movement_curved_smoothing(int adjusted_index,
+                                         const std::vector<SDL_FPoint>& original_xy,
+                                         const std::vector<float>& original_z,
+                                         std::vector<SDL_FPoint>& redistributed_xy,
+                                         std::vector<float>& redistributed_z,
+                                         int last_index) const;
+    void redistribute_movement_points_after_adjustment(int adjusted_index);
+    SDL_Point movement_asset_anchor_world() const;
+    float movement_base_world_z() const;
+    devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,
+                                                                                              const std::string& animation_id) const;
+    int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px) const;
+    bool handle_anchor_mode_mouse_input(const Input& input);
+    bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
+                                     devmode::core::DevSaveCoordinator::Priority priority);
+    bool persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::DetailValues& values);
+    bool update_anchor_depth(const std::string& anchor_name, float delta_world);
+    bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
+    bool add_anchor_in_current_frame();
+    bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
+    bool delete_selected_anchor_in_current_frame();
+    bool apply_anchor_current_frame_to_scope(EditorFramePropagationScope scope);
+    bool normalize_anchor_invariants_for_eligible_animations(Asset* target,
+                                                              const std::shared_ptr<AssetInfo>& target_info,
+                                                              bool& updated_any);
+    bool commit_anchor_bulk_edit(Asset* target,
+                                 const std::shared_ptr<AssetInfo>& target_info,
+                                 devmode::core::DevSaveCoordinator::Priority priority,
+                                 bool flush_now,
+                                 const char* reason,
+                                 const char* flush_tag);
+    std::vector<std::string> eligible_anchor_animation_names(const AssetInfo& info) const;
+    int find_hitbox_corner_at_screen_point(SDL_Point screen_point,
+                                           int radius_px,
+                                           int& out_corner_index,
+                                           int& out_point_index) const;
+    int find_attack_box_corner_at_screen_point(SDL_Point screen_point,
+                                               int radius_px,
+                                               int& out_corner_index,
+                                               int& out_point_index) const;
+    int find_hitbox_rotation_handle_at_screen_point(SDL_Point screen_point) const;
+    int find_attack_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
+    int find_hitbox_body_at_screen_point(SDL_Point screen_point) const;
+    int find_attack_box_body_at_screen_point(SDL_Point screen_point) const;
+    bool handle_hitbox_mode_mouse_input(const Input& input);
+    bool handle_attack_box_mode_mouse_input(const Input& input);
+    bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
+                                     devmode::core::DevSaveCoordinator::Priority priority);
+    bool mutate_attack_box_current_frame(const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
+                                         devmode::core::DevSaveCoordinator::Priority priority);
+    bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool drag_hitbox_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
+    bool drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
+    bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);
+    bool begin_attack_box_drag(int box_index, SDL_Point screen_point);
+    bool begin_hitbox_rotation_drag(int box_index, SDL_Point screen_point);
+    bool begin_attack_box_rotation_drag(int box_index, SDL_Point screen_point);
+    bool drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_attack_box_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_hitbox_rotation_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_attack_box_rotation_to_screen(int box_index, SDL_Point screen_point);
+    bool add_hitbox_in_current_frame();
+    bool add_attack_box_in_current_frame();
+    bool delete_selected_hitbox_in_current_frame();
+    bool delete_selected_attack_box_in_current_frame();
+    bool apply_hitbox_current_frame_to_scope(EditorFramePropagationScope scope);
+    bool apply_attack_box_current_frame_to_scope(EditorFramePropagationScope scope);
+    bool apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
+    bool apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
@@ -329,6 +558,7 @@ private:
     void render_asset_outline(SDL_Renderer* renderer, Asset* asset, const WarpedScreenGrid& cam, const SDL_Color& color, int outline_offset_px) const;
 
     void mark_spatial_index_dirty() const;
+    const std::vector<Asset*>* selection_asset_source() const;
     bool ensure_spatial_index(const WarpedScreenGrid& cam) const;
     bool camera_state_changed(const WarpedScreenGrid& cam) const;
       bool compute_asset_screen_bounds(const WarpedScreenGrid& cam, Asset* asset, SDL_Rect& out_rect, int& out_screen_y) const;
@@ -356,18 +586,149 @@ private:
     bool mouse_controls_enabled_last_frame_ = false;
 
     enum class SelectionFilter {
-        Normal,          // Normal assets only (not map, not boundary, not tiled, not anchored)
+        All,             // All selectable assets
+        Normal,          // Primary room assets (excluding map-wide, boundary-domain, tiled, and anchored)
         Tiled,           // Tiled assets only
-        MapWide,         // Map-wide assets only
-        Boundary,        // Boundary assets only
+        MapWide,         // map_assets_data spawn-group assets only
+        Boundary,        // map_boundary_data spawn-group assets/sprites only
         Anchored,        // Assets following another asset's anchor point
     };
+
+    enum class EditorMode {
+        Normal,
+        AnchorEdit,
+        MovementEdit,
+        HitBoxEdit,
+        AttackBoxEdit,
+    };
+
+    enum class AssetEditorSubview {
+        AssetInfo,
+        AnimationEditor,
+        Anchor,
+        Movement,
+        Hitbox,
+        AttackBox,
+    };
+
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
+    EditorMode editor_mode_ = EditorMode::Normal;
     bool shift_was_down_last_frame_ = false;
     bool shift_space_was_down_last_frame_ = false;
 
     std::unique_ptr<AssetLibraryUI> library_ui_;
     std::unique_ptr<AssetInfoUI> info_ui_;
+    std::unique_ptr<RoomAnchorToolsPanel> anchor_tools_panel_;
+    std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
+    std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
+    std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;
+    std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
+
+    struct AnchorHandleSample {
+        std::string name;
+        int texture_x = 0;
+        int texture_y = 0;
+        float depth_offset = 0.0f;
+        bool flip_horizontal = true;
+        bool flip_vertical = true;
+        float rotation_degrees = 0.0f;
+        bool hidden = false;
+        bool resolve_x = true;
+        SDL_FPoint flat_screen_px{0.0f, 0.0f};
+        bool has_flat_screen_px = false;
+        SDL_FPoint final_screen_px{0.0f, 0.0f};
+        bool has_final_screen_px = false;
+    };
+
+    struct AnchorEditState {
+        Asset* target_asset = nullptr;
+        std::string animation_id;
+        int frame_index = 0;
+        std::string selected_anchor_name;
+        std::string hovered_anchor_name;
+        std::string dragging_anchor_name;
+        bool point_selected = false;
+        bool dragging = false;
+        bool onion_skin_enabled = false;
+        bool had_static_frame_before = false;
+        bool static_frame_before = false;
+        bool dirty_since_last_flush = false;
+        std::vector<AnchorHandleSample> handles;
+    };
+    AnchorEditState anchor_edit_;
+
+    struct AnchorCandidateEditorState {
+        bool open = false;
+        std::string anchor_name;
+        SDL_Point open_point{0, 0};
+        SDL_Rect anchor_row_rect{0, 0, 0, 0};
+        std::unique_ptr<DockableCollapsible> panel{};
+        std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
+    };
+    AnchorCandidateEditorState anchor_candidate_editor_;
+
+    struct MovementEditState {
+        Asset* target_asset = nullptr;
+        std::string animation_id;
+        int frame_index = 0;
+        bool point_selected = false;
+        bool selected_point_active = false;
+        int hovered_point_index = -1;
+        bool dragging_point = false;
+        bool had_static_frame_before = false;
+        bool static_frame_before = false;
+        bool dirty_since_last_flush = false;
+        bool smooth_enabled = false;
+        bool curve_enabled = false;
+        std::vector<devmode::room_movement_payload::MovementFrame> frames;
+        std::vector<SDL_FPoint> rel_positions;
+        std::vector<float> rel_positions_z;
+
+        bool has_frames() const { return !frames.empty(); }
+        std::size_t frame_count() const { return frames.size(); }
+    };
+    MovementEditState movement_edit_;
+
+    struct BoxEditState {
+        Asset* target_asset = nullptr;
+        std::string animation_id;
+        int frame_index = 0;
+        int selected_box_index = -1;
+        int selected_corner_index = 0;
+        int selected_point_index = 0;
+        int hovered_box_index = -1;
+        int hovered_corner_index = -1;
+        int hovered_point_index = -1;
+        bool point_selected = false;
+        bool dragging_corner = false;
+        bool dragging_box = false;
+        bool dragging_rotation = false;
+        bool hovered_rotation_handle = false;
+        bool onion_skin_enabled = false;
+        int drag_reference_point_index = -1;
+        int drag_reference_corner_index = -1;
+        SDL_FPoint drag_reference_screen_offset{0.0f, 0.0f};
+        animation_update::FrameBoxRect drag_start_rect{};
+        SDL_FPoint rotation_drag_center_screen{0.0f, 0.0f};
+        float rotation_drag_start_angle_degrees = 0.0f;
+        float rotation_drag_start_box_rotation_degrees = 0.0f;
+        bool had_static_frame_before = false;
+        bool static_frame_before = false;
+        bool dirty_since_last_flush = false;
+    };
+    BoxEditState hitbox_edit_;
+    BoxEditState attack_box_edit_;
+
+    struct AssetEditorTransitionState {
+        bool active = false;
+        AssetEditorSubview from = AssetEditorSubview::AssetInfo;
+        AssetEditorSubview to = AssetEditorSubview::AssetInfo;
+        int frame = 0;
+        int duration_frames = 12;
+    };
+    AssetEditorSubview asset_editor_subview_ = AssetEditorSubview::AssetInfo;
+    AssetEditorSubview previous_non_animation_subview_ = AssetEditorSubview::AssetInfo;
+    AssetEditorTransitionState asset_editor_transition_{};
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
     SDL_Rect room_config_bounds_{0, 0, 0, 0};
@@ -385,9 +746,16 @@ private:
     std::array<bool, static_cast<size_t>(BlockingPanel::Count)> blocking_panel_visible_{};
 
     Asset* hovered_asset_ = nullptr;
+    Asset* hovered_anchor_asset_ = nullptr;
     bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
+    std::vector<Asset*> focus_selection_snapshot_;
+    std::optional<std::string> focus_spawn_group_snapshot_{};
+    Asset* focused_asset_ = nullptr;
+    std::optional<std::string> focused_spawn_id_{};
+    bool focus_active_ = false;
+    bool focus_from_asset_info_ = false;
     bool highlight_dirty_ = true;
 
     bool snap_to_grid_enabled_ = true;
@@ -487,9 +855,13 @@ private:
     bool camera_settings_lock_active_ = false;
     CameraSettingsDragState camera_settings_drag_{};
     std::unordered_set<std::string> room_spawn_ids_;
+    std::unordered_set<std::string> map_assets_spawn_ids_;
+    std::unordered_set<std::string> map_boundary_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;
     bool asset_belongs_to_room(const Asset* asset) const;
+    std::optional<DynamicBoundaryProxyKey> selected_dynamic_boundary_proxy_{};
+    std::optional<DynamicBoundaryProxyKey> hovered_dynamic_boundary_proxy_{};
 
     RoomAssetsSavedCallback room_assets_saved_callback_;
     std::string rename_active_room(const std::string& old_name, const std::string& desired_name);

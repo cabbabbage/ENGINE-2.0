@@ -6,12 +6,9 @@
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <utility>
-
-#include "devtools/draw_utils.hpp"
-#include "devtools/font_cache.hpp"
-#include "devtools/dm_styles.hpp"
 
 namespace {
 
@@ -26,6 +23,49 @@ struct SDLSurfaceDeleter {
 constexpr Uint32 kIndicatorFadeMs = 400;
 constexpr Uint32 kRoomChangeHoldMs = 1200;
 constexpr Uint32 kMinToastDurationMs = 100;
+constexpr int kPanelPadding = 14;
+constexpr int kSmallGap = 8;
+
+TTF_Font* open_popup_font(int point_size) {
+    const int clamped_size = std::max(10, point_size);
+#ifdef _WIN32
+    static constexpr std::array<const char*, 2> kCandidates{
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf"
+    };
+#else
+    static constexpr std::array<const char*, 2> kCandidates{
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+    };
+#endif
+    for (const char* path : kCandidates) {
+        if (!path) {
+            continue;
+        }
+        if (TTF_Font* font = TTF_OpenFont(path, clamped_size)) {
+            return font;
+        }
+    }
+    return nullptr;
+}
+
+void draw_popup_box(SDL_Renderer* renderer,
+                    const SDL_Rect& rect,
+                    SDL_Color fill,
+                    SDL_Color border) {
+    if (!renderer || rect.w <= 0 || rect.h <= 0) {
+        return;
+    }
+    SDL_BlendMode previous_blend = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(renderer, &previous_blend);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    sdl_render::FillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
+    sdl_render::Rect(renderer, &rect);
+    SDL_SetRenderDrawBlendMode(renderer, previous_blend);
+}
 
 Uint8 alpha_from_fraction(float value) {
     const int clamped = std::clamp(static_cast<int>(std::lround(value * 255.0f)), 0, 255);
@@ -39,12 +79,12 @@ std::string sanitize_room_label(const std::string& room_name) {
 } // namespace
 
 PopupManager::PopupManager()
-    : toast_style_(DMStyles::Label()),
-      indicator_style_(DMStyles::Label()) {
-    toast_style_.font_size = std::max(20, toast_style_.font_size + 4);
-    toast_style_.color = DMStyles::HighlightColor();
-    indicator_style_.font_size = std::max(14, indicator_style_.font_size);
-    indicator_style_.color = DMStyles::Label().color;
+    : toast_style_(),
+      indicator_style_() {
+    toast_style_.font_size = 24;
+    toast_style_.color = SDL_Color{236, 245, 255, 255};
+    indicator_style_.font_size = 14;
+    indicator_style_.color = SDL_Color{221, 228, 240, 255};
 }
 
 void PopupManager::show_toast(const std::string& message, Uint32 duration_ms) {
@@ -134,13 +174,13 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
     if (toast_.visible) {
         rebuild_toast_texture(renderer);
         if (toast_.texture && toast_.width > 0 && toast_.height > 0) {
-            const int padding_x = DMSpacing::panel_padding();
-            const int padding_y = DMSpacing::small_gap();
+            const int padding_x = kPanelPadding;
+            const int padding_y = kSmallGap;
 
             SDL_Rect dest{0, 0, toast_.width, toast_.height};
             dest.x = (screen_w - dest.w) / 2;
             dest.x = std::clamp(dest.x, 0, std::max(0, screen_w - dest.w));
-            dest.y = DMSpacing::panel_padding();
+            dest.y = kPanelPadding;
             SDL_Rect background{
                 dest.x - padding_x,
                 dest.y - padding_y,
@@ -152,18 +192,9 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
             dest.x = background.x + (background.w - dest.w) / 2;
             dest.y = background.y + (background.h - dest.h) / 2;
 
-            SDL_Color fill = DMStyles::PanelHeader();
-            fill.a = 220;
-            dm_draw::DrawBeveledRect(renderer,
-                                     background,
-                                     DMStyles::CornerRadius(),
-                                     DMStyles::BevelDepth(),
-                                     fill,
-                                     DMStyles::HighlightColor(),
-                                     DMStyles::ShadowColor(),
-                                     false,
-                                     DMStyles::HighlightIntensity(),
-                                     DMStyles::ShadowIntensity());
+            SDL_Color fill{22, 28, 40, 220};
+            SDL_Color border{88, 129, 191, 245};
+            draw_popup_box(renderer, background, fill, border);
 
             SDL_SetTextureBlendMode(toast_.texture.get(), SDL_BLENDMODE_BLEND);
             sdl_render::Texture(renderer, toast_.texture.get(), nullptr, &dest);
@@ -176,10 +207,10 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
             const float alpha = compute_indicator_alpha(now);
             if (alpha > 0.0f) {
                 const Uint8 alpha_byte = alpha_from_fraction(alpha);
-                const int padding = DMSpacing::small_gap();
+                const int padding = kSmallGap;
                 SDL_Rect dest{0, 0, indicator_.width, indicator_.height};
-                dest.x = DMSpacing::panel_padding();
-                dest.y = DMSpacing::panel_padding();
+                dest.x = kPanelPadding;
+                dest.y = kPanelPadding;
                 SDL_Rect background{
                     dest.x - padding,
                     dest.y - padding,
@@ -191,20 +222,10 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
                 dest.x = background.x + (background.w - dest.w) / 2;
                 dest.y = background.y + (background.h - dest.h) / 2;
 
-                SDL_Color fill = DMStyles::PanelBG();
+                SDL_Color fill{16, 22, 32, alpha_byte};
+                SDL_Color border{118, 130, 152, alpha_byte};
                 fill.a = alpha_byte;
-                SDL_Color border = DMStyles::Border();
-                border.a = alpha_byte;
-                dm_draw::DrawBeveledRect(renderer,
-                                         background,
-                                         DMStyles::CornerRadius(),
-                                         DMStyles::BevelDepth(),
-                                         fill,
-                                         DMStyles::HighlightColor(),
-                                         DMStyles::ShadowColor(),
-                                         false,
-                                         DMStyles::HighlightIntensity(),
-                                         DMStyles::ShadowIntensity());
+                draw_popup_box(renderer, background, fill, border);
 
                 SDL_SetTextureBlendMode(indicator_.texture.get(), SDL_BLENDMODE_BLEND);
                 SDL_SetTextureAlphaMod(indicator_.texture.get(), alpha_byte);
@@ -227,7 +248,9 @@ void PopupManager::rebuild_toast_texture(SDL_Renderer* renderer) {
         return;
     }
 
-    TTF_Font* font = DMFontCache::instance().get_font(toast_style_.font_path, toast_style_.font_size);
+    std::unique_ptr<TTF_Font, decltype(&TTF_CloseFont)> font(
+        open_popup_font(toast_style_.font_size),
+        TTF_CloseFont);
     if (!font) {
         toast_.dirty = false;
         toast_.visible = false;
@@ -235,7 +258,7 @@ void PopupManager::rebuild_toast_texture(SDL_Renderer* renderer) {
     }
 
     std::unique_ptr<SDL_Surface, SDLSurfaceDeleter> surface(
-        ttf_util::RenderTextBlended(font, toast_.message.c_str(), toast_style_.color));
+        ttf_util::RenderTextBlended(font.get(), toast_.message.c_str(), toast_style_.color));
     if (!surface) {
         toast_.dirty = false;
         toast_.visible = false;
@@ -268,7 +291,9 @@ void PopupManager::rebuild_indicator_texture(SDL_Renderer* renderer) {
         return;
     }
 
-    TTF_Font* font = DMFontCache::instance().get_font(indicator_style_.font_path, indicator_style_.font_size);
+    std::unique_ptr<TTF_Font, decltype(&TTF_CloseFont)> font(
+        open_popup_font(indicator_style_.font_size),
+        TTF_CloseFont);
     if (!font) {
         indicator_.dirty = false;
         indicator_.showing = false;
@@ -276,7 +301,7 @@ void PopupManager::rebuild_indicator_texture(SDL_Renderer* renderer) {
     }
 
     std::unique_ptr<SDL_Surface, SDLSurfaceDeleter> surface(
-        ttf_util::RenderTextBlended(font, indicator_.label_text.c_str(), indicator_style_.color));
+        ttf_util::RenderTextBlended(font.get(), indicator_.label_text.c_str(), indicator_style_.color));
     if (!surface) {
         indicator_.dirty = false;
         indicator_.showing = false;

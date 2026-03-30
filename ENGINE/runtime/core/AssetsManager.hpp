@@ -3,13 +3,17 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
+#include "utils/map_grid_settings.hpp"
+#include "core/manifest/depth_cue_settings.hpp"
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -20,6 +24,8 @@
 #include "assets/asset/Asset.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
+#include "runtime_world_context.hpp"
+#include "rendering/render/dynamic_boundary_system.hpp"
 
 class Asset;
 class SceneRenderer;
@@ -29,8 +35,7 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
-
-class QuickTaskPopup;
+class TaskEditor;
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
@@ -41,8 +46,6 @@ class ManifestStore;
 
 enum class FrameEditorLaunchMode {
     Movement,
-    AttackGeometry,
-    HitGeometry,
     AnchorPoints
 };
 
@@ -67,7 +70,7 @@ public:
 
     Assets(AssetLibrary& library,
            Asset*,
-           std::vector<Room*> rooms,
+           std::shared_ptr<RuntimeWorldContext> world_context,
            int screen_width,
            int screen_height,
            int screen_center_x,
@@ -100,19 +103,25 @@ public:
     const std::vector<Asset*>& getActive() const;
     const std::vector<Asset*>& getFilteredActiveAssets() const;
     const std::unordered_set<Asset*>& filtered_active_asset_membership() const { return filtered_active_asset_membership_; }
-    const std::vector<world::GridPoint*>& active_points() const { return active_points_; }
-    struct ActiveTraversalEntry {
-        Asset* asset = nullptr;
-        world::GridPoint* grid_point = nullptr;
-        double depth_from_anchor = 0.0;
+    using ActiveTraversalEntry = WarpedScreenGrid::VisibleTraversalEntry;
+    struct FrameCollisionEntry {
+        const Asset* asset = nullptr;
+        Area area{"impassable"};
+        world::GridPoint bottom_middle = world::GridPoint::make_virtual(0, 0, 0, 0);
     };
-    const std::vector<ActiveTraversalEntry>& active_traversal() const { return active_traversal_; }
+    const std::vector<ActiveTraversalEntry>& active_traversal() const { return camera_.visible_traversal_entries(); }
+    const std::vector<FrameCollisionEntry>& frame_collision_entries() const { return frame_collision_entries_; }
     const std::vector<Asset*>& getActiveRaw() const { return active_assets; }
     std::vector<Asset*>& mutable_filtered_active_assets() { return filtered_active_assets; }
     WarpedScreenGrid& getView() { return camera_; }
     const WarpedScreenGrid& getView() const { return camera_; }
+    void query_impassable_entries(const Asset& self,
+                                  int search_radius,
+                                  std::vector<const FrameCollisionEntry*>& out) const;
+    void mark_collision_context_dirty() { frame_collision_context_dirty_ = true; }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
+    float frame_delta_seconds_clamped() const;
     std::uint32_t frame_id() const { return frame_id_; }
 
     void render_overlays(SDL_Renderer* renderer);
@@ -130,6 +139,7 @@ public:
     void open_asset_info_editor_for_asset(Asset* a);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void close_asset_info_editor();
+    bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;
 
     void clear_editor_selection();
@@ -141,6 +151,9 @@ public:
     void force_camera_view_refresh();
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
+    const depth_cue::DepthCueSettings& depth_cue_settings() const { return depth_cue_settings_; }
+    void set_depth_cue_settings(const depth_cue::DepthCueSettings& settings);
+    std::uint64_t depth_cue_settings_version() const { return depth_cue_settings_version_; }
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
     void set_movement_debug_visible(bool visible);
@@ -149,6 +162,8 @@ public:
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     bool fog_visible() const;
     bool boundary_assets_visible() const;
+    float boundary_min_visible_screen_ratio() const;
+    void set_boundary_min_visible_screen_ratio(float value);
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 
@@ -169,6 +184,7 @@ public:
     void notify_spawn_group_config_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
     void invalidate_dynamic_boundary_system();
+    const std::vector<DynamicBoundarySystem::BoundarySprite>& dynamic_boundary_sprites() const;
 
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
     void notify_camera_activity(bool active);
@@ -198,29 +214,23 @@ public:
     std::unique_ptr<Asset> extract_asset(Asset* asset);
     Asset* attach_asset(std::unique_ptr<Asset> asset, int world_z = 0, int resolution_layer = -1);
     std::unique_ptr<Asset> create_unattached_asset(const std::string& name, SDL_Point world_pos);
-    void register_binding_helper(class AnchorBoundAssetHelper* helper);
-    void unregister_binding_helper(class AnchorBoundAssetHelper* helper);
 
     void persist_map_info_json();
 
     AssetLibrary& library();
     const AssetLibrary& library() const;
 
-    void set_rooms(std::vector<Room*> rooms);
     void ensure_light_textures_loaded(Asset* asset);
     std::vector<Room*>& rooms();
     const std::vector<Room*>& rooms() const;
     void notify_rooms_changed();
-    std::size_t rooms_generation() const { return rooms_generation_; }
+    std::size_t rooms_generation() const;
 
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();
     void mark_active_assets_dirty();
     void initialize_active_assets(const world::GridPoint& center);
     std::uint64_t dev_active_state_version() const { return dev_active_state_version_; }
-
-    // Region tagging
-    void classify_region(world::GridPoint& point);
 
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
@@ -232,6 +242,11 @@ public:
     bool is_dev_mode() const { return dev_mode; }
     bool is_frame_editor_target_active(const Asset* asset) const;
     bool should_advance_animation_for(const Asset* asset) const;
+    void set_focus_filter(Asset* asset, const std::string& spawn_id);
+    void clear_focus_filter();
+    bool focus_filter_active() const { return focus_filter_active_; }
+    bool is_asset_in_focus_filter(const Asset* asset) const;
+    bool is_spawn_id_in_focus_filter(const std::string& spawn_id) const;
 
 
     std::vector<Asset*> all;
@@ -249,6 +264,8 @@ public:
     bool process_pending_removals();
     std::size_t delete_assets_for_spawn_group(const std::string& spawn_id);
     WorldMutationBatch begin_world_mutation_batch();
+    void set_output_dimensions(int width, int height);
+    std::optional<SDL_Point> scene_postprocess_target_size() const;
 
 private:
     void save_map_info_json();
@@ -264,10 +281,8 @@ private:
     bool apply_world_mutation_batch(WorldMutationBatch& batch);
     void addAsset(const std::string& name, SDL_Point g);
     void update_filtered_active_assets();
+    bool asset_matches_focus_filter(const Asset* asset) const;
     void ensure_dev_controls();
-    void update_scene_render_quality();
-    int  saved_render_quality_percent() const;
-    int  effective_render_quality_percent() const;
     void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
     void log_camera_fog_state(const char* label) const;
@@ -279,10 +294,14 @@ private:
     Input* input = nullptr;
     DevControls* dev_controls_ = nullptr;
     Room* dev_controls_last_room_ = nullptr;
-    std::unique_ptr<QuickTaskPopup> quick_task_popup_;
+    std::unique_ptr<TaskEditor> task_editor_;
+    bool screenshot_capture_pending_ = false;
+    std::string latest_screenshot_relative_path_;
+    Uint32 screenshot_create_task_start_ticks_ = 0;
+    SDL_Rect screenshot_create_task_button_rect_{};
     PopupManager popup_manager_;
     WarpedScreenGrid camera_;
-    SceneRenderer* scene = nullptr;
+    std::unique_ptr<SceneRenderer> scene;
     int screen_width;
     int screen_height;
     int delta_x_ = 0;
@@ -290,8 +309,7 @@ private:
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
     std::unordered_set<Asset*> filtered_active_asset_membership_;
-    std::vector<Room*> rooms_;
-    std::size_t rooms_generation_ = 0;
+    std::shared_ptr<RuntimeWorldContext> world_context_;
     Room* current_room_ = nullptr;
     bool dev_mode = false;
     bool camera_settings_dirty_ = false;
@@ -300,13 +318,16 @@ private:
     bool suppress_dev_renderer_ = false;
     bool force_high_quality_rendering_ = false;
     bool depth_effects_enabled_ = true;
+    depth_cue::DepthCueSettings depth_cue_settings_{};
+    std::uint64_t depth_cue_settings_version_ = 1;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
-    std::vector<world::GridPoint*> active_points_;
-    std::vector<ActiveTraversalEntry> active_traversal_;
+    mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
+    mutable std::uint32_t frame_collision_context_frame_id_ = 0;
+    mutable bool frame_collision_context_dirty_ = true;
     std::vector<Asset*> removal_queue;
     std::mutex removal_queue_mutex_;
     std::vector<Asset*> non_player_update_buffer_;
@@ -330,6 +351,7 @@ private:
     float max_asset_width_world_  = 0.0f;
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
+    float boundary_min_visible_screen_ratio_ = 0.015f;
     struct AssetDimensionCache {
         float width = 0.0f;
         float height = 0.0f;
@@ -337,16 +359,28 @@ private:
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
     std::vector<Asset*> asset_dimension_update_queue_;
     std::unordered_set<Asset*> asset_dimension_update_lookup_;
-    std::vector<Asset*> anchor_basis_dirty_queue_;
-    std::unordered_set<Asset*> anchor_basis_dirty_lookup_;
+    struct RuntimeTraversalState {
+        std::uint64_t pending_anchor_invalidation_version = 0;
+        std::uint64_t processed_anchor_invalidation_version = 0;
+        std::uint64_t processed_anchor_revision = 0;
+        std::uint64_t processed_camera_state_version = 0;
+        int processed_frame_index = std::numeric_limits<int>::min();
+        std::uint32_t last_audio_frame_id = 0;
+    };
+    std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
+    std::uint64_t anchor_invalidation_version_counter_ = 1;
+    std::uint32_t last_audio_engine_update_frame_id_ = 0;
     Asset* max_asset_width_holder_ = nullptr;
     Asset* max_asset_height_holder_ = nullptr;
-    std::vector<Asset*> visible_candidate_buffer_;
-    std::uint64_t active_candidate_generation_ = 0;
     std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
+    std::uint32_t last_post_flush_refresh_frame_id_ = std::numeric_limits<std::uint32_t>::max();
+    std::uint32_t frame_rebuild_metrics_frame_ = 0;
+    std::uint32_t frame_rebuild_request_count_ = 0;
+    std::uint32_t frame_rebuild_execution_count_ = 0;
+    bool frame_rebuild_metrics_initialized_ = false;
 
     bool pending_initial_rebuild_ = false;
     bool logged_initial_rebuild_warning_ = false;
@@ -355,6 +389,7 @@ private:
     world::GridPoint last_camera_center_for_grid_ = world::GridPoint::make_virtual(0, 0, 0, 0);
     double last_camera_scale_for_grid_ = 0.0;
     double last_camera_pitch_for_grid_ = 0.0;
+    std::uint64_t last_camera_projection_state_version_for_grid_ = 0;
 
     struct GridMovementCommand {
         Asset* asset = nullptr;
@@ -363,10 +398,14 @@ private:
     };
 
     void track_asset_for_grid(Asset* asset);
+    void reset_frame_rebuild_stage();
+    void note_frame_rebuild_request();
+    bool run_frame_rebuild_stage();
     bool maybe_rebuild_world_grid();
     void rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                               double current_scale,
-                                              double current_pitch);
+                                              double current_pitch,
+                                              std::uint64_t current_projection_version);
     void mark_grid_dirty();
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
@@ -384,12 +423,31 @@ private:
 
     std::function<void()> dev_grid_overlay_callback_;
 
-    std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
-
     void rebuild_non_player_update_buffer_if_needed();
+    void refresh_visible_asset_scaling_only();
+    void run_idle_frame_pipeline(const Input& input);
+    void run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved);
+    void run_visibility_build_stage();
+    void run_post_flush_traversal_refresh_once();
+    void run_runtime_effects_stage();
+    void sync_dev_controls_for_frame(const Input& input);
+    void refresh_filtered_active_assets_if_needed();
+    void render_runtime_frame();
+    void finalize_dev_frame_state();
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
-    void refresh_dirty_anchor_bases();
+    std::uint64_t next_anchor_invalidation_version();
+    void run_active_runtime_single_pass(bool include_audio_update = true);
+    void run_active_runtime_single_pass_for_asset(Asset* asset,
+                                                  const SDL_Point& camera_focus,
+                                                  std::uint64_t camera_state_version,
+                                                  float camera_anchor_world_z,
+                                                  float depth_axis_sign);
+    bool capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out_relative_path);
+    bool screenshot_create_task_button_active(Uint32 now_ticks) const;
+    void render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32 now_ticks);
+    bool handle_screenshot_create_task_button_event(const SDL_Event& e, Uint32 now_ticks);
+    void rebuild_frame_collision_context() const;
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();
@@ -402,7 +460,6 @@ private:
     world::GridBounds screen_world_rect() const;
     int audio_effect_max_distance_world() const;
 
-    void update_audio_camera_metrics();
     void mark_non_player_update_buffer_dirty() {
         non_player_update_buffer_dirty_.store(true, std::memory_order_release);
     }
@@ -420,5 +477,8 @@ private:
     std::uint64_t last_camera_state_version_for_dev_ = 0;
     std::uint64_t last_dev_active_state_version_snapshot_ = 0;
     bool dev_frame_initialized_ = false;
+    bool focus_filter_active_ = false;
+    Asset* focus_filter_asset_ = nullptr;
+    std::string focus_filter_spawn_id_;
+    std::uint64_t focus_filter_version_ = 0;
 };
-#include "utils/map_grid_settings.hpp"

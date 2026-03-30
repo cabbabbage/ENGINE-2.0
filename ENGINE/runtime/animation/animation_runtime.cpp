@@ -14,7 +14,6 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
-#include "core/asset_list.hpp"
 #include "movement_plan_executor.hpp"
 #include "path_sanitizer.hpp"
 #include "get_best_path.hpp"
@@ -28,28 +27,24 @@
 namespace {
 template <typename Fn>
 bool visit_impassable_neighbors(const Asset& asset, Fn&& fn) {
-    const AssetList* list = asset.get_impassable_naighbors();
-    if (!list) {
+    const Assets* assets = asset.get_assets();
+    if (!assets) {
         return false;
     }
 
-    const auto visit_bucket = [&](const std::vector<Asset*>& bucket) {
-        for (Asset* neighbor : bucket) {
-            if (fn(neighbor)) {
-                return true;
-            }
+    std::vector<const Assets::FrameCollisionEntry*> entries;
+    const int search_radius = (asset.info && asset.info->NeighborSearchRadius > 0)
+        ? asset.info->NeighborSearchRadius
+        : 0;
+    assets->query_impassable_entries(asset, search_radius, entries);
+
+    for (const Assets::FrameCollisionEntry* entry : entries) {
+        if (!entry) {
+            continue;
         }
-        return false;
-};
-
-    if (visit_bucket(list->top_unsorted())) {
-        return true;
-    }
-    if (visit_bucket(list->middle_sorted())) {
-        return true;
-    }
-    if (visit_bucket(list->bottom_unsorted())) {
-        return true;
+        if (fn(entry->asset, entry->area, entry->bottom_middle)) {
+            return true;
+        }
     }
 
     return false;
@@ -93,6 +88,18 @@ std::vector<SDL_Point> build_escape_directions(SDL_Point primary) {
     }
     return dirs;
 }
+
+int resolve_effective_grid_resolution(const Asset* self,
+                                      const vibble::grid::Grid& grid_service,
+                                      std::optional<int> override_resolution) {
+    if (override_resolution.has_value()) {
+        return vibble::grid::clamp_resolution(*override_resolution);
+    }
+    if (self) {
+        return vibble::grid::clamp_resolution(self->grid_resolution);
+    }
+    return grid_service.default_resolution();
+}
 }
 
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
@@ -118,14 +125,6 @@ void AnimationRuntime::update() {
         return;
     }
 
-    float dt = 1.0f / 60.0f;
-    if (assets_owner_) {
-        dt = assets_owner_->frame_delta_seconds();
-    }
-    if (!(dt > 0.0f)) {
-        dt = 1.0f / 60.0f;
-    }
-
     struct SuppressionDecay {
         AnimationRuntime* runtime = nullptr;
         ~SuppressionDecay() {
@@ -145,12 +144,10 @@ void AnimationRuntime::update() {
             planner_iface_->move_pending_ = false;
             planner_iface_->pending_move_ = {};
         }
-        just_applied_controller_move_ = false;
     }
 
-    bool got_input = false;
     if (!freeze_for_frame_editor) {
-        got_input = planner_iface_->consume_input_event();
+        (void)planner_iface_->consume_input_event();
     }
 
     if (!freeze_for_frame_editor) {
@@ -160,7 +157,6 @@ void AnimationRuntime::update() {
 
         if (has_plan && !plan_deferred &&
             executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_)) {
-            just_applied_controller_move_ = false;
             return;
         }
 
@@ -168,32 +164,9 @@ void AnimationRuntime::update() {
             const auto& req = planner_iface_->pending_move_;
             if (!should_defer_for_non_locked(req.override_non_locked)) {
                 apply_pending_move();
-                just_applied_controller_move_ = true;
                 return;
             }
         }
-
-        if (!got_input && just_applied_controller_move_) {
-            auto it = self_->info->animations.find(self_->current_animation);
-            if (it != self_->info->animations.end()) {
-                Animation& anim = it->second;
-                if (!anim.locked) {
-                    const std::string next_id = anim.on_end_animation.empty()
-                                                  ? std::string{ animation_update::detail::kDefaultAnimation }
-                                                  : anim.on_end_animation;
-                    switch_to(resolve_animation(*self_, next_id), path_index_for(next_id));
-                }
-            }
-            just_applied_controller_move_ = false;
-        }
-    }
-
-    if (self_->get_current_animation() != animation_update::detail::kDefaultAnimation) {
-        if (!advance(self_->current_frame)) {
-            switch_to(animation_update::detail::kDefaultAnimation);
-            advance(self_->current_frame);
-        }
-        return;
     }
 
     advance(self_->current_frame);
@@ -248,6 +221,9 @@ void AnimationRuntime::apply_pending_move() {
         switch_to(resolved, path_index_for(resolved));
     } else {
         if (!advance(self_->current_frame)) {
+            if (self_->dead) {
+                return;
+            }
             switch_to(resolved, path_index_for(resolved));
         }
     }
@@ -263,24 +239,23 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
         return false;
     }
 
-    Animation& anim = it->second;
+    Animation* anim = &it->second;
     std::size_t path_index = path_index_for(self_->current_animation);
     if (!frame) {
-        frame = anim.get_first_frame(path_index);
+        frame = anim->get_first_frame(path_index);
         if (!frame) {
             return false;
         }
     }
 
     const bool is_player = self_->info && self_->info->type == asset_types::player;
-    bool should_skip = !is_player && (self_->static_frame || anim.locked || anim.is_frozen());
+    bool should_skip = !is_player && (self_->static_frame || anim->locked || anim->is_frozen() || lock_on_end_active_);
     bool has_overriding_plan = planner_iface_ && !planner_iface_->plan_.strides.empty() && planner_iface_->plan_.override_non_locked;
     if (should_skip && !has_overriding_plan) {
-        self_->static_frame = self_->static_frame || anim.is_frozen() || anim.locked;
+        self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || lock_on_end_active_;
         return true;
     }
     if (is_player) {
-
         self_->static_frame = false;
     }
 
@@ -298,17 +273,88 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     bool advanced_any = false;
     while (self_->frame_progress >= frame_interval) {
         self_->frame_progress -= frame_interval;
+
+        if (reverse_playback_active_) {
+            if (frame->prev) {
+                frame = frame->prev;
+                advanced_any = true;
+                continue;
+            }
+
+            reverse_playback_active_ = false;
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+            frame = self_->current_frame;
+            if (!frame) {
+                return false;
+            }
+            advanced_any = true;
+            continue;
+        }
+
         if (frame->next) {
             frame = frame->next;
             advanced_any = true;
-        } else {
-            const bool force_loop_default = self_->current_animation == animation_update::detail::kDefaultAnimation;
-            if (anim.loop || force_loop_default) {
-                frame = anim.get_first_frame(path_index);
-                advanced_any = true;
-            } else {
+            continue;
+        }
+
+        const Animation::OnEndDirective directive = anim->on_end_behavior;
+        switch (directive) {
+        case Animation::OnEndDirective::Loop: {
+            frame = anim->get_first_frame(path_index);
+            if (!frame) {
                 return false;
             }
+            advanced_any = true;
+            break;
+        }
+        case Animation::OnEndDirective::Kill:
+            self_->Delete();
+            return false;
+        case Animation::OnEndDirective::Lock:
+            lock_on_end_active_ = true;
+            self_->static_frame = true;
+            return true;
+        case Animation::OnEndDirective::Reverse:
+            reverse_playback_active_ = true;
+            lock_on_end_active_ = false;
+            self_->static_frame = false;
+            break;
+        case Animation::OnEndDirective::Animation: {
+            const std::string requested = anim->on_end_animation.empty()
+                                              ? std::string{animation_update::detail::kDefaultAnimation}
+                                              : anim->on_end_animation;
+            const std::string resolved = resolve_animation(*self_, requested);
+            switch_to(resolved, path_index_for(requested));
+            frame = self_->current_frame;
+            if (!frame) {
+                return false;
+            }
+            it = self_->info->animations.find(self_->current_animation);
+            if (it == self_->info->animations.end()) {
+                return false;
+            }
+            anim = &it->second;
+            path_index = path_index_for(self_->current_animation);
+            advanced_any = true;
+            break;
+        }
+        case Animation::OnEndDirective::Default:
+        default:
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+            frame = self_->current_frame;
+            if (!frame) {
+                return false;
+            }
+            it = self_->info->animations.find(self_->current_animation);
+            if (it == self_->info->animations.end()) {
+                return false;
+            }
+            anim = &it->second;
+            path_index = path_index_for(self_->current_animation);
+            advanced_any = true;
+            break;
         }
     }
     if (advanced_any) {
@@ -323,7 +369,8 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         return;
     }
 
-    const bool animation_changed = self_->current_animation != anim_id;
+    reverse_playback_active_ = false;
+    lock_on_end_active_ = false;
 
     auto it = self_->info->animations.find(anim_id);
     if (it == self_->info->animations.end()) {
@@ -406,18 +453,13 @@ bool AnimationRuntime::point_in_impassable(const world::GridPoint& pt, const Ass
     if (!animation_update::detail::bottom_point_inside_playable_area(assets, pt)) {
         return true;
     }
-    return visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+    return visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                                  const Area& area,
+                                                  const world::GridPoint&) {
         if (!neighbor || neighbor == self_ || neighbor == ignored || !neighbor->info) {
             return false;
         }
         if (neighbor->info->type == asset_types::player) {
-            return false;
-        }
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) {
-            area = neighbor->get_area("collision_area");
-        }
-        if (area.get_points().empty()) {
             return false;
         }
         return area.contains_point(pt.to_sdl_point());
@@ -444,18 +486,13 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         return true;
     }
     bool blocked = false;
-    visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+    visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                           const Area& area,
+                                           const world::GridPoint& neighbor_bottom) {
         if (!neighbor || neighbor == self_ || neighbor == ignored || !neighbor->info) {
             return false;
         }
         if (neighbor->info->type == asset_types::player) {
-            return false;
-        }
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) {
-            area = neighbor->get_area("collision_area");
-        }
-        if (area.get_points().empty()) {
             return false;
         }
         const bool contains_from = area.contains_point(bottom_from.to_sdl_point());
@@ -465,7 +502,6 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         if (!contains_from && !contains_to && !touches_segment) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                 overlaps = animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) <
                            animation_update::detail::kOverlapDistanceSq;
             }
@@ -507,15 +543,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     SDL_Point push{0, 0};
     std::vector<const Asset*> blocking_neighbors = blockers;
     if (blocking_neighbors.empty()) {
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
             if (!neighbor || neighbor == self_ || !neighbor->info) {
-                return false;
-            }
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) {
-                area = neighbor->get_area("collision_area");
-            }
-            if (area.get_points().empty()) {
                 return false;
             }
             const bool contains_from = area.contains_point(bottom_from.to_sdl_point());
@@ -525,7 +556,6 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             if (!contains_from && !contains_to && !touches_segment) {
                 const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
                 if (overlap_check) {
-                    const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                     overlaps = animation_update::detail::distance_sq(bottom_from, neighbor_bottom) <
                                animation_update::detail::kOverlapDistanceSq;
                 }
@@ -540,21 +570,21 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             return false;
         });
     } else {
-        for (const Asset* neighbor : blocking_neighbors) {
+        std::unordered_set<const Asset*> blocker_lookup(blocking_neighbors.begin(), blocking_neighbors.end());
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint&) {
             if (!neighbor || neighbor == self_ || !neighbor->info) {
-                continue;
+                return false;
             }
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) {
-                area = neighbor->get_area("collision_area");
+            if (blocker_lookup.find(neighbor) == blocker_lookup.end()) {
+                return false;
             }
-            if (area.get_points().empty()) {
-                continue;
-            }
-            SDL_Point center = area.get_center();
+            const SDL_Point center = area.get_center();
             push.x += bottom_from.world_x() - center.x;
             push.y += bottom_from.world_z() - center.y;
-        }
+            return false;
+        });
     }
     if (push.x == 0 && push.y == 0) {
         push.x = from.world_x() - to.world_x();
@@ -572,11 +602,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
         if (!animation_update::detail::bottom_point_inside_playable_area(assets, bottom)) {
             return true;
         }
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint&) {
             if (!neighbor || neighbor == self_ || !neighbor->info) return false;
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) area = neighbor->get_area("collision_area");
-            if (area.get_points().empty()) return false;
             if (!area.contains_point(bottom.to_sdl_point())) return false;
             const auto it = std::find(blocking_neighbors.begin(), blocking_neighbors.end(), neighbor);
             if (it == blocking_neighbors.end()) { blocked = true; return true; }
@@ -590,11 +619,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             return false;
         }
         bool inside = false;
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint&) {
             if (!neighbor || neighbor == self_ || !neighbor->info) return false;
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) area = neighbor->get_area("collision_area");
-            if (area.get_points().empty()) return false;
             if (area.contains_point(bottom.to_sdl_point())) { inside = true; return true; }
             return false;
         });
@@ -669,18 +697,18 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     const SDL_Point target_sdl = (next_checkpoint_index_ < planner_iface_->plan_.sanitized_checkpoints.size()) ? planner_iface_->plan_.sanitized_checkpoints[next_checkpoint_index_] : planner_iface_->final_dest;
     world::GridPoint target = world::grid_math::from_sdl(target_sdl, world_y, layer);
     world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
+    const world::GridPoint start_point = world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer);
     SDL_Point push{0, 0};
     std::vector<const Asset*> influencing_neighbors;
-    auto consider_neighbor = [&](const Asset* neighbor) {
+    auto consider_neighbor = [&](const Asset* neighbor,
+                                 const Area& area,
+                                 const world::GridPoint& neighbor_bottom) {
         if (!neighbor || neighbor == self_ || !neighbor->info) return;
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) area = neighbor->get_area("collision_area");
-        if (area.get_points().empty()) return;
-        bool relevant = area.contains_point(bottom_target.to_sdl_point()) || animation_update::detail::segment_hits_area(world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer), target, area);
+        bool relevant = area.contains_point(bottom_target.to_sdl_point()) ||
+                        animation_update::detail::segment_hits_area(start_point, target, area);
         if (!relevant) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                 relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < animation_update::detail::kOverlapDistanceSq;
             }
         }
@@ -691,13 +719,22 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         influencing_neighbors.push_back(neighbor);
 };
     if (!blockers.empty()) {
-        for (const Asset* neighbor : blockers) {
-            consider_neighbor(neighbor);
-        }
+        std::unordered_set<const Asset*> blocker_lookup(blockers.begin(), blockers.end());
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
+            if (!neighbor || blocker_lookup.find(neighbor) == blocker_lookup.end()) {
+                return false;
+            }
+            consider_neighbor(neighbor, area, neighbor_bottom);
+            return false;
+        });
     }
     if (influencing_neighbors.empty()) {
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
-            consider_neighbor(neighbor);
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
+            consider_neighbor(neighbor, area, neighbor_bottom);
             return false;
         });
     }
@@ -823,13 +860,14 @@ vibble::grid::Grid& AnimationRuntime::grid() const {
 }
 
 int AnimationRuntime::effective_grid_resolution(std::optional<int> override_resolution) const {
-    (void)override_resolution;
-
-    return 0;
+    return resolve_effective_grid_resolution(self_, grid(), override_resolution);
 }
 
 SDL_Point AnimationRuntime::convert_delta_to_world(SDL_Point delta, int resolution) const {
-    (void)resolution;
+    const int clamped_resolution = vibble::grid::clamp_resolution(resolution);
+    (void)clamped_resolution;
+    // Controller/movement deltas are authored in world-space pixels (X/Z).
+    // Resolution affects planning checkpoints but not per-frame root-motion deltas.
     return delta;
 }
 

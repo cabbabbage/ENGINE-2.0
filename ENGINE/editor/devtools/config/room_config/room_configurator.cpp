@@ -33,7 +33,7 @@ constexpr int kRadiusSliderExpansionMargin = 64;
 constexpr int kRadiusSliderExpansionFactor = 2;
 constexpr int kRadiusSliderHardCap = 20000;
 constexpr float kCameraTiltMinDeg = 0.0f;
-constexpr float kCameraTiltMaxDeg = 150.0f;
+constexpr float kCameraTiltMaxDeg = 360.0f;
 constexpr int kCameraZoomMinPercent = 0;
 constexpr int kCameraZoomMaxPercent = 100;
 constexpr int kCameraPanMinPercent = -100;
@@ -461,6 +461,15 @@ void RoomConfigurator::set_manifest_store(devmode::core::ManifestStore* store) {
     for (auto& cfg : spawn_group_configs_) {
         if (cfg) {
             cfg->set_manifest_store(manifest_store_);
+        }
+    }
+}
+
+void RoomConfigurator::set_assets(Assets* assets) {
+    assets_ = assets;
+    for (auto& cfg : spawn_group_configs_) {
+        if (cfg) {
+            cfg->set_assets(assets_);
         }
     }
 }
@@ -1398,9 +1407,8 @@ void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
             config = std::make_unique<SpawnGroupConfig>();
         }
 
-        if (manifest_store_) {
-            config->set_manifest_store(manifest_store_);
-        }
+        config->set_manifest_store(manifest_store_);
+        config->set_assets(assets_);
 
         int default_resolution = MapGridSettings::defaults().grid_resolution;
         if (room_) {
@@ -2386,6 +2394,15 @@ bool RoomConfigurator::focus_spawn_group(const std::string& spawn_id) {
         container_->prepare_layout(last_screen_w_, last_screen_h_);
     }
 
+    return true;
+}
+
+bool RoomConfigurator::focus_name_field() {
+    if (!visible() || !name_box_) {
+        return false;
+    }
+    focus_panel(geometry_panel_.get());
+    name_box_->start_editing();
     return true;
 }
 

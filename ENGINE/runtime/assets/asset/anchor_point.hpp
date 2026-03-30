@@ -18,6 +18,7 @@ struct Vec2 {
 // Canonical anchor contract:
 // - texture_x/texture_y name an integer pixel in the un-flipped source texture.
 // - The anchor refers to the *center* of that pixel: (x + 0.5, y + 0.5).
+// - Coordinates may be outside frame bounds for off-sprite anchor placements.
 // - +X goes right, +Y goes down in texture space; Z is derived at runtime.
 // - Horizontal flips are applied after converting to UV: u = 1 - u when flipped.
 // - The same contract is consumed by runtime projection and the editor preview.
@@ -25,17 +26,35 @@ struct DisplacedAssetAnchorPoint {
     std::string name;
     int         texture_x = 0;   // Pixel coordinate on the sprite texture (X axis)
     int         texture_y = 0;   // Pixel coordinate on the sprite texture (vertical axis)
-    int         depth_offset = 0; // Signed pixel offset along camera->anchor ray from the flat texture point
+    float       depth_offset = 0.0f; // Signed world-pixel offset along camera->anchor ray from the flat texture point (+farther, -closer)
+    // Transform inheritance parity:
+    // - true  => preserve parent axis orientation
+    // - false => invert parent axis orientation
+    bool        flip_horizontal = true;
+    bool        flip_vertical = true;
+    float       rotation_degrees = 0.0f;
+    bool        hidden = false;
+    bool        resolve_x = true;
 
     DisplacedAssetAnchorPoint() = default;
     DisplacedAssetAnchorPoint(std::string name_,
                               int tex_x,
                               int tex_y,
-                              int depth_offset_px = 0)
+                              float depth_offset_px = 0.0f,
+                              bool flip_horizontal_ = true,
+                              bool flip_vertical_ = true,
+                              float rotation_degrees_ = 0.0f,
+                              bool hidden_ = false,
+                              bool resolve_x_ = true)
         : name(std::move(name_))
         , texture_x(tex_x)
         , texture_y(tex_y)
-        , depth_offset(depth_offset_px) {}
+        , depth_offset(depth_offset_px)
+        , flip_horizontal(flip_horizontal_)
+        , flip_vertical(flip_vertical_)
+        , rotation_degrees(rotation_degrees_)
+        , hidden(hidden_)
+        , resolve_x(resolve_x_) {}
 
     bool is_valid() const {
         return !name.empty();
@@ -43,14 +62,21 @@ struct DisplacedAssetAnchorPoint {
 };
 
 struct ResolvedAnchor {
+    Vec2             world_exact_pos_2d{};
+    float            world_exact_z = 0.0f;
+    Vec2             flat_world_exact_pos_2d{};
+    float            flat_world_exact_z = 0.0f;
+    float            flat_perspective_scale = 1.0f;
+    bool             has_flat_perspective_scale = false;
     SDL_Point        world_px{0, 0};
     int              world_z = 0;
+    float            world_depth = 0.0f;
     int              resolution_layer = 0;
     SDL_Point        source_texture_px{0, 0};
     bool             has_canonical_texture_source = false;
     world::GridPoint* grid_point = nullptr;
     bool             missing = false;
-    int              depth_offset = 0;
+    float            depth_offset = 0.0f;
 };
 
 // Runtime-facing anchor state used by animation, rendering, and binding helpers.
@@ -58,12 +84,26 @@ struct AnchorPoint {
     std::string name;
     int frame_index = -1;
     bool exists = false;
-    int depth_offset = 0;
+    float depth_offset = 0.0f;
+    bool flip_horizontal = false;
+    bool flip_vertical = false;
+    float rotation_degrees = 0.0f;
+    bool hidden = false;
+    bool resolve_x = true;
     SDL_FPoint screen_pos_2d{0.0f, 0.0f};
     Vec2 relative_pos_2d{};
-    Vec2 world_pos_2d{};
+    Vec2 world_pos_2d{}; // exact world-space anchor position (render-facing)
+    Vec2 world_exact_pos_2d{};
+    Vec2 flat_world_pos_2d{}; // exact flat texture/world point (pre-depth-offset)
+    Vec2 flat_world_exact_pos_2d{};
+    SDL_Point world_quantized_px{0, 0};
     int world_z = 0;
+    float world_exact_z = 0.0f;
+    float flat_world_exact_z = 0.0f;
+    float world_depth = 0.0f;
     int resolution_layer = 0;
+    float flat_perspective_scale = 1.0f;
+    bool has_flat_perspective_scale = false;
 
     bool is_active() const { return exists; }
     const Vec2& world_pos() const { return world_pos_2d; }
@@ -76,7 +116,8 @@ enum class GridMaterialization {
     Ensure
 };
 
-// Convert a canonical anchor pixel to normalized UV, applying optional horizontal flip.
+// Convert a canonical anchor pixel to UV, applying optional horizontal flip.
+// UV may fall outside [0, 1] when anchors are authored beyond frame bounds.
 inline SDL_FPoint anchor_pixel_to_uv(SDL_Point texture_px,
                                      int texture_w,
                                      int texture_h,
@@ -85,7 +126,7 @@ inline SDL_FPoint anchor_pixel_to_uv(SDL_Point texture_px,
         if (dimension <= 0) {
             return 0.5f;
         }
-        return std::clamp((static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension), 0.0f, 1.0f);
+        return (static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension);
     };
     const float frame_u = to_unit(texture_px.x, texture_w);
     const float frame_v = to_unit(texture_px.y, texture_h);

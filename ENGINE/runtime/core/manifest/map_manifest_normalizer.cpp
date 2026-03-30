@@ -2,7 +2,10 @@
 
 #include <array>
 #include <cctype>
+#include <cmath>
 
+#include "core/manifest/depth_cue_settings.hpp"
+#include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
 
 namespace manifest {
@@ -31,6 +34,30 @@ bool ensure_fog_defaults(nlohmann::json& root) {
         fog["max_random_jitter"] = 0;
         changed = true;
     }
+    return changed;
+}
+
+bool ensure_map_layers_settings_defaults(nlohmann::json& root) {
+    bool changed = false;
+    if (ensure_object_section(root, "map_layers_settings")) {
+        changed = true;
+    }
+
+    nlohmann::json& settings = root["map_layers_settings"];
+    const double normalized_min_edge = map_layers::min_edge_distance_from_map_manifest(root);
+    auto min_edge_it = settings.find("min_edge_distance");
+    if (min_edge_it == settings.end() ||
+        !(min_edge_it->is_number_integer() || min_edge_it->is_number_float())) {
+        settings["min_edge_distance"] = normalized_min_edge;
+        return true;
+    }
+
+    const double current_value = min_edge_it->get<double>();
+    if (!std::isfinite(current_value) || current_value != normalized_min_edge) {
+        settings["min_edge_distance"] = normalized_min_edge;
+        changed = true;
+    }
+
     return changed;
 }
 
@@ -260,7 +287,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     map_info["rooms_data"] = nlohmann::json::object();
     map_info["rooms_data"]["spawn"] = std::move(spawn_room);
     map_info["camera_settings"] = nlohmann::json::object({
-        {"render_quality_percent", 80},
         {"smooth_motion_height", true},
         {"base_height_px", 720.0},
         {"min_visible_screen_ratio", 0.01}
@@ -304,6 +330,9 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     if (ensure_fog_defaults(map_manifest)) {
         changed = true;
     }
+    if (ensure_map_layers_settings_defaults(map_manifest)) {
+        changed = true;
+    }
 
     const bool had_grid_section =
         map_manifest.contains("map_grid_settings") &&
@@ -314,6 +343,17 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     ensure_map_grid_settings(map_manifest);
     if (!had_grid_section || map_manifest["map_grid_settings"] != grid_before) {
         changed = true;
+    }
+
+    auto depth_it = map_manifest.find(depth_cue::kMapEntryKey);
+    if (depth_it != map_manifest.end()) {
+        const nlohmann::json depth_before = *depth_it;
+        const depth_cue::DepthCueSettings normalized_depth = depth_cue::from_map_entry(map_manifest);
+        const nlohmann::json depth_after = depth_cue::to_json(normalized_depth);
+        if (!depth_before.is_object() || depth_before != depth_after) {
+            map_manifest[depth_cue::kMapEntryKey] = depth_after;
+            changed = true;
+        }
     }
 
     if (ensure_map_layers(map_manifest, map_id)) {
@@ -353,8 +393,7 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
 }
 
 MapManifestBootstrapResult bootstrap_map_manifest(const ManifestData& manifest_data,
-                                                  const std::string& map_id,
-                                                  const nlohmann::json* fallback_manifest) {
+                                                  const std::string& map_id) {
     MapManifestBootstrapResult bootstrap;
 
     nlohmann::json map_manifest_json = nlohmann::json::object();
@@ -365,11 +404,6 @@ MapManifestBootstrapResult bootstrap_map_manifest(const ManifestData& manifest_d
             map_manifest_json = map_it.value();
             manifest_entry_found = true;
         }
-    }
-
-    if (!manifest_entry_found && fallback_manifest && fallback_manifest->is_object() &&
-        !fallback_manifest->empty()) {
-        map_manifest_json = *fallback_manifest;
     }
 
     const std::filesystem::path manifest_root =

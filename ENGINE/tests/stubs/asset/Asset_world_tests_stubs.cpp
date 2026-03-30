@@ -1,16 +1,12 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <new>
 #include <utility>
 
 #if defined(ENGINE_WORLD_TESTS)
-
-// Minimal stand-in to satisfy unique_ptr destructors used by Asset during world grid tests.
-class AssetList {
-public:
-    AssetList() = default;
-    ~AssetList() = default;
-};
 
 class AnimationRuntime {
 public:
@@ -46,7 +42,7 @@ std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& ass
 }
 
 bool AssetInfo::has_tag(const std::string&) const { return false; }
-void AssetInfo::loadAnimations(SDL_Renderer*) {}
+void AssetInfo::loadAnimations(SDL_Renderer*, bool, bool) {}
 bool AssetInfo::commit_manifest() { return false; }
 nlohmann::json AssetInfo::manifest_payload() const { return nlohmann::json::object(); }
 void AssetInfo::set_asset_type(const std::string& t) { type = t; }
@@ -60,8 +56,11 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
              int grid_resolution_in)
     : info(std::move(info_in))
     , current_animation()
-    , pos_(nullptr)
-    , initial_world_pos_(start_pos)
+    , provisional_grid_point_(GridPoint::make_virtual(start_pos.x,
+                                                      0,
+                                                      start_pos.y,
+                                                      vibble::grid::clamp_resolution(grid_resolution_in)))
+    , grid_point_(&provisional_grid_point_)
     , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_in))
     , depth(depth_in)
     , spawn_id(spawn_id_in)
@@ -76,20 +75,129 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
 Asset::~Asset() = default;
 
 float Asset::smoothed_translation_x() const {
-    return pos_ ? static_cast<float>(pos_->world_x()) : static_cast<float>(initial_world_pos_.x);
+    return grid_point_ ? static_cast<float>(grid_point_->world_x()) : 0.0f;
 }
 
 float Asset::smoothed_translation_y() const {
-    return pos_ ? static_cast<float>(pos_->world_y()) : static_cast<float>(initial_world_pos_.y);
+    return grid_point_ ? static_cast<float>(grid_point_->world_y()) : 0.0f;
 }
 
 float Asset::smoothed_scale() const {
     return current_scale;
 }
 
+float Asset::runtime_height_px() const {
+    return (cached_h > 0) ? static_cast<float>(cached_h) : 0.0f;
+}
+
+Asset::PerspectiveSample Asset::runtime_perspective_sample() const {
+    PerspectiveSample sample{};
+    sample.scale = 1.0f;
+    sample.resolution_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
+    sample.source = PerspectiveSource::Default;
+
+    if (anchor_perspective_override_active_ &&
+        std::isfinite(anchor_perspective_override_scale_) &&
+        anchor_perspective_override_scale_ > 0.0001f) {
+        sample.scale = std::max(0.0001f, anchor_perspective_override_scale_);
+        sample.resolution_layer = anchor_perspective_override_resolution_layer_;
+        sample.source = PerspectiveSource::AnchorBindingOverride;
+        return sample;
+    }
+
+    if (grid_point_ &&
+        std::isfinite(grid_point_->perspective_scale()) &&
+        grid_point_->perspective_scale() > 0.0001f) {
+        sample.scale = std::max(0.0001f, grid_point_->perspective_scale());
+        sample.resolution_layer = grid_point_->resolution_layer();
+        sample.source = PerspectiveSource::AssetGridPoint;
+        return sample;
+    }
+
+    if (std::isfinite(last_scale_perspective_input_) && last_scale_perspective_input_ > 0.0001f) {
+        sample.scale = std::max(0.0001f, last_scale_perspective_input_);
+        sample.source = PerspectiveSource::CachedLastFrame;
+        return sample;
+    }
+
+    return sample;
+}
+
+bool Asset::set_anchor_perspective_override(float scale,
+                                            std::optional<int> resolution_layer_override) {
+    if (!std::isfinite(scale) || scale <= 0.0001f) {
+        return clear_anchor_perspective_override();
+    }
+
+    const float sanitized_scale = std::max(0.0001f, scale);
+    const int default_layer = grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
+    const int resolved_layer = resolution_layer_override.has_value()
+        ? vibble::grid::clamp_resolution(*resolution_layer_override)
+        : default_layer;
+    const bool changed =
+        !anchor_perspective_override_active_ ||
+        std::fabs(anchor_perspective_override_scale_ - sanitized_scale) > 1e-6f ||
+        anchor_perspective_override_resolution_layer_ != resolved_layer;
+    anchor_perspective_override_active_ = true;
+    anchor_perspective_override_scale_ = sanitized_scale;
+    anchor_perspective_override_resolution_layer_ = resolved_layer;
+    mark_anchors_dirty();
+    return changed;
+}
+
+bool Asset::clear_anchor_perspective_override() {
+    const bool changed =
+        anchor_perspective_override_active_ ||
+        std::fabs(anchor_perspective_override_scale_ - 1.0f) > 1e-6f;
+    anchor_perspective_override_active_ = false;
+    anchor_perspective_override_scale_ = 1.0f;
+    anchor_perspective_override_resolution_layer_ =
+        grid_point_ ? grid_point_->resolution_layer() : grid_resolution;
+    mark_anchors_dirty();
+    return changed;
+}
+
+const char* Asset::perspective_source_label(PerspectiveSource source) {
+    switch (source) {
+    case PerspectiveSource::AnchorBindingOverride:
+        return "anchor-binding-override";
+    case PerspectiveSource::CameraTraversal:
+        return "camera-traversal";
+    case PerspectiveSource::AssetGridPoint:
+        return "asset-grid-point";
+    case PerspectiveSource::CachedLastFrame:
+        return "cached-last-frame";
+    case PerspectiveSource::Default:
+    default:
+        return "default";
+    }
+}
+
 void Asset::set_assets(Assets* a) { assets_ = a; }
 void Asset::sync_transform_to_position() {}
 void Asset::clear_grid_id() { grid_id_ = 0; }
 void Asset::mark_anchors_dirty() {}
+
+void Asset::set_provisional_grid_point(const world::GridPoint& point) {
+    set_provisional_grid_point(point.world_x(),
+                               point.world_y(),
+                               point.world_z(),
+                               point.resolution_layer());
+}
+
+void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, int resolution_layer) {
+    provisional_grid_point_.~GridPoint();
+    new (&provisional_grid_point_) GridPoint(
+        GridPoint::make_virtual(world_x,
+                                world_y,
+                                world_z,
+                                vibble::grid::clamp_resolution(resolution_layer)));
+    grid_point_ = &provisional_grid_point_;
+}
+
+void Asset::cache_grid_residency(const world::GridPoint& point) {
+    has_cached_grid_residency_ = true;
+    cached_grid_residency_ = point.key();
+}
 
 #endif // ENGINE_WORLD_TESTS

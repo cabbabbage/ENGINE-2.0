@@ -98,6 +98,7 @@ public:
     void open_asset_info_editor_for_asset(Asset* asset);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void close_asset_info_editor();
+    bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;
     std::uint64_t other_settings_state_version() const;
 
@@ -108,9 +109,7 @@ public:
     [[nodiscard]] devmode::core::DevSaveCoordinator& save_coordinator();
     [[nodiscard]] const devmode::core::DevSaveCoordinator& save_coordinator() const;
     void mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority =
-                            devmode::core::DevSaveCoordinator::Priority::Debounced,
-                    devmode::core::SaveManager::MapWritePath path =
-                        devmode::core::SaveManager::MapWritePath::Default);
+                            devmode::core::DevSaveCoordinator::Priority::Debounced);
 
     void toggle_room_config();
     void close_room_config();
@@ -211,11 +210,17 @@ public:
     };
 
     struct MultiAssetImportState {
+        struct Item {
+            DropImportRequest request;
+            std::string suggested_name;
+            std::string error_message;
+        };
+
         bool active = false;
-        DropImportRequest request;
-        std::vector<std::filesystem::path> files;
+        std::vector<Item> items;
         std::size_t index = 0;
         bool waiting_for_rename = false;
+        std::size_t imported_count = 0;
     };
 
     bool can_use_room_editor_ui() const;
@@ -294,7 +299,9 @@ public:
                            std::string& error_out);
     void open_drop_choice_modal(const DropImportRequest& request);
     void begin_multi_asset_import(const DropImportRequest& request);
+    void begin_multi_folder_import(const std::vector<std::filesystem::path>& folders, SDL_Point drop_screen);
     void process_next_multi_asset_item();
+    const MultiAssetImportState::Item* current_multi_asset_import_item() const;
     void open_drop_conflict_modal(const std::string& asset_name);
     void open_drop_error_popup(const std::string& message);
     void reset_drop_choice_modal();
@@ -308,6 +315,12 @@ public:
     bool is_import_busy() const;
 
 private:
+    enum class LiveDepthLine {
+        Center,
+        BackgroundMax,
+        ForegroundMax,
+    };
+
     enum class DirtyFlag : std::uint32_t {
         None   = 0,
         Layout = 1 << 0,
@@ -335,10 +348,16 @@ private:
     void regenerate_map_grid_assets();
     void ensure_map_assets_modal_open();
     void ensure_boundary_assets_modal_open();
+    void ensure_image_effect_panel();
+    void enter_live_depth_edit_mode();
+    void exit_live_depth_edit_mode(bool reopen_depth_panel, bool flush_immediately);
+    bool handle_live_depth_edit_event(const SDL_Event& event);
+    void render_live_depth_edit_overlay(SDL_Renderer* renderer);
+    LiveDepthLine live_depth_line_from_cursor_screen(SDL_Point cursor_screen) const;
+    bool update_live_depth_setting(LiveDepthLine line, float delta_world);
 
 
-    bool persist_map_info_to_disk(devmode::core::SaveManager::MapWritePath path =
-                                 devmode::core::SaveManager::MapWritePath::Default);
+    bool persist_map_info_to_disk();
 
     Assets* assets_ = nullptr;
     Input* input_ = nullptr;
@@ -368,6 +387,11 @@ private:
     std::string map_path_;
     bool pointer_over_camera_panel_ = false;
     bool pointer_over_image_effect_panel_ = false;
+    bool live_depth_edit_mode_active_ = false;
+    bool live_depth_settings_dirty_ = false;
+    LiveDepthLine live_depth_selected_line_ = LiveDepthLine::Center;
+    depth_cue::DepthCueSettings live_depth_settings_{};
+    std::unique_ptr<DMButton> live_depth_exit_button_;
     bool modal_headers_hidden_ = false;
     bool sliding_headers_hidden_ = false;
     bool world_mutation_in_progress_ = false;
@@ -382,8 +406,7 @@ private:
     bool exit_save_sequence_ran_ = false;
     bool exit_save_sequence_ok_ = true;
     bool map_dirty_ = false;
-    devmode::core::SaveManager::MapWritePath map_write_path_ =
-        devmode::core::SaveManager::MapWritePath::Default;
+    bool map_info_dirty_ = false;
     OtherSettingsAndControls other_settings_;
     std::vector<OtherSettingsAndControls::SettingSchema> global_settings_schema_;
 

@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace devmode::core {
@@ -35,6 +36,43 @@ using Mapping = std::vector<MappingEntry>;
 class AssetInfo {
 
         public:
+    static constexpr std::uint8_t kTextureVariantNone = 0u;
+    static constexpr std::uint8_t kTextureVariantNormal = 1u << 0;
+    static constexpr std::uint8_t kTextureVariantForeground = 1u << 1;
+    static constexpr std::uint8_t kTextureVariantBackground = 1u << 2;
+    static constexpr std::uint8_t kTextureVariantAll =
+        static_cast<std::uint8_t>(kTextureVariantNormal | kTextureVariantForeground | kTextureVariantBackground);
+
+    struct AnimationTextureRebuildRequest {
+        std::uint8_t all_frames_variants = kTextureVariantNone;
+        std::unordered_map<int, std::uint8_t> frame_variants;
+
+        bool empty() const;
+        void clear();
+        void mark_animation(std::uint8_t variants);
+        void mark_frame(int frame_index, std::uint8_t variants);
+        void merge(const AnimationTextureRebuildRequest& other);
+    };
+
+    struct TextureRebuildBucket {
+        bool bundle_refresh_required = false;
+        std::unordered_map<std::string, AnimationTextureRebuildRequest> animations;
+
+        bool empty() const;
+        void clear();
+        void mark_bundle_refresh();
+        void mark_animation(const std::string& animation_name, std::uint8_t variants);
+        void mark_frame(const std::string& animation_name, int frame_index, std::uint8_t variants);
+        void merge(const TextureRebuildBucket& other);
+    };
+
+    struct RuntimeTextureRebuildState {
+        TextureRebuildBucket pending_on_load;
+        TextureRebuildBucket pending_on_close;
+
+        void clear();
+    };
+
     SDL_Texture* preview_texture = nullptr;
     AssetInfo(const std::string &asset_folder_name);
     AssetInfo(const std::string &asset_folder_name, const nlohmann::json& metadata);
@@ -57,9 +95,14 @@ class AssetInfo {
     int original_canvas_height = 0;
     bool flipable;
     bool tillable = false;
-    bool crop_frames = true;
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
+
+    struct AnchorChildPointCandidate {
+        std::string anchor_point_name;
+        nlohmann::json candidates = nlohmann::json::object();
+    };
+    std::vector<AnchorChildPointCandidate> anchor_point_child_candidates;
 
     bool moving_asset = false;
     std::vector<float>  scale_variants;
@@ -88,25 +131,32 @@ class AssetInfo {
     std::map<std::string, Animation> animations;
     std::map<std::string, Mapping> mappings;
 
-    struct FollowerBindingSpec {
-        std::string controller_asset_id;
-        std::string anchor_name;
-        std::string follower_anchor_name;
-        std::optional<std::string> depth_policy;
-        std::optional<std::string> layer_policy;
-
-        bool is_valid() const {
-            return !anchor_name.empty();
-        }
-    };
-    std::string custom_controller_key;
-    std::optional<FollowerBindingSpec> follower_binding;
-
 	public:
-    void loadAnimations(SDL_Renderer* renderer);
+    void loadAnimations(SDL_Renderer* renderer,
+                        bool include_all_animations = true,
+                        bool assume_cache_ready = false);
     bool commit_manifest();
     void mark_dirty();
     bool is_dirty() const;
+    RuntimeTextureRebuildState& runtime_texture_rebuild_state() { return runtime_texture_rebuild_state_; }
+    const RuntimeTextureRebuildState& runtime_texture_rebuild_state() const { return runtime_texture_rebuild_state_; }
+    void clear_runtime_texture_rebuild_state();
+    void mark_texture_rebuild_on_close(const std::string& animation_name, std::uint8_t variants = kTextureVariantAll);
+    void mark_texture_frame_rebuild_on_close(const std::string& animation_name,
+                                             int frame_index,
+                                             std::uint8_t variants = kTextureVariantAll);
+    void mark_all_animation_textures_on_close(std::uint8_t variants = kTextureVariantAll);
+    void mark_bundle_refresh_on_close();
+    void mark_texture_rebuild_on_load(const std::string& animation_name, std::uint8_t variants = kTextureVariantAll);
+    void mark_texture_frame_rebuild_on_load(const std::string& animation_name,
+                                            int frame_index,
+                                            std::uint8_t variants = kTextureVariantAll);
+    TextureRebuildBucket consume_pending_texture_rebuild_on_close();
+    TextureRebuildBucket consume_pending_texture_rebuild_on_load();
+    void merge_pending_texture_rebuild_on_close(const TextureRebuildBucket& pending);
+    void merge_pending_texture_rebuild_on_load(const TextureRebuildBucket& pending);
+    void classify_animation_snapshot_rebuilds(const nlohmann::json& before_snapshot,
+                                              const nlohmann::json& after_snapshot);
     bool save_self_to_manifest(devmode::core::ManifestStore* store = nullptr);
     bool save_self_to_cache_if_dirty(SDL_Renderer* renderer = nullptr);
     nlohmann::json manifest_payload() const;
@@ -127,7 +177,6 @@ class AssetInfo {
     void remove_anti_tag(const std::string &tag);
     void set_passable(bool v);
     void set_tillable(bool v);
-    void set_crop_frames(bool enabled);
     Area* find_area(const std::string& name);
     void upsert_area_from_editor(const class Area& area, std::optional<NamedArea::RenderFrame> frame = std::nullopt);
     std::string pick_next_animation(const std::string& mapping_id) const;
@@ -135,6 +184,13 @@ class AssetInfo {
 
     void set_spawn_groups_payload(const nlohmann::json& groups);
     nlohmann::json spawn_groups_payload() const;
+    void set_anchor_point_child_candidates_payload(const nlohmann::json& candidates);
+    nlohmann::json anchor_point_child_candidates_payload() const;
+    nlohmann::json anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const;
+    bool upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates);
+    bool rename_anchor_point_child_candidate(const std::string& old_name, const std::string& new_name);
+    bool remove_anchor_point_child_candidate(const std::string& anchor_point_name);
+    bool reconcile_anchor_point_child_candidates(const std::vector<std::string>& canonical_anchor_names);
 
     std::string info_json_path() const { return info_json_path_; }
     std::string asset_dir_path() const { return dir_path_; }
@@ -180,10 +236,15 @@ class AssetInfo {
     nlohmann::json info_json_;
     std::string info_json_path_;
     void initialize_from_json(const nlohmann::json& data);
+    void sync_anchor_point_child_candidates_info_json();
     void rebuild_tag_cache();
     void rebuild_anti_tag_cache();
+    static std::uint8_t sanitize_texture_variant_mask(std::uint8_t variants);
+    static std::uint8_t classify_texture_rebuild_variants(const nlohmann::json& before_payload,
+                                                          const nlohmann::json& after_payload);
     std::unordered_set<std::string> tag_lookup_;
     std::unordered_set<std::string> anti_tag_lookup_;
+    RuntimeTextureRebuildState runtime_texture_rebuild_state_;
     bool dirty_ = false;
     friend class AnimationLoader;
     friend class PrimaryAssetCache;

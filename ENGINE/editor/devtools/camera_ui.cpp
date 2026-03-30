@@ -2,7 +2,6 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -18,7 +17,6 @@
 
 #include "core/AssetsManager.hpp"
 #include "devtools/depth_cue_settings.hpp"
-#include "devtools/dm_icons.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
@@ -27,42 +25,6 @@
 #include "devtools/widgets.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/input.hpp"
-
-namespace {
-    constexpr float kPi     = 3.14159265358979323846f;
-    constexpr float kRadToDeg = 180.0f / kPi;
-    constexpr float kDegToRad = kPi / 180.0f;
-    constexpr const char* kCameraIconPath = "resources/icons/camera.png";
-
-    float wrap_angle_deg(float raw_value) {
-        if (!std::isfinite(raw_value)) {
-            return 0.0f;
-        }
-        float wrapped = std::fmod(raw_value, 360.0f);
-        if (wrapped < 0.0f) wrapped += 360.0f;
-        if (wrapped >= 360.0f) wrapped = std::fmod(wrapped, 360.0f);
-        if (wrapped < 0.0f) wrapped += 360.0f;
-        return wrapped;
-    }
-
-    float angle_to_pitch_deg(float angle_deg) {
-        return wrap_angle_deg(angle_deg);
-    }
-
-    float angular_distance_deg(float a, float b) {
-        const float diff = std::fabs(wrap_angle_deg(a) - wrap_angle_deg(b));
-        const float wrapped = std::fmod(diff, 360.0f);
-        return std::min(wrapped, 360.0f - wrapped);
-    }
-
-    float pitch_to_angle_deg(float pitch_deg, float preferred_angle_deg = 0.0f) {
-        return wrap_angle_deg(pitch_deg);
-    }
-
-    float clamp_angle_deg(float raw_value, float min_deg, float max_deg) {
-        return std::clamp(raw_value, min_deg, max_deg);
-    }
-}
 
 class SpacerWidget : public Widget {
 public:
@@ -80,335 +42,6 @@ private:
     SDL_Rect rect_{0, 0, 0, 0};
     int height_ = 0;
 };
-
-class GroupLabelWidget : public Widget {
-public:
-    explicit GroupLabelWidget(std::string text)
-        : text_(std::move(text)) {
-        style_ = DMStyles::Label();
-    }
-
-    void set_rect(const SDL_Rect& r) override { rect_ = r; }
-    const SDL_Rect& rect() const override { return rect_; }
-    int height_for_width(int) const override { return DMCheckbox::height(); }
-    bool handle_event(const SDL_Event&) override { return false; }
-    void render(SDL_Renderer* renderer) const override {
-        if (!renderer) return;
-        const int text_y = rect_.y + std::max(0, (DMCheckbox::height() - style_.font_size) / 2);
-        DrawLabelText(renderer, text_, rect_.x, text_y, style_);
-    }
-    bool wants_full_row() const override { return true; }
-private:
-    std::string text_{};
-    DMLabelStyle style_{};
-    SDL_Rect rect_{0,0,0,DMCheckbox::height()};
-};
-
-class PanelBannerWidget  : public Widget {
-public:
-    PanelBannerWidget(std::string heading, std::string detail)
-        : heading_(std::move(heading)),
-          detail_(std::move(detail)) {
-        heading_style_ = DMStyles::Label();
-        heading_style_.font_size = std::max(heading_style_.font_size + 2, 18);
-        heading_style_.color = DMStyles::AccentButton().text;
-
-        body_style_ = DMStyles::Label();
-        body_style_.font_size = std::max(12, body_style_.font_size - 2);
-        body_style_.color = dm::rgba(255, 255, 255, 230);
-    }
-
-    void set_rect(const SDL_Rect& r) override { rect_ = r; }
-    const SDL_Rect& rect() const override { return rect_; }
-
-    int height_for_width(int w) const override {
-        const int inner = std::max(1, w - 2 * padding());
-        ensure_lines(inner);
-        const int heading_h = heading_style_.font_size + kHeadingGap;
-        const int body_lines = std::max(1, static_cast<int>(lines_.size()));
-        const int line_h = body_style_.font_size + kLineGap;
-        return padding() * 2 + heading_h + body_lines * line_h;
-    }
-
-    bool handle_event(const SDL_Event&) override { return false; }
-
-    void render(SDL_Renderer* renderer) const override {
-        if (!renderer) return;
-        SDL_Color accent = DMStyles::AccentButton().bg;
-        SDL_Color background{ accent.r, accent.g, accent.b, static_cast<Uint8>(220) };
-        SDL_SetRenderDrawColor(renderer, background.r, background.g, background.b, background.a);
-        sdl_render::FillRect(renderer, &rect_);
-
-        SDL_Color border = DMStyles::AccentButton().border;
-        SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        sdl_render::Rect(renderer, &rect_);
-
-        const int pad = padding();
-        SDL_Rect content{ rect_.x + pad, rect_.y + pad, rect_.w - 2 * pad, rect_.h - 2 * pad };
-        DrawLabelText(renderer, heading_, content.x, content.y, heading_style_);
-        int text_y = content.y + heading_style_.font_size + kHeadingGap;
-
-        ensure_lines(content.w);
-        for (const auto& line : lines_) {
-            DrawLabelText(renderer, line, content.x, text_y, body_style_);
-            text_y += body_style_.font_size + kLineGap;
-        }
-    }
-
-    bool wants_full_row() const override { return true; }
-
-private:
-    static std::vector<std::string> wrap_lines(const std::string& text, int max_width, const DMLabelStyle& style) {
-        std::vector<std::string> lines;
-        if (text.empty() || max_width <= 0) {
-            if (!text.empty()) lines.push_back(text);
-            return lines;
-        }
-        std::istringstream stream(text);
-        std::string word;
-        std::string current;
-        while (stream >> word) {
-            std::string candidate = current.empty() ? word : current + " " + word;
-            SDL_Point dims = MeasureLabelText(style, candidate);
-            if (!current.empty() && dims.x > max_width) {
-                lines.push_back(current);
-                current = word;
-                continue;
-            }
-            current = candidate;
-        }
-        if (!current.empty()) {
-            lines.push_back(current);
-        }
-        if (lines.empty()) {
-            lines.push_back(text);
-        }
-        return lines;
-    }
-
-    void ensure_lines(int inner_width) const {
-        int width = std::max(1, inner_width);
-        if (width == cached_width_) {
-            return;
-        }
-        cached_width_ = width;
-        lines_ = wrap_lines(detail_, cached_width_, body_style_);
-    }
-
-    static int padding() { return DMSpacing::item_gap(); }
-
-private:
-    static constexpr int kHeadingGap = 6;
-    static constexpr int kLineGap = 4;
-    SDL_Rect rect_{0, 0, 0, 0};
-    std::string heading_;
-    std::string detail_;
-    DMLabelStyle heading_style_;
-    DMLabelStyle body_style_;
-    mutable std::vector<std::string> lines_;
-    mutable int cached_width_ = -1;
-};
-
-class SectionToggleWidget : public Widget {
-public:
-    using ToggleCallback = std::function<void(bool)>;
-
-    SectionToggleWidget(std::string label, bool expanded)
-        : label_(std::move(label)),
-          expanded_(expanded) {
-        button_ = std::make_unique<DMButton>( "", &DMStyles::HeaderButton(), DockableCollapsible::kDefaultFloatingContentWidth, DMButton::height());
-        if (button_) {
-            button_->set_tooltip_state(this->tooltip_state());
-        }
-        update_button_text();
-    }
-
-    ~SectionToggleWidget() override {
-        if (button_) {
-            button_->set_tooltip_state(nullptr);
-        }
-    }
-
-    void set_rect(const SDL_Rect& r) override {
-        rect_ = r;
-        if (button_) {
-            button_->set_rect(r);
-        }
-    }
-
-    const SDL_Rect& rect() const override { return rect_; }
-
-    int height_for_width(int) const override { return DMButton::height(); }
-
-    bool handle_event(const SDL_Event& e) override {
-        if (!button_) return false;
-        bool used = button_->handle_event(e);
-        if (used && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-            set_expanded(!expanded_);
-            if (on_toggle_) {
-                on_toggle_(expanded_);
-            }
-        }
-        return used;
-    }
-
-    void render(SDL_Renderer* renderer) const override {
-        if (button_) button_->render(renderer);
-    }
-
-    bool wants_full_row() const override { return true; }
-
-    void set_on_toggle(ToggleCallback cb) { on_toggle_ = std::move(cb); }
-
-    void set_label(std::string label) {
-        label_ = std::move(label);
-        update_button_text();
-    }
-
-    void set_expanded(bool expanded) {
-        if (expanded_ == expanded) {
-            return;
-        }
-        expanded_ = expanded;
-        update_button_text();
-    }
-
-    bool expanded() const { return expanded_; }
-
-private:
-    void update_button_text() {
-        if (!button_) return;
-        const std::string indicator = expanded_
-            ? std::string(DMIcons::CollapseExpanded()) : std::string(DMIcons::CollapseCollapsed());
-        button_->set_text(indicator + " " + label_);
-        const DMButtonStyle* style = expanded_ ? &DMStyles::HeaderButton() : &DMStyles::FooterToggleButton();
-        button_->set_style(style);
-    }
-
-    std::unique_ptr<DMButton> button_;
-    SDL_Rect rect_{0, 0, 0, DMButton::height()};
-    std::string label_;
-    bool expanded_ = true;
-    ToggleCallback on_toggle_{};
-};
-
-class DiscreteSliderWidget : public Widget {
-public:
-    using ChangeCallback = std::function<void(int)>;
-
-    DiscreteSliderWidget(std::string label,
-                         std::vector<int> values,
-                         int value)
-        : values_(std::move(values)) {
-        if (values_.empty()) {
-            values_.push_back(100);
-        }
-        slider_min_units_ = 0;
-        slider_max_units_ = static_cast<int>(values_.size() - 1);
-        slider_ = std::make_unique<DMSlider>(std::move(label), slider_min_units_, slider_max_units_, value_to_slider(value));
-        slider_->set_defer_commit_until_unfocus(false);
-        slider_->set_value_formatter([this](int units, std::array<char, dev_mode::kSliderFormatBufferSize>& buffer) {
-            const int idx = clamp_index(units);
-            std::snprintf(buffer.data(), buffer.size(), "%d%%", values_[idx]);
-            return std::string_view(buffer.data());
-        });
-        slider_->set_value_parser([this](const std::string& text) -> std::optional<int> {
-            try {
-                const int parsed = std::stoi(text);
-                return value_to_slider(parsed);
-            } catch (...) {
-                return std::nullopt;
-            }
-        });
-        slider_widget_ = std::make_unique<SliderWidget>(slider_.get());
-        current_index_ = clamp_index(slider_->value());
-    }
-
-    void set_on_value_changed(ChangeCallback cb) { on_change_ = std::move(cb); }
-
-    void set_value(int v) {
-        if (!slider_) return;
-        slider_->set_value(value_to_slider(v));
-        current_index_ = clamp_index(slider_->value());
-    }
-
-    int value() const {
-        if (values_.empty()) return 0;
-        const int idx = clamp_index(current_index_);
-        return values_[idx];
-    }
-
-    void set_rect(const SDL_Rect& r) override {
-        if (slider_widget_) slider_widget_->set_rect(r);
-    }
-
-    const SDL_Rect& rect() const override {
-        if (slider_widget_) {
-            return slider_widget_->rect();
-        }
-        static SDL_Rect empty{0, 0, 0, 0};
-        return empty;
-    }
-
-    int height_for_width(int w) const override {
-        return slider_widget_ ? slider_widget_->height_for_width(w) : DMSlider::height();
-    }
-
-    bool wants_full_row() const override { return true; }
-
-    bool handle_event(const SDL_Event& e) override {
-        if (!slider_widget_) return false;
-        const int previous_value = value();
-        bool handled = slider_widget_->handle_event(e);
-        if (slider_) {
-            current_index_ = clamp_index(slider_->value());
-            const int new_value = value();
-            if (handled && on_change_ && new_value != previous_value) {
-                on_change_(new_value);
-            }
-        }
-        return handled;
-    }
-
-    void render(SDL_Renderer* renderer) const override {
-        if (slider_widget_) slider_widget_->render(renderer);
-    }
-
-    void set_tooltip(std::string text) {
-        if (slider_widget_) slider_widget_->set_tooltip(std::move(text));
-    }
-
-private:
-    int clamp_index(int index) const {
-        if (values_.empty()) return 0;
-        return std::clamp(index, slider_min_units_, slider_max_units_);
-    }
-
-    int value_to_slider(int value) const {
-        if (values_.empty()) return slider_min_units_;
-        int best_index = slider_min_units_;
-        int best_diff = std::abs(value - values_[best_index]);
-        for (std::size_t i = 1; i < values_.size(); ++i) {
-            const int diff = std::abs(value - values_[i]);
-            if (diff < best_diff) {
-                best_diff = diff;
-                best_index = static_cast<int>(i);
-            }
-        }
-        return clamp_index(best_index);
-    }
-
-    std::unique_ptr<DMSlider> slider_;
-    std::unique_ptr<SliderWidget> slider_widget_;
-    std::vector<int> values_;
-    int slider_min_units_ = 0;
-    int slider_max_units_ = 0;
-    int current_index_ = 0;
-    ChangeCallback on_change_{};
-};
-
-
-
 
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
@@ -432,21 +65,9 @@ void CameraUIPanel::set_assets(Assets* assets) {
     sync_from_camera();
 }
 
-void CameraUIPanel::set_image_effects_panel_callback(std::function<void()> cb) {
-    open_image_effects_cb_ = std::move(cb);
-}
-
 void CameraUIPanel::open() {
     set_visible(true);
     suppress_apply_once_ = true;
-
-    visibility_section_expanded_ = false;
-    depth_section_expanded_ = false;
-    depthcue_section_expanded_ = false;
-    if (visibility_section_header_) visibility_section_header_->set_expanded(false);
-    if (depth_section_header_)      depth_section_header_->set_expanded(false);
-    if (depthcue_section_header_)   depthcue_section_header_->set_expanded(false);
-    rebuild_rows();
     sync_from_camera();
 }
 
@@ -475,14 +96,6 @@ void CameraUIPanel::update(const Input& input, int screen_w, int screen_h) {
     if (currently_visible && !previously_visible) {
 
         suppress_apply_once_ = true;
-
-        visibility_section_expanded_ = false;
-        depth_section_expanded_ = false;
-        depthcue_section_expanded_ = false;
-        if (visibility_section_header_) visibility_section_header_->set_expanded(false);
-        if (depth_section_header_)      depth_section_header_->set_expanded(false);
-        if (depthcue_section_header_)   depthcue_section_header_->set_expanded(false);
-        rebuild_rows();
         sync_from_camera();
     }
     was_visible_ = currently_visible;
@@ -524,12 +137,9 @@ void CameraUIPanel::sync_from_camera() {
     const auto& settings = cam.get_settings();
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
-    if (render_quality_slider_) render_quality_slider_->set_value(settings.render_quality_percent);
-    if (cull_margin_slider_) cull_margin_slider_->set_value(settings.extra_cull_margin);
-    if (meters_slider_) meters_slider_->set_value(settings.meters_per_100_world_px);
-    if (perspective_cap_slider_) perspective_cap_slider_->set_value(settings.near_camera_max_perspective_scale);
-    if (offscreen_fade_slider_) offscreen_fade_slider_->set_value(settings.offscreen_fade_amount_px);
-    if (depthcue_checkbox_) depthcue_checkbox_->set_value(assets_->depth_effects_enabled());
+    if (boundary_min_render_size_slider_) {
+        boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
+    }
 }
 
 void CameraUIPanel::build_ui() {
@@ -544,78 +154,30 @@ void CameraUIPanel::build_ui() {
 
     controls_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::small_gap());
 
-    depthcue_checkbox_ = std::make_unique<DMCheckbox>("Enable Depth Cue", false);
-    depthcue_widget_ = std::make_unique<CheckboxWidget>(depthcue_checkbox_.get());
-    depthcue_widget_->set_tooltip("Toggle depth cue texture compositing.\nDoes not affect parallax or perspective scaling.");
-    if (depthcue_checkbox_ && assets_) {
-        depthcue_checkbox_->set_value(assets_->depth_effects_enabled());
-    }
-
     WarpedScreenGrid::RealismSettings defaults;
     if (assets_) {
         defaults = assets_->getView().get_settings();
     }
-    defaults.min_visible_screen_ratio = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
-    defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
-    defaults.meters_per_100_world_px = devmode::camera_prefs::load_meters_per_100_world_px(defaults.meters_per_100_world_px);
-    defaults.render_quality_percent = devmode::camera_prefs::load_render_quality_percent(defaults.render_quality_percent);
-    defaults.near_camera_max_perspective_scale = devmode::camera_prefs::load_near_camera_max_perspective_scale(defaults.near_camera_max_perspective_scale);
-    defaults.offscreen_fade_amount_px = devmode::camera_prefs::load_offscreen_fade_amount_px(defaults.offscreen_fade_amount_px);
+    const float min_visible_default = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
+    defaults.min_visible_screen_ratio = min_visible_default;
+    const float boundary_min_visible_default =
+        devmode::camera_prefs::load_boundary_min_visible_screen_ratio(min_visible_default);
 
-    auto configure_section = [this](std::unique_ptr<SectionToggleWidget>& target,
-                                    const std::string& label,
-                                    bool* expanded_flag) {
-        target = std::make_unique<SectionToggleWidget>(label, *expanded_flag);
-        target->set_on_toggle([this, expanded_flag](bool expanded) {
-            *expanded_flag = expanded;
-            rebuild_rows();
-        });
-        target->set_tooltip("Click to collapse or expand this section.");
-};
-
-    configure_section(visibility_section_header_, "Visibility & Performance", &visibility_section_expanded_);
-    configure_section(depth_section_header_,      "Depth & Perspective",      &depth_section_expanded_);
-    configure_section(depthcue_section_header_,   "Depth Cue",               &depthcue_section_expanded_);
-    if (depth_section_header_) {
-        depth_section_header_->set_on_toggle([this](bool expanded) {
-            depth_section_expanded_ = expanded;
-            rebuild_rows();
-        });
-    }
-
-    min_render_size_slider_ = std::make_unique<FloatSliderWidget>("Min On-Screen Size", 0.0f, 0.05f, 0.001f, defaults.min_visible_screen_ratio, 3);
+    min_render_size_slider_ = std::make_unique<FloatSliderWidget>("Min On-Screen Size", 0.0f, 0.05f, 0.001f, min_visible_default, 3);
     min_render_size_slider_->set_tooltip("Cull sprites once their height drops below this fraction of the screen (0.01 = 1%).");
     min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    cull_margin_slider_ = std::make_unique<FloatSliderWidget>("Cull Depth (Z axis, world units)", 0.0f, 5000.0f, 10.0f, defaults.extra_cull_margin, 0);
-    cull_margin_slider_->set_tooltip("Distance along the canonical Z (depth) axis from the camera before assets are culled; vertical height (Y) remains unchanged.");
-    cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    boundary_min_render_size_slider_ = std::make_unique<FloatSliderWidget>(
+        "Boundary Min On-Screen Size",
+        0.0f,
+        0.05f,
+        0.001f,
+        boundary_min_visible_default,
+        3);
+    boundary_min_render_size_slider_->set_tooltip(
+        "Cull dynamically spawned boundary assets once their height drops below this fraction of the screen (0.01 = 1%).");
+    boundary_min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    render_quality_slider_ = std::make_unique<DiscreteSliderWidget>("Render Quality (%)", std::vector<int>{100, 75, 50, 25, 10}, defaults.render_quality_percent);
-    render_quality_slider_->set_tooltip("Trade fidelity for speed; lowers the number of sprites drawn each frame.");
-    render_quality_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
-
-    meters_slider_ = std::make_unique<FloatSliderWidget>("Meters per 100 World Pixels", 0.01f, 1.00f, 0.01f, defaults.meters_per_100_world_px, 2);
-    meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
-    meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    perspective_cap_slider_ = std::make_unique<FloatSliderWidget>("Max Perspective Scale", 0.25f, 12.0f, 0.05f, defaults.near_camera_max_perspective_scale, 2);
-    perspective_cap_slider_->set_tooltip("Upper bound on perspective stretching near the camera. Lower values flatten the scene; higher values increase depth exaggeration.");
-    perspective_cap_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    offscreen_fade_slider_ = std::make_unique<FloatSliderWidget>("Offscreen Fade Distance (px)", 0.0f, 800.0f, 5.0f, defaults.offscreen_fade_amount_px, 0);
-    offscreen_fade_slider_->set_tooltip("How far below the viewport sprites continue to fade before they are fully hidden.");
-    offscreen_fade_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    image_effect_button_ = std::make_unique<DMButton>("Configure Image Effects", &DMStyles::AccentButton(), DockableCollapsible::kDefaultFloatingContentWidth, DMButton::height());
-    image_effect_widget_ = std::make_unique<ButtonWidget>(image_effect_button_.get(), [this]() {
-        if (open_image_effects_cb_) {
-            open_image_effects_cb_();
-        }
-    });
-    if (image_effect_widget_) {
-        image_effect_widget_->set_tooltip("Open the global image effect editor to regenerate depth cue textures.");
-    }
     rebuild_rows();
 }
 
@@ -632,26 +194,8 @@ void CameraUIPanel::rebuild_rows() {
     Rows rows;
     if (header_spacer_) rows.push_back({ header_spacer_.get() });
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    if (depthcue_widget_) rows.push_back({ depthcue_widget_.get() });
-
-    if (visibility_section_header_) rows.push_back({ visibility_section_header_.get() });
-    if (visibility_section_expanded_) {
-        if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
-        if (cull_margin_slider_) rows.push_back({ cull_margin_slider_.get() });
-        if (render_quality_slider_) rows.push_back({ render_quality_slider_.get() });
-    }
-
-    if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
-    if (depth_section_expanded_) {
-        if (meters_slider_) rows.push_back({ meters_slider_.get() });
-        if (perspective_cap_slider_) rows.push_back({ perspective_cap_slider_.get() });
-        if (offscreen_fade_slider_) rows.push_back({ offscreen_fade_slider_.get() });
-    }
-
-    if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
-    if (depthcue_section_expanded_) {
-        if (image_effect_widget_) rows.push_back({ image_effect_widget_.get() });
-    }
+    if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
+    if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
 
     set_rows(rows);
 }
@@ -672,40 +216,31 @@ void CameraUIPanel::apply_settings_if_needed() {
     WarpedScreenGrid::RealismSettings updated = current;
 
     if (min_render_size_slider_) updated.min_visible_screen_ratio = min_render_size_slider_->value();
-    if (render_quality_slider_)   updated.render_quality_percent = render_quality_slider_->value();
-    if (cull_margin_slider_)      updated.extra_cull_margin = cull_margin_slider_->value();
-    if (meters_slider_)           updated.meters_per_100_world_px = meters_slider_->value();
-    if (perspective_cap_slider_)  updated.near_camera_max_perspective_scale = perspective_cap_slider_->value();
-    if (offscreen_fade_slider_)   updated.offscreen_fade_amount_px = offscreen_fade_slider_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
     };
     const bool realism_changed =
-        float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio) ||
-        float_changed(updated.extra_cull_margin, current.extra_cull_margin) ||
-        float_changed(updated.meters_per_100_world_px, current.meters_per_100_world_px) ||
-        float_changed(updated.near_camera_max_perspective_scale, current.near_camera_max_perspective_scale) ||
-        float_changed(updated.offscreen_fade_amount_px, current.offscreen_fade_amount_px) ||
-        updated.render_quality_percent != current.render_quality_percent;
+        float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio);
+    float boundary_value = assets_->boundary_min_visible_screen_ratio();
+    if (boundary_min_render_size_slider_) {
+        boundary_value = boundary_min_render_size_slider_->value();
+    }
+    const bool boundary_changed =
+        boundary_min_render_size_slider_ &&
+        float_changed(boundary_value, assets_->boundary_min_visible_screen_ratio());
 
     if (realism_changed) {
         cam.set_realism_settings(updated);
         devmode::camera_prefs::save_min_visible_screen_ratio(updated.min_visible_screen_ratio);
-        devmode::camera_prefs::save_extra_cull_margin(updated.extra_cull_margin);
-        devmode::camera_prefs::save_meters_per_100_world_px(updated.meters_per_100_world_px);
-        devmode::camera_prefs::save_render_quality_percent(updated.render_quality_percent);
-        devmode::camera_prefs::save_near_camera_max_perspective_scale(updated.near_camera_max_perspective_scale);
-        devmode::camera_prefs::save_offscreen_fade_amount_px(updated.offscreen_fade_amount_px);
-        assets_->on_camera_settings_changed();
+    }
+    if (boundary_changed) {
+        assets_->set_boundary_min_visible_screen_ratio(boundary_value);
+        devmode::camera_prefs::save_boundary_min_visible_screen_ratio(boundary_value);
     }
 
-    if (depthcue_checkbox_) {
-        const bool desired_depth_effects = depthcue_checkbox_->value();
-        const bool current_depth_effects = assets_->depth_effects_enabled();
-        if (desired_depth_effects != current_depth_effects) {
-            assets_->set_depth_effects_enabled(desired_depth_effects);
-        }
+    if (realism_changed || boundary_changed) {
+        assets_->on_camera_settings_changed();
     }
 }
 

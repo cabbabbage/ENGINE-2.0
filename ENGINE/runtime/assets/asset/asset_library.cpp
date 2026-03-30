@@ -1,4 +1,5 @@
 #include "asset_library.hpp"
+#include "primary_asset_cache.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include <algorithm>
 #include <chrono>
@@ -7,6 +8,7 @@
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <string>
 #include <system_error>
@@ -73,6 +75,39 @@ int count_png_frames(const std::filesystem::path& folder) {
         }
         return count;
 }
+
+std::string summarize_names(std::vector<std::string> names, std::size_t max_names = 8) {
+        if (names.empty()) {
+                return "[]";
+        }
+
+        std::sort(names.begin(), names.end());
+        std::ostringstream oss;
+        oss << "[";
+        const std::size_t count = std::min(max_names, names.size());
+        for (std::size_t idx = 0; idx < count; ++idx) {
+                if (idx > 0) {
+                        oss << ", ";
+                }
+                oss << names[idx];
+        }
+        if (names.size() > count) {
+                oss << ", +" << (names.size() - count) << " more";
+        }
+        oss << "]";
+        return oss.str();
+}
+
+struct WarmupPassStats {
+        std::vector<std::string> cache_created;
+        std::vector<std::string> cache_rebuilt;
+        std::vector<std::string> cache_repaired;
+        std::vector<std::string> cache_reused;
+        std::vector<std::string> cache_failed;
+        std::vector<std::string> load_succeeded;
+        std::vector<std::string> load_failed;
+        std::size_t already_loaded = 0;
+};
 
 std::vector<AnimationFolderInfo> discover_animation_folders(const std::filesystem::path& asset_dir) {
         std::vector<AnimationFolderInfo> result;
@@ -213,12 +248,16 @@ bool ensure_animation_metadata(const std::string& asset_name,
                         mutated = true;
                 }
 
-                if (!slot.contains("loop") || !slot["loop"].is_boolean()) {
-                        slot["loop"] = true;
-                        mutated = true;
-                }
                 if (!slot.contains("locked") || !slot["locked"].is_boolean()) {
                         slot["locked"] = false;
+                        mutated = true;
+                }
+                if (slot.contains("loop")) {
+                        slot.erase("loop");
+                        mutated = true;
+                }
+                if (!slot.contains("on_end") || !slot["on_end"].is_string() || slot["on_end"].get<std::string>().empty()) {
+                        slot["on_end"] = "default";
                         mutated = true;
                 }
         }
@@ -272,37 +311,25 @@ std::vector<std::string> discover_asset_directories(const std::filesystem::path&
         return names;
 }
 
-}
-
-AssetLibrary::AssetLibrary(bool auto_load) {
-        if (auto_load) {
-                load_all_from_resources();
-        }
-}
-
-void AssetLibrary::load_all_from_resources() {
-        info_by_name_.clear();
-        animations_fully_cached_ = false;
-
-        manifest::ManifestData manifest;
+bool load_manifest_with_asset_sync(manifest::ManifestData& manifest,
+                                   const std::filesystem::path& assets_root,
+                                   std::vector<std::string>* out_asset_names = nullptr) {
         try {
                 manifest = manifest::load_manifest();
         } catch (const std::exception& error) {
                 vibble::log::error(std::string("[AssetLibrary] Failed to load manifest: ") + error.what());
-                return;
+                return false;
         }
 
         const auto manifest_path = std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()));
         vibble::log::info(std::string("[FrameData] Loading animations manifest from ") + manifest_path.generic_string());
 
-        if (!manifest.assets.is_object()) {
-                vibble::log::error("[AssetLibrary] Manifest assets section is missing or malformed.");
-                return;
-        }
-
-        auto& raw_assets = manifest.raw["assets"];
-        const auto assets_root = assets_root_path();
         bool manifest_dirty = false;
+        auto& raw_assets = manifest.raw["assets"];
+        if (!raw_assets.is_object()) {
+                raw_assets = nlohmann::json::object();
+                manifest_dirty = true;
+        }
 
         for (auto it = raw_assets.begin(); it != raw_assets.end(); ++it) {
                 manifest_dirty |= ensure_manifest_entry_shape(it.key(), it.value(), assets_root);
@@ -332,6 +359,219 @@ void AssetLibrary::load_all_from_resources() {
                 } catch (...) {
                         vibble::log::warn("[AssetLibrary] Failed to persist manifest assets due to unknown error");
                 }
+        }
+
+        if (out_asset_names) {
+                out_asset_names->clear();
+                out_asset_names->reserve(raw_assets.size());
+                for (auto it = raw_assets.begin(); it != raw_assets.end(); ++it) {
+                        out_asset_names->push_back(it.key());
+                }
+                std::sort(out_asset_names->begin(), out_asset_names->end());
+        }
+        return true;
+}
+
+std::vector<std::string> sorted_names_from_set(const std::unordered_set<std::string>& names) {
+        std::vector<std::string> ordered;
+        ordered.reserve(names.size());
+        for (const auto& name : names) {
+                if (!name.empty()) {
+                        ordered.push_back(name);
+                }
+        }
+        std::sort(ordered.begin(), ordered.end());
+        ordered.erase(std::unique(ordered.begin(), ordered.end()), ordered.end());
+        return ordered;
+}
+
+void append_unique_names(std::vector<std::string>& out, const std::vector<std::string>& names) {
+        std::unordered_set<std::string> seen(out.begin(), out.end());
+        for (const auto& name : names) {
+                if (!name.empty() && seen.insert(name).second) {
+                        out.push_back(name);
+                }
+        }
+        std::sort(out.begin(), out.end());
+}
+
+WarmupPassStats warmup_assets(SDL_Renderer* renderer,
+                              std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& info_by_name,
+                              std::unordered_set<std::string>& runtime_loaded_assets,
+                              const std::vector<std::string>& ordered_names,
+                              const std::string& preload_label,
+                              const std::string& load_label) {
+        WarmupPassStats stats;
+        if (!renderer || ordered_names.empty()) {
+                return stats;
+        }
+
+        const auto begin = std::chrono::steady_clock::now();
+        PrimaryAssetCache primary_cache(renderer);
+        std::vector<std::shared_ptr<AssetInfo>> load_candidates;
+        std::vector<AssetInfo*> repair_candidates;
+        std::vector<std::string> reused_candidate_names;
+
+        for (const auto& name : ordered_names) {
+                auto it = info_by_name.find(name);
+                if (it == info_by_name.end() || !it->second) {
+                        stats.cache_failed.push_back(name);
+                        vibble::log::warn(std::string("[AssetLibrary] ") + preload_label + " cache_failed '" + name + "' (missing AssetInfo)");
+                        continue;
+                }
+
+                auto& info = it->second;
+                if (runtime_loaded_assets.find(name) != runtime_loaded_assets.end() || !info->animations.empty()) {
+                        runtime_loaded_assets.insert(name);
+                        ++stats.already_loaded;
+                        continue;
+                }
+
+                PrimaryAssetCache::WarmupOutcome outcome = PrimaryAssetCache::WarmupOutcome::Failed;
+                if (!primary_cache.ensure_cache_ready(*info, nullptr, nullptr, &outcome)) {
+                        stats.cache_failed.push_back(name);
+                        vibble::log::warn(std::string("[AssetLibrary] ") + preload_label + " cache_failed '" + name + "'");
+                        continue;
+                }
+
+                load_candidates.push_back(info);
+                switch (outcome) {
+                case PrimaryAssetCache::WarmupOutcome::Created:
+                        stats.cache_created.push_back(name);
+                        vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_created '" + name + "'");
+                        break;
+                case PrimaryAssetCache::WarmupOutcome::Rebuilt:
+                        stats.cache_rebuilt.push_back(name);
+                        vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_rebuilt '" + name + "'");
+                        break;
+                case PrimaryAssetCache::WarmupOutcome::Reused:
+                        repair_candidates.push_back(info.get());
+                        reused_candidate_names.push_back(name);
+                        break;
+                case PrimaryAssetCache::WarmupOutcome::Repaired:
+                        stats.cache_repaired.push_back(name);
+                        vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_repaired '" + name + "'");
+                        break;
+                case PrimaryAssetCache::WarmupOutcome::Failed:
+                        stats.cache_failed.push_back(name);
+                        vibble::log::warn(std::string("[AssetLibrary] ") + preload_label + " cache_failed '" + name + "'");
+                        break;
+                }
+        }
+
+        if (!repair_candidates.empty()) {
+                auto detect_result = primary_cache.detect_missing_cache_files(repair_candidates);
+                std::unordered_set<std::string> repaired_names;
+
+                if (!detect_result.ok) {
+                        vibble::log::warn(std::string("[AssetLibrary] ") + preload_label + " repair detection failed: " + detect_result.error);
+                } else if (!detect_result.touched_assets.empty()) {
+                        std::unordered_set<std::string> touched_set(detect_result.touched_assets.begin(),
+                                                                    detect_result.touched_assets.end());
+                        std::vector<AssetInfo*> touched_infos;
+                        touched_infos.reserve(detect_result.touched_assets.size());
+                        for (AssetInfo* info : repair_candidates) {
+                                if (info && touched_set.find(info->name) != touched_set.end()) {
+                                        touched_infos.push_back(info);
+                                }
+                        }
+
+                        auto repair_result = primary_cache.repair_missing_cache_files(touched_infos);
+                        if (!repair_result.ok) {
+                                vibble::log::warn(std::string("[AssetLibrary] ") + preload_label + " batched repair failed: " + repair_result.error);
+                        } else {
+                                for (const auto& [asset_name, written_files] : repair_result.written_files_by_asset) {
+                                        if (written_files.empty()) {
+                                                continue;
+                                        }
+                                        repaired_names.insert(asset_name);
+                                        stats.cache_repaired.push_back(asset_name);
+                                        vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_repaired '" + asset_name + "'");
+                                }
+                        }
+                }
+
+                for (const auto& name : reused_candidate_names) {
+                        if (repaired_names.find(name) != repaired_names.end()) {
+                                continue;
+                        }
+                        stats.cache_reused.push_back(name);
+                        vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_reused '" + name + "'");
+                }
+        }
+
+        const auto preload_end = std::chrono::steady_clock::now();
+        const auto preload_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - begin).count();
+        vibble::log::info(
+            std::string("[AssetLibrary] ") + preload_label + " summary: created=" + std::to_string(stats.cache_created.size()) +
+            " " + summarize_names(stats.cache_created) +
+            ", rebuilt=" + std::to_string(stats.cache_rebuilt.size()) +
+            " " + summarize_names(stats.cache_rebuilt) +
+            ", repaired=" + std::to_string(stats.cache_repaired.size()) +
+            " " + summarize_names(stats.cache_repaired) +
+            ", reused=" + std::to_string(stats.cache_reused.size()) +
+            " " + summarize_names(stats.cache_reused) +
+            ", failed=" + std::to_string(stats.cache_failed.size()) +
+            " " + summarize_names(stats.cache_failed) +
+            ", already_loaded=" + std::to_string(stats.already_loaded) +
+            " in " + std::to_string(preload_ms) + "ms");
+
+        const auto load_begin = std::chrono::steady_clock::now();
+        for (const auto& info : load_candidates) {
+                if (!info) {
+                        continue;
+                }
+                if (runtime_loaded_assets.find(info->name) != runtime_loaded_assets.end() || !info->animations.empty()) {
+                        runtime_loaded_assets.insert(info->name);
+                        continue;
+                }
+                try {
+                        const auto item_begin = std::chrono::steady_clock::now();
+                        info->loadAnimations(renderer, true, true);
+                        const auto item_end = std::chrono::steady_clock::now();
+                        const auto item_ms = std::chrono::duration_cast<std::chrono::milliseconds>(item_end - item_begin).count();
+                        runtime_loaded_assets.insert(info->name);
+                        stats.load_succeeded.push_back(info->name);
+                        vibble::log::info(std::string("[AssetLibrary] ") + load_label + " loaded '" + info->name + "' in " +
+                                          std::to_string(item_ms) + "ms");
+                } catch (const std::exception& ex) {
+                        stats.load_failed.push_back(info->name);
+                        vibble::log::error(std::string("[AssetLibrary] ") + load_label + " failed for '" + info->name +
+                                           "': " + ex.what());
+                } catch (...) {
+                        stats.load_failed.push_back(info->name);
+                        vibble::log::error(std::string("[AssetLibrary] ") + load_label + " failed for '" + info->name +
+                                           "' due to an unknown error.");
+                }
+        }
+        const auto load_end = std::chrono::steady_clock::now();
+        const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count();
+        vibble::log::info(
+            std::string("[AssetLibrary] ") + load_label + " summary: loaded=" +
+            std::to_string(stats.load_succeeded.size()) + " " + summarize_names(stats.load_succeeded) +
+            ", failed=" + std::to_string(stats.load_failed.size()) + " " + summarize_names(stats.load_failed) +
+            ", already_loaded=" + std::to_string(stats.already_loaded) +
+            " in " + std::to_string(load_ms) + "ms");
+
+        return stats;
+}
+
+}
+
+AssetLibrary::AssetLibrary(bool auto_load) {
+        if (auto_load) {
+                load_all_from_resources();
+        }
+}
+
+void AssetLibrary::load_all_from_resources() {
+        info_by_name_.clear();
+        const auto assets_root = assets_root_path();
+        manifest::ManifestData manifest;
+        runtime_loaded_assets_.clear();
+        startup_warmup_complete_ = false;
+        if (!load_manifest_with_asset_sync(manifest, assets_root)) {
+                return;
         }
 
         int loaded = 0;
@@ -419,6 +659,36 @@ void AssetLibrary::load_all_from_resources() {
         vibble::log::info(std::string("[AssetLibrary] Loaded ") + std::to_string(info_by_name_.size()) + " assets (ok=" + std::to_string(loaded) + ", failed=" + std::to_string(failed) + ") in " + std::to_string(elapsed_ms) + "ms");
 }
 
+std::vector<std::string> AssetLibrary::sync_missing_from_resources() {
+    manifest::ManifestData manifest;
+    const auto assets_root = assets_root_path();
+    if (!load_manifest_with_asset_sync(manifest, assets_root)) {
+        return {};
+    }
+
+    std::vector<std::string> added_assets;
+    for (auto it = manifest.assets.begin(); it != manifest.assets.end(); ++it) {
+        const std::string name = it.key();
+        const auto& metadata = it.value();
+        if (name.empty() || info_by_name_.find(name) != info_by_name_.end()) {
+            continue;
+        }
+        if (!metadata.is_object()) {
+            vibble::log::warn(std::string("[AssetLibrary] Cannot sync missing asset '") + name + "' because its manifest entry is malformed.");
+            continue;
+        }
+        add_asset(name, metadata);
+        if (info_by_name_.find(name) != info_by_name_.end()) {
+            added_assets.push_back(name);
+        }
+    }
+
+    if (!added_assets.empty()) {
+        vibble::log::info(std::string("[AssetLibrary] Synced missing assets ") + summarize_names(added_assets));
+    }
+    return added_assets;
+}
+
 void AssetLibrary::add_asset(const std::string& name, const nlohmann::json& metadata) {
     if (info_by_name_.count(name)) {
 
@@ -428,6 +698,7 @@ void AssetLibrary::add_asset(const std::string& name, const nlohmann::json& meta
     try {
         std::shared_ptr<AssetInfo> info = AssetInfo::from_manifest_entry(name, metadata);
         info_by_name_[name] = info;
+        runtime_loaded_assets_.erase(name);
         vibble::log::info(std::string("[AssetLibrary] Added asset '") + name + "' to library");
     } catch (const std::exception& error) {
         vibble::log::error(std::string("[AssetLibrary] Failed to add asset '") + name + "': " + error.what());
@@ -471,43 +742,55 @@ void AssetLibrary::loadAllAnimations(SDL_Renderer* renderer) {
             continue;
         }
         info->loadAnimations(renderer);
+        runtime_loaded_assets_.insert(name);
         ++loaded;
     }
     const auto end = std::chrono::steady_clock::now();
     const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
     vibble::log::info(std::string("[AssetLibrary] Preloaded animations for ") + std::to_string(loaded) + " asset(s) in " + std::to_string(elapsed_ms) + "ms");
-    animations_fully_cached_ = true;
+    startup_warmup_complete_ = true;
 }
 
 void AssetLibrary::ensureAllAnimationsLoaded(SDL_Renderer* renderer) {
-    if (!renderer || animations_fully_cached_) {
+    if (!renderer || startup_warmup_complete_) {
         return;
     }
 
-    const auto begin = std::chrono::steady_clock::now();
-    std::size_t loaded_now = 0;
-    std::size_t already_cached = 0;
-    for (auto& [name, info] : info_by_name_) {
-        if (!info) {
-            continue;
+    std::unordered_set<std::string> all_names;
+    all_names.reserve(info_by_name_.size());
+    for (const auto& [name, info] : info_by_name_) {
+        if (info && !name.empty()) {
+            all_names.insert(name);
         }
-        if (!info->animations.empty()) {
-            ++already_cached;
-            continue;
-        }
-        info->loadAnimations(renderer);
-        ++loaded_now;
     }
-    animations_fully_cached_ = true;
+    const WarmupPassStats stats = warmup_assets(
+        renderer,
+        info_by_name_,
+        runtime_loaded_assets_,
+        sorted_names_from_set(all_names),
+        "Preload pass 1",
+        "Pure load pass");
+    startup_warmup_complete_ = stats.load_failed.empty() && stats.cache_failed.empty();
+}
 
-    if (loaded_now > 0) {
-        const auto end = std::chrono::steady_clock::now();
-        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-        vibble::log::info(std::string("[AssetLibrary] Cached animations for ") + std::to_string(loaded_now) + " additional asset(s) (" + std::to_string(already_cached) + ") in " + std::to_string(elapsed_ms) + "ms");
+void AssetLibrary::ensureAnimationsLoadedFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names) {
+    if (!renderer || names.empty()) {
+        return;
     }
+
+    (void)warmup_assets(
+        renderer,
+        info_by_name_,
+        runtime_loaded_assets_,
+        sorted_names_from_set(names),
+        "Targeted preload",
+        "Targeted load");
 }
 
 void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names) {
+    if (!renderer || names.empty()) {
+        return;
+    }
     vibble::log::debug(std::string("[AssetLibrary] loadAnimationsFor: count=") + std::to_string(names.size()));
     std::size_t idx = 0;
     for (const auto& name : names) {
@@ -516,7 +799,18 @@ void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordere
         auto it = info_by_name_.find(name);
         if (it != info_by_name_.end() && it->second) {
             try {
-                it->second->loadAnimations(renderer);
+                const auto load_begin = std::chrono::steady_clock::now();
+                // Map startup only needs essential animations immediately (default/start).
+                // Missing non-essential animations are hydrated on demand.
+                it->second->loadAnimations(renderer, false);
+                const auto load_end = std::chrono::steady_clock::now();
+                const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count();
+                if (!it->second->animations.empty()) {
+                    runtime_loaded_assets_.insert(name);
+                }
+                if (load_ms > 250) {
+                        vibble::log::info(std::string("[AssetLibrary] Preload '") + name + "' took " + std::to_string(load_ms) + "ms");
+                }
             } catch (const std::exception& ex) {
                 vibble::log::error(std::string("[AssetLibrary] Exception while loading animations for '") + name + "': " + ex.what());
                 throw;
@@ -529,11 +823,80 @@ void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordere
         }
         ++idx;
     }
-    animations_fully_cached_ = false;
+}
+
+AssetLibrary::RefreshMissingResult AssetLibrary::repairAndRefreshMissing(SDL_Renderer* renderer) {
+    RefreshMissingResult result;
+    result.added_assets = sync_missing_from_resources();
+
+    std::vector<AssetInfo*> all_infos;
+    all_infos.reserve(info_by_name_.size());
+    for (auto& [name, info] : info_by_name_) {
+        if (info && !name.empty()) {
+            all_infos.push_back(info.get());
+        }
+    }
+
+    std::unordered_set<std::string> names_to_load(result.added_assets.begin(), result.added_assets.end());
+    if (renderer && !all_infos.empty()) {
+        PrimaryAssetCache primary_cache(renderer);
+        auto detect_result = primary_cache.detect_missing_cache_files(all_infos);
+        if (!detect_result.ok) {
+            vibble::log::warn(std::string("[AssetLibrary] Repair / Refresh Missing detection failed: ") + detect_result.error);
+        } else if (!detect_result.touched_assets.empty()) {
+            std::unordered_set<std::string> touched_names(detect_result.touched_assets.begin(), detect_result.touched_assets.end());
+            std::vector<AssetInfo*> touched_infos;
+            touched_infos.reserve(touched_names.size());
+            names_to_load.insert(detect_result.touched_assets.begin(), detect_result.touched_assets.end());
+            for (AssetInfo* info : all_infos) {
+                if (info && touched_names.find(info->name) != touched_names.end()) {
+                    touched_infos.push_back(info);
+                }
+            }
+
+            auto repair_result = primary_cache.repair_missing_cache_files(touched_infos);
+            if (!repair_result.ok) {
+                vibble::log::warn(std::string("[AssetLibrary] Repair / Refresh Missing repair failed: ") + repair_result.error);
+                append_unique_names(result.failed_assets, detect_result.touched_assets);
+            } else {
+                for (const auto& [asset_name, written_files] : repair_result.written_files_by_asset) {
+                    if (written_files.empty()) {
+                        continue;
+                    }
+                    result.repaired_assets.push_back(asset_name);
+                    names_to_load.insert(asset_name);
+                }
+            }
+        }
+    } else if (!renderer && !result.added_assets.empty()) {
+        vibble::log::warn("[AssetLibrary] Repair / Refresh Missing skipped runtime load because no renderer is available.");
+        append_unique_names(result.failed_assets, result.added_assets);
+    }
+
+    if (renderer && !names_to_load.empty()) {
+        const WarmupPassStats stats = warmup_assets(
+            renderer,
+            info_by_name_,
+            runtime_loaded_assets_,
+            sorted_names_from_set(names_to_load),
+            "Repair / Refresh Missing preload",
+            "Repair / Refresh Missing load");
+        append_unique_names(result.repaired_assets, stats.cache_repaired);
+        append_unique_names(result.loaded_assets, stats.load_succeeded);
+        append_unique_names(result.failed_assets, stats.cache_failed);
+        append_unique_names(result.failed_assets, stats.load_failed);
+    }
+
+    vibble::log::info(
+        std::string("[AssetLibrary] Repair / Refresh Missing summary: added=") +
+        std::to_string(result.added_assets.size()) + " " + summarize_names(result.added_assets) +
+        ", repaired=" + std::to_string(result.repaired_assets.size()) + " " + summarize_names(result.repaired_assets) +
+        ", loaded=" + std::to_string(result.loaded_assets.size()) + " " + summarize_names(result.loaded_assets) +
+        ", failed=" + std::to_string(result.failed_assets.size()) + " " + summarize_names(result.failed_assets));
+    return result;
 }
 
 bool AssetLibrary::remove(const std::string& name) {
-    const bool removed = info_by_name_.erase(name) > 0;
-    load_all_from_resources();
-    return removed;
+    runtime_loaded_assets_.erase(name);
+    return info_by_name_.erase(name) > 0;
 }

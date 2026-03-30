@@ -28,7 +28,6 @@
 #include "utils/area.hpp"
 #include "utils/string_utils.hpp"
 #include "utils/cache_manager.hpp"
-#include "utils/rebuild_queue.hpp"
 #include "widgets.hpp"
 #include "tag_utils.hpp"
 
@@ -64,6 +63,43 @@ namespace asset_paths = devmode::asset_paths;
 
 namespace {
 
+nlohmann::json animation_manifest_snapshot(const AssetInfo& info) {
+    nlohmann::json snapshot = nlohmann::json::object();
+    snapshot["animations"] = nlohmann::json::object();
+    snapshot["start"] = std::string{};
+
+    nlohmann::json payload = info.manifest_payload();
+    if (!payload.is_object()) {
+        return snapshot;
+    }
+
+    bool has_start = false;
+    const auto animations_it = payload.find("animations");
+    if (animations_it != payload.end() && animations_it->is_object()) {
+        const auto nested_animations_it = animations_it->find("animations");
+        if (nested_animations_it != animations_it->end() && nested_animations_it->is_object()) {
+            snapshot["animations"] = *nested_animations_it;
+        } else {
+            snapshot["animations"] = *animations_it;
+        }
+
+        const auto nested_start_it = animations_it->find("start");
+        if (nested_start_it != animations_it->end()) {
+            snapshot["start"] = *nested_start_it;
+            has_start = true;
+        }
+    }
+
+    if (!has_start) {
+        const auto root_start_it = payload.find("start");
+        if (root_start_it != payload.end()) {
+            snapshot["start"] = *root_start_it;
+        }
+    }
+
+    return snapshot;
+}
+
 class Section_BasicInfo : public DockableCollapsible {
   public:
     Section_BasicInfo();
@@ -84,7 +120,6 @@ class Section_BasicInfo : public DockableCollapsible {
     std::unique_ptr<DMSlider>    s_scale_pct_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
-    std::unique_ptr<DMCheckbox>  c_crop_frames_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
     std::unique_ptr<DMButton>    apply_btn_;
     std::vector<std::unique_ptr<Widget>> widgets_;
@@ -145,7 +180,6 @@ inline void Section_BasicInfo::build() {
         c_flipable_.reset();
     }
     c_tillable_ = std::make_unique<DMCheckbox>("Tileable (grid tiles)", info_->tillable);
-    c_crop_frames_ = std::make_unique<DMCheckbox>("Crop Frames (global)", info_->crop_frames);
 
     auto w_type = std::make_unique<DropdownWidget>(dd_type_.get());
     rows.push_back({ w_type.get() });
@@ -170,10 +204,6 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_tillable.get() });
     widgets_.push_back(std::move(w_tillable));
 
-    auto w_crop_frames = std::make_unique<CheckboxWidget>(c_crop_frames_.get());
-    rows.push_back({ w_crop_frames.get() });
-    widgets_.push_back(std::move(w_crop_frames));
-
     if (!apply_btn_) {
         apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
     }
@@ -196,13 +226,11 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
-        if (c_crop_frames_ && c_crop_frames_->handle_event(e)) used = true;
     }
 
     bool changed = false;
     bool rebuild_needed = false;
     bool tile_changed = false;
-    bool crop_changed = false;
     bool render_settings_changed = false;
     bool type_changed = false;
     if (dd_type_ && !type_options_.empty()) {
@@ -245,17 +273,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         rebuild_needed = true;
     }
 
-    if (c_crop_frames_ && info_->crop_frames != c_crop_frames_->value()) {
-        info_->set_crop_frames(c_crop_frames_->value());
-        changed = true;
-        crop_changed = true;
-    }
-
     if (changed) {
-        if (crop_changed && !info_->name.empty()) {
-            vibble::RebuildQueueCoordinator coordinator;
-            coordinator.request_asset(info_->name);
-        }
         auto on_success = [this, render_settings_changed, type_changed, tile_changed]() {
             if (!ui_) return;
             if (tile_changed) ui_->sync_target_tiling_state();
@@ -322,9 +340,9 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     float distance_scale = 1.0f;
     float vertical_scale = 1.0f;
     if (auto* gp = cam.grid_point_for_asset(target)) {
-        screen_pos = gp->screen;
-        distance_scale = std::max(0.0001f, gp->perspective_scale);
-        vertical_scale = std::max(0.0001f, gp->vertical_scale);
+        screen_pos = gp->screen_position();
+        distance_scale = std::max(0.0001f, gp->perspective_scale());
+        vertical_scale = std::max(0.0001f, gp->vertical_scale());
     }
 
     float scaled_sw = base_sw * distance_scale;
@@ -382,7 +400,7 @@ class Section_Tags : public DockableCollapsible {
       }
 
       if (!tag_editor_) {
-        tag_editor_ = std::make_unique<TagEditorWidget>();
+        tag_editor_ = std::make_unique<TagEditorWidget>(TagEditorWidget::Mode::AssetInfoOverhaul);
         tag_editor_->set_on_changed([this](const std::vector<std::string>& tags,
                                            const std::vector<std::string>& anti_tags) {
           if (!info_) return;
@@ -401,6 +419,7 @@ class Section_Tags : public DockableCollapsible {
         });
       }
 
+      tag_editor_->set_subject_asset_name(info_->name);
       tag_editor_->set_tags(info_->tags, info_->anti_tags);
       rows.push_back({ tag_editor_.get() });
 
@@ -569,8 +588,9 @@ void configure_panel_for_container(DockableCollapsible* panel) {
     panel->reset_scroll();
     panel->set_visible(true);
     panel->force_pointer_ready();
+    panel->setLocked(false);
     panel->set_embedded_focus_state(false);
-    panel->set_embedded_interaction_enabled(false);
+    panel->set_embedded_interaction_enabled(true);
 }
 
 bool read_pixel(SDL_Renderer* renderer, const SDL_Rect& rect, Uint32 format, Uint32& out_pixel) {
@@ -679,7 +699,6 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
             }
             changed |= copy_key("starting_health");
             changed |= copy_key("can_invert");
-            changed |= copy_key("crop_frames");
 
             changed |= copy_key("tileable");
             changed |= copy_key("tillable");
@@ -702,29 +721,20 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
 
 AssetInfoUI::AssetInfoUI() {
     rebuild_default_sections();
-    if (!configure_btn_) {
-        configure_btn_ = std::make_unique<DMButton>("Configure Animations", &DMStyles::CreateButton(), 220, DMButton::height());
-    }
-    if (!configure_btn_widget_) {
-        configure_btn_widget_ = std::make_unique<ButtonWidget>(configure_btn_.get(), [this]() {
-            if (!animation_editor_window_) {
-                return;
-            }
-            if (animation_editor_window_->is_visible()) {
-                animation_editor_window_->set_visible(false);
-            } else if (info_) {
-                if (animation_editor_rect_.w > 0 && animation_editor_rect_.h > 0) {
-                    animation_editor_window_->set_bounds(animation_editor_rect_);
-                }
-                animation_editor_window_->set_visible(true);
-            }
-        });
-    }
     if (!animation_editor_window_) {
         animation_editor_window_ = std::make_unique<animation_editor::AnimationEditorWindow>();
         if (animation_editor_window_) {
             animation_editor_window_->set_manifest_store(manifest_store_);
             animation_editor_window_->set_on_document_saved([this]() { this->on_animation_document_saved(); });
+            animation_editor_window_->set_on_closed([this]() {
+                if (!animation_editor_fullscreen_mode_) {
+                    return;
+                }
+                animation_editor_fullscreen_mode_ = false;
+                if (on_animation_editor_closed_) {
+                    on_animation_editor_closed_();
+                }
+            });
         }
     }
 
@@ -766,11 +776,8 @@ AssetInfoUI::AssetInfoUI() {
             int measured = section->embedded_height(ctx.content_width, embed_screen_h);
             SDL_Rect rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, measured};
             section_bounds_[i] = rect;
+            section->set_rect(rect); // keep event hit-testing aligned with current scroll/layout
             y += measured + ctx.gap;
-        }
-        if (configure_btn_widget_) {
-            configure_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
-            y += DMButton::height() + ctx.gap;
         }
         if (duplicate_btn_widget_) {
             duplicate_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
@@ -790,7 +797,6 @@ AssetInfoUI::AssetInfoUI() {
             SDL_Rect bounds = (i < section_bounds_.size()) ? section_bounds_[i] : SDL_Rect{0,0,0,0};
             section->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
         }
-        if (configure_btn_) configure_btn_->render(renderer);
         if (duplicate_btn_) duplicate_btn_->render(renderer);
         if (delete_btn_) delete_btn_->render(renderer);
     });
@@ -798,16 +804,19 @@ AssetInfoUI::AssetInfoUI() {
     container_.set_on_close([this]() { this->close(); });
 
     container_.set_update_function([this](const Input& input, int screen_w, int screen_h) {
-
-        SDL_Rect usable = DockManager::instance().usableRect();
-        if (usable.w > 0 && usable.h > 0) {
-            int panel_x = screen_w - std::max(screen_w / 3, 320);
-            panel_x = std::clamp(panel_x, 0, screen_w);
-            int panel_w = std::max(0, screen_w - panel_x);
-            SDL_Rect bounds{panel_x, usable.y, panel_w, usable.h};
-            container_.set_panel_bounds_override(bounds);
+        if (panel_bounds_override_active_) {
+            container_.set_panel_bounds_override(panel_bounds_override_);
         } else {
-            container_.clear_panel_bounds_override();
+            SDL_Rect usable = DockManager::instance().usableRect();
+            if (usable.w > 0 && usable.h > 0) {
+                int panel_x = screen_w - std::max(screen_w / 3, 320);
+                panel_x = std::clamp(panel_x, 0, screen_w);
+                int panel_w = std::max(0, screen_w - panel_x);
+                SDL_Rect bounds{panel_x, usable.y, panel_w, usable.h};
+                container_.set_panel_bounds_override(bounds);
+            } else {
+                container_.clear_panel_bounds_override();
+            }
         }
         std::vector<bool> previously_expanded;
         std::vector<int> previous_heights;
@@ -846,14 +855,31 @@ AssetInfoUI::AssetInfoUI() {
     });
 
     container_.set_event_function([this](const SDL_Event& e) {
-        if (handle_section_focus_event(e)) {
+        (void)handle_section_focus_event(e);
+        auto handle_section_event = [this, &e](DockableCollapsible* section) -> bool {
+            if (!section) {
+                return false;
+            }
+            if (section->handle_event(e)) {
+                container_.request_layout();
+                if (focused_section_ != section) {
+                    focus_section(section);
+                }
+                return true;
+            }
+            return false;
+        };
+        if (focused_section_ && handle_section_event(focused_section_)) {
             return true;
         }
-        if (focused_section_ && focused_section_->handle_event(e)) {
-            return true;
-        }
-        if (configure_btn_widget_ && configure_btn_widget_->handle_event(e)) {
-            return true;
+        for (auto& section : sections_) {
+            DockableCollapsible* candidate = section.get();
+            if (!candidate || candidate == focused_section_) {
+                continue;
+            }
+            if (handle_section_event(candidate)) {
+                return true;
+            }
         }
         if (duplicate_btn_widget_ && duplicate_btn_widget_->handle_event(e)) return true;
         if (delete_btn_widget_ && delete_btn_widget_->handle_event(e)) return true;
@@ -924,6 +950,18 @@ void AssetInfoUI::set_target_asset(Asset* a) {
     if (animation_editor_window_) {
         animation_editor_window_->set_target_asset(target_asset_);
     }
+}
+
+void AssetInfoUI::set_panel_bounds_override(const SDL_Rect& bounds) {
+    panel_bounds_override_ = bounds;
+    panel_bounds_override_active_ = bounds.w > 0 && bounds.h > 0;
+    container_.request_layout();
+}
+
+void AssetInfoUI::clear_panel_bounds_override() {
+    panel_bounds_override_active_ = false;
+    panel_bounds_override_ = SDL_Rect{0, 0, 0, 0};
+    container_.request_layout();
 }
 
 void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
@@ -1019,6 +1057,7 @@ void AssetInfoUI::open()  {
 void AssetInfoUI::close() {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
+    animation_editor_fullscreen_mode_ = false;
     apply_camera_override(false);
     visible_ = false;
     container_.close();
@@ -1062,6 +1101,36 @@ void AssetInfoUI::open_animation_editor_panel() {
     }
 }
 
+void AssetInfoUI::close_animation_editor_panel() {
+    pending_animation_editor_open_ = false;
+    if (animation_editor_window_) {
+        animation_editor_window_->set_visible(false);
+    }
+}
+
+bool AssetInfoUI::is_animation_editor_open() const {
+    return animation_editor_window_ && animation_editor_window_->is_visible();
+}
+
+void AssetInfoUI::set_animation_editor_fullscreen_mode(bool enabled) {
+    if (animation_editor_fullscreen_mode_ == enabled) {
+        return;
+    }
+    animation_editor_fullscreen_mode_ = enabled;
+    if (animation_editor_fullscreen_mode_) {
+        if (last_screen_w_ > 0 && last_screen_h_ > 0) {
+            animation_editor_rect_ = SDL_Rect{0, 0, last_screen_w_, last_screen_h_};
+        }
+    } else {
+        animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
+    container_.request_layout();
+}
+
+void AssetInfoUI::set_on_animation_editor_closed(std::function<void()> callback) {
+    on_animation_editor_closed_ = std::move(callback);
+}
+
 bool AssetInfoUI::is_locked() const {
     for (const auto& section : sections_) {
         if (section && section->isLocked()) {
@@ -1072,6 +1141,15 @@ bool AssetInfoUI::is_locked() const {
 }
 
 void AssetInfoUI::layout_widgets(int screen_w, int screen_h) const {
+    if (animation_editor_fullscreen_mode_) {
+        if (screen_w > 0 && screen_h > 0) {
+            animation_editor_rect_ = SDL_Rect{0, 0, screen_w, screen_h};
+        } else {
+            animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
+        return;
+    }
+
     container_.prepare_layout(screen_w, screen_h);
     const SDL_Rect& panel = container_.panel_rect();
     int editor_width = panel.x;
@@ -1182,6 +1260,27 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
 
     if (!visible_) return false;
 
+    if (animation_editor_fullscreen_mode_) {
+        if (animation_editor_window_ && animation_editor_window_->is_visible() &&
+            animation_editor_window_->handle_event(e)) {
+            return true;
+        }
+        if (pointer_event || wheel_event) {
+            SDL_Point p = pointer;
+            if (wheel_event) {
+                sdl_mouse_util::GetMouseState(&p.x, &p.y);
+            }
+            if (animation_editor_rect_.w > 0 && animation_editor_rect_.h > 0 &&
+                SDL_PointInRect(&p, &animation_editor_rect_)) {
+                return true;
+            }
+        }
+        if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT) {
+            return true;
+        }
+        return false;
+    }
+
     if (showing_delete_popup_) {
         if (handle_delete_modal_event(e)) {
             return true;
@@ -1270,6 +1369,13 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
 
     if (!visible_) return;
 
+    if (animation_editor_fullscreen_mode_) {
+        if (save_coordinator_) {
+            save_coordinator_->tick();
+        }
+        return;
+    }
+
 
     if (info_ && asset_selector_ && asset_selector_->visible()) {
         asset_selector_->update(input);
@@ -1305,9 +1411,14 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     layout_widgets(screen_w, screen_h);
     last_renderer_ = r;
 
-    container_.render(r, screen_w, screen_h);
+    if (!animation_editor_fullscreen_mode_) {
+        container_.render(r, screen_w, screen_h);
+    }
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         animation_editor_window_->render(r);
+    }
+    if (animation_editor_fullscreen_mode_) {
+        return;
     }
 
     if (asset_selector_ && asset_selector_->visible())
@@ -1524,8 +1635,8 @@ float AssetInfoUI::compute_player_screen_height(const WarpedScreenGrid& cam) con
     float distance_scale = 1.0f;
     float vertical_scale = 1.0f;
     if (gp) {
-        distance_scale = std::max(0.0001f, gp->perspective_scale);
-        vertical_scale = std::max(0.0001f, gp->vertical_scale);
+        distance_scale = std::max(0.0001f, gp->perspective_scale());
+        vertical_scale = std::max(0.0001f, gp->vertical_scale());
     }
 
     if (ph > 0) {
@@ -1727,7 +1838,7 @@ void AssetInfoUI::apply_section_focus_states() {
         }
         const bool focused = (section.get() == focused_section_);
         section->set_embedded_focus_state(focused);
-        section->set_embedded_interaction_enabled(focused);
+        section->set_embedded_interaction_enabled(true);
     }
 }
 
@@ -1743,6 +1854,7 @@ void AssetInfoUI::focus_section(DockableCollapsible* section) {
     }
     DockableCollapsible* previous = focused_section_;
     focused_section_ = resolved;
+    collapse_all_except(focused_section_);
     apply_section_focus_states();
     if (focused_section_) {
         focused_section_->force_pointer_ready();
@@ -1757,6 +1869,18 @@ void AssetInfoUI::focus_section(DockableCollapsible* section) {
 
 void AssetInfoUI::clear_section_focus() {
     focus_section(nullptr);
+}
+
+void AssetInfoUI::collapse_all_except(DockableCollapsible* keep) {
+    for (auto& entry : sections_) {
+        DockableCollapsible* section = entry.get();
+        if (!section || section == keep) {
+            continue;
+        }
+        if (section->is_expanded()) {
+            section->set_expanded(false);
+        }
+    }
 }
 
 DockableCollapsible* AssetInfoUI::section_at_point(SDL_Point p) const {
@@ -1789,7 +1913,9 @@ bool AssetInfoUI::handle_section_focus_event(const SDL_Event& e) {
         return false;
     }
     focus_section(target);
-    return true;
+    // Keep processing this same event through the newly focused section so
+    // controls react on first click instead of requiring a second click.
+    return false;
 }
 
 void AssetInfoUI::sync_target_tiling_state() {
@@ -1861,6 +1987,8 @@ void AssetInfoUI::request_apply_section(AssetInfoSectionId section_id) {
     }
     if (!asset_selector_) asset_selector_ = std::make_unique<SearchAssets>();
     if (!asset_selector_) return;
+    asset_selector_->set_manifest_store(manifest_store_);
+    asset_selector_->set_assets(assets_);
 
     asset_selector_->open([this, section_id](const std::string& selection) {
         if (selection.empty()) return;
@@ -1901,8 +2029,6 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
     bool all_success = true;
     bool any_written = false;
     auto tags_notified = std::make_shared<bool>(false);
-    const bool basic_info_contains_crop = section_id == AssetInfoSectionId::BasicInfo &&
-                                          source.contains("crop_frames");
 
     for (const auto& name : asset_names) {
         if (name.empty()) {
@@ -1931,17 +2057,13 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
             return session.commit();
         };
 
-        auto on_success = [this, section_id, tags_notified, target_key, basic_info_contains_crop]() {
+        auto on_success = [this, section_id, tags_notified]() {
             if (section_id == AssetInfoSectionId::Tags) {
                 if (!*tags_notified) {
                     tag_utils::notify_tags_changed();
                     *tags_notified = true;
                 }
                 sync_target_tags();
-            }
-            if (basic_info_contains_crop && !target_key.empty()) {
-                vibble::RebuildQueueCoordinator coordinator;
-                coordinator.request_asset(target_key);
             }
         };
 
@@ -2237,17 +2359,17 @@ void AssetInfoUI::on_animation_document_saved() {
         return;
     }
 
+    const nlohmann::json before_snapshot = animation_manifest_snapshot(*info_);
     const bool reloaded = info_->reload_animations_from_disk();
     if (!reloaded) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
     }
+    const nlohmann::json after_snapshot = animation_manifest_snapshot(*info_);
+    const bool animation_data_changed = reloaded && before_snapshot != after_snapshot;
 
-    // Ensure both bundle-cache save and image-cache rebuild have work queued after any
-    // animation document mutation (add/remove/rename/source edits).
-    info_->mark_dirty();
-    if (!info_->name.empty()) {
-        vibble::RebuildQueueCoordinator coordinator;
-        coordinator.request_asset(info_->name);
+    if (animation_data_changed) {
+        info_->classify_animation_snapshot_rebuilds(before_snapshot, after_snapshot);
+        info_->mark_dirty();
     }
 
     SDL_Renderer* renderer = nullptr;
@@ -2341,9 +2463,9 @@ bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {
         }
 
         if (assets_) {
-            assets_->library().load_all_from_resources();
+            assets_->library().add_asset(name, manifest_entry);
             if (SDL_Renderer* renderer = assets_->renderer()) {
-                assets_->library().ensureAllAnimationsLoaded(renderer);
+                assets_->library().ensureAnimationsLoadedFor(renderer, std::unordered_set<std::string>{name});
             }
             assets_->show_dev_notice(std::string("Duplicated asset as '") + name + "'");
         }

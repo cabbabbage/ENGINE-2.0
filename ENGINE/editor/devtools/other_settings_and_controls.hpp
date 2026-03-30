@@ -112,7 +112,7 @@ public:
     bool fog_visible() const;
 
 private:
-    enum class FilterKind { MapAssets, CurrentRoom, Fog, Type, SpawnMethod };
+    enum class FilterKind { MapAssets, CurrentRoom, Fog, Type };
 
     struct FilterEntry {
         std::string id;
@@ -125,7 +125,6 @@ private:
         bool current_room = true;
         bool fog = true;
         std::unordered_map<std::string, bool> type_filters;
-        std::unordered_map<std::string, bool> method_filters;
 };
 
     void rebuild_map_spawn_ids();
@@ -143,14 +142,9 @@ private:
     const FilterState& state() const;
     void notify_state_changed();
     bool type_filter_enabled(const std::string& type) const;
-    bool method_filter_enabled(const std::string& method) const;
     bool default_type_enabled(const std::string& type) const;
-    bool default_method_enabled(const std::string& method) const;
     bool load_type_filter_value(const std::string& type, bool default_value) const;
-    bool load_method_filter_value(const std::string& method, bool default_value) const;
     std::string format_type_label(const std::string& type) const;
-    std::string format_method_label(const std::string& method) const;
-    static std::string canonicalize_method(const std::string& method);
     void collect_spawn_ids(const nlohmann::json& node, std::unordered_set<std::string>& out) const;
     void update_filter_toggle_label();
     void clear_checkbox_rects();

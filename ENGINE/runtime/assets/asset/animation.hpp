@@ -24,6 +24,7 @@ class Animation {
 public:
     enum class OnEndDirective {
         Default,
+        Loop,
         Kill,
         Lock,
         Reverse,
@@ -87,10 +88,10 @@ public:
     } source{};
     bool flipped_source = false;
     bool flip_vertical_source = false;
-    bool flip_movement_horizontal = false;
-    bool flip_movement_vertical = false;
+    bool invert_frames_horizontal = false;
+    bool invert_frames_vertical = false;
     bool reverse_source = false;
-    bool inherit_source_movement = false;
+    bool inherit_data = false;
     bool locked = false;
     int number_of_frames = 0;
     int total_dx = 0;
@@ -100,26 +101,33 @@ public:
     bool rnd_start = false;
     std::string on_end_animation;
     OnEndDirective on_end_behavior = OnEndDirective::Default;
-    std::vector<AnimationFrame*> frames;
     bool randomize = false;
-    bool loop = true;
     bool frozen = false;
     SDL_Texture* preview_texture = nullptr;
+    bool has_frames(std::size_t path_index = 0) const;
+    std::size_t frame_count(std::size_t path_index = 0) const;
+    const std::vector<AnimationFrame>& primary_frames() const;
+    std::vector<AnimationFrame>& primary_frames();
+    const AnimationFrame* primary_frame_at(std::size_t index) const;
+    AnimationFrame* primary_frame_at(std::size_t index);
     std::size_t movement_path_count() const;
     const std::vector<AnimationFrame>& movement_path(std::size_t index) const;
     std::vector<AnimationFrame>& movement_path(std::size_t index);
-    void inherit_movement_from(const Animation& source);
+    void replace_movement_paths(std::vector<std::vector<AnimationFrame>> paths);
     std::size_t default_movement_path_index() const { return 0; }
     std::size_t clamp_path_index(std::size_t index) const;
     std::size_t variant_count() const { return variant_steps_.size(); }
     const std::vector<float>& variant_steps() const { return variant_steps_; }
+    std::size_t cached_frame_count() const { return frame_cache_.size(); }
+    const std::vector<FrameCache>& cached_frames() const { return frame_cache_; }
+    void synchronize_runtime_frames();
 private:
     std::vector<FrameCache> frame_cache_;
     AudioClip audio_clip;
     std::vector<std::vector<AnimationFrame>> movement_paths_;
     std::vector<float> variant_steps_;
     void bind_textures_to_frame(AnimationFrame& frame) const;
-    void refresh_frame_texture_bindings();
+    void update_preview_texture_from_primary_path();
 };
 
 struct PrebuiltAnimationFrames {

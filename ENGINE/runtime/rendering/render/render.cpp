@@ -28,9 +28,12 @@
 #include "assets/asset/asset_library.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/render_object_projection.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -41,6 +44,17 @@
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 
 namespace {
+constexpr double kDepthBucketSize = 0.0625;
+constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
+
+inline std::int64_t quantize_depth(double depth) {
+    const double scaled = std::floor(depth * kDepthBucketScale);
+    const double min_value = static_cast<double>(std::numeric_limits<std::int64_t>::lowest());
+    const double max_value = static_cast<double>(std::numeric_limits<std::int64_t>::max());
+    const double clamped = std::clamp(scaled, min_value, max_value);
+    return static_cast<std::int64_t>(clamped);
+}
+
 bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points);
 }
 
@@ -53,7 +67,6 @@ GeometryBatcher::GeometryBatcher(SDL_Renderer* renderer)
     // Pre-allocate for estimated 10,000 quads (40,000 vertices, 60,000 indices)
     vertex_buffer_.reserve(40000);
     index_buffer_.reserve(60000);
-    draw_list_.reserve(10000);
 }
 
 void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4],
@@ -70,11 +83,27 @@ void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4]
     item.vertices[3] = vertices[3];
     item.depth = depth;
 
-    draw_list_.push_back(item);
+    DepthBucket* bucket = nullptr;
+    if (std::isfinite(depth)) {
+        const auto quantized_depth = quantize_depth(depth);
+        bucket = &depth_buckets_[quantized_depth];
+    } else {
+        bucket = &invalid_depth_bucket_;
+    }
+
+    RenderStateKey key{texture, blend_mode};
+    auto group_it = bucket->group_index.find(key);
+    if (group_it == bucket->group_index.end()) {
+        bucket->groups.emplace_back(RenderStateGroup{key, {}});
+        const std::size_t new_index = bucket->groups.size() - 1;
+        auto insert_it = bucket->group_index.emplace(bucket->groups[new_index].key, new_index);
+        group_it = insert_it.first;
+    }
+    bucket->groups[group_it->second].items.push_back(item);
 }
 
 void GeometryBatcher::flush() {
-    if (draw_list_.empty()) {
+    if (depth_buckets_.empty() && invalid_depth_bucket_.groups.empty()) {
         last_flush_cpu_ms_ = 0.0;
         return;
     }
@@ -109,45 +138,42 @@ void GeometryBatcher::flush() {
         index_buffer_.clear();
     };
 
+    auto emit_group = [&](const RenderStateGroup& group, SDL_Texture*& current_texture, SDL_BlendMode& current_blend) {
+        if (group.key.texture != current_texture || group.key.blend_mode != current_blend) {
+            emit_current_batch(current_texture, current_blend);
+            current_texture = group.key.texture;
+            current_blend = group.key.blend_mode;
+        }
+
+        for (const DrawItem& quad : group.items) {
+            const int base_index = static_cast<int>(vertex_buffer_.size());
+
+            vertex_buffer_.push_back(quad.vertices[0]);
+            vertex_buffer_.push_back(quad.vertices[1]);
+            vertex_buffer_.push_back(quad.vertices[2]);
+            vertex_buffer_.push_back(quad.vertices[3]);
+
+            index_buffer_.push_back(base_index + kQuadIndices[0]);
+            index_buffer_.push_back(base_index + kQuadIndices[1]);
+            index_buffer_.push_back(base_index + kQuadIndices[2]);
+            index_buffer_.push_back(base_index + kQuadIndices[3]);
+            index_buffer_.push_back(base_index + kQuadIndices[4]);
+            index_buffer_.push_back(base_index + kQuadIndices[5]);
+        }
+    };
+
     SDL_Texture* current_texture = nullptr;
     SDL_BlendMode current_blend = SDL_BLENDMODE_BLEND;
 
-    double previous_depth = draw_list_.front().depth;
-    bool has_previous_depth = false;
-
-    for (const auto& quad : draw_list_) {
-#ifndef NDEBUG
-        if (has_previous_depth && quad.depth > previous_depth) {
-            SDL_assert(!"GeometryBatcher::flush draw_list_ depth is not monotonic (expected descending order)");
+    for (auto bucket_it = depth_buckets_.rbegin(); bucket_it != depth_buckets_.rend(); ++bucket_it) {
+        const DepthBucket& bucket = bucket_it->second;
+        for (const RenderStateGroup& group : bucket.groups) {
+            emit_group(group, current_texture, current_blend);
         }
-#endif
-        previous_depth = quad.depth;
-        has_previous_depth = true;
+    }
 
-        if (!current_texture) {
-            current_texture = quad.texture;
-            current_blend = quad.blend_mode;
-        }
-
-        if (quad.texture != current_texture || quad.blend_mode != current_blend) {
-            emit_current_batch(current_texture, current_blend);
-            current_texture = quad.texture;
-            current_blend = quad.blend_mode;
-        }
-
-        const int base_index = static_cast<int>(vertex_buffer_.size());
-
-        vertex_buffer_.push_back(quad.vertices[0]);
-        vertex_buffer_.push_back(quad.vertices[1]);
-        vertex_buffer_.push_back(quad.vertices[2]);
-        vertex_buffer_.push_back(quad.vertices[3]);
-
-        index_buffer_.push_back(base_index + kQuadIndices[0]);
-        index_buffer_.push_back(base_index + kQuadIndices[1]);
-        index_buffer_.push_back(base_index + kQuadIndices[2]);
-        index_buffer_.push_back(base_index + kQuadIndices[3]);
-        index_buffer_.push_back(base_index + kQuadIndices[4]);
-        index_buffer_.push_back(base_index + kQuadIndices[5]);
+    for (const RenderStateGroup& group : invalid_depth_bucket_.groups) {
+        emit_group(group, current_texture, current_blend);
     }
 
     emit_current_batch(current_texture, current_blend);
@@ -157,10 +183,13 @@ void GeometryBatcher::flush() {
 }
 
 void GeometryBatcher::clear() {
-    draw_list_.clear();
+    depth_buckets_.clear();
+    invalid_depth_bucket_ = DepthBucket{};
     draw_call_count_ = 0;
     total_vertices_ = 0;
     last_flush_cpu_ms_ = 0.0;
+    vertex_buffer_.clear();
+    index_buffer_.clear();
 }
 
 void GridTileRenderer::invalidate_texture_cache() {
@@ -290,9 +319,6 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
         }
     }
 
-    if (batcher) {
-        batcher->flush();
-    }
 }
 
 namespace {
@@ -310,8 +336,9 @@ inline float smoothstep(float edge0, float edge1, float x) {
 }
 
 struct WarpedMesh {
-    std::vector<SDL_Vertex> vertices;
-    std::vector<int> indices;
+    std::array<SDL_Vertex, 4> vertices{};
+    std::array<int, 6> indices{0, 1, 2, 0, 2, 3};
+    bool valid = false;
 };
 
 constexpr float kQuadEpsilon = 1e-5f;
@@ -453,17 +480,24 @@ void draw_filled_debug_dot(SDL_Renderer* renderer,
 }
 
 void render_anchor_debug_markers(SDL_Renderer* renderer,
+                                 const WarpedScreenGrid& cam,
                                  int screen_width,
                                  int screen_height,
-                                 const std::vector<Asset*>& assets) {
+                                 const std::vector<Asset*>& assets,
+                                 bool dev_mode) {
     if (!renderer) {
         return;
     }
 
     const SDL_Color kFlatColor{255, 32, 32, 220};
     const SDL_Color kFinalColor{48, 128, 255, 255};
+    const SDL_Color kAnchorParityColor{255, 224, 64, 255};
+    const SDL_Color kChildParityColor{64, 255, 160, 255};
+    const SDL_Color kParityLineColor{255, 224, 64, 190};
     constexpr int kFlatRadiusPx = 5;
     constexpr int kFinalRadiusPx = 3;
+    constexpr int kAnchorParityRadiusPx = 4;
+    constexpr int kChildParityRadiusPx = 4;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
@@ -502,6 +536,136 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
             }
         }
     }
+
+    const auto bindings = anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().debug_bindings_snapshot();
+    for (const auto& binding : bindings) {
+        Asset* owner = binding.owner;
+        Asset* child = binding.child_asset;
+        if (!owner || !child || owner->dead || child->dead || binding.anchor_name.empty()) {
+            continue;
+        }
+
+        const auto anchor = owner->anchor_state(binding.anchor_name,
+                                                anchor_points::GridMaterialization::None,
+                                                Asset::AnchorResolveMode::ForceRecompute);
+        if (!anchor.has_value() || !anchor->is_active()) {
+            continue;
+        }
+
+        anchored_child_placement::PlacementInput expected_input{};
+        expected_input.parent.world_x = static_cast<float>(owner->world_x());
+        expected_input.parent.world_y = static_cast<float>(owner->world_y());
+        expected_input.parent.world_z = static_cast<float>(owner->world_z());
+        expected_input.parent.resolution_layer =
+            owner->grid_point() ? owner->grid_point()->resolution_layer() : owner->grid_resolution;
+        expected_input.anchor_definition.anchor = *anchor;
+        expected_input.sprite_transform.mirror_x = anchor->flip_horizontal;
+        expected_input.sprite_transform.mirror_y = anchor->flip_vertical;
+        expected_input.sprite_transform.rotation_degrees = anchor->rotation_degrees;
+        expected_input.camera_state.camera = &cam;
+
+        anchored_child_placement::PlacementOutput expected{};
+        if (!anchored_child_placement::resolve_child_placement(expected_input, expected) ||
+            !expected.has_child_screen_px) {
+            continue;
+        }
+
+        SDL_FPoint actual_child_screen{};
+        const bool have_actual_child = anchored_child_placement::project_child_pivot_screen(
+            cam,
+            child->smoothed_translation_x() + child->render_anchor_offset_x(),
+            child->smoothed_translation_y() + child->render_anchor_offset_y(),
+            static_cast<float>(child->world_z()) + child->world_z_offset() + child->render_anchor_offset_z(),
+            actual_child_screen);
+        if (!have_actual_child) {
+            continue;
+        }
+
+        if (is_debug_marker_in_bounds(expected.child_screen_px, screen_width, screen_height)) {
+            draw_filled_debug_dot(renderer, expected.child_screen_px, kAnchorParityRadiusPx, kAnchorParityColor);
+        }
+        if (is_debug_marker_in_bounds(actual_child_screen, screen_width, screen_height)) {
+            draw_filled_debug_dot(renderer, actual_child_screen, kChildParityRadiusPx, kChildParityColor);
+        }
+        if (is_debug_marker_in_bounds(expected.child_screen_px, screen_width, screen_height) ||
+            is_debug_marker_in_bounds(actual_child_screen, screen_width, screen_height)) {
+            SDL_SetRenderDrawColor(renderer,
+                                   kParityLineColor.r,
+                                   kParityLineColor.g,
+                                   kParityLineColor.b,
+                                   kParityLineColor.a);
+            SDL_RenderLine(renderer,
+                           expected.child_screen_px.x,
+                           expected.child_screen_px.y,
+                           actual_child_screen.x,
+                           actual_child_screen.y);
+        }
+
+        const float dx = actual_child_screen.x - expected.child_screen_px.x;
+        const float dy = actual_child_screen.y - expected.child_screen_px.y;
+        const float delta_px = std::sqrt(dx * dx + dy * dy);
+        constexpr float kParityTolerancePx = 0.5f;
+        const std::string mode_label = dev_mode ? "dev" : "normal";
+        const std::string message = std::string("[AnchorParity][") + mode_label + "] owner='" +
+                                    (owner->info ? owner->info->name : std::string{"<unknown>"}) +
+                                    "' child='" +
+                                    (child->info ? child->info->name : std::string{"<unknown>"}) +
+                                    "' anchor='" + binding.anchor_name +
+                                    "' delta_px=" + std::to_string(delta_px);
+        if (delta_px > kParityTolerancePx) {
+            vibble::log::warn(message);
+        } else {
+            vibble::log::debug(message);
+        }
+    }
+}
+
+bool project_floor_debug_point(const WarpedScreenGrid& cam, SDL_Point world_xz, SDL_FPoint& out) {
+    SDL_FPoint projected{};
+    if (!cam.project_world_point(SDL_FPoint{static_cast<float>(world_xz.x), 0.0f},
+                                 static_cast<float>(world_xz.y),
+                                 projected)) {
+        return false;
+    }
+    if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
+        return false;
+    }
+    projected.y = cam.warp_floor_screen_y(0.0f, projected.y);
+    if (!std::isfinite(projected.y)) {
+        return false;
+    }
+    out = projected;
+    return true;
+}
+
+std::uint32_t stable_path_color_hash(const std::string& animation_id, std::size_t path_index) {
+    std::uint32_t hash = 2166136261u;
+    for (const unsigned char c : animation_id) {
+        hash ^= c;
+        hash *= 16777619u;
+    }
+    hash ^= static_cast<std::uint32_t>(path_index & 0xffffffffu);
+    hash *= 16777619u;
+    return hash;
+}
+
+SDL_Color stable_movement_path_color(const std::string& animation_id, std::size_t path_index) {
+    constexpr std::array<SDL_Color, 12> kPalette{{
+        SDL_Color{48, 200, 255, 220},
+        SDL_Color{255, 214, 64, 220},
+        SDL_Color{120, 235, 110, 220},
+        SDL_Color{255, 128, 96, 220},
+        SDL_Color{130, 170, 255, 220},
+        SDL_Color{255, 156, 220, 220},
+        SDL_Color{96, 240, 210, 220},
+        SDL_Color{240, 178, 96, 220},
+        SDL_Color{190, 240, 112, 220},
+        SDL_Color{255, 96, 150, 220},
+        SDL_Color{140, 210, 255, 220},
+        SDL_Color{255, 196, 120, 220},
+    }};
+    const std::uint32_t hash = stable_path_color_hash(animation_id, path_index);
+    return kPalette[hash % kPalette.size()];
 }
 
 bool build_perspective_mesh(RenderObject& obj,
@@ -517,49 +681,73 @@ bool build_perspective_mesh(RenderObject& obj,
     if (rect.w <= 0 || rect.h <= 0) {
         return false;
     }
-    const float world_x = static_cast<float>(rect.x);
-    const float world_y = static_cast<float>(rect.y);
-    const SDL_FPoint current_position{world_x, world_y};
+    const float anchor_world_x =
+        std::isfinite(obj.world_anchor_x) ? obj.world_anchor_x : static_cast<float>(rect.x);
+    const float anchor_world_y =
+        std::isfinite(obj.world_anchor_y) ? obj.world_anchor_y : static_cast<float>(rect.y);
+    const SDL_FPoint current_position{anchor_world_x, anchor_world_y};
 
-    // Render package dimensions already include the per-grid-point perspective scale;
-    // strip it off so the projection step is the sole place that applies perspective.
-    const float safe_perspective =
-        (std::isfinite(perspective_scale) && perspective_scale > 0.0f)
-            ? perspective_scale
-            : 1.0f;
+    // Render package dimensions are perspective-inclusive; pass them through unchanged
+    // so projected frame construction uses a single consistent contract.
+    const float safe_perspective = render_projection::sanitize_perspective_scale(perspective_scale);
     const float current_scale = safe_perspective;
     const std::uint64_t current_camera_version = cam.camera_state_version();
-    constexpr float kScaleMatchEpsilon = 1e-4f;
+    auto quantize_projection_key = [](float value) -> std::int64_t {
+        if (!std::isfinite(value)) {
+            return std::numeric_limits<std::int64_t>::min();
+        }
+        constexpr double kFixedPointScale = 256.0;
+        return static_cast<std::int64_t>(std::llround(static_cast<double>(value) * kFixedPointScale));
+    };
+    const std::int64_t current_position_key_x = quantize_projection_key(current_position.x);
+    const std::int64_t current_position_key_y = quantize_projection_key(current_position.y);
+    const std::int64_t current_world_z_key = quantize_projection_key(base_world_z);
+    const std::int64_t current_scale_key = quantize_projection_key(current_scale);
     if (!obj.mesh_dirty &&
-        obj.cached_vertices.size() == 4 &&
-        obj.cached_indices.size() == 6 &&
-        std::fabs(obj.cached_scale - current_scale) < kScaleMatchEpsilon &&
-        std::fabs(obj.cached_world_z - base_world_z) < kScaleMatchEpsilon &&
-        obj.cached_position.x == current_position.x &&
-        obj.cached_position.y == current_position.y &&
+        obj.has_cached_mesh &&
+        obj.cached_mesh_texture == obj.texture &&
+        obj.cached_projection_key_valid &&
+        obj.cached_position_key_x == current_position_key_x &&
+        obj.cached_position_key_y == current_position_key_y &&
+        obj.cached_world_z_key == current_world_z_key &&
+        obj.cached_scale_key == current_scale_key &&
         obj.cached_camera_state_version == current_camera_version) {
         mesh.vertices = obj.cached_vertices;
         mesh.indices = obj.cached_indices;
+        mesh.valid = true;
         return true;
     }
-    const float world_width = static_cast<float>(rect.w) / safe_perspective;
-    const float world_height = static_cast<float>(rect.h) / safe_perspective;
-    const float half_width = world_width * 0.5f;
-    const float height = world_height;
-    const float base_z = base_world_z;
-    if (!(std::isfinite(world_x) && std::isfinite(world_y) && std::isfinite(half_width) && std::isfinite(height))) {
+    render_projection::SpriteProjectionInput projection_input{};
+    if (!render_projection::assemble_render_object_projection_input(
+            obj, safe_perspective, base_world_z, projection_input)) {
         return false;
     }
 
-    int atlas_w = 0;
-    int atlas_h = 0;
-    float atlas_wf = 0.0f;
-    float atlas_hf = 0.0f;
-    if (!SDL_GetTextureSize(obj.texture, &atlas_wf, &atlas_hf)) {
-        return false;
+    if (obj.dimension_cache_texture != obj.texture) {
+        obj.dimension_cache_texture = obj.texture;
+        obj.has_atlas_size = false;
+        obj.has_texture_size = false;
+        obj.has_cached_mesh = false;
     }
-    atlas_w = static_cast<int>(std::lround(atlas_wf));
-    atlas_h = static_cast<int>(std::lround(atlas_hf));
+
+    if (!obj.has_atlas_size) {
+        float atlas_wf = 0.0f;
+        float atlas_hf = 0.0f;
+        if (!SDL_GetTextureSize(obj.texture, &atlas_wf, &atlas_hf)) {
+            return false;
+        }
+        obj.atlas_w = static_cast<int>(std::lround(atlas_wf));
+        obj.atlas_h = static_cast<int>(std::lround(atlas_hf));
+        obj.has_atlas_size = true;
+        if (!obj.has_texture_size) {
+            obj.texture_w = obj.atlas_w;
+            obj.texture_h = obj.atlas_h;
+            obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
+        }
+    }
+
+    const int atlas_w = obj.atlas_w;
+    const int atlas_h = obj.atlas_h;
     if (atlas_w <= 0 || atlas_h <= 0) {
         return false;
     }
@@ -569,6 +757,9 @@ bool build_perspective_mesh(RenderObject& obj,
     if (!obj.has_texture_size) {
         tex_w = atlas_w;
         tex_h = atlas_h;
+        obj.texture_w = tex_w;
+        obj.texture_h = tex_h;
+        obj.has_texture_size = (tex_w > 0 && tex_h > 0);
     }
     if (tex_w <= 0 || tex_h <= 0) {
         return false;
@@ -605,73 +796,10 @@ bool build_perspective_mesh(RenderObject& obj,
         std::swap(v0, v1);
     }
 
-    // Anchor the quad to the real-world bottom corners. Build a perfect rectangle whose
-    // width is the bottom edge and whose height preserves the source aspect ratio.
-    SDL_FPoint screen_bl{};
-    SDL_FPoint screen_br{};
-    if (!project_world_point(cam, world_x - half_width, world_y, base_z, screen_bl) ||
-        !project_world_point(cam, world_x + half_width, world_y, base_z, screen_br)) {
+    render_projection::ProjectedSpriteFrame projection{};
+    if (!render_projection::build_projected_sprite_frame(cam, projection_input, projection)) {
         return false;
     }
-
-    const float bottom_dx = screen_br.x - screen_bl.x;
-    const float bottom_dy = screen_br.y - screen_bl.y;
-    const float bottom_len = std::hypot(bottom_dx, bottom_dy);
-    if (bottom_len < 1e-5f) {
-        return false; // degenerate projection
-    }
-
-    const float aspect = (tex_w > 0 && tex_h > 0)
-        ? static_cast<float>(tex_h) / static_cast<float>(tex_w)
-        : (rect.w != 0 ? static_cast<float>(rect.h) / static_cast<float>(rect.w) : 1.0f);
-    float screen_height = bottom_len * aspect;
-    if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
-        screen_height = std::abs(screen_height);
-        if (screen_height <= 0.0f) {
-            screen_height = world_height; // fallback to unwarped height if projection misbehaves
-        }
-    }
-
-    // Perpendicular unit vector to the bottom edge
-    const float nx = -bottom_dy / bottom_len;
-    const float ny =  bottom_dx / bottom_len;
-
-    // Two candidate orientations; pick the one that places the top above the bottom in screen space.
-    const SDL_FPoint cand_tl_a{screen_bl.x + nx * screen_height, screen_bl.y + ny * screen_height};
-    const SDL_FPoint cand_tr_a{screen_br.x + nx * screen_height, screen_br.y + ny * screen_height};
-    const SDL_FPoint cand_tl_b{screen_bl.x - nx * screen_height, screen_bl.y - ny * screen_height};
-    const SDL_FPoint cand_tr_b{screen_br.x - nx * screen_height, screen_br.y - ny * screen_height};
-
-    const float avg_bottom_y = 0.5f * (screen_bl.y + screen_br.y);
-    const float avg_top_a = 0.5f * (cand_tl_a.y + cand_tr_a.y);
-    const float avg_top_b = 0.5f * (cand_tl_b.y + cand_tr_b.y);
-
-    bool a_is_above = avg_top_a < avg_bottom_y;
-    bool b_is_above = avg_top_b < avg_bottom_y;
-
-    SDL_FPoint screen_tl{};
-    SDL_FPoint screen_tr{};
-    if (a_is_above && (!b_is_above || avg_top_a <= avg_top_b)) {
-        screen_tl = cand_tl_a;
-        screen_tr = cand_tr_a;
-    } else if (b_is_above && (!a_is_above || avg_top_b <= avg_top_a)) {
-        screen_tl = cand_tl_b;
-        screen_tr = cand_tr_b;
-    } else {
-        // Neither is above; choose the one closer to being above (smaller avg y).
-        if (avg_top_a <= avg_top_b) {
-            screen_tl = cand_tl_a;
-            screen_tr = cand_tr_a;
-        } else {
-            screen_tl = cand_tl_b;
-            screen_tr = cand_tr_b;
-        }
-    }
-
-    mesh.vertices.clear();
-    mesh.indices.clear();
-    mesh.vertices.reserve(4);
-    mesh.indices.reserve(6);
 
     const SDL_FColor vertex_color{
         obj.color_mod.r / 255.0f,
@@ -680,37 +808,41 @@ bool build_perspective_mesh(RenderObject& obj,
         obj.color_mod.a / 255.0f};
 
     SDL_Vertex vtx_tl{};
-    vtx_tl.position = screen_tl;
+    vtx_tl.position = projection.screen_tl;
     vtx_tl.color = vertex_color;
     vtx_tl.tex_coord = SDL_FPoint{u0, v0};
 
     SDL_Vertex vtx_tr{};
-    vtx_tr.position = screen_tr;
+    vtx_tr.position = projection.screen_tr;
     vtx_tr.color = vertex_color;
     vtx_tr.tex_coord = SDL_FPoint{u1, v0};
 
     SDL_Vertex vtx_br{};
-    vtx_br.position = screen_br;
+    vtx_br.position = projection.screen_br;
     vtx_br.color = vertex_color;
     vtx_br.tex_coord = SDL_FPoint{u1, v1};
 
     SDL_Vertex vtx_bl{};
-    vtx_bl.position = screen_bl;
+    vtx_bl.position = projection.screen_bl;
     vtx_bl.color = vertex_color;
     vtx_bl.tex_coord = SDL_FPoint{u0, v1};
 
-    mesh.vertices.push_back(vtx_tl);
-    mesh.vertices.push_back(vtx_tr);
-    mesh.vertices.push_back(vtx_br);
-    mesh.vertices.push_back(vtx_bl);
-
+    mesh.vertices = {vtx_tl, vtx_tr, vtx_br, vtx_bl};
     mesh.indices = {0, 1, 2, 0, 2, 3};
+    mesh.valid = true;
     obj.cached_vertices = mesh.vertices;
     obj.cached_indices = mesh.indices;
     obj.cached_position = current_position;
-    obj.cached_world_z = base_z;
+    obj.cached_world_z = base_world_z;
     obj.cached_scale = current_scale;
+    obj.cached_position_key_x = current_position_key_x;
+    obj.cached_position_key_y = current_position_key_y;
+    obj.cached_world_z_key = current_world_z_key;
+    obj.cached_scale_key = current_scale_key;
+    obj.cached_projection_key_valid = true;
     obj.cached_camera_state_version = current_camera_version;
+    obj.cached_mesh_texture = obj.texture;
+    obj.has_cached_mesh = true;
     obj.mesh_dirty = false;
 
     return true;
@@ -757,21 +889,12 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   screen_height_(screen_height),
   tile_renderer_(std::make_unique<GridTileRenderer>(assets)),
   geometry_batcher_(std::make_unique<GeometryBatcher>(renderer)),
-  texture_load_queue_(std::make_unique<texture_loading::TextureLoadQueue>(renderer)),
   sky_texture_path_(std::filesystem::path("resources") / "misc_content" / "sky.png"),
   composite_renderer_(renderer, assets),
-  dynamic_fog_system_(std::make_unique<DynamicFogSystem>()),
   dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>())
 {
 
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
-
-    // Initialize dynamic fog system
-    if (dynamic_fog_system_) {
-        if (!dynamic_fog_system_->initialize(renderer_)) {
-            vibble::log::warn("[SceneRenderer] Failed to initialize dynamic fog system");
-        }
-    }
 
     // Initialize dynamic boundary system
     if (dynamic_boundary_system_) {
@@ -898,12 +1021,54 @@ SDL_Renderer* SceneRenderer::get_renderer() const {
     return renderer_;
 }
 
-texture_loading::TextureLoadQueue* SceneRenderer::get_texture_load_queue() const {
-    return texture_load_queue_.get();
+void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
+    const int safe_w = std::max(1, screen_width);
+    const int safe_h = std::max(1, screen_height);
+    if (safe_w == screen_width_ && safe_h == screen_height_) {
+        return;
+    }
+
+    screen_width_ = safe_w;
+    screen_height_ = safe_h;
+    map_radius_world_ = static_cast<double>(std::max(screen_width_, screen_height_));
+
+    if (scene_composite_tex_) {
+        SDL_DestroyTexture(scene_composite_tex_);
+        scene_composite_tex_ = nullptr;
+    }
+    if (postprocess_tex_) {
+        SDL_DestroyTexture(postprocess_tex_);
+        postprocess_tex_ = nullptr;
+    }
+    if (blur_tex_) {
+        SDL_DestroyTexture(blur_tex_);
+        blur_tex_ = nullptr;
+    }
+}
+
+std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
+    SDL_Texture* target = postprocess_tex_ ? postprocess_tex_
+                                           : (scene_composite_tex_ ? scene_composite_tex_ : blur_tex_);
+    if (!target) {
+        return std::nullopt;
+    }
+    float w = 0.0f;
+    float h = 0.0f;
+    if (!SDL_GetTextureSize(target, &w, &h) || w <= 0.0f || h <= 0.0f) {
+        return std::nullopt;
+    }
+    return SDL_Point{static_cast<int>(std::lround(w)), static_cast<int>(std::lround(h))};
 }
 
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {
+    if (debug_auto_paths_ == enabled) {
+        return;
+    }
     debug_auto_paths_ = enabled;
+    if (!enabled) {
+        movement_debug_snapshots_.clear();
+        movement_debug_observed_state_.clear();
+    }
 }
 
 void SceneRenderer::set_movement_debug_visible(bool visible) {
@@ -920,12 +1085,195 @@ void SceneRenderer::invalidate_dynamic_boundary_system() {
     }
 }
 
+const std::vector<DynamicBoundarySystem::BoundarySprite>& SceneRenderer::dynamic_boundary_sprites() const {
+    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
+    if (!dynamic_boundary_system_) {
+        return kEmptyBoundarySprites;
+    }
+    return dynamic_boundary_system_->get_boundary_sprites();
+}
+
+void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets) {
+    std::unordered_set<const Asset*> visible_set;
+    visible_set.reserve(visible_assets.size());
+    for (const Asset* asset : visible_assets) {
+        if (asset && !asset->dead) {
+            visible_set.insert(asset);
+        }
+    }
+
+    for (auto it = movement_debug_snapshots_.begin(); it != movement_debug_snapshots_.end();) {
+        if (visible_set.find(it->first) == visible_set.end()) {
+            it = movement_debug_snapshots_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = movement_debug_observed_state_.begin(); it != movement_debug_observed_state_.end();) {
+        if (visible_set.find(it->first) == visible_set.end()) {
+            it = movement_debug_observed_state_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (Asset* asset : visible_assets) {
+        if (!asset || asset->dead || !asset->info || !asset->current_frame) {
+            continue;
+        }
+
+        const std::string current_animation = asset->current_animation;
+        const AnimationFrame* current_frame = asset->current_frame;
+        const bool current_is_first = current_frame->is_first;
+        const bool current_is_last = current_frame->is_last;
+
+        const auto observed_it = movement_debug_observed_state_.find(asset);
+        const bool has_previous_state = observed_it != movement_debug_observed_state_.end();
+        const bool has_snapshot = movement_debug_snapshots_.find(asset) != movement_debug_snapshots_.end();
+
+        bool loop_trigger = false;
+        bool end_trigger = false;
+        if (has_previous_state) {
+            const MovementDebugObservedState& previous = observed_it->second;
+            loop_trigger = previous.frame_is_last &&
+                           previous.animation_id == current_animation &&
+                           current_is_first;
+            end_trigger = previous.frame_is_last &&
+                          previous.animation_id != current_animation;
+        }
+
+        const bool initial_trigger = !has_snapshot;
+        const bool should_refresh = initial_trigger || loop_trigger || end_trigger;
+        if (should_refresh) {
+            MovementDebugAssetSnapshot snapshot{};
+            const SDL_Point origin = asset->world_xz_point();
+
+            for (const auto& [animation_id, animation] : asset->info->animations) {
+                const std::size_t path_count = animation.movement_path_count();
+                for (std::size_t path_index = 0; path_index < path_count; ++path_index) {
+                    const auto& movement_path = animation.movement_path(path_index);
+                    if (movement_path.empty()) {
+                        continue;
+                    }
+
+                    MovementDebugPathSnapshot path_snapshot{};
+                    path_snapshot.color = stable_movement_path_color(animation_id, path_index);
+                    path_snapshot.world_points.reserve(movement_path.size() + 1);
+                    path_snapshot.world_points.push_back(origin);
+
+                    int world_x = origin.x;
+                    int world_z = origin.y;
+                    bool has_movement = false;
+
+                    for (const AnimationFrame& frame : movement_path) {
+                        if (frame.dx != 0 || frame.dz != 0) {
+                            has_movement = true;
+                        }
+                        world_x += frame.dx;
+                        world_z += frame.dz;
+
+                        const SDL_Point next_point{world_x, world_z};
+                        if (path_snapshot.world_points.empty() ||
+                            next_point.x != path_snapshot.world_points.back().x ||
+                            next_point.y != path_snapshot.world_points.back().y) {
+                            path_snapshot.world_points.push_back(next_point);
+                        }
+                    }
+
+                    if (!has_movement || path_snapshot.world_points.size() < 2) {
+                        continue;
+                    }
+                    snapshot.paths.push_back(std::move(path_snapshot));
+                }
+            }
+
+            if (snapshot.paths.empty()) {
+                movement_debug_snapshots_.erase(asset);
+            } else {
+                movement_debug_snapshots_[asset] = std::move(snapshot);
+            }
+        }
+
+        movement_debug_observed_state_[asset] = MovementDebugObservedState{
+            current_animation,
+            current_frame,
+            current_is_first,
+            current_is_last
+        };
+    }
+}
+
+void SceneRenderer::render_movement_debug_snapshots(const WarpedScreenGrid& cam,
+                                                    int screen_width,
+                                                    int screen_height,
+                                                    const std::vector<Asset*>& visible_assets) const {
+    if (!renderer_) {
+        return;
+    }
+
+    constexpr SDL_Color kStartColor{64, 255, 128, 230};
+    constexpr int kStartRadius = 3;
+    constexpr int kEndRadius = 3;
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    for (const Asset* asset : visible_assets) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+        const auto snapshot_it = movement_debug_snapshots_.find(asset);
+        if (snapshot_it == movement_debug_snapshots_.end()) {
+            continue;
+        }
+
+        const MovementDebugAssetSnapshot& snapshot = snapshot_it->second;
+        for (const MovementDebugPathSnapshot& path : snapshot.paths) {
+            if (path.world_points.size() < 2) {
+                continue;
+            }
+
+            std::vector<SDL_FPoint> projected_points(path.world_points.size(), SDL_FPoint{0.0f, 0.0f});
+            std::vector<bool> point_visible(path.world_points.size(), false);
+            for (std::size_t i = 0; i < path.world_points.size(); ++i) {
+                SDL_FPoint screen{};
+                if (project_floor_debug_point(cam, path.world_points[i], screen) &&
+                    is_debug_marker_in_bounds(screen, screen_width, screen_height)) {
+                    projected_points[i] = screen;
+                    point_visible[i] = true;
+                }
+            }
+
+            SDL_SetRenderDrawColor(renderer_, path.color.r, path.color.g, path.color.b, path.color.a);
+            for (std::size_t i = 1; i < projected_points.size(); ++i) {
+                if (!point_visible[i - 1] || !point_visible[i]) {
+                    continue;
+                }
+                SDL_RenderLine(renderer_,
+                               projected_points[i - 1].x,
+                               projected_points[i - 1].y,
+                               projected_points[i].x,
+                               projected_points[i].y);
+            }
+
+            if (point_visible.front()) {
+                draw_filled_debug_dot(renderer_, projected_points.front(), kStartRadius, kStartColor);
+            }
+            if (point_visible.back()) {
+                SDL_Color end_color = path.color;
+                end_color.a = 240;
+                draw_filled_debug_dot(renderer_, projected_points.back(), kEndRadius, end_color);
+            }
+        }
+    }
+}
+
 void SceneRenderer::render() {
-    static int s_boundary_render_debug_counter = 0;
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
     SDL_SetRenderTarget(renderer_, nullptr);
+    SDL_SetRenderViewport(renderer_, nullptr);
+    SDL_SetRenderClipRect(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
     SDL_RenderClear(renderer_);
@@ -961,6 +1309,9 @@ void SceneRenderer::render() {
     const double anchor_depth = cam.anchor_world_z();
     const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
     const float boundary_cull_margin = 64.0f;
+    const float boundary_min_visible_px =
+        static_cast<float>(screen_height_) *
+        std::clamp(assets_->boundary_min_visible_screen_ratio(), 0.0f, 0.5f);
     std::size_t queued_boundary_sprites = 0;
     float min_boundary_width = std::numeric_limits<float>::max();
     float max_boundary_width = 0.0f;
@@ -971,6 +1322,9 @@ void SceneRenderer::render() {
         if (!sprite.texture ||
             sprite.texture_w <= 0 || sprite.texture_h <= 0 ||
             sprite.world_width <= 0.0f || sprite.world_height <= 0.0f) {
+            return;
+        }
+        if (!assets_->is_spawn_id_in_focus_filter(sprite.spawn_id)) {
             return;
         }
 
@@ -991,6 +1345,13 @@ void SceneRenderer::render() {
             adjusted_y < -boundary_cull_margin ||
             adjusted_y - height > static_cast<float>(screen_height_) + boundary_cull_margin) {
             return;
+        }
+
+        if (boundary_min_visible_px > 0.0f) {
+            const float largest_dim = std::max(sprite.world_width, sprite.world_height);
+            if (largest_dim < boundary_min_visible_px) {
+                return;
+            }
         }
 
         const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
@@ -1057,17 +1418,25 @@ void SceneRenderer::render() {
             if (!asset || asset->dead) {
                 continue;
             }
+            if (!assets_->is_asset_in_focus_filter(asset)) {
+                continue;
+            }
 
             rendered_assets_for_debug.push_back(asset);
             composite_renderer_.update(asset, 0.0f);
-            const world::GridPoint* gp = traversal_entry.grid_point ? traversal_entry.grid_point
-                                                                    : cam.grid_point_for_asset(asset);
-            const float perspective_scale =
-                (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
-                    ? gp->perspective_scale
-                    : 1.0f;
+            const Asset::PerspectiveSample perspective_sample = asset->runtime_perspective_sample();
+            const float perspective_scale = perspective_sample.scale;
             const float base_world_z = static_cast<float>(asset->world_z());
-            const double depth_bias = asset->render_depth_bias();
+            const RuntimeCameraMetrics& camera_metrics = asset->runtime_camera_metrics;
+            const bool has_camera_metrics =
+                camera_metrics.valid &&
+                camera_metrics.frame_id == assets_->frame_id() &&
+                camera_metrics.camera_state_version == cam.camera_state_version();
+            const double asset_depth_from_anchor = has_camera_metrics
+                ? camera_metrics.world_z_depth_from_anchor
+                : render_depth::depth_from_anchor(anchor_depth,
+                                                  static_cast<double>(asset->world_z()),
+                                                  asset->render_depth_bias());
 
             for (RenderObject& obj : asset->render_package) {
                 if (!obj.texture) {
@@ -1078,18 +1447,15 @@ void SceneRenderer::render() {
                 if (!build_perspective_mesh(obj, cam, perspective_scale, effective_world_z, mesh)) {
                     continue;
                 }
-                if (mesh.vertices.size() != 4 || mesh.indices.size() != 6) {
+                if (!mesh.valid) {
                     continue;
                 }
-                SDL_Vertex verts[4];
-                int indices[6];
-                for (int i = 0; i < 4; ++i) verts[i] = mesh.vertices[static_cast<std::size_t>(i)];
-                for (int i = 0; i < 6; ++i) indices[i] = mesh.indices[static_cast<std::size_t>(i)];
-
-                const double draw_depth = render_depth::depth_from_anchor(anchor_depth,
-                                                                          static_cast<double>(effective_world_z),
-                                                                          depth_bias);
-                geometry_batcher_->addQuad(obj.texture, verts, indices, obj.blend_mode, draw_depth);
+                const double draw_depth = asset_depth_from_anchor - static_cast<double>(obj.world_z_offset);
+                geometry_batcher_->addQuad(obj.texture,
+                                           mesh.vertices.data(),
+                                           mesh.indices.data(),
+                                           obj.blend_mode,
+                                           draw_depth);
             }
             continue;
         }
@@ -1101,19 +1467,20 @@ void SceneRenderer::render() {
         }
     }
 
-    ++s_boundary_render_debug_counter;
-    if ((s_boundary_render_debug_counter % 120) == 0) {
-        vibble::log::info(std::string{"[SceneRenderer] boundary draw stats: sprites="} +
-                          std::to_string(boundary_sprites.size()) +
-                          " queued=" + std::to_string(queued_boundary_sprites) +
-                          " width=[" + std::to_string(min_boundary_width) + "," + std::to_string(max_boundary_width) + "]" +
-                          " height=[" + std::to_string(min_boundary_height) + "," + std::to_string(max_boundary_height) + "]");
-    }
-
     geometry_batcher_->flush();
 
+    if (debug_auto_paths_ && movement_debug_visible_) {
+        refresh_movement_debug_snapshots(rendered_assets_for_debug);
+        render_movement_debug_snapshots(cam, screen_width_, screen_height_, rendered_assets_for_debug);
+    }
+
     if (anchor_point_debug_enabled_) {
-        render_anchor_debug_markers(renderer_, screen_width_, screen_height_, rendered_assets_for_debug);
+        render_anchor_debug_markers(renderer_,
+                                    cam,
+                                    screen_width_,
+                                    screen_height_,
+                                    rendered_assets_for_debug,
+                                    assets_ ? assets_->is_dev_mode() : false);
     }
 
     // Dev grid overlay is projected against the final scene output.

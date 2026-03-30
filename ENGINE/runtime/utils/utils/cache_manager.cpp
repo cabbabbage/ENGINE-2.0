@@ -277,4 +277,30 @@ bool load_bundle(const std::string& bundle_path, BundleData& out_data) {
     return true;
 }
 
+bool update_bundle_content_hash(const std::string& bundle_path, std::uint64_t content_hash) {
+    std::fstream io(bundle_path, std::ios::binary | std::ios::in | std::ios::out);
+    if (!io.is_open()) {
+        return false;
+    }
+
+    BundleHeader header{};
+    io.read(reinterpret_cast<char*>(&header), sizeof(header));
+    if (!io.good()) {
+        return false;
+    }
+    if (header.magic != kBundleMagic || header.version != kBundleVersion) {
+        return false;
+    }
+    if (header.content_hash == content_hash) {
+        return true;
+    }
+
+    header.content_hash = content_hash;
+    io.clear();
+    io.seekp(0, std::ios::beg);
+    io.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    io.flush();
+    return io.good();
+}
+
 }

@@ -1,39 +1,49 @@
+// CONTROLLER_META_BEGIN
+// Controller: vibble_controller
+// Asset: vibble (type: object)
+// Available animations [1]:
+//   - default
+// Generated: 2026-03-17 23:48:57
+// CONTROLLER_META_END
+
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "assets/asset/asset_controller.hpp"
+#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/child_asset.hpp"
 #include <SDL3/SDL.h>
-#include <string>
 #include <chrono>
-#include <thread>
-#include <memory>
-
-#include "anchor_bound_asset_helper.hpp"
+#include <optional>
+#include <string>
+#include <vector>
 
 class Asset;
 class Input;
 
-class vibble_controller : public AssetController {
+class vibble_controller : public CustomAssetController {
 
 public:
     vibble_controller(Asset* player);
     ~vibble_controller() override;
-    void update(const Input& in) override;
-    void process_pending_attacks(Asset& self) override;
-    int get_dx() const;
-    int get_dy() const;
+
+protected:
+    void on_update(const Input& in) override;
+    void on_process_pending_attacks(Asset& self) override;
 
 private:
     void movement(const Input& input);
-    float frame_dt() const;
-    std::string animation_for_direction(int raw_x, int raw_y) const;
-    void Dash();
+    std::string animation_for_direction(int screen_x, int screen_y) const;
+    void start_dash();
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
 
-    Asset* player_ = nullptr;
-    std::unique_ptr<AnchorBoundAssetHelper> binding_helper_;
+    std::vector<ChildAsset*> child_assets_;
+    std::optional<ChildAsset> neck_child_;
+    std::optional<ChildAsset> hat_child_;
+    std::optional<ChildAsset> mouth_child_;
+    std::optional<ChildAsset> eyes_child_;
+    std::optional<ChildAsset> weapon_child_;
     int    dx_ = 0;
     int    dy_ = 0;
 

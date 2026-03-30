@@ -455,7 +455,10 @@ void SourceConfigPanel::clear_derived_fields() {
     payload_.erase("movement");
     payload_.erase("movement_total");
     payload_.erase("audio");
+    payload_.erase("speed");
     payload_.erase("speed_factor");
+    payload_.erase("speed_multiplier");
+    payload_.erase("fps");
     payload_.erase("rnd_start");
 }
 
@@ -549,7 +552,16 @@ bool SourceConfigPanel::animation_is_frame_based(const std::string& id) const {
         return false;
     }
     SourceConfig config = parse_source(*payload);
-    return to_lower_copy(config.kind) != std::string{"animation"};
+    if (to_lower_copy(config.kind) != std::string{"animation"}) {
+        return true;
+    }
+    bool inherits_data = false;
+    if (payload->contains("inherit_data")) {
+        inherits_data = payload->value("inherit_data", false);
+    } else {
+        inherits_data = payload->value("inherit_source_geometry", false);
+    }
+    return !inherits_data;
 }
 
 SourceConfigPanel::SourceConfig SourceConfigPanel::parse_source(const nlohmann::json& payload) const {
@@ -820,7 +832,9 @@ void SourceConfigPanel::refresh_animation_options() {
             if (id == animation_id_) {
                 continue;
             }
-            new_options.push_back(id);
+            if (animation_is_frame_based(id)) {
+                new_options.push_back(id);
+            }
         }
     }
 

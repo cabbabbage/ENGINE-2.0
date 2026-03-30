@@ -11,7 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
-TEST_CASE("PlaybackSettingsPanel coerces hidden inherit/invert state off for frame-sourced source chains") {
+TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-sourced chains") {
     auto document = std::make_shared<animation_editor::AnimationDocument>();
     const nlohmann::json manifest = {
         {"animations",
@@ -57,11 +57,11 @@ TEST_CASE("PlaybackSettingsPanel coerces hidden inherit/invert state off for fra
     REQUIRE(payload->is_object());
 
     CHECK((*payload)["reverse_source"] == true);
-    CHECK((*payload)["inherit_source_geometry"] == false);
-    CHECK((*payload)["flipped_source"] == false);
-    CHECK((*payload)["flip_vertical_source"] == false);
+    CHECK((*payload)["inherit_source_geometry"] == true);
+    CHECK((*payload)["flipped_source"] == true);
+    CHECK((*payload)["flip_vertical_source"] == true);
     REQUIRE(payload->contains("derived_modifiers"));
-    CHECK((*payload)["derived_modifiers"]["flipX"] == false);
-    CHECK((*payload)["derived_modifiers"]["flipY"] == false);
+    CHECK((*payload)["derived_modifiers"]["flipX"] == true);
+    CHECK((*payload)["derived_modifiers"]["flipY"] == true);
     CHECK((*payload)["derived_modifiers"]["reverse"] == true);
 }

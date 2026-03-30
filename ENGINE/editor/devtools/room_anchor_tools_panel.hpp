@@ -36,6 +36,7 @@ public:
     using ApplyDetailsCallback = std::function<void(const DetailValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
     using OnionSkinToggleCallback = std::function<void(bool)>;
+    using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
 
     RoomAnchorToolsPanel();
     ~RoomAnchorToolsPanel();
@@ -62,6 +63,7 @@ public:
     void set_on_apply_details(ApplyDetailsCallback callback);
     void set_on_propagate(PropagateCallback callback);
     void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
+    void set_on_open_candidates(OpenCandidatesCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -115,4 +117,5 @@ private:
     ApplyDetailsCallback on_apply_details_;
     PropagateCallback on_propagate_;
     OnionSkinToggleCallback on_onion_skin_toggle_;
+    OpenCandidatesCallback on_open_candidates_;
 };

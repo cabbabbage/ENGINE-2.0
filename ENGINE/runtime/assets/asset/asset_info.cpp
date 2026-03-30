@@ -49,6 +49,62 @@ std::vector<std::string> parse_string_array(const nlohmann::json& json_value) {
     return values;
 }
 
+constexpr const char* kAnchorPointChildCandidatesKey = "anchor_point_child_candidates";
+constexpr const char* kAnchorPointChildCandidatesLegacyKey = "anchor_point_child_cndidates";
+
+std::vector<AssetInfo::AnchorChildPointCandidate> parse_anchor_point_child_candidates_payload(
+    const nlohmann::json& payload) {
+    std::vector<AssetInfo::AnchorChildPointCandidate> parsed;
+    if (!payload.is_array()) {
+        return parsed;
+    }
+
+    std::unordered_set<std::string> seen_names;
+    parsed.reserve(payload.size());
+    for (const auto& entry : payload) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        const std::string anchor_point_name = entry.value("anchor_point_name", std::string{});
+        if (anchor_point_name.empty()) {
+            continue;
+        }
+        if (!seen_names.insert(anchor_point_name).second) {
+            continue;
+        }
+
+        AssetInfo::AnchorChildPointCandidate candidate{};
+        candidate.anchor_point_name = anchor_point_name;
+        if (entry.contains("candidates") && entry["candidates"].is_object()) {
+            candidate.candidates = entry["candidates"];
+        } else {
+            candidate.candidates = nlohmann::json::object();
+        }
+        parsed.push_back(std::move(candidate));
+    }
+
+    return parsed;
+}
+
+nlohmann::json build_anchor_point_child_candidates_payload(
+    const std::vector<AssetInfo::AnchorChildPointCandidate>& candidates) {
+    nlohmann::json payload = nlohmann::json::array();
+    std::unordered_set<std::string> seen_names;
+    for (const auto& candidate : candidates) {
+        if (candidate.anchor_point_name.empty()) {
+            continue;
+        }
+        if (!seen_names.insert(candidate.anchor_point_name).second) {
+            continue;
+        }
+        nlohmann::json encoded = nlohmann::json::object();
+        encoded["anchor_point_name"] = candidate.anchor_point_name;
+        encoded["candidates"] = candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+        payload.push_back(std::move(encoded));
+    }
+    return payload;
+}
+
 const nlohmann::json* locate_animation_payloads(const nlohmann::json& root);
 
 nlohmann::json normalize_animation_payload(nlohmann::json payload) {
@@ -1001,6 +1057,8 @@ nlohmann::json AssetInfo::manifest_payload() const {
         if (!payload.is_object()) {
                 payload = nlohmann::json::object();
         }
+        payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
+        payload.erase(kAnchorPointChildCandidatesLegacyKey);
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
                 payload["asset_name"] = name;
         }
@@ -1390,6 +1448,13 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         if (!info_json_.contains("anti_tags") || !info_json_["anti_tags"].is_array()) {
                 info_json_["anti_tags"] = nlohmann::json::array();
         }
+        if (data.contains(kAnchorPointChildCandidatesKey)) {
+                set_anchor_point_child_candidates_payload(data[kAnchorPointChildCandidatesKey]);
+        } else if (data.contains(kAnchorPointChildCandidatesLegacyKey)) {
+                set_anchor_point_child_candidates_payload(data[kAnchorPointChildCandidatesLegacyKey]);
+        } else {
+                set_anchor_point_child_candidates_payload(nlohmann::json::array());
+        }
         load_animations(data);
 
         mappings.clear();
@@ -1484,6 +1549,182 @@ void AssetInfo::set_spawn_groups(const nlohmann::json& groups) {
     }
 
     info_json_["spawn_groups"] = std::move(sanitized);
+}
+
+void AssetInfo::sync_anchor_point_child_candidates_info_json() {
+    if (!info_json_.is_object()) {
+        info_json_ = nlohmann::json::object();
+    }
+    info_json_[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
+    info_json_.erase(kAnchorPointChildCandidatesLegacyKey);
+}
+
+void AssetInfo::set_anchor_point_child_candidates_payload(const nlohmann::json& candidates) {
+    anchor_point_child_candidates = parse_anchor_point_child_candidates_payload(candidates);
+    sync_anchor_point_child_candidates_info_json();
+}
+
+nlohmann::json AssetInfo::anchor_point_child_candidates_payload() const {
+    return build_anchor_point_child_candidates_payload(anchor_point_child_candidates);
+}
+
+nlohmann::json AssetInfo::anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const {
+    if (anchor_point_name.empty()) {
+        return nlohmann::json::object();
+    }
+    for (const auto& candidate : anchor_point_child_candidates) {
+        if (candidate.anchor_point_name == anchor_point_name) {
+            return candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+        }
+    }
+    return nlohmann::json::object();
+}
+
+bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates) {
+    if (anchor_point_name.empty()) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> updated =
+        parse_anchor_point_child_candidates_payload(before_payload);
+
+    const nlohmann::json normalized_candidates = candidates.is_object() ? candidates : nlohmann::json::object();
+    auto existing = std::find_if(updated.begin(),
+                                 updated.end(),
+                                 [&](const AnchorChildPointCandidate& candidate) {
+                                     return candidate.anchor_point_name == anchor_point_name;
+                                 });
+    if (existing != updated.end()) {
+        existing->candidates = normalized_candidates;
+    } else {
+        AnchorChildPointCandidate created{};
+        created.anchor_point_name = anchor_point_name;
+        created.candidates = normalized_candidates;
+        updated.push_back(std::move(created));
+    }
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(updated);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(updated);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
+}
+
+bool AssetInfo::rename_anchor_point_child_candidate(const std::string& old_name, const std::string& new_name) {
+    if (old_name.empty() || new_name.empty() || old_name == new_name) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> updated =
+        parse_anchor_point_child_candidates_payload(before_payload);
+
+    auto old_it = std::find_if(updated.begin(),
+                               updated.end(),
+                               [&](const AnchorChildPointCandidate& candidate) {
+                                   return candidate.anchor_point_name == old_name;
+                               });
+    if (old_it == updated.end()) {
+        return false;
+    }
+
+    auto new_it = std::find_if(updated.begin(),
+                               updated.end(),
+                               [&](const AnchorChildPointCandidate& candidate) {
+                                   return candidate.anchor_point_name == new_name;
+                               });
+
+    if (new_it != updated.end()) {
+        updated.erase(old_it);
+    } else {
+        old_it->anchor_point_name = new_name;
+    }
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(updated);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(updated);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
+}
+
+bool AssetInfo::remove_anchor_point_child_candidate(const std::string& anchor_point_name) {
+    if (anchor_point_name.empty()) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> updated =
+        parse_anchor_point_child_candidates_payload(before_payload);
+    const auto erase_it = std::remove_if(updated.begin(),
+                                         updated.end(),
+                                         [&](const AnchorChildPointCandidate& candidate) {
+                                             return candidate.anchor_point_name == anchor_point_name;
+                                         });
+    if (erase_it == updated.end()) {
+        return false;
+    }
+    updated.erase(erase_it, updated.end());
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(updated);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(updated);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
+}
+
+bool AssetInfo::reconcile_anchor_point_child_candidates(const std::vector<std::string>& canonical_anchor_names) {
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> current =
+        parse_anchor_point_child_candidates_payload(before_payload);
+
+    std::vector<std::string> canonical_order;
+    canonical_order.reserve(canonical_anchor_names.size());
+    std::unordered_set<std::string> seen_names;
+    for (const std::string& name : canonical_anchor_names) {
+        if (name.empty()) {
+            continue;
+        }
+        if (seen_names.insert(name).second) {
+            canonical_order.push_back(name);
+        }
+    }
+
+    std::vector<AnchorChildPointCandidate> reconciled;
+    reconciled.reserve(canonical_order.size());
+    for (const std::string& name : canonical_order) {
+        auto it = std::find_if(current.begin(),
+                               current.end(),
+                               [&](const AnchorChildPointCandidate& candidate) {
+                                   return candidate.anchor_point_name == name;
+                               });
+        if (it != current.end()) {
+            reconciled.push_back(*it);
+        } else {
+            AnchorChildPointCandidate created{};
+            created.anchor_point_name = name;
+            created.candidates = nlohmann::json::object();
+            reconciled.push_back(std::move(created));
+        }
+    }
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(reconciled);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(reconciled);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
 }
 
 bool AssetInfo::remove_area(const std::string& name) {

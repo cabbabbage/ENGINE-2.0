@@ -30,6 +30,7 @@
 #include "dev_mode_color_utils.hpp"
 #include "spawn_groups/SpawnGroupConfig.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
+#include "spawn_groups/widgets/CandidateEditorPieGraphWidget.hpp"
 #include "devtools/dev_footer_bar.hpp"
 #include "config/room_config/room_configurator.hpp"
 #include "DockManager.hpp"
@@ -48,6 +49,7 @@
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "gameplay/spawn/check.hpp"
 #include "gameplay/spawn/methods/spawn_method.hpp"
+#include "gameplay/spawn/spawn_group_codec.hpp"
 #include "gameplay/spawn/spawn_context.hpp"
 #include "utils/input.hpp"
 #include "utils/grid.hpp"
@@ -92,6 +94,38 @@ constexpr int kBoxRotationHandlePickRadiusPx = 16;
 constexpr float kBoxRotationHandleDistancePx = 26.0f;
 constexpr int kBoxExtrusionScrollStep = 4;
 constexpr int kAssetEditorTransitionDurationFrames = 6;
+
+bool is_pointer_or_wheel_event(const SDL_Event& event) {
+    switch (event.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_WHEEL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_text_or_key_event(const SDL_Event& event) {
+    switch (event.type) {
+        case SDL_EVENT_TEXT_INPUT:
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_integral_weight(double value) {
+    if (!std::isfinite(value)) {
+        return false;
+    }
+    const double rounded = std::round(value);
+    return std::fabs(value - rounded) < 1e-9;
+}
+
 struct BoxCornerPickResult {
     int box_index = -1;
     int corner_index = -1;
@@ -1953,6 +1987,12 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
     }
+    if (anchor_candidate_editor_.pie_widget) {
+        anchor_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+        if (anchor_candidate_editor_.open) {
+            layout_anchor_candidate_editor_popup();
+        }
+    }
     update_asset_editor_layout();
 
 }
@@ -2374,6 +2414,7 @@ if (auto selected = library_ui_->consume_selection()) {
         anchor_tools_panel_->set_visible(anchor_mode_active());
         anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
+    update_anchor_candidate_editor_search(input);
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         movement_tools_panel_->set_visible(movement_mode_active());
@@ -2551,6 +2592,21 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         }
         ensure_anchor_editor_widgets();
         update_asset_editor_layout();
+
+        if (handle_anchor_candidate_editor_event(event)) {
+            result.handled = true;
+            result.pointer_blocked = true;
+            return result;
+        }
+
+        if (pointer_based && anchor_candidate_editor_.open && anchor_candidate_editor_.pie_widget) {
+            const SDL_Rect popup_rect = anchor_candidate_editor_.pie_widget->rect();
+            SDL_Point point{mx, my};
+            if (SDL_PointInRect(&point, &popup_rect) ||
+                anchor_candidate_editor_.pie_widget->is_search_point_inside(mx, my)) {
+                result.pointer_blocked = true;
+            }
+        }
 
         if (anchor_tools_panel_ && anchor_tools_panel_->is_visible()) {
             if (anchor_tools_panel_->handle_event(event)) {
@@ -3995,6 +4051,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (anchor_mode_active() && anchor_tools_panel_ && anchor_tools_panel_->is_visible()) {
             anchor_tools_panel_->render(renderer);
         }
+        render_anchor_candidate_editor(renderer);
         if (movement_mode_active() && movement_tools_panel_ && movement_tools_panel_->is_visible()) {
             movement_tools_panel_->render(renderer);
         }
@@ -4130,6 +4187,9 @@ void RoomEditor::set_manifest_store(devmode::core::ManifestStore* store) {
     }
     if (room_cfg_ui_) {
         room_cfg_ui_->set_manifest_store(manifest_store_);
+    }
+    if (anchor_candidate_editor_.pie_widget) {
+        anchor_candidate_editor_.pie_widget->set_manifest_store(manifest_store_);
     }
 }
 
@@ -6771,6 +6831,11 @@ void RoomEditor::ensure_anchor_editor_widgets() {
         anchor_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
             anchor_edit_.onion_skin_enabled = enabled;
         });
+        anchor_tools_panel_->set_on_open_candidates([this](const std::string& anchor_name,
+                                                            SDL_Point click_point,
+                                                            SDL_Rect row_rect) {
+            open_anchor_candidate_editor(anchor_name, click_point, row_rect);
+        });
     }
 
     if (anchor_tools_panel_) {
@@ -8055,6 +8120,7 @@ void RoomEditor::sync_anchor_tools_panel() {
         anchor_tools_panel_->set_anchor_names({});
         anchor_tools_panel_->set_selected_anchor({});
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
+        close_anchor_candidate_editor();
         return;
     }
 
@@ -8091,6 +8157,405 @@ void RoomEditor::sync_anchor_tools_panel() {
     } else {
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
     }
+    sync_anchor_candidate_editor();
+}
+
+std::vector<std::string> RoomEditor::canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const {
+    std::set<std::string> canonical_names;
+    for (const std::string& animation_id : eligible_anchor_animation_names(info)) {
+        auto anim_it = info.animations.find(animation_id);
+        if (anim_it == info.animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        const std::size_t frame_count = anim_it->second.frame_count();
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            const AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
+            }
+            for (const auto& anchor : frame->anchor_points) {
+                if (anchor.is_valid()) {
+                    canonical_names.insert(anchor.name);
+                }
+            }
+        }
+    }
+
+    return std::vector<std::string>(canonical_names.begin(), canonical_names.end());
+}
+
+bool RoomEditor::reconcile_anchor_child_candidates_with_eligible_names(const std::shared_ptr<AssetInfo>& target_info,
+                                                                       bool& changed) {
+    changed = false;
+    if (!target_info) {
+        return false;
+    }
+    const std::vector<std::string> canonical_names =
+        canonical_anchor_names_for_eligible_animations(*target_info);
+    changed = target_info->reconcile_anchor_point_child_candidates(canonical_names);
+    return true;
+}
+
+void RoomEditor::close_anchor_candidate_editor() {
+    if (anchor_candidate_editor_.pie_widget) {
+        anchor_candidate_editor_.pie_widget->hide_search();
+    }
+    anchor_candidate_editor_.open = false;
+    anchor_candidate_editor_.anchor_name.clear();
+    anchor_candidate_editor_.open_point = SDL_Point{0, 0};
+    anchor_candidate_editor_.anchor_row_rect = SDL_Rect{0, 0, 0, 0};
+}
+
+void RoomEditor::layout_anchor_candidate_editor_popup() {
+    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+        return;
+    }
+
+    constexpr int kPopupMargin = 10;
+    constexpr int kPopupGap = 12;
+    const int min_popup_width = 280;
+    const int max_popup_width = 420;
+    int popup_width = 360;
+    if (screen_w_ > 0) {
+        popup_width = std::clamp(popup_width, min_popup_width, std::max(min_popup_width, screen_w_ - (kPopupMargin * 2)));
+        popup_width = std::min(popup_width, max_popup_width);
+    }
+
+    int popup_height = anchor_candidate_editor_.pie_widget->height_for_width(popup_width);
+    if (popup_height <= 0) {
+        popup_height = 320;
+    }
+    if (screen_h_ > 0) {
+        popup_height = std::clamp(popup_height, 160, std::max(160, screen_h_ - (kPopupMargin * 2)));
+    }
+
+    int popup_x = anchor_candidate_editor_.open_point.x + kPopupGap;
+    if (screen_w_ > 0 && popup_x + popup_width > screen_w_ - kPopupMargin) {
+        popup_x = anchor_candidate_editor_.open_point.x - popup_width - kPopupGap;
+    }
+    popup_x = std::max(kPopupMargin, popup_x);
+    if (screen_w_ > 0) {
+        popup_x = std::min(popup_x, std::max(kPopupMargin, screen_w_ - kPopupMargin - popup_width));
+    }
+
+    int popup_y = anchor_candidate_editor_.open_point.y;
+    if (screen_h_ > 0 && popup_y + popup_height > screen_h_ - kPopupMargin) {
+        popup_y = screen_h_ - kPopupMargin - popup_height;
+    }
+    popup_y = std::max(kPopupMargin, popup_y);
+    if (screen_h_ > 0) {
+        popup_y = std::min(popup_y, std::max(kPopupMargin, screen_h_ - kPopupMargin - popup_height));
+    }
+
+    anchor_candidate_editor_.pie_widget->set_rect(SDL_Rect{popup_x, popup_y, popup_width, popup_height});
+}
+
+void RoomEditor::refresh_anchor_candidate_editor_widget() {
+    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+        return;
+    }
+    if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+        close_anchor_candidate_editor();
+        return;
+    }
+    nlohmann::json candidate_entry =
+        anchor_edit_.target_asset->info->anchor_point_child_candidate_candidates(anchor_candidate_editor_.anchor_name);
+    if (!candidate_entry.is_object()) {
+        candidate_entry = nlohmann::json::object();
+    }
+    anchor_candidate_editor_.pie_widget->set_candidates_from_json(candidate_entry);
+    layout_anchor_candidate_editor_popup();
+}
+
+void RoomEditor::sync_anchor_candidate_editor() {
+    if (!anchor_candidate_editor_.open) {
+        return;
+    }
+    if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+        close_anchor_candidate_editor();
+        return;
+    }
+    if (anchor_candidate_editor_.anchor_name.empty()) {
+        close_anchor_candidate_editor();
+        return;
+    }
+
+    const bool anchor_exists = std::any_of(anchor_edit_.handles.begin(),
+                                           anchor_edit_.handles.end(),
+                                           [&](const AnchorHandleSample& handle) {
+                                               return handle.name == anchor_candidate_editor_.anchor_name;
+                                           });
+    if (!anchor_exists) {
+        close_anchor_candidate_editor();
+        return;
+    }
+
+    if (anchor_edit_.selected_anchor_name != anchor_candidate_editor_.anchor_name) {
+        anchor_edit_.selected_anchor_name = anchor_candidate_editor_.anchor_name;
+        anchor_edit_.point_selected = true;
+        if (anchor_tools_panel_) {
+            anchor_tools_panel_->set_selected_anchor(anchor_edit_.selected_anchor_name);
+            anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
+        }
+    }
+    refresh_anchor_candidate_editor_widget();
+}
+
+void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect) {
+    if (anchor_name.empty() || !anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+        close_anchor_candidate_editor();
+        return;
+    }
+
+    std::shared_ptr<AssetInfo> target_info = anchor_edit_.target_asset->info;
+    bool reconciled = false;
+    if (!reconcile_anchor_child_candidates_with_eligible_names(target_info, reconciled)) {
+        return;
+    }
+    const bool upserted = target_info->upsert_anchor_point_child_candidate(anchor_name, nlohmann::json::object());
+    if (reconciled || upserted) {
+        (void)commit_anchor_bulk_edit(anchor_edit_.target_asset,
+                                      target_info,
+                                      devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                      false,
+                                      "Anchor Candidate Reconcile",
+                                      "room-anchor-candidate-reconcile");
+    }
+
+    if (!anchor_candidate_editor_.pie_widget) {
+        anchor_candidate_editor_.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
+        anchor_candidate_editor_.pie_widget->set_on_request_layout([this]() { layout_anchor_candidate_editor_popup(); });
+        anchor_candidate_editor_.pie_widget->set_defer_adjust_until_release(false);
+        anchor_candidate_editor_.pie_widget->set_on_regenerate({});
+        anchor_candidate_editor_.pie_widget->set_on_adjust([this](int index, double delta) {
+            mutate_anchor_candidate_entry(
+                [index, delta](nlohmann::json& candidate_entry) -> bool {
+                    if (index < 0 || std::abs(delta) < 1e-9) {
+                        return false;
+                    }
+                    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                    auto& candidates = candidate_entry["candidates"];
+                    if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) {
+                        return false;
+                    }
+                    auto& candidate = candidates[static_cast<std::size_t>(index)];
+                    if (!candidate.is_object()) {
+                        candidate = nlohmann::json::object();
+                    }
+                    const double current_weight = std::max(0.0, vibble::spawn_group_codec::read_candidate_chance(candidate, 0.0));
+                    const double next_weight = std::max(0.0, current_weight + delta);
+                    if (std::fabs(current_weight - next_weight) < 1e-9) {
+                        return false;
+                    }
+                    if (is_integral_weight(next_weight)) {
+                        candidate["chance"] = static_cast<int>(std::llround(next_weight));
+                    } else {
+                        candidate["chance"] = next_weight;
+                    }
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced,
+                false,
+                "Anchor Candidate Adjust",
+                "room-anchor-candidate-adjust");
+        });
+        anchor_candidate_editor_.pie_widget->set_on_delete([this](int index) {
+            mutate_anchor_candidate_entry(
+                [index](nlohmann::json& candidate_entry) -> bool {
+                    if (index < 0) {
+                        return false;
+                    }
+                    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                    auto& candidates = candidate_entry["candidates"];
+                    if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) {
+                        return false;
+                    }
+                    auto erase_it = candidates.begin() + static_cast<nlohmann::json::difference_type>(index);
+                    candidates.erase(erase_it);
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced,
+                false,
+                "Anchor Candidate Delete",
+                "room-anchor-candidate-delete");
+        });
+        anchor_candidate_editor_.pie_widget->set_on_add_candidate([this](const std::string& value) {
+            mutate_anchor_candidate_entry(
+                [value](nlohmann::json& candidate_entry) -> bool {
+                    if (value.empty()) {
+                        return false;
+                    }
+                    bool had_candidates = false;
+                    if (candidate_entry.is_object() &&
+                        candidate_entry.contains("candidates") &&
+                        candidate_entry["candidates"].is_array()) {
+                        had_candidates = !candidate_entry["candidates"].empty();
+                    }
+                    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                    auto& candidates = candidate_entry["candidates"];
+                    if (!candidates.is_array()) {
+                        candidates = nlohmann::json::array();
+                    }
+                    if (!had_candidates &&
+                        candidates.size() == 1 &&
+                        candidates[0].is_object() &&
+                        candidates[0].value("name", std::string{}) == "null" &&
+                        std::fabs(vibble::spawn_group_codec::read_candidate_chance(candidates[0], 0.0)) < 1e-9) {
+                        candidates = nlohmann::json::array();
+                    }
+
+                    double max_weight = 0.0;
+                    for (const auto& candidate : candidates) {
+                        max_weight = std::max(max_weight,
+                                              std::max(0.0, vibble::spawn_group_codec::read_candidate_chance(candidate, 0.0)));
+                    }
+                    double new_weight = max_weight > 0.0 ? max_weight * 0.05 : 5.0;
+                    if (new_weight <= 0.0 || !std::isfinite(new_weight)) {
+                        new_weight = 5.0;
+                    }
+
+                    nlohmann::json new_candidate = nlohmann::json::object();
+                    new_candidate["name"] = value;
+                    if (is_integral_weight(new_weight)) {
+                        new_candidate["chance"] = static_cast<int>(std::llround(new_weight));
+                    } else {
+                        new_candidate["chance"] = new_weight;
+                    }
+                    candidates.push_back(std::move(new_candidate));
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced,
+                false,
+                "Anchor Candidate Add",
+                "room-anchor-candidate-add");
+        });
+    }
+
+    anchor_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+    anchor_candidate_editor_.pie_widget->set_manifest_store(manifest_store_);
+    anchor_candidate_editor_.pie_widget->set_assets(assets_);
+    anchor_candidate_editor_.anchor_name = anchor_name;
+    anchor_candidate_editor_.open_point = click_point;
+    anchor_candidate_editor_.anchor_row_rect = row_rect;
+    anchor_candidate_editor_.open = true;
+
+    anchor_edit_.selected_anchor_name = anchor_name;
+    anchor_edit_.point_selected = true;
+    if (anchor_tools_panel_) {
+        anchor_tools_panel_->set_selected_anchor(anchor_name);
+        anchor_tools_panel_->set_rename_text(anchor_name);
+    }
+
+    refresh_anchor_candidate_editor_widget();
+}
+
+bool RoomEditor::mutate_anchor_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
+                                               devmode::core::DevSaveCoordinator::Priority priority,
+                                               bool flush_now,
+                                               const char* reason,
+                                               const char* flush_tag) {
+    if (!anchor_mode_active() || !anchor_candidate_editor_.open || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info ||
+        anchor_candidate_editor_.anchor_name.empty()) {
+        return false;
+    }
+
+    std::shared_ptr<AssetInfo> target_info = anchor_edit_.target_asset->info;
+    nlohmann::json candidate_entry =
+        target_info->anchor_point_child_candidate_candidates(anchor_candidate_editor_.anchor_name);
+    if (!candidate_entry.is_object()) {
+        candidate_entry = nlohmann::json::object();
+    }
+    if (!mutator(candidate_entry)) {
+        return false;
+    }
+    if (!target_info->upsert_anchor_point_child_candidate(anchor_candidate_editor_.anchor_name, candidate_entry)) {
+        return false;
+    }
+    if (!commit_anchor_bulk_edit(anchor_edit_.target_asset,
+                                 target_info,
+                                 priority,
+                                 flush_now,
+                                 reason,
+                                 flush_tag)) {
+        return false;
+    }
+    refresh_anchor_candidate_editor_widget();
+    return true;
+}
+
+bool RoomEditor::handle_anchor_candidate_editor_event(const SDL_Event& event) {
+    if (!anchor_mode_active() || !anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+        return false;
+    }
+
+    CandidateEditorPieGraphWidget* widget = anchor_candidate_editor_.pie_widget.get();
+    if (!widget) {
+        return false;
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN &&
+        event.key.key == SDLK_ESCAPE &&
+        event.key.repeat == 0) {
+        close_anchor_candidate_editor();
+        return true;
+    }
+
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        SDL_Point point{event.button.x, event.button.y};
+        const SDL_Rect popup_rect = widget->rect();
+        const bool inside_popup =
+            SDL_PointInRect(&point, &popup_rect) || widget->is_search_point_inside(point.x, point.y);
+        if (!inside_popup) {
+            close_anchor_candidate_editor();
+            return true;
+        }
+    }
+
+    if ((is_pointer_or_wheel_event(event) || is_text_or_key_event(event)) && widget->handle_event(event)) {
+        return true;
+    }
+
+    if (is_pointer_or_wheel_event(event)) {
+        int pointer_x = 0;
+        int pointer_y = 0;
+        if (event.type == SDL_EVENT_MOUSE_MOTION) {
+            pointer_x = event.motion.x;
+            pointer_y = event.motion.y;
+        } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+            pointer_x = event.button.x;
+            pointer_y = event.button.y;
+        } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+            sdl_mouse_util::GetMouseState(&pointer_x, &pointer_y);
+        }
+
+        SDL_Point point{pointer_x, pointer_y};
+        const SDL_Rect popup_rect = widget->rect();
+        if (SDL_PointInRect(&point, &popup_rect) || widget->is_search_point_inside(pointer_x, pointer_y)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void RoomEditor::update_anchor_candidate_editor_search(const Input& input) {
+    if (!anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+        return;
+    }
+    if (!anchor_mode_active()) {
+        close_anchor_candidate_editor();
+        return;
+    }
+    anchor_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+    anchor_candidate_editor_.pie_widget->update_search(input);
+    layout_anchor_candidate_editor_popup();
+}
+
+void RoomEditor::render_anchor_candidate_editor(SDL_Renderer* renderer) const {
+    if (!renderer || !anchor_mode_active() || !anchor_candidate_editor_.open || !anchor_candidate_editor_.pie_widget) {
+        return;
+    }
+    anchor_candidate_editor_.pie_widget->render(renderer);
 }
 
 void RoomEditor::refresh_anchor_mode_handles() {
@@ -8791,6 +9256,9 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
     }
 
     if (canonical_names.empty()) {
+        if (target_info->reconcile_anchor_point_child_candidates({})) {
+            updated_any = true;
+        }
         return true;
     }
 
@@ -8840,6 +9308,11 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
         if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
             return false;
         }
+    }
+
+    const std::vector<std::string> canonical_name_list(canonical_names.begin(), canonical_names.end());
+    if (target_info->reconcile_anchor_point_child_candidates(canonical_name_list)) {
+        updated_any = true;
     }
 
     return true;
@@ -8970,6 +9443,9 @@ bool RoomEditor::add_anchor_in_current_frame() {
             return false;
         }
     }
+    if (target_info->upsert_anchor_point_child_candidate(new_anchor_name, nlohmann::json::object())) {
+        updated_any = true;
+    }
 
     if (!updated_any) {
         return false;
@@ -9087,6 +9563,9 @@ bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desi
                 return false;
             }
         }
+        if (target_info->rename_anchor_point_child_candidate(old_name, normalized_name)) {
+            updated_any = true;
+        }
     }
 
     if (!updated_any) {
@@ -9098,13 +9577,19 @@ bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desi
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
     }
+    if (anchor_candidate_editor_.open && anchor_candidate_editor_.anchor_name == old_name) {
+        anchor_candidate_editor_.anchor_name = normalized_name;
+    }
     if (!commit_anchor_bulk_edit(target,
                                  target_info,
                                  devmode::core::DevSaveCoordinator::Priority::Debounced,
                                  false,
                                  "Anchor Global Rename",
-                                 "room-anchor-global-rename")) {
+                                  "room-anchor-global-rename")) {
         return false;
+    }
+    if (anchor_candidate_editor_.open) {
+        sync_anchor_candidate_editor();
     }
     if (normalized_name != old_name) {
         anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, old_name);
@@ -9121,6 +9606,8 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
     Asset* target = anchor_edit_.target_asset;
     std::shared_ptr<AssetInfo> target_info = target->info;
     const std::string deleted_name = anchor_edit_.selected_anchor_name;
+    const bool closing_open_candidate_editor =
+        anchor_candidate_editor_.open && anchor_candidate_editor_.anchor_name == deleted_name;
     bool normalized_any = false;
     if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
         return false;
@@ -9168,9 +9655,16 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
             return false;
         }
     }
+    if (target_info->remove_anchor_point_child_candidate(deleted_name)) {
+        updated_any = true;
+    }
 
     if (!updated_any) {
         return false;
+    }
+
+    if (closing_open_candidate_editor) {
+        close_anchor_candidate_editor();
     }
 
     std::string next_anchor_name;
@@ -9457,6 +9951,7 @@ bool RoomEditor::enter_anchor_edit_mode() {
     if (anchor_mode_active()) {
         return true;
     }
+    close_anchor_candidate_editor();
 
     Asset* target = selected_anchor_mode_asset();
     if (!target || !target->info) {
@@ -9494,6 +9989,7 @@ void RoomEditor::exit_anchor_edit_mode(bool flush_immediately) {
     if (!anchor_mode_active()) {
         return;
     }
+    close_anchor_candidate_editor();
 
     if (flush_immediately) {
         persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority::Immediate, true);
@@ -12007,6 +12503,14 @@ bool RoomEditor::is_anchor_ui_blocking_point(int x, int y) const {
     if (anchor_mode_active()) {
         if (anchor_tools_panel_ && anchor_tools_panel_->is_visible() && anchor_tools_panel_->is_point_inside(x, y)) {
             return true;
+        }
+        if (anchor_candidate_editor_.open && anchor_candidate_editor_.pie_widget) {
+            const SDL_Rect popup_rect = anchor_candidate_editor_.pie_widget->rect();
+            SDL_Point point{x, y};
+            if (SDL_PointInRect(&point, &popup_rect) ||
+                anchor_candidate_editor_.pie_widget->is_search_point_inside(x, y)) {
+                return true;
+            }
         }
     }
 

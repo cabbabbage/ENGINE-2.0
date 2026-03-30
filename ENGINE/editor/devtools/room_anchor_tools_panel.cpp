@@ -199,6 +199,10 @@ void RoomAnchorToolsPanel::set_on_onion_skin_toggle(OnionSkinToggleCallback call
     on_onion_skin_toggle_ = std::move(callback);
 }
 
+void RoomAnchorToolsPanel::set_on_open_candidates(OpenCandidatesCallback callback) {
+    on_open_candidates_ = std::move(callback);
+}
+
 RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values() const {
     DetailValues values;
     values.depth_offset = parse_int_or(depth_textbox_ ? depth_textbox_->value() : std::string{}, 0);
@@ -262,6 +266,23 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
                                  row_rect.y <= list_clip_rect_.y + list_clip_rect_.h;
         if (!row_visible) {
             continue;
+        }
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_RIGHT &&
+            i < anchor_names_.size() &&
+            point_in_rect(pointer_x, pointer_y, list_clip_rect_) &&
+            point_in_rect(pointer_x, pointer_y, row_rect)) {
+            selected_anchor_name_ = anchor_names_[i];
+            if (!rename_textbox_->is_editing()) {
+                rename_textbox_->set_value(selected_anchor_name_);
+            }
+            if (on_select_) {
+                on_select_(selected_anchor_name_);
+            }
+            if (on_open_candidates_) {
+                on_open_candidates_(selected_anchor_name_, SDL_Point{pointer_x, pointer_y}, row_rect);
+            }
+            return true;
         }
         if (button->handle_event(event)) {
             handled = true;

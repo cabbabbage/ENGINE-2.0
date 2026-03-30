@@ -45,6 +45,7 @@ class Grid;
 class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
+class CandidateEditorPieGraphWidget;
 class DevFooterBar;
 class DevControls;
 
@@ -443,6 +444,22 @@ private:
     int resolve_attack_box_mode_frame_index() const;
     void refresh_anchor_mode_handles();
     void sync_anchor_tools_panel();
+    void sync_anchor_candidate_editor();
+    void refresh_anchor_candidate_editor_widget();
+    void update_anchor_candidate_editor_search(const Input& input);
+    void layout_anchor_candidate_editor_popup();
+    void open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect);
+    void close_anchor_candidate_editor();
+    bool handle_anchor_candidate_editor_event(const SDL_Event& event);
+    void render_anchor_candidate_editor(SDL_Renderer* renderer) const;
+    bool mutate_anchor_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
+                                       devmode::core::DevSaveCoordinator::Priority priority,
+                                       bool flush_now,
+                                       const char* reason,
+                                       const char* flush_tag);
+    std::vector<std::string> canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const;
+    bool reconcile_anchor_child_candidates_with_eligible_names(const std::shared_ptr<AssetInfo>& target_info,
+                                                               bool& changed);
     void sync_hitbox_tools_panel();
     void sync_attack_box_tools_panel();
     void ensure_anchor_selection_valid();
@@ -638,6 +655,15 @@ private:
         std::vector<AnchorHandleSample> handles;
     };
     AnchorEditState anchor_edit_;
+
+    struct AnchorCandidateEditorState {
+        bool open = false;
+        std::string anchor_name;
+        SDL_Point open_point{0, 0};
+        SDL_Rect anchor_row_rect{0, 0, 0, 0};
+        std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
+    };
+    AnchorCandidateEditorState anchor_candidate_editor_;
 
     struct MovementEditState {
         Asset* target_asset = nullptr;

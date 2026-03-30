@@ -89,6 +89,8 @@ struct SourceChainClassification {
 SourceChainClassification classify_source_chain(const animation_editor::AnimationDocument* document,
                                                 const std::string& animation_id,
                                                 const nlohmann::json& payload) {
+    (void)document;
+    (void)animation_id;
     SourceChainClassification classification;
     if (!payload.is_object()) {
         return classification;
@@ -101,36 +103,6 @@ SourceChainClassification classify_source_chain(const animation_editor::Animatio
 
     classification.derived_from_animation = true;
     classification.direct_source_id = payload_source_animation_id(payload);
-    if (!document) {
-        return classification;
-    }
-
-    std::unordered_set<std::string> visited;
-    if (!animation_id.empty()) {
-        visited.insert(animation_id);
-    }
-
-    nlohmann::json current_payload = payload;
-    while (payload_uses_animation_source(current_payload)) {
-        const std::string source_id = payload_source_animation_id(current_payload);
-        if (source_id.empty()) {
-            break;
-        }
-        if (!visited.insert(source_id).second) {
-            break;
-        }
-
-        const auto source_payload = document->animation_payload_json(source_id);
-        if (!source_payload.has_value() || !source_payload->is_object()) {
-            break;
-        }
-        if (!payload_uses_animation_source(*source_payload)) {
-            classification.frame_sourced_direct_or_upstream = true;
-            break;
-        }
-        current_payload = *source_payload;
-    }
-
     return classification;
 }
 

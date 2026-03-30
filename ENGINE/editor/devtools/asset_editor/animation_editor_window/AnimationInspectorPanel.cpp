@@ -39,17 +39,15 @@ constexpr int kInspectorItemGap    = 10;
 constexpr int kInspectorSectionGap = 14;
 constexpr int kSectionHeaderHeight = 30;
 
-constexpr int kPreviewHeight = 120;
+constexpr int kPreviewHeight = 80;
 constexpr int kHeaderButtonWidth = 160;
 constexpr int kMinToggleButtonWidth = 120;
-constexpr int kPreviewControlsButtonWidth = 64;
-constexpr int kPreviewControlsMinSliderWidth = 140;
 constexpr int kScrollWheelStep = 20;
 constexpr int kScrollbarWidth = 8;
 constexpr int kScrollbarMinThumbHeight = 28;
 
 int preview_controls_height() {
-    return std::max(DMButton::height(), DMSlider::height());
+    return 0;
 }
 
 class ClipScope {
@@ -302,8 +300,6 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     total += section_gap;
     total += kSectionHeaderHeight;
     total += item_gap;
-    total += preview_controls_height();
-    total += item_gap;
     total += kPreviewHeight;
 
     auto add_section = [&](auto* widget) {
@@ -399,7 +395,6 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
         }
 
         draw_section_header(renderer, preview_section_rect_, "Preview");
-        render_preview_controls(renderer);
         render_preview(renderer);
 
         if (playback_settings_) {
@@ -442,8 +437,7 @@ void AnimationInspectorPanel::set_scrub_frame(int frame) {
         scrub_frame_ = std::clamp(scrub_frame_, 0, frame_count_ - 1);
     }
     if (scrub_mode_) {
-        current_frame_ = scrub_frame_;
-        sync_slider_to_current_frame();
+        sync_timeline_to_slider(scrub_frame_);
     }
 }
 
@@ -572,14 +566,6 @@ void AnimationInspectorPanel::rebuild_widgets() {
     if (!preview_timeline_) {
         preview_timeline_ = std::make_unique<PreviewTimeline>();
     }
-    const int desired_slider_max = std::max(0, frame_count_ - 1);
-    if (!preview_play_button_) {
-        preview_play_button_ = std::make_unique<DMButton>("Play", &DMStyles::AccentButton(), kPreviewControlsButtonWidth, preview_controls_height());
-    }
-    if (!preview_scrub_slider_) {
-        preview_scrub_slider_ = std::make_unique<DMSlider>("Frame", 0, desired_slider_max, 0);
-        preview_scrub_slider_->set_defer_commit_until_unfocus(false);
-    }
 
     if (!name_box_) {
         name_box_ = std::make_unique<DMTextBox>("Animation ID", animation_id_);
@@ -612,72 +598,6 @@ void AnimationInspectorPanel::rebuild_widgets() {
             }
             if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
                 activate_focus_target(FocusTarget::kStart);
-            }
-            return true;
-        });
-    }
-
-    if (preview_play_button_) {
-        widget_registry_.add_handler([this](const SDL_Event& ev) {
-            if (!preview_play_button_) {
-                return false;
-            }
-            if (!preview_play_button_->handle_event(ev)) {
-                return false;
-            }
-            if (scrub_mode_) {
-                return true;
-            }
-            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
-                if (preview_timeline_) {
-                    if (preview_timeline_->is_playing()) {
-                        preview_timeline_->pause();
-                    } else {
-                        preview_timeline_->play();
-                    }
-                }
-            }
-            return true;
-        });
-    }
-
-    if (preview_scrub_slider_) {
-        widget_registry_.add_handler([this](const SDL_Event& ev) {
-            if (!preview_scrub_slider_) {
-                return false;
-            }
-            int before = preview_scrub_slider_->value();
-            if (!preview_scrub_slider_->handle_event(ev)) {
-                if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && preview_scrubbing_active_) {
-                    preview_scrubbing_active_ = false;
-                    if (!scrub_mode_ && preview_timeline_ && was_playing_before_scrub_) {
-                        preview_timeline_->play();
-                    }
-                    was_playing_before_scrub_ = false;
-                }
-                return false;
-            }
-
-            if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT) {
-                preview_scrubbing_active_ = true;
-                was_playing_before_scrub_ = preview_timeline_ && preview_timeline_->is_playing();
-                if (preview_timeline_) {
-                    preview_timeline_->pause();
-                }
-            }
-
-            if (before != preview_scrub_slider_->value()) {
-                sync_timeline_to_slider(preview_scrub_slider_->value());
-            }
-
-            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
-                if (preview_scrubbing_active_) {
-                    preview_scrubbing_active_ = false;
-                    if (!scrub_mode_ && preview_timeline_ && was_playing_before_scrub_) {
-                        preview_timeline_->play();
-                    }
-                    was_playing_before_scrub_ = false;
-                }
             }
             return true;
         });
@@ -843,26 +763,7 @@ void AnimationInspectorPanel::layout_widgets() const {
     cursor.advance(kSectionHeaderHeight);
     cursor.advance(item_gap);
 
-    const int controls_height = preview_controls_height();
-    self->preview_controls_rect_ = SDL_Rect{x, cursor.visual_y(), width, controls_height};
-    SDL_Rect slider_rect{self->preview_controls_rect_.x, self->preview_controls_rect_.y, self->preview_controls_rect_.w, controls_height};
-    if (preview_play_button_) {
-        int button_width = std::min(kPreviewControlsButtonWidth, self->preview_controls_rect_.w);
-        SDL_Rect button_rect{self->preview_controls_rect_.x,
-                             self->preview_controls_rect_.y + std::max(0, (controls_height - button_height) / 2), button_width, button_height};
-        preview_play_button_->set_rect(button_rect);
-        slider_rect.x = button_rect.x + button_rect.w + button_gap;
-        slider_rect.w = std::max(0, self->preview_controls_rect_.w - button_rect.w - button_gap);
-        if (slider_rect.w < kPreviewControlsMinSliderWidth) {
-            slider_rect.x = self->preview_controls_rect_.x;
-            slider_rect.w = self->preview_controls_rect_.w;
-        }
-    }
-    if (preview_scrub_slider_) {
-        preview_scrub_slider_->set_rect(slider_rect);
-    }
-    cursor.advance(controls_height);
-    cursor.advance(item_gap);
+    self->preview_controls_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
 
     self->preview_rect_ = SDL_Rect{x, cursor.visual_y(), width, kPreviewHeight};
     cursor.advance(kPreviewHeight);
@@ -917,20 +818,9 @@ void AnimationInspectorPanel::ensure_preview_controls() {
     }
     preview_timeline_->set_frame_count(std::max(1, frame_count_));
     preview_timeline_->set_fps(static_cast<float>(kBaseAnimationFps));
-
-    const int desired_max = std::max(0, frame_count_ - 1);
-    if (!preview_scrub_slider_ || preview_slider_max_frame_ != desired_max) {
-        int slider_value = std::clamp(current_frame_, 0, desired_max);
-        preview_scrub_slider_ = std::make_unique<DMSlider>("Frame", 0, desired_max, slider_value);
-        preview_scrub_slider_->set_defer_commit_until_unfocus(false);
-        preview_slider_max_frame_ = desired_max;
+    if (!scrub_mode_ && !preview_timeline_->is_playing()) {
+        preview_timeline_->play();
     }
-
-    if (!preview_play_button_) {
-        preview_play_button_ = std::make_unique<DMButton>("Play", &DMStyles::AccentButton(), kPreviewControlsButtonWidth, preview_controls_height());
-    }
-
-    sync_slider_to_current_frame();
 }
 
 void AnimationInspectorPanel::update_preview_playback() {
@@ -944,38 +834,18 @@ void AnimationInspectorPanel::update_preview_playback() {
     if (scrub_mode_) {
         preview_timeline_->pause();
         current_frame_ = std::clamp(scrub_frame_, 0, std::max(0, frame_count_ - 1));
-        sync_slider_to_current_frame();
     } else {
+        if (!preview_timeline_->is_playing()) {
+            preview_timeline_->play();
+        }
         preview_timeline_->update();
         int timeline_frame = std::clamp(preview_timeline_->current_frame(), 0, std::max(0, frame_count_ - 1));
         current_frame_ = display_frame_from_timeline(timeline_frame);
-        sync_slider_to_current_frame();
-    }
-
-    if (preview_play_button_) {
-        if (scrub_mode_) {
-            preview_play_button_->set_text("Scrub");
-            preview_play_button_->set_style(&DMStyles::HeaderButton());
-        } else if (preview_timeline_->is_playing()) {
-            preview_play_button_->set_text("Pause");
-            preview_play_button_->set_style(&DMStyles::AccentButton());
-        } else {
-            preview_play_button_->set_text("Play");
-            preview_play_button_->set_style(&DMStyles::HeaderButton());
-        }
     }
 }
 
 void AnimationInspectorPanel::render_preview_controls(SDL_Renderer* renderer) const {
-    if (!renderer) {
-        return;
-    }
-    if (preview_play_button_) {
-        preview_play_button_->render(renderer);
-    }
-    if (preview_scrub_slider_) {
-        preview_scrub_slider_->render(renderer);
-    }
+    (void)renderer;
 }
 
 void AnimationInspectorPanel::render_preview(SDL_Renderer* renderer) const {
@@ -1038,14 +908,6 @@ void AnimationInspectorPanel::render_preview(SDL_Renderer* renderer) const {
 }
 
 void AnimationInspectorPanel::sync_slider_to_current_frame() {
-    if (!preview_scrub_slider_) {
-        return;
-    }
-    int max_frame = std::max(0, preview_slider_max_frame_);
-    int clamped = std::clamp(current_frame_, 0, max_frame);
-    if (preview_scrub_slider_->value() != clamped) {
-        preview_scrub_slider_->set_value(clamped);
-    }
 }
 
 void AnimationInspectorPanel::sync_timeline_to_slider(int display_frame) {

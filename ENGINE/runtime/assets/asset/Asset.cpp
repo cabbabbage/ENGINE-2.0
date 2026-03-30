@@ -19,6 +19,7 @@
 #include <mutex>
 #include <atomic>
 #include <algorithm>
+#include <utility>
 #include <cmath>
 #include <cctype>
 #include <limits>
@@ -1146,6 +1147,22 @@ const Asset::RuntimeBoxVolume* Asset::find_attack_box_volume(const std::string& 
         return nullptr;
     }
     return &current_attack_box_volumes_[it->second];
+}
+
+void Asset::test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes) {
+    current_hit_box_volumes_ = std::move(volumes);
+    runtime_hit_box_lookup_.clear();
+    for (std::size_t i = 0; i < current_hit_box_volumes_.size(); ++i) {
+        runtime_hit_box_lookup_.emplace(current_hit_box_volumes_[i].name, i);
+    }
+}
+
+void Asset::test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> volumes) {
+    current_attack_box_volumes_ = std::move(volumes);
+    runtime_attack_box_lookup_.clear();
+    for (std::size_t i = 0; i < current_attack_box_volumes_.size(); ++i) {
+        runtime_attack_box_lookup_.emplace(current_attack_box_volumes_[i].name, i);
+    }
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }

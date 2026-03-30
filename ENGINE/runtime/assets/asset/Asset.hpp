@@ -392,6 +392,8 @@ class Asset {
 
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
     const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
+    void test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes);
+    void test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     const RuntimeBoxVolume* find_hit_box_volume(const std::string& name) const;
     const RuntimeBoxVolume* find_attack_box_volume(const std::string& name) const;
 

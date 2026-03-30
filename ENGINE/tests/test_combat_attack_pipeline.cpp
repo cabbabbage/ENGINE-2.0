@@ -1,8 +1,5 @@
 #include <doctest/doctest.h>
-
-#define private public
 #include "assets/asset/Asset.hpp"
-#undef private
 
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/custom_controllers/davey_controller.hpp"
@@ -67,8 +64,10 @@ TEST_CASE("attack dispatch enqueues attacker metadata, damage, and attack type")
     attacker_ptr->current_frame = &attacker_frame;
     target_ptr->current_frame = &target_frame;
 
-    attacker_ptr->current_attack_box_volumes_ = {make_box(0.0f, 0.0f, 0.0f, 2.0f, 12, "heavy_slash")};
-    target_ptr->current_hit_box_volumes_ = {make_box(0.5f, 0.0f, 0.0f, 1.5f, 0, "hit")};
+    attacker_ptr->test_set_current_attack_box_volumes(
+        {make_box(0.0f, 0.0f, 0.0f, 2.0f, 12, "heavy_slash")});
+    target_ptr->test_set_current_hit_box_volumes(
+        {make_box(0.5f, 0.0f, 0.0f, 1.5f, 0, "hit")});
 
     AttackDetectionHelper::send_attack_if_hit(attacker_ptr, target_ptr);
 
@@ -96,8 +95,9 @@ TEST_CASE("attack dispatch skips non-overlapping attack and hit volumes") {
     attacker_ptr->current_frame = &attacker_frame;
     target_ptr->current_frame = &target_frame;
 
-    attacker_ptr->current_attack_box_volumes_ = {make_box(0.0f, 0.0f, 0.0f, 1.0f, 6)};
-    target_ptr->current_hit_box_volumes_ = {make_box(10.0f, 0.0f, 0.0f, 1.0f, 0, "hit")};
+    attacker_ptr->test_set_current_attack_box_volumes({make_box(0.0f, 0.0f, 0.0f, 1.0f, 6)});
+    target_ptr->test_set_current_hit_box_volumes(
+        {make_box(10.0f, 0.0f, 0.0f, 1.0f, 0, "hit")});
 
     AttackDetectionHelper::send_attack_if_hit(attacker_ptr, target_ptr);
     CHECK(target_ptr->process_pending_attacks().empty());
@@ -117,8 +117,10 @@ TEST_CASE("attack type falls back to attack_box when source box type is empty") 
     attacker_ptr->current_frame = &attacker_frame;
     target_ptr->current_frame = &target_frame;
 
-    attacker_ptr->current_attack_box_volumes_ = {make_box(0.0f, 0.0f, 0.0f, 2.0f, 9, "")};
-    target_ptr->current_hit_box_volumes_ = {make_box(0.0f, 0.0f, 0.0f, 1.0f, 0, "hit")};
+    attacker_ptr->test_set_current_attack_box_volumes(
+        {make_box(0.0f, 0.0f, 0.0f, 2.0f, 9, "")});
+    target_ptr->test_set_current_hit_box_volumes(
+        {make_box(0.0f, 0.0f, 0.0f, 1.0f, 0, "hit")});
 
     const auto attack = animation_update::AttackValidation::compute_attack_if_hit(*attacker_ptr, *target_ptr);
     REQUIRE(attack.has_value());
@@ -158,8 +160,9 @@ TEST_CASE("child assets cannot attack their parent assets") {
     AnimationFrame child_frame{};
     parent_ptr->current_frame = &parent_frame;
     child_ptr->current_frame = &child_frame;
-    child_ptr->current_attack_box_volumes_ = {make_box(0.0f, 0.0f, 0.0f, 2.0f, 5)};
-    parent_ptr->current_hit_box_volumes_ = {make_box(0.0f, 0.0f, 0.0f, 1.0f, 0, "hit")};
+    child_ptr->test_set_current_attack_box_volumes({make_box(0.0f, 0.0f, 0.0f, 2.0f, 5)});
+    parent_ptr->test_set_current_hit_box_volumes(
+        {make_box(0.0f, 0.0f, 0.0f, 1.0f, 0, "hit")});
 
     AttackDetectionHelper::send_attack_if_hit(child_ptr, parent_ptr);
     CHECK(parent_ptr->process_pending_attacks().empty());

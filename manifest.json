@@ -2068,6 +2068,7 @@
       "update_radius": 0
     },
     "spider": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "anchor_points": [
@@ -2123,6 +2124,7 @@
               }
             ]
           ],
+          "flip_vertical_source": false,
           "flipped_source": false,
           "hit_boxes": [
             [
@@ -2162,7 +2164,7 @@
           "movement_total": {
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -2175,16 +2177,139 @@
           }
         },
         "down": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 419,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 419,
+                    "texture_y": 235
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 235
+                  }
+                ],
+                "damage_amount": 0,
+                "extrusion_amount": 0,
+                "name": "attack_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "size": {
+                  "h": 235,
+                  "w": 419
+                }
+              },
+              {
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": -12
+                  },
+                  {
+                    "texture_x": 419,
+                    "texture_y": -12
+                  },
+                  {
+                    "texture_x": 419,
+                    "texture_y": 223
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 223
+                  }
+                ],
+                "damage_amount": 0,
+                "extrusion_amount": 0,
+                "name": "attack_box_2",
+                "position": {
+                  "x": 0,
+                  "y": -12
+                },
+                "size": {
+                  "h": 235,
+                  "w": 419
+                }
+              }
+            ],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "derived_modifiers": {
-            "flipMovementX": false,
-            "flipMovementY": true,
             "flipX": false,
-            "flipY": true,
+            "flipY": false,
             "reverse": false
           },
+          "flip_vertical_source": false,
           "flipped_source": false,
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_source_geometry": false,
           "inherit_source_movement": true,
-          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              -54
+            ],
+            [
+              0,
+              0,
+              -54
+            ],
+            [
+              0,
+              0,
+              -54
+            ],
+            [
+              0,
+              0,
+              -54
+            ],
+            [
+              0,
+              0,
+              -54
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": -270
+          },
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2196,16 +2321,76 @@
           }
         },
         "down_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "derived_modifiers": {
-            "flipMovementX": false,
-            "flipMovementY": true,
             "flipX": false,
-            "flipY": true,
+            "flipY": false,
             "reverse": false
           },
+          "flip_vertical_source": false,
           "flipped_source": false,
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_source_geometry": false,
           "inherit_source_movement": true,
-          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              -19,
+              0,
+              -35
+            ],
+            [
+              -32,
+              0,
+              -59
+            ],
+            [
+              -45,
+              0,
+              -82
+            ],
+            [
+              -80,
+              0,
+              -16
+            ],
+            [
+              -80,
+              0,
+              -16
+            ]
+          ],
+          "movement_total": {
+            "dx": -256,
+            "dy": 0,
+            "dz": -208
+          },
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2217,16 +2402,76 @@
           }
         },
         "down_right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "derived_modifiers": {
-            "flipMovementX": true,
-            "flipMovementY": true,
-            "flipX": true,
-            "flipY": true,
+            "flipX": false,
+            "flipY": false,
             "reverse": false
           },
-          "flipped_source": true,
+          "flip_vertical_source": false,
+          "flipped_source": false,
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_source_geometry": false,
           "inherit_source_movement": true,
-          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              -19,
+              0,
+              -35
+            ],
+            [
+              -32,
+              0,
+              -59
+            ],
+            [
+              -45,
+              0,
+              -82
+            ],
+            [
+              -80,
+              0,
+              -16
+            ],
+            [
+              -80,
+              0,
+              -16
+            ]
+          ],
+          "movement_total": {
+            "dx": -256,
+            "dy": 0,
+            "dz": -208
+          },
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2238,6 +2483,7 @@
           }
         },
         "left": {
+          "flip_vertical_source": false,
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -2276,7 +2522,7 @@
           "movement_total": {
             "dx": -200,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -2289,16 +2535,76 @@
           }
         },
         "right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "derived_modifiers": {
-            "flipMovementX": true,
-            "flipMovementY": false,
-            "flipX": true,
+            "flipX": false,
             "flipY": false,
             "reverse": false
           },
-          "flipped_source": true,
+          "flip_vertical_source": false,
+          "flipped_source": false,
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_source_geometry": false,
           "inherit_source_movement": true,
-          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              -20,
+              0,
+              0
+            ],
+            [
+              -20,
+              0,
+              0
+            ],
+            [
+              -20,
+              0,
+              0
+            ],
+            [
+              -20,
+              0,
+              0
+            ],
+            [
+              -20,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": -100,
+            "dy": 0,
+            "dz": 0.0
+          },
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2373,6 +2679,7 @@
             [],
             []
           ],
+          "flip_vertical_source": false,
           "flipped_source": false,
           "hit_boxes": [
             [],
@@ -2391,35 +2698,35 @@
               0
             ],
             [
+              2,
               0,
-              0,
-              -54
+              -35
             ],
             [
+              2,
               0,
-              0,
-              -54
+              -35
             ],
             [
+              2,
               0,
-              0,
-              -54
+              -35
             ],
             [
+              2,
               0,
-              0,
-              -54
+              -35
             ],
             [
+              2,
               0,
-              0,
-              -54
+              -35
             ]
           ],
           "movement_total": {
-            "dx": 0,
+            "dx": 10,
             "dy": 0,
-            "dz": -270.0
+            "dz": -175.0
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -2443,6 +2750,87 @@
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              -11,
+              0,
+              -22
+            ],
+            [
+              -11,
+              0,
+              -22
+            ],
+            [
+              -11,
+              0,
+              -22
+            ],
+            [
+              -11,
+              0,
+              -22
+            ],
+            [
+              -11,
+              0,
+              -22
+            ]
+          ],
+          "movement_total": {
+            "dx": -55,
+            "dy": 0,
+            "dz": -110.0
+          },
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "up_left"
+          }
+        },
+        "up_right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "derived_modifiers": {
+            "flipX": false,
+            "flipY": false,
+            "reverse": false
+          },
+          "flip_vertical_source": false,
+          "flipped_source": false,
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_source_geometry": false,
+          "inherit_source_movement": true,
           "movement": [
             [
               0,
@@ -2478,29 +2866,8 @@
           "movement_total": {
             "dx": -256,
             "dy": 0,
-            "dz": -208.0
+            "dz": -208
           },
-          "number_of_frames": 6,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "up_left"
-          }
-        },
-        "up_right": {
-          "derived_modifiers": {
-            "flipMovementX": true,
-            "flipMovementY": false,
-            "flipX": true,
-            "flipY": false,
-            "reverse": false
-          },
-          "flipped_source": true,
-          "inherit_source_movement": true,
-          "loop": true,
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -9544,9 +9911,9 @@
       },
       "content_root": "content/forrest",
       "depth_cue_settings": {
-        "background_max_depth_offset": 2380.0,
-        "center_depth_offset": 425.0,
-        "foreground_max_depth_offset": -1205.0
+        "background_max_depth_offset": 4080.0,
+        "center_depth_offset": 1400.0,
+        "foreground_max_depth_offset": -255.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -9694,8 +10061,8 @@
         "spawn": {
           "camera_center_dx": 20,
           "camera_center_dz": -1474,
-          "camera_height_px": 911,
-          "camera_tilt_deg": 33.400001525878906,
+          "camera_height_px": 1775,
+          "camera_tilt_deg": 40.0,
           "camera_zoom_percent": 85,
           "curvyness": 2,
           "display_color": [
@@ -9760,16 +10127,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": 122,
-              "dz": -1300,
+              "dx": -1776,
+              "dz": 164,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7040,
-              "origional_width": 6984,
+              "origional_height": 7000,
+              "origional_width": 6928,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,

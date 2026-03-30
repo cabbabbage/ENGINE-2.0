@@ -85,6 +85,15 @@ int resolve_effective_grid_resolution(const Asset* self,
     return grid_service.default_resolution();
 }
 
+int bounded_step_toward(int delta, int max_step) {
+    if (delta == 0) {
+        return 0;
+    }
+    const int positive_step = std::max(1, max_step);
+    const int magnitude = std::min(std::abs(delta), positive_step);
+    return (delta > 0) ? magnitude : -magnitude;
+}
+
 }
 
 namespace animation_update::detail {
@@ -360,7 +369,9 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
         absolute.push_back(next_world);
     }
 
-    plan_      = planner_(*self_, sanitizer_.sanitize(*self_, absolute, visited_thresh_), visited_thresh_, grid());
+    const std::vector<SDL_Point> requested_absolute = absolute;
+    const std::vector<SDL_Point> sanitized_checkpoints = sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_);
+    plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid());
     final_dest = plan_.final_dest;
     plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
@@ -373,6 +384,51 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     if (plan_.strides.empty()) {
+        bool queued_fallback = false;
+        SDL_Point fallback_target{0, 0};
+        if (!plan_.sanitized_checkpoints.empty()) {
+            fallback_target = plan_.sanitized_checkpoints.front();
+            queued_fallback = true;
+        } else if (!requested_absolute.empty()) {
+            fallback_target = requested_absolute.front();
+            queued_fallback = true;
+        }
+
+        if (queued_fallback) {
+            SDL_Point fallback_delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, fallback_target);
+            int fallback_step = vibble::grid::delta(resolution);
+            if (fallback_step <= 0) {
+                fallback_step = vibble::grid::delta(grid().default_resolution());
+            }
+            if (fallback_step <= 0) {
+                fallback_step = 1;
+            }
+
+            SDL_Point bounded_delta{
+                bounded_step_toward(fallback_delta.x, fallback_step),
+                bounded_step_toward(fallback_delta.y, fallback_step)
+            };
+
+            if (bounded_delta.x != 0 || bounded_delta.y != 0) {
+                move(bounded_delta,
+                     animation_update::detail::kDefaultAnimation,
+                     true,
+                     override_non_locked);
+                if (self_) {
+                    self_->needs_target = false;
+                }
+                if (debug_logging) {
+                    std::ostringstream oss;
+                    oss << "[AnimationUpdate] auto_move fallback asset=" << asset_name
+                        << " target=(" << fallback_target.x << "," << fallback_target.y << ")"
+                        << " delta=(" << bounded_delta.x << "," << bounded_delta.y << ")"
+                        << " step=" << fallback_step;
+                    vibble::log::info(oss.str());
+                }
+                return;
+            }
+        }
+
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move plan produced no strides for asset=" + asset_name);
         }

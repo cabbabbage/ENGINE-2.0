@@ -9,6 +9,7 @@
 #include "rendering/render/depth_cue_overlay_math.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "utils/log.hpp"
 #include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
@@ -16,6 +17,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string>
 
 namespace {
 
@@ -100,6 +102,97 @@ std::uint8_t overlay_layer_to_signature(depth_cue::OverlayLayer layer) {
     return kOverlayLayerNone;
 }
 
+depth_cue::OverlayLayer overlay_layer_from_signature(std::uint8_t layer_signature) {
+    if (layer_signature == kOverlayLayerForeground) {
+        return depth_cue::OverlayLayer::Foreground;
+    }
+    if (layer_signature == kOverlayLayerBackground) {
+        return depth_cue::OverlayLayer::Background;
+    }
+    return depth_cue::OverlayLayer::None;
+}
+
+#if !defined(NDEBUG)
+struct DepthCueMergeTelemetry {
+    std::uint64_t candidates = 0;
+    std::uint64_t selected_foreground = 0;
+    std::uint64_t selected_background = 0;
+    std::uint64_t merge_success = 0;
+    std::uint64_t merge_failure = 0;
+    std::uint64_t skipped_zero_opacity = 0;
+    std::uint64_t skipped_missing_texture = 0;
+    std::uint64_t skipped_invalid_dimensions = 0;
+};
+
+DepthCueMergeTelemetry& depth_cue_merge_telemetry() {
+    static DepthCueMergeTelemetry telemetry{};
+    return telemetry;
+}
+
+void depth_cue_log_periodic_summary() {
+    DepthCueMergeTelemetry& telemetry = depth_cue_merge_telemetry();
+    const std::uint64_t completed_merges = telemetry.merge_success + telemetry.merge_failure;
+    if (completed_merges == 0 || (completed_merges % 120ull) != 0ull) {
+        return;
+    }
+    vibble::log::debug(
+        "[DepthCueMerge] summary candidates=" + std::to_string(telemetry.candidates) +
+        " fg=" + std::to_string(telemetry.selected_foreground) +
+        " bg=" + std::to_string(telemetry.selected_background) +
+        " ok=" + std::to_string(telemetry.merge_success) +
+        " fail=" + std::to_string(telemetry.merge_failure) +
+        " skip_missing_texture=" + std::to_string(telemetry.skipped_missing_texture) +
+        " skip_zero_opacity=" + std::to_string(telemetry.skipped_zero_opacity) +
+        " skip_invalid_dimensions=" + std::to_string(telemetry.skipped_invalid_dimensions));
+}
+
+void depth_cue_note_candidate() {
+    ++depth_cue_merge_telemetry().candidates;
+}
+
+void depth_cue_note_selection(depth_cue::OverlayLayer layer) {
+    DepthCueMergeTelemetry& telemetry = depth_cue_merge_telemetry();
+    if (layer == depth_cue::OverlayLayer::Foreground) {
+        ++telemetry.selected_foreground;
+    } else if (layer == depth_cue::OverlayLayer::Background) {
+        ++telemetry.selected_background;
+    }
+}
+
+void depth_cue_note_skip_missing_texture() {
+    ++depth_cue_merge_telemetry().skipped_missing_texture;
+}
+
+void depth_cue_note_skip_zero_opacity() {
+    ++depth_cue_merge_telemetry().skipped_zero_opacity;
+}
+
+void depth_cue_note_skip_invalid_dimensions(const std::string& message) {
+    ++depth_cue_merge_telemetry().skipped_invalid_dimensions;
+    vibble::log::warn("[DepthCueMerge] skipped merge due to invalid dimensions: " + message);
+}
+
+void depth_cue_note_merge_result(bool success, const std::string& failure_message = std::string{}) {
+    DepthCueMergeTelemetry& telemetry = depth_cue_merge_telemetry();
+    if (success) {
+        ++telemetry.merge_success;
+    } else {
+        ++telemetry.merge_failure;
+        if (!failure_message.empty()) {
+            vibble::log::warn("[DepthCueMerge] merge failed: " + failure_message);
+        }
+    }
+    depth_cue_log_periodic_summary();
+}
+#else
+void depth_cue_note_candidate() {}
+void depth_cue_note_selection(depth_cue::OverlayLayer) {}
+void depth_cue_note_skip_missing_texture() {}
+void depth_cue_note_skip_zero_opacity() {}
+void depth_cue_note_skip_invalid_dimensions(const std::string&) {}
+void depth_cue_note_merge_result(bool, const std::string& = std::string{}) {}
+#endif
+
 DepthCueOverlayDecision decide_depth_cue_overlay(float signed_depth,
                                                  const depth_cue::DepthCueSettings& settings,
                                                  bool depth_effects_enabled,
@@ -181,6 +274,9 @@ DepthCueMergeSignature CompositeAssetRenderer::evaluate_depth_cue_merge_signatur
     }
 
     const DepthCueRenderData render_data = resolve_depth_cue_render_data(asset);
+    if (render_data.has_depth_cue) {
+        depth_cue_note_candidate();
+    }
 
     const Uint8 base_alpha = static_cast<Uint8>(std::lround(
         std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
@@ -234,14 +330,19 @@ DepthCueMergeSignature CompositeAssetRenderer::build_depth_cue_merge_signature(
         background_texture);
 
     if (!overlay_decision.texture) {
+        if (foreground_texture || background_texture) {
+            depth_cue_note_skip_missing_texture();
+        }
         return signature;
     }
+    depth_cue_note_selection(overlay_decision.layer);
 
     const float clamped_opacity = std::clamp(overlay_decision.opacity, 0.0f, 1.0f);
     const Uint8 overlay_alpha = static_cast<Uint8>(std::lround(
         std::clamp(clamped_opacity * static_cast<float>(base_alpha), 0.0f, 255.0f)));
 
     if (overlay_alpha == 0) {
+        depth_cue_note_skip_zero_opacity();
         return signature;
     }
 
@@ -297,8 +398,10 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
     SDL_Texture* overlay_texture,
     Uint8 overlay_alpha,
     Uint8 base_alpha,
+    depth_cue::OverlayLayer overlay_layer,
     SDL_Point* out_size) const {
     if (!renderer_ || !base_texture || !overlay_texture || overlay_alpha == 0) {
+        depth_cue_note_merge_result(false, "missing renderer/base/overlay texture or zero overlay alpha");
         return nullptr;
     }
 
@@ -307,9 +410,53 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
 
     int merged_w = 0;
     int merged_h = 0;
-    if (!query_texture_size(overlay_texture, &merged_w, &merged_h)) {
+    const bool has_overlay_size = query_texture_size(overlay_texture, &merged_w, &merged_h);
+    if (!has_overlay_size) {
         merged_w = safe_double_dimension(frame_w);
         merged_h = safe_double_dimension(frame_h);
+    }
+    const int expected_overlay_w = safe_double_dimension(frame_w);
+    const int expected_overlay_h = safe_double_dimension(frame_h);
+    if (has_overlay_size &&
+        (merged_w != expected_overlay_w || merged_h != expected_overlay_h)) {
+        vibble::log::warn("[DepthCueMerge] unexpected overlay size " +
+                          std::to_string(merged_w) + "x" + std::to_string(merged_h) +
+                          " for base " + std::to_string(frame_w) + "x" + std::to_string(frame_h));
+    }
+
+    auto compute_base_dst = [&](int canvas_w, int canvas_h) {
+        const int anchor_x = canvas_w / 2;
+        const int anchor_y = static_cast<int>(std::lround(static_cast<float>(canvas_h) * kOverlayAnchorUv.y));
+        SDL_Rect base_dst{};
+        base_dst.w = frame_w;
+        base_dst.h = frame_h;
+        base_dst.x = anchor_x - (base_dst.w / 2);
+        base_dst.y = anchor_y - base_dst.h;
+        return base_dst;
+    };
+
+    SDL_Rect base_dst = compute_base_dst(merged_w, merged_h);
+    const bool base_out_of_bounds =
+        base_dst.x < 0 ||
+        base_dst.y < 0 ||
+        (base_dst.x + base_dst.w) > merged_w ||
+        (base_dst.y + base_dst.h) > merged_h;
+    if (base_out_of_bounds) {
+        const int expanded_w = std::max(merged_w, safe_double_dimension(frame_w));
+        const int expanded_h = std::max(merged_h, safe_double_dimension(frame_h));
+        if (expanded_w == merged_w && expanded_h == merged_h) {
+            depth_cue_note_skip_invalid_dimensions(
+                "canvas=" + std::to_string(merged_w) + "x" + std::to_string(merged_h) +
+                " base=" + std::to_string(frame_w) + "x" + std::to_string(frame_h));
+            depth_cue_note_merge_result(false, "base projection exceeded merged canvas");
+            return nullptr;
+        }
+        vibble::log::warn("[DepthCueMerge] overlay canvas too small; expanding from " +
+                          std::to_string(merged_w) + "x" + std::to_string(merged_h) +
+                          " to " + std::to_string(expanded_w) + "x" + std::to_string(expanded_h));
+        merged_w = expanded_w;
+        merged_h = expanded_h;
+        base_dst = compute_base_dst(merged_w, merged_h);
     }
 
     SDL_Texture* merged_texture = SDL_CreateTexture(renderer_,
@@ -318,6 +465,7 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
                                                     merged_w,
                                                     merged_h);
     if (!merged_texture) {
+        depth_cue_note_merge_result(false, "SDL_CreateTexture failed for merged texture");
         return nullptr;
     }
 
@@ -327,6 +475,7 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
     if (!SDL_SetRenderTarget(renderer_, merged_texture)) {
         SDL_DestroyTexture(merged_texture);
         SDL_SetRenderTarget(renderer_, previous_target);
+        depth_cue_note_merge_result(false, "SDL_SetRenderTarget failed for merged texture");
         return nullptr;
     }
 
@@ -348,11 +497,6 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
     SDL_SetTextureAlphaMod(overlay_texture, overlay_alpha);
 
     const SDL_Rect overlay_dst{0, 0, merged_w, merged_h};
-    const bool overlay_ok = sdl_render::Texture(renderer_, overlay_texture, nullptr, &overlay_dst);
-
-    SDL_SetTextureBlendMode(overlay_texture, overlay_prev_blend);
-    SDL_SetTextureColorMod(overlay_texture, overlay_prev_r, overlay_prev_g, overlay_prev_b);
-    SDL_SetTextureAlphaMod(overlay_texture, overlay_prev_a);
 
     SDL_BlendMode base_prev_blend = SDL_BLENDMODE_BLEND;
     Uint8 base_prev_r = 255;
@@ -366,16 +510,20 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
     SDL_SetTextureBlendMode(base_texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureColorMod(base_texture, 255, 255, 255);
     SDL_SetTextureAlphaMod(base_texture, base_alpha);
+    const bool draw_overlay_over_base = (overlay_layer == depth_cue::OverlayLayer::Foreground);
+    bool overlay_ok = false;
+    bool base_ok = false;
+    if (draw_overlay_over_base) {
+        base_ok = sdl_render::Texture(renderer_, base_texture, base_src_rect, &base_dst);
+        overlay_ok = sdl_render::Texture(renderer_, overlay_texture, nullptr, &overlay_dst);
+    } else {
+        overlay_ok = sdl_render::Texture(renderer_, overlay_texture, nullptr, &overlay_dst);
+        base_ok = sdl_render::Texture(renderer_, base_texture, base_src_rect, &base_dst);
+    }
 
-    const int anchor_x = merged_w / 2;
-    const int anchor_y = static_cast<int>(std::lround(static_cast<float>(merged_h) * kOverlayAnchorUv.y));
-    SDL_Rect base_dst{};
-    base_dst.w = frame_w;
-    base_dst.h = frame_h;
-    base_dst.x = anchor_x - (base_dst.w / 2);
-    base_dst.y = anchor_y - base_dst.h;
-
-    const bool base_ok = sdl_render::Texture(renderer_, base_texture, base_src_rect, &base_dst);
+    SDL_SetTextureBlendMode(overlay_texture, overlay_prev_blend);
+    SDL_SetTextureColorMod(overlay_texture, overlay_prev_r, overlay_prev_g, overlay_prev_b);
+    SDL_SetTextureAlphaMod(overlay_texture, overlay_prev_a);
 
     SDL_SetTextureBlendMode(base_texture, base_prev_blend);
     SDL_SetTextureColorMod(base_texture, base_prev_r, base_prev_g, base_prev_b);
@@ -385,6 +533,7 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
 
     if (!overlay_ok || !base_ok) {
         SDL_DestroyTexture(merged_texture);
+        depth_cue_note_merge_result(false, "failed drawing base/overlay texture into merged target");
         return nullptr;
     }
 
@@ -393,6 +542,7 @@ SDL_Texture* CompositeAssetRenderer::compose_depth_cue_merged_texture(
         out_size->y = merged_h;
     }
 
+    depth_cue_note_merge_result(true);
     return merged_texture;
 }
 
@@ -560,6 +710,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                 desired_signature.overlay_texture,
                 desired_signature.overlay_alpha,
                 asset_alpha,
+                overlay_layer_from_signature(desired_signature.overlay_layer),
                 &merged_size);
             if (merged_texture) {
                 asset->set_composite_texture(merged_texture);
@@ -666,5 +817,26 @@ bool CompositeAssetRenderer::test_should_mark_composite_dirty_for_depth_cue_merg
     const Asset* asset,
     const DepthCueMergeSignature& desired_signature) const {
     return should_mark_composite_dirty_for_depth_cue_merge(asset, desired_signature);
+}
+
+SDL_Texture* CompositeAssetRenderer::test_compose_depth_cue_merged_texture(
+    SDL_Texture* base_texture,
+    const SDL_Rect* base_src_rect,
+    int base_frame_w,
+    int base_frame_h,
+    SDL_Texture* overlay_texture,
+    Uint8 overlay_alpha,
+    Uint8 base_alpha,
+    std::uint8_t overlay_layer,
+    SDL_Point* out_size) const {
+    return compose_depth_cue_merged_texture(base_texture,
+                                            base_src_rect,
+                                            base_frame_w,
+                                            base_frame_h,
+                                            overlay_texture,
+                                            overlay_alpha,
+                                            base_alpha,
+                                            overlay_layer_from_signature(overlay_layer),
+                                            out_size);
 }
 #endif

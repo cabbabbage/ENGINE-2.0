@@ -3,12 +3,149 @@
 #include <cmath>
 #include <memory>
 
+#include <SDL3/SDL.h>
+
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "core/manifest/depth_cue_settings.hpp"
 #include "rendering/render/composite_asset_renderer.hpp"
 
 namespace {
+
+class ScopedSdlVideo {
+public:
+    ScopedSdlVideo() : initialized_(SDL_InitSubSystem(SDL_INIT_VIDEO)) {}
+    ~ScopedSdlVideo() {
+        if (initialized_) {
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        }
+    }
+
+    bool initialized() const { return initialized_; }
+
+private:
+    bool initialized_ = false;
+};
+
+class ScopedRenderer {
+public:
+    ScopedRenderer() {
+        if (!video_.initialized()) {
+            return;
+        }
+        window_ = SDL_CreateWindow("depth_cue_tests", 32, 32, SDL_WINDOW_HIDDEN);
+        if (!window_) {
+            return;
+        }
+        renderer_ = SDL_CreateRenderer(window_, nullptr);
+        if (!renderer_) {
+            renderer_ = SDL_CreateRenderer(window_, SDL_SOFTWARE_RENDERER);
+        }
+        if (!renderer_) {
+            return;
+        }
+        SDL_Texture* probe = SDL_CreateTexture(renderer_,
+                                               SDL_PIXELFORMAT_RGBA8888,
+                                               SDL_TEXTUREACCESS_TARGET,
+                                               4,
+                                               4);
+        target_texture_supported_ = (probe != nullptr);
+        if (probe) {
+            SDL_DestroyTexture(probe);
+        }
+    }
+
+    ~ScopedRenderer() {
+        if (renderer_) {
+            SDL_DestroyRenderer(renderer_);
+            renderer_ = nullptr;
+        }
+        if (window_) {
+            SDL_DestroyWindow(window_);
+            window_ = nullptr;
+        }
+    }
+
+    SDL_Renderer* get() const { return renderer_; }
+    bool ready() const { return renderer_ != nullptr && target_texture_supported_; }
+
+private:
+    ScopedSdlVideo video_{};
+    SDL_Window* window_ = nullptr;
+    SDL_Renderer* renderer_ = nullptr;
+    bool target_texture_supported_ = false;
+};
+
+SDL_Texture* create_solid_texture(SDL_Renderer* renderer,
+                                  int width,
+                                  int height,
+                                  SDL_Color color) {
+    if (!renderer || width <= 0 || height <= 0) {
+        return nullptr;
+    }
+    SDL_Texture* texture = SDL_CreateTexture(renderer,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_TARGET,
+                                             width,
+                                             height);
+    if (!texture) {
+        return nullptr;
+    }
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, texture)) {
+        SDL_DestroyTexture(texture);
+        return nullptr;
+    }
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderTarget(renderer, previous_target);
+    return texture;
+}
+
+bool read_texture_pixel(SDL_Renderer* renderer,
+                        SDL_Texture* texture,
+                        int x,
+                        int y,
+                        SDL_Color& out_color) {
+    out_color = SDL_Color{0, 0, 0, 0};
+    if (!renderer || !texture || x < 0 || y < 0) {
+        return false;
+    }
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, texture)) {
+        return false;
+    }
+
+    SDL_Rect pixel_rect{x, y, 1, 1};
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &pixel_rect);
+    SDL_SetRenderTarget(renderer, previous_target);
+    if (!captured || !captured->pixels) {
+        if (captured) {
+            SDL_DestroySurface(captured);
+        }
+        return false;
+    }
+
+    const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(captured->format);
+    if (!format) {
+        SDL_DestroySurface(captured);
+        return false;
+    }
+
+    const Uint32 pixel = *static_cast<const Uint32*>(captured->pixels);
+    SDL_GetRGBA(pixel,
+                format,
+                SDL_GetSurfacePalette(captured),
+                &out_color.r,
+                &out_color.g,
+                &out_color.b,
+                &out_color.a);
+    SDL_DestroySurface(captured);
+    return true;
+}
 
 Asset make_test_asset(int world_x, int world_y) {
     auto info = std::make_shared<AssetInfo>("depth_cue_merge_refresh_asset");
@@ -123,4 +260,85 @@ TEST_CASE("depth cue merge signature transitions trigger rebuild at expected thr
     CHECK(background_signature.overlay_active);
     CHECK(background_signature.overlay_layer == 2);
     CHECK(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, background_signature));
+}
+
+TEST_CASE("depth cue compose draws foreground overlays in front of base") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    SDL_Texture* base_texture = create_solid_texture(renderer, 4, 4, SDL_Color{255, 0, 0, 255});
+    SDL_Texture* overlay_texture = create_solid_texture(renderer, 8, 8, SDL_Color{0, 0, 255, 255});
+    REQUIRE(base_texture != nullptr);
+    REQUIRE(overlay_texture != nullptr);
+
+    CompositeAssetRenderer composite_renderer(renderer, nullptr);
+    SDL_Point merged_size{0, 0};
+    SDL_Texture* merged = composite_renderer.test_compose_depth_cue_merged_texture(base_texture,
+                                                                                   nullptr,
+                                                                                   4,
+                                                                                   4,
+                                                                                   overlay_texture,
+                                                                                   255,
+                                                                                   255,
+                                                                                   1,
+                                                                                   &merged_size);
+    REQUIRE(merged != nullptr);
+    CHECK(merged_size.x == 8);
+    CHECK(merged_size.y == 8);
+
+    SDL_Color center_color{};
+    REQUIRE(read_texture_pixel(renderer, merged, 3, 3, center_color));
+    CHECK(center_color.b > 200);
+    CHECK(center_color.r < 40);
+    CHECK(center_color.a > 200);
+
+    SDL_DestroyTexture(merged);
+    SDL_DestroyTexture(base_texture);
+    SDL_DestroyTexture(overlay_texture);
+}
+
+TEST_CASE("depth cue compose keeps base dominant for background overlays while preserving halo") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    SDL_Texture* base_texture = create_solid_texture(renderer, 4, 4, SDL_Color{255, 0, 0, 255});
+    SDL_Texture* overlay_texture = create_solid_texture(renderer, 8, 8, SDL_Color{0, 0, 255, 255});
+    REQUIRE(base_texture != nullptr);
+    REQUIRE(overlay_texture != nullptr);
+
+    CompositeAssetRenderer composite_renderer(renderer, nullptr);
+    SDL_Point merged_size{0, 0};
+    SDL_Texture* merged = composite_renderer.test_compose_depth_cue_merged_texture(base_texture,
+                                                                                   nullptr,
+                                                                                   4,
+                                                                                   4,
+                                                                                   overlay_texture,
+                                                                                   255,
+                                                                                   255,
+                                                                                   2,
+                                                                                   &merged_size);
+    REQUIRE(merged != nullptr);
+    CHECK(merged_size.x == 8);
+    CHECK(merged_size.y == 8);
+
+    SDL_Color center_color{};
+    REQUIRE(read_texture_pixel(renderer, merged, 3, 3, center_color));
+    CHECK(center_color.r > 200);
+    CHECK(center_color.b < 40);
+    CHECK(center_color.a > 200);
+
+    SDL_Color halo_color{};
+    REQUIRE(read_texture_pixel(renderer, merged, 0, 0, halo_color));
+    CHECK(halo_color.b > 200);
+    CHECK(halo_color.a > 200);
+
+    SDL_DestroyTexture(merged);
+    SDL_DestroyTexture(base_texture);
+    SDL_DestroyTexture(overlay_texture);
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <SDL3/SDL.h>
 #include <vector>
 
@@ -8,7 +9,10 @@ class Asset;
 class Assets;
 struct RenderObject;
 struct DepthCueMergeSignature;
-namespace depth_cue { struct DepthCueSettings; }
+namespace depth_cue {
+struct DepthCueSettings;
+enum class OverlayLayer;
+}
 
 class CompositeAssetRenderer {
 public:
@@ -29,6 +33,16 @@ public:
     bool test_should_mark_composite_dirty_for_depth_cue_merge(
         const Asset* asset,
         const DepthCueMergeSignature& desired_signature) const;
+    SDL_Texture* test_compose_depth_cue_merged_texture(
+        SDL_Texture* base_texture,
+        const SDL_Rect* base_src_rect,
+        int base_frame_w,
+        int base_frame_h,
+        SDL_Texture* overlay_texture,
+        Uint8 overlay_alpha,
+        Uint8 base_alpha,
+        std::uint8_t overlay_layer,
+        SDL_Point* out_size) const;
 #endif
 
 private:
@@ -53,6 +67,7 @@ private:
         SDL_Texture* overlay_texture,
         Uint8 overlay_alpha,
         Uint8 base_alpha,
+        depth_cue::OverlayLayer overlay_layer,
         SDL_Point* out_size) const;
     void calculate_local_bounds(Asset* asset);
 

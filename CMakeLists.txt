@@ -291,6 +291,7 @@ add_executable(engine_tests
     ENGINE/tests/test_asset_perspective_sample.cpp
     ENGINE/tests/test_animation_runtime_ownership.cpp
     ENGINE/tests/test_animation_cloner_on_end.cpp
+    ENGINE/tests/test_auto_move_zero_stride_recovery.cpp
     ENGINE/tests/test_scaling_logic_variants.cpp
     ENGINE/tests/test_movement_pathing_axis.cpp
     ENGINE/tests/test_dev_mode_animation_policy.cpp

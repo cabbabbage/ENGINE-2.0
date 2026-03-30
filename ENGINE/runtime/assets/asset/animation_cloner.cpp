@@ -154,19 +154,36 @@ bool AnimationCloner::Clone(const Animation& source,
 
         for (std::size_t v = 0; v < variant_count; ++v) {
             SDL_Texture* src_tex = (v < src_cache.textures.size()) ? src_cache.textures[v] : nullptr;
-            int tex_w = (v < src_cache.widths.size()) ? src_cache.widths[v] : 0;
-            int tex_h = (v < src_cache.heights.size()) ? src_cache.heights[v] : 0;
-            dst_cache.textures[v] = clone_texture(src_tex, tex_w, tex_h, flip_flags, renderer, info, &tex_w, &tex_h);
-            dst_cache.widths[v]   = tex_w;
-            dst_cache.heights[v]  = tex_h;
+            int base_tex_w = (v < src_cache.widths.size()) ? src_cache.widths[v] : 0;
+            int base_tex_h = (v < src_cache.heights.size()) ? src_cache.heights[v] : 0;
+            dst_cache.textures[v] = clone_texture(src_tex,
+                                                  base_tex_w,
+                                                  base_tex_h,
+                                                  flip_flags,
+                                                  renderer,
+                                                  info,
+                                                  &base_tex_w,
+                                                  &base_tex_h);
+            dst_cache.widths[v]   = base_tex_w;
+            dst_cache.heights[v]  = base_tex_h;
 
             SDL_Texture* src_fg = (v < src_cache.foreground_textures.size()) ? src_cache.foreground_textures[v] : nullptr;
             if (src_fg) {
-                dst_cache.foreground_textures[v] = clone_texture(src_fg, tex_w, tex_h, flip_flags, renderer, info);
+                dst_cache.foreground_textures[v] = clone_texture(src_fg,
+                                                                 0,
+                                                                 0,
+                                                                 flip_flags,
+                                                                 renderer,
+                                                                 info);
             }
             SDL_Texture* src_bg = (v < src_cache.background_textures.size()) ? src_cache.background_textures[v] : nullptr;
             if (src_bg) {
-                dst_cache.background_textures[v] = clone_texture(src_bg, tex_w, tex_h, flip_flags, renderer, info);
+                dst_cache.background_textures[v] = clone_texture(src_bg,
+                                                                 0,
+                                                                 0,
+                                                                 flip_flags,
+                                                                 renderer,
+                                                                 info);
             }
         }
 

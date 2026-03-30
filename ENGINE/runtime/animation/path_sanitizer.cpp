@@ -58,8 +58,8 @@ static SDL_Point nudge_outside(SDL_Point pt, const Area& area) {
 }
 
 static SDL_Point walk_back_to_perimeter(SDL_Point start,
-                                 SDL_Point target,
-                                 const std::vector<CollisionAreaRef>& areas) {
+                                  SDL_Point target,
+                                  const std::vector<CollisionAreaRef>& areas) {
     const int steps = std::max(std::abs(target.x - start.x), std::abs(target.y - start.y));
     if (steps == 0) {
         return target;
@@ -91,6 +91,10 @@ static SDL_Point walk_back_to_perimeter(SDL_Point start,
     }
 
     return best;
+}
+
+bool checkpoint_collapses_to_anchor(SDL_Point anchor, SDL_Point candidate) {
+    return anchor.x == candidate.x && anchor.y == candidate.y;
 }
 
 std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
@@ -126,6 +130,10 @@ std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
             candidate = walk_back_to_perimeter(anchor, candidate, collision_areas);
         }
 
+        if (checkpoint_collapses_to_anchor(anchor, candidate)) {
+            continue;
+        }
+
         const SDL_Point anchor_bottom    = animation_update::detail::bottom_middle_for(self, anchor);
         const SDL_Point candidate_bottom = animation_update::detail::bottom_middle_for(self, candidate);
         if (!animation_update::detail::bottom_point_inside_playable_area(assets, candidate_bottom)) {
@@ -144,3 +152,13 @@ std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
 
     return sanitized;
 }
+
+#if defined(ENGINE_WORLD_TESTS)
+namespace path_sanitizer::test_hooks {
+
+bool checkpoint_collapses_to_anchor(SDL_Point anchor, SDL_Point candidate) {
+    return ::checkpoint_collapses_to_anchor(anchor, candidate);
+}
+
+} // namespace path_sanitizer::test_hooks
+#endif

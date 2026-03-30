@@ -235,6 +235,7 @@ std::optional<Attack> AttackValidation::compute_attack_if_hit(const Asset& attac
             attack.attacker_asset_name = stable_asset_name(attacker);
             attack.target_asset_id = stable_asset_id(target);
             attack.target_asset_name = stable_asset_name(target);
+            attack.attack_type = attack_volume.type.empty() ? std::string{"attack_box"} : attack_volume.type;
             attack.damage_amount = attack_volume.damage_amount;
             attack.hit_x = (attack_volume.centroid.x + hit_volume.centroid.x) * 0.5f;
             attack.hit_y = (attack_volume.centroid.y + hit_volume.centroid.y) * 0.5f;

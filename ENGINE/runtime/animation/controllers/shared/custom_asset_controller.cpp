@@ -11,8 +11,12 @@
 #include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
+
+namespace animation_update::custom_controllers {}
+namespace custom_controllers = animation_update::custom_controllers;
 
 namespace {
 
@@ -168,34 +172,22 @@ std::string CustomAssetController::owner_identity_for_anchor_candidates() const 
 
 void CustomAssetController::on_update(const Input&) {
     Asset* self = self_ptr();
-    if (!self || !self->info || !self->anim_) {
-        return;
-    }
-    if (!self->default_controller_animation_enforced()) {
-        return;
-    }
+    if (self && self->info && self->anim_ && self->default_controller_animation_enforced()) {
+        const std::string default_anim{ animation_update::detail::kDefaultAnimation };
 
-    const std::string default_anim{ animation_update::detail::kDefaultAnimation };
-
-    auto it = self->info->animations.find(default_anim);
-    if (it == self->info->animations.end() || !it->second.has_frames()) {
-        return;
+        auto it = self->info->animations.find(default_anim);
+        if (it != self->info->animations.end() && it->second.has_frames()) {
+            if (self->current_animation != default_anim || self->current_frame == nullptr) {
+                self->anim_->move(SDL_Point{ 0, 0 }, default_anim);
+            }
+        }
     }
 
-    if (self->current_animation != default_anim || self->current_frame == nullptr) {
-        self->anim_->move(SDL_Point{ 0, 0 }, default_anim);
+    if (self && !self->current_attack_box_volumes().empty()) {
+        custom_controllers::AttackDetectionHelper::send_attacks_to_active_targets(self, assets());
     }
 }
 
-void CustomAssetController::on_process_pending_attacks(Asset&) {
-    Asset* self = self_ptr();
-    if (!self || !self->info || !self->anim_) {
-        return;
-    }
-    if (self->current_animation == "damaged" && self->info->animations.count("destroyed")) {
-        self->anim_->set_animation("destroy");
-    }
-    if (self->info->animations.count("damaged")) {
-        self->anim_->set_animation("damaged");
-    }
+void CustomAssetController::on_process_pending_attacks(Asset& self) {
+    custom_controllers::AttackDetectionHelper::process_pending_attacks_default(&self);
 }

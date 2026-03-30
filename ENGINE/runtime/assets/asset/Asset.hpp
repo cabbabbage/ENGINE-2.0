@@ -329,6 +329,7 @@ class Asset {
 
     int depth = 0;
     bool dead = false;
+    int runtime_health = 0;
     bool static_frame = true;
     bool needs_target = false;
     bool target_reached = false;

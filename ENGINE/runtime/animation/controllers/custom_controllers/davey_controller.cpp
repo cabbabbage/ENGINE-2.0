@@ -32,5 +32,5 @@ void davey_controller::on_update(const Input&) {
 }
 
 void davey_controller::on_process_pending_attacks(Asset& self) {
-    (void)self.process_pending_attacks();
+    CustomAssetController::on_process_pending_attacks(self);
 }

@@ -270,5 +270,5 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
         }
     }
 
-    self.process_pending_attacks();
+    CustomAssetController::on_process_pending_attacks(self);
 }

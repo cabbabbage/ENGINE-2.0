@@ -276,6 +276,7 @@ add_executable(engine_tests
     ENGINE/tests/test_animation_document_geometry.cpp
     ENGINE/tests/test_animation_source_navigation.cpp
     ENGINE/tests/test_combat_box_geometry.cpp
+    ENGINE/tests/test_combat_attack_pipeline.cpp
     ENGINE/tests/test_map_data.cpp
     ENGINE/tests/test_map_manifest_normalizer.cpp
     ENGINE/tests/test_movement_payload_geometry.cpp

@@ -10,6 +10,7 @@ struct Attack {
     std::string attacker_asset_name;
     std::string target_asset_id;
     std::string target_asset_name;
+    std::string attack_type;
 
     int damage_amount = 0;
 

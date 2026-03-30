@@ -153,6 +153,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , grid_point_(&provisional_grid_point_)
 , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_))
 , depth(depth_)
+, runtime_health(info ? info->starting_health : 0)
 , spawn_id(spawn_id_)
 , spawn_method(spawn_method_)
 , owning_room_name_(spawn_area.get_name())
@@ -268,6 +269,7 @@ Asset::Asset(const Asset& o)
     , render_depth_bias_(o.render_depth_bias_)
     , depth(o.depth)
     , dead(o.dead)
+    , runtime_health(o.runtime_health)
     , static_frame(o.static_frame)
     , needs_target(o.needs_target)
     , cached_w(o.cached_w)
@@ -349,6 +351,7 @@ Asset& Asset::operator=(const Asset& o) {
         render_depth_bias_   = o.render_depth_bias_;
 	depth                = o.depth;
 	dead                 = o.dead;
+	runtime_health       = o.runtime_health;
 	static_frame         = o.static_frame;
         needs_target        = o.needs_target;
 	cached_w             = o.cached_w;

@@ -25,6 +25,8 @@ struct AnchorSpec {
     bool flip_horizontal = false;
     bool flip_vertical = false;
     float rotation_degrees = 0.0f;
+    bool hidden = false;
+    bool resolve_x = true;
 };
 
 Assets* create_assets_stub();

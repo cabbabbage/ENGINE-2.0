@@ -236,6 +236,8 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
     anchor.flip_horizontal = spec->flip_horizontal;
     anchor.flip_vertical = spec->flip_vertical;
     anchor.rotation_degrees = spec->rotation_degrees;
+    anchor.hidden = spec->hidden;
+    anchor.resolve_x = spec->resolve_x;
     return anchor;
 }
 

@@ -8717,112 +8717,493 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
     return changed;
 }
 
+std::vector<std::string> RoomEditor::eligible_anchor_animation_names(const AssetInfo& info) const {
+    std::vector<std::string> names;
+    names.reserve(info.animations.size());
+    for (const auto& [animation_id, animation] : info.animations) {
+        if (anchor_animation_is_eligible_for_edit(animation)) {
+            names.push_back(animation_id);
+        }
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* target,
+                                                                      const std::shared_ptr<AssetInfo>& target_info,
+                                                                      bool& updated_any) {
+    updated_any = false;
+    if (!target || !target_info) {
+        return false;
+    }
+
+    const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
+    if (eligible_ids.empty()) {
+        return true;
+    }
+
+    std::set<std::string> canonical_names;
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        const std::size_t frame_count = anim_it->second.frame_count();
+        bool payload_changed = false;
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
+            }
+            std::unordered_set<std::string> seen_names;
+            std::vector<DisplacedAssetAnchorPoint> deduped;
+            deduped.reserve(frame->anchor_points.size());
+            bool frame_changed = false;
+            for (const auto& anchor : frame->anchor_points) {
+                if (!anchor.is_valid()) {
+                    frame_changed = true;
+                    continue;
+                }
+                if (!seen_names.insert(anchor.name).second) {
+                    frame_changed = true;
+                    continue;
+                }
+                canonical_names.insert(anchor.name);
+                deduped.push_back(anchor);
+            }
+            if (!frame_changed) {
+                continue;
+            }
+            frame->set_anchor_points(std::move(deduped));
+            if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                          frame_count,
+                                                                          frame_index,
+                                                                          frame->anchor_points)) {
+                return false;
+            }
+            payload_changed = true;
+            updated_any = true;
+        }
+        if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
+
+    if (canonical_names.empty()) {
+        return true;
+    }
+
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        const std::size_t frame_count = anim_it->second.frame_count();
+        bool payload_changed = false;
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
+            }
+            std::unordered_set<std::string> present_names;
+            for (const auto& anchor : frame->anchor_points) {
+                if (anchor.is_valid()) {
+                    present_names.insert(anchor.name);
+                }
+            }
+            std::vector<DisplacedAssetAnchorPoint> updated = frame->anchor_points;
+            bool frame_changed = false;
+            for (const std::string& name : canonical_names) {
+                if (present_names.find(name) != present_names.end()) {
+                    continue;
+                }
+                const SDL_Point dims = resolve_anchor_editor_frame_dimensions(target, frame);
+                updated.push_back(devmode::room_anchor_mode::make_default_anchor_for_frame(name, dims.x, dims.y));
+                frame_changed = true;
+                present_names.insert(name);
+            }
+            if (!frame_changed) {
+                continue;
+            }
+            frame->set_anchor_points(std::move(updated));
+            if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                          frame_count,
+                                                                          frame_index,
+                                                                          frame->anchor_points)) {
+                return false;
+            }
+            payload_changed = true;
+            updated_any = true;
+        }
+        if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool RoomEditor::commit_anchor_bulk_edit(Asset* target,
+                                         const std::shared_ptr<AssetInfo>& target_info,
+                                         devmode::core::DevSaveCoordinator::Priority priority,
+                                         bool flush_now,
+                                         const char* reason,
+                                         const char* flush_tag) {
+    if (!target || !target_info) {
+        return false;
+    }
+
+    target->refresh_frame_texture_bindings();
+    refresh_anchor_mode_handles();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    target_info->mark_dirty();
+    nlohmann::json manifest_payload = target_info->manifest_payload();
+    if (save_coordinator_ && manifest_store_) {
+        save_coordinator_->enqueue_manifest_asset(
+            target_info->name,
+            std::move(manifest_payload),
+            priority,
+            reason ? reason : "Anchor Edit",
+            [assets = assets_, target_info]() {
+                devmode::refresh_loaded_animation_instances(assets, target_info);
+            });
+        if (flush_now) {
+            save_coordinator_->flush_now(flush_tag ? flush_tag : "room-anchor-bulk");
+            anchor_edit_.dirty_since_last_flush = false;
+        } else {
+            anchor_edit_.dirty_since_last_flush = true;
+        }
+        return true;
+    }
+
+    if (manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = std::move(manifest_payload);
+        if (!session.commit()) {
+            return false;
+        }
+        devmode::refresh_loaded_animation_instances(assets_, target_info);
+        anchor_edit_.dirty_since_last_flush = false;
+        return true;
+    }
+
+    return false;
+}
+
 bool RoomEditor::add_anchor_in_current_frame() {
     if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
     }
 
-    auto anim_it = anchor_edit_.target_asset->info->animations.find(anchor_edit_.animation_id);
-    if (anim_it == anchor_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
+    Asset* target = anchor_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    bool normalized_any = false;
+    if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
         return false;
     }
-    const int frame_index =
-        devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(anim_it->second.frame_count()));
-    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
-    const SDL_Point dims = resolve_anchor_editor_frame_dimensions(anchor_edit_.target_asset, frame);
 
-    std::string new_anchor_name;
-    const bool changed = mutate_anchor_current_frame(
-        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
-            std::vector<std::string> names;
-            names.reserve(anchors.size());
-            for (const auto& anchor : anchors) {
+    const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
+    if (eligible_ids.empty()) {
+        return false;
+    }
+
+    std::vector<std::string> existing_names;
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        const std::size_t frame_count = anim_it->second.frame_count();
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            const AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
+            }
+            for (const auto& anchor : frame->anchor_points) {
                 if (anchor.is_valid()) {
-                    names.push_back(anchor.name);
+                    existing_names.push_back(anchor.name);
                 }
             }
-            new_anchor_name = devmode::room_anchor_mode::next_default_anchor_name(names);
-            anchors.push_back(devmode::room_anchor_mode::make_default_anchor_for_frame(new_anchor_name, dims.x, dims.y));
-            anchor_edit_.selected_anchor_name = new_anchor_name;
-            anchor_edit_.point_selected = true;
-            return true;
-        },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
-    if (changed && anchor_tools_panel_) {
+        }
+    }
+    const std::string new_anchor_name = devmode::room_anchor_mode::next_default_anchor_name(existing_names);
+    if (new_anchor_name.empty()) {
+        return false;
+    }
+
+    bool updated_any = normalized_any;
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        const std::size_t frame_count = anim_it->second.frame_count();
+        bool payload_changed = false;
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame || find_named_anchor(frame, new_anchor_name)) {
+                continue;
+            }
+            std::vector<DisplacedAssetAnchorPoint> updated = frame->anchor_points;
+            const SDL_Point dims = resolve_anchor_editor_frame_dimensions(target, frame);
+            updated.push_back(devmode::room_anchor_mode::make_default_anchor_for_frame(new_anchor_name, dims.x, dims.y));
+            frame->set_anchor_points(std::move(updated));
+            if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                          frame_count,
+                                                                          frame_index,
+                                                                          frame->anchor_points)) {
+                return false;
+            }
+            payload_changed = true;
+            updated_any = true;
+        }
+        if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
+
+    if (!updated_any) {
+        return false;
+    }
+
+    anchor_edit_.selected_anchor_name = new_anchor_name;
+    anchor_edit_.point_selected = true;
+    if (anchor_tools_panel_) {
         anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
     }
-    return changed;
+    if (!commit_anchor_bulk_edit(target,
+                                 target_info,
+                                 devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Anchor Global Add",
+                                 "room-anchor-global-add")) {
+        return false;
+    }
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, new_anchor_name);
+    return true;
 }
 
 bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desired_name) {
-    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
     }
 
-    const bool changed = mutate_anchor_current_frame(
-        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
-            auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
-                return anchor.name == anchor_edit_.selected_anchor_name;
-            });
-            if (it == anchors.end()) {
-                return false;
+    Asset* target = anchor_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    const std::string old_name = anchor_edit_.selected_anchor_name;
+    bool normalized_any = false;
+    if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
+        return false;
+    }
+
+    const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
+    if (eligible_ids.empty()) {
+        return false;
+    }
+
+    std::vector<std::string> existing_names;
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        const std::size_t frame_count = anim_it->second.frame_count();
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            const AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
             }
-            std::vector<std::string> names;
-            names.reserve(anchors.size());
-            for (const auto& anchor : anchors) {
+            for (const auto& anchor : frame->anchor_points) {
                 if (anchor.is_valid()) {
-                    names.push_back(anchor.name);
+                    existing_names.push_back(anchor.name);
                 }
             }
-            const std::string normalized = devmode::room_anchor_mode::make_unique_anchor_name(
-                desired_name,
-                names,
-                anchor_edit_.selected_anchor_name);
-            if (normalized.empty() || normalized == it->name) {
+        }
+    }
+
+    const std::string normalized_name = devmode::room_anchor_mode::make_unique_anchor_name(
+        desired_name,
+        existing_names,
+        old_name);
+
+    bool updated_any = normalized_any;
+    if (normalized_name != old_name) {
+        for (const std::string& animation_id : eligible_ids) {
+            auto anim_it = target_info->animations.find(animation_id);
+            if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+                continue;
+            }
+            nlohmann::json payload = target_info->animation_payload(animation_id);
+            const std::size_t frame_count = anim_it->second.frame_count();
+            bool payload_changed = false;
+            for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+                AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+                if (!frame) {
+                    continue;
+                }
+                std::unordered_set<std::string> seen;
+                std::vector<DisplacedAssetAnchorPoint> rebuilt;
+                rebuilt.reserve(frame->anchor_points.size());
+                bool frame_changed = false;
+                for (const auto& anchor : frame->anchor_points) {
+                    if (!anchor.is_valid()) {
+                        frame_changed = true;
+                        continue;
+                    }
+                    DisplacedAssetAnchorPoint updated_anchor = anchor;
+                    if (updated_anchor.name == old_name) {
+                        updated_anchor.name = normalized_name;
+                        frame_changed = true;
+                    }
+                    if (!seen.insert(updated_anchor.name).second) {
+                        frame_changed = true;
+                        continue;
+                    }
+                    rebuilt.push_back(std::move(updated_anchor));
+                }
+                if (!frame_changed) {
+                    continue;
+                }
+                frame->set_anchor_points(std::move(rebuilt));
+                if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                              frame_count,
+                                                                              frame_index,
+                                                                              frame->anchor_points)) {
+                    return false;
+                }
+                payload_changed = true;
+                updated_any = true;
+            }
+            if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
                 return false;
             }
-            it->name = normalized;
-            anchor_edit_.selected_anchor_name = normalized;
-            anchor_edit_.point_selected = true;
-            return true;
-        },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
-    if (changed && anchor_tools_panel_) {
+        }
+    }
+
+    if (!updated_any) {
+        return false;
+    }
+
+    anchor_edit_.selected_anchor_name = normalized_name;
+    anchor_edit_.point_selected = !anchor_edit_.selected_anchor_name.empty();
+    if (anchor_tools_panel_) {
         anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
     }
-    return changed;
+    if (!commit_anchor_bulk_edit(target,
+                                 target_info,
+                                 devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Anchor Global Rename",
+                                 "room-anchor-global-rename")) {
+        return false;
+    }
+    if (normalized_name != old_name) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, old_name);
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, normalized_name);
+    }
+    return true;
 }
 
 bool RoomEditor::delete_selected_anchor_in_current_frame() {
-    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
     }
-    return mutate_anchor_current_frame(
-        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
-            const auto before = anchors.size();
-            anchors.erase(std::remove_if(anchors.begin(),
-                                         anchors.end(),
-                                         [&](const DisplacedAssetAnchorPoint& anchor) {
-                                             return anchor.name == anchor_edit_.selected_anchor_name;
-                                         }),
-                          anchors.end());
-            if (anchors.size() == before) {
+
+    Asset* target = anchor_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    const std::string deleted_name = anchor_edit_.selected_anchor_name;
+    bool normalized_any = false;
+    if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
+        return false;
+    }
+    const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
+    if (eligible_ids.empty()) {
+        return false;
+    }
+
+    bool updated_any = normalized_any;
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        const std::size_t frame_count = anim_it->second.frame_count();
+        bool payload_changed = false;
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
+            }
+            std::vector<DisplacedAssetAnchorPoint> updated = frame->anchor_points;
+            const auto erase_it = std::remove_if(updated.begin(),
+                                                 updated.end(),
+                                                 [&](const DisplacedAssetAnchorPoint& anchor) {
+                                                     return anchor.name == deleted_name;
+                                                 });
+            if (erase_it == updated.end()) {
+                continue;
+            }
+            updated.erase(erase_it, updated.end());
+            frame->set_anchor_points(std::move(updated));
+            if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                          frame_count,
+                                                                          frame_index,
+                                                                          frame->anchor_points)) {
                 return false;
             }
-            if (anchors.empty()) {
-                anchor_edit_.selected_anchor_name.clear();
-                anchor_edit_.point_selected = false;
-            } else {
-                anchor_edit_.selected_anchor_name = anchors.front().name;
-                anchor_edit_.point_selected = true;
-            }
-            return true;
-        },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
+            payload_changed = true;
+            updated_any = true;
+        }
+        if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
+
+    if (!updated_any) {
+        return false;
+    }
+
+    std::string next_anchor_name;
+    auto current_anim_it = target_info->animations.find(anchor_edit_.animation_id);
+    if (current_anim_it != target_info->animations.end() && current_anim_it->second.has_frames()) {
+        const int frame_index = devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index,
+                                                                       static_cast<int>(current_anim_it->second.frame_count()));
+        AnimationFrame* frame = current_anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
+        std::vector<std::string> names = anchor_names_for_frame(frame);
+        if (!names.empty()) {
+            next_anchor_name = names.front();
+        }
+    }
+    anchor_edit_.selected_anchor_name = next_anchor_name;
+    anchor_edit_.point_selected = !anchor_edit_.selected_anchor_name.empty();
+    if (anchor_tools_panel_) {
+        anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
+    }
+    if (!commit_anchor_bulk_edit(target,
+                                 target_info,
+                                 devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Anchor Global Delete",
+                                 "room-anchor-global-delete")) {
+        return false;
+    }
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, deleted_name);
+    return true;
 }
 
 bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope scope) {
-    if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+    if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info ||
+        anchor_edit_.selected_anchor_name.empty()) {
         return false;
     }
 
@@ -8833,6 +9214,11 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
         return false;
     }
 
+    bool normalized_any = false;
+    if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
+        return false;
+    }
+
     const std::size_t source_frame_count = current_anim_it->second.frame_count();
     const std::size_t source_frame_index = static_cast<std::size_t>(
         devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index, static_cast<int>(source_frame_count)));
@@ -8840,19 +9226,27 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
     if (!source_frame) {
         return false;
     }
+    const DisplacedAssetAnchorPoint* source_anchor = find_named_anchor(source_frame, anchor_edit_.selected_anchor_name);
+    if (!source_anchor) {
+        return normalized_any &&
+               commit_anchor_bulk_edit(target,
+                                       target_info,
+                                       devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                       true,
+                                       "Anchor Bulk Apply",
+                                       "room-anchor-bulk-apply");
+    }
 
-    // Copy the full anchor payload (position, depth, flip parity, and rotation) during propagation.
-    const std::vector<DisplacedAssetAnchorPoint> source_anchors = source_frame->anchor_points;
     std::unordered_map<std::string, std::vector<std::size_t>> apply_indices;
     if (scope == EditorFramePropagationScope::Asset) {
-        for (const auto& pair : target_info->animations) {
-            const auto& frames = pair.second.primary_frames();
-            if (frames.empty()) {
+        for (const std::string& animation_id : eligible_anchor_animation_names(*target_info)) {
+            auto anim_it = target_info->animations.find(animation_id);
+            if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
                 continue;
             }
-            std::vector<std::size_t>& indices = apply_indices[pair.first];
-            indices.reserve(frames.size());
-            for (std::size_t i = 0; i < frames.size(); ++i) {
+            std::vector<std::size_t>& indices = apply_indices[animation_id];
+            indices.reserve(anim_it->second.frame_count());
+            for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
                 indices.push_back(i);
             }
         }
@@ -8868,12 +9262,9 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
             devmode::room_anchor_mode::wrap_index(static_cast<int>(source_frame_index) + 1,
                                                   static_cast<int>(source_frame_count)));
         indices.push_back(next_frame);
-        if (next_frame != source_frame_index) {
-            indices.push_back(source_frame_index);
-        }
     }
 
-    bool updated_any = false;
+    bool updated_any = normalized_any;
     for (auto& pair : apply_indices) {
         auto anim_it = target_info->animations.find(pair.first);
         if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
@@ -8895,13 +9286,21 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
             if (!frame) {
                 continue;
             }
-            frame->set_anchor_points(source_anchors);
-            if (devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+            DisplacedAssetAnchorPoint* target_anchor = find_named_anchor_mutable(frame, anchor_edit_.selected_anchor_name);
+            if (!target_anchor) {
+                continue;
+            }
+            if (!copy_anchor_authoring_fields(*target_anchor, *source_anchor)) {
+                continue;
+            }
+            frame->rebuild_anchor_lookup();
+            if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
                                                                           frame_count,
                                                                           frame_index,
-                                                                          source_anchors)) {
-                payload_changed = true;
+                                                                          frame->anchor_points)) {
+                return false;
             }
+            payload_changed = true;
             updated_any = true;
         }
         if (payload_changed) {
@@ -8914,44 +9313,18 @@ bool RoomEditor::apply_anchor_current_frame_to_scope(EditorFramePropagationScope
     if (!updated_any) {
         return false;
     }
-
-    target->refresh_frame_texture_bindings();
-    refresh_anchor_mode_handles();
-    if (assets_) {
-        assets_->mark_active_assets_dirty();
+    if (!commit_anchor_bulk_edit(target,
+                                 target_info,
+                                 devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                 true,
+                                 "Anchor Bulk Apply",
+                                 "room-anchor-bulk-apply")) {
+        return false;
     }
-
-    target_info->mark_dirty();
-    nlohmann::json manifest_payload = target_info->manifest_payload();
-    if (save_coordinator_ && manifest_store_) {
-        save_coordinator_->enqueue_manifest_asset(
-            target_info->name,
-            std::move(manifest_payload),
-            devmode::core::DevSaveCoordinator::Priority::Immediate,
-            "Anchor Bulk Apply",
-            [assets = assets_, target_info]() {
-                devmode::refresh_loaded_animation_instances(assets, target_info);
-            });
-        save_coordinator_->flush_now("room-anchor-bulk-apply");
-        anchor_edit_.dirty_since_last_flush = false;
-        return true;
-    }
-
-    if (manifest_store_) {
-        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
-        if (!session) {
-            return false;
-        }
-        session.data() = std::move(manifest_payload);
-        if (!session.commit()) {
-            return false;
-        }
-        devmode::refresh_loaded_animation_instances(assets_, target_info);
-        anchor_edit_.dirty_since_last_flush = false;
-        return true;
-    }
-
-    return false;
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+        target,
+        anchor_edit_.selected_anchor_name);
+    return true;
 }
 
 bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {

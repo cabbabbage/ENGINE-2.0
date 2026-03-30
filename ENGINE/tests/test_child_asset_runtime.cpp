@@ -440,6 +440,19 @@ TEST_CASE("ChildAsset bind and update follow the owner anchor and recover from m
     CHECK(spawned->grid_resolution == 4);
     CHECK(spawned->render_depth_bias() == doctest::Approx(-0.5));
 
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{
+        "eyes", 10, 20, 7, 0, 4, 0.5f, true, {}, {}, {}, false, false, 0.0f, true, true
+    });
+    child->update();
+    CHECK(child->is_hidden());
+    CHECK(spawned->is_anchor_hidden());
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{
+        "eyes", 10, 20, 7, 0, 4, 0.5f, true, {}, {}, {}, false, false, 0.0f, false, true
+    });
+    child->update();
+    CHECK_FALSE(child->is_hidden());
+
     test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 10, 20, 7, 0, 4, 0.5f, false});
     child->update();
     CHECK(child->is_hidden());

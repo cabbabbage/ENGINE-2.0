@@ -270,6 +270,7 @@ list(APPEND ENGINE_TEST_RUNTIME_SRC
 add_executable(engine_tests
     ${ENGINE_TEST_RUNTIME_SRC}
     ENGINE/tests/engine_tests_main.cpp
+    ENGINE/tests/stubs/asset/child_asset_runtime_test_support.cpp
     ENGINE/tests/test_render_object_projection.cpp
     ENGINE/tests/test_anchor_binding_order.cpp
     ENGINE/tests/test_anchor_point_resolver.cpp
@@ -326,6 +327,7 @@ target_compile_definitions(engine_tests PRIVATE
     PROJECT_ROOT="${TEST_ROOT}"
     FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
     FRAME_EDITOR_ACCESS=public
+    ENGINE_WORLD_TESTS=1
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
 )
 

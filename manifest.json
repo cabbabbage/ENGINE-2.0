@@ -130,8 +130,52 @@
               }
             ]
           ],
+          "box_schema_version": 1,
           "flip_vertical_source": false,
           "flipped_source": false,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 137,
+                    "texture_y": 29
+                  },
+                  {
+                    "texture_x": 309,
+                    "texture_y": 29
+                  },
+                  {
+                    "texture_x": 309,
+                    "texture_y": 227
+                  },
+                  {
+                    "texture_x": 137,
+                    "texture_y": 227
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 0,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 137,
+                  "y": 29
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 198,
+                  "w": 172
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "locked": false,
           "movement": [
             [
@@ -9461,6 +9505,9 @@
           }
         },
         "default": {
+          "anchor_points": [
+            []
+          ],
           "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
@@ -9844,7 +9891,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            120,
+            90,
             242,
             255
           ],
@@ -9868,9 +9915,9 @@
           "camera_zoom_percent": 85,
           "curvyness": 2,
           "display_color": [
-            36,
-            133,
             242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 85,
@@ -9929,16 +9976,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -64,
-              "dz": -264,
+              "dx": 792,
+              "dz": -32,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6976,
-              "origional_width": 7024,
+              "origional_height": 7008,
+              "origional_width": 6992,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -9989,16 +10036,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -180,
-              "dz": 1264,
+              "dx": 216,
+              "dz": 208,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6992,
-              "origional_width": 7032,
+              "origional_height": 7008,
+              "origional_width": 6992,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

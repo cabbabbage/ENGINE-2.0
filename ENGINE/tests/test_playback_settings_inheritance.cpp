@@ -21,7 +21,7 @@ TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-source
              {"derived",
               {{"source", {{"kind", "animation"}, {"path", ""}, {"name", "mid"}}},
                {"number_of_frames", 1},
-               {"inherit_source_geometry", true},
+               {"inherit_data", true},
                {"flipped_source", true},
                {"flip_vertical_source", true},
                {"reverse_source", false},
@@ -42,7 +42,7 @@ TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-source
     REQUIRE(payload->is_object());
 
     CHECK((*payload)["reverse_source"] == false);
-    CHECK((*payload)["inherit_source_geometry"] == true);
+    CHECK((*payload)["inherit_data"] == true);
     CHECK((*payload)["flipped_source"] == true);
     CHECK((*payload)["flip_vertical_source"] == true);
     REQUIRE(payload->contains("derived_modifiers"));
@@ -63,7 +63,7 @@ TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is togg
              {"derived",
               {{"source", {{"kind", "animation"}, {"path", ""}, {"name", "source_anim"}}},
                {"number_of_frames", 1},
-               {"inherit_source_geometry", false},
+               {"inherit_data", false},
                {"on_end", "loop"}}},
          }},
     };
@@ -99,7 +99,7 @@ TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is togg
     auto after_inherit_on = document->animation_payload_json("derived");
     REQUIRE(after_inherit_on.has_value());
     REQUIRE(after_inherit_on->is_object());
-    CHECK((*after_inherit_on)["inherit_source_geometry"] == true);
+    CHECK((*after_inherit_on)["inherit_data"] == true);
     CHECK((*after_inherit_on)["on_end"] == "reverse");
 
     panel.update();
@@ -109,6 +109,6 @@ TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is togg
     auto after_inherit_off = document->animation_payload_json("derived");
     REQUIRE(after_inherit_off.has_value());
     REQUIRE(after_inherit_off->is_object());
-    CHECK((*after_inherit_off)["inherit_source_geometry"] == false);
+    CHECK((*after_inherit_off)["inherit_data"] == false);
     CHECK((*after_inherit_off)["on_end"] == "default");
 }

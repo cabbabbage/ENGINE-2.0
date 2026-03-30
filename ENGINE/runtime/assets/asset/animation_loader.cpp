@@ -85,8 +85,8 @@ std::string source_animation_id(const Animation& animation) {
         return animation.source.path;
 }
 
-bool animation_inherits_geometry(const Animation& animation) {
-        return animation.inherit_source_geometry && !source_animation_id(animation).empty();
+bool animation_inherits_data(const Animation& animation) {
+        return animation.inherit_data && !source_animation_id(animation).empty();
 }
 
 void apply_movement_transforms(std::vector<std::vector<AnimationFrame>>& paths,
@@ -759,7 +759,7 @@ bool bind_frame_data(Animation&                                                 
 
 void resolve_inherited_frame_data(AssetInfo& info) {
         for (auto& [animation_id, animation] : info.animations) {
-                if (!animation_inherits_geometry(animation)) {
+                if (!animation_inherits_data(animation)) {
                         continue;
                 }
 
@@ -993,6 +993,8 @@ void AnimationLoader::load(Animation& animation,
         animation.flipped_source = read_bool_field_like(anim_json, "flipped_source", false);
         animation.flip_vertical_source = read_bool_field_like(anim_json, "flip_vertical_source", false);
         animation.reverse_source = read_bool_field_like(anim_json, "reverse_source", false);
+        animation.invert_frames_horizontal = read_bool_field_like(anim_json, "invert_frames_horizontal", false);
+        animation.invert_frames_vertical = read_bool_field_like(anim_json, "invert_frames_vertical", false);
         if (animation.source.kind == "animation" && anim_json.contains("derived_modifiers") &&
             anim_json["derived_modifiers"].is_object()) {
                 const auto& modifiers = anim_json["derived_modifiers"];
@@ -1034,12 +1036,16 @@ void AnimationLoader::load(Animation& animation,
             has_movement_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
         const bool legacy_inherit_source_movement =
             read_bool_field_like(anim_json, "inherit_source_movement", (animation.source.kind == "animation"));
-        const bool inherit_source_geometry = read_bool_field_like(
-            anim_json,
-            "inherit_source_geometry",
-            (animation.source.kind == "animation") && legacy_inherit_source_movement && !has_any_local_frame_data);
-        animation.inherit_source_geometry = (animation.source.kind == "animation") && inherit_source_geometry;
-        const bool allow_geometry_inversion = (animation.source.kind == "animation") && animation.inherit_source_geometry;
+        const bool default_inherit_data =
+            (animation.source.kind == "animation") && legacy_inherit_source_movement && !has_any_local_frame_data;
+        bool inherit_data = default_inherit_data;
+        if (anim_json.contains("inherit_data")) {
+                inherit_data = read_bool_field_like(anim_json, "inherit_data", default_inherit_data);
+        } else {
+                inherit_data = read_bool_field_like(anim_json, "inherit_source_geometry", default_inherit_data);
+        }
+        animation.inherit_data = (animation.source.kind == "animation") && inherit_data;
+        const bool allow_geometry_inversion = (animation.source.kind == "animation") && animation.inherit_data;
         if (!allow_geometry_inversion) {
                 animation.flipped_source = false;
                 animation.flip_vertical_source = false;
@@ -1189,10 +1195,10 @@ void AnimationLoader::load(Animation& animation,
                         const Animation& src_anim = it->second;
                         if (src_anim.has_frames()) {
                                 AnimationCloner::Options opts{};
-                                opts.flip_horizontal = animation.flipped_source;
-                                opts.flip_vertical   = animation.flip_vertical_source;
+                                opts.flip_horizontal = animation.invert_frames_horizontal;
+                                opts.flip_vertical   = animation.invert_frames_vertical;
                                 opts.reverse_frames  = animation.reverse_source;
-                                opts.inherit_on_end_from_source = animation.inherit_source_geometry;
+                                opts.inherit_on_end_from_source = animation.inherit_data;
 
                                 if (!AnimationCloner::Clone(src_anim, animation, opts, renderer, info)) {
                                         flush_diagnostics();
@@ -1228,10 +1234,10 @@ void AnimationLoader::load(Animation& animation,
                 auto src_it = info.animations.find(animation.source.name);
                 if (src_it != info.animations.end() && !src_it->second.frame_cache_.empty()) {
                         AnimationCloner::Options opts{};
-                        opts.flip_horizontal = animation.flipped_source;
-                        opts.flip_vertical   = animation.flip_vertical_source;
+                        opts.flip_horizontal = animation.invert_frames_horizontal;
+                        opts.flip_vertical   = animation.invert_frames_vertical;
                         opts.reverse_frames  = animation.reverse_source;
-                        opts.inherit_on_end_from_source = animation.inherit_source_geometry;
+                        opts.inherit_on_end_from_source = animation.inherit_data;
                         std::cout << "[AnimationLoader] " << info.name << "::" << trigger
                                   << " late-cloning from source animation '" << animation.source.name
                                   << "' (flipH=" << opts.flip_horizontal
@@ -1244,9 +1250,9 @@ void AnimationLoader::load(Animation& animation,
         }
 
         const bool derive_from_animation = !source_animation_id(animation).empty();
-        const bool use_inherited_geometry = animation_inherits_geometry(animation);
+        const bool use_inherited_data = animation_inherits_data(animation);
         bool       movement_from_source = false;
-        if (use_inherited_geometry) {
+        if (use_inherited_data) {
                 auto it = info.animations.find(source_animation_id(animation));
                 if (it != info.animations.end()) {
                         animation.movement_paths_ = it->second.movement_paths_;
@@ -1263,7 +1269,7 @@ void AnimationLoader::load(Animation& animation,
         if (!movement_from_source) {
                 animation.movement_paths_ = authored_movement_paths;
         }
-        if (use_inherited_geometry) {
+        if (use_inherited_data) {
                 apply_movement_transforms(animation.movement_paths_,
                                           animation.reverse_source,
                                           animation.flipped_source,
@@ -1318,7 +1324,7 @@ void AnimationLoader::load(Animation& animation,
                                                     0.0f,
                                                     false,
                                                     true);
-        } else if (source_animation_ptr && use_inherited_geometry) {
+        } else if (source_animation_ptr && use_inherited_data) {
                 anchor_frames = collect_anchor_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_anchor_transforms(anchor_frames,
                                         animation.frame_cache_,
@@ -1329,7 +1335,7 @@ void AnimationLoader::load(Animation& animation,
         std::vector<std::vector<animation_update::FrameHitBox>> hit_box_frames;
         if (has_hit_boxes_json) {
                 hit_box_frames = parse_hit_box_frames(hit_boxes_json, frame_count);
-        } else if (source_animation_ptr && use_inherited_geometry) {
+        } else if (source_animation_ptr && use_inherited_data) {
                 hit_box_frames = collect_hit_box_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_box_transforms(hit_box_frames,
                                      animation.frame_cache_,
@@ -1341,7 +1347,7 @@ void AnimationLoader::load(Animation& animation,
         std::vector<std::vector<animation_update::FrameAttackBox>> attack_box_frames;
         if (has_attack_boxes_json) {
                 attack_box_frames = parse_attack_box_frames(attack_boxes_json, frame_count);
-        } else if (source_animation_ptr && use_inherited_geometry) {
+        } else if (source_animation_ptr && use_inherited_data) {
                 attack_box_frames = collect_attack_box_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_box_transforms(attack_box_frames,
                                      animation.frame_cache_,

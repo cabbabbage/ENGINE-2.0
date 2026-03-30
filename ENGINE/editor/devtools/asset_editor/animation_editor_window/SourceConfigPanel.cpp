@@ -555,7 +555,13 @@ bool SourceConfigPanel::animation_is_frame_based(const std::string& id) const {
     if (to_lower_copy(config.kind) != std::string{"animation"}) {
         return true;
     }
-    return !payload->value("inherit_source_geometry", false);
+    bool inherits_data = false;
+    if (payload->contains("inherit_data")) {
+        inherits_data = payload->value("inherit_data", false);
+    } else {
+        inherits_data = payload->value("inherit_source_geometry", false);
+    }
+    return !inherits_data;
 }
 
 SourceConfigPanel::SourceConfig SourceConfigPanel::parse_source(const nlohmann::json& payload) const {

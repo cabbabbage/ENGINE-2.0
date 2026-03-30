@@ -1,11 +1,14 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 #include "rendering/render/composite_asset_renderer.hpp"
 #include "rendering/render/scaling_logic.hpp"
@@ -46,8 +49,34 @@ private:
         double depth = 0.0;
     };
 
+    struct RenderStateKey {
+        SDL_Texture* texture = nullptr;
+        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+        bool operator==(const RenderStateKey& rhs) const noexcept {
+            return texture == rhs.texture && blend_mode == rhs.blend_mode;
+        }
+    };
+
+    struct RenderStateKeyHash {
+        std::size_t operator()(const RenderStateKey& key) const noexcept {
+            const auto ptr_value = reinterpret_cast<std::uintptr_t>(key.texture);
+            return ptr_value ^ (static_cast<std::size_t>(key.blend_mode) + 0x9e3779b97f4a7c15ULL + (ptr_value << 6) + (ptr_value >> 2));
+        }
+    };
+
+    struct RenderStateGroup {
+        RenderStateKey key;
+        std::vector<DrawItem> items;
+    };
+
+    struct DepthBucket {
+        std::vector<RenderStateGroup> groups;
+        std::unordered_map<RenderStateKey, std::size_t, RenderStateKeyHash> group_index;
+    };
+
     SDL_Renderer* renderer_;
-    std::vector<DrawItem> draw_list_;
+    std::map<std::int64_t, DepthBucket> depth_buckets_;
+    DepthBucket invalid_depth_bucket_;
     size_t draw_call_count_ = 0;
     size_t total_vertices_ = 0;
     double last_flush_cpu_ms_ = 0.0;

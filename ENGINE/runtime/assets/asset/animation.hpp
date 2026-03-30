@@ -88,8 +88,10 @@ public:
     } source{};
     bool flipped_source = false;
     bool flip_vertical_source = false;
+    bool invert_frames_horizontal = false;
+    bool invert_frames_vertical = false;
     bool reverse_source = false;
-    bool inherit_source_geometry = false;
+    bool inherit_data = false;
     bool locked = false;
     int number_of_frames = 0;
     int total_dx = 0;

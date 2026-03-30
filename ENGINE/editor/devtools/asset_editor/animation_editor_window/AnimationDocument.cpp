@@ -96,16 +96,20 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         has_movement_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
     const bool legacy_inherit_source_movement =
         read_bool_field_like(payload, "inherit_source_movement", derived_from_animation);
-    bool inherit_source_geometry = read_bool_field_like(
-        payload,
-        "inherit_source_geometry",
+    const bool default_inherit_data =
         derived_from_animation &&
             legacy_inherit_source_movement &&
             !has_any_local_frame_data &&
             !derived_flip_movement_x &&
-            !derived_flip_movement_y);
-    inherit_source_geometry = derived_from_animation && inherit_source_geometry;
-    if (!inherit_source_geometry) {
+            !derived_flip_movement_y;
+    bool inherit_data = default_inherit_data;
+    if (payload.contains("inherit_data")) {
+        inherit_data = read_bool_field_like(payload, "inherit_data", default_inherit_data);
+    } else {
+        inherit_data = read_bool_field_like(payload, "inherit_source_geometry", default_inherit_data);
+    }
+    inherit_data = derived_from_animation && inherit_data;
+    if (!inherit_data) {
         derived_flip_x = false;
         derived_flip_y = false;
     }
@@ -114,9 +118,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         payload["derived_modifiers"] = nlohmann::json{{"reverse", derived_reverse},
                                                        {"flipX", derived_flip_x},
                                                        {"flipY", derived_flip_y}};
-        payload["inherit_source_geometry"] = inherit_source_geometry;
+        payload["inherit_data"] = inherit_data;
 
-        if (inherit_source_geometry) {
+        if (inherit_data) {
             payload.erase("movement");
             payload.erase("movement_total");
             payload.erase("movement_variants");
@@ -132,7 +136,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         payload.erase("movement_preview_bounds");
     } else {
         payload.erase("derived_modifiers");
-        payload.erase("inherit_source_geometry");
+        payload.erase("inherit_data");
     }
     payload["reverse_source"] = derived_reverse;
     payload["flipped_source"] = derived_flip_x;
@@ -150,7 +154,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     if (frames < 1) frames = 1;
     payload["number_of_frames"] = frames;
 
-    if (!derived_from_animation || (derived_from_animation && !inherit_source_geometry)) {
+    if (!derived_from_animation || (derived_from_animation && !inherit_data)) {
         nlohmann::json movement = payload.contains("movement") && payload["movement"].is_array() ? payload["movement"] : nlohmann::json::array();
         if (!movement.is_array()) {
             movement = nlohmann::json::array();
@@ -334,14 +338,16 @@ bool payload_has_local_frame_data(const nlohmann::json& payload) {
     return payload_has_local_movement_data(payload) || payload_has_local_non_movement_geometry(payload);
 }
 
-bool payload_inherits_geometry(const nlohmann::json& payload) {
+bool payload_inherits_data(const nlohmann::json& payload) {
     if (!payload_uses_animation_source(payload)) {
         return false;
     }
     const bool legacy_inherit = read_bool_field_like(payload, "inherit_source_movement", true);
-    return read_bool_field_like(payload,
-                                "inherit_source_geometry",
-                                legacy_inherit && !payload_has_local_frame_data(payload));
+    const bool default_inherit = legacy_inherit && !payload_has_local_frame_data(payload);
+    if (payload.contains("inherit_data")) {
+        return read_bool_field_like(payload, "inherit_data", default_inherit);
+    }
+    return read_bool_field_like(payload, "inherit_source_geometry", default_inherit);
 }
 
 bool payload_legacy_inherits_movement(const nlohmann::json& payload) {
@@ -988,7 +994,7 @@ nlohmann::json AnimationDocument::normalize_payload_for_storage(const std::strin
                                                          size_visited);
         resize_with_last(result.frame_sizes, frame_count, SDL_Point{0, 0});
 
-        const bool inherit_geometry = payload_inherits_geometry(raw);
+        const bool inherit_data = payload_inherits_data(raw);
         const bool legacy_inherit_movement = payload_legacy_inherits_movement(raw);
         const bool legacy_flip_movement_x = payload_has_legacy_movement_flip_x(raw);
         const bool legacy_flip_movement_y = payload_has_legacy_movement_flip_y(raw);
@@ -1009,13 +1015,13 @@ nlohmann::json AnimationDocument::normalize_payload_for_storage(const std::strin
             flip_y = read_bool_field_like(modifiers, "flipY", flip_y);
         }
 
-        if (has_source && (inherit_geometry || legacy_inherit_movement)) {
+        if (has_source && (inherit_data || legacy_inherit_movement)) {
             result.movement = source_resolution.movement;
             resize_with_last(result.movement, frame_count, nlohmann::json::array({0, 0, 0}));
             apply_movement_transforms(result.movement,
                                       reverse,
-                                      inherit_geometry ? flip_x : false,
-                                      inherit_geometry ? flip_y : false);
+                                      inherit_data ? flip_x : false,
+                                      inherit_data ? flip_y : false);
         } else {
             result.movement = canonical_movement_frames(raw, frame_count);
         }
@@ -1027,7 +1033,7 @@ nlohmann::json AnimationDocument::normalize_payload_for_storage(const std::strin
                                       legacy_flip_movement_y);
         }
 
-        if (inherit_geometry && has_source) {
+        if (inherit_data && has_source) {
             result.anchors = source_resolution.anchors;
             result.hit_boxes = source_resolution.hit_boxes;
             result.attack_boxes = source_resolution.attack_boxes;
@@ -1090,7 +1096,7 @@ nlohmann::json AnimationDocument::normalize_payload_for_storage(const std::strin
             for (const auto& frame : resolved.attack_boxes) {
                 working["attack_boxes"].push_back(frame);
             }
-            working["inherit_source_geometry"] = false;
+            working["inherit_data"] = false;
             working.erase("hit_geometry");
             working.erase("attack_geometry");
             update_payload_movement_total(working);

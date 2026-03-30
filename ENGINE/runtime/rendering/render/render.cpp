@@ -44,6 +44,17 @@
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 
 namespace {
+constexpr double kDepthBucketSize = 0.0625;
+constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
+
+inline std::int64_t quantize_depth(double depth) {
+    const double scaled = std::floor(depth * kDepthBucketScale);
+    const double min_value = static_cast<double>(std::numeric_limits<std::int64_t>::lowest());
+    const double max_value = static_cast<double>(std::numeric_limits<std::int64_t>::max());
+    const double clamped = std::clamp(scaled, min_value, max_value);
+    return static_cast<std::int64_t>(clamped);
+}
+
 bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points);
 }
 
@@ -56,7 +67,6 @@ GeometryBatcher::GeometryBatcher(SDL_Renderer* renderer)
     // Pre-allocate for estimated 10,000 quads (40,000 vertices, 60,000 indices)
     vertex_buffer_.reserve(40000);
     index_buffer_.reserve(60000);
-    draw_list_.reserve(10000);
 }
 
 void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4],
@@ -73,11 +83,27 @@ void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4]
     item.vertices[3] = vertices[3];
     item.depth = depth;
 
-    draw_list_.push_back(item);
+    DepthBucket* bucket = nullptr;
+    if (std::isfinite(depth)) {
+        const auto quantized_depth = quantize_depth(depth);
+        bucket = &depth_buckets_[quantized_depth];
+    } else {
+        bucket = &invalid_depth_bucket_;
+    }
+
+    RenderStateKey key{texture, blend_mode};
+    auto group_it = bucket->group_index.find(key);
+    if (group_it == bucket->group_index.end()) {
+        bucket->groups.emplace_back(RenderStateGroup{key, {}});
+        const std::size_t new_index = bucket->groups.size() - 1;
+        auto insert_it = bucket->group_index.emplace(bucket->groups[new_index].key, new_index);
+        group_it = insert_it.first;
+    }
+    bucket->groups[group_it->second].items.push_back(item);
 }
 
 void GeometryBatcher::flush() {
-    if (draw_list_.empty()) {
+    if (depth_buckets_.empty() && invalid_depth_bucket_.groups.empty()) {
         last_flush_cpu_ms_ = 0.0;
         return;
     }
@@ -89,34 +115,6 @@ void GeometryBatcher::flush() {
 
     // Static quad indices pattern (0,1,2, 0,2,3)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
-
-    auto depth_precedes = [](const DrawItem& lhs, const DrawItem& rhs) {
-        const bool lhs_finite = std::isfinite(lhs.depth);
-        const bool rhs_finite = std::isfinite(rhs.depth);
-        if (lhs_finite != rhs_finite) {
-            return lhs_finite; // finite depths first
-        }
-        if (!lhs_finite && !rhs_finite) {
-            return false; // preserve submit order among invalid depths
-        }
-        if (lhs.depth == rhs.depth) {
-            return false; // preserve submit order for equal depths
-        }
-        return lhs.depth > rhs.depth; // descending depth
-    };
-
-    bool needs_sort = false;
-    for (std::size_t i = 1; i < draw_list_.size(); ++i) {
-        const DrawItem& previous = draw_list_[i - 1];
-        const DrawItem& current = draw_list_[i];
-        if (depth_precedes(current, previous)) {
-            needs_sort = true;
-            break;
-        }
-    }
-    if (needs_sort) {
-        std::stable_sort(draw_list_.begin(), draw_list_.end(), depth_precedes);
-    }
 
     vertex_buffer_.clear();
     index_buffer_.clear();
@@ -140,45 +138,42 @@ void GeometryBatcher::flush() {
         index_buffer_.clear();
     };
 
+    auto emit_group = [&](const RenderStateGroup& group, SDL_Texture*& current_texture, SDL_BlendMode& current_blend) {
+        if (group.key.texture != current_texture || group.key.blend_mode != current_blend) {
+            emit_current_batch(current_texture, current_blend);
+            current_texture = group.key.texture;
+            current_blend = group.key.blend_mode;
+        }
+
+        for (const DrawItem& quad : group.items) {
+            const int base_index = static_cast<int>(vertex_buffer_.size());
+
+            vertex_buffer_.push_back(quad.vertices[0]);
+            vertex_buffer_.push_back(quad.vertices[1]);
+            vertex_buffer_.push_back(quad.vertices[2]);
+            vertex_buffer_.push_back(quad.vertices[3]);
+
+            index_buffer_.push_back(base_index + kQuadIndices[0]);
+            index_buffer_.push_back(base_index + kQuadIndices[1]);
+            index_buffer_.push_back(base_index + kQuadIndices[2]);
+            index_buffer_.push_back(base_index + kQuadIndices[3]);
+            index_buffer_.push_back(base_index + kQuadIndices[4]);
+            index_buffer_.push_back(base_index + kQuadIndices[5]);
+        }
+    };
+
     SDL_Texture* current_texture = nullptr;
     SDL_BlendMode current_blend = SDL_BLENDMODE_BLEND;
 
-    double previous_depth = draw_list_.front().depth;
-    bool has_previous_depth = false;
-
-    for (const auto& quad : draw_list_) {
-#ifndef NDEBUG
-        if (has_previous_depth && quad.depth > previous_depth) {
-            SDL_assert(!"GeometryBatcher::flush draw_list_ depth is not monotonic (expected descending order)");
+    for (auto bucket_it = depth_buckets_.rbegin(); bucket_it != depth_buckets_.rend(); ++bucket_it) {
+        const DepthBucket& bucket = bucket_it->second;
+        for (const RenderStateGroup& group : bucket.groups) {
+            emit_group(group, current_texture, current_blend);
         }
-#endif
-        previous_depth = quad.depth;
-        has_previous_depth = true;
+    }
 
-        if (!current_texture) {
-            current_texture = quad.texture;
-            current_blend = quad.blend_mode;
-        }
-
-        if (quad.texture != current_texture || quad.blend_mode != current_blend) {
-            emit_current_batch(current_texture, current_blend);
-            current_texture = quad.texture;
-            current_blend = quad.blend_mode;
-        }
-
-        const int base_index = static_cast<int>(vertex_buffer_.size());
-
-        vertex_buffer_.push_back(quad.vertices[0]);
-        vertex_buffer_.push_back(quad.vertices[1]);
-        vertex_buffer_.push_back(quad.vertices[2]);
-        vertex_buffer_.push_back(quad.vertices[3]);
-
-        index_buffer_.push_back(base_index + kQuadIndices[0]);
-        index_buffer_.push_back(base_index + kQuadIndices[1]);
-        index_buffer_.push_back(base_index + kQuadIndices[2]);
-        index_buffer_.push_back(base_index + kQuadIndices[3]);
-        index_buffer_.push_back(base_index + kQuadIndices[4]);
-        index_buffer_.push_back(base_index + kQuadIndices[5]);
+    for (const RenderStateGroup& group : invalid_depth_bucket_.groups) {
+        emit_group(group, current_texture, current_blend);
     }
 
     emit_current_batch(current_texture, current_blend);
@@ -188,10 +183,13 @@ void GeometryBatcher::flush() {
 }
 
 void GeometryBatcher::clear() {
-    draw_list_.clear();
+    depth_buckets_.clear();
+    invalid_depth_bucket_ = DepthBucket{};
     draw_call_count_ = 0;
     total_vertices_ = 0;
     last_flush_cpu_ms_ = 0.0;
+    vertex_buffer_.clear();
+    index_buffer_.clear();
 }
 
 void GridTileRenderer::invalidate_texture_cache() {

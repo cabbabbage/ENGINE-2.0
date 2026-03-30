@@ -2183,7 +2183,7 @@
           },
           "flip_vertical_source": false,
           "flipped_source": true,
-          "inherit_source_geometry": true,
+          "inherit_data": true,
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2226,7 +2226,7 @@
             [],
             []
           ],
-          "inherit_source_geometry": false,
+          "inherit_data": false,
           "movement": [
             [
               0,
@@ -2306,7 +2306,7 @@
             [],
             []
           ],
-          "inherit_source_geometry": false,
+          "inherit_data": false,
           "movement": [
             [
               0,
@@ -2413,7 +2413,7 @@
           },
           "flip_vertical_source": false,
           "flipped_source": true,
-          "inherit_source_geometry": true,
+          "inherit_data": true,
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -2637,7 +2637,7 @@
             [],
             []
           ],
-          "inherit_source_geometry": false,
+          "inherit_data": false,
           "movement": [
             [
               0,
@@ -4116,7 +4116,7 @@
               }
             ]
           ],
-          "inherit_source_geometry": false,
+          "inherit_data": false,
           "movement": [
             [
               0,
@@ -4893,7 +4893,7 @@
               }
             ]
           ],
-          "inherit_source_geometry": false,
+          "inherit_data": false,
           "movement": [
             [
               0,
@@ -5670,7 +5670,7 @@
               }
             ]
           ],
-          "inherit_source_geometry": false,
+          "inherit_data": false,
           "movement": [
             [
               0,
@@ -6603,7 +6603,7 @@
           },
           "flip_vertical_source": false,
           "flipped_source": true,
-          "inherit_source_geometry": true,
+          "inherit_data": true,
           "number_of_frames": 8,
           "on_end": "default",
           "reverse_source": false,
@@ -9065,7 +9065,7 @@
               }
             ]
           ],
-          "inherit_source_geometry": false,
+          "inherit_data": false,
           "movement": [
             [
               0,
@@ -9843,9 +9843,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            142,
+            120,
+            242,
             255
           ],
           "edge_smoothness": 49,
@@ -9868,9 +9868,9 @@
           "camera_zoom_percent": 85,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            145,
+            133,
+            242,
             255
           ],
           "edge_smoothness": 85,

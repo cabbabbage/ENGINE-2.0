@@ -88,8 +88,8 @@ TEST_CASE("AnimationDocument materializes legacy movement inheritance when non-m
     REQUIRE(payload.has_value());
     REQUIRE(payload->is_object());
 
-    CHECK(payload->contains("inherit_source_geometry"));
-    CHECK_FALSE((*payload)["inherit_source_geometry"].get<bool>());
+    CHECK(payload->contains("inherit_data"));
+    CHECK_FALSE((*payload)["inherit_data"].get<bool>());
     CHECK_FALSE(payload->contains("inherit_source_movement"));
 
     REQUIRE(payload->contains("movement"));
@@ -140,8 +140,8 @@ TEST_CASE("AnimationDocument materializes legacy movement-only flips into local 
     REQUIRE(payload.has_value());
     REQUIRE(payload->is_object());
 
-    CHECK(payload->contains("inherit_source_geometry"));
-    CHECK_FALSE((*payload)["inherit_source_geometry"].get<bool>());
+    CHECK(payload->contains("inherit_data"));
+    CHECK_FALSE((*payload)["inherit_data"].get<bool>());
     CHECK_FALSE(payload->contains("inherit_source_movement"));
 
     REQUIRE(payload->contains("derived_modifiers"));

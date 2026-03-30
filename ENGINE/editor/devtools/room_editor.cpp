@@ -1199,7 +1199,7 @@ bool anchor_animation_is_eligible_for_edit(const Animation& animation) {
     if (animation.source.kind != "animation") {
         return true;
     }
-    return !animation.inherit_source_geometry;
+    return !animation.inherit_data;
 }
 
 const DisplacedAssetAnchorPoint* find_named_anchor(const AnimationFrame* frame, const std::string& name) {

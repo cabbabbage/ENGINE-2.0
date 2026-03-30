@@ -42,7 +42,7 @@ struct AnimationSourceFixture {
         Animation animation;
         animation.source.kind = "animation";
         animation.source.name = source_id;
-        animation.inherit_source_geometry = inherit_geometry;
+        animation.inherit_data = inherit_geometry;
         auto& frames = animation.primary_frames();
         frames.resize(frame_count);
         for (int i = 0; i < frame_count; ++i) {
@@ -53,7 +53,7 @@ struct AnimationSourceFixture {
             it->second = Animation{};
             it->second.source.kind = "animation";
             it->second.source.name = source_id;
-            it->second.inherit_source_geometry = inherit_geometry;
+            it->second.inherit_data = inherit_geometry;
             auto& existing_frames = it->second.primary_frames();
             existing_frames.clear();
             existing_frames.resize(frame_count);

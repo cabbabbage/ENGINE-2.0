@@ -1768,7 +1768,7 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
         {"name", source_animation_id}
     });
     payload["number_of_frames"] = std::max(frame_count, 1);
-    payload["inherit_source_geometry"] = true;
+    payload["inherit_data"] = true;
     payload["locked"] = false;
     payload["reverse_source"] = false;
     payload["flipped_source"] = false;
@@ -2847,10 +2847,15 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
         }
         const bool sourced_from_animation =
             animation_editor::strings::to_lower_copy(kind) == std::string{"animation"};
-        const bool inherits_geometry = payload.value("inherit_source_geometry", false);
-        if (!sourced_from_animation || !inherits_geometry) {
-            selectable.push_back(id);
+        bool inherits_data = false;
+        if (payload.contains("inherit_data")) {
+            inherits_data = payload.value("inherit_data", false);
+        } else {
+            inherits_data = payload.value("inherit_source_geometry", false);
         }
+        if (!sourced_from_animation || !inherits_data) {
+        selectable.push_back(id);
+    }
     }
 
     if (selectable.empty()) return std::nullopt;

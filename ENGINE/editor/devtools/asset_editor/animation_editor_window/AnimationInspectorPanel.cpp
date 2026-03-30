@@ -186,9 +186,10 @@ bool payload_inherits_source_data(const nlohmann::json& payload) {
         return false;
     }
     const bool legacy_inherit = json_coercion::read_bool_field_like(payload, "inherit_source_movement", true);
-    return json_coercion::read_bool_field_like(payload,
-                                               "inherit_source_geometry",
-                                               legacy_inherit);
+    if (payload.contains("inherit_data")) {
+        return json_coercion::read_bool_field_like(payload, "inherit_data", legacy_inherit);
+    }
+    return json_coercion::read_bool_field_like(payload, "inherit_source_geometry", legacy_inherit);
 }
 
 bool should_show_on_end_section(const animation_editor::AnimationDocument* document,

@@ -3,6 +3,7 @@
 #include "asset_types.hpp"
 #include "assets/asset/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
+#include "utils/log.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include <algorithm>
 #include <iomanip>
@@ -2102,20 +2103,107 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animatio
         }
         return selected_animation_names.find(anim_name) != selected_animation_names.end();
     };
+    auto is_folder_source_animation = [](const nlohmann::json& payload) {
+        if (!payload.is_object()) {
+            return false;
+        }
+        if (!payload.contains("source") || !payload["source"].is_object()) {
+            return false;
+        }
+        try {
+            return payload["source"].value("kind", std::string{}) == "folder";
+        } catch (...) {
+            return false;
+        }
+    };
+    auto prebuilt_frames_are_usable_for_folder_animation = [](const PrebuiltAnimationFrames& prebuilt) {
+        if (prebuilt.frames.empty()) {
+            return false;
+        }
+        for (const auto& frame : prebuilt.frames) {
+            for (SDL_Texture* texture : frame.textures) {
+                if (texture) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    auto join_animation_names = [](const std::vector<std::string>& names) {
+        if (names.empty()) {
+            return std::string{};
+        }
+        std::ostringstream joined;
+        const std::size_t limit = std::min<std::size_t>(names.size(), 6);
+        for (std::size_t idx = 0; idx < limit; ++idx) {
+            if (idx != 0) {
+                joined << ", ";
+            }
+            joined << names[idx];
+        }
+        if (names.size() > limit) {
+            joined << ", ...";
+        }
+        return joined.str();
+    };
+    auto cached_prebuilt_covers_selected_folder_animations =
+        [&](const std::unordered_map<std::string, PrebuiltAnimationFrames>& prebuilt_frames_map,
+            std::vector<std::string>* unusable_animations = nullptr) {
+            bool all_usable = true;
+            for (const auto& animation_name : selected_animation_names) {
+                auto it = anims_json_.find(animation_name);
+                if (it == anims_json_.end() || !it->is_object()) {
+                    continue;
+                }
+                if (!is_folder_source_animation(*it)) {
+                    continue;
+                }
+
+                auto prebuilt_it = prebuilt_frames_map.find(animation_name);
+                if (prebuilt_it == prebuilt_frames_map.end() ||
+                    !prebuilt_frames_are_usable_for_folder_animation(prebuilt_it->second)) {
+                    all_usable = false;
+                    if (unusable_animations) {
+                        unusable_animations->push_back(animation_name);
+                    }
+                }
+            }
+            return all_usable;
+        };
 
     SDL_Texture* dummy_base_sprite = nullptr;
     int dummy_w = 0;
     int dummy_h = 0;
     std::unordered_map<std::string, PrebuiltAnimationFrames> prebuilt_frames;
     CacheManager::BundleData bundle_data;
+    bool prebuilt_cache_ready = false;
     if (renderer) {
         PrimaryAssetCache primary_cache(renderer);
         const std::unordered_set<std::string>* filter =
             include_all_animations ? nullptr : &selected_animation_names;
         if (assume_cache_ready) {
-            primary_cache.load_cached_only(*this, prebuilt_frames, bundle_data, filter);
+            prebuilt_cache_ready = primary_cache.load_cached_only(*this, prebuilt_frames, bundle_data, filter);
+            if (prebuilt_cache_ready) {
+                std::vector<std::string> unusable_animations;
+                if (!cached_prebuilt_covers_selected_folder_animations(prebuilt_frames, &unusable_animations)) {
+                    vibble::log::warn("[AssetInfo] Cached-only preload produced incomplete frame caches for '" + name +
+                                      "'; forcing rebuild-capable load. Missing/invalid animations: " +
+                                      join_animation_names(unusable_animations));
+                    prebuilt_cache_ready = false;
+                    prebuilt_frames.clear();
+                    bundle_data = CacheManager::BundleData{};
+                }
+            }
+            if (!prebuilt_cache_ready) {
+                vibble::log::warn("[AssetInfo] Cached-only animation preload failed integrity checks for '" + name +
+                                  "'; falling back to rebuild-capable cache load.");
+                prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+                if (!prebuilt_cache_ready) {
+                    vibble::log::warn("[AssetInfo] Rebuild-capable cache load also failed for '" + name + "'.");
+                }
+            }
         } else {
-            primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+            prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
         }
     }
 

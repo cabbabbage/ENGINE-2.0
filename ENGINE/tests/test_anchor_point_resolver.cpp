@@ -161,7 +161,7 @@ TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z
     CHECK(sample.resolved.depth_offset == doctest::Approx(2.5f).epsilon(1e-6));
 }
 
-TEST_CASE("Resolved anchor flat perspective scale is driven by parent perspective sample, not anchor texture position") {
+TEST_CASE("Resolved anchor flat perspective scale is driven by effective runtime perspective sample, not anchor texture position") {
     Asset asset = make_test_asset(40, 55);
     CHECK(asset.set_anchor_perspective_override(2.35f, std::nullopt));
 
@@ -207,3 +207,27 @@ TEST_CASE("Anchor perspective override rejects non-finite input and falls back t
     const Asset::PerspectiveSample sample = asset.runtime_perspective_sample();
     CHECK(sample.source != Asset::PerspectiveSource::AnchorBindingOverride);
 }
+
+#if !defined(ENGINE_WORLD_TESTS)
+TEST_CASE("Resolved anchor does not propagate flat perspective scale when runtime sample falls back to default source") {
+    Asset asset = make_test_asset(12, 18);
+    asset.clear_anchor_perspective_override();
+
+    const Asset::PerspectiveSample runtime_sample = asset.runtime_perspective_sample();
+    REQUIRE(runtime_sample.source == Asset::PerspectiveSource::Default);
+
+    DisplacedAssetAnchorPoint anchor{};
+    anchor.name = "default_source_anchor";
+    anchor.texture_x = 8;
+    anchor.texture_y = 11;
+    anchor.depth_offset = 0.0f;
+
+    const auto sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        anchor,
+        anchor_points::GridMaterialization::None);
+
+    CHECK(sample.resolved.missing);
+    CHECK_FALSE(sample.resolved.has_flat_perspective_scale);
+}
+#endif

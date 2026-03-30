@@ -575,7 +575,10 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         (has_render_perspective && render_gp) ? render_gp->resolution_layer() : resolution_layer;
     const float perspective_delta = std::fabs(render_perspective - perspective_scale);
     const std::uint64_t camera_state_version = cam.camera_state_version();
+    const bool expected_override_divergence =
+        perspective_sample.source == Asset::PerspectiveSource::AnchorBindingOverride;
     if (has_render_perspective &&
+        !expected_override_divergence &&
         perspective_delta > 1e-3f &&
         should_warn_perspective_divergence(asset, camera_state_version)) {
         vibble::log::warn(std::string("[AnchorResolver] perspective mismatch for asset '") +
@@ -639,8 +642,12 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.flat_relative_pixel_point.x,
         sample.flat_relative_pixel_point.y};
     sample.resolved.flat_world_exact_z = sample.flat_relative_pixel_point.z;
-    if (std::isfinite(render_perspective) && render_perspective > 0.0f) {
-        sample.resolved.flat_perspective_scale = std::max(0.0001f, render_perspective);
+    const bool has_propagated_perspective =
+        perspective_sample.source != Asset::PerspectiveSource::Default &&
+        std::isfinite(perspective_scale) &&
+        perspective_scale > 0.0f;
+    if (has_propagated_perspective) {
+        sample.resolved.flat_perspective_scale = std::max(0.0001f, perspective_scale);
         sample.resolved.has_flat_perspective_scale = true;
     }
 

@@ -297,6 +297,7 @@ add_executable(engine_tests
     ENGINE/tests/test_playback_settings_inheritance.cpp
     ENGINE/tests/test_tag_editor_widget_recommendations.cpp
     ENGINE/tests/test_depth_cue_overlay_math.cpp
+    ENGINE/tests/test_composite_asset_renderer_depth_cue_refresh.cpp
     ENGINE/tests/test_screen_space_math.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
   )

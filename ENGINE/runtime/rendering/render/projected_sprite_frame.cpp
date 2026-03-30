@@ -52,6 +52,38 @@ SDL_FPoint rotate_about_point(const SDL_FPoint& point,
         pivot.y + (dx * sin_theta + dy * cos_theta)};
 }
 
+bool calibrate_pixels_per_world_x(const WarpedScreenGrid& cam,
+                                  const render_projection::SpriteProjectionInput& input,
+                                  float& out_pixels_per_world_x) {
+    out_pixels_per_world_x = 0.0f;
+    constexpr float kHalfWorldSpan = 0.5f;
+
+    SDL_FPoint left_screen{};
+    SDL_FPoint right_screen{};
+    if (!project_world_point(cam,
+                             input.world_x - kHalfWorldSpan,
+                             input.world_y,
+                             input.world_z,
+                             left_screen) ||
+        !project_world_point(cam,
+                             input.world_x + kHalfWorldSpan,
+                             input.world_y,
+                             input.world_z,
+                             right_screen)) {
+        return false;
+    }
+
+    const float dx = right_screen.x - left_screen.x;
+    const float dy = right_screen.y - left_screen.y;
+    const float pixel_span = std::hypot(dx, dy);
+    if (!std::isfinite(pixel_span) || pixel_span <= 1e-5f) {
+        return false;
+    }
+
+    out_pixels_per_world_x = pixel_span; // Sampled over exactly one world unit.
+    return true;
+}
+
 }  // namespace
 
 namespace render_projection {
@@ -104,7 +136,20 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
         (std::isfinite(input.perspective_scale) && input.perspective_scale > 0.0f)
             ? input.perspective_scale
             : 1.0f;
-    const float world_width = static_cast<float>(input.final_width_px) / safe_perspective;
+    const float final_width_px = static_cast<float>(input.final_width_px);
+    const float final_height_px = static_cast<float>(input.final_height_px);
+    if (!std::isfinite(final_width_px) || !std::isfinite(final_height_px) ||
+        final_width_px <= 0.0f || final_height_px <= 0.0f) {
+        return false;
+    }
+
+    float pixels_per_world_x = 0.0f;
+    const bool has_local_calibration =
+        calibrate_pixels_per_world_x(cam, input, pixels_per_world_x);
+    const float world_width =
+        has_local_calibration
+            ? (final_width_px / pixels_per_world_x)
+            : (final_width_px / safe_perspective);
     const float half_width = world_width * 0.5f;
     if (!std::isfinite(half_width) || half_width <= 0.0f) {
         return false;
@@ -124,7 +169,7 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
         return false;
     }
 
-    const float aspect = static_cast<float>(input.frame_height_px) / static_cast<float>(input.frame_width_px);
+    const float aspect = final_height_px / final_width_px;
     float screen_height = bottom_len * aspect;
     if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
         return false;

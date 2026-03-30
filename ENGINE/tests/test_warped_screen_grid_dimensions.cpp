@@ -1,9 +1,11 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <cmath>
 #include <vector>
 
 #include "core/manifest/depth_cue_settings.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -14,6 +16,11 @@ Area make_starting_area() {
         SDL_Point{100, 100},
         SDL_Point{-100, 100}};
     return Area("starting", corners, 0);
+}
+
+float projected_bottom_edge_length(const render_projection::ProjectedSpriteFrame& frame) {
+    return std::hypot(frame.screen_br.x - frame.screen_bl.x,
+                      frame.screen_br.y - frame.screen_bl.y);
 }
 }  // namespace
 
@@ -127,4 +134,45 @@ TEST_CASE("WarpedScreenGrid depth guides remain world-anchored and ordered acros
         CHECK(bg_screen.y < center_screen.y);
         CHECK(center_screen.y < fg_screen.y);
     }
+}
+
+TEST_CASE("Projected sprite frame keeps final width stable across depth with fixed perspective source") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const world::CameraProjectionParams params = grid.projection_params();
+    const float depth_sign = (params.forward_z >= 0.0) ? 1.0f : -1.0f;
+    const float anchor_world_z = static_cast<float>(params.anchor_world_z);
+    const float farther_world_z = anchor_world_z + depth_sign * 520.0f;
+    const float nearer_world_z = anchor_world_z + depth_sign * 140.0f;
+
+    const SDL_FPoint ground_center =
+        grid.screen_to_map(SDL_Point{params.screen_width / 2, params.screen_height / 2});
+
+    render_projection::SpriteProjectionInput projection_input{};
+    projection_input.world_x = ground_center.x;
+    projection_input.world_y = 0.0f;
+    projection_input.perspective_scale = 2.4f; // Emulates parent-forced perspective source.
+    projection_input.frame_width_px = 64;
+    projection_input.frame_height_px = 64;
+    projection_input.final_width_px = 96;
+    projection_input.final_height_px = 96;
+
+    render_projection::ProjectedSpriteFrame farther_frame{};
+    projection_input.world_z = farther_world_z;
+    REQUIRE(render_projection::build_projected_sprite_frame(grid, projection_input, farther_frame));
+    REQUIRE(farther_frame.valid);
+
+    render_projection::ProjectedSpriteFrame nearer_frame{};
+    projection_input.world_z = nearer_world_z;
+    REQUIRE(render_projection::build_projected_sprite_frame(grid, projection_input, nearer_frame));
+    REQUIRE(nearer_frame.valid);
+
+    const float farther_width = projected_bottom_edge_length(farther_frame);
+    const float nearer_width = projected_bottom_edge_length(nearer_frame);
+    REQUIRE(std::isfinite(farther_width));
+    REQUIRE(std::isfinite(nearer_width));
+
+    CHECK(farther_width == doctest::Approx(96.0f).epsilon(0.08));
+    CHECK(nearer_width == doctest::Approx(96.0f).epsilon(0.08));
+    CHECK(nearer_width == doctest::Approx(farther_width).epsilon(0.06));
 }

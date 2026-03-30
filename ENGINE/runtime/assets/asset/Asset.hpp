@@ -74,6 +74,7 @@ struct RenderObject {
     bool has_cached_mesh = false;
     bool mesh_dirty = true;
     SDL_FPoint projection_anchor_uv{0.5f, 1.0f};
+    bool is_depth_cue_overlay = false;
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;

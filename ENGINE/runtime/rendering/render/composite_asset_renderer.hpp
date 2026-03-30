@@ -5,6 +5,7 @@
 
 class Asset;
 class Assets;
+struct RenderObject;
 
 class CompositeAssetRenderer {
 public:
@@ -15,6 +16,9 @@ public:
 
 private:
     void regenerate_package(Asset* asset, float flicker_time_seconds, float package_scale);
+    bool refresh_depth_cue_overlay(Asset* asset);
+    bool upsert_depth_cue_overlay_object(Asset* asset, std::size_t base_index, const RenderObject& desired_overlay);
+    bool remove_depth_cue_overlay_objects(Asset* asset);
     void calculate_local_bounds(Asset* asset);
 
     SDL_Renderer* renderer_;

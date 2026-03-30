@@ -195,6 +195,7 @@ AnimationListPanel::AnimationListPanel() {
 
 void AnimationListPanel::set_document(std::shared_ptr<AnimationDocument> document) {
     document_ = std::move(document);
+    last_document_revision_.reset();
     rebuild_rows();
 }
 
@@ -464,8 +465,15 @@ void AnimationListPanel::rebuild_rows() {
             layout_dirty_ = true;
         }
         start_animation_id_.reset();
+        last_document_revision_.reset();
         return;
     }
+
+    const std::uint64_t document_revision = document_->revision();
+    if (last_document_revision_ && *last_document_revision_ == document_revision) {
+        return;
+    }
+    last_document_revision_ = document_revision;
 
     start_animation_id_ = document_->start_animation();
 

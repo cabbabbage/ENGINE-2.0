@@ -72,6 +72,7 @@ SourceConfigPanel::SourceConfigPanel() {
 
 void SourceConfigPanel::set_document(std::shared_ptr<AnimationDocument> document) {
     document_ = std::move(document);
+    animation_ids_revision_.reset();
     cached_asset_root_valid_ = false;
     if (preview_provider_) {
         preview_provider_->set_document(document_);
@@ -127,27 +128,31 @@ void SourceConfigPanel::update() {
     }
 
     if (use_animation_reference_ && document_) {
-        auto ids = document_->animation_ids();
-        std::sort(ids.begin(), ids.end());
-        std::string sig;
-        sig.reserve(ids.size() * 8);
-        for (const auto& id : ids) {
-            if (!sig.empty()) sig.push_back('|');
-            sig.append(id);
-        }
-        if (sig != animation_ids_signature_) {
-            animation_ids_signature_.swap(sig);
-            int previous_index = animation_index_;
-            std::string previously_selected = (previous_index >= 0 && previous_index < static_cast<int>(animation_options_.size()))
-                                              ? animation_options_[previous_index]
-                                              : std::string{};
-            refresh_animation_options();
+        const std::uint64_t revision = document_->revision();
+        if (!animation_ids_revision_ || *animation_ids_revision_ != revision) {
+            animation_ids_revision_ = revision;
+            auto ids = document_->animation_ids();
+            std::sort(ids.begin(), ids.end());
+            std::string sig;
+            sig.reserve(ids.size() * 8);
+            for (const auto& id : ids) {
+                if (!sig.empty()) sig.push_back('|');
+                sig.append(id);
+            }
+            if (sig != animation_ids_signature_) {
+                animation_ids_signature_.swap(sig);
+                int previous_index = animation_index_;
+                std::string previously_selected = (previous_index >= 0 && previous_index < static_cast<int>(animation_options_.size()))
+                                                ? animation_options_[previous_index]
+                                                : std::string{};
+                refresh_animation_options();
 
-            if (!previously_selected.empty() && !animation_options_.empty()) {
-                auto it = std::find(animation_options_.begin(), animation_options_.end(), previously_selected);
-                if (it != animation_options_.end()) {
-                    animation_index_ = static_cast<int>(std::distance(animation_options_.begin(), it));
-                    if (animation_dropdown_) animation_dropdown_->set_selected(animation_index_);
+                if (!previously_selected.empty() && !animation_options_.empty()) {
+                    auto it = std::find(animation_options_.begin(), animation_options_.end(), previously_selected);
+                    if (it != animation_options_.end()) {
+                        animation_index_ = static_cast<int>(std::distance(animation_options_.begin(), it));
+                        if (animation_dropdown_) animation_dropdown_->set_selected(animation_index_);
+                    }
                 }
             }
         }
@@ -367,6 +372,7 @@ void SourceConfigPanel::reload_from_document() {
     frame_count_ = 1;
 
     if (!document_ || animation_id_.empty()) {
+        animation_ids_revision_.reset();
         reloading_ = false;
         return;
     }
@@ -387,6 +393,7 @@ void SourceConfigPanel::reload_from_document() {
 
     use_animation_reference_ = (current_source_.kind == std::string("animation"));
     refresh_animation_options();
+    animation_ids_revision_ = document_->revision();
 
     if (use_animation_reference_ && animation_options_.empty()) {
         use_animation_reference_ = false;

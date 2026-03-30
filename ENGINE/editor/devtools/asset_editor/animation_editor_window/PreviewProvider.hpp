@@ -33,11 +33,13 @@ class PreviewProvider {
     struct CacheEntry {
         SDL_Renderer* renderer = nullptr;
         std::shared_ptr<SDL_Texture> texture;
+        std::string request_signature;
         std::string signature;
 };
 
     struct FrameCacheEntry {
         SDL_Renderer* renderer = nullptr;
+        std::string request_signature;
         std::string signature;
         std::vector<std::shared_ptr<SDL_Texture>> textures;
 };
@@ -57,6 +59,7 @@ class PreviewProvider {
     std::shared_ptr<SDL_Texture> build_texture_from_resolved(SDL_Renderer* renderer, const ResolvedAnimation& resolved);
     std::vector<std::shared_ptr<SDL_Texture>> build_frame_textures(SDL_Renderer* renderer, const ResolvedAnimation& resolved);
     ResolvedAnimation resolve_animation(const std::string& animation_id, int depth = 0) const;
+    std::string build_request_signature(const std::string& animation_id) const;
     std::filesystem::path resolve_asset_root() const;
     std::filesystem::path find_first_frame(const std::filesystem::path& folder, int frames) const;
     std::vector<std::filesystem::path> find_frame_sequence(const std::filesystem::path& folder, int frames) const;

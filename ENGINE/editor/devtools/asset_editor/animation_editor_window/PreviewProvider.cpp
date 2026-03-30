@@ -115,17 +115,25 @@ SDL_Texture* PreviewProvider::get_preview_texture(SDL_Renderer* renderer, const 
         return nullptr;
     }
 
-    asset_root_ = resolve_asset_root();
+    const std::filesystem::path resolved_root = resolve_asset_root();
+    if (resolved_root != asset_root_) {
+        asset_root_ = resolved_root;
+        invalidate_all();
+    }
 
-    ResolvedAnimation resolved = resolve_animation(animation_id);
-    std::string signature = resolved.signature.empty() ? std::string{"anim:"} + animation_id : resolved.signature;
+    const std::string request_signature = build_request_signature(animation_id);
 
     auto it = cache_.find(animation_id);
     if (it != cache_.end()) {
-        if (it->second.renderer == renderer && it->second.signature == signature && it->second.texture) {
+        if (it->second.renderer == renderer &&
+            it->second.request_signature == request_signature &&
+            it->second.texture) {
             return it->second.texture.get();
         }
     }
+
+    ResolvedAnimation resolved = resolve_animation(animation_id);
+    std::string signature = resolved.signature.empty() ? std::string{"anim:"} + animation_id : resolved.signature;
 
     std::shared_ptr<SDL_Texture> texture = build_texture_from_resolved(renderer, resolved);
     if (!texture) {
@@ -135,6 +143,7 @@ SDL_Texture* PreviewProvider::get_preview_texture(SDL_Renderer* renderer, const 
 
     CacheEntry entry;
     entry.renderer = renderer;
+    entry.request_signature = request_signature;
     entry.signature = std::move(signature);
     entry.texture = std::move(texture);
     cache_[animation_id] = std::move(entry);
@@ -151,15 +160,18 @@ SDL_Texture* PreviewProvider::get_frame_texture(SDL_Renderer* renderer, const st
         return nullptr;
     }
 
-    asset_root_ = resolve_asset_root();
+    const std::filesystem::path resolved_root = resolve_asset_root();
+    if (resolved_root != asset_root_) {
+        asset_root_ = resolved_root;
+        invalidate_all();
+    }
 
-    ResolvedAnimation resolved = resolve_animation(animation_id);
-    std::string signature = resolved.signature.empty() ? std::string{"anim:"} + animation_id : resolved.signature;
+    const std::string request_signature = build_request_signature(animation_id);
 
     auto it = frame_cache_.find(animation_id);
     if (it != frame_cache_.end()) {
         FrameCacheEntry& entry = it->second;
-        if (entry.renderer == renderer && entry.signature == signature) {
+        if (entry.renderer == renderer && entry.request_signature == request_signature) {
             if (frame_index < static_cast<int>(entry.textures.size())) {
                 const auto& tex = entry.textures[frame_index];
                 if (tex) {
@@ -169,6 +181,9 @@ SDL_Texture* PreviewProvider::get_frame_texture(SDL_Renderer* renderer, const st
         }
     }
 
+    ResolvedAnimation resolved = resolve_animation(animation_id);
+    std::string signature = resolved.signature.empty() ? std::string{"anim:"} + animation_id : resolved.signature;
+
     std::vector<std::shared_ptr<SDL_Texture>> textures = build_frame_textures(renderer, resolved);
     if (textures.empty()) {
         frame_cache_.erase(animation_id);
@@ -177,6 +192,7 @@ SDL_Texture* PreviewProvider::get_frame_texture(SDL_Renderer* renderer, const st
 
     FrameCacheEntry entry;
     entry.renderer = renderer;
+    entry.request_signature = request_signature;
     entry.signature = std::move(signature);
     entry.textures = std::move(textures);
     auto [stored_it, inserted] = frame_cache_.insert_or_assign(animation_id, std::move(entry));
@@ -448,6 +464,26 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
     result.signature.push_back(flip_x ? '1' : '0');
     result.signature.push_back(flip_y ? '1' : '0');
     return result;
+}
+
+std::string PreviewProvider::build_request_signature(const std::string& animation_id) const {
+    if (!document_ || animation_id.empty()) {
+        return {};
+    }
+
+    std::string signature;
+    if (!asset_root_.empty()) {
+        signature = asset_root_.generic_string();
+    }
+    signature.push_back('|');
+    signature.append(animation_id);
+    signature.push_back('|');
+    if (auto payload_dump = document_->animation_payload(animation_id); payload_dump.has_value()) {
+        signature.append(*payload_dump);
+    } else {
+        signature.append("<missing>");
+    }
+    return signature;
 }
 
 std::filesystem::path PreviewProvider::resolve_asset_root() const {

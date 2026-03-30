@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <cstdint>
 
 #include <SDL3/SDL.h>
 
@@ -70,6 +71,7 @@ class AnimationListPanel {
     int content_height_ = 0;
     mutable bool layout_dirty_ = true;
     ui::ScrollController scroll_controller_;
+    std::optional<std::uint64_t> last_document_revision_;
 
     std::unordered_map<std::string, std::string> root_for_id_;
 };

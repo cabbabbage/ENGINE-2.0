@@ -32,6 +32,9 @@
                 "texture": true
             }
         },
+        "depth_effects": {
+            "enabled": true
+        },
         "grid": {
             "cell_size_px": 81.0,
             "overlay": {

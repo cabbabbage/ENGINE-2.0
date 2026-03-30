@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -143,6 +144,7 @@ class SourceConfigPanel {
     std::vector<std::string> animation_options_;
     int animation_index_ = -1;
     std::string animation_ids_signature_;
+    std::optional<std::uint64_t> animation_ids_revision_;
     std::vector<std::string> previous_animation_options_;
     std::function<void(const std::string&)> on_source_changed_;
 

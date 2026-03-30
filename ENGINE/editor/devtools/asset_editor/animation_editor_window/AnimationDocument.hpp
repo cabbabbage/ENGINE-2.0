@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -40,6 +41,7 @@ class AnimationDocument {
     std::optional<nlohmann::json> animation_payload_json(const std::string& animation_id) const;
     const std::filesystem::path& info_path() const { return info_path_; }
     const std::filesystem::path& asset_root() const { return asset_root_; }
+    std::uint64_t revision() const { return revision_; }
     void set_manifest_asset_key_debug(std::string key);
     const std::string& manifest_asset_key_debug() const { return manifest_asset_key_debug_; }
 
@@ -64,6 +66,7 @@ class AnimationDocument {
     bool use_nested_container_ = false;
     std::string container_metadata_;
     mutable bool dirty_ = false;
+    mutable std::uint64_t revision_ = 1;
     mutable nlohmann::json base_data_;
     std::string manifest_asset_key_debug_;
     std::function<bool(const nlohmann::json&)> persist_callback_;

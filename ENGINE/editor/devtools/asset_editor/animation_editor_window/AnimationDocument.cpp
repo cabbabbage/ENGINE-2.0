@@ -10,6 +10,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
@@ -888,6 +889,14 @@ std::string normalize_animation_id(std::string value) {
     return animation_editor::strings::to_lower_copy(trimmed);
 }
 
+void bump_revision(std::uint64_t& revision) {
+    if (revision == std::numeric_limits<std::uint64_t>::max()) {
+        revision = 1;
+        return;
+    }
+    ++revision;
+}
+
 }
 
 namespace animation_editor {
@@ -1201,6 +1210,7 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
     }
 
     ensure_document_initialized();
+    bump_revision(revision_);
 }
 
 void AnimationDocument::save_to_file(bool fire_callback) const {
@@ -1613,7 +1623,10 @@ void AnimationDocument::rebuild_animation_cache() {
     ensure_document_initialized();
 }
 
-void AnimationDocument::mark_dirty() const { dirty_ = true; }
+void AnimationDocument::mark_dirty() const {
+    dirty_ = true;
+    bump_revision(revision_);
+}
 
 double AnimationDocument::scale_percentage() const {
     try {

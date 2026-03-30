@@ -46,7 +46,7 @@ TEST_CASE("Anchor mode default anchor position is center-bottom with depth zero"
     CHECK(anchor.name == "anchor_1");
     CHECK(anchor.texture_x == 5);
     CHECK(anchor.texture_y == 7);
-    CHECK(anchor.depth_offset == 0);
+    CHECK(anchor.depth_offset == doctest::Approx(0.0f));
     CHECK(anchor.flip_horizontal);
     CHECK(anchor.flip_vertical);
     CHECK(anchor.rotation_degrees == doctest::Approx(0.0f));
@@ -73,7 +73,7 @@ TEST_CASE("Anchor mode payload write normalizes frame count and writes current f
     });
 
     const std::vector<DisplacedAssetAnchorPoint> replacement{
-        DisplacedAssetAnchorPoint{"edited", 10, 11, 12}
+        DisplacedAssetAnchorPoint{"edited", 10, 11, 12.5f}
     };
 
     REQUIRE(write_anchor_frame_to_payload(payload, 4, 1, replacement));
@@ -86,7 +86,7 @@ TEST_CASE("Anchor mode payload write normalizes frame count and writes current f
     CHECK(payload["anchor_points"][1][0]["name"] == "edited");
     CHECK(payload["anchor_points"][1][0]["texture_x"] == 10);
     CHECK(payload["anchor_points"][1][0]["texture_y"] == 11);
-    CHECK(payload["anchor_points"][1][0]["depth_offset"] == 12);
+    CHECK(payload["anchor_points"][1][0]["depth_offset"].get<float>() == doctest::Approx(12.5f));
     CHECK(payload["anchor_points"][1][0]["flip_horizontal"] == true);
     CHECK(payload["anchor_points"][1][0]["flip_vertical"] == true);
     CHECK(payload["anchor_points"][1][0]["rotation_degrees"].get<float>() == doctest::Approx(0.0f));

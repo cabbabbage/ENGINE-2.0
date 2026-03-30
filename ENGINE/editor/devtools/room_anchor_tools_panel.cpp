@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <utility>
 
 #include "dm_styles.hpp"
@@ -24,12 +26,32 @@ constexpr int kSectionGap = 8;
 constexpr int kHeaderHeight = 24;
 constexpr int kLineHeight = 18;
 
-int parse_int_or(const std::string& text, int fallback) {
+float parse_float_or(const std::string& text, float fallback) {
     try {
-        return std::stoi(text);
+        return std::stof(text);
     } catch (...) {
         return fallback;
     }
+}
+
+std::string format_depth_offset(float value) {
+    if (!std::isfinite(value)) {
+        return "0";
+    }
+    std::ostringstream oss;
+    oss.setf(std::ios::fixed, std::ios::floatfield);
+    oss << std::setprecision(3) << value;
+    std::string formatted = oss.str();
+    while (!formatted.empty() && formatted.back() == '0') {
+        formatted.pop_back();
+    }
+    if (!formatted.empty() && formatted.back() == '.') {
+        formatted.pop_back();
+    }
+    if (formatted.empty() || formatted == "-0") {
+        return "0";
+    }
+    return formatted;
 }
 
 bool parse_bool_or(const std::string& text, bool fallback) {
@@ -141,7 +163,7 @@ std::string RoomAnchorToolsPanel::rename_text() const {
 
 void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
     if (depth_textbox_ && !depth_textbox_->is_editing()) {
-        depth_textbox_->set_value(std::to_string(values.depth_offset));
+        depth_textbox_->set_value(format_depth_offset(values.depth_offset));
     }
     if (flip_horizontal_textbox_ && !flip_horizontal_textbox_->is_editing()) {
         flip_horizontal_textbox_->set_value(values.flip_horizontal ? "1" : "0");
@@ -205,12 +227,15 @@ void RoomAnchorToolsPanel::set_on_open_candidates(OpenCandidatesCallback callbac
 
 RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values() const {
     DetailValues values;
-    values.depth_offset = parse_int_or(depth_textbox_ ? depth_textbox_->value() : std::string{}, 0);
+    values.depth_offset = parse_float_or(depth_textbox_ ? depth_textbox_->value() : std::string{}, 0.0f);
     values.flip_horizontal = parse_bool_or(flip_horizontal_textbox_ ? flip_horizontal_textbox_->value() : std::string{}, true);
     values.flip_vertical = parse_bool_or(flip_vertical_textbox_ ? flip_vertical_textbox_->value() : std::string{}, true);
     values.rotation_degrees = rotation_slider_ ? static_cast<float>(rotation_slider_->value()) : 0.0f;
     values.hidden = hidden_checkbox_ ? hidden_checkbox_->value() : false;
     values.resolve_x = resolve_x_checkbox_ ? resolve_x_checkbox_->value() : true;
+    if (!std::isfinite(values.depth_offset)) {
+        values.depth_offset = 0.0f;
+    }
     if (!std::isfinite(values.rotation_degrees)) {
         values.rotation_degrees = 0.0f;
     }

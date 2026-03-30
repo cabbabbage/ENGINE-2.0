@@ -26,7 +26,7 @@ struct DisplacedAssetAnchorPoint {
     std::string name;
     int         texture_x = 0;   // Pixel coordinate on the sprite texture (X axis)
     int         texture_y = 0;   // Pixel coordinate on the sprite texture (vertical axis)
-    int         depth_offset = 0; // Signed pixel offset along camera->anchor ray from the flat texture point (+farther, -closer)
+    float       depth_offset = 0.0f; // Signed world-pixel offset along camera->anchor ray from the flat texture point (+farther, -closer)
     // Transform inheritance parity:
     // - true  => preserve parent axis orientation
     // - false => invert parent axis orientation
@@ -40,7 +40,7 @@ struct DisplacedAssetAnchorPoint {
     DisplacedAssetAnchorPoint(std::string name_,
                               int tex_x,
                               int tex_y,
-                              int depth_offset_px = 0,
+                              float depth_offset_px = 0.0f,
                               bool flip_horizontal_ = true,
                               bool flip_vertical_ = true,
                               float rotation_degrees_ = 0.0f,
@@ -72,7 +72,7 @@ struct ResolvedAnchor {
     bool             has_canonical_texture_source = false;
     world::GridPoint* grid_point = nullptr;
     bool             missing = false;
-    int              depth_offset = 0;
+    float            depth_offset = 0.0f;
 };
 
 // Runtime-facing anchor state used by animation, rendering, and binding helpers.
@@ -80,7 +80,7 @@ struct AnchorPoint {
     std::string name;
     int frame_index = -1;
     bool exists = false;
-    int depth_offset = 0;
+    float depth_offset = 0.0f;
     bool flip_horizontal = false;
     bool flip_vertical = false;
     float rotation_degrees = 0.0f;

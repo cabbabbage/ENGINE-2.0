@@ -1041,6 +1041,7 @@ constexpr int kMaxScreenCoordMagnitude = 1 << 20;
 constexpr int kAnchorHandlePickRadiusPx = 12;
 constexpr int kShiftAnchorHoverRadiusPx = 20;
 constexpr int kShiftAnchorSelectRadiusPx = 24;
+constexpr float kAnchorDepthScrollStepWorldPx = 0.1f;
 
 bool is_debug_marker_in_bounds(const SDL_FPoint& point, int screen_width, int screen_height) {
     if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
@@ -1230,7 +1231,7 @@ bool copy_anchor_authoring_fields(DisplacedAssetAnchorPoint& target, const Displ
         target.texture_y = source.texture_y;
         changed = true;
     }
-    if (target.depth_offset != source.depth_offset) {
+    if (std::fabs(target.depth_offset - source.depth_offset) > 1e-4f) {
         target.depth_offset = source.depth_offset;
         changed = true;
     }
@@ -9088,12 +9089,15 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
         return false;
     }
 
-    const int requested_depth = values.depth_offset;
+    float requested_depth = values.depth_offset;
     const bool requested_flip_horizontal = values.flip_horizontal;
     const bool requested_flip_vertical = values.flip_vertical;
     float requested_rotation = values.rotation_degrees;
     const bool requested_hidden = values.hidden;
     const bool requested_resolve_x = values.resolve_x;
+    if (!std::isfinite(requested_depth)) {
+        requested_depth = 0.0f;
+    }
     if (!std::isfinite(requested_rotation)) {
         requested_rotation = 0.0f;
     }
@@ -9107,7 +9111,7 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
                 return false;
             }
 
-            if (it->depth_offset == requested_depth &&
+            if (std::fabs(it->depth_offset - requested_depth) < 1e-4f &&
                 it->flip_horizontal == requested_flip_horizontal &&
                 it->flip_vertical == requested_flip_vertical &&
                 std::fabs(it->rotation_degrees - requested_rotation) < 1e-4f &&
@@ -9134,8 +9138,8 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
     return changed;
 }
 
-bool RoomEditor::update_anchor_depth(const std::string& anchor_name, int delta) {
-    if (anchor_name.empty() || delta == 0) {
+bool RoomEditor::update_anchor_depth(const std::string& anchor_name, float delta_world) {
+    if (anchor_name.empty() || !std::isfinite(delta_world) || std::fabs(delta_world) < 1e-6f) {
         return false;
     }
     const bool changed = mutate_anchor_current_frame(
@@ -9146,7 +9150,7 @@ bool RoomEditor::update_anchor_depth(const std::string& anchor_name, int delta) 
             if (it == anchors.end()) {
                 return false;
             }
-            it->depth_offset += delta;
+            it->depth_offset += delta_world;
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -9939,7 +9943,8 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
     if (scroll_y != 0 && !pointer_blocked) {
         ensure_anchor_selection_valid();
         if (!anchor_edit_.selected_anchor_name.empty() &&
-            update_anchor_depth(anchor_edit_.selected_anchor_name, scroll_y) &&
+            update_anchor_depth(anchor_edit_.selected_anchor_name,
+                                static_cast<float>(scroll_y) * kAnchorDepthScrollStepWorldPx) &&
             input_) {
             input_->consumeScroll();
         }
@@ -15524,4 +15529,3 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         }
     }
 }
-

@@ -1,7 +1,7 @@
 Anchor point contract (runtime + editor must stay in lockstep)
 
 - Canonical anchors are integer `texture_x`/`texture_y` that point at the center of a source texture pixel; origin is top-left, +X right, +Y down.
-- Anchors also store integer `depth_offset` (signed world-pixel units). Runtime resolves the flat texture-relative world point first, then applies `depth_offset` along the normalized `camera -> flat_point` ray:
+- Anchors also store floating-point `depth_offset` (signed world-pixel units; sub-pixel values supported). Runtime resolves the flat texture-relative world point first, then applies `depth_offset` along the normalized `camera -> flat_point` ray:
   - `depth_offset > 0` moves farther from camera.
   - `depth_offset < 0` moves closer to camera.
 - Box extrusion uses the same ray convention and creates symmetric endpoints around the flat point (`-extrusion` near, `+extrusion` far).

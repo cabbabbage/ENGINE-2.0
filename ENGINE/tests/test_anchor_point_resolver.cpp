@@ -143,7 +143,7 @@ TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z
     anchor.name = "depth_precision";
     anchor.texture_x = 0;
     anchor.texture_y = 0;
-    anchor.depth_offset = 3;
+    anchor.depth_offset = 2.5f;
 
     const auto sample = anchor_points::resolve_frame_anchor_sample(
         asset,
@@ -157,4 +157,5 @@ TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z
     CHECK(sample.resolved.world_exact_z == doctest::Approx(sample.final_anchor_point.z).epsilon(1e-6));
     CHECK(sample.resolved.world_depth == doctest::Approx(sample.final_anchor_point.z).epsilon(1e-6));
     CHECK(sample.resolved.world_z == static_cast<int>(std::lround(sample.final_anchor_point.z)));
+    CHECK(sample.resolved.depth_offset == doctest::Approx(2.5f).epsilon(1e-6));
 }

@@ -365,7 +365,7 @@ class Asset {
         bool            has_canonical_texture_source = false;
         bool            dirty = true;
         bool            missing = false;
-        int             depth_offset = 0;
+        float           depth_offset = 0.0f;
         bool            runtime_flip_horizontal = false;
         bool            runtime_flip_vertical = false;
         float           runtime_rotation_degrees = 0.0f;

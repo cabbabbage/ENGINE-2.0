@@ -216,13 +216,16 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node,
         if (!node.contains("texture_y") || !node["texture_y"].is_number_integer()) {
                 return anchor;
         }
-        if (!node.contains("depth_offset") || !node["depth_offset"].is_number_integer()) {
+        if (!node.contains("depth_offset") || !node["depth_offset"].is_number()) {
                 return anchor;
         }
 
         anchor.texture_x = node["texture_x"].get<int>();
         anchor.texture_y = node["texture_y"].get<int>();
-        anchor.depth_offset = node["depth_offset"].get<int>();
+        anchor.depth_offset = read_float_field_like(node, "depth_offset", 0.0f);
+        if (!std::isfinite(anchor.depth_offset)) {
+                anchor.depth_offset = 0.0f;
+        }
         anchor.flip_horizontal = read_bool_field_like(node, "flip_horizontal", default_flip_horizontal);
         anchor.flip_vertical = read_bool_field_like(node, "flip_vertical", default_flip_vertical);
         anchor.rotation_degrees = read_float_field_like(node, "rotation_degrees", default_rotation_degrees);

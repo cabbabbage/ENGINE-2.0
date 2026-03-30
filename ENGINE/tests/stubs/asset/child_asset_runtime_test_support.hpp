@@ -15,7 +15,7 @@ struct AnchorSpec {
     int offset_x = 0;
     int offset_y = 0;
     int offset_z = 0;
-    int depth_offset = 0;
+    float depth_offset = 0.0f;
     std::optional<int> resolution_layer{};
     float world_depth_offset = 0.0f;
     bool exists = true;

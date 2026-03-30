@@ -9884,7 +9884,7 @@
       "depth_cue_settings": {
         "background_max_depth_offset": 2380.0,
         "center_depth_offset": 150.0,
-        "foreground_max_depth_offset": -630.0
+        "foreground_max_depth_offset": -580.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -10012,9 +10012,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            90,
             242,
+            36,
+            188,
             255
           ],
           "edge_smoothness": 49,
@@ -10037,8 +10037,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            37,
             242,
-            241,
             36,
             255
           ],

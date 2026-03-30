@@ -494,7 +494,7 @@ private:
                                      devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::DetailValues& values);
-    bool update_anchor_depth(const std::string& anchor_name, int delta);
+    bool update_anchor_depth(const std::string& anchor_name, float delta_world);
     bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
     bool add_anchor_in_current_frame();
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
@@ -628,7 +628,7 @@ private:
         std::string name;
         int texture_x = 0;
         int texture_y = 0;
-        int depth_offset = 0;
+        float depth_offset = 0.0f;
         bool flip_horizontal = true;
         bool flip_vertical = true;
         float rotation_degrees = 0.0f;

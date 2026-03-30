@@ -3074,8 +3074,8 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     }
 
     if (live_depth_edit_mode_active_) {
-        handle_live_depth_edit_event(event);
-        if (input_) {
+        const bool handled_live_depth = handle_live_depth_edit_event(event);
+        if (handled_live_depth && input_) {
             input_->consumeEvent(event);
         }
         return;

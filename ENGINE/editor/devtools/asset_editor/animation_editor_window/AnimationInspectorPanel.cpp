@@ -1174,6 +1174,7 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
 void AnimationInspectorPanel::reset_payload_notification_state() {
     notified_payload_animation_id_.clear();
     notified_payload_signature_.clear();
+    notified_payload_revision_.reset();
 }
 
 void AnimationInspectorPanel::notify_payload_change_if_needed(bool force_notify) {
@@ -1181,22 +1182,30 @@ void AnimationInspectorPanel::notify_payload_change_if_needed(bool force_notify)
         return;
     }
 
-    auto payload_json = document_->animation_payload_json(animation_id_);
-    if (!payload_json.has_value() || !payload_json->is_object()) {
+    auto payload_dump = document_->animation_payload(animation_id_);
+    if (!payload_dump.has_value()) {
         return;
     }
 
-    std::string signature = payload_json->dump();
+    const std::uint64_t revision = document_->revision();
     const bool changed = force_notify ||
                          notified_payload_animation_id_ != animation_id_ ||
-                         notified_payload_signature_ != signature;
+                         !notified_payload_revision_.has_value() ||
+                         *notified_payload_revision_ != revision ||
+                         notified_payload_signature_ != *payload_dump;
     if (!changed) {
         return;
     }
 
+    nlohmann::json payload_json = nlohmann::json::parse(*payload_dump, nullptr, false);
+    if (!payload_json.is_object()) {
+        return;
+    }
+
     notified_payload_animation_id_ = animation_id_;
-    notified_payload_signature_ = signature;
-    on_animation_properties_changed_(animation_id_, *payload_json);
+    notified_payload_signature_ = *payload_dump;
+    notified_payload_revision_ = revision;
+    on_animation_properties_changed_(animation_id_, payload_json);
 }
 
 std::vector<AnimationInspectorPanel::FocusTarget> AnimationInspectorPanel::focus_order() const {

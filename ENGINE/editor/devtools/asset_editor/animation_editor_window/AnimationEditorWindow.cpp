@@ -1278,6 +1278,16 @@ void AnimationEditorWindow::refresh_inspector_animation_callback() {
         }
         if (external_animation_properties_changed_) {
             external_animation_properties_changed_(animation_id, payload);
+            return;
+        }
+        if (document_) {
+            if (!document_->save_to_file_checked(true)) {
+                const std::string manifest_key = document_->manifest_asset_key_debug();
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "AnimationEditorWindow: fallback save failed for animation '%s' (manifest key: '%s').",
+                            animation_id.c_str(),
+                            manifest_key.empty() ? "<unknown>" : manifest_key.c_str());
+            }
         }
     });
 }
@@ -2235,7 +2245,9 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     };
 
     auto on_success = [this, finalize]() {
-        handle_document_saved();
+        if (finalize) {
+            handle_document_saved();
+        }
         set_status_message(finalize ? "Animations saved." : "Animations updated.", finalize ? 200 : 120);
     };
 

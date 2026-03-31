@@ -135,3 +135,46 @@ TEST_CASE("Broken and cyclic chains fall back to the first file sourced animatio
     CHECK(cyclic.requested_was_derived);
     CHECK(cyclic.navigable_animation_ids == std::vector<std::string>{"attack", "idle"});
 }
+
+TEST_CASE("AssetInfo animation update classification distinguishes structural changes") {
+    AssetInfo info("animation_update_classification_test");
+
+    const nlohmann::json base_payload = {
+        {"source", {{"kind", "folder"}, {"path", "idle"}, {"name", ""}}},
+        {"number_of_frames", 2},
+        {"on_end", "default"},
+    };
+
+    const auto created = info.update_animation_properties_detailed("idle", base_payload);
+    CHECK(created.changed);
+    CHECK(created.animation_changed);
+    CHECK_FALSE(created.start_changed);
+    CHECK(created.structural);
+    CHECK(static_cast<int>(created.variant_mask) == static_cast<int>(AssetInfo::kTextureVariantAll));
+
+    const auto playback_only = info.update_animation_properties_detailed(
+        "idle",
+        nlohmann::json{{"on_end", "loop"}});
+    CHECK(playback_only.changed);
+    CHECK(playback_only.animation_changed);
+    CHECK_FALSE(playback_only.start_changed);
+    CHECK_FALSE(playback_only.structural);
+    CHECK(static_cast<int>(playback_only.variant_mask) == static_cast<int>(AssetInfo::kTextureVariantNone));
+
+    const auto source_changed = info.update_animation_properties_detailed(
+        "idle",
+        nlohmann::json{{"source", {{"kind", "folder"}, {"path", "idle_alt"}, {"name", ""}}}});
+    CHECK(source_changed.changed);
+    CHECK(source_changed.animation_changed);
+    CHECK(source_changed.structural);
+    CHECK(static_cast<int>(source_changed.variant_mask) == static_cast<int>(AssetInfo::kTextureVariantAll));
+
+    const auto start_only = info.update_animation_properties_detailed(
+        "idle",
+        nlohmann::json{{"start", true}});
+    CHECK(start_only.changed);
+    CHECK_FALSE(start_only.animation_changed);
+    CHECK(start_only.start_changed);
+    CHECK_FALSE(start_only.structural);
+    CHECK(static_cast<int>(start_only.variant_mask) == static_cast<int>(AssetInfo::kTextureVariantNone));
+}

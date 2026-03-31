@@ -103,6 +103,7 @@ nlohmann::json serialize_anchor_frame(const std::vector<DisplacedAssetAnchorPoin
             {"rotation_degrees", anchor.rotation_degrees},
             {"hidden", anchor.hidden},
             {"resolve_x", anchor.resolve_x},
+            {"scaling_method", std::string(anchor_points::anchor_scaling_method_to_token(anchor.scaling_method))},
         }));
     }
     return frame_json;

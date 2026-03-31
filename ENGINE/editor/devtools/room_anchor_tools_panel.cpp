@@ -26,6 +26,43 @@ constexpr int kSectionGap = 8;
 constexpr int kHeaderHeight = 24;
 constexpr int kLineHeight = 18;
 
+const std::vector<std::string>& scaling_method_options() {
+    static const std::vector<std::string> options{
+        "Parent",
+        "Real 3D Point",
+        "Relative 2D Anchor Point",
+        "Real 3D Floor Point",
+    };
+    return options;
+}
+
+int scaling_method_to_dropdown_index(AnchorScalingMethod method) {
+    switch (method) {
+        case AnchorScalingMethod::Parent:
+            return 0;
+        case AnchorScalingMethod::Real3DPoint:
+            return 1;
+        case AnchorScalingMethod::Relative2DAnchorPoint:
+            return 2;
+        case AnchorScalingMethod::Real3DFloorPoint:
+            return 3;
+    }
+    return 0;
+}
+
+AnchorScalingMethod dropdown_index_to_scaling_method(int index) {
+    switch (index) {
+        case 1:
+            return AnchorScalingMethod::Real3DPoint;
+        case 2:
+            return AnchorScalingMethod::Relative2DAnchorPoint;
+        case 3:
+            return AnchorScalingMethod::Real3DFloorPoint;
+        default:
+            return AnchorScalingMethod::Parent;
+    }
+}
+
 float parse_float_or(const std::string& text, float fallback) {
     try {
         return std::stof(text);
@@ -54,32 +91,19 @@ std::string format_depth_offset(float value) {
     return formatted;
 }
 
-bool parse_bool_or(const std::string& text, bool fallback) {
-    std::string lowered;
-    lowered.reserve(text.size());
-    for (const char ch : text) {
-        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    }
-    if (lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on") {
-        return true;
-    }
-    if (lowered == "0" || lowered == "false" || lowered == "no" || lowered == "off") {
-        return false;
-    }
-    return fallback;
-}
-
 }  // namespace
 
 RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     add_button_ = std::make_unique<DMButton>("Add Anchor", &DMStyles::CreateButton(), 180, DMButton::height());
     rename_textbox_ = std::make_unique<DMTextBox>("Rename", "");
     depth_textbox_ = std::make_unique<DMTextBox>("Depth Offset", "0");
-    flip_horizontal_textbox_ = std::make_unique<DMTextBox>("Flip Horizontal (1/0)", "1");
-    flip_vertical_textbox_ = std::make_unique<DMTextBox>("Flip Vertical (1/0)", "1");
     rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
     hidden_checkbox_ = std::make_unique<DMCheckbox>("Hidden", false);
+    advanced_options_button_ = std::make_unique<DMButton>("Advanced Options (Show)", &DMStyles::ListButton(), 180, DMButton::height());
+    flip_horizontal_checkbox_ = std::make_unique<DMCheckbox>("Flip Horizontal", true);
+    flip_vertical_checkbox_ = std::make_unique<DMCheckbox>("Flip Vertical", true);
     resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
+    scaling_method_dropdown_ = std::make_unique<DMDropdown>("Scaling Method", scaling_method_options(), 0);
     onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
     apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
@@ -165,12 +189,6 @@ void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
     if (depth_textbox_ && !depth_textbox_->is_editing()) {
         depth_textbox_->set_value(format_depth_offset(values.depth_offset));
     }
-    if (flip_horizontal_textbox_ && !flip_horizontal_textbox_->is_editing()) {
-        flip_horizontal_textbox_->set_value(values.flip_horizontal ? "1" : "0");
-    }
-    if (flip_vertical_textbox_ && !flip_vertical_textbox_->is_editing()) {
-        flip_vertical_textbox_->set_value(values.flip_vertical ? "1" : "0");
-    }
     if (rotation_slider_) {
         int rotation_degrees = static_cast<int>(std::lround(values.rotation_degrees));
         rotation_slider_->set_value(rotation_degrees);
@@ -178,8 +196,17 @@ void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
     if (hidden_checkbox_) {
         hidden_checkbox_->set_value(values.hidden);
     }
+    if (flip_horizontal_checkbox_) {
+        flip_horizontal_checkbox_->set_value(values.flip_horizontal);
+    }
+    if (flip_vertical_checkbox_) {
+        flip_vertical_checkbox_->set_value(values.flip_vertical);
+    }
     if (resolve_x_checkbox_) {
         resolve_x_checkbox_->set_value(values.resolve_x);
+    }
+    if (scaling_method_dropdown_) {
+        scaling_method_dropdown_->set_selected(scaling_method_to_dropdown_index(values.scaling_method));
     }
 }
 
@@ -228,11 +255,13 @@ void RoomAnchorToolsPanel::set_on_open_candidates(OpenCandidatesCallback callbac
 RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values() const {
     DetailValues values;
     values.depth_offset = parse_float_or(depth_textbox_ ? depth_textbox_->value() : std::string{}, 0.0f);
-    values.flip_horizontal = parse_bool_or(flip_horizontal_textbox_ ? flip_horizontal_textbox_->value() : std::string{}, true);
-    values.flip_vertical = parse_bool_or(flip_vertical_textbox_ ? flip_vertical_textbox_->value() : std::string{}, true);
+    values.flip_horizontal = flip_horizontal_checkbox_ ? flip_horizontal_checkbox_->value() : true;
+    values.flip_vertical = flip_vertical_checkbox_ ? flip_vertical_checkbox_->value() : true;
     values.rotation_degrees = rotation_slider_ ? static_cast<float>(rotation_slider_->value()) : 0.0f;
     values.hidden = hidden_checkbox_ ? hidden_checkbox_->value() : false;
     values.resolve_x = resolve_x_checkbox_ ? resolve_x_checkbox_->value() : true;
+    values.scaling_method = dropdown_index_to_scaling_method(
+        scaling_method_dropdown_ ? scaling_method_dropdown_->selected() : 0);
     if (!std::isfinite(values.depth_offset)) {
         values.depth_offset = 0.0f;
     }
@@ -396,14 +425,6 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
         details_changed = true;
     }
-    if (has_selected_anchor && flip_horizontal_textbox_ && flip_horizontal_textbox_->handle_event(event)) {
-        handled = true;
-        details_changed = true;
-    }
-    if (has_selected_anchor && flip_vertical_textbox_ && flip_vertical_textbox_->handle_event(event)) {
-        handled = true;
-        details_changed = true;
-    }
     if (has_selected_anchor && rotation_slider_ && rotation_slider_->handle_event(event)) {
         handled = true;
         details_changed = true;
@@ -412,7 +433,30 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
         details_changed = true;
     }
-    if (has_selected_anchor && resolve_x_checkbox_ && resolve_x_checkbox_->handle_event(event)) {
+    if (has_selected_anchor && advanced_options_button_ && advanced_options_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            advanced_options_expanded_ = !advanced_options_expanded_;
+            layout_dirty_ = true;
+        }
+    }
+    if (has_selected_anchor && advanced_options_expanded_ &&
+        flip_horizontal_checkbox_ && flip_horizontal_checkbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && advanced_options_expanded_ &&
+        flip_vertical_checkbox_ && flip_vertical_checkbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && advanced_options_expanded_ &&
+        resolve_x_checkbox_ && resolve_x_checkbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && advanced_options_expanded_ &&
+        scaling_method_dropdown_ && scaling_method_dropdown_->handle_event(event)) {
         handled = true;
         details_changed = true;
     }
@@ -421,10 +465,7 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
     }
 
-    const bool detail_editing =
-        (depth_textbox_ && depth_textbox_->is_editing()) ||
-        (flip_horizontal_textbox_ && flip_horizontal_textbox_->is_editing()) ||
-        (flip_vertical_textbox_ && flip_vertical_textbox_->is_editing());
+    const bool detail_editing = (depth_textbox_ && depth_textbox_->is_editing());
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) &&
         ((rename_textbox_ && rename_textbox_->is_editing()) || detail_editing)) {
         handled = true;

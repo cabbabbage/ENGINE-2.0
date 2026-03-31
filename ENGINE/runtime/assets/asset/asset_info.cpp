@@ -1958,9 +1958,12 @@ bool AssetInfo::reload_animations_from_disk() {
     return apply_payload(*view.data);
 }
 
-bool AssetInfo::update_animation_properties(const std::string& animation_name, const nlohmann::json& properties) {
+AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed(
+    const std::string& animation_name,
+    const nlohmann::json& properties) {
+    AnimationUpdateResult result{};
     if (animation_name.empty() || !properties.is_object()) {
-        return false;
+        return result;
     }
 
     try {
@@ -1996,7 +1999,7 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
         const bool animation_changed = !has_existing_animation || existing_animation != updated_animation;
         const bool start_changed = should_set_start && start_animation != animation_name;
         if (!animation_changed && !start_changed) {
-            return false;
+            return result;
         }
 
         anims_json_[animation_name] = updated_animation;
@@ -2014,22 +2017,32 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
             info_json_["start"] = start_animation;
         }
 
+        result.changed = true;
+        result.animation_changed = animation_changed;
+        result.start_changed = start_changed;
+
         if (animation_changed) {
             if (!has_existing_animation) {
-                mark_texture_rebuild_on_close(animation_name, kTextureVariantAll);
+                result.variant_mask = kTextureVariantAll;
             } else {
                 const auto variants = classify_texture_rebuild_variants(existing_animation, updated_animation);
-                if (variants != kTextureVariantNone) {
-                    mark_texture_rebuild_on_close(animation_name, variants);
-                }
+                result.variant_mask = variants;
+            }
+            if (result.variant_mask != kTextureVariantNone) {
+                mark_texture_rebuild_on_close(animation_name, result.variant_mask);
             }
         }
 
-        return true;
+        result.structural = result.variant_mask != kTextureVariantNone;
+        return result;
     } catch (const std::exception& e) {
         std::cerr << "[AssetInfo] Failed to update animation properties for '" << animation_name << "': " << e.what() << std::endl;
-        return false;
+        return AnimationUpdateResult{};
     }
+}
+
+bool AssetInfo::update_animation_properties(const std::string& animation_name, const nlohmann::json& properties) {
+    return update_animation_properties_detailed(animation_name, properties).changed;
 }
 
 void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations, bool assume_cache_ready) {

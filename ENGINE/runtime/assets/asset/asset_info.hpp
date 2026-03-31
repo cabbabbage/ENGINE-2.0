@@ -215,6 +215,16 @@ class AssetInfo {
 
     bool reload_animations_from_disk();
 
+    struct AnimationUpdateResult {
+        bool changed = false;
+        bool animation_changed = false;
+        bool start_changed = false;
+        std::uint8_t variant_mask = kTextureVariantNone;
+        bool structural = false;
+    };
+
+    AnimationUpdateResult update_animation_properties_detailed(const std::string& animation_name,
+                                                               const nlohmann::json& properties);
     bool update_animation_properties(const std::string& animation_name, const nlohmann::json& properties);
 
     struct AreaCodec {

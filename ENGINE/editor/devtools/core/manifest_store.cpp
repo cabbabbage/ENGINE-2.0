@@ -131,7 +131,7 @@ ManifestStore::ManifestStore()
                     [](const std::filesystem::path& path, const nlohmann::json& data, int indent) {
                         DevJsonStore::instance().submit(path, data, indent);
                     },
-                    []() { DevJsonStore::instance().flush_all(); },
+                    {},
                     2) {}
 
 ManifestStore::ManifestStore(const std::filesystem::path& manifest_path,
@@ -150,7 +150,7 @@ ManifestStore::ManifestStore(const std::filesystem::path& manifest_path,
         };
     }
     if (!flush_) {
-        flush_ = []() { DevJsonStore::instance().flush_all(); };
+        flush_ = [path = manifest_path_]() { DevJsonStore::instance().flush_path(path); };
     }
 }
 

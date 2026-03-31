@@ -1303,8 +1303,10 @@ bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
         base_data_ = root;
     }
     if (saved) {
-        // Force immediate persistence to disk so dev-mode edits are visible without debounce.
-        devmode::core::DevJsonStore::instance().flush_all();
+        if (!persist_callback_ && !info_path_.empty()) {
+            // Keep animation edits immediately durable without flushing unrelated pending files.
+            devmode::core::DevJsonStore::instance().flush_path(info_path_);
+        }
         dirty_ = false;
     }
     if (saved && fire_callback && on_saved_callback_) {
@@ -1315,6 +1317,17 @@ bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
 
 bool AnimationDocument::consume_dirty_flag() const {
     if (!dirty_) {
+        return false;
+    }
+    dirty_ = false;
+    return true;
+}
+
+bool AnimationDocument::clear_dirty_if_revision_not_newer(std::uint64_t revision) const {
+    if (!dirty_) {
+        return false;
+    }
+    if (revision_ > revision) {
         return false;
     }
     dirty_ = false;

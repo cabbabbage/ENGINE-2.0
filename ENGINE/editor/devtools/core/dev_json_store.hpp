@@ -11,6 +11,7 @@ public:
 
     nlohmann::json load(const std::filesystem::path& path);
     void submit(const std::filesystem::path& path, const nlohmann::json& data, int indent = 4);
+    void flush_path(const std::filesystem::path& path);
     void flush_all();
     bool has_pending_write(const std::filesystem::path& path) const;
     void shutdown();

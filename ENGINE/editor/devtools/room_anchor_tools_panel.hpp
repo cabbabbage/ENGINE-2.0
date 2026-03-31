@@ -7,10 +7,13 @@
 
 #include <SDL3/SDL.h>
 
+#include "assets/asset/anchor_point.hpp"
+
 class DMButton;
 class DMTextBox;
 class DMSlider;
 class DMCheckbox;
+class DMDropdown;
 
 class RoomAnchorToolsPanel {
 public:
@@ -27,6 +30,7 @@ public:
         float rotation_degrees = 0.0f;
         bool hidden = false;
         bool resolve_x = true;
+        AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
     };
 
     using SelectCallback = std::function<void(const std::string&)>;
@@ -99,16 +103,19 @@ private:
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMTextBox> rename_textbox_;
     std::unique_ptr<DMTextBox> depth_textbox_;
-    std::unique_ptr<DMTextBox> flip_horizontal_textbox_;
-    std::unique_ptr<DMTextBox> flip_vertical_textbox_;
     std::unique_ptr<DMSlider> rotation_slider_;
     std::unique_ptr<DMCheckbox> hidden_checkbox_;
+    std::unique_ptr<DMButton> advanced_options_button_;
+    std::unique_ptr<DMCheckbox> flip_horizontal_checkbox_;
+    std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> resolve_x_checkbox_;
+    std::unique_ptr<DMDropdown> scaling_method_dropdown_;
     std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;
     std::unique_ptr<DMButton> apply_asset_button_;
+    bool advanced_options_expanded_ = false;
 
     SelectCallback on_select_;
     AddCallback on_add_;

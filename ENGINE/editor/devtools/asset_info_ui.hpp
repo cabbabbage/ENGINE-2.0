@@ -88,6 +88,11 @@ class AssetInfoUI {
                                std::function<void()> on_success = {});
 
   private:
+    enum class RuntimeRefreshScope {
+        LocalOnly,
+        StructuralWithDependents,
+    };
+
     void rebuild_default_sections();
     void layout_widgets(int screen_w, int screen_h) const;
     void apply_camera_override(bool enable);
@@ -100,6 +105,8 @@ class AssetInfoUI {
     bool asset_matches_current_info(const Asset* asset) const;
     void on_animation_document_saved();
     void refresh_loaded_asset_instances();
+    void refresh_loaded_asset_instances(RuntimeRefreshScope scope,
+                                        const std::shared_ptr<AssetInfo>& context_info);
     void complete_color_sampling(SDL_Color color);
     void focus_section(DockableCollapsible* section);
     void apply_section_focus_states();
@@ -176,5 +183,6 @@ class AssetInfoUI {
     std::function<void()> color_sampling_cancel_{};
     SDL_Cursor* color_sampling_prev_cursor_ = nullptr;
     SDL_Cursor* color_sampling_cursor_handle_ = nullptr;
+    bool animation_document_save_in_progress_ = false;
 };
 

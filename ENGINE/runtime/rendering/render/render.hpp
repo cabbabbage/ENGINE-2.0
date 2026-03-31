@@ -49,29 +49,8 @@ private:
         double depth = 0.0;
     };
 
-    struct RenderStateKey {
-        SDL_Texture* texture = nullptr;
-        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
-        bool operator==(const RenderStateKey& rhs) const noexcept {
-            return texture == rhs.texture && blend_mode == rhs.blend_mode;
-        }
-    };
-
-    struct RenderStateKeyHash {
-        std::size_t operator()(const RenderStateKey& key) const noexcept {
-            const auto ptr_value = reinterpret_cast<std::uintptr_t>(key.texture);
-            return ptr_value ^ (static_cast<std::size_t>(key.blend_mode) + 0x9e3779b97f4a7c15ULL + (ptr_value << 6) + (ptr_value >> 2));
-        }
-    };
-
-    struct RenderStateGroup {
-        RenderStateKey key;
-        std::vector<DrawItem> items;
-    };
-
     struct DepthBucket {
-        std::vector<RenderStateGroup> groups;
-        std::unordered_map<RenderStateKey, std::size_t, RenderStateKeyHash> group_index;
+        std::vector<DrawItem> items;
     };
 
     SDL_Renderer* renderer_;

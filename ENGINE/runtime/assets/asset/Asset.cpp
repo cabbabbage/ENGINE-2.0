@@ -238,10 +238,6 @@ void Asset::clear_downscale_cache() {
 
 Asset::~Asset() {
         clear_render_caches();
-        if (composite_texture_) {
-                SDL_DestroyTexture(composite_texture_);
-                composite_texture_ = nullptr;
-        }
         visibility_stamp = 0;
 }
 
@@ -297,7 +293,6 @@ Asset::Asset(const Asset& o)
     , last_scale_camera_input_(o.last_scale_camera_input_)
     , last_scale_quality_cap_input_(o.last_scale_quality_cap_input_)
     , grid_id_(o.grid_id_)
-    , composite_texture_(nullptr)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
@@ -384,7 +379,6 @@ Asset& Asset::operator=(const Asset& o) {
         alpha_smoothing_          = o.alpha_smoothing_;
         finalized_                = o.finalized_;
         grid_id_                  = o.grid_id_;
-        composite_texture_        = nullptr;
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
@@ -1899,13 +1893,6 @@ double Asset::effective_render_angle() const {
         return std::isfinite(anchor_sprite_transform_override_angle_degrees_)
                 ? anchor_sprite_transform_override_angle_degrees_
                 : 0.0;
-}
-
-void Asset::set_composite_texture(SDL_Texture* tex) {
-    if (composite_texture_ && composite_texture_ != tex) {
-        SDL_DestroyTexture(composite_texture_);
-    }
-    composite_texture_ = tex;
 }
 
 float Asset::smoothed_translation_x() const {

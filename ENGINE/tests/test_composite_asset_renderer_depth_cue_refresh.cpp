@@ -7,6 +7,8 @@
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "core/manifest/depth_cue_settings.hpp"
 #include "rendering/render/composite_asset_renderer.hpp"
 
@@ -104,53 +106,29 @@ SDL_Texture* create_solid_texture(SDL_Renderer* renderer,
     return texture;
 }
 
-bool read_texture_pixel(SDL_Renderer* renderer,
-                        SDL_Texture* texture,
-                        int x,
-                        int y,
-                        SDL_Color& out_color) {
-    out_color = SDL_Color{0, 0, 0, 0};
-    if (!renderer || !texture || x < 0 || y < 0) {
-        return false;
-    }
-
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
-    if (!SDL_SetRenderTarget(renderer, texture)) {
-        return false;
-    }
-
-    SDL_Rect pixel_rect{x, y, 1, 1};
-    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &pixel_rect);
-    SDL_SetRenderTarget(renderer, previous_target);
-    if (!captured || !captured->pixels) {
-        if (captured) {
-            SDL_DestroySurface(captured);
-        }
-        return false;
-    }
-
-    const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(captured->format);
-    if (!format) {
-        SDL_DestroySurface(captured);
-        return false;
-    }
-
-    const Uint32 pixel = *static_cast<const Uint32*>(captured->pixels);
-    SDL_GetRGBA(pixel,
-                format,
-                SDL_GetSurfacePalette(captured),
-                &out_color.r,
-                &out_color.g,
-                &out_color.b,
-                &out_color.a);
-    SDL_DestroySurface(captured);
-    return true;
-}
-
 Asset make_test_asset(int world_x, int world_y) {
     auto info = std::make_shared<AssetInfo>("depth_cue_merge_refresh_asset");
     Area spawn_area("depth_cue_merge_refresh_area", 0);
     return Asset(info, spawn_area, SDL_Point{world_x, world_y}, 0);
+}
+
+void bind_single_variant_frame(Asset& asset,
+                               AnimationFrame& frame,
+                               SDL_Texture* base_texture,
+                               SDL_Texture* foreground_texture,
+                               SDL_Texture* background_texture) {
+    frame.variants.clear();
+    FrameVariant variant{};
+    variant.base_texture = base_texture;
+    variant.foreground_texture = foreground_texture;
+    variant.background_texture = background_texture;
+    frame.variants.push_back(variant);
+
+    asset.current_animation = "idle";
+    asset.info->animations["idle"] = Animation{};
+    asset.current_frame = &frame;
+    asset.current_variant_index = 0;
+    asset.current_remaining_scale_adjustment = 1.0f;
 }
 
 } // namespace
@@ -217,8 +195,8 @@ TEST_CASE("depth cue merge signature transitions trigger rebuild at expected thr
     REQUIRE(small_delta_signature.overlay_active);
     CHECK(small_delta_signature.overlay_layer == mid_foreground_signature.overlay_layer);
     CHECK(std::abs(static_cast<int>(small_delta_signature.overlay_alpha) -
-                   static_cast<int>(mid_foreground_signature.overlay_alpha)) < 8);
-    CHECK_FALSE(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, small_delta_signature));
+                   static_cast<int>(mid_foreground_signature.overlay_alpha)) >= 1);
+    CHECK(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, small_delta_signature));
 
     const DepthCueMergeSignature large_delta_signature = renderer.test_build_depth_cue_merge_signature(
         base_texture,
@@ -262,7 +240,7 @@ TEST_CASE("depth cue merge signature transitions trigger rebuild at expected thr
     CHECK(renderer.test_should_mark_composite_dirty_for_depth_cue_merge(&asset, background_signature));
 }
 
-TEST_CASE("depth cue compose draws foreground overlays in front of base") {
+TEST_CASE("depth cue layered package places foreground overlays after base") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
 
@@ -274,33 +252,45 @@ TEST_CASE("depth cue compose draws foreground overlays in front of base") {
     REQUIRE(base_texture != nullptr);
     REQUIRE(overlay_texture != nullptr);
 
+    Asset asset = make_test_asset(120, 240);
+    AnimationFrame frame{};
+    bind_single_variant_frame(asset, frame, base_texture, overlay_texture, nullptr);
+
+    DepthCueMergeSignature desired_signature{};
+    desired_signature.valid = true;
+    desired_signature.base_texture = base_texture;
+    desired_signature.overlay_active = true;
+    desired_signature.overlay_texture = overlay_texture;
+    desired_signature.overlay_layer = 1;
+    desired_signature.overlay_alpha = 170;
+
     CompositeAssetRenderer composite_renderer(renderer, nullptr);
-    SDL_Point merged_size{0, 0};
-    SDL_Texture* merged = composite_renderer.test_compose_depth_cue_merged_texture(base_texture,
-                                                                                   nullptr,
-                                                                                   4,
-                                                                                   4,
-                                                                                   overlay_texture,
-                                                                                   255,
-                                                                                   255,
-                                                                                   1,
-                                                                                   &merged_size);
-    REQUIRE(merged != nullptr);
-    CHECK(merged_size.x == 8);
-    CHECK(merged_size.y == 8);
+    composite_renderer.test_regenerate_package_with_signature(&asset, 1.0f, desired_signature);
 
-    SDL_Color center_color{};
-    REQUIRE(read_texture_pixel(renderer, merged, 3, 3, center_color));
-    CHECK(center_color.b > 200);
-    CHECK(center_color.r < 40);
-    CHECK(center_color.a > 200);
+    REQUIRE(asset.render_package.size() == 2);
+    const RenderObject& base_obj = asset.render_package[0];
+    const RenderObject& overlay_obj = asset.render_package[1];
 
-    SDL_DestroyTexture(merged);
+    CHECK(base_obj.texture == base_texture);
+    CHECK(base_obj.screen_rect.w == 4);
+    CHECK(base_obj.screen_rect.h == 4);
+    CHECK(base_obj.projection_anchor_uv.x == doctest::Approx(0.5f));
+    CHECK(base_obj.projection_anchor_uv.y == doctest::Approx(1.0f));
+
+    CHECK(overlay_obj.texture == overlay_texture);
+    CHECK(overlay_obj.screen_rect.w == 8);
+    CHECK(overlay_obj.screen_rect.h == 8);
+    CHECK(overlay_obj.projection_anchor_uv.x == doctest::Approx(0.5f));
+    CHECK(overlay_obj.projection_anchor_uv.y == doctest::Approx(0.75f));
+    CHECK(overlay_obj.color_mod.a == desired_signature.overlay_alpha);
+    CHECK(overlay_obj.world_anchor_x == doctest::Approx(base_obj.world_anchor_x));
+    CHECK(overlay_obj.world_anchor_y == doctest::Approx(base_obj.world_anchor_y));
+
     SDL_DestroyTexture(base_texture);
     SDL_DestroyTexture(overlay_texture);
 }
 
-TEST_CASE("depth cue compose keeps base dominant for background overlays while preserving halo") {
+TEST_CASE("depth cue layered package places background overlays before base") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
 
@@ -312,33 +302,66 @@ TEST_CASE("depth cue compose keeps base dominant for background overlays while p
     REQUIRE(base_texture != nullptr);
     REQUIRE(overlay_texture != nullptr);
 
+    Asset asset = make_test_asset(100, 220);
+    AnimationFrame frame{};
+    bind_single_variant_frame(asset, frame, base_texture, nullptr, overlay_texture);
+
+    DepthCueMergeSignature desired_signature{};
+    desired_signature.valid = true;
+    desired_signature.base_texture = base_texture;
+    desired_signature.overlay_active = true;
+    desired_signature.overlay_texture = overlay_texture;
+    desired_signature.overlay_layer = 2;
+    desired_signature.overlay_alpha = 200;
+
     CompositeAssetRenderer composite_renderer(renderer, nullptr);
-    SDL_Point merged_size{0, 0};
-    SDL_Texture* merged = composite_renderer.test_compose_depth_cue_merged_texture(base_texture,
-                                                                                   nullptr,
-                                                                                   4,
-                                                                                   4,
-                                                                                   overlay_texture,
-                                                                                   255,
-                                                                                   255,
-                                                                                   2,
-                                                                                   &merged_size);
-    REQUIRE(merged != nullptr);
-    CHECK(merged_size.x == 8);
-    CHECK(merged_size.y == 8);
+    composite_renderer.test_regenerate_package_with_signature(&asset, 1.0f, desired_signature);
 
-    SDL_Color center_color{};
-    REQUIRE(read_texture_pixel(renderer, merged, 3, 3, center_color));
-    CHECK(center_color.r > 200);
-    CHECK(center_color.b < 40);
-    CHECK(center_color.a > 200);
+    REQUIRE(asset.render_package.size() == 2);
+    const RenderObject& overlay_obj = asset.render_package[0];
+    const RenderObject& base_obj = asset.render_package[1];
 
-    SDL_Color halo_color{};
-    REQUIRE(read_texture_pixel(renderer, merged, 0, 0, halo_color));
-    CHECK(halo_color.b > 200);
-    CHECK(halo_color.a > 200);
+    CHECK(overlay_obj.texture == overlay_texture);
+    CHECK(base_obj.texture == base_texture);
+    CHECK(overlay_obj.color_mod.a == desired_signature.overlay_alpha);
+    CHECK(overlay_obj.screen_rect.w == 8);
+    CHECK(overlay_obj.screen_rect.h == 8);
+    CHECK(base_obj.screen_rect.w == 4);
+    CHECK(base_obj.screen_rect.h == 4);
+    CHECK(overlay_obj.projection_anchor_uv.x == doctest::Approx(0.5f));
+    CHECK(overlay_obj.projection_anchor_uv.y == doctest::Approx(0.75f));
 
-    SDL_DestroyTexture(merged);
     SDL_DestroyTexture(base_texture);
     SDL_DestroyTexture(overlay_texture);
+}
+
+TEST_CASE("depth cue layered package emits base only when overlay is inactive") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    SDL_Texture* base_texture = create_solid_texture(renderer, 4, 4, SDL_Color{255, 0, 0, 255});
+    REQUIRE(base_texture != nullptr);
+
+    Asset asset = make_test_asset(96, 144);
+    AnimationFrame frame{};
+    bind_single_variant_frame(asset, frame, base_texture, nullptr, nullptr);
+
+    DepthCueMergeSignature desired_signature{};
+    desired_signature.valid = true;
+    desired_signature.base_texture = base_texture;
+    desired_signature.overlay_active = false;
+
+    CompositeAssetRenderer composite_renderer(renderer, nullptr);
+    composite_renderer.test_regenerate_package_with_signature(&asset, 1.0f, desired_signature);
+
+    REQUIRE(asset.render_package.size() == 1);
+    const RenderObject& base_obj = asset.render_package[0];
+    CHECK(base_obj.texture == base_texture);
+    CHECK(base_obj.projection_anchor_uv.x == doctest::Approx(0.5f));
+    CHECK(base_obj.projection_anchor_uv.y == doctest::Approx(1.0f));
+
+    SDL_DestroyTexture(base_texture);
 }

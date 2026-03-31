@@ -287,8 +287,6 @@ class Asset {
     SDL_FlipMode effective_render_flip() const;
     double effective_render_angle() const;
 
-    SDL_Texture* composite_texture() const { return composite_texture_; }
-    void set_composite_texture(SDL_Texture* tex);
     bool is_composite_dirty() const { return composite_dirty_; }
     void mark_composite_dirty() { composite_dirty_ = true; }
     void clear_composite_dirty() { composite_dirty_ = false; }
@@ -557,7 +555,6 @@ private:
     std::uint64_t grid_id_ = 0;
     bool has_cached_grid_residency_ = false;
     world::GridKey cached_grid_residency_{0, 0, 0, 0};
-    SDL_Texture* composite_texture_ = nullptr;
     bool         composite_dirty_   = true;
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;

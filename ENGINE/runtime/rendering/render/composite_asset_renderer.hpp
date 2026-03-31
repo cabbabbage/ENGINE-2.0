@@ -33,16 +33,10 @@ public:
     bool test_should_mark_composite_dirty_for_depth_cue_merge(
         const Asset* asset,
         const DepthCueMergeSignature& desired_signature) const;
-    SDL_Texture* test_compose_depth_cue_merged_texture(
-        SDL_Texture* base_texture,
-        const SDL_Rect* base_src_rect,
-        int base_frame_w,
-        int base_frame_h,
-        SDL_Texture* overlay_texture,
-        Uint8 overlay_alpha,
-        Uint8 base_alpha,
-        std::uint8_t overlay_layer,
-        SDL_Point* out_size) const;
+    void test_regenerate_package_with_signature(
+        Asset* asset,
+        float package_scale,
+        const DepthCueMergeSignature& desired_signature);
 #endif
 
 private:
@@ -59,16 +53,6 @@ private:
     bool should_mark_composite_dirty_for_depth_cue_merge(
         const Asset* asset,
         const DepthCueMergeSignature& desired_signature) const;
-    SDL_Texture* compose_depth_cue_merged_texture(
-        SDL_Texture* base_texture,
-        const SDL_Rect* base_src_rect,
-        int base_frame_w,
-        int base_frame_h,
-        SDL_Texture* overlay_texture,
-        Uint8 overlay_alpha,
-        Uint8 base_alpha,
-        depth_cue::OverlayLayer overlay_layer,
-        SDL_Point* out_size) const;
     void calculate_local_bounds(Asset* asset);
 
     SDL_Renderer* renderer_;

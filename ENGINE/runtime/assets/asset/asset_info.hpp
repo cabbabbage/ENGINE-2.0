@@ -90,6 +90,7 @@ class AssetInfo {
     int min_distance_all;
     int starting_health = 100;
     float scale_factor;
+    float weight_kg = 0.0f;
     bool smooth_scaling = true;
     int original_canvas_width = 0;
     int original_canvas_height = 0;
@@ -168,6 +169,8 @@ class AssetInfo {
     void set_starting_health(int health);
     void set_scale_factor(float factor);
     void set_scale_percentage(float percent);
+    void set_weight_kg(float weight);
+    float get_weight_kg() const { return weight_kg; }
     void set_scale_filter(bool smooth);
     void set_tags(const std::vector<std::string> &t);
     void add_tag(const std::string &tag);

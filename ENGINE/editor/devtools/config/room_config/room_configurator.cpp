@@ -180,10 +180,10 @@ struct SpawnCallbackGuard {
 struct RoomConfigurator::State {
     std::string name;
     std::string geometry;
-    int width_min = 1500;
-    int width_max = 10000;
-    int height_min = 1500;
-    int height_max = 10000;
+    int width_min = 500;
+    int width_max = 5000;
+    int height_min = 500;
+    int height_max = 5000;
     int radius_min = 100;
     int radius_max = 100;
     int edge_smoothness = 2;

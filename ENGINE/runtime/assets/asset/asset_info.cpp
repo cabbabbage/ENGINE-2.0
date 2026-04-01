@@ -1053,6 +1053,7 @@ nlohmann::json AssetInfo::manifest_payload() const {
         if (!payload.is_object()) {
                 payload = nlohmann::json::object();
         }
+        payload["weight_kg"] = weight_kg;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
@@ -1179,6 +1180,14 @@ void AssetInfo::set_scale_percentage(float percent) {
                 info_json_["size_settings"] = nlohmann::json::object();
         }
         info_json_["size_settings"]["scale_percentage"] = percent;
+}
+
+void AssetInfo::set_weight_kg(float weight) {
+        if (weight < 0.0f) {
+                weight = 0.0f;
+        }
+        weight_kg = weight;
+        info_json_["weight_kg"] = weight;
 }
 
 void AssetInfo::set_scale_filter(bool smooth) {
@@ -1508,6 +1517,9 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 if (data.contains("canvas_height") && data["canvas_height"].is_number_integer()) {
                         original_canvas_height = std::max(0, data["canvas_height"].get<int>());
                 }
+                if (data.contains("weight_kg") && data["weight_kg"].is_number()) {
+                        weight_kg = std::max(0.0f, static_cast<float>(data["weight_kg"].get<double>()));
+                }
         } catch (...) {
 
         }
@@ -1564,15 +1576,49 @@ nlohmann::json AssetInfo::anchor_point_child_candidates_payload() const {
 }
 
 nlohmann::json AssetInfo::anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const {
+    nlohmann::json result = nlohmann::json::object();
+    result["candidates"] = nlohmann::json::array();
+
     if (anchor_point_name.empty()) {
-        return nlohmann::json::object();
+        return result;
     }
-    for (const auto& candidate : anchor_point_child_candidates) {
-        if (candidate.anchor_point_name == anchor_point_name) {
-            return candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+    for (const auto& entry : anchor_point_child_candidates) {
+        if (entry.anchor_point_name == anchor_point_name) {
+            // Convert stored candidates to the array format expected by
+            // CandidateEditorPieGraphWidget::set_candidates_from_json().
+            nlohmann::json candidates_array = nlohmann::json::array();
+            if (entry.candidates.is_object()) {
+                // The stored object may be keyed by candidate name or may
+                // already contain a "candidates" array.
+                if (entry.candidates.contains("candidates") && entry.candidates["candidates"].is_array()) {
+                    candidates_array = entry.candidates["candidates"];
+                } else {
+                    // Treat each key-value pair as a candidate entry.
+                    for (auto it = entry.candidates.begin(); it != entry.candidates.end(); ++it) {
+                        nlohmann::json candidate = nlohmann::json::object();
+                        candidate["name"] = it.key();
+                        if (it.value().is_object()) {
+                            // Copy through fields from the stored object and
+                            // ensure "name" is honoured if it exists inside.
+                            for (auto field_it = it.value().begin(); field_it != it.value().end(); ++field_it) {
+                                if (field_it.key() == "name") {
+                                    candidate["name"] = field_it.value().get<std::string>();
+                                } else if (!candidate.contains(field_it.key())) {
+                                    candidate[field_it.key()] = field_it.value();
+                                }
+                            }
+                        }
+                        candidates_array.push_back(candidate);
+                    }
+                }
+            } else if (entry.candidates.is_array()) {
+                candidates_array = entry.candidates;
+            }
+            result["candidates"] = candidates_array;
+            return result;
         }
     }
-    return nlohmann::json::object();
+    return result;
 }
 
 bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates) {

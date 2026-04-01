@@ -119,6 +119,7 @@ class Section_BasicInfo : public DockableCollapsible {
 
     std::unique_ptr<DMDropdown>  dd_type_;
     std::unique_ptr<DMSlider>    s_scale_pct_;
+    std::unique_ptr<DMSlider>    s_weight_kg_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
@@ -175,6 +176,8 @@ inline void Section_BasicInfo::build() {
     int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
     s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
+    int weight_val = std::max(0, static_cast<int>(std::lround(info_->weight_kg)));
+    s_weight_kg_ = std::make_unique<DMSlider>("Weight (kg)", 0, 10000, weight_val);
     if (!is_tiled_asset) {
         c_flipable_  = std::make_unique<DMCheckbox>("Flipable (can invert)", info_->flipable);
     } else {
@@ -189,6 +192,10 @@ inline void Section_BasicInfo::build() {
     auto w_scale = std::make_unique<SliderWidget>(s_scale_pct_.get());
     rows.push_back({ w_scale.get() });
     widgets_.push_back(std::move(w_scale));
+
+    auto w_weight = std::make_unique<SliderWidget>(s_weight_kg_.get());
+    rows.push_back({ w_weight.get() });
+    widgets_.push_back(std::move(w_weight));
 
     tb_starting_health_ = std::make_unique<DMTextBox>("Starting Health", std::to_string(info_->starting_health));
     auto w_health = std::make_unique<TextBoxWidget>(tb_starting_health_.get());
@@ -224,6 +231,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (!used) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
+        if (s_weight_kg_ && s_weight_kg_->handle_event(e)) used = true;
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
@@ -261,6 +269,11 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         }
     }
 
+    if (s_weight_kg_ && info_->weight_kg != static_cast<float>(s_weight_kg_->value())) {
+        info_->set_weight_kg(static_cast<float>(s_weight_kg_->value()));
+        changed = true;
+        render_settings_changed = true;
+    }
     if (c_flipable_ && info_->flipable != c_flipable_->value()) {
         info_->set_flipable(c_flipable_->value());
         changed = true;

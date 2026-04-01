@@ -398,6 +398,13 @@ void AssetSpawner::spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
                         }
 
                         SDL_Point spawn_pos = vertex->world;
+                        // Apply position jitter for natural distribution
+                        int jitter = context.map_grid_settings().position_jitter_px;
+                        if (jitter > 0) {
+                                std::uniform_int_distribution<> dist(-jitter, jitter);
+                                spawn_pos.x += dist(local_rng);
+                                spawn_pos.y += dist(local_rng);
+                        }
                         context.set_clip_area(owner->room_area.get());
                         const bool enforce_spacing = spawn_info->check_min_spacing;
                         const auto spawn_gp = context.to_grid_point(spawn_pos);

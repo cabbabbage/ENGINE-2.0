@@ -584,13 +584,9 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                               SDL_FPoint{world_anchor_x, world_anchor_y});
         };
 
-        if (overlay_active && overlay_layer == depth_cue::OverlayLayer::Background) {
-            add_overlay_object();
-            add_base_object();
-        } else {
-            add_base_object();
-            add_overlay_object();
-        }
+        // Base must render first so the depth-cue overlay renders in front.
+        add_base_object();
+        add_overlay_object();
 
         if (overlay_active) {
             asset->depth_cue_merge_applied_signature_ = desired_signature;

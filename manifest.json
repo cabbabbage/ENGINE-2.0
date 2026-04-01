@@ -276,7 +276,7 @@
       ],
       "asset_directory": "resources/assets/bench",
       "asset_name": "bench",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -296,7 +296,8 @@
         "wooden"
       ],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "weight_kg": 1302.0
     },
     "big_rock": {
       "animations": {
@@ -11731,6 +11732,7 @@
             "max_number": 1,
             "min_number": 1,
             "position": "Random",
+            "position_jitter_px": 127,
             "priority": 0,
             "resolution": 4,
             "resolve_geometry_to_room_size": false,
@@ -11786,7 +11788,8 @@
         "regen_seed": 1
       },
       "map_grid_settings": {
-        "grid_resolution": 6
+        "grid_resolution": 6,
+        "position_jitter_px": 0
       },
       "map_layers": [
         {
@@ -11817,9 +11820,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            120,
             242,
+            36,
+            188,
             255
           ],
           "edge_smoothness": 49,
@@ -11842,9 +11845,9 @@
           "camera_zoom_percent": 85,
           "curvyness": 2,
           "display_color": [
-            36,
-            133,
+            37,
             242,
+            36,
             255
           ],
           "edge_smoothness": 85,

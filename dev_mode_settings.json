@@ -33,7 +33,7 @@
             }
         },
         "depth_effects": {
-            "enabled": false
+            "enabled": true
         },
         "grid": {
             "cell_size_px": 81.0,

@@ -70,6 +70,8 @@ bool is_null_candidate_name(std::string_view name) {
 
 constexpr int kMapWideGridResolutionMin = 5;
 constexpr int kMapWideGridResolutionMax = 10;
+constexpr int kMapWidePositionJitterMin = 0;
+constexpr int kMapWidePositionJitterMax = 500;
 
 bool ensure_null_candidate_entry(json& entry) {
     if (!entry.is_object()) return false;
@@ -340,8 +342,22 @@ public:
             grid_resolution_stepper_->set_value(resolution);
         }
 
+        const int jitter = current_position_jitter();
+        if (!position_jitter_stepper_) {
+            position_jitter_stepper_ = std::make_unique<DMNumericStepper>("Position Jitter (px)",
+                                                                          kMapWidePositionJitterMin,
+                                                                          kMapWidePositionJitterMax,
+                                                                          jitter);
+            position_jitter_stepper_->set_step(1);
+            position_jitter_stepper_->set_on_change([this](int value) { this->update_position_jitter(value); });
+            position_jitter_widget_ = std::make_unique<StepperWidget>(position_jitter_stepper_.get());
+        } else {
+            position_jitter_stepper_->set_value(jitter);
+        }
+
         if (entry_) {
             (*entry_)["grid_resolution"] = resolution;
+            (*entry_)["position_jitter_px"] = jitter;
         }
 
         if (!ownership_label_.empty()) {
@@ -461,6 +477,12 @@ private:
             rows.push_back({grid_resolution_widget_.get()});
         }
 
+        if (position_jitter_widget_ && position_jitter_stepper_) {
+            const int jitter = current_position_jitter();
+            position_jitter_stepper_->set_value(jitter);
+            rows.push_back({position_jitter_widget_.get()});
+        }
+
         if (pie_widget_) {
             rows.push_back({pie_widget_.get()});
         }
@@ -578,6 +600,21 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMNumericStepper> grid_resolution_stepper_{};
     std::unique_ptr<StepperWidget> grid_resolution_widget_{};
+    std::unique_ptr<DMNumericStepper> position_jitter_stepper_{};
+    std::unique_ptr<StepperWidget> position_jitter_widget_{};
+
+    int current_position_jitter() const {
+        if (!entry_) return kMapWidePositionJitterMin;
+        int value = entry_->value("position_jitter_px", kMapWidePositionJitterMin);
+        return std::clamp(value, kMapWidePositionJitterMin, kMapWidePositionJitterMax);
+    }
+
+    void update_position_jitter(int value) {
+        if (!entry_) return;
+        const int clamped = std::clamp(value, kMapWidePositionJitterMin, kMapWidePositionJitterMax);
+        (*entry_)["position_jitter_px"] = clamped;
+        notify_save(false);
+    }
 };
 
 class BoundaryCandidateListPanelImpl : public DockableCollapsible {

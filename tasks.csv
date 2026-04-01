@@ -1,7 +1,8 @@
 type,last_updated,severity,description,created_by,attachment_path
-issue,2026-03-31 21:31:14,low,,,
-issue,2026-03-31 21:31:14,low,,,
-issue,2026-03-31 21:31:44,low,dont change the camera position when the user enters dev mode.  keep the camera right where it was when entering dev mode,,
+issue,2026-03-31 21:31:14,low,"for room editor pannel make the height min and max values for square use the min max sliders propperly make sure they both have reasonable min and max values simalr max value to the circle values so the max and the min ould resut in simlar sized objects.
+",,
+issue,2026-03-31 21:31:14,low,"[PENDING APPROVAL] make sure that all text boxes we use in dev mode it the custom textbox we designed in widgets with the select to edit and scroll wheele functionality. make sure that all usages of this textbox in dev mode consume mouse input and scroll input propperly. Implemented: Updated DMTextBox::handle_event() in widgets.cpp to properly consume mouse motion, mouse button clicks, and scroll wheel events when inside the textbox bounds. Added scroll wheel event handling to block propagation. Added ESC key to exit edit mode.",,
+issue,2026-03-31 21:31:44,low,"[PENDING APPROVAL] dont change the camera position when the user enters dev mode.  keep the camera right where it was when entering dev mode. Fixed: Changed camera restoration logic in DevControls::set_enabled(true) to always set a focus override with the preserved screen center position. This prevents update_camera_height() from centering the camera on the room on subsequent frames.",,
 issue,2026-03-31 21:31:06,low,"in dev mode, make sure we are updating current room apprpriatly. when we open the room config pannel make sure we are loading the correct room (the current room) make sure that we can only select current rooms assets in room editor (but also boundary and map wide assets when in that selection mode )",,
 modification,2026-03-31 21:26:08,medium,depth effects textures need to be applied to the dynamically spawned assets. currently they are not. same method of calculation and rendering for the foreground background textures on the dynamically spawned assets ,,
 issue,2026-03-31 21:19:20,low,in normal game mode the transition from camera settings in one room to another room needs to be way more smooth,,

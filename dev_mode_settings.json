@@ -2,7 +2,7 @@
     "dev": {
         "anchor_points": {
             "debug": {
-                "enabled": true
+                "enabled": false
             }
         },
         "asset_filter": {

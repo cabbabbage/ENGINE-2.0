@@ -1804,11 +1804,10 @@ void DevControls::set_enabled(bool enabled) {
             camera_ptr->set_scale(preserved_camera.height_px);
             camera_ptr->set_zoom_percent(preserved_camera.zoom_percent);
             camera_ptr->set_tilt_override(preserved_camera.pitch_deg);
-            if (preserved_camera.has_focus_override) {
-                camera_ptr->set_focus_override(preserved_camera.focus_override);
-            } else {
-                camera_ptr->clear_focus_override();
-            }
+            // Always set focus override to preserve the exact camera position when
+            // entering dev mode. Without this, update_camera_height() will center
+            // the camera on the room on the next frame.
+            camera_ptr->set_focus_override(preserved_camera.center);
             camera_ptr->set_screen_center(preserved_camera.center);
             camera_ptr->set_manual_height_override(preserved_camera.manual_height_override);
             camera_ptr->set_manual_zoom_override(preserved_camera.manual_zoom_override);

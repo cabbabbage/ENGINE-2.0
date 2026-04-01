@@ -44,6 +44,8 @@ Room* CurrentRoomFinder::getCurrentRoom() const {
 
     const int px = focus_point.x;
     const int pz = focus_point.y;
+
+
     auto contains_player = [&](Room* room) -> bool {
         return room &&
                room->room_area &&

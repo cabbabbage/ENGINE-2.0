@@ -41,7 +41,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.09999998658895493,
+                "depth_offset": -0.19999998807907104,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -53,7 +53,7 @@
                 "texture_y": 134
               },
               {
-                "depth_offset": -0.10000000149011612,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -61,8 +61,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 139
+                "texture_x": 211,
+                "texture_y": 137
               },
               {
                 "depth_offset": -0.10000001639127731,
@@ -113,7 +113,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 53.0
       },
       "start": "default",
       "tags": [],
@@ -389,10 +389,23 @@
       "weight_kg": 1302.0
     },
     "big_rock": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -419,13 +432,13 @@
       "asset_directory": "resources/assets/big_rock",
       "asset_name": "big_rock",
       "asset_type": "Object",
-      "can_invert": false,
+      "can_invert": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 154.0
       },
       "start": "default",
       "tags": [
@@ -441,7 +454,8 @@
         "stone"
       ],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "blacksmith": {
       "animations": {
@@ -2739,34 +2753,34 @@
             ],
             [
               0,
-              0,
+              -2,
               -16
             ],
             [
               0,
-              0,
+              -3,
               -16
             ],
             [
               0,
-              0,
+              -5,
               -16
             ],
             [
               0,
-              0,
+              -6,
               -16
             ],
             [
               0,
-              0,
+              -8,
               -16
             ]
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0,
-            "dz": -80.0
+            "dy": -24,
+            "dz": -80
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -3059,35 +3073,35 @@
               0
             ],
             [
-              -10,
+              -6,
               0,
-              10
+              -13
             ],
             [
-              -10,
+              -6,
               0,
-              10
+              -13
             ],
             [
-              -10,
+              -6,
               0,
-              10
+              -13
             ],
             [
-              -10,
+              -6,
               0,
-              10
+              -13
             ],
             [
-              -10,
+              -6,
               0,
-              10
+              -13
             ]
           ],
           "movement_total": {
-            "dx": -50,
+            "dx": -30,
             "dy": 0,
-            "dz": 50.0
+            "dz": -65
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -3381,34 +3395,34 @@
             ],
             [
               0,
-              0,
-              -19
+              -2,
+              -16
             ],
             [
               0,
-              0,
-              -19
+              -3,
+              -16
             ],
             [
               0,
-              0,
-              -19
+              -5,
+              -16
             ],
             [
               0,
-              0,
-              -19
+              -6,
+              -16
             ],
             [
               0,
-              0,
-              -19
+              -8,
+              -16
             ]
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0,
-            "dz": -95.0
+            "dy": -24,
+            "dz": -80
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -3716,7 +3730,7 @@
           "movement_total": {
             "dx": -50,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -4101,7 +4115,7 @@
           "movement_total": {
             "dx": 0,
             "dy": -24,
-            "dz": -80.0
+            "dz": -80
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -4409,7 +4423,7 @@
           "movement_total": {
             "dx": -30,
             "dy": 0,
-            "dz": -65.0
+            "dz": -65
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -4704,35 +4718,35 @@
               0
             ],
             [
-              16,
+              -10,
               0,
-              -16
+              0
             ],
             [
-              16,
+              -10,
               0,
-              -16
+              0
             ],
             [
-              16,
+              -10,
               0,
-              -16
+              0
             ],
             [
-              16,
+              -10,
               0,
-              -16
+              0
             ],
             [
-              16,
+              -10,
               0,
-              -16
+              0
             ]
           ],
           "movement_total": {
-            "dx": 80,
+            "dx": -50,
             "dy": 0,
-            "dz": -80.0
+            "dz": 0
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -4740,7 +4754,7 @@
           "rnd_start": false,
           "source": {
             "kind": "animation",
-            "name": "down_right",
+            "name": "left",
             "path": ""
           }
         }
@@ -4775,7 +4789,8 @@
         "spider"
       ],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "stagecoach": {
       "animations": {
@@ -4970,10 +4985,23 @@
       "update_radius": 0
     },
     "tree_dark": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -4995,7 +5023,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 292.0
+        "scale_percentage": 380.0
       },
       "start": "default",
       "tags": [
@@ -5006,13 +5034,27 @@
         "tree"
       ],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "tree_darker": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "flip_vertical_source": false,
           "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -5034,7 +5076,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 246.0
+        "scale_percentage": 375.0
       },
       "start": "default",
       "tags": [
@@ -5046,7 +5088,8 @@
         "tree"
       ],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "tree_eyes_fps_2": {
       "animations": {
@@ -5091,98 +5134,6 @@
             [
               0,
               0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
             ]
           ],
           "movement_total": {
@@ -5190,10 +5141,10 @@
             "dy": 0,
             "dz": 0
           },
-          "number_of_frames": 24,
+          "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
-          "rnd_start": true,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
@@ -5217,7 +5168,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 268.0
+        "scale_percentage": 368.0
       },
       "start": "default",
       "tags": [
@@ -5229,7 +5180,8 @@
         "tree"
       ],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "vibble": {
       "anchor_point_child_candidates": [
@@ -11845,7 +11797,7 @@
             "position": "Random",
             "position_jitter_px": 127,
             "priority": 0,
-            "resolution": 4,
+            "resolution": 3,
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-forrest-map_assets"
@@ -11893,6 +11845,66 @@
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-forrest-map_boundary"
+          },
+          {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "big_rock"
+              },
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 0.25,
+                "name": "bush_1_fps_2"
+              },
+              {
+                "chance": 0.25,
+                "name": "bush_fps_2"
+              }
+            ],
+            "display_name": "batch_map_boundary",
+            "enforce_spacing": false,
+            "explicit_flip": false,
+            "force_flipped": false,
+            "grid_resolution": 8,
+            "jitter": 0,
+            "locked": false,
+            "max_number": 1,
+            "min_number": 1,
+            "position": "Random",
+            "resolution": 0,
+            "resolve_geometry_to_room_size": false,
+            "resolve_quantity_to_room_size": false,
+            "spawn_id": "spn-5d2a87ea7a90"
+          },
+          {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "grass_fps_2"
+              },
+              {
+                "chance": 0,
+                "name": "null"
+              }
+            ],
+            "display_name": "batch_map_boundary",
+            "enforce_spacing": false,
+            "explicit_flip": false,
+            "force_flipped": false,
+            "grid_resolution": 3,
+            "jitter": 0,
+            "locked": false,
+            "max_number": 1,
+            "min_number": 1,
+            "position": "Random",
+            "resolution": 0,
+            "resolve_geometry_to_room_size": false,
+            "resolve_quantity_to_room_size": false,
+            "spawn_id": "spn-be5b8b8ad3ad"
           }
         ],
         "inherits_map_assets": false,
@@ -11947,9 +11959,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            141,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 49,
@@ -11968,19 +11980,19 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": 20,
-          "camera_center_dz": -1474,
-          "camera_height_px": 1775,
-          "camera_tilt_deg": 40.0,
-          "camera_zoom_percent": 85,
+          "camera_center_dx": -4494,
+          "camera_center_dz": -1952,
+          "camera_height_px": 1002,
+          "camera_tilt_deg": 75.07833862304688,
+          "camera_zoom_percent": 36,
           "curvyness": 2,
           "display_color": [
-            36,
-            106,
             242,
+            166,
+            36,
             255
           ],
-          "edge_smoothness": 85,
+          "edge_smoothness": 24,
           "geometry": "Circle",
           "inherits_map_assets": true,
           "is_boss": false,
@@ -12096,16 +12108,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1524,
-              "dz": -944,
+              "dx": -2488,
+              "dz": -888,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7008,
-              "origional_width": 6968,
+              "origional_height": 6992,
+              "origional_width": 7024,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -12126,20 +12138,20 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -1052,
-              "dz": 452,
+              "dx": -1760,
+              "dz": -456,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6936,
-              "origional_width": 7016,
+              "origional_height": 6992,
+              "origional_width": 7024,
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
-              "resolution": 4,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-b623ba5ae77d"
@@ -12246,16 +12258,16 @@
                 }
               ],
               "display_name": "3_candles",
-              "dx": -983,
-              "dz": -266,
+              "dx": -608,
+              "dz": -528,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7008,
-              "origional_width": 6968,
+              "origional_height": 6992,
+              "origional_width": 7008,
               "position": "Exact",
               "priority": 8,
               "quantity": 1,

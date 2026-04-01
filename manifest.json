@@ -5161,6 +5161,7 @@
                 "name": "hat",
                 "resolve_x": true,
                 "rotation_degrees": -20.0,
+                "scaling_method": "parent",
                 "texture_x": 198,
                 "texture_y": 129
               },
@@ -5172,6 +5173,7 @@
                 "name": "mouth",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
+                "scaling_method": "parent",
                 "texture_x": 203,
                 "texture_y": 179
               },
@@ -5183,6 +5185,7 @@
                 "name": "neck",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
+                "scaling_method": "parent",
                 "texture_x": 219,
                 "texture_y": 191
               },
@@ -5194,6 +5197,7 @@
                 "name": "weapon",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
+                "scaling_method": "parent",
                 "texture_x": 223,
                 "texture_y": 182
               },
@@ -5205,6 +5209,7 @@
                 "name": "eyes",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
+                "scaling_method": "parent",
                 "texture_x": 216,
                 "texture_y": 164
               }
@@ -7638,43 +7643,43 @@
               0
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ]
           ],
           "movement_total": {
-            "dx": -7,
+            "dx": 0,
             "dy": 0,
             "dz": -7
           },
@@ -7684,7 +7689,7 @@
           "rnd_start": false,
           "source": {
             "kind": "animation",
-            "name": "up_left",
+            "name": "up",
             "path": ""
           }
         },
@@ -11045,43 +11050,43 @@
               0
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ],
             [
-              -1,
+              0,
               0,
               -1
             ]
           ],
           "movement_total": {
-            "dx": -7,
+            "dx": 0,
             "dy": 0,
             "dz": -7
           },
@@ -11091,7 +11096,7 @@
           "rnd_start": false,
           "source": {
             "kind": "animation",
-            "name": "up_left",
+            "name": "up",
             "path": ""
           }
         }
@@ -11113,7 +11118,8 @@
         "player"
       ],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "vibble_attack_1": {
       "anchor_point_child_candidates": [],
@@ -11654,22 +11660,22 @@
   },
   "image_effects": {
     "background": {
-      "blur": 0.6799999475479126,
-      "brightness": 0.0,
-      "contrast": 0.0,
-      "hue": -2.0,
+      "blur": 1.0,
+      "brightness": -0.04000002145767212,
+      "contrast": -0.36000001430511475,
+      "hue": 0.0,
       "saturation_blue": 0.36000001430511475,
       "saturation_green": 0.019999980926513672,
-      "saturation_red": -0.2800000309944153
+      "saturation_red": -0.14000004529953003
     },
     "foreground": {
       "blur": 0.1799999475479126,
-      "brightness": 0.0,
-      "contrast": 0.0,
+      "brightness": -0.04000002145767212,
+      "contrast": 0.12000000476837158,
       "hue": 0.0,
-      "saturation_blue": -0.40000003576278687,
-      "saturation_green": -0.2200000286102295,
-      "saturation_red": 0.31999993324279785
+      "saturation_blue": -0.12000000476837158,
+      "saturation_green": -0.10000002384185791,
+      "saturation_red": 0.13999998569488525
     }
   },
   "maps": {
@@ -11688,9 +11694,9 @@
       },
       "content_root": "content/forrest",
       "depth_cue_settings": {
-        "background_max_depth_offset": 730.0,
-        "center_depth_offset": -375.0,
-        "foreground_max_depth_offset": -1330.0
+        "background_max_depth_offset": 2480.0,
+        "center_depth_offset": -100.0,
+        "foreground_max_depth_offset": -1830.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -11822,7 +11828,7 @@
           "display_color": [
             242,
             36,
-            188,
+            142,
             255
           ],
           "edge_smoothness": 49,
@@ -11845,9 +11851,9 @@
           "camera_zoom_percent": 85,
           "curvyness": 2,
           "display_color": [
-            37,
             242,
             36,
+            145,
             255
           ],
           "edge_smoothness": 85,
@@ -11906,16 +11912,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -444,
-              "dz": 240,
+              "dx": -1464,
+              "dz": 1352,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7008,
-              "origional_width": 6936,
+              "origional_height": 6992,
+              "origional_width": 6960,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -11966,16 +11972,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -932,
-              "dz": 628,
+              "dx": -988,
+              "dz": -2368,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7016,
-              "origional_width": 6984,
+              "origional_height": 7008,
+              "origional_width": 7000,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

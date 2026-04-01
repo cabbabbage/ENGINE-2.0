@@ -9,6 +9,8 @@ class Widget;
 class Input;
 class FloatSliderWidget;
 class PitchDialWidget;
+class SliderWidget;
+class DMSlider;
 
 
 class CameraUIPanel : public DockableCollapsible {
@@ -39,6 +41,10 @@ private:
 
     void on_control_value_changed();
 
+    std::pair<int, int> load_camera_height_bounds() const;
+    void save_camera_height_bounds(int min_val, int max_val) const;
+    void clamp_all_room_camera_heights(int min_val, int max_val);
+
 private:
     Assets* assets_ = nullptr;
 
@@ -50,6 +56,12 @@ private:
 
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> boundary_min_render_size_slider_;
+
+    // Global camera height bounds
+    std::unique_ptr<DMSlider> camera_height_min_slider_;
+    std::unique_ptr<DMSlider> camera_height_max_slider_;
+    std::unique_ptr<SliderWidget> camera_height_min_widget_;
+    std::unique_ptr<SliderWidget> camera_height_max_widget_;
 
     bool applying_settings_ = false;
     int last_screen_w_ = 0;

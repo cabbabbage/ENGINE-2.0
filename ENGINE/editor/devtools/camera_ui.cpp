@@ -17,12 +17,14 @@
 
 #include "core/AssetsManager.hpp"
 #include "devtools/depth_cue_settings.hpp"
+#include "devtools/dev_camera_controls.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/float_slider_widget.hpp"
 #include "devtools/shared/shared/formatting.hpp"
 #include "devtools/widgets.hpp"
+#include "gameplay/map_generation/room.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/input.hpp"
 
@@ -140,6 +142,14 @@ void CameraUIPanel::sync_from_camera() {
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
     }
+
+    // Sync camera height bounds
+    const auto [saved_min, saved_max] = load_camera_height_bounds();
+    if (camera_height_min_slider_) camera_height_min_slider_->set_value(saved_min);
+    if (camera_height_max_slider_) camera_height_max_slider_->set_value(saved_max);
+
+    // Initialize the global camera height bounds used by DevCameraControls
+    DevCameraHeightBounds::set(static_cast<double>(saved_min), static_cast<double>(saved_max));
 }
 
 void CameraUIPanel::build_ui() {
@@ -178,6 +188,22 @@ void CameraUIPanel::build_ui() {
         "Cull dynamically spawned boundary assets once their height drops below this fraction of the screen (0.01 = 1%).");
     boundary_min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
+    // Global camera height bounds
+    const auto [saved_min, saved_max] = load_camera_height_bounds();
+    const std::string min_label = "Min Camera Height (px): " + std::to_string(saved_min);
+    const std::string max_label = "Max Camera Height (px): " + std::to_string(saved_max);
+
+    camera_height_min_slider_ = std::make_unique<DMSlider>(min_label, 1, 100000, saved_min);
+    camera_height_min_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
+
+    camera_height_max_slider_ = std::make_unique<DMSlider>(max_label, 1, 100000, saved_max);
+    camera_height_max_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
+
+    camera_height_min_widget_ = std::make_unique<SliderWidget>(camera_height_min_slider_.get());
+    camera_height_min_widget_->set_tooltip("Global minimum camera height. All room camera heights will be clamped to this value.");
+    camera_height_max_widget_ = std::make_unique<SliderWidget>(camera_height_max_slider_.get());
+    camera_height_max_widget_->set_tooltip("Global maximum camera height. All room camera heights will be clamped to this value.");
+
     rebuild_rows();
 }
 
@@ -188,6 +214,47 @@ void CameraUIPanel::on_control_value_changed() {
     apply_settings_if_needed();
 }
 
+std::pair<int, int> CameraUIPanel::load_camera_height_bounds() const {
+    if (!assets_) return {1, 100000};
+    const auto& map_info = assets_->map_info_json();
+    int min_val = map_info.value("camera_height_min_px", 1);
+    int max_val = map_info.value("camera_height_max_px", 100000);
+    if (min_val < 1) min_val = 1;
+    if (max_val < min_val) max_val = 100000;
+    return {min_val, max_val};
+}
+
+void CameraUIPanel::save_camera_height_bounds(int min_val, int max_val) const {
+    if (!assets_) return;
+    auto& map_info = assets_->map_info_json();
+    map_info["camera_height_min_px"] = min_val;
+    map_info["camera_height_max_px"] = max_val;
+
+    // Update the global camera height bounds used by DevCameraControls
+    DevCameraHeightBounds::set(static_cast<double>(min_val), static_cast<double>(max_val));
+}
+
+void CameraUIPanel::clamp_all_room_camera_heights(int min_val, int max_val) {
+    if (!assets_) return;
+    const auto& rooms = assets_->rooms();
+    for (Room* room : rooms) {
+        if (!room) continue;
+        room->camera_height_px = std::clamp(room->camera_height_px, min_val, max_val);
+        // Also update the room's assets_data JSON
+        auto& room_data = room->assets_data();
+        room_data["camera_height_px"] = room->camera_height_px;
+        room->mark_dirty();
+    }
+
+    // Also clamp the live camera view if it's outside the new bounds
+    WarpedScreenGrid& cam = assets_->getView();
+    const int current_height = static_cast<int>(cam.get_scale());
+    const int clamped_height = std::clamp(current_height, min_val, max_val);
+    if (clamped_height != current_height) {
+        cam.set_scale(static_cast<double>(clamped_height));
+    }
+}
+
 
 
 void CameraUIPanel::rebuild_rows() {
@@ -196,6 +263,10 @@ void CameraUIPanel::rebuild_rows() {
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
     if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
+
+    // Camera height bounds section
+    if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
+    if (camera_height_max_widget_) rows.push_back({ camera_height_max_widget_.get() });
 
     set_rows(rows);
 }
@@ -241,6 +312,24 @@ void CameraUIPanel::apply_settings_if_needed() {
 
     if (realism_changed || boundary_changed) {
         assets_->on_camera_settings_changed();
+    }
+
+    // Apply camera height bounds
+    if (camera_height_min_slider_ && camera_height_max_slider_) {
+        const int new_min = camera_height_min_slider_->value();
+        const int new_max = camera_height_max_slider_->value();
+        const auto [old_min, old_max] = load_camera_height_bounds();
+
+        if (new_min != old_min || new_max != old_max) {
+            // Ensure min <= max
+            const int clamped_min = std::min(new_min, new_max);
+            const int clamped_max = std::max(new_min, new_max);
+
+            save_camera_height_bounds(clamped_min, clamped_max);
+
+            // Clamp all room camera heights
+            clamp_all_room_camera_heights(clamped_min, clamped_max);
+        }
     }
 }
 

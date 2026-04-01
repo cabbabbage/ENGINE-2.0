@@ -12,6 +12,30 @@ constexpr float kTiltDegreesPerPixel = 0.2f;
 constexpr double kZoomStepPercent = 5.0;
 constexpr double kMinZoomPercent = 0.0;
 constexpr double kMaxZoomPercent = 100.0;
+
+struct BoundsState {
+    double min_px = 1.0;
+    double max_px = 50000.0;
+};
+
+BoundsState& dev_camera_bounds() {
+    static BoundsState state{};
+    return state;
+}
+}
+
+void DevCameraHeightBounds::set(double min_px, double max_px) {
+    auto& bounds = dev_camera_bounds();
+    bounds.min_px = std::max(1.0, min_px);
+    bounds.max_px = std::max(bounds.min_px, max_px);
+}
+
+double DevCameraHeightBounds::min_px() {
+    return dev_camera_bounds().min_px;
+}
+
+double DevCameraHeightBounds::max_px() {
+    return dev_camera_bounds().max_px;
 }
 
 void DevCameraControls::set_height_scale_factor(double factor) {
@@ -49,7 +73,7 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
 
             const double base_scale = std::max(1.0, static_cast<double>(cam.get_scale()));
             const double unclamped_target = base_scale * eff;
-            const double target_scale = std::clamp(unclamped_target, 1.0, 50000.0);
+            const double target_scale = std::clamp(unclamped_target, DevCameraHeightBounds::min_px(), DevCameraHeightBounds::max_px());
             const double adjusted_eff = target_scale / base_scale;
 
             if (std::abs(adjusted_eff - 1.0) > 1e-6) {

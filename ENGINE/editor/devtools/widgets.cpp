@@ -2485,7 +2485,14 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
-        if (!(focused_ && active_ == this && !options_.empty())) return false;
+        // Capture all wheel events while this dropdown is active to prevent
+        // scroll events from leaking to underlying widgets (e.g., sliders).
+        if (active_ != this) {
+            return false;
+        }
+        if (options_.empty()) {
+            return true;
+        }
         if (!has_pending_index_) {
             pending_index_ = index_;
             has_pending_index_ = true;

@@ -6410,13 +6410,10 @@ void RoomEditor::handle_click(const Input& input) {
         if (shift_modifier) {
             Room* target_geom = selected_geometry_room_ ? selected_geometry_room_ : find_geometry_room_at_point(world_mouse);
             if (target_geom && is_point_between_geometry_bounds(target_geom, world_mouse)) {
-                if (geometry_room_is_trail(target_geom)) {
-                    open_room_config();
-                } else {
+                if (!geometry_room_is_trail(target_geom)) {
                     if (target_geom != current_room_ && assets_) {
                         assets_->set_editor_current_room(target_geom);
                     }
-                    open_room_config();
                 }
                 return;
             }

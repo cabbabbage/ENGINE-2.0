@@ -6,6 +6,13 @@
 class WarpedScreenGrid;
 class Input;
 
+// Global camera height bounds for dev mode, accessed by both UI and camera controls.
+struct DevCameraHeightBounds {
+    static void set(double min_px, double max_px);
+    static double min_px();
+    static double max_px();
+};
+
 class DevCameraControls {
 public:
     void set_height_scale_factor(double factor);

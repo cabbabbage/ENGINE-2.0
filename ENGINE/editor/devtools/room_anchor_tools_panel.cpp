@@ -539,12 +539,12 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
         if (depth_textbox_) {
             depth_textbox_->render(renderer);
         }
-        if (flip_horizontal_textbox_) {
-            flip_horizontal_textbox_->render(renderer);
-        }
-        if (flip_vertical_textbox_) {
-            flip_vertical_textbox_->render(renderer);
-        }
+    if (flip_horizontal_checkbox_) {
+        flip_horizontal_checkbox_->render(renderer);
+    }
+    if (flip_vertical_checkbox_) {
+        flip_vertical_checkbox_->render(renderer);
+    }
         if (rotation_slider_) {
             rotation_slider_->render(renderer);
         }
@@ -606,8 +606,8 @@ void RoomAnchorToolsPanel::update_layout() const {
     const int controls_width = std::max(0, panel_rect_.w - kPanelPadding * 2);
     const int rename_h = rename_textbox_ ? rename_textbox_->preferred_height(controls_width) : DMTextBox::height();
     const int depth_h = depth_textbox_ ? depth_textbox_->preferred_height(controls_width) : DMTextBox::height();
-    const int flip_h_h = flip_horizontal_textbox_ ? flip_horizontal_textbox_->preferred_height(controls_width) : DMTextBox::height();
-    const int flip_v_h = flip_vertical_textbox_ ? flip_vertical_textbox_->preferred_height(controls_width) : DMTextBox::height();
+    const int flip_h_h = flip_horizontal_checkbox_ ? DMCheckbox::height() : 0;
+    const int flip_v_h = flip_vertical_checkbox_ ? DMCheckbox::height() : 0;
     const int rotation_h = rotation_slider_ ? rotation_slider_->preferred_height(controls_width) : DMSlider::height();
     const int hidden_h = hidden_checkbox_ ? DMCheckbox::height() : 0;
     const int resolve_x_h = resolve_x_checkbox_ ? DMCheckbox::height() : 0;
@@ -682,12 +682,12 @@ void RoomAnchorToolsPanel::update_layout() const {
             depth_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, depth_h});
             row_y += depth_h + row_gap;
         }
-        if (flip_horizontal_textbox_) {
-            flip_horizontal_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_h_h});
+        if (flip_horizontal_checkbox_) {
+            flip_horizontal_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_h_h});
             row_y += flip_h_h + row_gap;
         }
-        if (flip_vertical_textbox_) {
-            flip_vertical_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_v_h});
+        if (flip_vertical_checkbox_) {
+            flip_vertical_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_v_h});
             row_y += flip_v_h + row_gap;
         }
         if (rotation_slider_) {
@@ -707,11 +707,11 @@ void RoomAnchorToolsPanel::update_layout() const {
         if (depth_textbox_) {
             depth_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (flip_horizontal_textbox_) {
-            flip_horizontal_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (flip_horizontal_checkbox_) {
+            flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (flip_vertical_textbox_) {
-            flip_vertical_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (flip_vertical_checkbox_) {
+            flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (rotation_slider_) {
             rotation_slider_->set_rect(SDL_Rect{0, 0, 0, 0});

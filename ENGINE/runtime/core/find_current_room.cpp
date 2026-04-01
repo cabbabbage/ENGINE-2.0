@@ -1,6 +1,7 @@
 #include "find_current_room.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "assets/asset/Asset.hpp"
+#include "rendering/render/warped_screen_grid.hpp"
 #include "utils/area.hpp"
 #include "utils/range_util.hpp"
 #include "utils/string_utils.hpp"
@@ -20,17 +21,29 @@ void CurrentRoomFinder::setPlayer(Asset*& player) {
     last_room_ = nullptr;
 }
 
+void CurrentRoomFinder::setCamera(WarpedScreenGrid* camera) {
+    camera_ = camera;
+    last_room_ = nullptr;
+}
+
 Room* CurrentRoomFinder::getCurrentRoom() const {
     auto* rooms = rooms_;
     Asset* player = player_ ? *player_ : nullptr;
 
-    if (!player) {
+    // Determine the focus point: use camera focus override when available, fall back to player position.
+    SDL_Point focus_point;
+    bool use_camera_focus = camera_ != nullptr && camera_->has_focus_override();
+    if (use_camera_focus) {
+        focus_point = camera_->get_focus_override_point();
+    } else if (player) {
+        focus_point = SDL_Point{player->world_x(), player->world_z()};
+    } else {
         last_room_ = nullptr;
         return nullptr;
     }
 
-    const int px = player->world_x();
-    const int pz = player->world_z();
+    const int px = focus_point.x;
+    const int pz = focus_point.y;
     auto contains_player = [&](Room* room) -> bool {
         return room &&
                room->room_area &&

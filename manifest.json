@@ -11111,7 +11111,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 133.0
+        "scale_percentage": 138.0
       },
       "start": "default",
       "tags": [
@@ -11813,10 +11813,26 @@
               "required_children": []
             }
           ]
+        },
+        {
+          "bounding_extent": 1045.0,
+          "level": 1,
+          "max_rooms": 2,
+          "min_rooms": 1,
+          "name": "layer_1",
+          "ring_radius": 14470.0,
+          "rooms": [
+            {
+              "max_instances": 2,
+              "min_instances": 1,
+              "name": "ok",
+              "required_children": []
+            }
+          ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 200
+        "min_edge_distance": 10000
       },
       "map_name": "forrest",
       "rooms_data": {
@@ -11826,21 +11842,24 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            144,
             242,
             36,
-            142,
             255
           ],
           "edge_smoothness": 49,
-          "geometry": "Square",
+          "geometry": "Circle",
           "inherits_map_assets": false,
           "is_boss": false,
           "is_spawn": false,
-          "max_height": 3000,
-          "max_width": 30000,
-          "min_height": 3000,
-          "min_width": 3000,
+          "max_height": 2090,
+          "max_radius": 1045,
+          "max_width": 2090,
+          "min_height": 1134,
+          "min_radius": 567,
+          "min_width": 1134,
           "name": "ok",
+          "radius": 1045,
           "spawn_groups": []
         },
         "spawn": {
@@ -11851,9 +11870,9 @@
           "camera_zoom_percent": 85,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            145,
+            242,
+            158,
             255
           ],
           "edge_smoothness": 85,
@@ -11972,20 +11991,20 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -988,
-              "dz": -2368,
+              "dx": 4,
+              "dz": 8,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7008,
-              "origional_width": 7000,
+              "origional_height": 6976,
+              "origional_width": 6936,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
-              "resolution": 4,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-47ecdeeceabe"

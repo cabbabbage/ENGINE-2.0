@@ -188,6 +188,7 @@ Assets::Assets(AssetLibrary& library,
     auto& room_refs = rooms();
     finder_ = new CurrentRoomFinder(room_refs, player);
     if (finder_) {
+        finder_->setCamera(&camera_);
         camera_.set_up_rooms(finder_);
     }
 

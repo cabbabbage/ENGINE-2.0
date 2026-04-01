@@ -11895,7 +11895,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 3,
+            "grid_resolution": 6,
             "jitter": 0,
             "locked": false,
             "max_number": 1,
@@ -11959,9 +11959,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            240,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 49,
@@ -11988,8 +11988,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            166,
             36,
+            115,
             255
           ],
           "edge_smoothness": 24,

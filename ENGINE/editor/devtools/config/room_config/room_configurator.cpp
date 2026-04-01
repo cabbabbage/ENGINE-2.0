@@ -31,7 +31,7 @@ constexpr int kMinimumRadius = 100;
 constexpr int kRadiusSliderInitialMax = 2000;
 constexpr int kRadiusSliderExpansionMargin = 64;
 constexpr int kRadiusSliderExpansionFactor = 2;
-constexpr int kRadiusSliderHardCap = 20000;
+constexpr int kRadiusSliderHardCap = 2000;
 constexpr float kCameraTiltMinDeg = 0.0f;
 constexpr float kCameraTiltMaxDeg = 360.0f;
 constexpr int kCameraZoomMinPercent = 0;
@@ -180,10 +180,10 @@ struct SpawnCallbackGuard {
 struct RoomConfigurator::State {
     std::string name;
     std::string geometry;
-    int width_min = 500;
-    int width_max = 5000;
+int width_min = 500;
+    int width_max = 2000;
     int height_min = 500;
-    int height_max = 5000;
+    int height_max = 2000;
     int radius_min = 100;
     int radius_max = 100;
     int edge_smoothness = 2;
@@ -239,12 +239,17 @@ struct RoomConfigurator::State {
                     mutated = true;
                 }
                 int new_height_max = std::max(height_min, height_max);
-                if (new_height_max != height_max) {
-                    height_max = new_height_max;
-                    mutated = true;
-                }
+if (new_height_max != height_max) {
+                height_max = new_height_max;
+                mutated = true;
             }
         }
+    }
+    if (!geometry_is_circle()) {
+        width_max = std::min(width_max, 4000);
+        height_max = std::min(height_max, 4000);
+        mutated = true;
+    }
         int new_edge = std::clamp(edge_smoothness, 0, 101);
         if (new_edge != edge_smoothness) {
             edge_smoothness = new_edge;
@@ -1938,6 +1943,52 @@ void RoomConfigurator::expand_radius_slider_range_if_needed() {
     radius_slider_ = std::make_unique<DMRangeSlider>(kMinimumRadius, radius_slider_max_range_, state_->radius_min, state_->radius_max);
     radius_slider_->set_defer_commit_until_unfocus(true);
     radius_widget_ = std::make_unique<RangeSliderWidget>(radius_slider_.get());
+    refresh_base_panel_rows();
+    request_container_layout();
+}
+
+void RoomConfigurator::expand_width_slider_range_if_needed() {
+    if (!width_range_slider_ || !state_) {
+        return;
+    }
+    if (width_slider_max_range_ >= 4000) {
+        return;
+    }
+    if (state_->width_max + kRadiusSliderExpansionMargin < width_slider_max_range_) {
+        return;
+    }
+    int desired = std::max(width_slider_max_range_ * kRadiusSliderExpansionFactor, state_->width_max + kRadiusSliderExpansionMargin);
+    desired = std::min(desired, 4000);
+    if (desired <= width_slider_max_range_) {
+        return;
+    }
+    width_slider_max_range_ = desired;
+    width_range_slider_ = std::make_unique<DMRangeSlider>(500, width_slider_max_range_, state_->width_min, state_->width_max);
+    width_range_widget_ = std::make_unique<RangeSliderWidget>(width_range_slider_.get());
+    refresh_base_panel_rows();
+    request_container_layout();
+}
+
+
+
+void RoomConfigurator::expand_height_slider_range_if_needed() {
+    if (!height_range_slider_ || !state_) {
+        return;
+    }
+    if (height_slider_max_range_ >= 4000) {
+        return;
+    }
+    if (state_->height_max + kRadiusSliderExpansionMargin < height_slider_max_range_) {
+        return;
+    }
+    int desired = std::max(height_slider_max_range_ * kRadiusSliderExpansionFactor, state_->height_max + kRadiusSliderExpansionMargin);
+    desired = std::min(desired, 4000);
+    if (desired <= height_slider_max_range_) {
+        return;
+    }
+    height_slider_max_range_ = desired;
+    height_range_slider_ = std::make_unique<DMRangeSlider>(500, height_slider_max_range_, state_->height_min, state_->height_max);
+    height_range_widget_ = std::make_unique<RangeSliderWidget>(height_range_slider_.get());
     refresh_base_panel_rows();
     request_container_layout();
 }

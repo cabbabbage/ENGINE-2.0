@@ -2073,65 +2073,6 @@ void RoomEditor::set_boundary_assets_panel_callback(std::function<void()> cb) {
     open_boundary_assets_panel_callback_ = std::move(cb);
 }
 
-void RoomEditor::set_current_room(Room* room) {
-    room_editor_trace("[RoomEditor] set_current_room begin");
-    if (room) {
-        room_editor_trace(std::string("[RoomEditor] target room -> ") + room->room_name);
-    } else {
-        room_editor_trace("[RoomEditor] target room -> <null>");
-    }
-
-    Room* previous_room = current_room_;
-    const bool room_changed = (room != current_room_);
-
-    if (room_changed && anchor_mode_active()) {
-        exit_anchor_edit_mode(true);
-    }
-    if (room_changed && movement_mode_active()) {
-        exit_movement_edit_mode(true);
-    }
-
-    if (room != current_room_) {
-        room_editor_trace("[RoomEditor] clearing active spawn group target");
-        clear_active_spawn_group_target();
-        clear_geometry_selection();
-    }
-
-    current_room_ = room;
-    if (room_changed) {
-        invalidate_label_cache(previous_room);
-        invalidate_label_cache(current_room_);
-    }
-    if (current_room_) {
-        room_editor_trace("[RoomEditor] acquiring assets_data");
-        auto& assets_json = current_room_->assets_data();
-        room_editor_trace("[RoomEditor] ensuring spawn_groups array");
-        auto& groups = ensure_spawn_groups_array(assets_json);
-        if (sanitize_perimeter_spawn_groups(groups)) {
-            room_editor_trace("[RoomEditor] perimeter groups sanitized, saving");
-            save_current_room_assets_json();
-        }
-    }
-    room_editor_trace("[RoomEditor] rebuilding room spawn id cache");
-    rebuild_room_spawn_id_cache();
-    room_editor_trace("[RoomEditor] refreshing spawn group config UI");
-    refresh_spawn_group_config_ui();
-    mark_spatial_index_dirty();
-
-    if (room_cfg_ui_) {
-        room_editor_trace("[RoomEditor] opening room config UI");
-        room_cfg_ui_->open(current_room_);
-        refresh_room_config_visibility();
-    }
-
-    if (!enabled_ && room_changed && current_room_) {
-        room_editor_trace("[RoomEditor] focusing camera on room center");
-        focus_camera_on_room_center();
-    }
-
-    room_editor_trace("[RoomEditor] set_current_room complete");
-
-}
 
 void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     vibble::log::info(std::string("[RoomEditor] Dev Mode ") + (enabled ? "ENABLED" : "DISABLED") +
@@ -14615,8 +14556,27 @@ bool RoomEditor::is_room_spawn_id(const std::string& spawn_id) const {
     return room_spawn_ids_.find(spawn_id) != room_spawn_ids_.end();
 }
 
-bool RoomEditor::asset_belongs_to_room(const Asset* ) const {
-    return true;
+bool RoomEditor::asset_belongs_to_room(const Asset* asset) const {
+    if (!asset) return false;
+    // Boundary and map-wide assets are always accessible in selection modes
+    const auto ownership = classify_asset_ownership(asset);
+    if (ownership == devmode::room_selection_filter::SpawnOwnership::MapBoundary ||
+        ownership == devmode::room_selection_filter::SpawnOwnership::MapAssets) {
+        return true;
+    }
+    // If no current room, only boundary/map-wide assets are eligible
+    if (!current_room_) {
+        return false;
+    }
+    // Check if the asset belongs to the current room by spawn_id
+    if (!asset->spawn_id.empty() && room_spawn_ids_.find(asset->spawn_id) != room_spawn_ids_.end()) {
+        return true;
+    }
+    // Check by owning room name
+    if (!asset->owning_room_name().empty() && asset->owning_room_name() == current_room_->room_name) {
+        return true;
+    }
+    return false;
 }
 
 void RoomEditor::handle_spawn_config_change(const nlohmann::json& entry) {
@@ -14999,6 +14959,73 @@ double RoomEditor::edge_length_along_direction(const Area& area,
     }
     return best;
 }
+void RoomEditor::set_current_room(Room* room, bool lock_room) {
+    room_editor_trace("[RoomEditor] set_current_room begin");
+    if (room) {
+        room_editor_trace(std::string("[RoomEditor] target room -> ") + room->room_name);
+    } else {
+        room_editor_trace("[RoomEditor] target room -> <null>");
+    }
+
+    Room* previous_room = current_room_;
+    const bool room_changed = (room != current_room_);
+
+    if (room_changed && anchor_mode_active()) {
+        exit_anchor_edit_mode(true);
+    }
+    if (room_changed && movement_mode_active()) {
+        exit_movement_edit_mode(true);
+    }
+
+    if (room != current_room_) {
+        room_editor_trace("[RoomEditor] clearing active spawn group target");
+        clear_active_spawn_group_target();
+        clear_geometry_selection();
+    }
+
+    current_room_ = room;
+    // Only lock the room when explicitly requested via lock_room=true
+    // This allows normal room switching based on camera position to work
+    room_locked_for_edit_ = lock_room;
+    if (room_changed) {
+        invalidate_label_cache(previous_room);
+        invalidate_label_cache(current_room_);
+    }
+    if (current_room_) {
+        room_editor_trace("[RoomEditor] acquiring assets_data");
+        auto& assets_json = current_room_->assets_data();
+        room_editor_trace("[RoomEditor] ensuring spawn_groups array");
+        auto& groups = ensure_spawn_groups_array(assets_json);
+        if (sanitize_perimeter_spawn_groups(groups)) {
+            room_editor_trace("[RoomEditor] perimeter groups sanitized, saving");
+            save_current_room_assets_json();
+        }
+    }
+    room_editor_trace("[RoomEditor] rebuilding room spawn id cache");
+    rebuild_room_spawn_id_cache();
+    room_editor_trace("[RoomEditor] refreshing spawn group config UI");
+    refresh_spawn_group_config_ui();
+    mark_spatial_index_dirty();
+
+    if (room_cfg_ui_) {
+        room_editor_trace("[RoomEditor] opening room config UI");
+        room_cfg_ui_->open(current_room_);
+        refresh_room_config_visibility();
+    }
+
+    if (!enabled_ && room_changed && current_room_) {
+        room_editor_trace("[RoomEditor] focusing camera on room center");
+        focus_camera_on_room_center();
+    }
+
+    room_editor_trace("[RoomEditor] set_current_room complete");
+}
+
+void RoomEditor::unlock_current_room() {
+    room_locked_for_edit_ = false;
+    room_editor_trace("[RoomEditor] unlock_current_room - room editing no longer locked");
+}
+
 bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
     if (spawn_id.empty()) return false;
 

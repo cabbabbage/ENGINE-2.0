@@ -11743,6 +11743,8 @@
           "tracks": []
         }
       },
+      "camera_height_max_px": 6503,
+      "camera_height_min_px": 200,
       "camera_settings": {
         "base_height_px": 720.0,
         "min_visible_screen_ratio": 0.01,
@@ -11753,7 +11755,7 @@
       "depth_cue_settings": {
         "background_max_depth_offset": 2480.0,
         "center_depth_offset": -100.0,
-        "foreground_max_depth_offset": -1830.0
+        "foreground_max_depth_offset": -2130.0
       },
       "dev_map_settings": {},
       "fog_settings": {
@@ -11916,7 +11918,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 3425.0,
+          "bounding_extent": 2000.0,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -11937,7 +11939,7 @@
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 14470.0,
+          "ring_radius": 13045.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -11954,14 +11956,14 @@
       "map_name": "forrest",
       "rooms_data": {
         "ok": {
-          "camera_height_px": 1000,
+          "camera_height_px": 5158,
           "camera_tilt_deg": 60.0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            240,
-            242,
-            85,
+            32,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 49,
@@ -11980,16 +11982,16 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": -4494,
-          "camera_center_dz": -1952,
-          "camera_height_px": 1002,
-          "camera_tilt_deg": 75.07833862304688,
-          "camera_zoom_percent": 36,
+          "camera_center_dx": 10656,
+          "camera_center_dz": 7644,
+          "camera_height_px": 637,
+          "camera_tilt_deg": 50.400001525878906,
+          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            115,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 24,
@@ -11997,14 +11999,14 @@
           "inherits_map_assets": true,
           "is_boss": false,
           "is_spawn": false,
-          "max_height": 6850,
-          "max_radius": 3425,
-          "max_width": 6850,
-          "min_height": 4302,
-          "min_radius": 2151,
-          "min_width": 4302,
+          "max_height": 4000,
+          "max_radius": 2000,
+          "max_width": 4000,
+          "min_height": 4000,
+          "min_radius": 2000,
+          "min_width": 4000,
           "name": "spawn",
-          "radius": 3425,
+          "radius": 2000,
           "spawn_groups": [
             {
               "candidates": [
@@ -12108,16 +12110,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -2488,
-              "dz": -888,
+              "dx": 10936,
+              "dz": 7588,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6992,
-              "origional_width": 7024,
+              "origional_height": 4376,
+              "origional_width": 4416,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -12282,6 +12284,7 @@
       "schema_version": 1,
       "trails_data": {
         "NewTrail": {
+          "camera_height_px": 5158,
           "curvyness": 4,
           "display_color": [
             242,
@@ -12302,7 +12305,11 @@
           "spawn_groups": []
         },
         "NewTrail1": {
-          "curvyness": 4,
+          "camera_center_dx": 3387,
+          "camera_center_dz": 1296,
+          "camera_height_px": 1664,
+          "camera_tilt_deg": 66.0,
+          "camera_zoom_percent": 19,
           "display_color": [
             36,
             38,
@@ -12314,14 +12321,15 @@
           "inherits_map_assets": true,
           "is_boss": false,
           "is_spawn": false,
-          "max_height": 200,
-          "max_width": 400,
-          "min_height": 200,
-          "min_width": 400,
+          "max_height": 900,
+          "max_width": 900,
+          "min_height": 600,
+          "min_width": 600,
           "name": "NewTrail1",
           "spawn_groups": []
         },
         "basic": {
+          "camera_height_px": 5158,
           "display_color": [
             85,
             242,

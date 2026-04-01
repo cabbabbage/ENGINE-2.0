@@ -64,7 +64,9 @@ public:
     void set_player(Asset* player);
     void set_active_assets(std::vector<Asset*>& actives, std::uint64_t generation);
     void set_screen_dimensions(int width, int height);
-    void set_current_room(Room* room);
+    void set_current_room(Room* room, bool lock_room = false);
+    void unlock_current_room();
+    bool is_room_locked_for_edit() const { return room_locked_for_edit_; }
     void set_room_config_visible(bool visible);
     void set_shared_footer_bar(DevFooterBar* footer);
     void set_snap_to_grid_enabled(bool enabled);
@@ -579,6 +581,7 @@ private:
     std::uint64_t active_assets_version_ = 0;
     Asset* player_ = nullptr;
     Room* current_room_ = nullptr;
+    bool room_locked_for_edit_ = false;
 
     int screen_w_ = 0;
     int screen_h_ = 0;

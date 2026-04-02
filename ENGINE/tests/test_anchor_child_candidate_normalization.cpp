@@ -118,6 +118,23 @@ TEST_CASE("AssetInfo upsert canonicalizes legacy payload shape for anchor child 
     CHECK(*missing == doctest::Approx(100.0));
 }
 
+TEST_CASE("AssetInfo upsert with empty object preserves existing anchor child candidates") {
+    AssetInfo info("anchor_upsert_preserve_asset");
+    REQUIRE(info.upsert_anchor_point_child_candidate(
+        "hat",
+        nlohmann::json::object({
+            {"legacy_scalar", 50}
+        })));
+
+    const bool changed = info.upsert_anchor_point_child_candidate("hat", nlohmann::json::object());
+    CHECK_FALSE(changed);
+
+    const nlohmann::json normalized = info.anchor_point_child_candidate_candidates("hat");
+    const auto scalar = find_chance(normalized, "legacy_scalar");
+    REQUIRE(scalar.has_value());
+    CHECK(*scalar == doctest::Approx(50.0));
+}
+
 TEST_CASE("Normalized anchor tag candidates resolve through RuntimeCandidates tag selection") {
     AssetInfo info("anchor_tag_asset");
     info.anchor_point_child_candidates = {
@@ -148,4 +165,3 @@ TEST_CASE("Normalized anchor tag candidates resolve through RuntimeCandidates ta
     CHECK_FALSE(pick->is_null);
     CHECK(pick->resolved_asset_name == "oak");
 }
-

@@ -8268,7 +8268,9 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
     if (!reconcile_anchor_child_candidates_with_eligible_names(target_info, reconciled)) {
         return;
     }
-    const bool upserted = target_info->upsert_anchor_point_child_candidate(anchor_name, nlohmann::json::object());
+    const nlohmann::json existing_candidate_entry =
+        target_info->anchor_point_child_candidate_candidates(anchor_name);
+    const bool upserted = target_info->upsert_anchor_point_child_candidate(anchor_name, existing_candidate_entry);
     if (reconciled || upserted) {
         (void)commit_anchor_bulk_edit(anchor_edit_.target_asset,
                                       target_info,

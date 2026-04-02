@@ -1757,13 +1757,18 @@ bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_po
     std::vector<AnchorChildPointCandidate> updated =
         parse_anchor_point_child_candidates_payload(before_payload);
 
-    const nlohmann::json normalized_candidates = normalize_anchor_candidate_payload(candidates);
+    nlohmann::json normalized_candidates = normalize_anchor_candidate_payload(candidates);
     auto existing = std::find_if(updated.begin(),
                                  updated.end(),
                                  [&](const AnchorChildPointCandidate& candidate) {
                                      return candidate.anchor_point_name == anchor_point_name;
                                  });
     if (existing != updated.end()) {
+        // Treat an empty object as "ensure exists" instead of destructive reset.
+        const bool request_is_empty_object = candidates.is_object() && candidates.empty();
+        if (request_is_empty_object) {
+            normalized_candidates = normalize_anchor_candidate_payload(existing->candidates);
+        }
         existing->candidates = normalized_candidates;
     } else {
         AnchorChildPointCandidate created{};

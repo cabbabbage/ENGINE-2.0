@@ -1,7 +1,7 @@
-#include "animation/controllers/shared/attack_reaction_helper.hpp"
+﻿#include  animation/controllers/shared/attack_processing_helper.hpp
 
-#include "animation/animation_update.hpp"
-#include "assets/asset/Asset.hpp"
+#include animation/animation_update.hpp
+#include assets/asset/Asset.hpp
 
 #include <algorithm>
 #include <cmath>
@@ -12,12 +12,12 @@ namespace animation_update::custom_controllers {
 namespace {
 
 constexpr float kZeroTolerance = 1e-4f;
-constexpr char kDieAnimationId[] = "die";
-constexpr char kBreakAnimationId[] = "break";
+constexpr char kDieAnimationId[] = die;
+constexpr char kBreakAnimationId[] = break;
 
 } // namespace
 
-bool AttackReactionHelper::try_play_death_animation(Asset& self) {
+bool AttackProcessingHelper::try_play_death_animation(Asset& self) {
     if (!self.info) {
         return false;
     }
@@ -36,11 +36,11 @@ bool AttackReactionHelper::try_play_death_animation(Asset& self) {
     return try_animation(kBreakAnimationId);
 }
 
-bool AttackReactionHelper::compute_knockback_delta(const Asset& self,
-                                                   const animation_update::Attack& attack,
-                                                   SDL_Point& out_delta,
-                                                   float max_distance,
-                                                   int max_damage) {
+bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
+                                                      const animation_update::Attack& attack,
+                                                      SDL_Point& out_delta,
+                                                      float max_distance,
+                                                      int max_damage) {
     if (max_distance <= 0.0f || max_damage <= 0) {
         return false;
     }
@@ -79,12 +79,25 @@ bool AttackReactionHelper::compute_knockback_delta(const Asset& self,
     return true;
 }
 
-void AttackReactionHelper::apply_knockback(Asset& self, SDL_Point delta) {
+void AttackProcessingHelper::apply_knockback(Asset& self, SDL_Point delta) {
     if (!self.anim_) {
         return;
     }
     self.anim_->cancel_all_movement();
     self.anim_->move(delta, animation_update::detail::kDefaultAnimation, true, true);
+}
+
+void AttackProcessingHelper::process_pending_attacks(Asset& self) {
+    const auto pending_attacks = self.process_pending_attacks();
+    for (const auto& attack : pending_attacks) {
+        self.runtime_health -= attack.damage_amount;
+    }
+
+    if (self.runtime_health < 0) {
+        if (!try_play_death_animation(self)) {
+            self.Delete();
+        }
+    }
 }
 
 } // namespace animation_update::custom_controllers

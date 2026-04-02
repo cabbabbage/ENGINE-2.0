@@ -4,12 +4,14 @@
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/custom_controllers/davey_controller.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "assets/asset/animation_frame.hpp"
 #include "stubs/asset/child_asset_runtime_test_support.hpp"
 
 namespace {
 
 using animation_update::custom_controllers::AttackDetectionHelper;
+using animation_update::custom_controllers::AttackProcessingHelper;
 
 struct AssetsScope {
     AssetsScope()
@@ -140,7 +142,7 @@ TEST_CASE("default pending attack processor applies cumulative damage and delete
     self_ptr->send_attack(attack_a);
     self_ptr->send_attack(attack_b);
 
-    AttackDetectionHelper::process_pending_attacks_default(self_ptr);
+    AttackProcessingHelper::process_pending_attacks(*self_ptr);
     CHECK(self_ptr->runtime_health == -2);
     CHECK(self_ptr->dead);
 }

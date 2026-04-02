@@ -12,6 +12,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
 
@@ -187,5 +188,5 @@ void CustomAssetController::on_update(const Input&) {
 }
 
 void CustomAssetController::on_process_pending_attacks(Asset& self) {
-    custom_controllers::AttackDetectionHelper::process_pending_attacks_default(&self);
+    custom_controllers::AttackProcessingHelper::process_pending_attacks(self);
 }

@@ -11,7 +11,7 @@
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
-#include "animation/controllers/shared/attack_reaction_helper.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
@@ -279,7 +279,7 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
     std::optional<SDL_Point> bump_delta;
     auto consider_knockback = [&](const animation_update::Attack& attack) {
         SDL_Point candidate_delta{};
-        if (!animation_update::custom_controllers::AttackReactionHelper::compute_knockback_delta(self, attack, candidate_delta)) {
+        if (!animation_update::custom_controllers::AttackProcessingHelper::compute_knockback_delta(self, attack, candidate_delta)) {
             return;
         }
         if (!bump_delta.has_value()) {
@@ -301,13 +301,13 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
     }
 
     if (self.runtime_health < 0) {
-        if (!animation_update::custom_controllers::AttackReactionHelper::try_play_death_animation(self)) {
+        if (!animation_update::custom_controllers::AttackProcessingHelper::try_play_death_animation(self)) {
             self.Delete();
         }
         return;
     }
 
     if (bump_delta.has_value()) {
-        animation_update::custom_controllers::AttackReactionHelper::apply_knockback(self, *bump_delta);
+        animation_update::custom_controllers::AttackProcessingHelper::apply_knockback(self, *bump_delta);
     }
 }

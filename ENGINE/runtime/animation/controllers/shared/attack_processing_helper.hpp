@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <SDL3/SDL.h>
 
@@ -10,8 +10,9 @@ class Asset;
 
 namespace animation_update::custom_controllers {
 
-class AttackReactionHelper {
+class AttackProcessingHelper {
 public:
+    static void process_pending_attacks(Asset& self);
     static bool try_play_death_animation(Asset& self);
     static bool compute_knockback_delta(const Asset& self,
                                        const animation_update::Attack& attack,

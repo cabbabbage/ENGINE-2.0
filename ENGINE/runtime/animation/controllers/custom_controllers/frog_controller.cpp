@@ -1,13 +1,11 @@
 #include "frog_controller.hpp"
-#include "animation/controllers/shared/attack_helpers.hpp"
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 
 #include "animation/controllers/shared/controller_path_utils.hpp"
 #include "animation/controllers/shared/controller_visit_threshold.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
-
-namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
 frog_controller::frog_controller(Asset* self)
     : CustomAssetController(self) {
@@ -42,13 +40,13 @@ void frog_controller::on_update(const Input&) {
         }
         const int visit_threshold = controller_utils::controller_visit_threshold(self, path);
         self->anim_->auto_move(path, visit_threshold);
-        attack_helpers::send_attack_if_hit(self, player);
+        animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
         return;
     }
 
     self->anim_->auto_move(player);
 
-    attack_helpers::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
 }
 
 void frog_controller::on_process_pending_attacks(Asset& self) {

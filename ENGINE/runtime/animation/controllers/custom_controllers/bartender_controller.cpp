@@ -1,10 +1,8 @@
 #include "bartender_controller.hpp"
-#include "animation/controllers/shared/attack_helpers.hpp"
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
-
-namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
 bartender_controller::bartender_controller(Asset* self)
     : CustomAssetController(self) {
@@ -55,7 +53,7 @@ void bartender_controller::on_update(const Input&) {
         self->anim_->auto_move(get_random_point_in_room());
     }
 
-    attack_helpers::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
 }
 
 void bartender_controller::on_process_pending_attacks(Asset& self) {

@@ -1,9 +1,7 @@
 #include "davey_controller.hpp"
-#include "animation/controllers/shared/attack_helpers.hpp"
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
-
-namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
 davey_controller::davey_controller(Asset* self)
     : CustomAssetController(self) {
@@ -28,7 +26,7 @@ void davey_controller::on_update(const Input&) {
 
     self->anim_->auto_move(player);
 
-    attack_helpers::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
 }
 
 void davey_controller::on_process_pending_attacks(Asset& self) {

@@ -214,6 +214,13 @@ class Asset {
     bool is_current_animation_last_frame() const;
     bool is_current_animation_looping() const;
     const AnimationFrame* current_animation_frame() const { return current_frame; }
+    struct CumulativeMovementDisplacement {
+        float dx = 0.0f;
+        float dy = 0.0f;
+        float dz = 0.0f;
+        bool valid = false;
+    };
+    CumulativeMovementDisplacement current_frame_cumulative_movement_displacement() const;
 
     struct ScaleUsageStats {
         float requested_scale = 1.0f;

@@ -10707,7 +10707,7 @@
                   "x": 226,
                   "y": 207
                 },
-                "rotation_degrees": -176.89395141601562,
+                "rotation_degrees": -176.89395141601563,
                 "size": {
                   "h": 18,
                   "w": 110
@@ -10750,7 +10750,7 @@
                   "x": 118,
                   "y": 180
                 },
-                "rotation_degrees": -176.89395141601562,
+                "rotation_degrees": -176.89395141601563,
                 "size": {
                   "h": 18,
                   "w": 110
@@ -11384,9 +11384,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            37,
-            242,
+            94,
             36,
+            242,
             255
           ],
           "edge_smoothness": 24,
@@ -11578,7 +11578,7 @@
               "position": "Exact",
               "priority": 5,
               "quantity": 1,
-              "resolution": 4,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-17fef8869ce4"

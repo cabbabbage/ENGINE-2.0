@@ -445,6 +445,38 @@ bool is_debug_marker_in_bounds(const SDL_FPoint& point, int screen_width, int sc
            point.y <= static_cast<float>(screen_height) + kMargin;
 }
 
+anchor_points::AnchorWorldPoint3 debug_child_anchor_world_displacement(const AnchorPoint& parent_anchor,
+                                                                       const Asset* child_asset) {
+    anchor_points::AnchorWorldPoint3 displacement{};
+    if (!child_asset) {
+        return displacement;
+    }
+    const Asset::CumulativeMovementDisplacement cumulative =
+        child_asset->current_frame_cumulative_movement_displacement();
+    if (!cumulative.valid) {
+        return displacement;
+    }
+
+    float displacement_x = cumulative.dx;
+    float displacement_y = cumulative.dy;
+    const float displacement_z = cumulative.dz;
+    if (parent_anchor.flip_horizontal) {
+        displacement_x = -displacement_x;
+    }
+    if (parent_anchor.flip_vertical) {
+        displacement_y = -displacement_y;
+    }
+
+    displacement = anchor_points::AnchorWorldPoint3{
+        displacement_x,
+        displacement_y,
+        displacement_z,
+        std::isfinite(displacement_x) &&
+            std::isfinite(displacement_y) &&
+            std::isfinite(displacement_z)};
+    return displacement;
+}
+
 void draw_filled_debug_dot(SDL_Renderer* renderer,
                            const SDL_FPoint& center,
                            int radius_px,
@@ -549,6 +581,13 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
         expected_input.parent.resolution_layer =
             owner->grid_point() ? owner->grid_point()->resolution_layer() : owner->grid_resolution;
         expected_input.anchor_definition.anchor = *anchor;
+        const anchor_points::AnchorWorldPoint3 anchor_displacement =
+            debug_child_anchor_world_displacement(*anchor, child);
+        if (anchor_displacement.valid) {
+            expected_input.anchor_world_displacement.x = anchor_displacement.x;
+            expected_input.anchor_world_displacement.y = anchor_displacement.y;
+            expected_input.anchor_world_displacement.z = anchor_displacement.z;
+        }
         expected_input.sprite_transform.mirror_x = anchor->flip_horizontal;
         expected_input.sprite_transform.mirror_y = anchor->flip_vertical;
         expected_input.sprite_transform.rotation_degrees = anchor->rotation_degrees;

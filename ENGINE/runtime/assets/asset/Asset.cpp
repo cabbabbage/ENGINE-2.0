@@ -1149,6 +1149,47 @@ void Asset::test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> vo
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
+
+Asset::CumulativeMovementDisplacement Asset::current_frame_cumulative_movement_displacement() const {
+    CumulativeMovementDisplacement displacement{};
+    if (!info || current_animation.empty() || !current_frame) {
+        return displacement;
+    }
+
+    const auto animation_it = info->animations.find(current_animation);
+    if (animation_it == info->animations.end()) {
+        return displacement;
+    }
+
+    const Animation& animation = animation_it->second;
+    std::size_t path_index = 0;
+    if (anim_) {
+        path_index = anim_->path_index_for(current_animation);
+    }
+    const auto& path = animation.movement_path(path_index);
+    if (path.empty()) {
+        displacement.valid = true;
+        return displacement;
+    }
+
+    const int frame_index = current_frame->frame_index;
+    if (frame_index < 0) {
+        return displacement;
+    }
+    const int clamped_frame_index =
+        std::clamp(frame_index, 0, static_cast<int>(path.size()) - 1);
+
+    // Frame 0 is the baseline pose: cumulative displacement starts at frame 1.
+    for (int index = 1; index <= clamped_frame_index; ++index) {
+        displacement.dx += static_cast<float>(path[static_cast<std::size_t>(index)].dx);
+        displacement.dy += static_cast<float>(path[static_cast<std::size_t>(index)].dy);
+        displacement.dz += static_cast<float>(path[static_cast<std::size_t>(index)].dz);
+    }
+
+    displacement.valid = true;
+    return displacement;
+}
+
 bool Asset::is_current_animation_locked_in_progress() const {
         if (!info || !current_frame) return false;
         if (info->type == asset_types::player) return false;

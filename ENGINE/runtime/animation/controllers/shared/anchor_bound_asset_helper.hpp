@@ -33,6 +33,7 @@ private:
         ChildAsset* child = nullptr;
         Asset* child_asset = nullptr;
         std::string anchor_name;
+        int last_child_frame_index = -1;
     };
 
     std::unordered_map<Asset*, BindingRecord> bindings_;

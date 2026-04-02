@@ -5,9 +5,11 @@
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/render_depth_policy.hpp"
+#include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
 
 #include <cmath>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -15,6 +17,108 @@ namespace {
 double desired_render_depth_bias(const AnchorPoint& anchor, int quantized_world_z) {
     return render_depth::bias_for_quantized_depth(anchor.world_depth,
                                                   static_cast<double>(quantized_world_z));
+}
+
+anchor_points::AnchorWorldPoint3 child_anchor_world_displacement(const AnchorPoint& parent_anchor,
+                                                                  const Asset* child_asset) {
+    anchor_points::AnchorWorldPoint3 displacement{};
+    if (!child_asset) {
+        return displacement;
+    }
+
+    const Asset::CumulativeMovementDisplacement cumulative =
+        child_asset->current_frame_cumulative_movement_displacement();
+    if (!cumulative.valid) {
+        return displacement;
+    }
+
+    float displacement_x = cumulative.dx;
+    float displacement_y = cumulative.dy;
+    const float displacement_z = cumulative.dz;
+    if (parent_anchor.flip_horizontal) {
+        displacement_x = -displacement_x;
+    }
+    if (parent_anchor.flip_vertical) {
+        displacement_y = -displacement_y;
+    }
+
+    displacement = anchor_points::AnchorWorldPoint3{
+        displacement_x,
+        displacement_y,
+        displacement_z,
+        std::isfinite(displacement_x) &&
+            std::isfinite(displacement_y) &&
+            std::isfinite(displacement_z)};
+    return displacement;
+}
+
+bool sample_perspective_scale_at_world_point(const WarpedScreenGrid& cam,
+                                             const anchor_points::AnchorWorldPoint3& world_point,
+                                             float& out_scale) {
+    out_scale = 1.0f;
+    if (!world_point.valid ||
+        !std::isfinite(world_point.x) ||
+        !std::isfinite(world_point.y) ||
+        !std::isfinite(world_point.z)) {
+        return false;
+    }
+
+    const SDL_Point sample_world{
+        static_cast<int>(std::lround(world_point.x)),
+        static_cast<int>(std::lround(world_point.y)),
+    };
+    const int sample_world_z = static_cast<int>(std::lround(world_point.z));
+    const WarpedScreenGrid::RenderEffects effects =
+        cam.compute_render_effects(sample_world,
+                                   0.0f,
+                                   0.0f,
+                                   WarpedScreenGrid::RenderSmoothingKey{},
+                                   sample_world_z);
+    if (!std::isfinite(effects.distance_scale) || effects.distance_scale <= 0.0f) {
+        return false;
+    }
+
+    out_scale = std::max(0.0001f, effects.distance_scale);
+    return true;
+}
+
+std::optional<float> resolve_child_perspective_override(const AnchorPoint& parent_anchor,
+                                                        const anchored_child_placement::PlacementOutput& placement,
+                                                        const Assets* assets_owner) {
+    const auto fallback_parent_scale = [&]() -> std::optional<float> {
+        if (!parent_anchor.has_flat_perspective_scale) {
+            return std::nullopt;
+        }
+        return std::max(0.0001f, parent_anchor.flat_perspective_scale);
+    };
+
+    switch (parent_anchor.scaling_method) {
+    case AnchorScalingMethod::Parent:
+    case AnchorScalingMethod::Relative2DAnchorPoint:
+        return fallback_parent_scale();
+    case AnchorScalingMethod::Real3DPoint:
+    case AnchorScalingMethod::Real3DFloorPoint:
+        break;
+    }
+
+    if (!assets_owner) {
+        return fallback_parent_scale();
+    }
+
+    const WarpedScreenGrid& camera = assets_owner->getView();
+    anchor_points::AnchorWorldPoint3 sample_point = placement.anchor_world;
+    if (parent_anchor.scaling_method == AnchorScalingMethod::Real3DFloorPoint) {
+        sample_point.y = 0.0f;
+        sample_point.valid = std::isfinite(sample_point.x) &&
+            std::isfinite(sample_point.y) &&
+            std::isfinite(sample_point.z);
+    }
+
+    float sampled_scale = 1.0f;
+    if (sample_perspective_scale_at_world_point(camera, sample_point, sampled_scale)) {
+        return sampled_scale;
+    }
+    return fallback_parent_scale();
 }
 
 } // namespace
@@ -210,6 +314,13 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
     placement_input.parent.resolution_layer =
         (owner_ && owner_->grid_point()) ? owner_->grid_point()->resolution_layer() : child_->grid_resolution;
     placement_input.anchor_definition.anchor = parent_anchor;
+    const anchor_points::AnchorWorldPoint3 anchor_displacement =
+        child_anchor_world_displacement(parent_anchor, child_);
+    if (anchor_displacement.valid) {
+        placement_input.anchor_world_displacement.x = anchor_displacement.x;
+        placement_input.anchor_world_displacement.y = anchor_displacement.y;
+        placement_input.anchor_world_displacement.z = anchor_displacement.z;
+    }
     placement_input.sprite_transform.mirror_x = parent_anchor.flip_horizontal;
     placement_input.sprite_transform.mirror_y = parent_anchor.flip_vertical;
     placement_input.sprite_transform.rotation_degrees = parent_anchor.rotation_degrees;
@@ -243,8 +354,11 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
     const float residual_y = exact_world_y - static_cast<float>(target_world_y);
     const float residual_z = exact_world_z - static_cast<float>(target_world_z);
     bool changed = false;
-    if (bound_ && parent_anchor.has_flat_perspective_scale) {
-        changed = child_->set_anchor_perspective_override(parent_anchor.flat_perspective_scale,
+
+    const std::optional<float> perspective_override_scale =
+        bound_ ? resolve_child_perspective_override(parent_anchor, placement, assets_) : std::nullopt;
+    if (perspective_override_scale.has_value()) {
+        changed = child_->set_anchor_perspective_override(*perspective_override_scale,
                                                           target_layer) || changed;
     } else {
         changed = child_->clear_anchor_perspective_override() || changed;

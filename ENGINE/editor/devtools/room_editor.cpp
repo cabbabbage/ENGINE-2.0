@@ -1255,6 +1255,10 @@ bool copy_anchor_authoring_fields(DisplacedAssetAnchorPoint& target, const Displ
         target.resolve_x = source.resolve_x;
         changed = true;
     }
+    if (target.scaling_method != source.scaling_method) {
+        target.scaling_method = source.scaling_method;
+        changed = true;
+    }
     return changed;
 }
 
@@ -8096,6 +8100,7 @@ void RoomEditor::sync_anchor_tools_panel() {
         detail.rotation_degrees = selected_it->rotation_degrees;
         detail.hidden = selected_it->hidden;
         detail.resolve_x = selected_it->resolve_x;
+        detail.scaling_method = selected_it->scaling_method;
         anchor_tools_panel_->set_detail_values(detail);
     } else {
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
@@ -8585,6 +8590,7 @@ void RoomEditor::refresh_anchor_mode_handles() {
         handle.rotation_degrees = anchor.rotation_degrees;
         handle.hidden = anchor.hidden;
         handle.resolve_x = anchor.resolve_x;
+        handle.scaling_method = anchor.scaling_method;
         handle.flat_screen_px = sample.flat_screen_px;
         handle.has_flat_screen_px = sample.has_flat_screen_px;
         handle.final_screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;

@@ -28,10 +28,10 @@ namespace {
 constexpr int kRoomConfigPanelMinWidth = 260;
 constexpr bool kTrailsAllowIndependentDimensions = true;
 constexpr int kMinimumRadius = 100;
-constexpr int kRadiusSliderInitialMax = 2000;
+constexpr int kRadiusSliderInitialMax = 10000;
 constexpr int kRadiusSliderExpansionMargin = 64;
 constexpr int kRadiusSliderExpansionFactor = 2;
-constexpr int kRadiusSliderHardCap = 2000;
+constexpr int kRadiusSliderHardCap = 10000;
 constexpr float kCameraTiltMinDeg = 0.0f;
 constexpr float kCameraTiltMaxDeg = 360.0f;
 constexpr int kCameraZoomMinPercent = 0;
@@ -181,9 +181,9 @@ struct RoomConfigurator::State {
     std::string name;
     std::string geometry;
 int width_min = 500;
-    int width_max = 2000;
+    int width_max = 10000;
     int height_min = 500;
-    int height_max = 2000;
+    int height_max = 10000;
     int radius_min = 100;
     int radius_max = 100;
     int edge_smoothness = 2;

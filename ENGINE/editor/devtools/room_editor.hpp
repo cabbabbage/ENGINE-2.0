@@ -637,6 +637,7 @@ private:
         float rotation_degrees = 0.0f;
         bool hidden = false;
         bool resolve_x = true;
+        AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
         SDL_FPoint flat_screen_px{0.0f, 0.0f};
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};

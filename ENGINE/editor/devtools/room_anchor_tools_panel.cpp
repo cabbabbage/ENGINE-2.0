@@ -539,20 +539,28 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
         if (depth_textbox_) {
             depth_textbox_->render(renderer);
         }
-    if (flip_horizontal_checkbox_) {
-        flip_horizontal_checkbox_->render(renderer);
-    }
-    if (flip_vertical_checkbox_) {
-        flip_vertical_checkbox_->render(renderer);
-    }
         if (rotation_slider_) {
             rotation_slider_->render(renderer);
         }
         if (hidden_checkbox_) {
             hidden_checkbox_->render(renderer);
         }
-        if (resolve_x_checkbox_) {
-            resolve_x_checkbox_->render(renderer);
+        if (advanced_options_button_) {
+            advanced_options_button_->render(renderer);
+        }
+        if (advanced_options_expanded_) {
+            if (resolve_x_checkbox_) {
+                resolve_x_checkbox_->render(renderer);
+            }
+            if (flip_vertical_checkbox_) {
+                flip_vertical_checkbox_->render(renderer);
+            }
+            if (flip_horizontal_checkbox_) {
+                flip_horizontal_checkbox_->render(renderer);
+            }
+            if (scaling_method_dropdown_) {
+                scaling_method_dropdown_->render(renderer);
+            }
         }
     }
     if (delete_button_) {
@@ -606,11 +614,14 @@ void RoomAnchorToolsPanel::update_layout() const {
     const int controls_width = std::max(0, panel_rect_.w - kPanelPadding * 2);
     const int rename_h = rename_textbox_ ? rename_textbox_->preferred_height(controls_width) : DMTextBox::height();
     const int depth_h = depth_textbox_ ? depth_textbox_->preferred_height(controls_width) : DMTextBox::height();
+    const int advanced_button_h = advanced_options_button_ ? DMButton::height() : 0;
+    const int resolve_x_h = resolve_x_checkbox_ ? DMCheckbox::height() : 0;
     const int flip_h_h = flip_horizontal_checkbox_ ? DMCheckbox::height() : 0;
     const int flip_v_h = flip_vertical_checkbox_ ? DMCheckbox::height() : 0;
+    const int scaling_method_h =
+        scaling_method_dropdown_ ? scaling_method_dropdown_->preferred_height(controls_width) : DMDropdown::height();
     const int rotation_h = rotation_slider_ ? rotation_slider_->preferred_height(controls_width) : DMSlider::height();
     const int hidden_h = hidden_checkbox_ ? DMCheckbox::height() : 0;
-    const int resolve_x_h = resolve_x_checkbox_ ? DMCheckbox::height() : 0;
     int controls_height = 0;
     controls_height += DMButton::height();                          // add
     controls_height += kSectionGap;
@@ -623,15 +634,21 @@ void RoomAnchorToolsPanel::update_layout() const {
         controls_height += row_gap;
         controls_height += depth_h;
         controls_height += row_gap;
-        controls_height += flip_h_h;
-        controls_height += row_gap;
-        controls_height += flip_v_h;
-        controls_height += row_gap;
         controls_height += rotation_h;
         controls_height += row_gap;
         controls_height += hidden_h;
         controls_height += row_gap;
-        controls_height += resolve_x_h;
+        controls_height += advanced_button_h;
+        if (advanced_options_expanded_) {
+            controls_height += row_gap;
+            controls_height += resolve_x_h;
+            controls_height += row_gap;
+            controls_height += flip_v_h;
+            controls_height += row_gap;
+            controls_height += flip_h_h;
+            controls_height += row_gap;
+            controls_height += scaling_method_h;
+        }
         controls_height += kSectionGap;
     }
     controls_height += DMButton::height();                          // delete
@@ -682,14 +699,6 @@ void RoomAnchorToolsPanel::update_layout() const {
             depth_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, depth_h});
             row_y += depth_h + row_gap;
         }
-        if (flip_horizontal_checkbox_) {
-            flip_horizontal_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_h_h});
-            row_y += flip_h_h + row_gap;
-        }
-        if (flip_vertical_checkbox_) {
-            flip_vertical_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_v_h});
-            row_y += flip_v_h + row_gap;
-        }
         if (rotation_slider_) {
             rotation_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, rotation_h});
             row_y += rotation_h + row_gap;
@@ -698,9 +707,45 @@ void RoomAnchorToolsPanel::update_layout() const {
             hidden_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, hidden_h});
             row_y += hidden_h + row_gap;
         }
-        if (resolve_x_checkbox_) {
-            resolve_x_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, resolve_x_h});
-            row_y += resolve_x_h + kSectionGap;
+        if (advanced_options_button_) {
+            advanced_options_button_->set_text(
+                advanced_options_expanded_ ? "Advanced Options (Hide)" : "Advanced Options (Show)");
+            advanced_options_button_->set_rect(SDL_Rect{controls_x, row_y, controls_width, advanced_button_h});
+            row_y += advanced_button_h;
+        }
+        if (advanced_options_expanded_) {
+            row_y += row_gap;
+            if (resolve_x_checkbox_) {
+                resolve_x_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, resolve_x_h});
+                row_y += resolve_x_h + row_gap;
+            }
+            if (flip_vertical_checkbox_) {
+                flip_vertical_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_v_h});
+                row_y += flip_v_h + row_gap;
+            }
+            if (flip_horizontal_checkbox_) {
+                flip_horizontal_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, flip_h_h});
+                row_y += flip_h_h + row_gap;
+            }
+            if (scaling_method_dropdown_) {
+                scaling_method_dropdown_->set_rect(SDL_Rect{controls_x, row_y, controls_width, scaling_method_h});
+                row_y += scaling_method_h;
+            }
+            row_y += kSectionGap;
+        } else {
+            if (resolve_x_checkbox_) {
+                resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            if (flip_vertical_checkbox_) {
+                flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            if (flip_horizontal_checkbox_) {
+                flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            if (scaling_method_dropdown_) {
+                scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            row_y += kSectionGap;
         }
     } else {
         detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -719,8 +764,14 @@ void RoomAnchorToolsPanel::update_layout() const {
         if (hidden_checkbox_) {
             hidden_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
+        if (advanced_options_button_) {
+            advanced_options_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
         if (resolve_x_checkbox_) {
             resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (scaling_method_dropdown_) {
+            scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
 

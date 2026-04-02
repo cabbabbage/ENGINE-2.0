@@ -55,6 +55,7 @@
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "utils/string_utils.hpp"
 #include "utils/AnchorPointResolver.hpp"
 #include "utils/relative_room_position.hpp"
 
@@ -94,6 +95,13 @@ constexpr int kBoxRotationHandlePickRadiusPx = 16;
 constexpr float kBoxRotationHandleDistancePx = 26.0f;
 constexpr int kBoxExtrusionScrollStep = 4;
 constexpr int kAssetEditorTransitionDurationFrames = 6;
+
+bool is_trail_room(const Room* room) {
+    if (!room || room->type.empty()) {
+        return false;
+    }
+    return vibble::strings::to_lower_copy(room->type) == "trail";
+}
 
 bool is_pointer_or_wheel_event(const SDL_Event& event) {
     switch (event.type) {
@@ -2085,6 +2093,8 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     if (!assets_) return;
     if (!enabled_) {
         clear_focus();
+        room_nav_visible_ = false;
+        clear_room_trail_nav_entries();
         if (anchor_mode_active()) {
             exit_anchor_edit_mode(true);
         }
@@ -2865,27 +2875,39 @@ void RoomEditor::prune_label_cache(const std::vector<Room*>& rooms) {
     }
 }
 
-void RoomEditor::render_room_labels(SDL_Renderer* renderer) {
-    if (!enabled_) return;
-    if (!renderer || !assets_) return;
+void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
+    if (!room_nav_visible_) {
+        clear_room_trail_nav_entries();
+        return;
+    }
+    if (!enabled_ || !renderer || !assets_) {
+        clear_room_trail_nav_entries();
+        return;
+    }
 
     ensure_label_font();
-    if (!label_font_) return;
+    if (!label_font_) {
+        clear_room_trail_nav_entries();
+        return;
+    }
 
     const std::vector<Room*>& rooms = assets_->rooms();
-    if (rooms.empty()) return;
+    if (rooms.empty()) {
+        clear_room_trail_nav_entries();
+        return;
+    }
 
     prune_label_cache(rooms);
-
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
+    room_nav_entries_.clear();
     label_rects_.clear();
 
     struct LabelInfo {
         Room* room = nullptr;
         SDL_FPoint desired_center{0.0f, 0.0f};
         float priority = 0.0f;
-};
+    };
 
     std::vector<LabelInfo> render_queue;
     render_queue.reserve(rooms.size());
@@ -2919,13 +2941,16 @@ void RoomEditor::render_room_labels(SDL_Renderer* renderer) {
 
     for (const auto& info : render_queue) {
         if (!info.room) continue;
-        render_room_label(renderer, info.room, info.desired_center);
+        SDL_Rect rendered_rect{};
+        if (render_room_label(renderer, info.room, info.desired_center, &rendered_rect)) {
+            room_nav_entries_.push_back(RoomNavEntry{info.room, rendered_rect, is_trail_room(info.room)});
+        }
     }
 }
 
-void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center) {
-    if (!room || !room->room_area || !assets_) return;
-    if (!label_font_) return;
+bool RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center, SDL_Rect* out_rect) {
+    if (!room || !room->room_area || !assets_) return false;
+    if (!label_font_) return false;
 
     const std::string name = room->room_name.empty() ? std::string("<unnamed>") : room->room_name;
     SDL_Color base_color = room->display_color();
@@ -2942,13 +2967,13 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
 
         SDL_Surface* text_surface = ttf_util::RenderTextBlended(label_font_, name.c_str(), text_color);
         if (!text_surface) {
-            return;
+            return false;
         }
 
         SDL_Texture* new_texture = SDL_CreateTextureFromSurface(renderer, text_surface);
         if (!new_texture) {
             SDL_DestroySurface(text_surface);
-            return;
+            return false;
         }
 
         if (cache.texture) {
@@ -2964,7 +2989,7 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
     }
 
     if (!cache.texture || cache.text_size.x <= 0 || cache.text_size.y <= 0) {
-        return;
+        return false;
     }
 
     SDL_Rect bg_rect = label_background_rect(cache.text_size.x, cache.text_size.y, desired_center);
@@ -2982,6 +3007,44 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
 
     SDL_Rect dst{bg_rect.x + kLabelPadding, bg_rect.y + kLabelPadding, cache.text_size.x, cache.text_size.y};
     sdl_render::Texture(renderer, cache.texture, nullptr, &dst);
+    if (out_rect) {
+        *out_rect = bg_rect;
+    }
+    return true;
+}
+
+void RoomEditor::clear_room_trail_nav_entries() {
+    room_nav_entries_.clear();
+    label_rects_.clear();
+}
+
+bool RoomEditor::handle_room_nav_click(const SDL_Point& screen_pt) {
+    if (!room_nav_visible_ || room_nav_entries_.empty() || !assets_) {
+        return false;
+    }
+    for (const RoomNavEntry& entry : room_nav_entries_) {
+        if (!entry.room) {
+            continue;
+        }
+        if (SDL_PointInRect(&screen_pt, &entry.rect)) {
+            pan_camera_to_room(entry.room);
+            assets_->set_editor_current_room(entry.room);
+            return true;
+        }
+    }
+    return false;
+}
+
+void RoomEditor::pan_camera_to_room(Room* room) {
+    if (!room || !room->room_area || !assets_) {
+        return;
+    }
+    WarpedScreenGrid& cam = assets_->getView();
+    const SDL_Point center = room->room_area->get_center();
+    const double current_scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
+    const double target_scale = cam.default_camera_height_for_room(room);
+    const double factor = (target_scale > 0.0) ? (target_scale / current_scale) : 1.0;
+    cam.pan_and_height_to_point(center.x, factor);
 }
 
 SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const {
@@ -3279,6 +3342,10 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         return;
     }
     const WarpedScreenGrid& cam = assets_->getView();
+
+    if (renderer && room_nav_visible_) {
+        render_room_trail_nav_buttons(renderer);
+    }
 
     if (renderer) {
         if (selected_geometry_room_ && selected_geometry_room_->room_area) {
@@ -4844,6 +4911,16 @@ bool RoomEditor::any_blocking_panel_visible() const {
     return std::any_of(blocking_panel_visible_.begin(),
                        blocking_panel_visible_.end(),
                        [](bool state) { return state; });
+}
+
+void RoomEditor::set_room_trail_nav_visibility(bool visible) {
+    if (room_nav_visible_ == visible) {
+        return;
+    }
+    room_nav_visible_ = visible;
+    if (!visible) {
+        clear_room_trail_nav_entries();
+    }
 }
 
 float RoomEditor::edge_pan_intensity(int value, int max_value, float threshold_fraction) {
@@ -6421,6 +6498,10 @@ void RoomEditor::handle_click(const Input& input) {
         return;
     }
 
+    if (room_nav_visible_ && handle_room_nav_click(screen_mouse)) {
+        return;
+    }
+
     if (shift_modifier) {
         Room* hit_room = find_geometry_room_at_point(world_mouse);
         if (hit_room) {
@@ -6486,20 +6567,6 @@ void RoomEditor::handle_click(const Input& input) {
             hovered_dynamic_boundary_proxy_ = boundary_hit->key;
             mark_highlight_dirty();
             return;
-        }
-        bool inside_room = true;
-        if (current_room_ && current_room_->room_area) {
-            inside_room = current_room_->room_area->contains_point(world_mouse);
-        }
-
-        if (!inside_room && assets_) {
-            for (Room* r : assets_->rooms()) {
-                if (!r || r == current_room_ || !r->room_area) continue;
-                if (r->room_area->contains_point(world_mouse)) {
-                    assets_->set_editor_current_room(r);
-                    break;
-                }
-            }
         }
     }
 }
@@ -14651,6 +14718,7 @@ void RoomEditor::reopen_room_configurator() {
 }
 
 void RoomEditor::rebuild_room_spawn_id_cache() {
+    clear_room_trail_nav_entries();
     room_spawn_ids_.clear();
     map_assets_spawn_ids_.clear();
     map_boundary_spawn_ids_.clear();
@@ -15129,11 +15197,11 @@ void RoomEditor::set_current_room(Room* room, bool lock_room) {
         room_editor_trace("[RoomEditor] clearing active spawn group target");
         clear_active_spawn_group_target();
         clear_geometry_selection();
+        clear_room_trail_nav_entries();
     }
 
     current_room_ = room;
-    // Only lock the room when explicitly requested via lock_room=true
-    // This allows normal room switching based on camera position to work
+    // Room locking is explicit; room changes now come from direct editor navigation.
     room_locked_for_edit_ = lock_room;
     if (room_changed) {
         invalidate_label_cache(previous_room);

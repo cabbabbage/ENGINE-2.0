@@ -91,6 +91,7 @@ private:
     mutable SDL_Rect panel_rect_{12, 56, 300, 420};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
     mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
+    mutable SDL_Rect advanced_card_rect_{0, 0, 0, 0};
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
     mutable int content_height_ = 0;
     mutable int max_scroll_ = 0;

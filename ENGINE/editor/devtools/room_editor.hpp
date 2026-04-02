@@ -82,6 +82,7 @@ public:
     bool is_enabled() const { return enabled_; }
     bool is_anchor_edit_mode_active() const;
     bool is_asset_stack_editor_active() const;
+    void set_room_trail_nav_visibility(bool visible);
 
     void update(const Input& input);
     void update_ui(const Input& input);
@@ -284,8 +285,11 @@ private:
     void respawn_spawn_group(const nlohmann::json& entry);
     std::unique_ptr<vibble::grid::Occupancy> build_room_grid(const std::string& ignore_spawn_id) const;
     bool snap_spawn_group_to_resolution(Asset* anchor, int resolution);
-    void render_room_labels(SDL_Renderer* renderer);
-    void render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center);
+    void render_room_trail_nav_buttons(SDL_Renderer* renderer);
+    bool render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center, SDL_Rect* out_rect = nullptr);
+    void clear_room_trail_nav_entries();
+    bool handle_room_nav_click(const SDL_Point& screen_pt);
+    void pan_camera_to_room(Room* room);
     SDL_Rect label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const;
     SDL_Rect resolve_edge_overlap(SDL_Rect rect, SDL_FPoint desired_center);
     SDL_Rect resolve_horizontal_edge_overlap(SDL_Rect rect, float desired_center_x, bool top_edge);
@@ -836,8 +840,15 @@ private:
         std::string last_name;
         SDL_Color last_color{0, 0, 0, 0};
         bool dirty = true;
-};
+    };
     std::unordered_map<Room*, LabelCacheEntry> label_cache_;
+    struct RoomNavEntry {
+        Room*   room = nullptr;
+        SDL_Rect rect{0, 0, 0, 0};
+        bool    is_trail = false;
+    };
+    std::vector<RoomNavEntry> room_nav_entries_;
+    bool room_nav_visible_ = false;
 
     double height_scale_factor_ = 1.1;
     DevCameraControls camera_controls_;

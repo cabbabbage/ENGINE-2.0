@@ -1633,18 +1633,18 @@ bool DevControls::is_pointer_over_dev_ui(int x, int y) const {
 
 Room* DevControls::resolve_current_room(Room* detected_room) {
     detected_room_ = detected_room;
-    Room* target = choose_room(detected_room_);
+    Room* target = dev_selected_room_;
+    if (!target && assets_) {
+        target = assets_->current_room();
+    }
+    if (!target) {
+        target = choose_room(detected_room_);
+    }
     if (!enabled_) {
         dev_selected_room_ = nullptr;
         set_current_room(target);
         return current_room_;
     }
-
-    if (!dev_selected_room_) {
-        dev_selected_room_ = choose_room(detected_room_);
-    }
-
-    target = choose_room(dev_selected_room_);
     dev_selected_room_ = target;
     set_current_room(target);
     return current_room_;
@@ -1714,7 +1714,13 @@ void DevControls::set_enabled(bool enabled) {
         const bool camera_was_visible = camera_panel_ && camera_panel_->is_visible();
         close_all_floating_panels();
         set_mode(Mode::RoomEditor);
-        Room* target = choose_room(current_room_ ? current_room_ : detected_room_);
+        Room* target = nullptr;
+        if (assets_) {
+            target = assets_->current_room();
+        }
+        if (!target) {
+            target = choose_room(current_room_ ? current_room_ : detected_room_);
+        }
         dev_selected_room_ = target;
         if (room_editor_) {
             room_editor_->set_enabled(true, true);
@@ -1755,6 +1761,9 @@ void DevControls::set_enabled(bool enabled) {
     } else {
         const char* msg_disable = "[DevControls] preparing disable flow";
         std::cout << msg_disable << "\n";
+        if (room_editor_) {
+            room_editor_->set_room_trail_nav_visibility(false);
+        }
         WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
         grid_overlay_enabled_ = false;
         other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, false);
@@ -4024,7 +4033,12 @@ void DevControls::configure_header_button_sets() {
 }
 
 void DevControls::sync_header_button_states() {
-    if (!map_mode_ui_) return;
+    if (!map_mode_ui_) {
+        if (room_editor_) {
+            room_editor_->set_room_trail_nav_visibility(false);
+        }
+        return;
+    }
     const bool room_config_open = room_editor_ && room_editor_->is_room_config_open();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "room_config", room_config_open);
     const bool library_open = room_editor_ && room_editor_->is_asset_library_open();
@@ -4042,9 +4056,27 @@ void DevControls::sync_header_button_states() {
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_trail", false);
 
     if (room_editor_) {
+        room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::Camera, camera_open);
         room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::AssetLibrary, library_open);
-
         room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::MapLayers, layers_open);
+
+        const bool map_ui_panels_open = map_mode_ui_ && map_mode_ui_->is_any_panel_visible();
+        const bool any_modal_open =
+            room_config_open ||
+            room_editor_->is_asset_info_editor_open() ||
+            (regenerate_popup_ && regenerate_popup_->visible()) ||
+            (trail_suite_ && trail_suite_->is_open()) ||
+            map_assets_open ||
+            boundary_open ||
+            camera_open ||
+            map_ui_panels_open;
+        const bool nav_buttons_enabled =
+            enabled_ &&
+            mode_ == Mode::RoomEditor &&
+            room_editor_->is_enabled() &&
+            !room_editor_->any_blocking_panel_visible() &&
+            !any_modal_open;
+        room_editor_->set_room_trail_nav_visibility(nav_buttons_enabled);
     }
 
 }
@@ -4799,44 +4831,7 @@ void DevControls::exit_map_editor_mode(bool focus_player, bool restore_previous_
 }
 
 void DevControls::handle_map_selection() {
-    if (!map_editor_) return;
-    Room* selected = map_editor_->consume_selected_room();
-    if (!selected) return;
-
-    if (assets_) {
-        assets_->set_render_suppressed(true);
-        render_suppression_in_progress_ = true;
-    }
-    if (assets_) {
-        WarpedScreenGrid* cam = &assets_->getView();
-        if (cam && selected && selected->room_area) {
-            const SDL_Point center = selected->room_area->get_center();
-            const double current_scale = std::max(0.0001, static_cast<double>(cam->get_scale()));
-            const double target_scale  = cam->default_camera_height_for_room(selected);
-            const double factor = (target_scale > 0.0) ? (target_scale / current_scale) : 1.0;
-            const int duration_steps = 30;
-            cam->pan_and_height_to_point(center.x, factor);
-        }
-    }
-    if (is_trail_room(selected)) {
-        if (trail_suite_) {
-            trail_suite_->open(selected, false);
-        }
-        pending_trail_template_.reset();
-        return;
-    }
-
-    if (trail_suite_) {
-        trail_suite_->close();
-    }
-    pending_trail_template_.reset();
-
-    dev_selected_room_ = selected;
-    set_current_room(selected);
-    exit_map_editor_mode(false, false);
-    if (room_editor_) {
-        room_editor_->open_room_config();
-    }
+    // Room selection is now handled exclusively by RoomEditor room/trail nav badges.
 }
 
 Room* DevControls::find_spawn_room() const {

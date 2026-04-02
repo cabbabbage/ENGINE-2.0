@@ -537,6 +537,36 @@ bool build_symmetric_camera_ray_extrusion(const Asset& asset,
     return valid;
 }
 
+bool sample_perspective_scale_at_point(const WarpedScreenGrid& cam,
+                                       const anchor_points::AnchorWorldPoint3& world_point,
+                                       float& out_scale) {
+    out_scale = 1.0f;
+    if (!world_point.valid ||
+        !std::isfinite(world_point.x) ||
+        !std::isfinite(world_point.y) ||
+        !std::isfinite(world_point.z)) {
+        return false;
+    }
+
+    const SDL_Point sample_world{
+        static_cast<int>(std::lround(world_point.x)),
+        static_cast<int>(std::lround(world_point.y)),
+    };
+    const int sample_world_z = static_cast<int>(std::lround(world_point.z));
+    const WarpedScreenGrid::RenderEffects effects =
+        cam.compute_render_effects(sample_world,
+                                   0.0f,
+                                   0.0f,
+                                   WarpedScreenGrid::RenderSmoothingKey{},
+                                   sample_world_z);
+    if (!std::isfinite(effects.distance_scale) || effects.distance_scale <= 0.0f) {
+        return false;
+    }
+
+    out_scale = std::max(0.0001f, effects.distance_scale);
+    return true;
+}
+
 FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization grid_policy) {
@@ -642,14 +672,12 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.flat_relative_pixel_point.x,
         sample.flat_relative_pixel_point.y};
     sample.resolved.flat_world_exact_z = sample.flat_relative_pixel_point.z;
-    const bool has_propagated_perspective =
+    const bool has_parent_perspective_sample =
         perspective_sample.source != Asset::PerspectiveSource::Default &&
         std::isfinite(perspective_scale) &&
         perspective_scale > 0.0f;
-    if (has_propagated_perspective) {
-        sample.resolved.flat_perspective_scale = std::max(0.0001f, perspective_scale);
-        sample.resolved.has_flat_perspective_scale = true;
-    }
+    const float parent_perspective_sample =
+        has_parent_perspective_sample ? std::max(0.0001f, perspective_scale) : 1.0f;
 
     if (!displace_along_camera_to_point_ray(asset,
                                             sample.flat_relative_pixel_point,
@@ -663,6 +691,46 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.final_anchor_point.y,
         sample.final_anchor_point.z,
         true};
+
+    auto apply_perspective_override = [&](float scale) {
+        sample.resolved.flat_perspective_scale = std::max(0.0001f, scale);
+        sample.resolved.has_flat_perspective_scale = true;
+    };
+
+    float selected_method_scale = 1.0f;
+    bool has_selected_method_scale = false;
+    switch (anchor.scaling_method) {
+        case AnchorScalingMethod::Parent:
+            break;
+        case AnchorScalingMethod::Real3DPoint:
+            has_selected_method_scale =
+                sample_perspective_scale_at_point(cam, sample.final_anchor_point, selected_method_scale);
+            break;
+        case AnchorScalingMethod::Relative2DAnchorPoint:
+            has_selected_method_scale =
+                sample_perspective_scale_at_point(cam, sample.flat_relative_pixel_point, selected_method_scale);
+            break;
+        case AnchorScalingMethod::Real3DFloorPoint: {
+            anchor_points::AnchorWorldPoint3 floor_point = sample.final_anchor_point;
+            floor_point.y = 0.0f;
+            floor_point.valid = std::isfinite(floor_point.x) &&
+                                std::isfinite(floor_point.y) &&
+                                std::isfinite(floor_point.z);
+            has_selected_method_scale =
+                sample_perspective_scale_at_point(cam, floor_point, selected_method_scale);
+            break;
+        }
+    }
+
+    if (anchor.scaling_method == AnchorScalingMethod::Parent) {
+        if (has_parent_perspective_sample) {
+            apply_perspective_override(parent_perspective_sample);
+        }
+    } else if (has_selected_method_scale) {
+        apply_perspective_override(selected_method_scale);
+    } else if (has_parent_perspective_sample) {
+        apply_perspective_override(parent_perspective_sample);
+    }
 
     const int resolved_x = static_cast<int>(std::lround(final_anchor_point.x));
     const int resolved_y = static_cast<int>(std::lround(final_anchor_point.y));

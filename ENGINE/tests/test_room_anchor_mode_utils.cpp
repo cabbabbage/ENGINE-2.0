@@ -13,6 +13,7 @@ using devmode::room_anchor_mode::make_default_anchor_for_frame;
 using devmode::room_anchor_mode::make_unique_anchor_name;
 using devmode::room_anchor_mode::next_default_anchor_name;
 using devmode::room_anchor_mode::normalize_anchor_points_payload;
+using devmode::room_anchor_mode::serialize_anchor_frame;
 using devmode::room_anchor_mode::write_anchor_frame_to_payload;
 using devmode::room_anchor_mode::wrap_index;
 
@@ -52,6 +53,7 @@ TEST_CASE("Anchor mode default anchor position is center-bottom with depth zero"
     CHECK(anchor.rotation_degrees == doctest::Approx(0.0f));
     CHECK(anchor.hidden == false);
     CHECK(anchor.resolve_x == true);
+    CHECK(anchor.scaling_method == AnchorScalingMethod::Parent);
 }
 
 TEST_CASE("Anchor mode payload write normalizes frame count and writes current frame only") {
@@ -92,8 +94,48 @@ TEST_CASE("Anchor mode payload write normalizes frame count and writes current f
     CHECK(payload["anchor_points"][1][0]["rotation_degrees"].get<float>() == doctest::Approx(0.0f));
     CHECK(payload["anchor_points"][1][0]["hidden"] == false);
     CHECK(payload["anchor_points"][1][0]["resolve_x"] == true);
+    CHECK(payload["anchor_points"][1][0]["scaling_method"] == "parent");
     CHECK(payload["anchor_points"][2].is_array());
     CHECK(payload["anchor_points"][3].is_array());
+}
+
+TEST_CASE("Anchor mode serialization preserves scaling method tokens") {
+    std::vector<DisplacedAssetAnchorPoint> anchors;
+
+    DisplacedAssetAnchorPoint parent_anchor{"a_parent", 1, 2, 0.0f};
+    parent_anchor.scaling_method = AnchorScalingMethod::Parent;
+    anchors.push_back(parent_anchor);
+
+    DisplacedAssetAnchorPoint real_3d_anchor{"a_real_3d", 3, 4, 1.0f};
+    real_3d_anchor.scaling_method = AnchorScalingMethod::Real3DPoint;
+    anchors.push_back(real_3d_anchor);
+
+    DisplacedAssetAnchorPoint relative_2d_anchor{"a_relative_2d", 5, 6, 2.0f};
+    relative_2d_anchor.scaling_method = AnchorScalingMethod::Relative2DAnchorPoint;
+    anchors.push_back(relative_2d_anchor);
+
+    DisplacedAssetAnchorPoint floor_anchor{"a_floor", 7, 8, 3.0f};
+    floor_anchor.scaling_method = AnchorScalingMethod::Real3DFloorPoint;
+    anchors.push_back(floor_anchor);
+
+    const nlohmann::json frame_json = serialize_anchor_frame(anchors);
+    REQUIRE(frame_json.is_array());
+    REQUIRE(frame_json.size() == 4);
+
+    CHECK(frame_json[0]["scaling_method"] == "parent");
+    CHECK(frame_json[1]["scaling_method"] == "real_3d_point");
+    CHECK(frame_json[2]["scaling_method"] == "relative_2d_anchor_point");
+    CHECK(frame_json[3]["scaling_method"] == "real_3d_floor_point");
+}
+
+TEST_CASE("Anchor scaling method parser falls back to parent for invalid tokens") {
+    CHECK(anchor_points::anchor_scaling_method_from_token("parent") == AnchorScalingMethod::Parent);
+    CHECK(anchor_points::anchor_scaling_method_from_token("real_3d_point") == AnchorScalingMethod::Real3DPoint);
+    CHECK(anchor_points::anchor_scaling_method_from_token("relative_2d_anchor_point") ==
+          AnchorScalingMethod::Relative2DAnchorPoint);
+    CHECK(anchor_points::anchor_scaling_method_from_token("real_3d_floor_point") ==
+          AnchorScalingMethod::Real3DFloorPoint);
+    CHECK(anchor_points::anchor_scaling_method_from_token("not_a_method") == AnchorScalingMethod::Parent);
 }
 
 TEST_CASE("Anchor mode payload normalization enforces exact frame count") {

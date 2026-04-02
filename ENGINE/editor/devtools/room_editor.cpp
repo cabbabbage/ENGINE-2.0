@@ -9032,6 +9032,9 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
     if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
         return false;
     }
+    if (!anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+        return false;
+    }
 
     float requested_depth = values.depth_offset;
     const bool requested_flip_horizontal = values.flip_horizontal;
@@ -9039,6 +9042,7 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
     float requested_rotation = values.rotation_degrees;
     const bool requested_hidden = values.hidden;
     const bool requested_resolve_x = values.resolve_x;
+    const AnchorScalingMethod requested_scaling_method = values.scaling_method;
     if (!std::isfinite(requested_depth)) {
         requested_depth = 0.0f;
     }
@@ -9046,7 +9050,39 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
         requested_rotation = 0.0f;
     }
 
-    const bool changed = mutate_anchor_current_frame(
+    Asset* target = anchor_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+
+    AnchorScalingMethod selected_scaling_method = AnchorScalingMethod::Parent;
+    bool selected_scaling_method_known = false;
+    auto selected_handle_it = std::find_if(
+        anchor_edit_.handles.begin(),
+        anchor_edit_.handles.end(),
+        [&](const AnchorHandleSample& handle) {
+            return handle.name == anchor_edit_.selected_anchor_name;
+        });
+    if (selected_handle_it != anchor_edit_.handles.end()) {
+        selected_scaling_method = selected_handle_it->scaling_method;
+        selected_scaling_method_known = true;
+    } else {
+        auto anim_it = target_info->animations.find(anchor_edit_.animation_id);
+        if (anim_it != target_info->animations.end() && anim_it->second.has_frames()) {
+            const int frame_index = devmode::room_anchor_mode::wrap_index(
+                anchor_edit_.frame_index,
+                static_cast<int>(anim_it->second.frame_count()));
+            if (AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index))) {
+                if (const DisplacedAssetAnchorPoint* selected_anchor = frame->find_anchor(anchor_edit_.selected_anchor_name)) {
+                    selected_scaling_method = selected_anchor->scaling_method;
+                    selected_scaling_method_known = true;
+                }
+            }
+        }
+    }
+
+    bool changed = false;
+    std::unordered_set<std::string> anchors_to_notify;
+
+    const bool local_changed = mutate_anchor_current_frame(
         [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
             auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
                 return anchor.name == anchor_edit_.selected_anchor_name;
@@ -9073,11 +9109,82 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (local_changed) {
+        changed = true;
+        anchors_to_notify.insert(anchor_edit_.selected_anchor_name);
+    }
 
-    if (changed && anchor_edit_.target_asset) {
-        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
-            anchor_edit_.target_asset,
-            anchor_edit_.selected_anchor_name);
+    const bool scaling_method_mismatch =
+        !selected_scaling_method_known || selected_scaling_method != requested_scaling_method;
+    if (scaling_method_mismatch) {
+        bool scaling_updated_any = false;
+        const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
+        for (const std::string& animation_id : eligible_ids) {
+            auto anim_it = target_info->animations.find(animation_id);
+            if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+                continue;
+            }
+
+            nlohmann::json payload = target_info->animation_payload(animation_id);
+            const std::size_t frame_count = anim_it->second.frame_count();
+            bool payload_changed = false;
+            for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+                AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+                if (!frame) {
+                    continue;
+                }
+
+                bool frame_changed = false;
+                for (DisplacedAssetAnchorPoint& anchor : frame->anchor_points) {
+                    if (!anchor.is_valid() || anchor.scaling_method == requested_scaling_method) {
+                        continue;
+                    }
+                    anchor.scaling_method = requested_scaling_method;
+                    frame_changed = true;
+                    anchors_to_notify.insert(anchor.name);
+                }
+                if (!frame_changed) {
+                    continue;
+                }
+
+                frame->rebuild_anchor_lookup();
+                if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                              frame_count,
+                                                                              frame_index,
+                                                                              frame->anchor_points)) {
+                    return changed;
+                }
+                payload_changed = true;
+                scaling_updated_any = true;
+            }
+
+            if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
+                return changed;
+            }
+        }
+
+        if (scaling_updated_any) {
+            if (!commit_anchor_bulk_edit(target,
+                                         target_info,
+                                         devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                         false,
+                                         "Anchor Scaling Method",
+                                         "room-anchor-scaling-method")) {
+                return changed;
+            }
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        for (const std::string& anchor_name : anchors_to_notify) {
+            if (anchor_name.empty()) {
+                continue;
+            }
+            anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+                target,
+                anchor_name);
+        }
     }
     return changed;
 }
@@ -9384,6 +9491,36 @@ bool RoomEditor::add_anchor_in_current_frame() {
         return false;
     }
 
+    AnchorScalingMethod global_scaling_method = AnchorScalingMethod::Parent;
+    bool global_scaling_method_found = false;
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+        const std::size_t frame_count = anim_it->second.frame_count();
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            const AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
+            }
+            for (const auto& anchor : frame->anchor_points) {
+                if (!anchor.is_valid()) {
+                    continue;
+                }
+                global_scaling_method = anchor.scaling_method;
+                global_scaling_method_found = true;
+                break;
+            }
+            if (global_scaling_method_found) {
+                break;
+            }
+        }
+        if (global_scaling_method_found) {
+            break;
+        }
+    }
+
     std::vector<std::string> existing_names;
     for (const std::string& animation_id : eligible_ids) {
         auto anim_it = target_info->animations.find(animation_id);
@@ -9424,7 +9561,10 @@ bool RoomEditor::add_anchor_in_current_frame() {
             }
             std::vector<DisplacedAssetAnchorPoint> updated = frame->anchor_points;
             const SDL_Point dims = resolve_anchor_editor_frame_dimensions(target, frame);
-            updated.push_back(devmode::room_anchor_mode::make_default_anchor_for_frame(new_anchor_name, dims.x, dims.y));
+            DisplacedAssetAnchorPoint new_anchor =
+                devmode::room_anchor_mode::make_default_anchor_for_frame(new_anchor_name, dims.x, dims.y);
+            new_anchor.scaling_method = global_scaling_method;
+            updated.push_back(new_anchor);
             frame->set_anchor_points(std::move(updated));
             if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
                                                                           frame_count,

@@ -309,7 +309,9 @@
       "anchor_point_child_candidates": [
         {
           "anchor_point_name": "anchor_1",
-          "candidates": {}
+          "candidates": {
+            "candidates": []
+          }
         }
       ],
       "animations": {
@@ -5187,23 +5189,33 @@
       "anchor_point_child_candidates": [
         {
           "anchor_point_name": "eyes",
-          "candidates": {}
+          "candidates": {
+            "candidates": []
+          }
         },
         {
           "anchor_point_name": "hat",
-          "candidates": {}
+          "candidates": {
+            "candidates": []
+          }
         },
         {
           "anchor_point_name": "mouth",
-          "candidates": {}
+          "candidates": {
+            "candidates": []
+          }
         },
         {
           "anchor_point_name": "neck",
-          "candidates": {}
+          "candidates": {
+            "candidates": []
+          }
         },
         {
           "anchor_point_name": "weapon",
-          "candidates": {}
+          "candidates": {
+            "candidates": []
+          }
         }
       ],
       "animations": {
@@ -10695,7 +10707,7 @@
                   "x": 226,
                   "y": 207
                 },
-                "rotation_degrees": -176.89395141601563,
+                "rotation_degrees": -176.89395141601562,
                 "size": {
                   "h": 18,
                   "w": 110
@@ -10738,7 +10750,7 @@
                   "x": 118,
                   "y": 180
                 },
-                "rotation_degrees": -176.89395141601563,
+                "rotation_degrees": -176.89395141601562,
                 "size": {
                   "h": 18,
                   "w": 110

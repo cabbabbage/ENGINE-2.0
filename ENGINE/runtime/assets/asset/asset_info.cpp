@@ -18,10 +18,12 @@
 #include <filesystem>
 #include <system_error>
 #include <utility>
+#include <optional>
 #include <unordered_set>
 #include <SDL3/SDL.h>
 
 #include "devtools/core/manifest_store.hpp"
+#include "gameplay/spawn/spawn_group_codec.hpp"
 #include "utils/grid.hpp"
 
 namespace fs = std::filesystem;
@@ -52,6 +54,165 @@ std::vector<std::string> parse_string_array(const nlohmann::json& json_value) {
 
 constexpr const char* kAnchorPointChildCandidatesKey = "anchor_point_child_candidates";
 constexpr const char* kAnchorPointChildCandidatesLegacyKey = "anchor_point_child_cndidates";
+constexpr double kAnchorCandidateMissingChanceDefault = 100.0;
+
+std::string trim_copy(std::string value) {
+    const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+    auto begin_it = std::find_if_not(value.begin(), value.end(),
+                                     [&](char c) { return is_space(static_cast<unsigned char>(c)); });
+    auto end_it = std::find_if_not(value.rbegin(), value.rend(),
+                                   [&](char c) { return is_space(static_cast<unsigned char>(c)); }).base();
+    if (begin_it >= end_it) {
+        return {};
+    }
+    return std::string(begin_it, end_it);
+}
+
+bool is_integral_number(double value) {
+    return std::isfinite(value) && std::fabs(value - std::round(value)) <= 1e-9;
+}
+
+double clamp_non_negative_finite(double value) {
+    if (!std::isfinite(value) || value < 0.0) {
+        return 0.0;
+    }
+    return value;
+}
+
+std::optional<double> parse_number_like_json(const nlohmann::json& value) {
+    if (value.is_number_float()) {
+        return value.get<double>();
+    }
+    if (value.is_number_integer()) {
+        return static_cast<double>(value.get<std::int64_t>());
+    }
+    if (value.is_number_unsigned()) {
+        return static_cast<double>(value.get<std::uint64_t>());
+    }
+    if (value.is_string()) {
+        const std::string text = trim_copy(value.get<std::string>());
+        if (text.empty()) {
+            return std::nullopt;
+        }
+        try {
+            std::size_t idx = 0;
+            const double parsed = std::stod(text, &idx);
+            if (idx == text.size()) {
+                return parsed;
+            }
+        } catch (...) {
+        }
+    }
+    return std::nullopt;
+}
+
+std::string ensure_tag_prefix(std::string value) {
+    value = trim_copy(std::move(value));
+    if (!value.empty() && value.front() != '#') {
+        value.insert(value.begin(), '#');
+    }
+    return value;
+}
+
+std::string normalize_anchor_candidate_name(const nlohmann::json& candidate_json,
+                                            const std::string& legacy_key = std::string{}) {
+    std::string name = trim_copy(legacy_key);
+    std::string explicit_tag_name;
+    bool tag_flag = false;
+
+    if (candidate_json.is_object()) {
+        if (candidate_json.contains("name") && candidate_json["name"].is_string()) {
+            name = trim_copy(candidate_json["name"].get<std::string>());
+        } else if (candidate_json.contains("asset_name") && candidate_json["asset_name"].is_string()) {
+            name = trim_copy(candidate_json["asset_name"].get<std::string>());
+        }
+
+        if (candidate_json.contains("tag_name") && candidate_json["tag_name"].is_string()) {
+            explicit_tag_name = trim_copy(candidate_json["tag_name"].get<std::string>());
+        }
+
+        if (candidate_json.contains("tag")) {
+            const auto& tag_value = candidate_json["tag"];
+            if (tag_value.is_boolean()) {
+                tag_flag = tag_value.get<bool>();
+            } else if (tag_value.is_string()) {
+                explicit_tag_name = trim_copy(tag_value.get<std::string>());
+            }
+        }
+    }
+
+    if (!explicit_tag_name.empty()) {
+        name = ensure_tag_prefix(explicit_tag_name);
+    } else if (tag_flag && !name.empty()) {
+        name = ensure_tag_prefix(name);
+    }
+
+    return name;
+}
+
+nlohmann::json encode_anchor_candidate_entry(const std::string& name, double chance) {
+    nlohmann::json candidate = nlohmann::json::object();
+    candidate["name"] = name.empty() ? std::string("null") : name;
+    chance = clamp_non_negative_finite(chance);
+    if (is_integral_number(chance)) {
+        candidate["chance"] = static_cast<int>(std::llround(chance));
+    } else {
+        candidate["chance"] = chance;
+    }
+    return candidate;
+}
+
+nlohmann::json normalize_single_anchor_candidate(const nlohmann::json& candidate_json,
+                                                 const std::string& legacy_key = std::string{}) {
+    const std::string normalized_name = normalize_anchor_candidate_name(candidate_json, legacy_key);
+
+    bool had_explicit_weight = false;
+    double chance = 0.0;
+    if (candidate_json.is_object()) {
+        if (candidate_json.contains("chance") || candidate_json.contains("weight")) {
+            had_explicit_weight = true;
+            chance = vibble::spawn_group_codec::read_candidate_chance(candidate_json, 0.0);
+        }
+    } else {
+        const auto parsed = parse_number_like_json(candidate_json);
+        if (parsed.has_value()) {
+            had_explicit_weight = true;
+            chance = *parsed;
+        }
+    }
+
+    if (!had_explicit_weight) {
+        chance = normalized_name.empty() ? 0.0 : kAnchorCandidateMissingChanceDefault;
+    }
+    return encode_anchor_candidate_entry(normalized_name, chance);
+}
+
+nlohmann::json normalize_anchor_candidate_payload(const nlohmann::json& payload) {
+    nlohmann::json normalized = nlohmann::json::object();
+    normalized["candidates"] = nlohmann::json::array();
+    auto& normalized_candidates = normalized["candidates"];
+
+    if (payload.is_object()) {
+        auto candidates_it = payload.find("candidates");
+        if (candidates_it != payload.end() && candidates_it->is_array()) {
+            for (const auto& candidate_json : *candidates_it) {
+                normalized_candidates.push_back(normalize_single_anchor_candidate(candidate_json));
+            }
+        } else {
+            for (auto it = payload.begin(); it != payload.end(); ++it) {
+                normalized_candidates.push_back(normalize_single_anchor_candidate(it.value(), it.key()));
+            }
+        }
+    } else if (payload.is_array()) {
+        for (const auto& candidate_json : payload) {
+            normalized_candidates.push_back(normalize_single_anchor_candidate(candidate_json));
+        }
+    } else if (!payload.is_null()) {
+        normalized_candidates.push_back(normalize_single_anchor_candidate(payload));
+    }
+
+    return normalized;
+}
 
 std::vector<AssetInfo::AnchorChildPointCandidate> parse_anchor_point_child_candidates_payload(
     const nlohmann::json& payload) {
@@ -76,10 +237,10 @@ std::vector<AssetInfo::AnchorChildPointCandidate> parse_anchor_point_child_candi
 
         AssetInfo::AnchorChildPointCandidate candidate{};
         candidate.anchor_point_name = anchor_point_name;
-        if (entry.contains("candidates") && entry["candidates"].is_object()) {
-            candidate.candidates = entry["candidates"];
+        if (entry.contains("candidates")) {
+            candidate.candidates = normalize_anchor_candidate_payload(entry["candidates"]);
         } else {
-            candidate.candidates = nlohmann::json::object();
+            candidate.candidates = normalize_anchor_candidate_payload(nlohmann::json::object());
         }
         parsed.push_back(std::move(candidate));
     }
@@ -100,7 +261,7 @@ nlohmann::json build_anchor_point_child_candidates_payload(
         }
         nlohmann::json encoded = nlohmann::json::object();
         encoded["anchor_point_name"] = candidate.anchor_point_name;
-        encoded["candidates"] = candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+        encoded["candidates"] = normalize_anchor_candidate_payload(candidate.candidates);
         payload.push_back(std::move(encoded));
     }
     return payload;
@@ -1576,49 +1737,15 @@ nlohmann::json AssetInfo::anchor_point_child_candidates_payload() const {
 }
 
 nlohmann::json AssetInfo::anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const {
-    nlohmann::json result = nlohmann::json::object();
-    result["candidates"] = nlohmann::json::array();
-
     if (anchor_point_name.empty()) {
-        return result;
+        return normalize_anchor_candidate_payload(nlohmann::json::object());
     }
     for (const auto& entry : anchor_point_child_candidates) {
         if (entry.anchor_point_name == anchor_point_name) {
-            // Convert stored candidates to the array format expected by
-            // CandidateEditorPieGraphWidget::set_candidates_from_json().
-            nlohmann::json candidates_array = nlohmann::json::array();
-            if (entry.candidates.is_object()) {
-                // The stored object may be keyed by candidate name or may
-                // already contain a "candidates" array.
-                if (entry.candidates.contains("candidates") && entry.candidates["candidates"].is_array()) {
-                    candidates_array = entry.candidates["candidates"];
-                } else {
-                    // Treat each key-value pair as a candidate entry.
-                    for (auto it = entry.candidates.begin(); it != entry.candidates.end(); ++it) {
-                        nlohmann::json candidate = nlohmann::json::object();
-                        candidate["name"] = it.key();
-                        if (it.value().is_object()) {
-                            // Copy through fields from the stored object and
-                            // ensure "name" is honoured if it exists inside.
-                            for (auto field_it = it.value().begin(); field_it != it.value().end(); ++field_it) {
-                                if (field_it.key() == "name") {
-                                    candidate["name"] = field_it.value().get<std::string>();
-                                } else if (!candidate.contains(field_it.key())) {
-                                    candidate[field_it.key()] = field_it.value();
-                                }
-                            }
-                        }
-                        candidates_array.push_back(candidate);
-                    }
-                }
-            } else if (entry.candidates.is_array()) {
-                candidates_array = entry.candidates;
-            }
-            result["candidates"] = candidates_array;
-            return result;
+            return normalize_anchor_candidate_payload(entry.candidates);
         }
     }
-    return result;
+    return normalize_anchor_candidate_payload(nlohmann::json::object());
 }
 
 bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates) {
@@ -1630,7 +1757,7 @@ bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_po
     std::vector<AnchorChildPointCandidate> updated =
         parse_anchor_point_child_candidates_payload(before_payload);
 
-    const nlohmann::json normalized_candidates = candidates.is_object() ? candidates : nlohmann::json::object();
+    const nlohmann::json normalized_candidates = normalize_anchor_candidate_payload(candidates);
     auto existing = std::find_if(updated.begin(),
                                  updated.end(),
                                  [&](const AnchorChildPointCandidate& candidate) {

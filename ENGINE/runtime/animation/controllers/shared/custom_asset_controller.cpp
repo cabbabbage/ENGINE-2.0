@@ -82,12 +82,10 @@ void CustomAssetController::initialize_anchor_candidate_children() {
         if (!seen_anchor_names.insert(candidate_entry.anchor_point_name).second) {
             continue;
         }
-        if (!candidate_entry.candidates.is_object()) {
-            continue;
-        }
-
-        const auto candidates_it = candidate_entry.candidates.find("candidates");
-        if (candidates_it == candidate_entry.candidates.end() || !candidates_it->is_array()) {
+        const nlohmann::json normalized_candidate_entry =
+            self_->info->anchor_point_child_candidate_candidates(candidate_entry.anchor_point_name);
+        const auto candidates_it = normalized_candidate_entry.find("candidates");
+        if (candidates_it == normalized_candidate_entry.end() || !candidates_it->is_array()) {
             continue;
         }
 

@@ -937,11 +937,9 @@ void enforce_canonical_variant_layout(std::vector<float>& steps,
                 cache.textures.resize(canonical_variant_count, nullptr);
                 cache.widths.resize(canonical_variant_count, 0);
                 cache.heights.resize(canonical_variant_count, 0);
-                cache.foreground_textures.resize(canonical_variant_count, nullptr);
-                cache.background_textures.resize(canonical_variant_count, nullptr);
                 cache.source_rects.resize(canonical_variant_count, SDL_Rect{0, 0, 0, 0});
                 cache.uses_atlas.resize(canonical_variant_count, false);
-        }
+            }
 }
 
 }

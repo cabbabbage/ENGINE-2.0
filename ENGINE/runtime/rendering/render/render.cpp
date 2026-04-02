@@ -982,13 +982,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     vibble::log::debug(std::string{"[SceneRenderer] Initializing for map '"} + map_id +
                        "' with screen " + std::to_string(screen_width_) + "x" + std::to_string(screen_height_) + ".");
 
-    if (const char* override_frames = std::getenv("VIBBLE_DEPTHCUE_WARMUP_FRAMES")) {
-        const int v = std::atoi(override_frames);
-        if (v >= 0 && v <= 120) {
-            depthcue_warmup_frames_ = static_cast<std::uint32_t>(v);
-        }
-    }
-    std::cout<<"[SceneRenderer] Init complete. Depth-cue warmup frames: "<<depthcue_warmup_frames_<<std::endl;
+    std::cout<<"[SceneRenderer] Init complete."<<std::endl;
 }
 
 SceneRenderer::~SceneRenderer() {
@@ -1308,7 +1302,7 @@ void SceneRenderer::render() {
     SDL_RenderClear(renderer_);
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
-    render_sky_layer(cam, assets_->depth_effects_enabled());
+    render_sky_layer(cam);
 
     if (!geometry_batcher_) return;
 
@@ -1518,10 +1512,7 @@ void SceneRenderer::render() {
     }
 }
 
-void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled) {
-    if (!depth_effects_enabled) {
-        return;
-    }
+void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam) {
     if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
@@ -1529,7 +1520,7 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     const auto floor_params = cam.compute_floor_depth_params();
     double horizon_y = std::numeric_limits<double>::quiet_NaN();
     if (floor_params.enabled && std::isfinite(floor_params.horizon_screen_y)) {
-        // Match the same clamped horizon used for floor warping and depth effects.
+        // Match the same clamped horizon used for floor warping.
         horizon_y = floor_params.horizon_screen_y;
     } else {
         constexpr double kHalfFovY = 3.14159265358979323846 / 4.0;

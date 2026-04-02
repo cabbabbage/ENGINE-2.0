@@ -4,7 +4,6 @@
 #include <cmath>
 #include <vector>
 
-#include "core/manifest/depth_cue_settings.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
@@ -16,6 +15,18 @@ Area make_starting_area() {
         SDL_Point{100, 100},
         SDL_Point{-100, 100}};
     return Area("starting", corners, 0);
+}
+
+float normalized_depth_axis_sign(float sign) {
+    constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
+    if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
+        return 1.0f;
+    }
+    return sign >= 0.0f ? 1.0f : -1.0f;
+}
+
+float world_z_from_depth_offset(float depth_offset, float anchor_world_z, float depth_axis_sign) {
+    return anchor_world_z + depth_offset * normalized_depth_axis_sign(depth_axis_sign);
 }
 
 float projected_bottom_edge_length(const render_projection::ProjectedSpriteFrame& frame) {
@@ -106,16 +117,16 @@ TEST_CASE("WarpedScreenGrid depth guides remain world-anchored and ordered acros
 
     const std::array<float, 2> tilt_values{35.0f, 75.0f};
 
-    constexpr float kForegroundDepth = -220.0f;
+    constexpr float kNearDepth = -220.0f;
     constexpr float kCenterDepth = 0.0f;
-    constexpr float kBackgroundDepth = 220.0f;
+    constexpr float kFarDepth = 220.0f;
 
     for (float tilt_deg : tilt_values) {
         grid.set_tilt_override(tilt_deg);
         grid.update();
 
         const world::CameraProjectionParams params = grid.projection_params();
-        const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(params.forward_z);
+        const float depth_axis_sign = normalized_depth_axis_sign(static_cast<float>(params.forward_z));
         const float anchor_world_z = static_cast<float>(params.anchor_world_z);
         const SDL_FPoint sample_screen{
             static_cast<float>(params.screen_width) * 0.35f,
@@ -123,11 +134,11 @@ TEST_CASE("WarpedScreenGrid depth guides remain world-anchored and ordered acros
         };
 
         const float world_z_fg =
-            depth_cue::world_z_from_depth_offset(kForegroundDepth, anchor_world_z, depth_axis_sign);
+            world_z_from_depth_offset(kNearDepth, anchor_world_z, depth_axis_sign);
         const float world_z_center =
-            depth_cue::world_z_from_depth_offset(kCenterDepth, anchor_world_z, depth_axis_sign);
+            world_z_from_depth_offset(kCenterDepth, anchor_world_z, depth_axis_sign);
         const float world_z_bg =
-            depth_cue::world_z_from_depth_offset(kBackgroundDepth, anchor_world_z, depth_axis_sign);
+            world_z_from_depth_offset(kFarDepth, anchor_world_z, depth_axis_sign);
 
         const float depth_sign = (params.forward_z >= 0.0) ? 1.0f : -1.0f;
         const float roundtrip_world_z = anchor_world_z + depth_sign * 300.0f;

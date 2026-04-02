@@ -4,7 +4,6 @@
 #include <cctype>
 #include <cmath>
 
-#include "core/manifest/depth_cue_settings.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
 
@@ -343,17 +342,6 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     ensure_map_grid_settings(map_manifest);
     if (!had_grid_section || map_manifest["map_grid_settings"] != grid_before) {
         changed = true;
-    }
-
-    auto depth_it = map_manifest.find(depth_cue::kMapEntryKey);
-    if (depth_it != map_manifest.end()) {
-        const nlohmann::json depth_before = *depth_it;
-        const depth_cue::DepthCueSettings normalized_depth = depth_cue::from_map_entry(map_manifest);
-        const nlohmann::json depth_after = depth_cue::to_json(normalized_depth);
-        if (!depth_before.is_object() || depth_before != depth_after) {
-            map_manifest[depth_cue::kMapEntryKey] = depth_after;
-            changed = true;
-        }
     }
 
     if (ensure_map_layers(map_manifest, map_id)) {

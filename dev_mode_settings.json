@@ -32,9 +32,6 @@
                 "texture": true
             }
         },
-        "depth_effects": {
-            "enabled": true
-        },
         "grid": {
             "cell_size_px": 27.0,
             "overlay": {
@@ -53,11 +50,8 @@
     },
     "dev_ui": {
         "camera": {
-            "background_texture_max_opacity": 255.0,
             "boundary_min_visible_screen_ratio": 0.05000000074505806,
-            "depthcue_enabled": true,
             "extra_cull_margin": 2870.0,
-            "foreground_texture_max_opacity": 255.0,
             "meters_per_100_world_px": 0.5499999523162842,
             "min_visible_screen_ratio": 0.004000000189989805,
             "near_camera_fade_end_ratio": 1.6699999570846558,

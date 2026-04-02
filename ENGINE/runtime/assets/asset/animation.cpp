@@ -38,8 +38,6 @@ inline void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
 
 struct VariantLayerPaths {
     std::filesystem::path normal;
-    std::filesystem::path foreground;
-    std::filesystem::path background;
     std::filesystem::path mask;
 };
 
@@ -49,10 +47,8 @@ VariantLayerPaths build_variant_paths(const std::string& cache_root,
     VariantLayerPaths out;
     const std::string folder = render_pipeline::ScalingLogic::VariantFolder(cache_root, variant_steps, variant_idx);
     std::filesystem::path base(folder);
-    out.normal     = base / "normal";
-    out.foreground = base / "foreground";
-    out.background = base / "background";
-    out.mask       = base / "mask";
+    out.normal = base / "normal";
+    out.mask = base / "mask";
     return out;
 }
 
@@ -159,29 +155,13 @@ bool Animation::rebuild_frame(int frame_index,
         }
         apply_scale_mode(base_tex, info);
 
-        int fg_w = 0, fg_h = 0;
-        SDL_Texture* fg_tex = load_texture_from_path(renderer, paths.foreground / (std::to_string(idx) + ".png"), fg_w, fg_h);
-        if (fg_tex) {
-            apply_scale_mode(fg_tex, info);
-        }
-
-        int bg_w = 0, bg_h = 0;
-        SDL_Texture* bg_tex = load_texture_from_path(renderer, paths.background / (std::to_string(idx) + ".png"), bg_w, bg_h);
-        if (bg_tex) {
-            apply_scale_mode(bg_tex, info);
-        }
-
         destroy_texture(cache_entry.textures[variant_idx]);
-        destroy_texture(cache_entry.foreground_textures[variant_idx]);
-        destroy_texture(cache_entry.background_textures[variant_idx]);
 
         cache_entry.textures[variant_idx] = base_tex;
         cache_entry.widths[variant_idx] = base_w;
         cache_entry.heights[variant_idx] = base_h;
         cache_entry.source_rects[variant_idx] = SDL_Rect{0, 0, base_w, base_h};
         cache_entry.uses_atlas[variant_idx] = false;
-        cache_entry.foreground_textures[variant_idx] = fg_tex;
-        cache_entry.background_textures[variant_idx] = bg_tex;
     }
 
     for (auto& path : movement_paths_) {
@@ -195,8 +175,6 @@ bool Animation::rebuild_frame(int frame_index,
             FrameVariant variant;
             variant.varient = static_cast<int>(v);
             variant.base_texture = cache_entry.textures[v];
-            variant.foreground_texture = (v < cache_entry.foreground_textures.size()) ? cache_entry.foreground_textures[v] : nullptr;
-            variant.background_texture = (v < cache_entry.background_textures.size()) ? cache_entry.background_textures[v] : nullptr;
             variant.source_rect = SDL_Rect{0, 0,
                                            (v < cache_entry.widths.size() ? cache_entry.widths[v] : 0),
                                            (v < cache_entry.heights.size() ? cache_entry.heights[v] : 0)};
@@ -243,12 +221,6 @@ void Animation::clear_texture_cache() {
         for (SDL_Texture*& tex : cache_entry.textures) {
             destroy_once(tex);
         }
-        for (SDL_Texture*& tex : cache_entry.foreground_textures) {
-            destroy_once(tex);
-        }
-        for (SDL_Texture*& tex : cache_entry.background_textures) {
-            destroy_once(tex);
-        }
     }
     frame_cache_.clear();
     if (audio_clip.buffer) {
@@ -268,8 +240,6 @@ void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
         cache.textures.resize(canonical_variant_count, nullptr);
         cache.widths.resize(canonical_variant_count, 0);
         cache.heights.resize(canonical_variant_count, 0);
-        cache.foreground_textures.resize(canonical_variant_count, nullptr);
-        cache.background_textures.resize(canonical_variant_count, nullptr);
         cache.source_rects.resize(canonical_variant_count, SDL_Rect{0, 0, 0, 0});
         cache.uses_atlas.resize(canonical_variant_count, false);
     }
@@ -394,18 +364,6 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
             dst_cache.heights[variant_idx] = tex_h;
             dst_cache.source_rects[variant_idx] = SDL_Rect{0, 0, tex_w, tex_h};
             dst_cache.uses_atlas[variant_idx] = false;
-
-            SDL_Texture* src_fg = (variant_idx < src_cache.foreground_textures.size()) ? src_cache.foreground_textures[variant_idx] : nullptr;
-            if (src_fg) {
-                SDL_Texture* dst_fg = clone_texture(src_fg, tex_w, tex_h, flip_flags);
-                dst_cache.foreground_textures[variant_idx] = dst_fg;
-            }
-
-            SDL_Texture* src_bg = (variant_idx < src_cache.background_textures.size()) ? src_cache.background_textures[variant_idx] : nullptr;
-            if (src_bg) {
-                SDL_Texture* dst_bg = clone_texture(src_bg, tex_w, tex_h, flip_flags);
-                dst_cache.background_textures[variant_idx] = dst_bg;
-            }
 
         }
 
@@ -555,8 +513,6 @@ void Animation::bind_textures_to_frame(AnimationFrame& frame) const {
         FrameVariant variant;
         variant.varient = static_cast<int>(v);
         variant.base_texture = cache.textures[v];
-        variant.foreground_texture = (v < cache.foreground_textures.size()) ? cache.foreground_textures[v] : nullptr;
-        variant.background_texture = (v < cache.background_textures.size()) ? cache.background_textures[v] : nullptr;
         if (v < cache.source_rects.size()) {
             variant.source_rect = cache.source_rects[v];
         } else {

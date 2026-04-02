@@ -22,7 +22,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - `cache/`: Generated texture/cache exports produced by cache tooling.
 - `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
 - `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
-- `ENGINE/tools/`: C++ cache utilities like `asset_tool_cli` and `apply_effects_cli`.
+- `ENGINE/tools/`: C++ cache utilities like `asset_tool_cli`.
 - `vcpkg/`, `external/`: Dependency management and bundled libs.
 
 ## Running

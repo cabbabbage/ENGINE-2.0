@@ -167,24 +167,6 @@ bool AnimationCloner::Clone(const Animation& source,
             dst_cache.widths[v]   = base_tex_w;
             dst_cache.heights[v]  = base_tex_h;
 
-            SDL_Texture* src_fg = (v < src_cache.foreground_textures.size()) ? src_cache.foreground_textures[v] : nullptr;
-            if (src_fg) {
-                dst_cache.foreground_textures[v] = clone_texture(src_fg,
-                                                                 0,
-                                                                 0,
-                                                                 flip_flags,
-                                                                 renderer,
-                                                                 info);
-            }
-            SDL_Texture* src_bg = (v < src_cache.background_textures.size()) ? src_cache.background_textures[v] : nullptr;
-            if (src_bg) {
-                dst_cache.background_textures[v] = clone_texture(src_bg,
-                                                                 0,
-                                                                 0,
-                                                                 flip_flags,
-                                                                 renderer,
-                                                                 info);
-            }
         }
 
         dest.frame_cache_.push_back(std::move(dst_cache));

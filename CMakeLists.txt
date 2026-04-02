@@ -63,14 +63,12 @@ list(REMOVE_DUPLICATES ENGINE_SRC)
 # Exclude standalone tool entry points from the main engine binary
 list(REMOVE_ITEM ENGINE_SRC
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/asset_tool_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/apply_effects_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
 )
 
 add_executable(engine ${ENGINE_SRC})
 target_sources(engine PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/d3d11_effects_backend.cpp
 )
 
 # Unity build (jumbo) for faster compiles
@@ -264,7 +262,6 @@ list(REMOVE_ITEM ENGINE_TEST_RUNTIME_SRC
 )
 list(APPEND ENGINE_TEST_RUNTIME_SRC
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/d3d11_effects_backend.cpp"
 )
 
 add_executable(engine_tests
@@ -300,10 +297,7 @@ add_executable(engine_tests
     ENGINE/tests/test_dev_mode_animation_policy.cpp
     ENGINE/tests/test_playback_settings_inheritance.cpp
     ENGINE/tests/test_tag_editor_widget_recommendations.cpp
-    ENGINE/tests/test_depth_cue_overlay_math.cpp
-    ENGINE/tests/test_composite_asset_renderer_depth_cue_refresh.cpp
     ENGINE/tests/test_geometry_batcher_ordering.cpp
-    ENGINE/tests/test_primary_asset_cache_depth_layers.cpp
     ENGINE/tests/test_screen_space_math.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
   )
@@ -369,7 +363,6 @@ function(add_cli_tool target_name entry_point)
     add_executable(${target_name}
         ENGINE/tools/cli/${entry_point}
         ENGINE/tools/cli/image_cache_generator.cpp
-        ENGINE/tools/cli/d3d11_effects_backend.cpp
         ENGINE/runtime/utils/utils/stb_image_impl.cpp
     )
     target_include_directories(${target_name} PRIVATE
@@ -383,19 +376,13 @@ function(add_cli_tool target_name entry_point)
     target_compile_definitions(${target_name} PRIVATE
         PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
     )
-    if (WIN32)
-        target_link_libraries(${target_name} PRIVATE d3d11 d3dcompiler)
-    endif()
 endfunction()
 
 # Asset Tool CLI - main cache generator
 add_cli_tool(asset_tool_cli asset_tool_cli.cpp)
 
-# Apply Effects CLI - effect preview generation
-add_cli_tool(apply_effects_cli apply_effects_cli.cpp)
-
 # Output all tools to ENGINE/tools directory
-foreach(tool_target asset_tool_cli apply_effects_cli)
+foreach(tool_target asset_tool_cli)
     set_target_properties(${tool_target} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/ENGINE/tools"
     )

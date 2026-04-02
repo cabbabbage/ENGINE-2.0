@@ -18,7 +18,6 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
-#include "core/manifest/depth_cue_settings.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/render_depth_policy.hpp"
@@ -64,6 +63,26 @@ namespace {
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
+constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
+
+float normalize_depth_axis_sign(float sign) {
+    if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
+        return 1.0f;
+    }
+    return sign >= 0.0f ? 1.0f : -1.0f;
+}
+
+float depth_axis_sign_from_forward_z(float forward_z) {
+    return normalize_depth_axis_sign(forward_z);
+}
+
+float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth_axis_sign) {
+    if (!std::isfinite(world_z) || !std::isfinite(anchor_world_z)) {
+        return 0.0f;
+    }
+    const float sign = normalize_depth_axis_sign(depth_axis_sign);
+    return (world_z - anchor_world_z) * sign;
+}
 
 struct AssetWorldBounds {
     float left = 0.0f;
@@ -179,7 +198,6 @@ Assets::Assets(AssetLibrary& library,
     }
 
     hydrate_map_info_sections();
-    depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
     InitializeAssets::initialize(*this, screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
@@ -431,9 +449,6 @@ void Assets::hydrate_map_info_sections() {
 
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
-    depth_cue_settings_ = depth_cue::from_map_entry(map_info_json_);
-    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
-
 }
 
 void Assets::load_camera_settings_from_json() {
@@ -548,37 +563,6 @@ void Assets::log_camera_fog_state(const char* label) const {
         " scale=" + std::to_string(camera_.get_scale()) +
         " screen_center=(" + std::to_string(center.x) + "," + std::to_string(center.y) + ")"
     );
-}
-
-void Assets::set_depth_effects_enabled(bool enabled) {
-    if (depth_effects_enabled_ == enabled) {
-        return;
-    }
-    depth_effects_enabled_ = enabled;
-}
-
-void Assets::set_depth_cue_settings(const depth_cue::DepthCueSettings& settings) {
-    depth_cue::DepthCueSettings sanitized = settings;
-    depth_cue::clamp(sanitized);
-    if (depth_cue::nearly_equal(sanitized, depth_cue_settings_)) {
-        return;
-    }
-
-    depth_cue_settings_ = sanitized;
-    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
-    mark_map_data_dirty();
-
-    for (Asset* asset : all) {
-        if (!asset) {
-            continue;
-        }
-        asset->mark_composite_dirty();
-    }
-
-    ++depth_cue_settings_version_;
-    if (depth_cue_settings_version_ == 0) {
-        ++depth_cue_settings_version_;
-    }
 }
 
 void Assets::set_movement_debug_enabled(bool enabled) {
@@ -733,7 +717,7 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const std::uint64_t camera_state_version = camera_.camera_state_version();
     const float camera_anchor_world_z = static_cast<float>(camera_.anchor_world_z());
     const world::CameraProjectionParams projection = camera_.projection_params();
-    const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(
+    const float depth_axis_sign = depth_axis_sign_from_forward_z(
         static_cast<float>(projection.forward_z));
 
     if (asset_matches_focus_filter(player)) {
@@ -816,12 +800,12 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
     metrics.planar_distance = std::sqrt(dx * dx + dz * dz);
     metrics.planar_angle_radians = std::atan2(dz, dx);
     metrics.anchor_world_z = camera_anchor_world_z;
-    metrics.depth_axis_sign = depth_cue::normalize_depth_axis_sign(depth_axis_sign);
-    metrics.world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+    metrics.depth_axis_sign = normalize_depth_axis_sign(depth_axis_sign);
+    metrics.world_z_depth_offset = depth_offset_from_world_z(
         world_z,
         camera_anchor_world_z,
         metrics.depth_axis_sign);
-    metrics.effective_world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+    metrics.effective_world_z_depth_offset = depth_offset_from_world_z(
         effective_world_z,
         camera_anchor_world_z,
         metrics.depth_axis_sign);

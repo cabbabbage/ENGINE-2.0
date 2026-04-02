@@ -87,4 +87,4 @@ void AttackDetectionHelper::process_pending_attacks_default(Asset* self) {
     }
 }
 
-} // namespace animation_update::custom_controllers
+}

@@ -73,9 +73,6 @@ public:
     void set_grid_resolution(int resolution, bool notify_callback = true);
     int grid_resolution() const { return grid_resolution_; }
 
-    void set_depth_effects_enabled(bool enabled);
-    void set_depth_effects_callbacks(std::function<void(bool)> cb);
-
     void set_grid_controls_callbacks(std::function<void(bool)> on_overlay_toggle, std::function<void(int, bool)> on_resolution_change);
     void set_movement_debug_enabled(bool enabled);
     void set_movement_debug_callback(std::function<void(bool)> cb);
@@ -128,11 +125,9 @@ private:
     int grid_resolution_ = 0;
     bool movement_debug_enabled_ = false;
 
-    std::unique_ptr<DMCheckbox> depth_effects_checkbox_;
     std::unique_ptr<DMCheckbox> grid_checkbox_;
     std::unique_ptr<DMCheckbox> movement_debug_checkbox_;
     std::unique_ptr<DMNumericStepper> grid_stepper_;
-    std::function<void(bool)> on_depth_effects_toggle_;
     std::function<void(bool)> on_grid_overlay_toggle_;
     std::function<void(bool)> on_movement_debug_toggle_;
     std::function<void(int, bool)> on_grid_resolution_change_;

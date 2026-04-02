@@ -16,7 +16,6 @@
 #include <sstream>
 
 #include "core/AssetsManager.hpp"
-#include "devtools/depth_cue_settings.hpp"
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"

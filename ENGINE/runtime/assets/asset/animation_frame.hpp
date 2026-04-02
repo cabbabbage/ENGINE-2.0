@@ -35,20 +35,6 @@ public:
         return variants[index].get_base_texture();
     }
 
-    SDL_Texture* get_foreground_texture(int index) const {
-        if (index < 0 || static_cast<std::size_t>(index) >= variants.size()) {
-            return nullptr;
-        }
-        return variants[index].get_foreground_texture();
-    }
-
-    SDL_Texture* get_background_texture(int index) const {
-        if (index < 0 || static_cast<std::size_t>(index) >= variants.size()) {
-            return nullptr;
-        }
-        return variants[index].get_background_texture();
-    }
-
 
     animation_update::FrameHitBoxes hit_boxes;
     animation_update::FrameAttackBoxes attack_boxes;

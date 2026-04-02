@@ -11110,26 +11110,6 @@
       "update_radius": 0
     }
   },
-  "image_effects": {
-    "background": {
-      "blur": 1.0,
-      "brightness": -0.04000002145767212,
-      "contrast": -0.36000001430511475,
-      "hue": 0.0,
-      "saturation_blue": 0.36000001430511475,
-      "saturation_green": 0.019999980926513672,
-      "saturation_red": -0.14000004529953003
-    },
-    "foreground": {
-      "blur": 0.1799999475479126,
-      "brightness": -0.04000002145767212,
-      "contrast": 0.12000000476837158,
-      "hue": 0.0,
-      "saturation_blue": -0.12000000476837158,
-      "saturation_green": -0.10000002384185791,
-      "saturation_red": 0.13999998569488525
-    }
-  },
   "maps": {
     "forrest": {
       "audio": {
@@ -11147,11 +11127,6 @@
         "smooth_motion_height": true
       },
       "content_root": "content/forrest",
-      "depth_cue_settings": {
-        "background_max_depth_offset": 2480.0,
-        "center_depth_offset": -100.0,
-        "foreground_max_depth_offset": -2130.0
-      },
       "dev_map_settings": {},
       "fog_settings": {
         "max_random_jitter": 0

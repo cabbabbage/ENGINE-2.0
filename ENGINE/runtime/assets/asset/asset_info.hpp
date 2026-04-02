@@ -38,10 +38,7 @@ class AssetInfo {
         public:
     static constexpr std::uint8_t kTextureVariantNone = 0u;
     static constexpr std::uint8_t kTextureVariantNormal = 1u << 0;
-    static constexpr std::uint8_t kTextureVariantForeground = 1u << 1;
-    static constexpr std::uint8_t kTextureVariantBackground = 1u << 2;
-    static constexpr std::uint8_t kTextureVariantAll =
-        static_cast<std::uint8_t>(kTextureVariantNormal | kTextureVariantForeground | kTextureVariantBackground);
+    static constexpr std::uint8_t kTextureVariantAll = kTextureVariantNormal;
 
     struct AnimationTextureRebuildRequest {
         std::uint8_t all_frames_variants = kTextureVariantNone;

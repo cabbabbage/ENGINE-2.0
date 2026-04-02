@@ -53,12 +53,6 @@ std::uint8_t variant_mask_for_directory(const std::string& variant_dir) {
     if (variant_dir == "normal") {
         return AssetInfo::kTextureVariantNormal;
     }
-    if (variant_dir == "foreground") {
-        return AssetInfo::kTextureVariantForeground;
-    }
-    if (variant_dir == "background") {
-        return AssetInfo::kTextureVariantBackground;
-    }
     return AssetInfo::kTextureVariantNone;
 }
 
@@ -305,56 +299,7 @@ bool animation_is_selected(const std::string& animation_name,
 
 struct FolderAnimationCacheState {
     std::unordered_set<std::string> required_folder_animations;
-    std::unordered_set<std::string> animations_with_foreground_cache;
-    std::unordered_set<std::string> animations_with_background_cache;
-    std::optional<fs::file_time_type> newest_overlay_cache_timestamp;
 };
-
-std::string lowercase_copy(const std::string& value) {
-    std::string lowered = value;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    return lowered;
-}
-
-bool is_png_path(const fs::path& path) {
-    const std::string extension = lowercase_copy(path.extension().string());
-    return extension == ".png";
-}
-
-bool directory_contains_png(const fs::path& directory,
-                            std::optional<fs::file_time_type>* newest_timestamp = nullptr) {
-    std::error_code ec;
-    if (!fs::exists(directory, ec) || ec || !fs::is_directory(directory, ec)) {
-        return false;
-    }
-
-    bool found_png = false;
-    for (const auto& entry : fs::directory_iterator(directory, ec)) {
-        if (ec) {
-            break;
-        }
-        if (!entry.is_regular_file(ec) || ec) {
-            continue;
-        }
-        const fs::path file_path = entry.path();
-        if (!is_png_path(file_path)) {
-            continue;
-        }
-
-        found_png = true;
-        if (newest_timestamp) {
-            const fs::file_time_type file_time = fs::last_write_time(file_path, ec);
-            if (!ec) {
-                if (!newest_timestamp->has_value() || file_time > newest_timestamp->value()) {
-                    *newest_timestamp = file_time;
-                }
-            }
-        }
-    }
-    return found_png;
-}
 
 const CacheManager::BundleAnimation* find_bundle_animation(const CacheManager::BundleData& bundle,
                                                            const std::string& animation_name) {
@@ -364,28 +309,6 @@ const CacheManager::BundleAnimation* find_bundle_animation(const CacheManager::B
         }
     }
     return nullptr;
-}
-
-bool bundle_animation_has_any_foreground_layer(const CacheManager::BundleAnimation& animation) {
-    for (const auto& frame : animation.frames) {
-        for (const auto& variant : frame.variants) {
-            if (!variant.foreground.empty()) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool bundle_animation_has_any_background_layer(const CacheManager::BundleAnimation& animation) {
-    for (const auto& frame : animation.frames) {
-        for (const auto& variant : frame.variants) {
-            if (!variant.background.empty()) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 FolderAnimationCacheState collect_folder_animation_cache_state(
@@ -412,17 +335,6 @@ FolderAnimationCacheState collect_folder_animation_cache_state(
         }
 
         state.required_folder_animations.insert(animation_name);
-
-        const fs::path scale_100_root = cache_animation_root / animation_name / "scale_100";
-        const fs::path foreground_dir = scale_100_root / "foreground";
-        const fs::path background_dir = scale_100_root / "background";
-
-        if (directory_contains_png(foreground_dir, &state.newest_overlay_cache_timestamp)) {
-            state.animations_with_foreground_cache.insert(animation_name);
-        }
-        if (directory_contains_png(background_dir, &state.newest_overlay_cache_timestamp)) {
-            state.animations_with_background_cache.insert(animation_name);
-        }
     }
 
     return state;
@@ -439,64 +351,22 @@ bool bundle_contains_required_folder_animations(const CacheManager::BundleData& 
     return true;
 }
 
-bool bundle_has_required_overlay_layers(const CacheManager::BundleData& bundle,
-                                        const FolderAnimationCacheState& cache_state) {
-    for (const auto& animation_name : cache_state.animations_with_foreground_cache) {
-        const CacheManager::BundleAnimation* animation = find_bundle_animation(bundle, animation_name);
-        if (!animation || !bundle_animation_has_any_foreground_layer(*animation)) {
-            return false;
-        }
-    }
-    for (const auto& animation_name : cache_state.animations_with_background_cache) {
-        const CacheManager::BundleAnimation* animation = find_bundle_animation(bundle, animation_name);
-        if (!animation || !bundle_animation_has_any_background_layer(*animation)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool bundle_overlay_cache_is_stale(const fs::path& bundle_path,
-                                   const FolderAnimationCacheState& cache_state) {
-    if (!cache_state.newest_overlay_cache_timestamp.has_value()) {
-        return false;
-    }
-
-    std::error_code ec;
-    if (!fs::exists(bundle_path, ec) || ec) {
-        return false;
-    }
-
-    const fs::file_time_type bundle_timestamp = fs::last_write_time(bundle_path, ec);
-    if (ec) {
-        return false;
-    }
-
-    return cache_state.newest_overlay_cache_timestamp.value() > bundle_timestamp;
-}
-
 struct BundleValidationResult {
     bool variant_layout_ok = true;
     bool required_animations_ok = true;
-    bool overlay_integrity_ok = true;
-    bool overlay_freshness_ok = true;
 
     bool ready() const {
         return variant_layout_ok &&
-               required_animations_ok &&
-               overlay_integrity_ok &&
-               overlay_freshness_ok;
+               required_animations_ok;
     }
 };
 
 BundleValidationResult validate_loaded_bundle(const CacheManager::BundleData& bundle,
-                                              const fs::path& bundle_path,
+                                              const fs::path& /*bundle_path*/,
                                               const FolderAnimationCacheState& cache_state) {
     BundleValidationResult result{};
     result.variant_layout_ok = bundle_variant_layout_is_valid(bundle);
     result.required_animations_ok = bundle_contains_required_folder_animations(bundle, cache_state);
-    result.overlay_integrity_ok = bundle_has_required_overlay_layers(bundle, cache_state);
-    result.overlay_freshness_ok = !bundle_overlay_cache_is_stale(bundle_path, cache_state);
     return result;
 }
 
@@ -507,12 +377,6 @@ std::string describe_bundle_validation_failure(const BundleValidationResult& val
     }
     if (!validation.variant_layout_ok) {
         reasons.emplace_back("missing full-resolution or inconsistent variant metadata");
-    }
-    if (!validation.overlay_integrity_ok) {
-        reasons.emplace_back("missing foreground/background layer data");
-    }
-    if (!validation.overlay_freshness_ok) {
-        reasons.emplace_back("overlay cache files are newer than bundle");
     }
 
     if (reasons.empty()) {
@@ -673,7 +537,6 @@ PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::run_missing_cache_file_b
     options.force_rebuild = false;
     options.dry_run = dry_run;
     options.quiet_task_logs = true;
-    options.effects_backend = imgcache::EffectsBackend::Auto;
     for (const AssetInfo* info : selected_infos) {
         options.filters.assets.insert(info->name);
     }
@@ -815,8 +678,6 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
             const fs::path cache_anim_root = fs::path("cache") / info.name / "animations" / bundle_anim.name;
             const fs::path cache_scale_100 = cache_anim_root / "scale_100";
             const fs::path cache_normal_100 = cache_scale_100 / "normal";
-            const fs::path cache_foreground_100 = cache_scale_100 / "foreground";
-            const fs::path cache_background_100 = cache_scale_100 / "background";
             const int source_frame_count = count_sequential_png(folder);
             const int cached_frame_count = count_sequential_png(cache_normal_100);
             const int frame_count = std::max(source_frame_count, cached_frame_count);
@@ -828,9 +689,6 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                 out_data.animations.push_back(std::move(bundle_anim));
                 continue;
             }
-
-            const fs::path fg_folder = folder / "foreground";
-            const fs::path bg_folder = folder / "background";
 
             bundle_anim.frames.reserve(static_cast<std::size_t>(frame_count));
             bool warned_missing_base_frame = false;
@@ -853,14 +711,6 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                     }
                     base_layer = make_transparent_layer(1, 1);
                 }
-                CacheManager::BundleFrameLayer fg_layer = load_layer_from_candidates({
-                    cache_foreground_100 / frame_name,
-                    fg_folder / frame_name,
-                });
-                CacheManager::BundleFrameLayer bg_layer = load_layer_from_candidates({
-                    cache_background_100 / frame_name,
-                    bg_folder / frame_name,
-                });
 
                 for (std::size_t variant_idx = 0; variant_idx < bundle_anim.variant_steps.size(); ++variant_idx) {
                     const float step = bundle_anim.variant_steps[variant_idx];
@@ -876,20 +726,6 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                     }
                     if (variant.base.empty()) {
                         variant.base = make_transparent_layer(1, 1);
-                    }
-
-                    variant.foreground = load_layer_from_candidates({
-                        variant_root / "foreground" / frame_name,
-                    });
-                    if (variant.foreground.empty() && !fg_layer.empty()) {
-                        variant.foreground = scale_layer(fg_layer, step);
-                    }
-
-                    variant.background = load_layer_from_candidates({
-                        variant_root / "background" / frame_name,
-                    });
-                    if (variant.background.empty() && !bg_layer.empty()) {
-                        variant.background = scale_layer(bg_layer, step);
                     }
                     frame.variants.push_back(std::move(variant));
                 }
@@ -923,26 +759,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
         }
         SDL_SetTextureScaleMode(texture, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
     };
-    auto load_texture_from_cache_png = [&](const fs::path& path) -> SDL_Texture* {
-        std::error_code ec;
-        if (!fs::exists(path, ec) || ec) {
-            return nullptr;
-        }
-        SDL_Surface* surface = CacheManager::load_surface(path.generic_string());
-        if (!surface) {
-            return nullptr;
-        }
-        SDL_Texture* texture = CacheManager::surface_to_texture(renderer_, surface);
-        SDL_DestroySurface(surface);
-        apply_texture_scale_mode(texture);
-        return texture;
-    };
-
     out_frames.clear();
-    std::size_t repaired_foreground_layers = 0;
-    std::size_t repaired_background_layers = 0;
-    std::size_t repaired_variants = 0;
-    std::unordered_set<std::string> repaired_animations;
     for (const auto& anim : bundle.animations) {
         if (animation_filter && !animation_filter->empty() &&
             animation_filter->find(anim.name) == animation_filter->end()) {
@@ -960,10 +777,8 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
         }
         const std::size_t frame_count = anim.frames.size();
         prepared.frames.reserve(frame_count);
-        const fs::path cache_animation_root = fs::path("cache") / info.name / "animations" / anim.name;
 
         std::unordered_map<std::size_t, SDL_Texture*> atlas_by_variant;
-        std::unordered_map<std::size_t, SDL_Point> atlas_sizes;
         if (anim.uses_atlas) {
             for (std::size_t idx = 0; idx < anim.atlas_paths.size(); ++idx) {
                 if (anim.atlas_paths[idx].empty()) continue;
@@ -973,7 +788,6 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                 if (atlas_tex) {
                     apply_texture_scale_mode(atlas_tex);
                     atlas_by_variant[idx] = atlas_tex;
-                    atlas_sizes[idx] = SDL_Point{atlas_surface->w, atlas_surface->h};
                 }
                 SDL_DestroySurface(atlas_surface);
             }
@@ -986,7 +800,6 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
             cache_entry.resize(variant_count);
 
             for (std::size_t variant_idx = 0; variant_idx < variant_count && variant_idx < frame.variants.size(); ++variant_idx) {
-                bool repaired_any_layer = false;
                 const auto& variant = frame.variants[variant_idx];
 
                 if (variant.use_atlas && atlas_by_variant.count(variant_idx)) {
@@ -1006,49 +819,6 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                     cache_entry.uses_atlas[variant_idx] = false;
                     SDL_DestroySurface(base_surface);
                 }
-
-                if (!variant.foreground.empty()) {
-                    SDL_Surface* fg_surface = surface_from_layer(variant.foreground);
-                    cache_entry.foreground_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, fg_surface);
-                    apply_texture_scale_mode(cache_entry.foreground_textures[variant_idx]);
-                    SDL_DestroySurface(fg_surface);
-                }
-
-                if (!variant.background.empty()) {
-                    SDL_Surface* bg_surface = surface_from_layer(variant.background);
-                    cache_entry.background_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, bg_surface);
-                    apply_texture_scale_mode(cache_entry.background_textures[variant_idx]);
-                    SDL_DestroySurface(bg_surface);
-                }
-
-                const fs::path variant_root =
-                    cache_variant_root(cache_animation_root, prepared.variant_steps, variant_idx);
-                const std::string frame_file = std::to_string(frame_idx) + ".png";
-
-                if (!cache_entry.foreground_textures[variant_idx]) {
-                    const fs::path foreground_path = variant_root / "foreground" / frame_file;
-                    SDL_Texture* recovered_fg = load_texture_from_cache_png(foreground_path);
-                    if (recovered_fg) {
-                        cache_entry.foreground_textures[variant_idx] = recovered_fg;
-                        ++repaired_foreground_layers;
-                        repaired_any_layer = true;
-                    }
-                }
-
-                if (!cache_entry.background_textures[variant_idx]) {
-                    const fs::path background_path = variant_root / "background" / frame_file;
-                    SDL_Texture* recovered_bg = load_texture_from_cache_png(background_path);
-                    if (recovered_bg) {
-                        cache_entry.background_textures[variant_idx] = recovered_bg;
-                        ++repaired_background_layers;
-                        repaired_any_layer = true;
-                    }
-                }
-
-                if (repaired_any_layer) {
-                    ++repaired_variants;
-                    repaired_animations.insert(anim.name);
-                }
             }
 
             prepared.frames.push_back(std::move(cache_entry));
@@ -1060,14 +830,6 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
         }
 
         out_frames[anim.name] = std::move(prepared);
-    }
-    if (repaired_foreground_layers > 0 || repaired_background_layers > 0) {
-        vibble::log::warn(
-            "[PrimaryAssetCache] Repaired missing bundle overlay layers for asset '" + info.name +
-            "': animations=" + std::to_string(repaired_animations.size()) +
-            " variants=" + std::to_string(repaired_variants) +
-            " fg=" + std::to_string(repaired_foreground_layers) +
-            " bg=" + std::to_string(repaired_background_layers));
     }
     return !out_frames.empty();
 }

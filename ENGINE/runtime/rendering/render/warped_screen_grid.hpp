@@ -1,7 +1,6 @@
 #pragma once
 
 #include "rendering/render/camera_controller.hpp"
-#include "rendering/render/image_effect_settings.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "utils/area.hpp"
 #include <SDL3/SDL.h>

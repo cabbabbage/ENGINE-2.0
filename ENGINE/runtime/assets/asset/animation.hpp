@@ -35,8 +35,6 @@ public:
         std::vector<SDL_Texture*> textures;
         std::vector<int> widths;
         std::vector<int> heights;
-        std::vector<SDL_Texture*> foreground_textures;
-        std::vector<SDL_Texture*> background_textures;
         std::vector<SDL_Rect> source_rects;
         std::vector<bool> uses_atlas;
 
@@ -44,8 +42,6 @@ public:
             textures.assign(variant_count, nullptr);
             widths.assign(variant_count, 0);
             heights.assign(variant_count, 0);
-            foreground_textures.assign(variant_count, nullptr);
-            background_textures.assign(variant_count, nullptr);
             source_rects.assign(variant_count, SDL_Rect{0, 0, 0, 0});
             uses_atlas.assign(variant_count, false);
         }

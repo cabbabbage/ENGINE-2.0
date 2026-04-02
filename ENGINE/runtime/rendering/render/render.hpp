@@ -146,7 +146,7 @@ private:
 
     bool ensure_sky_texture();
     void destroy_sky_texture();
-    void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
+    void render_sky_layer(const WarpedScreenGrid& cam);
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
     void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
                                          int screen_width,
@@ -175,8 +175,6 @@ private:
 
     CompositeAssetRenderer composite_renderer_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
-
-    std::uint32_t depthcue_warmup_frames_ = 8;
 
     SDL_Texture* scene_composite_tex_ = nullptr;
     SDL_Texture* postprocess_tex_     = nullptr;

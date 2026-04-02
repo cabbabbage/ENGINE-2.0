@@ -296,9 +296,6 @@ Asset::Asset(const Asset& o)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
-    , composite_depth_cue_settings_version_(o.composite_depth_cue_settings_version_)
-    , depth_cue_merge_desired_signature_({})
-    , depth_cue_merge_applied_signature_({})
     , world_z_offset_(o.world_z_offset_)
     , render_anchor_offset_x_(o.render_anchor_offset_x_)
     , render_anchor_offset_y_(o.render_anchor_offset_y_)
@@ -382,9 +379,6 @@ Asset& Asset::operator=(const Asset& o) {
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
-        composite_depth_cue_settings_version_ = o.composite_depth_cue_settings_version_;
-        depth_cue_merge_desired_signature_ = {};
-        depth_cue_merge_applied_signature_ = {};
         world_z_offset_           = o.world_z_offset_;
         render_anchor_offset_x_   = o.render_anchor_offset_x_;
         render_anchor_offset_y_   = o.render_anchor_offset_y_;

@@ -310,7 +310,12 @@
         {
           "anchor_point_name": "anchor_1",
           "candidates": {
-            "candidates": []
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "skull_pile_1"
+              }
+            ]
           }
         }
       ],
@@ -11331,9 +11336,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            61,
-            242,
-            242,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 49,
@@ -11359,9 +11364,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            94,
-            36,
             242,
+            166,
+            36,
             255
           ],
           "edge_smoothness": 24,

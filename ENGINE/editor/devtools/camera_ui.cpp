@@ -15,9 +15,10 @@
 #include <functional>
 #include <sstream>
 
-#include "core/AssetsManager.hpp"
 #include "devtools/dev_camera_controls.hpp"
+#include "devtools/depth_cue_settings.hpp"
 #include "devtools/dm_styles.hpp"
+#include "core/AssetsManager.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/float_slider_widget.hpp"

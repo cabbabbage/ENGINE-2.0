@@ -1,7 +1,7 @@
-﻿#include  animation/controllers/shared/attack_processing_helper.hpp
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 
-#include animation/animation_update.hpp
-#include assets/asset/Asset.hpp
+#include "animation/animation_update.hpp"
+#include "assets/asset/Asset.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,8 +12,8 @@ namespace animation_update::custom_controllers {
 namespace {
 
 constexpr float kZeroTolerance = 1e-4f;
-constexpr char kDieAnimationId[] = die;
-constexpr char kBreakAnimationId[] = break;
+constexpr char kDieAnimationId[] = "die";
+constexpr char kBreakAnimationId[] = "break";
 
 } // namespace
 

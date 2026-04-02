@@ -1,8 +1,8 @@
-﻿#include  attack_detection_helper.hpp
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 
-#include animation/attack_validation.hpp
-#include assets/asset/Asset.hpp
-#include core/AssetsManager.hpp
+#include "animation/attack_validation.hpp"
+#include "assets/asset/Asset.hpp"
+#include "core/AssetsManager.hpp"
 
 namespace animation_update::custom_controllers {
 

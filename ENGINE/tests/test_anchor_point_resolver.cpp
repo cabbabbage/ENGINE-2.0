@@ -168,6 +168,80 @@ TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z
     CHECK(sample.resolved.depth_offset == doctest::Approx(2.5f).epsilon(1e-6));
 }
 
+TEST_CASE("Resolve X enabled keeps final anchor on camera ray displacement") {
+    Asset asset = make_test_asset(14, -6);
+    asset.set_world_z_offset(9.0f);
+
+    DisplacedAssetAnchorPoint anchor{};
+    anchor.name = "resolve_x_enabled";
+    anchor.texture_x = 8;
+    anchor.texture_y = 13;
+    anchor.depth_offset = 4.0f;
+    anchor.resolve_x = true;
+
+    const auto sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        anchor,
+        anchor_points::GridMaterialization::None);
+
+    REQUIRE_FALSE(sample.resolved.missing);
+    REQUIRE(sample.flat_relative_pixel_point.valid);
+    REQUIRE(sample.final_anchor_point.valid);
+
+    anchor_points::AnchorWorldPoint3 expected{};
+    REQUIRE(anchor_points::displace_along_camera_to_point_ray(
+        asset,
+        sample.flat_relative_pixel_point,
+        anchor.depth_offset,
+        expected));
+    REQUIRE(expected.valid);
+
+    CHECK(sample.final_anchor_point.x == doctest::Approx(expected.x).epsilon(1e-6));
+    CHECK(sample.final_anchor_point.y == doctest::Approx(expected.y).epsilon(1e-6));
+    CHECK(sample.final_anchor_point.z == doctest::Approx(expected.z).epsilon(1e-6));
+}
+
+TEST_CASE("Resolve X disabled locks final world X and preserves ray-derived depth") {
+    Asset asset = make_test_asset(25, 50);
+    asset.set_world_z_offset(6.0f);
+
+    DisplacedAssetAnchorPoint ray_anchor{};
+    ray_anchor.name = "resolve_x_on";
+    ray_anchor.texture_x = 4;
+    ray_anchor.texture_y = 7;
+    ray_anchor.depth_offset = 5.0f;
+    ray_anchor.resolve_x = true;
+
+    const auto ray_sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        ray_anchor,
+        anchor_points::GridMaterialization::None);
+    REQUIRE_FALSE(ray_sample.resolved.missing);
+    REQUIRE(ray_sample.flat_relative_pixel_point.valid);
+    REQUIRE(ray_sample.final_anchor_point.valid);
+
+    DisplacedAssetAnchorPoint lock_x_anchor = ray_anchor;
+    lock_x_anchor.resolve_x = false;
+    const auto lock_x_sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        lock_x_anchor,
+        anchor_points::GridMaterialization::None);
+    REQUIRE_FALSE(lock_x_sample.resolved.missing);
+    REQUIRE(lock_x_sample.flat_relative_pixel_point.valid);
+    REQUIRE(lock_x_sample.final_anchor_point.valid);
+
+    CHECK(lock_x_sample.final_anchor_point.x ==
+          doctest::Approx(lock_x_sample.flat_relative_pixel_point.x).epsilon(1e-6));
+    CHECK(lock_x_sample.final_anchor_point.z ==
+          doctest::Approx(ray_sample.final_anchor_point.z).epsilon(1e-6));
+
+#if defined(ENGINE_WORLD_TESTS)
+    // In ENGINE_WORLD_TESTS screen-y follows world-y directly.
+    CHECK(lock_x_sample.final_anchor_point.y ==
+          doctest::Approx(lock_x_sample.flat_relative_pixel_point.y).epsilon(1e-6));
+#endif
+}
+
 TEST_CASE("Resolved anchor flat perspective scale is driven by effective runtime perspective sample, not anchor texture position") {
     Asset asset = make_test_asset(40, 55);
     CHECK(asset.set_anchor_perspective_override(2.35f, std::nullopt));

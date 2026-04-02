@@ -106,7 +106,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/3_candles",
       "asset_name": "3_candles",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -11336,9 +11336,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            240,
-            242,
-            85,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 49,
@@ -11365,8 +11365,8 @@
           "curvyness": 2,
           "display_color": [
             242,
+            241,
             36,
-            115,
             255
           ],
           "edge_smoothness": 24,
@@ -11485,16 +11485,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -2096,
-              "dz": -2300,
+              "dx": -2220,
+              "dz": 3624,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12136,
-              "origional_width": 12000,
+              "origional_height": 12384,
+              "origional_width": 12280,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -11680,11 +11680,11 @@
           "spawn_groups": []
         },
         "NewTrail1": {
-          "camera_center_dx": 3387,
-          "camera_center_dz": 1296,
-          "camera_height_px": 1664,
-          "camera_tilt_deg": 66.0,
-          "camera_zoom_percent": 19,
+          "camera_center_dx": 260,
+          "camera_center_dz": -1394,
+          "camera_height_px": 200,
+          "camera_tilt_deg": 27.0,
+          "camera_zoom_percent": 31,
           "display_color": [
             36,
             38,
@@ -11705,6 +11705,8 @@
         },
         "basic": {
           "camera_height_px": 5158,
+          "camera_tilt_deg": 60.0,
+          "camera_zoom_percent": 0,
           "display_color": [
             85,
             242,

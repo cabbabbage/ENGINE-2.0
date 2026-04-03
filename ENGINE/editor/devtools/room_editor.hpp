@@ -286,7 +286,12 @@ private:
     std::unique_ptr<vibble::grid::Occupancy> build_room_grid(const std::string& ignore_spawn_id) const;
     bool snap_spawn_group_to_resolution(Asset* anchor, int resolution);
     void render_room_trail_nav_buttons(SDL_Renderer* renderer);
-    bool render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center, SDL_Rect* out_rect = nullptr);
+    bool render_room_label(SDL_Renderer* renderer,
+                           Room* room,
+                           SDL_FPoint desired_center,
+                           const SDL_Point& hover_point,
+                           bool hover_enabled,
+                           SDL_Rect* out_rect = nullptr);
     void clear_room_trail_nav_entries();
     bool handle_room_nav_click(const SDL_Point& screen_pt);
     void pan_camera_to_room(Room* room);
@@ -295,6 +300,7 @@ private:
     SDL_Rect resolve_horizontal_edge_overlap(SDL_Rect rect, float desired_center_x, bool top_edge);
     SDL_Rect resolve_vertical_edge_overlap(SDL_Rect rect, float desired_center_y, bool left_edge);
     static bool rects_overlap(const SDL_Rect& a, const SDL_Rect& b);
+    SDL_Rect effective_label_bounds() const;
     void ensure_label_font();
     void release_label_font();
     void invalidate_label_cache(Room* room);
@@ -842,6 +848,7 @@ private:
         bool dirty = true;
     };
     std::unordered_map<Room*, LabelCacheEntry> label_cache_;
+    SDL_Rect active_label_bounds_{0, 0, 0, 0};
     struct RoomNavEntry {
         Room*   room = nullptr;
         SDL_Rect rect{0, 0, 0, 0};

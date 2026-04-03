@@ -18,11 +18,9 @@
 #include <cmath>
 #include <optional>
 #include <set>
-#include <sstream>
 #include <unordered_set>
 #include <vector>
 #include <utility>
-#include <limits>
 
 namespace {
 constexpr int kRoomConfigPanelMinWidth = 260;
@@ -36,8 +34,6 @@ constexpr float kCameraTiltMinDeg = 0.0f;
 constexpr float kCameraTiltMaxDeg = 360.0f;
 constexpr int kCameraZoomMinPercent = 0;
 constexpr int kCameraZoomMaxPercent = 100;
-constexpr int kCameraPanMinPercent = -100;
-constexpr int kCameraPanMaxPercent = 100;
 
 const nlohmann::json& empty_object() {
     static const nlohmann::json kEmpty = nlohmann::json::object();
@@ -87,77 +83,6 @@ int infer_radius_from_dimensions(int w_min, int w_max, int h_min, int h_max) {
     diameter = std::max(diameter, std::max(h_min, h_max));
     if (diameter <= 0) return 0;
     return std::max(0, diameter / 2);
-}
-
-std::string trim_copy_room_config(const std::string& value) {
-    const auto first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) {
-        return std::string{};
-    }
-    const auto last = value.find_last_not_of(" \t\r\n");
-    return value.substr(first, last - first + 1);
-}
-
-std::optional<int> parse_int_from_text(const std::string& text) {
-    std::string trimmed = trim_copy_room_config(text);
-    if (trimmed.empty()) {
-        return std::nullopt;
-    }
-    try {
-        size_t consumed = 0;
-        long long value = std::stoll(trimmed, &consumed, 10);
-        if (consumed != trimmed.size()) {
-            return std::nullopt;
-        }
-        if (value < static_cast<long long>(std::numeric_limits<int>::min()) ||
-            value > static_cast<long long>(std::numeric_limits<int>::max())) {
-            return std::nullopt;
-        }
-        return static_cast<int>(value);
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-std::optional<float> parse_float_from_text(const std::string& text) {
-    std::string trimmed = trim_copy_room_config(text);
-    if (trimmed.empty()) {
-        return std::nullopt;
-    }
-    try {
-        size_t consumed = 0;
-        float value = std::stof(trimmed, &consumed);
-        if (consumed != trimmed.size()) {
-            return std::nullopt;
-        }
-        return value;
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-std::optional<int> read_text_box_value(DMTextBox* box) {
-    if (!box) {
-        return std::nullopt;
-    }
-    return parse_int_from_text(box->value());
-}
-
-std::optional<float> read_text_box_float(DMTextBox* box) {
-    if (!box) {
-        return std::nullopt;
-    }
-    return parse_float_from_text(box->value());
-}
-
-void sync_text_box_with_value(DMTextBox* box, int value) {
-    if (!box || box->is_editing()) {
-        return;
-    }
-    std::string desired = std::to_string(value);
-    if (box->value() != desired) {
-        box->set_value(desired);
-    }
 }
 
 bool append_unique(std::vector<std::string>& options, const std::string& value) {
@@ -239,17 +164,32 @@ int width_min = 500;
                     mutated = true;
                 }
                 int new_height_max = std::max(height_min, height_max);
-if (new_height_max != height_max) {
-                height_max = new_height_max;
+                if (new_height_max != height_max) {
+                    height_max = new_height_max;
+                    mutated = true;
+                }
+            }
+
+            int clamped_width_max = std::min(width_max, 4000);
+            if (clamped_width_max != width_max) {
+                width_max = clamped_width_max;
+                mutated = true;
+            }
+            int clamped_height_max = std::min(height_max, 4000);
+            if (clamped_height_max != height_max) {
+                height_max = clamped_height_max;
+                mutated = true;
+            }
+            if (width_min > width_max) {
+                width_min = width_max;
+                mutated = true;
+            }
+            if (height_min > height_max) {
+                height_min = height_max;
                 mutated = true;
             }
         }
-    }
-    if (!geometry_is_circle()) {
-        width_max = std::min(width_max, 4000);
-        height_max = std::min(height_max, 4000);
-        mutated = true;
-    }
+
         int new_edge = std::clamp(edge_smoothness, 0, 101);
         if (new_edge != edge_smoothness) {
             edge_smoothness = new_edge;
@@ -280,25 +220,24 @@ if (new_height_max != height_max) {
                 radius_max = new_radius_max;
                 mutated = true;
             }
-            {
-                int min_diameter = radius_min > 0 ? radius_min * 2 : 0;
-                int max_diameter = radius_max > 0 ? radius_max * 2 : min_diameter;
-                if (width_min != min_diameter) {
-                    width_min = min_diameter;
-                    mutated = true;
-                }
-                if (width_max != max_diameter) {
-                    width_max = max_diameter;
-                    mutated = true;
-                }
-                if (height_min != min_diameter) {
-                    height_min = min_diameter;
-                    mutated = true;
-                }
-                if (height_max != max_diameter) {
-                    height_max = max_diameter;
-                    mutated = true;
-                }
+
+            int min_diameter = radius_min > 0 ? radius_min * 2 : 0;
+            int max_diameter = radius_max > 0 ? radius_max * 2 : min_diameter;
+            if (width_min != min_diameter) {
+                width_min = min_diameter;
+                mutated = true;
+            }
+            if (width_max != max_diameter) {
+                width_max = max_diameter;
+                mutated = true;
+            }
+            if (height_min != min_diameter) {
+                height_min = min_diameter;
+                mutated = true;
+            }
+            if (height_max != max_diameter) {
+                height_max = max_diameter;
+                mutated = true;
             }
         }
         if (is_spawn && is_boss) {
@@ -754,20 +693,8 @@ void RoomConfigurator::ensure_base_panels() {
         if (panel->is_expanded() != expanded) {
             panel->set_expanded(expanded);
         }
-};
+    };
 
-
-    // Camera panel
-    if (!camera_panel_) {
-        camera_panel_ = std::make_unique<DockableCollapsible>("Camera Settings", false);
-        camera_panel_->set_floatable(false);
-        camera_panel_->set_show_header(true);
-        camera_panel_->set_close_button_enabled(false);
-        camera_panel_->set_scroll_enabled(false);
-        camera_panel_->set_row_gap(DMSpacing::item_gap());
-        camera_panel_->set_col_gap(DMSpacing::item_gap());
-        camera_panel_->set_padding(DMSpacing::panel_padding());
-    }
     const std::string geometry_title = is_trail_context_ ? "Trail Geometry" : "Room Geometry";
     const std::string tags_title = is_trail_context_ ? "Trail Tags" : "Room Tags";
     const std::string types_title = is_trail_context_ ? "Trail Types" : "Room Types";
@@ -783,18 +710,6 @@ void RoomConfigurator::refresh_base_panel_rows() {
     spawn_config_bounds_.clear();
     add_spawn_bounds_ = SDL_Rect{0,0,0,0};
 
-    refresh_camera_panel_widgets();
-    if (camera_panel_) {
-        DockableCollapsible::Rows cam_rows;
-        cam_rows.push_back({camera_height_widget_.get()});
-        cam_rows.push_back({camera_tilt_widget_.get()});
-        cam_rows.push_back({camera_zoom_widget_.get()});
-        cam_rows.push_back({camera_pan_widget_.get()});
-        camera_panel_->set_rows(cam_rows);
-        camera_panel_->set_visible(true);
-        ordered_base_panels_.push_back(camera_panel_.get());
-    }
-
     if (geometry_panel_) {
         DockableCollapsible::Rows rows;
         if (name_widget_) rows.push_back({name_widget_.get()});
@@ -802,17 +717,11 @@ void RoomConfigurator::refresh_base_panel_rows() {
         if (radius_widget_) {
             rows.push_back({radius_widget_.get()});
         }
-        if (width_min_widget_ || width_max_widget_) {
-            DockableCollapsible::Row row;
-            if (width_min_widget_) row.push_back(width_min_widget_.get());
-            if (width_max_widget_) row.push_back(width_max_widget_.get());
-            if (!row.empty()) rows.push_back(std::move(row));
+        if (width_range_widget_) {
+            rows.push_back({width_range_widget_.get()});
         }
-        if (height_min_widget_ || height_max_widget_) {
-            DockableCollapsible::Row row;
-            if (height_min_widget_) row.push_back(height_min_widget_.get());
-            if (height_max_widget_) row.push_back(height_max_widget_.get());
-            if (!row.empty()) rows.push_back(std::move(row));
+        if (height_range_widget_) {
+            rows.push_back({height_range_widget_.get()});
         }
         if (edge_widget_) rows.push_back({edge_widget_.get()});
         if (curvy_widget_) rows.push_back({curvy_widget_.get()});
@@ -1702,35 +1611,31 @@ void RoomConfigurator::rebuild_rows_internal() {
     }
 
     if (state_->geometry_is_circle()) {
-        width_min_box_.reset();
-        width_min_widget_.reset();
-        width_max_box_.reset();
-        width_max_widget_.reset();
-        height_min_box_.reset();
-        height_min_widget_.reset();
-        height_max_box_.reset();
-        height_max_widget_.reset();
+        width_range_slider_.reset();
+        width_range_widget_.reset();
+        width_slider_max_range_ = 0;
+        height_range_slider_.reset();
+        height_range_widget_.reset();
+        height_slider_max_range_ = 0;
         initialize_radius_slider(false);
     } else {
         radius_slider_.reset();
         radius_widget_.reset();
         radius_slider_max_range_ = 0;
-
-        width_min_box_ = std::make_unique<DMTextBox>("Min Width", std::to_string(state_->width_min));
-        width_min_widget_ = std::make_unique<TextBoxWidget>(width_min_box_.get());
-        width_max_box_ = std::make_unique<DMTextBox>("Max Width", std::to_string(state_->width_max));
-        width_max_widget_ = std::make_unique<TextBoxWidget>(width_max_box_.get());
+        width_slider_max_range_ = 4000;
+        width_range_slider_ = std::make_unique<DMRangeSlider>(0, width_slider_max_range_, state_->width_min, state_->width_max);
+        width_range_slider_->set_defer_commit_until_unfocus(true);
+        width_range_widget_ = std::make_unique<RangeSliderWidget>(width_range_slider_.get());
 
         if (allow_height) {
-            height_min_box_ = std::make_unique<DMTextBox>("Min Height", std::to_string(state_->height_min));
-            height_min_widget_ = std::make_unique<TextBoxWidget>(height_min_box_.get());
-            height_max_box_ = std::make_unique<DMTextBox>("Max Height", std::to_string(state_->height_max));
-            height_max_widget_ = std::make_unique<TextBoxWidget>(height_max_box_.get());
+            height_slider_max_range_ = 4000;
+            height_range_slider_ = std::make_unique<DMRangeSlider>(0, height_slider_max_range_, state_->height_min, state_->height_max);
+            height_range_slider_->set_defer_commit_until_unfocus(true);
+            height_range_widget_ = std::make_unique<RangeSliderWidget>(height_range_slider_.get());
         } else {
-            height_min_box_.reset();
-            height_min_widget_.reset();
-            height_max_box_.reset();
-            height_max_widget_.reset();
+            height_range_slider_.reset();
+            height_range_widget_.reset();
+            height_slider_max_range_ = 0;
         }
     }
 
@@ -1963,7 +1868,8 @@ void RoomConfigurator::expand_width_slider_range_if_needed() {
         return;
     }
     width_slider_max_range_ = desired;
-    width_range_slider_ = std::make_unique<DMRangeSlider>(500, width_slider_max_range_, state_->width_min, state_->width_max);
+    width_range_slider_ = std::make_unique<DMRangeSlider>(0, width_slider_max_range_, state_->width_min, state_->width_max);
+    width_range_slider_->set_defer_commit_until_unfocus(true);
     width_range_widget_ = std::make_unique<RangeSliderWidget>(width_range_slider_.get());
     refresh_base_panel_rows();
     request_container_layout();
@@ -1987,7 +1893,8 @@ void RoomConfigurator::expand_height_slider_range_if_needed() {
         return;
     }
     height_slider_max_range_ = desired;
-    height_range_slider_ = std::make_unique<DMRangeSlider>(500, height_slider_max_range_, state_->height_min, state_->height_max);
+    height_range_slider_ = std::make_unique<DMRangeSlider>(0, height_slider_max_range_, state_->height_min, state_->height_max);
+    height_range_slider_->set_defer_commit_until_unfocus(true);
     height_range_widget_ = std::make_unique<RangeSliderWidget>(height_range_slider_.get());
     refresh_base_panel_rows();
     request_container_layout();
@@ -1999,7 +1906,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
     bool changed = false;
     bool rebuild_required = false;
     bool tags_changed = false;
-    bool camera_changed = false;
     const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
 
     if (tags_dirty_) {
@@ -2058,71 +1964,27 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
-    if (width_min_box_ && !width_min_box_->is_editing()) {
-        if (auto parsed = read_text_box_value(width_min_box_.get())) {
-            if (*parsed != state_->width_min) {
-                state_->width_min = *parsed;
-                changed = true;
-            }
-        }
-    }
-
-    if (width_max_box_ && !width_max_box_->is_editing()) {
-        if (auto parsed = read_text_box_value(width_max_box_.get())) {
-            if (*parsed != state_->width_max) {
-                state_->width_max = *parsed;
-                changed = true;
-            }
-        }
-    }
-
-    if (height_min_box_ && !height_min_box_->is_editing()) {
-        if (auto parsed = read_text_box_value(height_min_box_.get())) {
-            if (*parsed != state_->height_min) {
-                state_->height_min = *parsed;
-                changed = true;
-            }
-        }
-    }
-
-    if (height_max_box_ && !height_max_box_->is_editing()) {
-        if (auto parsed = read_text_box_value(height_max_box_.get())) {
-            if (*parsed != state_->height_max) {
-                state_->height_max = *parsed;
-                changed = true;
-            }
-        }
-    }
-
-    if (camera_height_slider_) {
-        int slider_height = camera_height_slider_->value();
-        if (slider_height != state_->camera_height_px) {
-            state_->camera_height_px = slider_height;
+    if (width_range_slider_) {
+        int slider_min = width_range_slider_->min_value();
+        int slider_max = width_range_slider_->max_value();
+        if (slider_min != state_->width_min || slider_max != state_->width_max) {
+            state_->width_min = slider_min;
+            state_->width_max = slider_max;
             changed = true;
-            camera_changed = true;
         }
+        expand_width_slider_range_if_needed();
     }
 
-    if (camera_tilt_slider_) {
-        float clamped = static_cast<float>(std::clamp(camera_tilt_slider_->value(),
-                                                      static_cast<int>(kCameraTiltMinDeg),
-                                                      static_cast<int>(kCameraTiltMaxDeg)));
-        if (std::fabs(clamped - state_->camera_tilt_deg) > 1e-3f) {
-            state_->camera_tilt_deg = clamped;
+    if (height_range_slider_) {
+        int slider_min = height_range_slider_->min_value();
+        int slider_max = height_range_slider_->max_value();
+        if (slider_min != state_->height_min || slider_max != state_->height_max) {
+            state_->height_min = slider_min;
+            state_->height_max = slider_max;
             changed = true;
-            camera_changed = true;
         }
+        expand_height_slider_range_if_needed();
     }
-
-    if (camera_zoom_slider_) {
-        int sanitized = std::clamp(camera_zoom_slider_->value(), kCameraZoomMinPercent, kCameraZoomMaxPercent);
-        if (sanitized != state_->camera_zoom_percent) {
-            state_->camera_zoom_percent = sanitized;
-            changed = true;
-            camera_changed = true;
-        }
-    }
-
 
 
     if (radius_slider_) {
@@ -2176,43 +2038,13 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
-    const bool editing_size_box =
-        (width_min_box_ && width_min_box_->is_editing()) || (width_max_box_ && width_max_box_->is_editing()) || (height_min_box_ && height_min_box_->is_editing()) || (height_max_box_ && height_max_box_->is_editing());
-
-    if (state_->ensure_valid(allow_height, !editing_size_box)) {
+    if (state_->ensure_valid(allow_height, true)) {
         changed = true;
     }
 
     if (state_->is_spawn && state_->is_boss) {
         state_->is_boss = false;
         if (boss_checkbox_) boss_checkbox_->set_value(false);
-    }
-
-    sync_text_box_with_value(width_min_box_.get(), state_->width_min);
-    sync_text_box_with_value(width_max_box_.get(), state_->width_max);
-    sync_text_box_with_value(height_min_box_.get(), state_->height_min);
-    sync_text_box_with_value(height_max_box_.get(), state_->height_max);
-    auto sync_float_box = [](DMTextBox* box, float value) {
-        if (!box || box->is_editing()) {
-            return;
-        }
-        std::stringstream ss;
-        ss << value;
-        const std::string desired = ss.str();
-        if (box->value() != desired) {
-            box->set_value(desired);
-        }
-    };
-    if (camera_height_slider_) {
-        camera_height_slider_->set_value(state_->camera_height_px);
-    }
-    if (camera_tilt_slider_) {
-        camera_tilt_slider_->set_value(std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)),
-                                                  static_cast<int>(kCameraTiltMinDeg),
-                                                  static_cast<int>(kCameraTiltMaxDeg)));
-    }
-    if (camera_zoom_slider_) {
-        camera_zoom_slider_->set_value(std::clamp(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent));
     }
 
     if (radius_slider_) {
@@ -2223,6 +2055,22 @@ bool RoomConfigurator::sync_state_from_widgets() {
             radius_slider_->set_max_value(state_->radius_max);
         }
     }
+    if (width_range_slider_) {
+        bool skip_slider_sync =
+            width_range_slider_->defer_commit_until_unfocus() && width_range_slider_->has_pending_values();
+        if (!skip_slider_sync) {
+            width_range_slider_->set_min_value(state_->width_min);
+            width_range_slider_->set_max_value(state_->width_max);
+        }
+    }
+    if (height_range_slider_) {
+        bool skip_slider_sync =
+            height_range_slider_->defer_commit_until_unfocus() && height_range_slider_->has_pending_values();
+        if (!skip_slider_sync) {
+            height_range_slider_->set_min_value(state_->height_min);
+            height_range_slider_->set_max_value(state_->height_max);
+        }
+    }
 
     if (changed) {
         state_->apply_to_json(loaded_json_, allow_height);
@@ -2231,9 +2079,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
             auto& root = live_room_json();
             state_->apply_to_json(root, allow_height);
             write_tags_to_json(root);
-            room_->camera_height_px = state_->camera_height_px;
-            room_->camera_tilt_deg = state_->camera_tilt_deg;
-            room_->camera_zoom_percent = state_->camera_zoom_percent;
             if (room_save_callback_) { room_save_callback_(false); } else { room_->mark_dirty(); }
             if (tags_changed) {
                 tag_utils::notify_tags_changed();
@@ -2242,9 +2087,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
             auto& root = live_room_json();
             state_->apply_to_json(root, allow_height);
             write_tags_to_json(root);
-        }
-        if (camera_changed) {
-            request_camera_live_update();
         }
         if (on_external_spawn_change_) {
             on_external_spawn_change_();
@@ -2474,32 +2316,11 @@ void RoomConfigurator::request_rebuild() {
 }
 
 bool RoomConfigurator::camera_controls_enabled() const {
-    return visible() && camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_expanded();
+    return false;
 }
 
 void RoomConfigurator::refresh_camera_panel_widgets() {
-    const int height_value = state_->camera_height_px;
-    const int tilt_value = std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)),
-                                      static_cast<int>(kCameraTiltMinDeg),
-                                      static_cast<int>(kCameraTiltMaxDeg));
-    const int zoom_value = std::clamp(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent);
-
-    const std::string height_label = is_trail_context_ ? "Trail Height (px)" : "Height (px)";
-    const std::string tilt_label   = is_trail_context_ ? "Trail Tilt (deg)" : "Tilt (deg)";
-    const std::string zoom_label = is_trail_context_ ? "Trail Zoom (%)" : "Zoom (%)";
-    const std::string pan_label = is_trail_context_ ? "Trail Pan Y (%)" : "Pan Up/Down (%)";
-
-    camera_height_slider_ = std::make_unique<DMSlider>(height_label, 0, 100000, height_value);
-    camera_tilt_slider_ = std::make_unique<DMSlider>(tilt_label,
-                                                     static_cast<int>(kCameraTiltMinDeg),
-                                                     static_cast<int>(kCameraTiltMaxDeg),
-                                                     tilt_value);
-    camera_zoom_slider_ = std::make_unique<DMSlider>(zoom_label, kCameraZoomMinPercent, kCameraZoomMaxPercent, zoom_value);
-
-    camera_height_widget_ = std::make_unique<SliderWidget>(camera_height_slider_.get());
-    camera_tilt_widget_ = std::make_unique<SliderWidget>(camera_tilt_slider_.get());
-    camera_zoom_widget_ = std::make_unique<SliderWidget>(camera_zoom_slider_.get());
-    camera_pan_widget_ = std::make_unique<SliderWidget>(camera_pan_slider_.get());
+    // Camera section is intentionally removed from Room Config UI.
 }
 
 bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustment) {
@@ -2535,17 +2356,6 @@ bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustmen
         return false;
     }
 
-    if (camera_height_slider_) {
-        camera_height_slider_->set_value(state_->camera_height_px);
-    }
-    if (camera_tilt_slider_) {
-        camera_tilt_slider_->set_value(static_cast<int>(std::lround(state_->camera_tilt_deg)));
-    }
-    if (camera_zoom_slider_) {
-        camera_zoom_slider_->set_value(state_->camera_zoom_percent);
-    }
-
-
     request_camera_live_update();
     return true;
 }
@@ -2565,7 +2375,6 @@ void RoomConfigurator::reload_camera_state_from_room() {
                                               kCameraZoomMinPercent,
                                               kCameraZoomMaxPercent);
 
-    refresh_base_panel_rows();
     request_container_layout();
 }
 

@@ -193,14 +193,6 @@ private:
     std::unique_ptr<TextBoxWidget> name_widget_;
     std::unique_ptr<DMDropdown> geometry_dropdown_;
     std::unique_ptr<DropdownWidget> geometry_widget_;
-    std::unique_ptr<DMTextBox> width_min_box_;
-    std::unique_ptr<TextBoxWidget> width_min_widget_;
-    std::unique_ptr<DMTextBox> width_max_box_;
-    std::unique_ptr<TextBoxWidget> width_max_widget_;
-    std::unique_ptr<DMTextBox> height_min_box_;
-    std::unique_ptr<TextBoxWidget> height_min_widget_;
-    std::unique_ptr<DMTextBox> height_max_box_;
-    std::unique_ptr<TextBoxWidget> height_max_widget_;
     std::unique_ptr<DMRangeSlider> width_range_slider_;
     std::unique_ptr<RangeSliderWidget> width_range_widget_;
     std::unique_ptr<DMRangeSlider> height_range_slider_;
@@ -222,16 +214,6 @@ private:
     std::unique_ptr<CheckboxWidget> inherit_widget_;
     std::unique_ptr<TagEditorWidget> tag_editor_;
 
-    std::unique_ptr<DMSlider> camera_height_slider_;
-    std::unique_ptr<SliderWidget> camera_height_widget_;
-    std::unique_ptr<DMSlider> camera_tilt_slider_;
-    std::unique_ptr<SliderWidget> camera_tilt_widget_;
-    std::unique_ptr<DMSlider> camera_zoom_slider_;
-    std::unique_ptr<SliderWidget> camera_zoom_widget_;
-    std::unique_ptr<DMSlider> camera_pan_slider_;
-    std::unique_ptr<SliderWidget> camera_pan_widget_;
-
-    std::unique_ptr<DockableCollapsible> camera_panel_;
     std::unique_ptr<DockableCollapsible> geometry_panel_;
     std::unique_ptr<DockableCollapsible> tags_panel_;
     std::unique_ptr<DockableCollapsible> types_panel_;

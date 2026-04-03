@@ -2021,10 +2021,17 @@ void RoomEditor::set_room_config_visible(bool visible) {
         return;
     }
     if (visible) {
+        if (assets_) {
+            Room* selected_room = assets_->current_room();
+            if (selected_room && selected_room != current_room_) {
+                set_current_room(selected_room);
+            }
+        }
         room_cfg_ui_->open(current_room_);
     }
     room_config_dock_open_ = visible;
-    set_camera_settings_lock(visible);
+    const bool allow_camera_lock = visible && room_cfg_ui_ && room_cfg_ui_->camera_controls_enabled();
+    set_camera_settings_lock(allow_camera_lock);
     refresh_room_config_visibility();
 }
 
@@ -2224,7 +2231,11 @@ void RoomEditor::update(const Input& input) {
 
 void RoomEditor::update_ui(const Input& input) {
     const bool config_visible_now = room_cfg_ui_ && room_cfg_ui_->visible();
-    set_camera_settings_lock(enabled_ && config_visible_now);
+    const bool allow_camera_lock = enabled_ &&
+                                   config_visible_now &&
+                                   room_cfg_ui_ &&
+                                   room_cfg_ui_->camera_controls_enabled();
+    set_camera_settings_lock(allow_camera_lock);
 
     if (!enabled_) {
         room_config_was_visible_ = config_visible_now;
@@ -2448,6 +2459,20 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             }
             open_spawn_group_floating_panel(target->spawn_id, click_point);
             if (input_) input_->consumeEvent(event);
+            return true;
+        }
+    }
+
+    if (enabled_ &&
+        room_nav_visible_ &&
+        event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+        event.button.button == SDL_BUTTON_LEFT &&
+        !is_room_ui_blocking_point(mx, my)) {
+        SDL_Point click_point{mx, my};
+        if (handle_room_nav_click(click_point)) {
+            if (input_) {
+                input_->consumeEvent(event);
+            }
             return true;
         }
     }
@@ -2902,6 +2927,13 @@ void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
 
     room_nav_entries_.clear();
     label_rects_.clear();
+    active_label_bounds_ = effective_label_bounds();
+
+    int hover_x = 0;
+    int hover_y = 0;
+    sdl_mouse_util::GetMouseState(&hover_x, &hover_y);
+    const SDL_Point hover_point{hover_x, hover_y};
+    const bool hover_enabled = !is_room_ui_blocking_point(hover_x, hover_y);
 
     struct LabelInfo {
         Room* room = nullptr;
@@ -2912,8 +2944,11 @@ void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
     std::vector<LabelInfo> render_queue;
     render_queue.reserve(rooms.size());
 
-    SDL_FPoint screen_center{static_cast<float>(screen_w_) * 0.5f,
-                             static_cast<float>(screen_h_) * 0.5f};
+    const float bounds_center_x =
+        static_cast<float>(active_label_bounds_.x) + static_cast<float>(active_label_bounds_.w) * 0.5f;
+    const float bounds_center_y =
+        static_cast<float>(active_label_bounds_.y) + static_cast<float>(active_label_bounds_.h) * 0.5f;
+    SDL_FPoint screen_center{bounds_center_x, bounds_center_y};
 
     WarpedScreenGrid& view = assets_->getView();
 
@@ -2942,13 +2977,18 @@ void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
     for (const auto& info : render_queue) {
         if (!info.room) continue;
         SDL_Rect rendered_rect{};
-        if (render_room_label(renderer, info.room, info.desired_center, &rendered_rect)) {
+        if (render_room_label(renderer, info.room, info.desired_center, hover_point, hover_enabled, &rendered_rect)) {
             room_nav_entries_.push_back(RoomNavEntry{info.room, rendered_rect, is_trail_room(info.room)});
         }
     }
 }
 
-bool RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center, SDL_Rect* out_rect) {
+bool RoomEditor::render_room_label(SDL_Renderer* renderer,
+                                   Room* room,
+                                   SDL_FPoint desired_center,
+                                   const SDL_Point& hover_point,
+                                   bool hover_enabled,
+                                   SDL_Rect* out_rect) {
     if (!room || !room->room_area || !assets_) return false;
     if (!label_font_) return false;
 
@@ -2997,11 +3037,26 @@ bool RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
 
     label_rects_.push_back(bg_rect);
 
+    const bool hovered = hover_enabled && SDL_PointInRect(&hover_point, &bg_rect);
     SDL_Color bg_color = with_alpha(lighten(base_color, 0.08f), 205);
     SDL_Color border_color = with_alpha(darken(base_color, 0.3f), 235);
+    if (hovered) {
+        bg_color = with_alpha(lighten(base_color, 0.2f), 235);
+        border_color = with_alpha(lighten(base_color, 0.5f), 255);
+    }
 
     const int radius = std::min(DMStyles::CornerRadius(), std::min(bg_rect.w, bg_rect.h) / 2);
     const int bevel = std::min(DMStyles::BevelDepth(), std::max(0, std::min(bg_rect.w, bg_rect.h) / 2));
+    if (hovered) {
+        SDL_Color glow_color = with_alpha(lighten(base_color, 0.45f), 120);
+        for (int pad = 3; pad >= 1; --pad) {
+            SDL_Rect glow_rect{bg_rect.x - pad, bg_rect.y - pad, bg_rect.w + pad * 2, bg_rect.h + pad * 2};
+            const int glow_radius = std::min(DMStyles::CornerRadius() + pad, std::min(glow_rect.w, glow_rect.h) / 2);
+            const Uint8 glow_alpha =
+                static_cast<Uint8>(std::max(24, static_cast<int>(glow_color.a) / (pad + 1)));
+            dm_draw::DrawRoundedOutline(renderer, glow_rect, glow_radius, 1, with_alpha(glow_color, glow_alpha));
+        }
+    }
     dm_draw::DrawBeveledRect( renderer, bg_rect, radius, bevel, bg_color, bg_color, bg_color, false, 0.0f, 0.0f);
     dm_draw::DrawRoundedOutline( renderer, bg_rect, radius, 1, border_color);
 
@@ -3027,8 +3082,8 @@ bool RoomEditor::handle_room_nav_click(const SDL_Point& screen_pt) {
             continue;
         }
         if (SDL_PointInRect(&screen_pt, &entry.rect)) {
-            pan_camera_to_room(entry.room);
             assets_->set_editor_current_room(entry.room);
+            pan_camera_to_room(entry.room);
             return true;
         }
     }
@@ -3041,10 +3096,12 @@ void RoomEditor::pan_camera_to_room(Room* room) {
     }
     WarpedScreenGrid& cam = assets_->getView();
     const SDL_Point center = room->room_area->get_center();
-    const double current_scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
-    const double target_scale = cam.default_camera_height_for_room(room);
-    const double factor = (target_scale > 0.0) ? (target_scale / current_scale) : 1.0;
-    cam.pan_and_height_to_point(center.x, factor);
+    // Room label navigation should only pan to the selected room center.
+    // Preserve existing zoom/height by avoiding any height animation/reframe.
+    cam.set_manual_height_override(true);
+    cam.set_focus_override(center);
+    cam.set_screen_center(center);
+    cam.update();
 }
 
 SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const {
@@ -3061,12 +3118,16 @@ SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint de
         return rect;
     }
 
+    const SDL_Rect bounds = active_label_bounds_.w > 0 && active_label_bounds_.h > 0
+                                ? active_label_bounds_
+                                : SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)};
+
     const float half_w = static_cast<float>(rect_w) * 0.5f;
     const float half_h = static_cast<float>(rect_h) * 0.5f;
-    const float min_x = half_w;
-    const float max_x = static_cast<float>(screen_w_) - half_w;
-    const float min_y = half_h;
-    const float max_y = static_cast<float>(screen_h_) - half_h;
+    const float min_x = static_cast<float>(bounds.x) + half_w;
+    const float max_x = static_cast<float>(bounds.x + bounds.w) - half_w;
+    const float min_y = static_cast<float>(bounds.y) + half_h;
+    const float max_y = static_cast<float>(bounds.y + bounds.h) - half_h;
 
     auto clamp_center = [&](const SDL_FPoint& point) {
         SDL_FPoint clamped = point;
@@ -3081,8 +3142,8 @@ SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint de
                         desired_center.y >= min_y && desired_center.y <= max_y;
 
     if (!inside) {
-        SDL_FPoint screen_center{static_cast<float>(screen_w_) * 0.5f,
-                                 static_cast<float>(screen_h_) * 0.5f};
+        SDL_FPoint screen_center{static_cast<float>(bounds.x) + static_cast<float>(bounds.w) * 0.5f,
+                                 static_cast<float>(bounds.y) + static_cast<float>(bounds.h) * 0.5f};
         const float dx = desired_center.x - screen_center.x;
         const float dy = desired_center.y - screen_center.y;
         const float epsilon = 0.0001f;
@@ -3120,11 +3181,15 @@ SDL_Rect RoomEditor::resolve_edge_overlap(SDL_Rect rect, SDL_FPoint desired_cent
         return rect;
     }
 
+    const SDL_Rect bounds = active_label_bounds_.w > 0 && active_label_bounds_.h > 0
+                                ? active_label_bounds_
+                                : SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)};
+
     const int tolerance = 1;
-    const bool touches_left = rect.x <= tolerance;
-    const bool touches_right = rect.x + rect.w >= screen_w_ - tolerance;
-    const bool touches_top = rect.y <= tolerance;
-    const bool touches_bottom = rect.y + rect.h >= screen_h_ - tolerance;
+    const bool touches_left = rect.x <= bounds.x + tolerance;
+    const bool touches_right = rect.x + rect.w >= (bounds.x + bounds.w) - tolerance;
+    const bool touches_top = rect.y <= bounds.y + tolerance;
+    const bool touches_bottom = rect.y + rect.h >= (bounds.y + bounds.h) - tolerance;
 
     if (touches_top || touches_bottom) {
         rect = resolve_horizontal_edge_overlap(rect, desired_center.x, touches_top);
@@ -3140,8 +3205,11 @@ SDL_Rect RoomEditor::resolve_edge_overlap(SDL_Rect rect, SDL_FPoint desired_cent
 SDL_Rect RoomEditor::resolve_horizontal_edge_overlap(SDL_Rect rect, float desired_center_x, bool top_edge) {
     if (screen_w_ <= 0) return rect;
 
-    const int min_x = 0;
-    const int max_x = std::max(0, screen_w_ - rect.w);
+    const SDL_Rect bounds = active_label_bounds_.w > 0 && active_label_bounds_.h > 0
+                                ? active_label_bounds_
+                                : SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)};
+    const int min_x = bounds.x;
+    const int max_x = std::max(bounds.x, bounds.x + std::max(0, bounds.w - rect.w));
     if (max_x <= min_x) {
         rect.x = min_x;
         return rect;
@@ -3152,8 +3220,8 @@ SDL_Rect RoomEditor::resolve_horizontal_edge_overlap(SDL_Rect rect, float desire
     const int tolerance = 1;
 
     for (const SDL_Rect& other : label_rects_) {
-        bool other_on_edge = top_edge ? other.y <= tolerance
-                                      : other.y + other.h >= screen_h_ - tolerance;
+        bool other_on_edge = top_edge ? other.y <= bounds.y + tolerance
+                                      : other.y + other.h >= (bounds.y + bounds.h) - tolerance;
         if (other_on_edge) {
             same_edge_rects.push_back(other);
         }
@@ -3232,8 +3300,11 @@ SDL_Rect RoomEditor::resolve_horizontal_edge_overlap(SDL_Rect rect, float desire
 SDL_Rect RoomEditor::resolve_vertical_edge_overlap(SDL_Rect rect, float desired_center_y, bool left_edge) {
     if (screen_h_ <= 0) return rect;
 
-    const int min_y = 0;
-    const int max_y = std::max(0, screen_h_ - rect.h);
+    const SDL_Rect bounds = active_label_bounds_.w > 0 && active_label_bounds_.h > 0
+                                ? active_label_bounds_
+                                : SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)};
+    const int min_y = bounds.y;
+    const int max_y = std::max(bounds.y, bounds.y + std::max(0, bounds.h - rect.h));
     if (max_y <= min_y) {
         rect.y = min_y;
         return rect;
@@ -3244,8 +3315,8 @@ SDL_Rect RoomEditor::resolve_vertical_edge_overlap(SDL_Rect rect, float desired_
     const int tolerance = 1;
 
     for (const SDL_Rect& other : label_rects_) {
-        bool other_on_edge = left_edge ? other.x <= tolerance
-                                       : other.x + other.w >= screen_w_ - tolerance;
+        bool other_on_edge = left_edge ? other.x <= bounds.x + tolerance
+                                       : other.x + other.w >= (bounds.x + bounds.w) - tolerance;
         if (other_on_edge) {
             same_edge_rects.push_back(other);
         }
@@ -3323,6 +3394,41 @@ SDL_Rect RoomEditor::resolve_vertical_edge_overlap(SDL_Rect rect, float desired_
 
 bool RoomEditor::rects_overlap(const SDL_Rect& a, const SDL_Rect& b) {
     return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+}
+
+SDL_Rect RoomEditor::effective_label_bounds() const {
+    SDL_Rect fallback{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)};
+    SDL_Rect area = DockManager::instance().usableRect();
+    if (area.w <= 0 || area.h <= 0) {
+        area = fallback;
+    }
+    if (screen_w_ > 0 && screen_h_ > 0) {
+        const int max_x = std::max(0, screen_w_ - area.w);
+        const int max_y = std::max(0, screen_h_ - area.h);
+        area.x = std::clamp(area.x, 0, max_x);
+        area.y = std::clamp(area.y, 0, max_y);
+        if (area.x + area.w > screen_w_) {
+            area.w = std::max(0, screen_w_ - area.x);
+        }
+        if (area.y + area.h > screen_h_) {
+            area.h = std::max(0, screen_h_ - area.y);
+        }
+    }
+
+    if (shared_footer_bar_ && shared_footer_bar_->visible()) {
+        const SDL_Rect footer = shared_footer_bar_->rect();
+        if (footer.w > 0 && footer.h > 0) {
+            const int footer_top = footer.y;
+            if (footer_top > area.y && footer_top < area.y + area.h) {
+                area.h = std::max(0, footer_top - area.y);
+            }
+        }
+    }
+
+    if (area.w <= 0 || area.h <= 0) {
+        return fallback;
+    }
+    return area;
 }
 
 void RoomEditor::ensure_label_font() {
@@ -4345,6 +4451,12 @@ void RoomEditor::open_room_config() {
     if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; open request ignored.");
         return;
+    }
+    if (assets_) {
+        Room* selected_room = assets_->current_room();
+        if (selected_room && selected_room != current_room_) {
+            set_current_room(selected_room);
+        }
     }
     set_room_config_visible(true);
 }
@@ -6495,10 +6607,6 @@ void RoomEditor::handle_click(const Input& input) {
     const bool floating_modal_open = DockManager::instance().active_panel() != nullptr;
 
     if (asset_info_open || floating_modal_open) {
-        return;
-    }
-
-    if (room_nav_visible_ && handle_room_nav_click(screen_mouse)) {
         return;
     }
 

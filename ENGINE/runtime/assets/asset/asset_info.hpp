@@ -102,6 +102,33 @@ class AssetInfo {
     };
     std::vector<AnchorChildPointCandidate> anchor_point_child_candidates;
 
+    struct OvalAnchorPoint {
+        float angle_degrees = 0.0f;
+        int texture_x = 0;
+        int texture_y = 0;
+        float depth_offset = 0.0f;
+        bool flip_horizontal = true;
+        bool flip_vertical = true;
+        float rotation_degrees = 0.0f;
+        bool hidden = false;
+        bool resolve_x = true;
+        AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+    };
+
+    struct OvalAnchorMapping {
+        std::string name;
+        std::string asset_name;
+        float width_radius_x = 48.0f;
+        float height_radius_z = 24.0f;
+        std::vector<std::string> legacy_names;
+        std::vector<OvalAnchorPoint> points;
+
+        bool valid() const {
+            return !name.empty();
+        }
+    };
+    std::vector<OvalAnchorMapping> oval_anchor_mappings;
+
     bool moving_asset = false;
     std::vector<float>  scale_variants;
     struct NamedArea {
@@ -191,6 +218,22 @@ class AssetInfo {
     bool rename_anchor_point_child_candidate(const std::string& old_name, const std::string& new_name);
     bool remove_anchor_point_child_candidate(const std::string& anchor_point_name);
     bool reconcile_anchor_point_child_candidates(const std::vector<std::string>& canonical_anchor_names);
+    void set_oval_anchor_mappings_payload(const nlohmann::json& mappings);
+    nlohmann::json oval_anchor_mappings_payload() const;
+    bool upsert_oval_anchor_mapping(const OvalAnchorMapping& mapping);
+    bool remove_oval_anchor_mapping(const std::string& mapping_name);
+    bool rename_oval_anchor_mapping(const std::string& old_name,
+                                    const std::string& new_name,
+                                    bool append_legacy_alias = true);
+    const OvalAnchorMapping* find_oval_anchor_mapping(const std::string& mapping_name,
+                                                      bool include_legacy_aliases = true) const;
+    static std::string oval_center_anchor_name_for_mapping(const std::string& mapping_name);
+    bool ensure_oval_center_anchors_for_mapping(const std::string& mapping_name,
+                                                bool include_legacy_aliases = true);
+    bool ensure_oval_center_anchors_for_all_mappings();
+    bool rename_oval_center_anchors_for_mapping(const std::string& old_mapping_name,
+                                                const std::string& new_mapping_name,
+                                                bool include_legacy_aliases = true);
 
     std::string info_json_path() const { return info_json_path_; }
     std::string asset_dir_path() const { return dir_path_; }
@@ -247,6 +290,7 @@ class AssetInfo {
     std::string info_json_path_;
     void initialize_from_json(const nlohmann::json& data);
     void sync_anchor_point_child_candidates_info_json();
+    void sync_oval_anchor_mappings_info_json();
     void rebuild_tag_cache();
     void rebuild_anti_tag_cache();
     static std::uint8_t sanitize_texture_variant_mask(std::uint8_t variants);

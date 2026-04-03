@@ -136,6 +136,157 @@ std::string runtime_box_ids_csv(const std::vector<Asset::RuntimeBoxVolume>& volu
     return out.str();
 }
 
+constexpr float kPi = 3.14159265358979323846f;
+
+float normalize_degrees(float degrees) {
+    if (!std::isfinite(degrees)) {
+        return 0.0f;
+    }
+    float normalized = std::fmod(degrees, 360.0f);
+    if (normalized < 0.0f) {
+        normalized += 360.0f;
+    }
+    if (normalized >= 360.0f) {
+        normalized -= 360.0f;
+    }
+    return normalized;
+}
+
+float normalize_radians(float radians) {
+    if (!std::isfinite(radians)) {
+        return 0.0f;
+    }
+    float normalized = std::fmod(radians, 2.0f * kPi);
+    if (normalized < 0.0f) {
+        normalized += 2.0f * kPi;
+    }
+    if (normalized >= 2.0f * kPi) {
+        normalized -= 2.0f * kPi;
+    }
+    return normalized;
+}
+
+float radians_to_degrees(float radians) {
+    return normalize_degrees(normalize_radians(radians) * (180.0f / kPi));
+}
+
+template <typename T>
+T lerp_value(const T& a, const T& b, float t) {
+    return static_cast<T>(static_cast<float>(a) + (static_cast<float>(b) - static_cast<float>(a)) * t);
+}
+
+const AssetInfo::OvalAnchorMapping* find_oval_mapping_for_anchor_name(const AssetInfo* info,
+                                                                       const std::string& anchor_name) {
+    if (!info || anchor_name.empty()) {
+        return nullptr;
+    }
+    return info->find_oval_anchor_mapping(anchor_name, true);
+}
+
+std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_heading(
+    const AssetInfo::OvalAnchorMapping& mapping,
+    const std::string& requested_anchor_name,
+    float heading_radians) {
+    if (mapping.points.empty()) {
+        return std::nullopt;
+    }
+
+    std::vector<const AssetInfo::OvalAnchorPoint*> sorted_points;
+    sorted_points.reserve(mapping.points.size());
+    for (const auto& point : mapping.points) {
+        sorted_points.push_back(&point);
+    }
+    std::sort(sorted_points.begin(),
+              sorted_points.end(),
+              [](const AssetInfo::OvalAnchorPoint* lhs, const AssetInfo::OvalAnchorPoint* rhs) {
+                  return normalize_degrees(lhs->angle_degrees) < normalize_degrees(rhs->angle_degrees);
+              });
+
+    const float heading_degrees = radians_to_degrees(heading_radians);
+    const std::size_t count = sorted_points.size();
+    std::size_t prev_index = 0;
+    std::size_t next_index = 0;
+    float blend_t = 0.0f;
+
+    if (count == 1) {
+        prev_index = next_index = 0;
+        blend_t = 0.0f;
+    } else {
+        bool found_segment = false;
+        for (std::size_t i = 0; i < count; ++i) {
+            const std::size_t j = (i + 1) % count;
+            const float a = normalize_degrees(sorted_points[i]->angle_degrees);
+            float b = normalize_degrees(sorted_points[j]->angle_degrees);
+            float h = heading_degrees;
+            if (j == 0 && b <= a) {
+                b += 360.0f;
+                if (h < a) {
+                    h += 360.0f;
+                }
+            } else if (b < a) {
+                b += 360.0f;
+                if (h < a) {
+                    h += 360.0f;
+                }
+            }
+            if (h + 1e-4f < a || h - 1e-4f > b) {
+                continue;
+            }
+
+            prev_index = i;
+            next_index = j;
+            const float span = std::max(1e-4f, b - a);
+            blend_t = std::clamp((h - a) / span, 0.0f, 1.0f);
+            found_segment = true;
+            break;
+        }
+        if (!found_segment) {
+            prev_index = count - 1;
+            next_index = 0;
+            blend_t = 0.0f;
+        }
+    }
+
+    const AssetInfo::OvalAnchorPoint& prev = *sorted_points[prev_index];
+    const AssetInfo::OvalAnchorPoint& next = *sorted_points[next_index];
+    const AssetInfo::OvalAnchorPoint& nearest = (blend_t <= 0.5f) ? prev : next;
+
+    DisplacedAssetAnchorPoint synthesized{};
+    synthesized.name = requested_anchor_name.empty() ? mapping.name : requested_anchor_name;
+    synthesized.texture_x = static_cast<int>(std::lround(lerp_value(prev.texture_x, next.texture_x, blend_t)));
+    synthesized.texture_y = static_cast<int>(std::lround(lerp_value(prev.texture_y, next.texture_y, blend_t)));
+    synthesized.depth_offset = lerp_value(prev.depth_offset, next.depth_offset, blend_t);
+    synthesized.flip_horizontal = nearest.flip_horizontal;
+    synthesized.flip_vertical = nearest.flip_vertical;
+    synthesized.rotation_degrees = lerp_value(prev.rotation_degrees, next.rotation_degrees, blend_t);
+    synthesized.hidden = nearest.hidden;
+    synthesized.resolve_x = nearest.resolve_x;
+    synthesized.scaling_method = nearest.scaling_method;
+    return synthesized;
+}
+
+std::vector<std::string> center_anchor_name_candidates(const AssetInfo::OvalAnchorMapping& mapping,
+                                                       const std::string& requested_anchor_name) {
+    std::vector<std::string> names;
+    std::unordered_set<std::string> seen;
+    auto append_center_name = [&](const std::string& source_name) {
+        const std::string center_name = AssetInfo::oval_center_anchor_name_for_mapping(source_name);
+        if (center_name.empty()) {
+            return;
+        }
+        if (seen.insert(center_name).second) {
+            names.push_back(center_name);
+        }
+    };
+
+    append_center_name(mapping.name);
+    append_center_name(requested_anchor_name);
+    for (const auto& alias : mapping.legacy_names) {
+        append_center_name(alias);
+    }
+    return names;
+}
+
 }
 
 Asset::Asset(std::shared_ptr<AssetInfo> info_,
@@ -303,6 +454,8 @@ Asset::Asset(const Asset& o)
     , anchor_sprite_transform_override_active_(o.anchor_sprite_transform_override_active_)
     , anchor_sprite_transform_override_flip_(o.anchor_sprite_transform_override_flip_)
     , anchor_sprite_transform_override_angle_degrees_(o.anchor_sprite_transform_override_angle_degrees_)
+    , directional_heading_radians_(o.directional_heading_radians_)
+    , directional_heading_valid_(o.directional_heading_valid_)
 {
 
         clear_render_caches();
@@ -386,6 +539,8 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_sprite_transform_override_active_ = o.anchor_sprite_transform_override_active_;
         anchor_sprite_transform_override_flip_ = o.anchor_sprite_transform_override_flip_;
         anchor_sprite_transform_override_angle_degrees_ = o.anchor_sprite_transform_override_angle_degrees_;
+        directional_heading_radians_ = o.directional_heading_radians_;
+        directional_heading_valid_ = o.directional_heading_valid_;
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
@@ -460,6 +615,11 @@ void Asset::initialize_anchor_registry_from_animations() {
                         }
                 }
         }
+        for (const auto& mapping : info->oval_anchor_mappings) {
+                if (mapping.valid()) {
+                        unique_names.insert(mapping.name);
+                }
+        }
 
         if (!unique_names.empty()) {
                 std::vector<std::string> sorted_names(unique_names.begin(), unique_names.end());
@@ -475,6 +635,24 @@ void Asset::initialize_anchor_registry_from_animations() {
                         AnchorPoint point{};
                         point.name = anchor_name;
                         anchor_points_.push_back(std::move(point));
+                }
+        }
+
+        for (const auto& mapping : info->oval_anchor_mappings) {
+                if (!mapping.valid()) {
+                        continue;
+                }
+                auto canonical_it = anchor_name_to_index_.find(mapping.name);
+                if (canonical_it == anchor_name_to_index_.end()) {
+                        continue;
+                }
+                for (const auto& alias : mapping.legacy_names) {
+                        if (alias.empty() || alias == mapping.name) {
+                                continue;
+                        }
+                        if (anchor_name_to_index_.find(alias) == anchor_name_to_index_.end()) {
+                                anchor_name_to_index_.emplace(alias, canonical_it->second);
+                        }
                 }
         }
 
@@ -908,39 +1086,17 @@ void Asset::refresh_anchor_point_cache_from_frame() {
         return;
     }
 
-    const SDL_Point origin_world = world_xy_point();
     const std::size_t count = std::min(anchor_handles_.size(), anchor_points_.size());
     for (std::size_t idx = 0; idx < count; ++idx) {
-        AnchorPoint& resolved = anchor_points_[idx];
-        const DisplacedAssetAnchorPoint* frame_anchor =
-            current_frame ? current_frame->find_anchor(resolved.name) : nullptr;
-
-        resolved.name = anchor_handles_[idx].name;
-        resolved.frame_index = current_frame ? current_frame->frame_index : -1;
-        resolved.exists = frame_anchor && frame_anchor->is_valid();
-        resolved.depth_offset = frame_anchor ? frame_anchor->depth_offset : 0;
-
-        if (!resolved.exists) {
-            resolved.relative_pos_2d = Vec2{};
-            resolved.world_pos_2d = Vec2{};
-            resolved.world_exact_pos_2d = Vec2{};
-            resolved.world_quantized_px = SDL_Point{0, 0};
-            resolved.world_z = world_z();
-            resolved.world_exact_z = static_cast<float>(world_z());
-            resolved.world_depth = static_cast<float>(world_z());
-            resolved.resolution_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
-            continue;
-        }
-
-        AnchorHandle& handle = anchor_handles_[idx];
-        handle.owner = this;
-        handle.update(anchor_points::GridMaterialization::None);
-
-        apply_anchor_runtime_state(resolved, handle, frame_anchor);
-        if (resolved.exists) {
-            resolved.relative_pos_2d = Vec2{
-                resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
-                resolved.world_pos_2d.y - static_cast<float>(origin_world.y)};
+        const std::string anchor_name = anchor_handles_[idx].name;
+        std::optional<AnchorPoint> resolved = anchor_state(anchor_name,
+                                                           anchor_points::GridMaterialization::None,
+                                                           AnchorResolveMode::ForceRecompute);
+        if (!resolved.has_value()) {
+            AnchorPoint empty{};
+            empty.name = anchor_name;
+            empty.frame_index = current_frame ? current_frame->frame_index : -1;
+            anchor_points_[idx] = empty;
         }
     }
 }
@@ -1548,6 +1704,8 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         sig.perspective_scale = perspective_sample.scale;
 
         sig.world_z_offset = world_z_offset_;
+        sig.directional_heading_valid = directional_heading_valid_;
+        sig.directional_heading_radians = directional_heading_valid_ ? normalize_radians(directional_heading_radians_) : 0.0f;
         sig.resolution_layer = perspective_sample.resolution_layer;
         sig.camera_state_version = (assets_ ? assets_->getView().camera_state_version() : 0);
         return sig;
@@ -1579,6 +1737,9 @@ bool Asset::update_anchor_basis_if_needed() {
                 signature.render_flip_horizontal != last_anchor_basis_signature_.render_flip_horizontal ||
                 signature.render_flip_vertical != last_anchor_basis_signature_.render_flip_vertical ||
                 !almost_equal(signature.render_rotation_degrees, last_anchor_basis_signature_.render_rotation_degrees) ||
+                signature.directional_heading_valid != last_anchor_basis_signature_.directional_heading_valid ||
+                (signature.directional_heading_valid &&
+                 !almost_equal(signature.directional_heading_radians, last_anchor_basis_signature_.directional_heading_radians)) ||
                 signature.resolution_layer != last_anchor_basis_signature_.resolution_layer ||
                 signature.camera_state_version != last_anchor_basis_signature_.camera_state_version ||
                 !almost_equal(signature.remainder_scale, last_anchor_basis_signature_.remainder_scale) ||
@@ -1668,7 +1829,7 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
 
         AnchorHandle& handle = anchor_handles_[index];
         handle.owner = this;
-        handle.update(grid_policy, resolve_mode == AnchorResolveMode::ForceRecompute);
+        handle.update(grid_policy, resolve_mode == AnchorResolveMode::ForceRecompute, frame_anchor);
 
         AnchorPoint& resolved = anchor_points_[index];
         resolved.name = handle.name;
@@ -1684,17 +1845,152 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
         if (!anchors_initialized_) {
                 initialize_anchor_registry_from_animations();
         }
+        const AssetInfo::OvalAnchorMapping* oval_mapping = find_oval_mapping_for_anchor_name(info.get(), name);
+        std::size_t resolved_index = std::numeric_limits<std::size_t>::max();
         auto it = anchor_name_to_index_.find(name);
-        if (it == anchor_name_to_index_.end() ||
-            it->second >= anchor_handles_.size() ||
-            it->second >= anchor_points_.size()) {
+        if (it != anchor_name_to_index_.end()) {
+                resolved_index = it->second;
+        } else if (oval_mapping && !oval_mapping->name.empty()) {
+                auto canonical_it = anchor_name_to_index_.find(oval_mapping->name);
+                if (canonical_it != anchor_name_to_index_.end()) {
+                        resolved_index = canonical_it->second;
+                }
+        }
+        if (resolved_index >= anchor_handles_.size() || resolved_index >= anchor_points_.size()) {
                 return std::nullopt;
         }
 
-        const DisplacedAssetAnchorPoint* frame_anchor =
-                current_frame ? current_frame->find_anchor(name) : nullptr;
+        std::optional<DisplacedAssetAnchorPoint> synthesized_anchor;
+        const DisplacedAssetAnchorPoint* frame_anchor = current_frame ? current_frame->find_anchor(name) : nullptr;
+        if (oval_mapping) {
+                const float heading_radians = directional_heading_valid_ ? directional_heading_radians_ : 0.0f;
+                synthesized_anchor = interpolate_oval_anchor_point_for_heading(*oval_mapping, name, heading_radians);
+                if (synthesized_anchor.has_value() && synthesized_anchor->is_valid()) {
+                        std::optional<AnchorPoint> center_anchor_state;
+                        const std::vector<std::string> center_candidates =
+                            center_anchor_name_candidates(*oval_mapping, name);
+                        for (const auto& center_name : center_candidates) {
+                                if (center_name.empty() || center_name == name) {
+                                        continue;
+                                }
+                                std::optional<AnchorPoint> candidate_center =
+                                    anchor_state(center_name, grid_policy, resolve_mode);
+                                if (!candidate_center.has_value() || !candidate_center->exists) {
+                                        continue;
+                                }
+                                center_anchor_state = candidate_center;
+                                break;
+                        }
 
-        AnchorPoint& resolved = resolve_anchor_point_entry(it->second,
+                        const AnchorPoint* center = center_anchor_state.has_value() ? &(*center_anchor_state) : nullptr;
+                        const SDL_Point origin_world = world_xy_point();
+                        const float fallback_world_z = static_cast<float>(world_z()) + world_z_offset();
+                        const int fallback_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
+                        const PerspectiveSample perspective_sample = runtime_perspective_sample();
+                        const bool fallback_has_flat_perspective =
+                            std::isfinite(perspective_sample.scale) && perspective_sample.scale > 0.0f;
+                        const float fallback_flat_perspective =
+                            fallback_has_flat_perspective ? std::max(0.0001f, perspective_sample.scale) : 1.0f;
+
+                        const float center_x = center ? center->world_exact_pos_2d.x : static_cast<float>(origin_world.x);
+                        const float center_y = center ? center->world_exact_pos_2d.y : static_cast<float>(origin_world.y);
+                        const float center_z = center ? center->world_exact_z : fallback_world_z;
+                        const int center_layer = center ? center->resolution_layer : fallback_layer;
+                        const float center_flat_perspective =
+                            center ? center->flat_perspective_scale : fallback_flat_perspective;
+                        const bool center_has_flat_perspective =
+                            center ? center->has_flat_perspective_scale : fallback_has_flat_perspective;
+
+                        const float flat_x = center_x + static_cast<float>(synthesized_anchor->texture_x);
+                        const float flat_y = center_y + static_cast<float>(synthesized_anchor->texture_y);
+                        const float flat_z = center_z;
+                        anchor_points::AnchorWorldPoint3 flat_point{flat_x, flat_y, flat_z, true};
+                        anchor_points::AnchorWorldPoint3 final_point = flat_point;
+                        if (!anchor_points::displace_along_camera_to_point_ray(
+                                *this,
+                                flat_point,
+                                synthesized_anchor->depth_offset,
+                                final_point)) {
+                                final_point = flat_point;
+                        }
+                        if (!synthesized_anchor->resolve_x && flat_point.valid && final_point.valid) {
+                                final_point.x = flat_point.x;
+                                final_point.y = flat_point.y;
+                                final_point.valid =
+                                    std::isfinite(final_point.x) &&
+                                    std::isfinite(final_point.y) &&
+                                    std::isfinite(final_point.z);
+                        }
+                        if (!final_point.valid) {
+                                final_point = flat_point;
+                        }
+
+                        SDL_FPoint final_screen{
+                            final_point.x,
+                            final_point.y,
+                        };
+                        if (assets_) {
+                                SDL_FPoint projected_screen{};
+                                if (assets_->getView().project_world_point(
+                                        SDL_FPoint{final_point.x, final_point.y},
+                                        final_point.z,
+                                        projected_screen) &&
+                                    std::isfinite(projected_screen.x) &&
+                                    std::isfinite(projected_screen.y)) {
+                                        final_screen = projected_screen;
+                                }
+                        }
+
+                        if (grid_policy == anchor_points::GridMaterialization::Ensure && assets_) {
+                                const world::GridKey key{
+                                    static_cast<int>(std::lround(final_point.x)),
+                                    static_cast<int>(std::lround(final_point.y)),
+                                    static_cast<int>(std::lround(final_point.z)),
+                                    center_layer,
+                                };
+                                assets_->world_grid().find_or_create_grid_point(key);
+                        }
+
+                        AnchorPoint resolved{};
+                        resolved.name = anchor_handles_[resolved_index].name;
+                        resolved.frame_index = current_frame ? current_frame->frame_index : -1;
+                        resolved.exists = true;
+                        resolved.depth_offset = synthesized_anchor->depth_offset;
+                        resolved.flip_horizontal = synthesized_anchor->flip_horizontal;
+                        resolved.flip_vertical = synthesized_anchor->flip_vertical;
+                        resolved.rotation_degrees = synthesized_anchor->rotation_degrees;
+                        resolved.hidden = synthesized_anchor->hidden;
+                        resolved.resolve_x = synthesized_anchor->resolve_x;
+                        resolved.scaling_method = synthesized_anchor->scaling_method;
+                        resolved.world_pos_2d = Vec2{final_point.x, final_point.y};
+                        resolved.world_exact_pos_2d = resolved.world_pos_2d;
+                        resolved.flat_world_pos_2d = Vec2{flat_point.x, flat_point.y};
+                        resolved.flat_world_exact_pos_2d = resolved.flat_world_pos_2d;
+                        resolved.world_quantized_px = SDL_Point{
+                            static_cast<int>(std::lround(final_point.x)),
+                            static_cast<int>(std::lround(final_point.y)),
+                        };
+                        resolved.relative_pos_2d = Vec2{
+                            resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
+                            resolved.world_pos_2d.y - static_cast<float>(origin_world.y),
+                        };
+                        resolved.screen_pos_2d = final_screen;
+                        resolved.world_z = static_cast<int>(std::lround(final_point.z));
+                        resolved.world_exact_z = final_point.z;
+                        resolved.flat_world_exact_z = flat_point.z;
+                        resolved.world_depth = final_point.z;
+                        resolved.resolution_layer = center_layer;
+                        resolved.flat_perspective_scale = center_flat_perspective;
+                        resolved.has_flat_perspective_scale = center_has_flat_perspective;
+
+                        if (resolved_index < anchor_points_.size()) {
+                                anchor_points_[resolved_index] = resolved;
+                        }
+                        return resolved;
+                }
+        }
+
+        AnchorPoint& resolved = resolve_anchor_point_entry(resolved_index,
                                                            grid_policy,
                                                            frame_anchor,
                                                            resolve_mode);
@@ -1702,7 +1998,9 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
 }
 
 
-void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy, bool force_recompute) {
+void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
+                                 bool force_recompute,
+                                 const DisplacedAssetAnchorPoint* override_anchor) {
 #if !defined(NDEBUG)
         auto& counters = anchor_update_counters();
         ++counters.calls;
@@ -1759,12 +2057,14 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 dirty = keep_dirty;
         };
 
-        if (!frame) {
-                mark_missing("no current frame");
-                return;
+        const DisplacedAssetAnchorPoint* anchor = override_anchor;
+        if (!anchor) {
+                if (!frame) {
+                        mark_missing("no current frame");
+                        return;
+                }
+                anchor = frame->find_anchor(name);
         }
-
-        const DisplacedAssetAnchorPoint* anchor = frame->find_anchor(name);
 
         if (!anchor) {
                 mark_missing("anchor not present on current frame");
@@ -1841,6 +2141,32 @@ void Asset::set_grid_id(std::uint64_t id) {
 
 void Asset::clear_grid_id() {
         grid_id_ = 0;
+}
+
+bool Asset::set_directional_heading_radians(float radians) {
+        if (!std::isfinite(radians)) {
+                return false;
+        }
+        const float normalized = normalize_radians(radians);
+        constexpr float kHeadingEpsilon = 1e-5f;
+        const bool changed = !directional_heading_valid_ ||
+                             std::fabs(directional_heading_radians_ - normalized) > kHeadingEpsilon;
+        if (!changed) {
+                return false;
+        }
+        directional_heading_radians_ = normalized;
+        directional_heading_valid_ = true;
+        mark_anchors_dirty();
+        return true;
+}
+
+void Asset::clear_directional_heading_radians() {
+        if (!directional_heading_valid_ && std::fabs(directional_heading_radians_) < 1e-6f) {
+                return;
+        }
+        directional_heading_radians_ = 0.0f;
+        directional_heading_valid_ = false;
+        mark_anchors_dirty();
 }
 
 void Asset::set_render_anchor_offset(float x, float y, float z) {

@@ -272,6 +272,7 @@ add_executable(engine_tests
     ENGINE/tests/test_anchor_binding_order.cpp
     ENGINE/tests/test_anchor_point_resolver.cpp
     ENGINE/tests/test_anchor_child_candidate_normalization.cpp
+    ENGINE/tests/test_oval_anchor_mappings.cpp
     ENGINE/tests/test_animation_document_geometry.cpp
     ENGINE/tests/test_animation_source_navigation.cpp
     ENGINE/tests/test_combat_box_geometry.cpp
@@ -299,6 +300,7 @@ add_executable(engine_tests
     ENGINE/tests/test_tag_editor_widget_recommendations.cpp
     ENGINE/tests/test_geometry_batcher_ordering.cpp
     ENGINE/tests/test_screen_space_math.cpp
+    ENGINE/tests/test_trail_geometry.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
   )
 

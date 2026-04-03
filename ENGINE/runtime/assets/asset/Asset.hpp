@@ -266,6 +266,10 @@ class Asset {
     void clear_grid_id();
     void set_world_z_offset(float z) { if (world_z_offset_ != z) { world_z_offset_ = z; mark_anchors_dirty(); } }
     float world_z_offset() const { return world_z_offset_; }
+    bool set_directional_heading_radians(float radians);
+    void clear_directional_heading_radians();
+    bool has_directional_heading_radians() const { return directional_heading_valid_; }
+    float directional_heading_radians() const { return directional_heading_radians_; }
     void set_render_anchor_offset(float x, float y, float z);
     void clear_render_anchor_offset();
     float render_anchor_offset_x() const { return render_anchor_offset_x_; }
@@ -417,7 +421,9 @@ class Asset {
                 }
         } last_update_key_;
 
-        void update(anchor_points::GridMaterialization grid_policy, bool force_recompute = false);
+        void update(anchor_points::GridMaterialization grid_policy,
+                    bool force_recompute = false,
+                    const DisplacedAssetAnchorPoint* override_anchor = nullptr);
     };
 
     // A single source of truth for inputs that influence resolved anchor output
@@ -435,6 +441,8 @@ class Asset {
         float remainder_scale = 1.0f;       // runtime scale applied to rendered frame geometry
         float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
         float world_z_offset = 0.0f;        // render depth offset used by cached anchor screen projection
+        float directional_heading_radians = 0.0f; // runtime directional heading used by oval anchor mappings
+        bool  directional_heading_valid = false;
         int   resolution_layer = 0;         // grid resolution used for anchor materialization
         std::uint64_t camera_state_version = 0; // camera snapshot that produced cached anchor placement
     };
@@ -547,6 +555,8 @@ private:
     bool         anchor_perspective_override_active_ = false;
     float        anchor_perspective_override_scale_ = 1.0f;
     int          anchor_perspective_override_resolution_layer_ = 0;
+    float        directional_heading_radians_ = 0.0f;
+    bool         directional_heading_valid_ = false;
     bool         mesh_dirty_        = true;
 
     void initialize_anchor_registry_from_animations();

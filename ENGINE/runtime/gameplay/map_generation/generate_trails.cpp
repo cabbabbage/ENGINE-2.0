@@ -1,5 +1,6 @@
 #include "generate_trails.hpp"
 #include "generate_rooms.hpp"
+#include "trail_geometry.hpp"
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <iostream>
@@ -20,6 +21,11 @@ namespace {
 constexpr int kNearestNeighborCount = 4;
 constexpr double kLoopConnectionChance = 0.35;
 constexpr double kLoopCapRatio = 0.25;
+constexpr int kTrailBaseAttempts = 96;
+constexpr int kIsolatedMaxPasses = 48;
+constexpr int kIsolatedNoProgressLimit = 5;
+constexpr int kIsolatedConnectionAttempts = 80;
+constexpr int kIsolatedIntersectionIncreaseInterval = 5;
 
 struct DisjointSet {
     explicit DisjointSet(size_t count) : parent(count), rank(count, 0) {
@@ -120,46 +126,295 @@ std::vector<SDL_Point> build_centerline(const SDL_Point& start,
     return line;
 }
 
-std::vector<SDL_Point> extrude_centerline(const std::vector<SDL_Point>& centerline,
-                                          double width)
-{
-    const double half_w = width * 0.5;
-    std::vector<SDL_Point> left, right;
-    left.reserve(centerline.size());
-    right.reserve(centerline.size());
-    for (size_t i = 0; i < centerline.size(); ++i) {
-        double cx = static_cast<double>(centerline[i].x);
-        double cy = static_cast<double>(centerline[i].y);
-        double dx, dy;
-        if (i == 0) {
-            dx = static_cast<double>(centerline[i + 1].x - centerline[i].x);
-            dy = static_cast<double>(centerline[i + 1].y - centerline[i].y);
-        } else if (i == centerline.size() - 1) {
-            dx = static_cast<double>(centerline[i].x - centerline[i - 1].x);
-            dy = static_cast<double>(centerline[i].y - centerline[i - 1].y);
-        } else {
-            dx = static_cast<double>(centerline[i + 1].x - centerline[i - 1].x);
-            dy = static_cast<double>(centerline[i + 1].y - centerline[i - 1].y);
-        }
-        double len = std::hypot(dx, dy);
-        if (len <= 0.0) len = 1.0;
-        double nx = -dy / len;
-        double ny =  dx / len;
-        left.push_back(SDL_Point{
-            static_cast<int>(std::lround(cx + nx * half_w)),
-            static_cast<int>(std::lround(cy + ny * half_w))
-        });
-        right.push_back(SDL_Point{
-            static_cast<int>(std::lround(cx - nx * half_w)),
-            static_cast<int>(std::lround(cy - ny * half_w))
-        });
+namespace detail {
+
+struct Vec2 {
+    double x = 0.0;
+    double y = 0.0;
+};
+
+constexpr double kCenterlineSpacingMin = 4.0;
+constexpr double kCenterlineSpacingMax = 16.0;
+
+inline Vec2 to_vec(const SDL_Point& raw_point) {
+    return Vec2{ static_cast<double>(raw_point.x), static_cast<double>(raw_point.y) };
+}
+
+inline SDL_Point to_point(const Vec2& point) {
+    return SDL_Point{
+        static_cast<int>(std::lround(point.x)),
+        static_cast<int>(std::lround(point.y))
+    };
+}
+
+inline Vec2 lerp(const Vec2& a, const Vec2& b, double t) {
+    return Vec2{
+        a.x + (b.x - a.x) * t,
+        a.y + (b.y - a.y) * t
+    };
+}
+
+inline double length(const Vec2& value) {
+    return std::hypot(value.x, value.y);
+}
+
+inline Vec2 normalize(const Vec2& value) {
+    double len = length(value);
+    if (len <= 1e-6) {
+        return Vec2{ 1.0, 0.0 };
     }
+    return Vec2{ value.x / len, value.y / len };
+}
+
+inline Vec2 perp(const Vec2& value) {
+    return Vec2{ -value.y, value.x };
+}
+
+double endpoint_fade(size_t index, size_t count) {
+    if (count < 2) {
+        return 0.0;
+    }
+    double relative = static_cast<double>(index) / (count - 1);
+    double fade = std::min(relative, 1.0 - relative);
+    return std::clamp(fade * 4.0, 0.0, 1.0);
+}
+
+Vec2 compute_tangent(const std::vector<Vec2>& line, size_t index) {
+    if (line.empty()) {
+        return Vec2{ 1.0, 0.0 };
+    }
+    Vec2 previous = line[index];
+    Vec2 next = line[index];
+    if (index > 0) {
+        previous = line[index - 1];
+    }
+    if (index + 1 < line.size()) {
+        next = line[index + 1];
+    }
+    return normalize(Vec2{ next.x - previous.x, next.y - previous.y });
+}
+
+void smooth_profile(std::vector<double>& values, int passes) {
+    if (values.size() < 3 || passes <= 0) {
+        return;
+    }
+    std::vector<double> buffer(values.size());
+    for (int pass_idx = 0; pass_idx < passes; ++pass_idx) {
+        buffer = values;
+        for (size_t i = 1; i + 1 < values.size(); ++i) {
+            buffer[i] = (values[i - 1] + values[i] * 2.0 + values[i + 1]) * 0.25;
+        }
+        values.swap(buffer);
+    }
+}
+
+std::vector<Vec2> resample_polyline(const std::vector<Vec2>& raw, double spacing) {
+    if (raw.size() < 2) {
+        return raw;
+    }
+    double total_length = 0.0;
+    std::vector<double> segment_lengths;
+    segment_lengths.reserve(raw.size() - 1);
+    for (size_t i = 0; i + 1 < raw.size(); ++i) {
+        double seg_len = length(Vec2{ raw[i + 1].x - raw[i].x, raw[i + 1].y - raw[i].y });
+        segment_lengths.push_back(seg_len);
+        total_length += seg_len;
+    }
+    if (total_length <= 0.0 || spacing <= 0.0) {
+        if (raw.size() <= trail_generation::kTrailGeometryMaxSamples) {
+            return raw;
+        }
+        return std::vector<Vec2>(raw.begin(), raw.begin() + trail_generation::kTrailGeometryMaxSamples);
+    }
+    double clamped_spacing = std::clamp(spacing, kCenterlineSpacingMin, kCenterlineSpacingMax);
+    size_t target_samples = static_cast<size_t>(std::ceil(total_length / clamped_spacing)) + 1;
+    target_samples = std::clamp(target_samples, static_cast<size_t>(2), trail_generation::kTrailGeometryMaxSamples);
+    std::vector<Vec2> result;
+    result.reserve(target_samples);
+    double step = (target_samples > 1) ? (total_length / (target_samples - 1)) : 0.0;
+    size_t segment_index = 0;
+    double consumed = 0.0;
+    result.push_back(raw.front());
+    for (size_t sample = 1; sample + 1 < target_samples; ++sample) {
+        double target = step * sample;
+        while (segment_index < segment_lengths.size() && consumed + segment_lengths[segment_index] < target) {
+            consumed += segment_lengths[segment_index];
+            ++segment_index;
+        }
+        if (segment_index >= segment_lengths.size()) {
+            break;
+        }
+        double seg_length = segment_lengths[segment_index];
+        double local_target = target - consumed;
+        double t = (seg_length <= 0.0) ? 0.0 : (local_target / seg_length);
+        result.push_back(lerp(raw[segment_index], raw[segment_index + 1], t));
+    }
+    result.push_back(raw.back());
+    if (result.size() > trail_generation::kTrailGeometryMaxSamples) {
+        result.resize(trail_generation::kTrailGeometryMaxSamples);
+    }
+    return result;
+}
+
+std::vector<Vec2> chaikin_smooth(const std::vector<Vec2>& chain, int passes) {
+    if (chain.size() < 2 || passes <= 0) {
+        return chain;
+    }
+    std::vector<Vec2> current = chain;
+    for (int pass_idx = 0; pass_idx < passes && current.size() < trail_generation::kTrailGeometryMaxSamples; ++pass_idx) {
+        std::vector<Vec2> next;
+        next.reserve(std::min(trail_generation::kTrailGeometryMaxSamples, current.size() * 2));
+        next.push_back(current.front());
+        for (size_t i = 0; i + 1 < current.size(); ++i) {
+            next.push_back(lerp(current[i], current[i + 1], 0.25));
+            if (next.size() >= trail_generation::kTrailGeometryMaxSamples) {
+                break;
+            }
+            next.push_back(lerp(current[i], current[i + 1], 0.75));
+            if (next.size() >= trail_generation::kTrailGeometryMaxSamples) {
+                break;
+            }
+        }
+        next.push_back(current.back());
+        current.swap(next);
+    }
+    return current;
+}
+
+}  // namespace detail
+
+}  // namespace
+
+namespace trail_generation {
+
+std::vector<SDL_Point> build_trail_polygon(const std::vector<SDL_Point>& base_centerline,
+                                           int min_width,
+                                           int max_width,
+                                           int curvyness,
+                                           std::mt19937& rng,
+                                           TrailGeometryReport* report)
+{
+    if (base_centerline.size() < 2) {
+        if (report) {
+            report->centerline.clear();
+            report->local_widths.clear();
+            report->resampled_points = 0;
+            report->boundary_points = 0;
+            report->smoothing_passes = 0;
+        }
+        return {};
+    }
+
+    std::vector<detail::Vec2> raw;
+    raw.reserve(base_centerline.size());
+    for (const auto& pt : base_centerline) {
+        raw.push_back(detail::to_vec(pt));
+    }
+
+    double desired_spacing = std::clamp(
+        static_cast<double>(std::max(min_width, max_width)) * 0.2,
+        detail::kCenterlineSpacingMin,
+        detail::kCenterlineSpacingMax);
+    auto dense = detail::resample_polyline(raw, desired_spacing);
+    if (dense.size() < 2) {
+        if (report) {
+            report->centerline.clear();
+            report->local_widths.clear();
+            report->resampled_points = dense.size();
+            report->boundary_points = 0;
+            report->smoothing_passes = 0;
+        }
+        return {};
+    }
+
+    double sorted_min = static_cast<double>(std::min(min_width, max_width));
+    double sorted_max = static_cast<double>(std::max(min_width, max_width));
+    double width_range = sorted_max - sorted_min;
+    std::vector<double> width_profile(dense.size(), sorted_min);
+
+    if (width_range > 0.0) {
+        double curvy_factor = std::clamp(static_cast<double>(curvyness) / 8.0, 0.0, 1.0);
+        std::uniform_real_distribution<double> profile_noise(-1.0, 1.0);
+        std::vector<double> normalized(dense.size(), 0.5);
+        double noise_scale = 0.25 + 0.5 * curvy_factor;
+        for (size_t i = 0; i < normalized.size(); ++i) {
+            normalized[i] = 0.5 + profile_noise(rng) * noise_scale;
+        }
+        detail::smooth_profile(normalized, 2);
+        for (size_t i = 0; i < normalized.size(); ++i) {
+            normalized[i] = std::clamp(normalized[i], 0.0, 1.0);
+            double fade = detail::endpoint_fade(i, normalized.size());
+            double blend = 0.5 + (normalized[i] - 0.5) * fade;
+            blend = std::clamp(blend, 0.0, 1.0);
+            width_profile[i] = sorted_min + blend * width_range;
+        }
+    } else {
+        std::fill(width_profile.begin(), width_profile.end(), sorted_min);
+    }
+
+    double jitter_factor = std::clamp(static_cast<double>(curvyness) / 8.0, 0.0, 1.0);
+    double jitter_scale = (4.0 + width_range * 0.5) * (0.2 + 0.8 * jitter_factor);
+    std::uniform_real_distribution<double> offset_noise(-1.0, 1.0);
+
+    if (report) {
+        report->centerline.clear();
+        report->centerline.reserve(dense.size());
+    }
+
+    for (size_t i = 0; i < dense.size(); ++i) {
+        double fade = detail::endpoint_fade(i, dense.size());
+        detail::Vec2 tangent = detail::compute_tangent(dense, i);
+        detail::Vec2 normal = detail::perp(tangent);
+        double offset = offset_noise(rng) * jitter_scale * fade;
+        dense[i].x += normal.x * offset;
+        dense[i].y += normal.y * offset;
+        if (report) {
+            report->centerline.push_back({ dense[i].x, dense[i].y });
+        }
+    }
+
+    if (report) {
+        report->local_widths = width_profile;
+    }
+
+    std::vector<detail::Vec2> left;
+    std::vector<detail::Vec2> right;
+    left.reserve(dense.size());
+    right.reserve(dense.size());
+    for (size_t i = 0; i < dense.size(); ++i) {
+        detail::Vec2 tangent = detail::compute_tangent(dense, i);
+        detail::Vec2 normal = detail::perp(tangent);
+        double half_width = std::max(1.0, width_profile[i] * 0.5);
+        left.push_back(detail::Vec2{ dense[i].x + normal.x * half_width, dense[i].y + normal.y * half_width });
+        right.push_back(detail::Vec2{ dense[i].x - normal.x * half_width, dense[i].y - normal.y * half_width });
+    }
+
+    auto smooth_left = detail::chaikin_smooth(left, kTrailGeometryBoundarySmoothPasses);
+    auto smooth_right = detail::chaikin_smooth(right, kTrailGeometryBoundarySmoothPasses);
+
     std::vector<SDL_Point> polygon;
-    polygon.reserve(left.size() + right.size());
-    polygon.insert(polygon.end(), left.begin(), left.end());
-    polygon.insert(polygon.end(), right.rbegin(), right.rend());
+    polygon.reserve(smooth_left.size() + smooth_right.size());
+    for (const auto& point : smooth_left) {
+        polygon.push_back(detail::to_point(point));
+    }
+    for (auto it = smooth_right.rbegin(); it != smooth_right.rend(); ++it) {
+        polygon.push_back(detail::to_point(*it));
+    }
+
+    if (polygon.size() < 4) {
+        return {};
+    }
+
+    if (report) {
+        report->resampled_points = dense.size();
+        report->boundary_points = polygon.size();
+        report->smoothing_passes = kTrailGeometryBoundarySmoothPasses;
+    }
+
     return polygon;
 }
+
+}  // namespace trail_generation
 
 SDL_Point compute_edge_point(const SDL_Point& center,
                              const SDL_Point& toward,
@@ -216,12 +471,12 @@ bool attempt_trail_connection(Room* a,
     const int max_width = config.value("max_width", min_width);
     const int curvyness = config.value("curvyness", 2);
     const std::string name = config.value("name", trail_name.empty() ? std::string("trail_segment") : trail_name);
-    const double width = static_cast<double>(std::max(min_width, max_width));
-    if (testing) std::cout << "[TrailGeometry] Template '" << name << "' width=" << width << " curvyness=" << curvyness << "\n";
+    const int width_for_depth = std::max(min_width, max_width);
+    if (testing) std::cout << "[TrailGeometry] Template " << name << " width_range=[" << min_width << "," << max_width << "] curvyness=" << curvyness << "\n";
     const SDL_Point a_center = a->room_area->get_center();
     const SDL_Point b_center = b->room_area->get_center();
     const double overshoot = 100.0;
-    const double min_interior_depth = std::max(40.0, width * 0.75);
+    const double min_interior_depth = std::max(40.0, static_cast<double>(width_for_depth) * 0.75);
 
     auto make_edge_triplet =
         [&](const SDL_Point& center, const SDL_Point& toward, const Area* area)
@@ -272,82 +527,69 @@ bool attempt_trail_connection(Room* a,
     auto [aminx, aminy, amaxx, amaxy] = a->room_area->get_bounds();
     auto [bminx, bminy, bmaxx, bmaxy] = b->room_area->get_bounds();
 
-    std::vector<SDL_Point> full_line;
-    full_line.reserve(static_cast<size_t>(curvyness) + 6);
-    std::vector<SDL_Point> polygon;
+    std::vector<SDL_Point> base_line;
+    base_line.reserve(static_cast<size_t>(curvyness) + 6);
+    base_line.push_back(a_interior);
+    base_line.push_back(a_edge);
+    auto middle = build_centerline(a_outside, b_outside, curvyness, rng);
+    base_line.insert(base_line.end(), middle.begin(), middle.end());
+    base_line.push_back(b_edge);
+    base_line.push_back(b_interior);
 
-    for (int attempt = 0; attempt < 1000; ++attempt) {
-        full_line.clear();
-        full_line.push_back(a_interior);
-        full_line.push_back(a_edge);
-        auto middle = build_centerline(a_outside, b_outside, curvyness, rng);
-        full_line.insert(full_line.end(), middle.begin(), middle.end());
-        full_line.push_back(b_edge);
-        full_line.push_back(b_interior);
+    auto polygon = trail_generation::build_trail_polygon(base_line, min_width, max_width, curvyness, rng);
+    if (polygon.empty()) {
+        if (testing) {
+            std::cout << "[TrailGeometry] Geometry builder produced no polygon\n";
+        }
+        return false;
+    }
 
-        polygon = extrude_centerline(full_line, width);
+    int cminx = polygon[0].x, cmaxx = polygon[0].x;
+    int cminy = polygon[0].y, cmaxy = polygon[0].y;
+    for (const auto& p : polygon) {
+        cminx = std::min(cminx, p.x);
+        cmaxx = std::max(cmaxx, p.x);
+        cminy = std::min(cminy, p.y);
+        cmaxy = std::max(cmaxy, p.y);
+    }
 
-        if (polygon.empty()) {
+    Area candidate("trail_candidate", polygon, 3);
+
+    int intersection_count = 0;
+    for (auto& area : existing_areas) {
+        auto [minx, miny, maxx, maxy] = area.get_bounds();
+        bool isA = (minx == aminx && miny == aminy && maxx == amaxx && maxy == amaxy);
+        bool isB = (minx == bminx && miny == bminy && maxx == bmaxx && maxy == bmaxy);
+        if (isA || isB) continue;
+        if (cmaxx < minx || maxx < cminx || cmaxy < miny || maxy < cminy) {
             continue;
         }
-
-        int cminx = polygon[0].x, cmaxx = polygon[0].x;
-        int cminy = polygon[0].y, cmaxy = polygon[0].y;
-        for (const auto& p : polygon) {
-            cminx = std::min(cminx, p.x);
-            cmaxx = std::max(cmaxx, p.x);
-            cminy = std::min(cminy, p.y);
-            cmaxy = std::max(cmaxy, p.y);
-        }
-
-        int intersection_count = 0;
-        for (auto& area : existing_areas) {
-            auto [minx, miny, maxx, maxy] = area.get_bounds();
-            bool isA = (minx == aminx && miny == aminy && maxx == amaxx && maxy == amaxy);
-            bool isB = (minx == bminx && miny == bminy && maxx == bmaxx && maxy == bmaxy);
-            if (isA || isB) continue;
-            if (cmaxx < minx || maxx < cminx || cmaxy < miny || maxy < cminy) {
-                continue;
-            }
+        if (candidate.intersects(area)) {
             if (++intersection_count > allowed_intersections) {
                 break;
             }
         }
-        if (intersection_count > allowed_intersections) {
-            continue;
-        }
-
-        Area candidate("trail_candidate", polygon, 3);
-
-        intersection_count = 0;
-        for (auto& area : existing_areas) {
-            auto [minx, miny, maxx, maxy] = area.get_bounds();
-            bool isA = (minx == aminx && miny == aminy && maxx == amaxx && maxy == amaxy);
-            bool isB = (minx == bminx && miny == bminy && maxx == bmaxx && maxy == bmaxy);
-            if (isA || isB) continue;
-            if (candidate.intersects(area)) {
-                intersection_count++;
-                break;
-            }
-        }
-        if (intersection_count > allowed_intersections) {
-            continue;
-        }
-
-        auto trail_room = std::make_unique<Room>( a->map_origin, "trail", name, nullptr, manifest_context, asset_lib, &candidate, trail_config, map_assets_data, MapGridSettings::defaults(), map_radius, "trails_data", map_manifest, manifest_store, manifest_context, manifest_writer );
-        a->add_connecting_room(trail_room.get());
-        b->add_connecting_room(trail_room.get());
-        trail_room->add_connecting_room(a);
-        trail_room->add_connecting_room(b);
-
-        existing_areas.push_back(candidate);
-        trail_rooms.push_back(std::move(trail_room));
-
-        if (testing) std::cout << "[TrailGeometry] Trail placed successfully on attempt " << attempt + 1 << "\n";
-        return true;
     }
-    if (testing) std::cout << "[TrailGeometry] Failed to place trail after 1000 attempts\n";
-    return false;
+    if (intersection_count > allowed_intersections) {
+        if (testing) {
+            std::cout << "[TrailGeometry] Abort due to excessive intersections\n";
+        }
+        return false;
+    }
+
+    auto trail_room = std::make_unique<Room>( a->map_origin, "trail", name, nullptr, manifest_context, asset_lib, &candidate, trail_config, map_assets_data, MapGridSettings::defaults(), map_radius, "trails_data", map_manifest, manifest_store, manifest_context, manifest_writer );
+    a->add_connecting_room(trail_room.get());
+    b->add_connecting_room(trail_room.get());
+    trail_room->add_connecting_room(a);
+    trail_room->add_connecting_room(b);
+
+    existing_areas.push_back(candidate);
+    trail_rooms.push_back(std::move(trail_room));
+
+    if (testing) {
+        std::cout << "[TrailGeometry] Trail placed successfully\n";
+    }
+    return true;
 }
 
 }
@@ -402,36 +644,53 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(
         }
         for (const auto& [a, b] : connection_plan) {
                 if (!a || !b) continue;
-                std::cout << "[GenerateTrails] Attempting connection: " << a->room_name << " <-> " << b->room_name << "\n";
+        std::cout << "[GenerateTrails] Attempting connection: " << a->room_name << " <-> " << b->room_name << " (budget " << kTrailBaseAttempts << ")\n";
+        if (testing) {
+                std::cout << "[GenerateTrails] Connecting: " << a->room_name
+                << " <--> " << b->room_name << "\n";
+        }
+        bool success = false;
+        int attempts_made = 0;
+        for (int attempts = 0; attempts < kTrailBaseAttempts && !success; ++attempts) {
+                if (const auto* asset_ref = pick_random_asset()) {
+                                ++attempts_made;
+                                success = attempt_trail_connection(
+                                        a,
+                                        b,
+                                        all_areas,
+                                        manifest_context,
+                                        asset_lib,
+                                        trail_rooms,
+                                        1,
+                                        asset_ref->data,
+                                        asset_ref->name,
+                                        map_assets_data,
+                                        map_radius,
+                                        testing,
+                                        rng_,
+                                        map_manifest,
+                                        manifest_store,
+                                        manifest_writer);
+                                if (success && !trail_rooms.empty()) {
+                                        auto& trail_room = trail_rooms.back();
+                                        const nlohmann::json& config = asset_ref->data ? *asset_ref->data : nlohmann::json::object();
+                                        trail_room->camera_height_px = std::clamp(config.value("camera_height_px", 1000), 1, 2000);
+                                        trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 360.0f);
+                                        trail_room->camera_zoom_percent = std::clamp(config.value("camera_zoom_percent", 0), 0, 100);
+                                        trail_room->camera_center_dx = config.value("camera_center_dx", 0);
+                                        trail_room->camera_center_dz = config.value("camera_center_dz", 0);
+                                }
+                        }
+                }
+        if (success) {
+                std::cout << "[GenerateTrails] Connection succeeded after " << attempts_made << " attempt(s)\n";
+        } else {
+                std::cout << "[GenerateTrails] Connection failed after " << kTrailBaseAttempts << " attempts\n";
                 if (testing) {
-                        std::cout << "[GenerateTrails] Connecting: " << a->room_name
-                        << " <--> " << b->room_name << "\n";
-                }
-                bool success = false;
-                for (int attempts = 0; attempts < 1000 && !success; ++attempts) {
-                        if (const auto* asset_ref = pick_random_asset()) {
-                                success = attempt_trail_connection( a, b, all_areas, manifest_context, asset_lib, trail_rooms, 1, asset_ref->data, asset_ref->name, map_assets_data, map_radius, testing, rng_, map_manifest, manifest_store, manifest_writer);
-                                       // Set camera parameters for the most recent trail room (if any)
-                                       if (!trail_rooms.empty()) {
-                                           auto& trail_room = trail_rooms.back();
-                                           const nlohmann::json& config = asset_ref->data ? *asset_ref->data : nlohmann::json::object();
-                                           trail_room->camera_height_px = std::clamp(config.value("camera_height_px", 1000), 1, 2000);
-                                           trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 360.0f);
-                                           trail_room->camera_zoom_percent = std::clamp(config.value("camera_zoom_percent", 0), 0, 100);
-                                           trail_room->camera_center_dx = config.value("camera_center_dx", 0);
-                                           trail_room->camera_center_dz = config.value("camera_center_dz", 0);
-                                       }
-                        }
-                }
-                if (success) {
-                        std::cout << "[GenerateTrails] Connection successful\n";
-                } else {
-                        std::cout << "[GenerateTrails] Connection failed after 1000 attempts\n";
-                        if (testing) {
-                                std::cout << "[TrailGen] Failed to place trail between "
+                        std::cout << "[TrailGen] Failed to place trail between "
                                 << a->room_name << " and " << b->room_name << "\n";
-                        }
                 }
+        }
         }
         std::cout << "[GenerateTrails] Starting isolated room connections\n";
         find_and_connect_isolated(manifest_context, asset_lib, all_areas, trail_rooms, map_assets_data, map_radius, map_manifest, manifest_store, manifest_writer);
@@ -642,11 +901,15 @@ void GenerateTrails::find_and_connect_isolated(
                                                    devmode::core::ManifestStore* manifest_store,
                                                    Room::ManifestWriter manifest_writer)
 {
-	const int max_passes = 1000000;
-	int allowed_intersections = 0;
-	std::cout << "[GenerateTrails] Starting isolated connection with max " << max_passes << " passes\n";
-	for (int pass = 0; pass < max_passes; ++pass) {
-		std::cout << "[GenerateTrails] Isolated pass " << pass + 1 << " with " << allowed_intersections << " allowed intersections\n";
+    int allowed_intersections = 0;
+    int no_progress_count = 0;
+    std::cout << "[GenerateTrails] Starting isolated connection (max " << kIsolatedMaxPasses << " passes)\n";
+    int pass = 0;
+    int passes_done = 0;
+    for (; pass < kIsolatedMaxPasses && no_progress_count < kIsolatedNoProgressLimit; ++pass) {
+        if (testing) {
+            std::cout << "[GenerateTrails] Isolated pass " << pass + 1 << " with " << allowed_intersections << " allowed intersections\n";
+        }
 		std::unordered_set<Room*> visited;
 		std::unordered_set<Room*> connected_to_spawn;
 		std::vector<std::vector<Room*>> isolated_groups;
@@ -680,12 +943,13 @@ void GenerateTrails::find_and_connect_isolated(
 					}
 			}
 		}
-		if (isolated_groups.empty()) {
-			if (testing) {
-					std::cout << "[ConnectIsolated] All rooms connected after " << pass << " passes.\n";
-			}
-			break;
-		}
+        if (isolated_groups.empty()) {
+            if (testing) {
+                    std::cout << "[ConnectIsolated] All rooms connected after " << pass << " passes.\n";
+            }
+            ++passes_done;
+            break;
+        }
 		if (testing) {
 			std::cout << "[ConnectIsolated] Pass " << pass + 1 << " - " << isolated_groups.size() << " disconnected groups found | allowed intersections: " << allowed_intersections << "\n";
 		}
@@ -726,7 +990,7 @@ void GenerateTrails::find_and_connect_isolated(
                });
 					if (candidates.size() > 5) candidates.resize(5);
                                         for (Room* roomB : candidates) {
-                                                                for (int attempt = 0; attempt < 100; ++attempt) {
+                                        for (int attempt = 0; attempt < kIsolatedConnectionAttempts; ++attempt) {
                                                                                                         if (const auto* asset_ref = pick_random_asset()) {
                                                                                                                 if (attempt_trail_connection(
                                                                                 roomA,
@@ -757,13 +1021,20 @@ void GenerateTrails::find_and_connect_isolated(
 		if (!any_connection_made && testing) {
 			std::cout << "[ConnectIsolated] No connections made on pass " << pass + 1 << "\n";
 		}
-		if ((pass + 1) % 5 == 0) {
+		if ((pass + 1) % kIsolatedIntersectionIncreaseInterval == 0) {
 			++allowed_intersections;
 			if (testing) {
 					std::cout << "[ConnectIsolated] Increasing allowed intersections to " << allowed_intersections << "\n";
 			}
 		}
+        if (any_connection_made) {
+            no_progress_count = 0;
+        } else {
+            ++no_progress_count;
+        }
+        ++passes_done;
 	}
+	std::cout << "[GenerateTrails] Isolated connections completed after " << passes_done << " pass(es); allowed intersections " << allowed_intersections << "\n";
 }
 
 void GenerateTrails::remove_connection(Room* a,

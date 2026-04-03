@@ -11293,7 +11293,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 5686.0,
+          "bounding_extent": 11372.0,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -11309,12 +11309,12 @@
           ]
         },
         {
-          "bounding_extent": 1045.0,
+          "bounding_extent": 2090.0,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 16731.0,
+          "ring_radius": 23462.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -11336,8 +11336,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            146,
-            36,
+            61,
+            242,
             242,
             255
           ],
@@ -11364,9 +11364,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
+            94,
             36,
-            103,
+            242,
             255
           ],
           "edge_smoothness": 24,

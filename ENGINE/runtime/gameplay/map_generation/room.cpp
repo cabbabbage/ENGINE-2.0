@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <random>
 #include <string>
 #include "utils/grid.hpp"
 #include "utils/string_utils.hpp"
@@ -21,6 +22,35 @@ using json = nlohmann::json;
 namespace {
 
 using vibble::strings::to_lower_copy;
+
+constexpr double kOvalMinAspectRatio = 14.0 / 9.0;
+constexpr double kOvalMaxAspectRatio = 18.0 / 9.0;
+constexpr double kOvalHardAspectCap = 2.0;
+
+int infer_vertical_radius_from_dimensions(int w_min, int w_max, int h_min, int h_max) {
+        int diameter = std::max(h_min, h_max);
+        if (diameter <= 0) {
+                diameter = std::max(w_min, w_max);
+        }
+        if (diameter <= 0) {
+                return 0;
+        }
+        return std::max(1, diameter / 2);
+}
+
+int sample_horizontal_radius_for_oval(int vertical_radius) {
+        const int clamped_vertical = std::max(1, vertical_radius);
+        const double max_ratio = std::min(kOvalMaxAspectRatio, kOvalHardAspectCap);
+        static thread_local std::mt19937 oval_rng{std::random_device{}()};
+        std::uniform_real_distribution<double> aspect_dist(kOvalMinAspectRatio, max_ratio);
+
+        const int min_horizontal = std::max(1, static_cast<int>(std::ceil(static_cast<double>(clamped_vertical) * kOvalMinAspectRatio)));
+        const int max_aspect_bound = static_cast<int>(std::floor(static_cast<double>(clamped_vertical) * max_ratio));
+        const int max_hard_cap = clamped_vertical * 2;
+        const int max_horizontal = std::max(min_horizontal, std::min(max_aspect_bound, max_hard_cap));
+        const int sampled = static_cast<int>(std::lround(static_cast<double>(clamped_vertical) * aspect_dist(oval_rng)));
+        return std::clamp(sampled, min_horizontal, max_horizontal);
+}
 
 RoomAreaSerialization::Kind parse_kind_value(const std::string& value) {
         if (value.empty()) return RoomAreaSerialization::Kind::Unknown;
@@ -461,27 +491,22 @@ manifest_writer_(std::move(manifest_writer))
                 int edge_smoothness = assets_json.value("edge_smoothness", 2);
                 std::string geometry = assets_json.value("geometry", "square");
                 if (!geometry.empty()) geometry[0] = std::toupper(geometry[0]);
-                auto infer_radius_from_dims = [](int w_min, int w_max, int h_min, int h_max) {
-                        int diameter = 0;
-                        diameter = std::max(diameter, std::max(w_min, w_max));
-                        diameter = std::max(diameter, std::max(h_min, h_max));
-                        if (diameter <= 0) return 0;
-                        return std::max(1, diameter / 2);
-};
                 std::string lowered_geometry = geometry;
                 std::transform(lowered_geometry.begin(), lowered_geometry.end(), lowered_geometry.begin(), [](unsigned char ch) {
                         return static_cast<char>(std::tolower(ch));
                 });
                 if (lowered_geometry == "circle") {
-                        int radius = assets_json.value("radius", -1);
-                        if (radius <= 0) {
-                                radius = infer_radius_from_dims(min_w, max_w, min_h, max_h);
+                        int vertical_radius = assets_json.value("radius", -1);
+                        if (vertical_radius <= 0) {
+                                vertical_radius = infer_vertical_radius_from_dimensions(min_w, max_w, min_h, max_h);
                         }
-                        if (radius <= 0) {
-                                radius = 1;
+                        if (vertical_radius <= 0) {
+                                vertical_radius = 1;
                         }
-                        min_w = max_w = min_h = max_h = radius * 2;
-                        assets_json["radius"] = radius;
+                        const int horizontal_radius = sample_horizontal_radius_for_oval(vertical_radius);
+                        min_w = max_w = horizontal_radius * 2;
+                        min_h = max_h = vertical_radius * 2;
+                        assets_json["radius"] = vertical_radius;
                 }
                 int width = std::max(min_w, max_w);
                 int height = std::max(min_h, max_h);
@@ -992,7 +1017,7 @@ nlohmann::json Room::create_static_room_json(std::string name) {
                 return static_cast<char>(std::tolower(ch));
         });
         if (lowered_geom == "circle") {
-                out["radius"] = std::max(0, width / 2);
+                out["radius"] = std::max(0, height / 2);
         } else {
                 out.erase("radius");
         }

@@ -769,6 +769,45 @@ bool rename_anchor_in_frame_json(nlohmann::json& frame_anchor_array,
     return changed;
 }
 
+bool remove_anchor_in_frame(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                            const std::unordered_set<std::string>& names) {
+    if (anchors.empty() || names.empty()) {
+        return false;
+    }
+    const auto erase_it = std::remove_if(anchors.begin(),
+                                         anchors.end(),
+                                         [&](const DisplacedAssetAnchorPoint& anchor) {
+                                             return names.find(anchor.name) != names.end();
+                                         });
+    if (erase_it == anchors.end()) {
+        return false;
+    }
+    anchors.erase(erase_it, anchors.end());
+    return true;
+}
+
+bool remove_anchor_in_frame_json(nlohmann::json& frame_anchor_array,
+                                 const std::unordered_set<std::string>& names) {
+    if (!frame_anchor_array.is_array() || names.empty()) {
+        return false;
+    }
+    bool changed = false;
+    for (auto it = frame_anchor_array.begin(); it != frame_anchor_array.end();) {
+        if (!it->is_object()) {
+            ++it;
+            continue;
+        }
+        const std::string anchor_name = it->value("name", std::string{});
+        if (names.find(anchor_name) == names.end()) {
+            ++it;
+            continue;
+        }
+        it = frame_anchor_array.erase(it);
+        changed = true;
+    }
+    return changed;
+}
+
 const nlohmann::json* locate_animation_payloads(const nlohmann::json& root);
 
 nlohmann::json normalize_animation_payload(nlohmann::json payload) {
@@ -2375,21 +2414,81 @@ bool AssetInfo::remove_oval_anchor_mapping(const std::string& mapping_name) {
 
     const nlohmann::json before_payload = oval_anchor_mappings_payload();
     std::vector<OvalAnchorMapping> updated = parse_oval_anchor_mappings_payload(before_payload, name);
-    const auto erase_it = std::remove_if(updated.begin(),
-                                         updated.end(),
-                                         [&](const OvalAnchorMapping& mapping) { return mapping.name == trimmed_name; });
-    if (erase_it == updated.end()) {
+    auto remove_it = std::find_if(updated.begin(),
+                                  updated.end(),
+                                  [&](const OvalAnchorMapping& mapping) { return mapping.name == trimmed_name; });
+    if (remove_it == updated.end()) {
         return false;
     }
-    updated.erase(erase_it, updated.end());
+
+    std::unordered_set<std::string> center_anchor_names;
+    auto append_center_name = [&](const std::string& source_name) {
+        const std::string center_name = oval_center_anchor_name(source_name);
+        if (!center_name.empty()) {
+            center_anchor_names.insert(center_name);
+        }
+    };
+    append_center_name(remove_it->name);
+    for (const auto& legacy_name : remove_it->legacy_names) {
+        append_center_name(legacy_name);
+    }
+
+    updated.erase(remove_it);
 
     const nlohmann::json after_payload = build_oval_anchor_mappings_payload(updated);
-    if (after_payload == before_payload) {
+    const bool oval_changed = (after_payload != before_payload);
+
+    bool center_anchor_changed = false;
+    if (!center_anchor_names.empty()) {
+        for (auto& [animation_id, animation] : animations) {
+            (void)animation_id;
+            for (std::size_t path_index = 0; path_index < animation.movement_path_count(); ++path_index) {
+                auto& path = animation.movement_path(path_index);
+                for (auto& frame : path) {
+                    if (remove_anchor_in_frame(frame.anchor_points, center_anchor_names)) {
+                        frame.rebuild_anchor_lookup();
+                        center_anchor_changed = true;
+                    }
+                }
+            }
+        }
+
+        if (!anims_json_.is_object()) {
+            anims_json_ = nlohmann::json::object();
+        }
+        if (!info_json_.is_object()) {
+            info_json_ = nlohmann::json::object();
+        }
+        if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
+            info_json_["animations"] = nlohmann::json::object();
+        }
+
+        for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+            if (!it.value().is_object()) {
+                continue;
+            }
+            auto anchor_points_it = it.value().find("anchor_points");
+            if (anchor_points_it == it.value().end() || !anchor_points_it->is_array()) {
+                continue;
+            }
+            for (auto& frame_anchors_json : *anchor_points_it) {
+                center_anchor_changed =
+                    remove_anchor_in_frame_json(frame_anchors_json, center_anchor_names) || center_anchor_changed;
+            }
+        }
+    }
+
+    if (!oval_changed && !center_anchor_changed) {
         return false;
     }
 
-    oval_anchor_mappings = std::move(updated);
-    sync_oval_anchor_mappings_info_json();
+    if (oval_changed) {
+        oval_anchor_mappings = std::move(updated);
+        sync_oval_anchor_mappings_info_json();
+    }
+    if (center_anchor_changed) {
+        info_json_["animations"] = anims_json_;
+    }
     return true;
 }
 

@@ -17,6 +17,10 @@ struct TrailGeometryReport {
     };
     std::vector<Point> centerline;
     std::vector<double> local_widths;
+    std::vector<double> left_half_widths;
+    std::vector<double> right_half_widths;
+    std::vector<Point> left_boundary;
+    std::vector<Point> right_boundary;
     size_t resampled_points = 0;
     size_t boundary_points = 0;
     size_t smoothing_passes = 0;
@@ -28,5 +32,7 @@ std::vector<SDL_Point> build_trail_polygon(const std::vector<SDL_Point>& base_ce
                                            int curvyness,
                                            std::mt19937& rng,
                                            TrailGeometryReport* report = nullptr);
+
+bool polygons_overlap_precise(const std::vector<SDL_Point>& a, const std::vector<SDL_Point>& b);
 
 }  // namespace trail_generation

@@ -15740,9 +15740,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            32,
             31,
             204,
+            31,
             255
           ],
           "edge_smoothness": 49,
@@ -15768,9 +15768,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
+            166,
             36,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 24,
@@ -16100,8 +16100,8 @@
           "inherits_map_assets": true,
           "is_boss": false,
           "is_spawn": false,
-          "max_height": 900,
-          "max_width": 900,
+          "max_height": 1313,
+          "max_width": 1313,
           "min_height": 600,
           "min_width": 600,
           "name": "NewTrail1",

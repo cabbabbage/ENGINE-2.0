@@ -151,7 +151,7 @@ void vibble_controller::on_update(const Input& input) {
     if (player) {
         if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
             const float dx = static_cast<float>(mouse_world->x - player->world_x());
-            const float dy = static_cast<float>(mouse_world->y - player->world_y());
+            const float dy = static_cast<float>(mouse_world->y - player->world_z());
             constexpr float kMinHeadingVectorLengthSq = 1e-4f;
             const float length_sq = dx * dx + dy * dy;
             if (length_sq > kMinHeadingVectorLengthSq) {

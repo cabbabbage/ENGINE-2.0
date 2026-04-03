@@ -1653,6 +1653,14 @@ void Asset::mark_anchors_dirty() {
             std::string{});
 }
 
+void Asset::invalidate_anchor_registry() {
+        anchors_initialized_ = false;
+        anchor_handles_.clear();
+        anchor_points_.clear();
+        anchor_name_to_index_.clear();
+        mark_anchors_dirty();
+}
+
 
 void Asset::assert_unique_anchor_names_for_frame() const {
 #if !defined(NDEBUG)

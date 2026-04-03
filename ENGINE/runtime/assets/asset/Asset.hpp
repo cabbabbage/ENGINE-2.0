@@ -468,6 +468,7 @@ class Asset {
     void refresh_anchor_point_cache_from_frame();
     void refresh_runtime_box_cache_from_frame();
     void mark_anchors_dirty();
+    void invalidate_anchor_registry();
     bool update_anchor_basis_if_needed();
     AnchorBasisSignature compute_anchor_basis_signature() const;
     void capture_anchor_basis_snapshot(const AnchorBasisSignature& signature);

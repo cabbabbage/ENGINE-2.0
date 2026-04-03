@@ -592,7 +592,7 @@ bool attempt_trail_connection(Room* a,
     return true;
 }
 
-}
+
 GenerateTrails::GenerateTrails(nlohmann::json& trail_data, std::vector<SDL_Color> reserved_colors)
 : rng_(std::random_device{}()),
 trails_data_(&trail_data),

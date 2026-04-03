@@ -21,6 +21,7 @@
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_movement_tools_panel.hpp"
+#include "devtools/room_oval_tools_panel.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_edit_transaction.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
@@ -64,6 +65,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <optional>
 #include <iostream>
@@ -90,6 +92,7 @@ constexpr float kShiftEdgePanThresholdFraction = 0.008f;
 constexpr float kShiftEdgePanExponent = 1.5f;
 constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr int kMovementPointPickRadiusPx = 16;
+constexpr int kOvalPointPickRadiusPx = 16;
 constexpr int kBoxCornerPickRadiusPx = 18;
 constexpr int kBoxRotationHandlePickRadiusPx = 16;
 constexpr float kBoxRotationHandleDistancePx = 26.0f;
@@ -269,6 +272,40 @@ float screen_angle_degrees(const SDL_FPoint& center, const SDL_Point& point) {
     const float dx = static_cast<float>(point.x) - center.x;
     const float dy = static_cast<float>(point.y) - center.y;
     return static_cast<float>(std::atan2(dy, dx) * (180.0 / kPi));
+}
+
+float normalize_oval_angle_degrees(float degrees) {
+    float normalized = std::fmod(degrees, 360.0f);
+    if (normalized < 0.0f) {
+        normalized += 360.0f;
+    }
+    if (normalized >= 360.0f) {
+        normalized -= 360.0f;
+    }
+    return normalized;
+}
+
+void recompute_oval_point_from_angle(AssetInfo::OvalAnchorPoint& point, float width_radius_x, float height_radius_z) {
+    point.angle_degrees = normalize_oval_angle_degrees(point.angle_degrees);
+    const float radians = point.angle_degrees * static_cast<float>(kPi / 180.0);
+    point.texture_x = static_cast<int>(std::lround(std::cos(radians) * width_radius_x));
+    point.texture_y = 0;
+    point.depth_offset = std::sin(radians) * height_radius_z;
+}
+
+std::string format_oval_point_label(float angle_degrees, int point_index) {
+    std::ostringstream oss;
+    oss << "#" << (point_index + 1) << " - " << static_cast<int>(std::lround(normalize_oval_angle_degrees(angle_degrees))) << " deg";
+    return oss.str();
+}
+
+bool is_oval_center_anchor_name(const std::string& anchor_name) {
+    constexpr const char* kOvalCenterSuffix = "_oval_center";
+    if (anchor_name.size() <= std::strlen(kOvalCenterSuffix)) {
+        return false;
+    }
+    const std::size_t suffix_pos = anchor_name.size() - std::strlen(kOvalCenterSuffix);
+    return anchor_name.compare(suffix_pos, std::strlen(kOvalCenterSuffix), kOvalCenterSuffix) == 0;
 }
 
 bool compute_rotation_handle_screen_for_volume(const Asset::RuntimeBoxVolume& volume,
@@ -2105,6 +2142,9 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
         if (anchor_mode_active()) {
             exit_anchor_edit_mode(true);
         }
+        if (oval_mode_active()) {
+            exit_oval_anchor_edit_mode(true);
+        }
         if (movement_mode_active()) {
             exit_movement_edit_mode(true);
         }
@@ -2191,6 +2231,7 @@ void RoomEditor::update(const Input& input) {
     validate_focus_state();
 
     validate_anchor_edit_target();
+    validate_oval_edit_target();
     validate_movement_edit_target();
     validate_hitbox_edit_target();
     validate_attack_box_edit_target();
@@ -2383,6 +2424,10 @@ if (auto selected = library_ui_->consume_selection()) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active());
         anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
+    }
+    if (oval_tools_panel_) {
+        oval_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        oval_tools_panel_->set_visible(oval_mode_active());
     }
     update_anchor_candidate_editor_search(input);
     if (movement_tools_panel_) {
@@ -2632,6 +2677,23 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         return result;
     };
 
+    auto route_oval_ui = [&]() -> RouteResult {
+        RouteResult result;
+        if (!enabled_) {
+            return result;
+        }
+        ensure_oval_editor_widgets();
+        if (oval_tools_panel_ && oval_tools_panel_->is_visible()) {
+            if (oval_tools_panel_->handle_event(event)) {
+                result.handled = true;
+                result.pointer_blocked = true;
+            } else if (pointer_based && oval_tools_panel_->is_point_inside(mx, my)) {
+                result.pointer_blocked = true;
+            }
+        }
+        return result;
+    };
+
     auto route_hitbox_ui = [&]() -> RouteResult {
         RouteResult result;
         if (!enabled_) {
@@ -2681,6 +2743,9 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     if (apply_result(route_anchor_ui(), pointer_blocked)) {
         return true;
     }
+    if (apply_result(route_oval_ui(), pointer_blocked)) {
+        return true;
+    }
     if (apply_result(route_movement_ui(), pointer_blocked)) {
         return true;
     }
@@ -2720,6 +2785,9 @@ bool RoomEditor::is_room_panel_blocking_point(int x, int y) const {
     if (is_anchor_ui_blocking_point(x, y)) {
         return true;
     }
+    if (is_oval_ui_blocking_point(x, y)) {
+        return true;
+    }
     if (is_movement_ui_blocking_point(x, y)) {
         return true;
     }
@@ -2754,6 +2822,9 @@ bool RoomEditor::is_room_ui_blocking_point(int x, int y) const {
     }
 
     if (is_anchor_ui_blocking_point(x, y)) {
+        return true;
+    }
+    if (is_oval_ui_blocking_point(x, y)) {
         return true;
     }
     if (is_movement_ui_blocking_point(x, y)) {
@@ -3784,6 +3855,81 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
+        if (!suppress_asset_info_overlays && oval_mode_active()) {
+            refresh_oval_mode_handles();
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+            if (oval_edit_.has_center_screen_px) {
+                const int cx = static_cast<int>(std::lround(oval_edit_.center_screen_px.x));
+                const int cy = static_cast<int>(std::lround(oval_edit_.center_screen_px.y));
+                SDL_SetRenderDrawColor(renderer, 250, 205, 90, 220);
+                SDL_RenderLine(renderer, cx - 8, cy, cx + 8, cy);
+                SDL_RenderLine(renderer, cx, cy - 8, cx, cy + 8);
+            }
+
+            std::vector<const OvalPointHandleSample*> sorted_handles;
+            sorted_handles.reserve(oval_edit_.handles.size());
+            for (const auto& handle : oval_edit_.handles) {
+                if (handle.has_final_screen_px) {
+                    sorted_handles.push_back(&handle);
+                }
+            }
+            std::sort(sorted_handles.begin(),
+                      sorted_handles.end(),
+                      [](const OvalPointHandleSample* lhs, const OvalPointHandleSample* rhs) {
+                          return normalize_oval_angle_degrees(lhs->angle_degrees) <
+                                 normalize_oval_angle_degrees(rhs->angle_degrees);
+                      });
+
+            if (sorted_handles.size() >= 2) {
+                SDL_SetRenderDrawColor(renderer, 96, 192, 255, 220);
+                for (std::size_t i = 0; i < sorted_handles.size(); ++i) {
+                    const auto* a = sorted_handles[i];
+                    const auto* b = sorted_handles[(i + 1) % sorted_handles.size()];
+                    SDL_RenderLine(renderer,
+                                   static_cast<int>(std::lround(a->final_screen_px.x)),
+                                   static_cast<int>(std::lround(a->final_screen_px.y)),
+                                   static_cast<int>(std::lround(b->final_screen_px.x)),
+                                   static_cast<int>(std::lround(b->final_screen_px.y)));
+                }
+            }
+
+            for (const auto& handle : oval_edit_.handles) {
+                if (!handle.has_final_screen_px) {
+                    continue;
+                }
+                const bool selected = (handle.point_index == oval_edit_.selected_point_index);
+                const bool hovered = (handle.point_index == oval_edit_.hovered_point_index);
+                if (oval_edit_.has_center_screen_px) {
+                    SDL_SetRenderDrawColor(renderer, 80, 170, 255, 170);
+                    SDL_RenderLine(renderer,
+                                   static_cast<int>(std::lround(oval_edit_.center_screen_px.x)),
+                                   static_cast<int>(std::lround(oval_edit_.center_screen_px.y)),
+                                   static_cast<int>(std::lround(handle.final_screen_px.x)),
+                                   static_cast<int>(std::lround(handle.final_screen_px.y)));
+                }
+                const int cx = static_cast<int>(std::lround(handle.final_screen_px.x));
+                const int cy = static_cast<int>(std::lround(handle.final_screen_px.y));
+                const int radius = selected ? 6 : 5;
+                SDL_Color color{255, 165, 0, 235};
+                if (selected) {
+                    color = SDL_Color{255, 255, 255, 255};
+                } else if (hovered) {
+                    color = SDL_Color{255, 220, 120, 255};
+                }
+                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+                SDL_Rect point_rect{cx - radius, cy - radius, radius * 2 + 1, radius * 2 + 1};
+                sdl_render::FillRect(renderer, &point_rect);
+                SDL_SetRenderDrawColor(renderer, 24, 24, 24, 240);
+                sdl_render::Rect(renderer, &point_rect);
+                if (hovered || selected) {
+                    SDL_Rect outline{point_rect.x - 1, point_rect.y - 1, point_rect.w + 2, point_rect.h + 2};
+                    SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
+                    sdl_render::Rect(renderer, &outline);
+                }
+            }
+        }
+
         if (movement_mode_active()) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const int count = static_cast<int>(movement_edit_.rel_positions.size());
@@ -4175,6 +4321,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             anchor_tools_panel_->render(renderer);
         }
         render_anchor_candidate_editor(renderer);
+        if (oval_mode_active() && oval_tools_panel_ && oval_tools_panel_->is_visible()) {
+            oval_tools_panel_->render(renderer);
+        }
         if (movement_mode_active() && movement_tools_panel_ && movement_tools_panel_->is_visible()) {
             movement_tools_panel_->render(renderer);
         }
@@ -4237,6 +4386,9 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
     if (anchor_mode_active()) {
         exit_anchor_edit_mode(true);
     }
+    if (oval_mode_active()) {
+        exit_oval_anchor_edit_mode(true);
+    }
     if (movement_mode_active()) {
         exit_movement_edit_mode(true);
     }
@@ -4279,6 +4431,7 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
     asset_editor_transition_.active = false;
     editor_mode_ = EditorMode::Normal;
     anchor_edit_ = AnchorEditState{};
+    oval_edit_ = OvalAnchorEditState{};
     movement_edit_ = MovementEditState{};
     hitbox_edit_ = BoxEditState{};
     attack_box_edit_ = BoxEditState{};
@@ -4330,6 +4483,9 @@ void RoomEditor::set_save_manager(devmode::core::SaveManager* manager) {
 void RoomEditor::close_asset_info_editor() {
     if (anchor_mode_active()) {
         exit_anchor_edit_mode(true);
+    }
+    if (oval_mode_active()) {
+        exit_oval_anchor_edit_mode(true);
     }
     if (movement_mode_active()) {
         exit_movement_edit_mode(true);
@@ -4676,6 +4832,9 @@ void RoomEditor::purge_asset(Asset* asset) {
     if (!asset) return;
     if (anchor_mode_active() && anchor_edit_.target_asset == asset) {
         exit_anchor_edit_mode(true);
+    }
+    if (oval_mode_active() && oval_edit_.target_asset == asset) {
+        exit_oval_anchor_edit_mode(true);
     }
     if (movement_mode_active() && movement_edit_.target_asset == asset) {
         exit_movement_edit_mode(true);
@@ -5134,7 +5293,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     if (!input_) return;
 
     const bool editor_mode_active =
-        hitbox_mode_active() || attack_box_mode_active() || movement_mode_active() || anchor_mode_active();
+        hitbox_mode_active() || attack_box_mode_active() || movement_mode_active() || oval_mode_active() || anchor_mode_active();
     if (editor_mode_active) {
         if (hitbox_mode_active()) {
             handle_hitbox_mode_mouse_input(input);
@@ -5142,6 +5301,8 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             handle_attack_box_mode_mouse_input(input);
         } else if (movement_mode_active()) {
             handle_movement_mode_mouse_input(input);
+        } else if (oval_mode_active()) {
+            handle_oval_mode_mouse_input(input);
         } else if (anchor_mode_active()) {
             handle_anchor_mode_mouse_input(input);
         }
@@ -5162,6 +5323,8 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
         if (anchor_mode_active()) {
             pointer_blocks_pan = pointer_blocks_pan || is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y);
+        } else if (oval_mode_active()) {
+            pointer_blocks_pan = pointer_blocks_pan || is_oval_ui_blocking_point(screen_pt.x, screen_pt.y);
         } else if (movement_mode_active()) {
             pointer_blocks_pan = pointer_blocks_pan || is_movement_ui_blocking_point(screen_pt.x, screen_pt.y);
         } else if (hitbox_mode_active()) {
@@ -6868,6 +7031,10 @@ bool RoomEditor::anchor_mode_active() const {
     return editor_mode_ == EditorMode::AnchorEdit;
 }
 
+bool RoomEditor::oval_mode_active() const {
+    return editor_mode_ == EditorMode::OvalAnchorEdit;
+}
+
 bool RoomEditor::movement_mode_active() const {
     return editor_mode_ == EditorMode::MovementEdit;
 }
@@ -6885,7 +7052,7 @@ bool RoomEditor::is_anchor_edit_mode_active() const {
 }
 
 bool RoomEditor::is_asset_stack_editor_active() const {
-    return anchor_mode_active() || movement_mode_active() || hitbox_mode_active() || attack_box_mode_active();
+    return anchor_mode_active() || oval_mode_active() || movement_mode_active() || hitbox_mode_active() || attack_box_mode_active();
 }
 
 Asset* RoomEditor::selected_anchor_mode_asset() const {
@@ -6964,6 +7131,68 @@ void RoomEditor::ensure_anchor_editor_widgets() {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active());
         anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
+    }
+}
+
+void RoomEditor::ensure_oval_editor_widgets() {
+    if (!oval_tools_panel_) {
+        oval_tools_panel_ = std::make_unique<RoomOvalToolsPanel>();
+        oval_tools_panel_->set_on_select_oval([this](int index) {
+            oval_edit_.selected_oval_index = index;
+            oval_edit_.selected_point_index = -1;
+            oval_edit_.hovered_point_index = -1;
+            oval_edit_.dragging_point_index = -1;
+            oval_edit_.dragging_point = false;
+            refresh_oval_mode_handles();
+            sync_oval_tools_panel();
+        });
+        oval_tools_panel_->set_on_add_oval([this]() {
+            add_oval_mapping();
+        });
+        oval_tools_panel_->set_on_delete_oval([this]() {
+            delete_selected_oval_mapping();
+        });
+        oval_tools_panel_->set_on_apply_oval_properties([this](const RoomOvalToolsPanel::OvalProperties& properties) {
+            apply_selected_oval_properties(properties);
+        });
+        oval_tools_panel_->set_on_jump_to_center_anchor([this]() {
+            if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+                return;
+            }
+            const auto& mappings = oval_edit_.target_asset->info->oval_anchor_mappings;
+            if (oval_edit_.selected_oval_index < 0 ||
+                oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+                return;
+            }
+            const std::string center_anchor_name =
+                AssetInfo::oval_center_anchor_name_for_mapping(mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)].name);
+            set_asset_editor_subview(AssetEditorSubview::Anchor, true);
+            anchor_edit_.selected_anchor_name = center_anchor_name;
+            anchor_edit_.point_selected = !center_anchor_name.empty();
+            sync_anchor_tools_panel();
+            refresh_anchor_mode_handles();
+        });
+        oval_tools_panel_->set_on_select_point([this](int index) {
+            oval_edit_.selected_point_index = index;
+            oval_edit_.hovered_point_index = -1;
+            oval_edit_.dragging_point_index = -1;
+            oval_edit_.dragging_point = false;
+            sync_oval_tools_panel();
+        });
+        oval_tools_panel_->set_on_add_point([this]() {
+            add_oval_point();
+        });
+        oval_tools_panel_->set_on_delete_point([this]() {
+            delete_selected_oval_point();
+        });
+        oval_tools_panel_->set_on_apply_point_details([this](const RoomOvalToolsPanel::PointDetailValues& values) {
+            apply_selected_oval_point_details(values);
+        });
+    }
+
+    if (oval_tools_panel_) {
+        oval_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        oval_tools_panel_->set_visible(oval_mode_active());
     }
 }
 
@@ -7667,7 +7896,8 @@ RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditor
     switch (subview) {
         case AssetEditorSubview::AssetInfo: return AssetEditorSubview::AnimationEditor;
         case AssetEditorSubview::AnimationEditor: return AssetEditorSubview::Anchor;
-        case AssetEditorSubview::Anchor: return AssetEditorSubview::Movement;
+        case AssetEditorSubview::Anchor: return AssetEditorSubview::OvalAnchor;
+        case AssetEditorSubview::OvalAnchor: return AssetEditorSubview::Movement;
         case AssetEditorSubview::Movement: return AssetEditorSubview::Hitbox;
         case AssetEditorSubview::Hitbox: return AssetEditorSubview::AttackBox;
         case AssetEditorSubview::AttackBox: return AssetEditorSubview::AssetInfo;
@@ -7692,6 +7922,9 @@ bool RoomEditor::can_enter_asset_editor_subview(AssetEditorSubview subview) cons
     if (subview == AssetEditorSubview::Anchor) {
         return !selection.navigable_animation_ids.empty();
     }
+    if (subview == AssetEditorSubview::OvalAnchor) {
+        return selection.has_selection();
+    }
     return selection.has_selection();
 }
 
@@ -7701,7 +7934,7 @@ void RoomEditor::cycle_asset_editor_subview() {
     }
 
     AssetEditorSubview candidate = asset_editor_subview_;
-    constexpr int kAssetEditorSubviewCount = 6;
+    constexpr int kAssetEditorSubviewCount = 7;
     for (int i = 0; i < kAssetEditorSubviewCount; ++i) {
         candidate = next_asset_editor_subview(candidate);
         if (!can_enter_asset_editor_subview(candidate)) {
@@ -7750,6 +7983,9 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
     if (previous == AssetEditorSubview::Anchor && subview != AssetEditorSubview::Anchor) {
         exit_anchor_edit_mode(true);
     }
+    if (previous == AssetEditorSubview::OvalAnchor && subview != AssetEditorSubview::OvalAnchor) {
+        exit_oval_anchor_edit_mode(true);
+    }
     if (previous == AssetEditorSubview::Movement && subview != AssetEditorSubview::Movement) {
         exit_movement_edit_mode(true);
     }
@@ -7770,6 +8006,10 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
         }
     } else if (subview == AssetEditorSubview::Anchor) {
         if (!enter_anchor_edit_mode()) {
+            enter_success = false;
+        }
+    } else if (subview == AssetEditorSubview::OvalAnchor) {
+        if (!enter_oval_anchor_edit_mode()) {
             enter_success = false;
         }
     } else if (subview == AssetEditorSubview::Movement) {
@@ -7800,6 +8040,8 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
             active_modal_ = ActiveModal::AssetInfo;
         } else if (previous == AssetEditorSubview::Anchor) {
             (void)enter_anchor_edit_mode();
+        } else if (previous == AssetEditorSubview::OvalAnchor) {
+            (void)enter_oval_anchor_edit_mode();
         } else if (previous == AssetEditorSubview::Movement) {
             (void)enter_movement_edit_mode();
         } else if (previous == AssetEditorSubview::Hitbox) {
@@ -7942,6 +8184,7 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     }
 
     ensure_anchor_editor_widgets();
+    ensure_oval_editor_widgets();
     ensure_movement_editor_widgets();
     ensure_hitbox_editor_widgets();
     ensure_attack_box_editor_widgets();
@@ -7950,6 +8193,13 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
             anchor_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Anchor, left_panel_rect));
         } else {
             anchor_tools_panel_->clear_panel_bounds_override();
+        }
+    }
+    if (oval_tools_panel_) {
+        if (oval_mode_active() || asset_editor_transition_.active) {
+            oval_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::OvalAnchor, left_panel_rect));
+        } else {
+            oval_tools_panel_->clear_panel_bounds_override();
         }
     }
     if (movement_tools_panel_) {
@@ -7977,6 +8227,7 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
 
 void RoomEditor::update_asset_editor_layout() {
     ensure_anchor_editor_widgets();
+    ensure_oval_editor_widgets();
     ensure_movement_editor_widgets();
     ensure_hitbox_editor_widgets();
     ensure_attack_box_editor_widgets();
@@ -8012,6 +8263,22 @@ void RoomEditor::update_asset_editor_layout() {
             on_down = [this]() { navigate_anchor_animation(1); };
             on_left = [this]() { navigate_anchor_frame(-1); };
             on_right = [this]() { navigate_anchor_frame(1); };
+        } else if (oval_mode_active() && oval_edit_.target_asset && oval_edit_.target_asset->info) {
+            const std::string animation_label =
+                oval_edit_.animation_id.empty() ? std::string("No Animation") : oval_edit_.animation_id;
+            std::string frame_label = "Frame";
+            auto anim_it = oval_edit_.target_asset->info->animations.find(oval_edit_.animation_id);
+            if (anim_it != oval_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
+                const int total_frames = static_cast<int>(anim_it->second.frame_count());
+                const int shown_frame =
+                    devmode::room_anchor_mode::wrap_index(oval_edit_.frame_index, total_frames) + 1;
+                frame_label = std::to_string(shown_frame) + " / " + std::to_string(total_frames);
+            }
+            center_value = animation_label + " | " + frame_label;
+            on_up = [this]() { navigate_oval_animation(-1); };
+            on_down = [this]() { navigate_oval_animation(1); };
+            on_left = [this]() { navigate_oval_frame(-1); };
+            on_right = [this]() { navigate_oval_frame(1); };
         } else if (movement_mode_active() && movement_edit_.target_asset && movement_edit_.target_asset->info) {
             const std::string animation_label =
                 movement_edit_.animation_id.empty() ? std::string("No Animation") : movement_edit_.animation_id;
@@ -8108,6 +8375,10 @@ void RoomEditor::update_asset_editor_layout() {
         anchor_tools_panel_->set_visible(anchor_mode_active());
         anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
+    if (oval_tools_panel_) {
+        oval_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        oval_tools_panel_->set_visible(oval_mode_active());
+    }
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         movement_tools_panel_->set_visible(movement_mode_active());
@@ -8196,6 +8467,70 @@ bool RoomEditor::apply_anchor_animation_and_frame(const std::string& animation_i
     return true;
 }
 
+std::vector<std::string> RoomEditor::oval_mode_animation_names() const {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return {};
+    }
+    return resolve_file_sourced_animation_selection_for_target(oval_edit_.target_asset,
+                                                               oval_edit_.animation_id).navigable_animation_ids;
+}
+
+int RoomEditor::resolve_oval_mode_frame_index() const {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return 0;
+    }
+    auto anim_it = oval_edit_.target_asset->info->animations.find(oval_edit_.animation_id);
+    if (anim_it == oval_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
+        return 0;
+    }
+    for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+        if (anim_it->second.primary_frame_at(i) == oval_edit_.target_asset->current_frame) {
+            return static_cast<int>(i);
+        }
+    }
+    return devmode::room_anchor_mode::wrap_index(oval_edit_.frame_index,
+                                                  static_cast<int>(anim_it->second.frame_count()));
+}
+
+bool RoomEditor::apply_oval_animation_and_frame(const std::string& animation_id, int frame_index) {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = oval_edit_.target_asset;
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, animation_id);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto anim_it = target->info->animations.find(selection.resolved_animation_id);
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
+        return false;
+    }
+
+    const int resolved_index =
+        devmode::room_anchor_mode::wrap_index(frame_index, static_cast<int>(anim_it->second.frame_count()));
+
+    target->set_current_animation(selection.resolved_animation_id);
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(resolved_index));
+    if (!frame) {
+        return false;
+    }
+
+    target->current_frame = frame;
+    target->set_frame_progress(0.0f);
+    target->static_frame = true;
+    target->refresh_frame_texture_bindings();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    oval_edit_.animation_id = selection.resolved_animation_id;
+    oval_edit_.frame_index = resolved_index;
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return true;
+}
+
 void RoomEditor::ensure_anchor_selection_valid() {
     if (!anchor_mode_active()) {
         return;
@@ -8281,6 +8616,196 @@ void RoomEditor::sync_anchor_tools_panel() {
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
     }
     sync_anchor_candidate_editor();
+}
+
+void RoomEditor::refresh_oval_mode_handles() {
+    oval_edit_.handles.clear();
+    oval_edit_.center_screen_px = SDL_FPoint{0.0f, 0.0f};
+    oval_edit_.has_center_screen_px = false;
+
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info || !assets_) {
+        return;
+    }
+    Asset* target = oval_edit_.target_asset;
+    const auto& mappings = target->info->oval_anchor_mappings;
+    if (oval_edit_.selected_oval_index < 0 ||
+        oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        return;
+    }
+    const auto& mapping = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+    if (mapping.points.empty()) {
+        return;
+    }
+
+    const std::string center_anchor_name = AssetInfo::oval_center_anchor_name_for_mapping(mapping.name);
+    const auto center_anchor_state = target->anchor_state(center_anchor_name,
+                                                          anchor_points::GridMaterialization::None,
+                                                          Asset::AnchorResolveMode::ForceRecompute);
+
+    const SDL_Point origin_world = target->world_xy_point();
+    const float fallback_world_z = static_cast<float>(target->world_z()) + target->world_z_offset();
+    const int fallback_layer = target->grid_point() ? target->grid_point()->resolution_layer() : target->grid_resolution;
+    const auto perspective_sample = target->runtime_perspective_sample();
+    const bool fallback_has_flat_perspective =
+        std::isfinite(perspective_sample.scale) && perspective_sample.scale > 0.0f;
+    const float fallback_flat_perspective =
+        fallback_has_flat_perspective ? std::max(0.0001f, perspective_sample.scale) : 1.0f;
+
+    const bool center_exists = center_anchor_state.has_value() && center_anchor_state->exists;
+    const float center_x = center_exists ? center_anchor_state->world_exact_pos_2d.x : static_cast<float>(origin_world.x);
+    const float center_y = center_exists ? center_anchor_state->world_exact_pos_2d.y : static_cast<float>(origin_world.y);
+    const float center_z = center_exists ? center_anchor_state->world_exact_z : fallback_world_z;
+    const int center_layer = center_exists ? center_anchor_state->resolution_layer : fallback_layer;
+    const float center_flat_perspective = center_exists ? center_anchor_state->flat_perspective_scale : fallback_flat_perspective;
+    const bool center_has_flat_perspective = center_exists ? center_anchor_state->has_flat_perspective_scale : fallback_has_flat_perspective;
+
+    SDL_FPoint center_screen{};
+    if (assets_->getView().project_world_point(SDL_FPoint{center_x, center_y}, center_z, center_screen)) {
+        oval_edit_.center_screen_px = center_screen;
+        oval_edit_.has_center_screen_px = std::isfinite(center_screen.x) && std::isfinite(center_screen.y);
+    }
+
+    oval_edit_.handles.reserve(mapping.points.size());
+    for (std::size_t point_index = 0; point_index < mapping.points.size(); ++point_index) {
+        const auto& point = mapping.points[point_index];
+        const float flat_x = center_x + static_cast<float>(point.texture_x);
+        const float flat_y = center_y + static_cast<float>(point.texture_y);
+        const float flat_z = center_z;
+        anchor_points::AnchorWorldPoint3 flat_point{flat_x, flat_y, flat_z, true};
+        anchor_points::AnchorWorldPoint3 final_point = flat_point;
+        if (!anchor_points::displace_along_camera_to_point_ray(*target,
+                                                               flat_point,
+                                                               point.depth_offset,
+                                                               final_point)) {
+            final_point = flat_point;
+        }
+        if (!point.resolve_x && flat_point.valid && final_point.valid) {
+            final_point.x = flat_point.x;
+            final_point.y = flat_point.y;
+            final_point.valid = std::isfinite(final_point.x) &&
+                                std::isfinite(final_point.y) &&
+                                std::isfinite(final_point.z);
+        }
+        if (!final_point.valid) {
+            final_point = flat_point;
+        }
+
+        SDL_FPoint flat_screen{};
+        bool has_flat_screen =
+            assets_->getView().project_world_point(SDL_FPoint{flat_point.x, flat_point.y}, flat_point.z, flat_screen) &&
+            std::isfinite(flat_screen.x) &&
+            std::isfinite(flat_screen.y);
+
+        SDL_FPoint final_screen{};
+        bool has_final_screen =
+            assets_->getView().project_world_point(SDL_FPoint{final_point.x, final_point.y}, final_point.z, final_screen) &&
+            std::isfinite(final_screen.x) &&
+            std::isfinite(final_screen.y);
+
+        OvalPointHandleSample handle{};
+        handle.point_index = static_cast<int>(point_index);
+        handle.angle_degrees = point.angle_degrees;
+        handle.flat_screen_px = flat_screen;
+        handle.has_flat_screen_px = has_flat_screen;
+        handle.final_screen_px = has_final_screen ? final_screen : flat_screen;
+        handle.has_final_screen_px = has_final_screen || has_flat_screen;
+        oval_edit_.handles.push_back(handle);
+    }
+
+    (void)center_layer;
+    (void)center_flat_perspective;
+    (void)center_has_flat_perspective;
+}
+
+void RoomEditor::sync_oval_tools_panel() {
+    ensure_oval_editor_widgets();
+    if (!oval_tools_panel_) {
+        return;
+    }
+
+    if (!oval_mode_active()) {
+        oval_tools_panel_->set_visible(false);
+        oval_tools_panel_->set_oval_names({});
+        oval_tools_panel_->set_selected_oval_index(-1);
+        oval_tools_panel_->set_point_names({});
+        oval_tools_panel_->set_selected_point_index(-1);
+        oval_tools_panel_->set_center_anchor_status({}, false);
+        return;
+    }
+
+    oval_tools_panel_->set_visible(true);
+    std::vector<std::string> oval_names;
+    if (!oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        oval_tools_panel_->set_oval_names({});
+        oval_tools_panel_->set_selected_oval_index(-1);
+        oval_tools_panel_->set_point_names({});
+        oval_tools_panel_->set_selected_point_index(-1);
+        return;
+    }
+
+    auto& mappings = oval_edit_.target_asset->info->oval_anchor_mappings;
+    oval_names.reserve(mappings.size());
+    for (const auto& mapping : mappings) {
+        oval_names.push_back(mapping.name);
+    }
+    oval_tools_panel_->set_oval_names(oval_names);
+
+    if (oval_edit_.selected_oval_index < 0 && !mappings.empty()) {
+        oval_edit_.selected_oval_index = 0;
+    }
+    if (oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        oval_edit_.selected_oval_index = mappings.empty() ? -1 : static_cast<int>(mappings.size()) - 1;
+    }
+    oval_tools_panel_->set_selected_oval_index(oval_edit_.selected_oval_index);
+
+    std::vector<std::string> point_names;
+    if (oval_edit_.selected_oval_index >= 0 &&
+        oval_edit_.selected_oval_index < static_cast<int>(mappings.size())) {
+        const auto& mapping = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+        RoomOvalToolsPanel::OvalProperties properties{};
+        properties.name = mapping.name;
+        properties.width_radius_x = mapping.width_radius_x;
+        properties.height_radius_z = mapping.height_radius_z;
+        properties.asset_name = mapping.asset_name;
+        oval_tools_panel_->set_oval_properties(properties);
+
+        const std::string center_anchor_name = AssetInfo::oval_center_anchor_name_for_mapping(mapping.name);
+        const bool center_present =
+            oval_edit_.target_asset->current_frame && oval_edit_.target_asset->current_frame->find_anchor(center_anchor_name);
+        oval_tools_panel_->set_center_anchor_status(center_anchor_name, center_present);
+
+        point_names.reserve(mapping.points.size());
+        for (std::size_t i = 0; i < mapping.points.size(); ++i) {
+            point_names.push_back(format_oval_point_label(mapping.points[i].angle_degrees, static_cast<int>(i)));
+        }
+
+        if (oval_edit_.selected_point_index < 0 && !mapping.points.empty()) {
+            oval_edit_.selected_point_index = 0;
+        }
+        if (oval_edit_.selected_point_index >= static_cast<int>(mapping.points.size())) {
+            oval_edit_.selected_point_index = mapping.points.empty() ? -1 : static_cast<int>(mapping.points.size()) - 1;
+        }
+        oval_tools_panel_->set_point_names(point_names);
+        oval_tools_panel_->set_selected_point_index(oval_edit_.selected_point_index);
+
+        if (oval_edit_.selected_point_index >= 0 &&
+            oval_edit_.selected_point_index < static_cast<int>(mapping.points.size())) {
+            const auto& point = mapping.points[static_cast<std::size_t>(oval_edit_.selected_point_index)];
+            RoomOvalToolsPanel::PointDetailValues values{};
+            values.rotation_degrees = point.rotation_degrees;
+            values.hidden = point.hidden;
+            values.resolve_x = point.resolve_x;
+            values.flip_horizontal = point.flip_horizontal;
+            values.flip_vertical = point.flip_vertical;
+            values.scaling_method = point.scaling_method;
+            oval_tools_panel_->set_point_detail_values(values);
+        }
+    } else {
+        oval_edit_.selected_point_index = -1;
+        oval_tools_panel_->set_center_anchor_status({}, false);
+        oval_tools_panel_->set_point_names({});
+        oval_tools_panel_->set_selected_point_index(-1);
+    }
 }
 
 std::vector<std::string> RoomEditor::canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const {
@@ -9781,6 +10306,34 @@ bool RoomEditor::add_anchor_in_current_frame() {
     return true;
 }
 
+bool RoomEditor::selected_anchor_is_oval_center() const {
+    if (!anchor_mode_active() ||
+        anchor_edit_.selected_anchor_name.empty() ||
+        !anchor_edit_.target_asset ||
+        !anchor_edit_.target_asset->info) {
+        return false;
+    }
+    const std::string& selected_name = anchor_edit_.selected_anchor_name;
+    if (!is_oval_center_anchor_name(selected_name)) {
+        return false;
+    }
+    const auto& mappings = anchor_edit_.target_asset->info->oval_anchor_mappings;
+    for (const auto& mapping : mappings) {
+        if (!mapping.valid()) {
+            continue;
+        }
+        if (selected_name == AssetInfo::oval_center_anchor_name_for_mapping(mapping.name)) {
+            return true;
+        }
+        for (const auto& legacy_name : mapping.legacy_names) {
+            if (selected_name == AssetInfo::oval_center_anchor_name_for_mapping(legacy_name)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desired_name) {
     if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
@@ -9789,6 +10342,13 @@ bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desi
     Asset* target = anchor_edit_.target_asset;
     std::shared_ptr<AssetInfo> target_info = target->info;
     const std::string old_name = anchor_edit_.selected_anchor_name;
+    if (selected_anchor_is_oval_center()) {
+        show_notice("Oval center anchors are managed by Oval Anchor mode. Rename the oval object instead.");
+        if (anchor_tools_panel_) {
+            anchor_tools_panel_->set_rename_text(old_name);
+        }
+        return false;
+    }
     bool normalized_any = false;
     if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
         return false;
@@ -9919,6 +10479,10 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
     Asset* target = anchor_edit_.target_asset;
     std::shared_ptr<AssetInfo> target_info = target->info;
     const std::string deleted_name = anchor_edit_.selected_anchor_name;
+    if (selected_anchor_is_oval_center()) {
+        show_notice("Oval center anchors are managed by Oval Anchor mode. Delete the oval object instead.");
+        return false;
+    }
     const bool closing_open_candidate_editor =
         anchor_candidate_editor_.open && anchor_candidate_editor_.anchor_name == deleted_name;
     bool normalized_any = false;
@@ -10005,6 +10569,501 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
         return false;
     }
     anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, deleted_name);
+    return true;
+}
+
+bool RoomEditor::persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority priority,
+                                       bool flush_now,
+                                       const char* reason,
+                                       const char* flush_tag) {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = oval_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    target->refresh_frame_texture_bindings();
+    target->mark_anchors_dirty();
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    target_info->mark_dirty();
+    nlohmann::json manifest_payload = target_info->manifest_payload();
+    if (save_coordinator_ && manifest_store_) {
+        save_coordinator_->enqueue_manifest_asset(
+            target_info->name,
+            std::move(manifest_payload),
+            priority,
+            reason ? reason : "Oval Anchor Edit",
+            [assets = assets_, target_info]() {
+                devmode::refresh_loaded_animation_instances(assets, target_info);
+            });
+        if (flush_now) {
+            save_coordinator_->flush_now(flush_tag ? flush_tag : "room-oval-anchor");
+            oval_edit_.dirty_since_last_flush = false;
+        } else {
+            oval_edit_.dirty_since_last_flush = true;
+        }
+        return true;
+    }
+
+    if (manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = std::move(manifest_payload);
+        if (!session.commit()) {
+            return false;
+        }
+        devmode::refresh_loaded_animation_instances(assets_, target_info);
+        oval_edit_.dirty_since_last_flush = false;
+        return true;
+    }
+    return false;
+}
+
+bool RoomEditor::add_oval_mapping() {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+    Asset* target = oval_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+
+    std::unordered_set<std::string> existing_names;
+    for (const auto& mapping : target_info->oval_anchor_mappings) {
+        if (mapping.valid()) {
+            existing_names.insert(mapping.name);
+        }
+    }
+    std::string name = "oval";
+    int suffix = 1;
+    while (existing_names.find(name) != existing_names.end()) {
+        name = "oval_" + std::to_string(++suffix);
+    }
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = name;
+    mapping.asset_name = target_info->name;
+    mapping.width_radius_x = 48.0f;
+    mapping.height_radius_z = 24.0f;
+    mapping.points.reserve(8);
+    for (int i = 0; i < 8; ++i) {
+        AssetInfo::OvalAnchorPoint point{};
+        point.angle_degrees = static_cast<float>(i) * 45.0f;
+        point.flip_horizontal = true;
+        point.flip_vertical = true;
+        point.rotation_degrees = 0.0f;
+        point.hidden = false;
+        point.resolve_x = true;
+        point.scaling_method = AnchorScalingMethod::Parent;
+        recompute_oval_point_from_angle(point, mapping.width_radius_x, mapping.height_radius_z);
+        mapping.points.push_back(point);
+    }
+
+    if (!target_info->upsert_oval_anchor_mapping(mapping)) {
+        return false;
+    }
+    target->invalidate_anchor_registry();
+
+    int new_index = -1;
+    for (std::size_t i = 0; i < target_info->oval_anchor_mappings.size(); ++i) {
+        if (target_info->oval_anchor_mappings[i].name == mapping.name) {
+            new_index = static_cast<int>(i);
+            break;
+        }
+    }
+    oval_edit_.selected_oval_index = new_index;
+    oval_edit_.selected_point_index = 0;
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Oval Mapping Add",
+                                 "room-oval-mapping-add");
+}
+
+bool RoomEditor::delete_selected_oval_mapping() {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+    Asset* target = oval_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    auto& mappings = target_info->oval_anchor_mappings;
+    if (oval_edit_.selected_oval_index < 0 ||
+        oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        return false;
+    }
+
+    const std::string mapping_name = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)].name;
+    if (!target_info->remove_oval_anchor_mapping(mapping_name)) {
+        return false;
+    }
+    target->invalidate_anchor_registry();
+
+    const int mapping_count = static_cast<int>(target_info->oval_anchor_mappings.size());
+    if (mapping_count <= 0) {
+        oval_edit_.selected_oval_index = -1;
+        oval_edit_.selected_point_index = -1;
+    } else if (oval_edit_.selected_oval_index >= mapping_count) {
+        oval_edit_.selected_oval_index = mapping_count - 1;
+        oval_edit_.selected_point_index = -1;
+    }
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Oval Mapping Delete",
+                                 "room-oval-mapping-delete");
+}
+
+bool RoomEditor::apply_selected_oval_properties(const RoomOvalToolsPanel::OvalProperties& properties) {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+    Asset* target = oval_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    auto& mappings = target_info->oval_anchor_mappings;
+    if (oval_edit_.selected_oval_index < 0 ||
+        oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        return false;
+    }
+
+    const AssetInfo::OvalAnchorMapping current_mapping = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+    const std::string old_name = current_mapping.name;
+    std::string new_name = vibble::strings::trim_copy(properties.name);
+    if (new_name.empty()) {
+        new_name = old_name;
+    }
+    const bool rename_requested = (new_name != old_name);
+
+    bool changed = false;
+    if (new_name != old_name) {
+        changed = target_info->rename_oval_anchor_mapping(old_name, new_name, true) || changed;
+    }
+
+    const AssetInfo::OvalAnchorMapping* mapped = target_info->find_oval_anchor_mapping(new_name, false);
+    if (!mapped) {
+        mapped = target_info->find_oval_anchor_mapping(old_name, false);
+    }
+    if (!mapped) {
+        return changed;
+    }
+
+    AssetInfo::OvalAnchorMapping updated = *mapped;
+    const float width = std::max(1.0f, std::fabs(properties.width_radius_x));
+    const float height = std::max(1.0f, std::fabs(properties.height_radius_z));
+    updated.width_radius_x = width;
+    updated.height_radius_z = height;
+    const std::string asset_name = vibble::strings::trim_copy(properties.asset_name);
+    updated.asset_name = asset_name.empty() ? target_info->name : asset_name;
+    for (auto& point : updated.points) {
+        recompute_oval_point_from_angle(point, updated.width_radius_x, updated.height_radius_z);
+    }
+
+    changed = target_info->upsert_oval_anchor_mapping(updated) || changed;
+    if (!changed) {
+        return false;
+    }
+    if (rename_requested) {
+        target->invalidate_anchor_registry();
+    }
+
+    int selected_index = -1;
+    for (std::size_t i = 0; i < target_info->oval_anchor_mappings.size(); ++i) {
+        if (target_info->oval_anchor_mappings[i].name == updated.name) {
+            selected_index = static_cast<int>(i);
+            break;
+        }
+    }
+    oval_edit_.selected_oval_index = selected_index;
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Oval Mapping Properties",
+                                 "room-oval-mapping-properties");
+}
+
+bool RoomEditor::add_oval_point() {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+    std::shared_ptr<AssetInfo> target_info = oval_edit_.target_asset->info;
+    auto& mappings = target_info->oval_anchor_mappings;
+    if (oval_edit_.selected_oval_index < 0 ||
+        oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        return false;
+    }
+
+    AssetInfo::OvalAnchorMapping updated = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+    float insert_angle = 0.0f;
+    if (!updated.points.empty() &&
+        oval_edit_.selected_point_index >= 0 &&
+        oval_edit_.selected_point_index < static_cast<int>(updated.points.size())) {
+        std::vector<std::pair<float, int>> sorted;
+        sorted.reserve(updated.points.size());
+        for (std::size_t i = 0; i < updated.points.size(); ++i) {
+            sorted.emplace_back(normalize_oval_angle_degrees(updated.points[i].angle_degrees), static_cast<int>(i));
+        }
+        std::sort(sorted.begin(),
+                  sorted.end(),
+                  [](const auto& lhs, const auto& rhs) {
+                      return lhs.first < rhs.first;
+                  });
+        int selected_pos = 0;
+        for (std::size_t i = 0; i < sorted.size(); ++i) {
+            if (sorted[i].second == oval_edit_.selected_point_index) {
+                selected_pos = static_cast<int>(i);
+                break;
+            }
+        }
+        const int next_pos = (selected_pos + 1) % static_cast<int>(sorted.size());
+        const float a = sorted[static_cast<std::size_t>(selected_pos)].first;
+        float b = sorted[static_cast<std::size_t>(next_pos)].first;
+        if (b <= a) {
+            b += 360.0f;
+        }
+        insert_angle = normalize_oval_angle_degrees((a + b) * 0.5f);
+    } else if (oval_edit_.target_asset && oval_edit_.target_asset->has_directional_heading_radians()) {
+        insert_angle = normalize_oval_angle_degrees(
+            oval_edit_.target_asset->directional_heading_radians() * static_cast<float>(180.0 / kPi));
+    }
+
+    AssetInfo::OvalAnchorPoint point{};
+    point.angle_degrees = insert_angle;
+    point.flip_horizontal = true;
+    point.flip_vertical = true;
+    point.rotation_degrees = 0.0f;
+    point.hidden = false;
+    point.resolve_x = true;
+    point.scaling_method = AnchorScalingMethod::Parent;
+    recompute_oval_point_from_angle(point, updated.width_radius_x, updated.height_radius_z);
+    updated.points.push_back(point);
+    std::sort(updated.points.begin(),
+              updated.points.end(),
+              [](const AssetInfo::OvalAnchorPoint& lhs, const AssetInfo::OvalAnchorPoint& rhs) {
+                  return normalize_oval_angle_degrees(lhs.angle_degrees) < normalize_oval_angle_degrees(rhs.angle_degrees);
+              });
+
+    if (!target_info->upsert_oval_anchor_mapping(updated)) {
+        return false;
+    }
+
+    int selected_point = -1;
+    float best_delta = std::numeric_limits<float>::max();
+    for (std::size_t i = 0; i < updated.points.size(); ++i) {
+        float delta = std::fabs(normalize_oval_angle_degrees(updated.points[i].angle_degrees) - insert_angle);
+        delta = std::min(delta, 360.0f - delta);
+        if (delta < best_delta) {
+            best_delta = delta;
+            selected_point = static_cast<int>(i);
+        }
+    }
+    oval_edit_.selected_point_index = selected_point;
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Oval Point Add",
+                                 "room-oval-point-add");
+}
+
+bool RoomEditor::delete_selected_oval_point() {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+    std::shared_ptr<AssetInfo> target_info = oval_edit_.target_asset->info;
+    auto& mappings = target_info->oval_anchor_mappings;
+    if (oval_edit_.selected_oval_index < 0 ||
+        oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        return false;
+    }
+
+    AssetInfo::OvalAnchorMapping updated = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+    if (updated.points.size() <= 1 ||
+        oval_edit_.selected_point_index < 0 ||
+        oval_edit_.selected_point_index >= static_cast<int>(updated.points.size())) {
+        return false;
+    }
+    updated.points.erase(updated.points.begin() + oval_edit_.selected_point_index);
+    if (!target_info->upsert_oval_anchor_mapping(updated)) {
+        return false;
+    }
+    if (oval_edit_.selected_point_index >= static_cast<int>(updated.points.size())) {
+        oval_edit_.selected_point_index = static_cast<int>(updated.points.size()) - 1;
+    }
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Oval Point Delete",
+                                 "room-oval-point-delete");
+}
+
+bool RoomEditor::apply_selected_oval_point_details(const RoomOvalToolsPanel::PointDetailValues& values) {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return false;
+    }
+    std::shared_ptr<AssetInfo> target_info = oval_edit_.target_asset->info;
+    auto& mappings = target_info->oval_anchor_mappings;
+    if (oval_edit_.selected_oval_index < 0 ||
+        oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        return false;
+    }
+
+    AssetInfo::OvalAnchorMapping updated = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+    if (oval_edit_.selected_point_index < 0 ||
+        oval_edit_.selected_point_index >= static_cast<int>(updated.points.size())) {
+        return false;
+    }
+
+    auto& point = updated.points[static_cast<std::size_t>(oval_edit_.selected_point_index)];
+    const bool changed =
+        point.rotation_degrees != values.rotation_degrees ||
+        point.hidden != values.hidden ||
+        point.resolve_x != values.resolve_x ||
+        point.flip_horizontal != values.flip_horizontal ||
+        point.flip_vertical != values.flip_vertical ||
+        point.scaling_method != values.scaling_method;
+    if (!changed) {
+        return false;
+    }
+
+    point.rotation_degrees = values.rotation_degrees;
+    point.hidden = values.hidden;
+    point.resolve_x = values.resolve_x;
+    point.flip_horizontal = values.flip_horizontal;
+    point.flip_vertical = values.flip_vertical;
+    point.scaling_method = values.scaling_method;
+    if (!target_info->upsert_oval_anchor_mapping(updated)) {
+        return false;
+    }
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Oval Point Update",
+                                 "room-oval-point-update");
+}
+
+bool RoomEditor::drag_oval_point_to_screen(int point_index, SDL_Point screen_point) {
+    if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info || !oval_edit_.has_center_screen_px) {
+        return false;
+    }
+    std::shared_ptr<AssetInfo> target_info = oval_edit_.target_asset->info;
+    auto& mappings = target_info->oval_anchor_mappings;
+    if (oval_edit_.selected_oval_index < 0 ||
+        oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        return false;
+    }
+
+    AssetInfo::OvalAnchorMapping updated = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+    if (point_index < 0 || point_index >= static_cast<int>(updated.points.size())) {
+        return false;
+    }
+
+    const float next_angle = normalize_oval_angle_degrees(screen_angle_degrees(oval_edit_.center_screen_px, screen_point));
+    if (!std::isfinite(next_angle)) {
+        return false;
+    }
+
+    updated.points[static_cast<std::size_t>(point_index)].angle_degrees = next_angle;
+    recompute_oval_point_from_angle(updated.points[static_cast<std::size_t>(point_index)],
+                                    updated.width_radius_x,
+                                    updated.height_radius_z);
+    std::sort(updated.points.begin(),
+              updated.points.end(),
+              [](const AssetInfo::OvalAnchorPoint& lhs, const AssetInfo::OvalAnchorPoint& rhs) {
+                  return normalize_oval_angle_degrees(lhs.angle_degrees) < normalize_oval_angle_degrees(rhs.angle_degrees);
+              });
+    if (!target_info->upsert_oval_anchor_mapping(updated)) {
+        return false;
+    }
+
+    int selected_index = -1;
+    float best_delta = std::numeric_limits<float>::max();
+    for (std::size_t i = 0; i < updated.points.size(); ++i) {
+        float delta = std::fabs(normalize_oval_angle_degrees(updated.points[i].angle_degrees) - next_angle);
+        delta = std::min(delta, 360.0f - delta);
+        if (delta < best_delta) {
+            best_delta = delta;
+            selected_index = static_cast<int>(i);
+        }
+    }
+    oval_edit_.selected_point_index = selected_index;
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Oval Point Drag",
+                                 "room-oval-point-drag");
+}
+
+int RoomEditor::find_oval_point_handle_at_point(SDL_Point screen_point, int radius_px) const {
+    const float radius_sq = static_cast<float>(radius_px * radius_px);
+    float best_dist_sq = radius_sq;
+    int best_index = -1;
+    for (const auto& handle : oval_edit_.handles) {
+        if (!handle.has_final_screen_px) {
+            continue;
+        }
+        const float dx = handle.final_screen_px.x - static_cast<float>(screen_point.x);
+        const float dy = handle.final_screen_px.y - static_cast<float>(screen_point.y);
+        const float dist_sq = dx * dx + dy * dy;
+        if (dist_sq <= best_dist_sq) {
+            best_dist_sq = dist_sq;
+            best_index = handle.point_index;
+        }
+    }
+    return best_index;
+}
+
+bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
+    if (!oval_mode_active()) {
+        return false;
+    }
+    refresh_oval_mode_handles();
+
+    const SDL_Point screen_pt{input_->getX(), input_->getY()};
+    const bool left_down = input_->isDown(Input::LEFT);
+    const bool left_pressed = input_->wasPressed(Input::LEFT);
+    const bool left_released = input_->wasReleased(Input::LEFT);
+    const bool pointer_blocked = is_oval_ui_blocking_point(screen_pt.x, screen_pt.y);
+
+    if (left_pressed && !pointer_blocked) {
+        const int hit = find_oval_point_handle_at_point(screen_pt, kOvalPointPickRadiusPx);
+        if (hit >= 0) {
+            oval_edit_.selected_point_index = hit;
+            oval_edit_.dragging_point_index = hit;
+            oval_edit_.dragging_point = true;
+            (void)drag_oval_point_to_screen(hit, screen_pt);
+            sync_oval_tools_panel();
+        } else {
+            oval_edit_.selected_point_index = -1;
+            oval_edit_.hovered_point_index = -1;
+            oval_edit_.dragging_point_index = -1;
+            oval_edit_.dragging_point = false;
+            sync_oval_tools_panel();
+        }
+    }
+
+    if (oval_edit_.dragging_point && left_down) {
+        (void)drag_oval_point_to_screen(oval_edit_.dragging_point_index, screen_pt);
+    }
+
+    if (left_released) {
+        oval_edit_.dragging_point = false;
+        oval_edit_.dragging_point_index = -1;
+    }
+
+    if (!oval_edit_.dragging_point && !pointer_blocked) {
+        oval_edit_.hovered_point_index = find_oval_point_handle_at_point(screen_pt, kOvalPointPickRadiusPx);
+    } else if (pointer_blocked) {
+        oval_edit_.hovered_point_index = -1;
+    }
+
     return true;
 }
 
@@ -10320,6 +11379,109 @@ void RoomEditor::exit_anchor_edit_mode(bool flush_immediately) {
     }
     sync_anchor_tools_panel();
     update_asset_editor_layout();
+}
+
+bool RoomEditor::enter_oval_anchor_edit_mode() {
+    if (oval_mode_active()) {
+        return true;
+    }
+
+    Asset* target = selected_anchor_mode_asset();
+    if (!target || !target->info) {
+        return false;
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+
+    oval_edit_ = OvalAnchorEditState{};
+    oval_edit_.target_asset = target;
+    oval_edit_.had_static_frame_before = true;
+    oval_edit_.static_frame_before = target->static_frame;
+    oval_edit_.selected_oval_index = target->info->oval_anchor_mappings.empty() ? -1 : 0;
+    oval_edit_.selected_point_index = -1;
+
+    editor_mode_ = EditorMode::OvalAnchorEdit;
+    oval_edit_.animation_id = selection.resolved_animation_id;
+    oval_edit_.frame_index = 0;
+
+    if (!apply_oval_animation_and_frame(oval_edit_.animation_id, resolve_oval_mode_frame_index())) {
+        editor_mode_ = EditorMode::Normal;
+        oval_edit_ = OvalAnchorEditState{};
+        return false;
+    }
+
+    refresh_oval_mode_handles();
+    sync_oval_tools_panel();
+    update_asset_editor_layout();
+    return true;
+}
+
+void RoomEditor::exit_oval_anchor_edit_mode(bool flush_immediately) {
+    if (!oval_mode_active()) {
+        return;
+    }
+
+    if (flush_immediately && oval_edit_.dirty_since_last_flush) {
+        (void)persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                    true,
+                                    "Oval Anchor Edit",
+                                    "room-oval-anchor-edit");
+    }
+
+    if (oval_edit_.target_asset && oval_edit_.had_static_frame_before) {
+        oval_edit_.target_asset->static_frame = oval_edit_.static_frame_before;
+    }
+
+    editor_mode_ = EditorMode::Normal;
+    oval_edit_ = OvalAnchorEditState{};
+    sync_oval_tools_panel();
+    update_asset_editor_layout();
+}
+
+void RoomEditor::navigate_oval_animation(int delta) {
+    if (!oval_mode_active() || delta == 0) {
+        return;
+    }
+    std::vector<std::string> names = oval_mode_animation_names();
+    if (names.empty()) {
+        return;
+    }
+    int index = 0;
+    auto found = std::find(names.begin(), names.end(), oval_edit_.animation_id);
+    if (found != names.end()) {
+        index = static_cast<int>(std::distance(names.begin(), found));
+    }
+    const int next_index = devmode::room_anchor_mode::wrap_index(index + delta, static_cast<int>(names.size()));
+    const std::string& next_animation = names[static_cast<std::size_t>(next_index)];
+
+    int next_frame_index = oval_edit_.frame_index;
+    if (oval_edit_.target_asset && oval_edit_.target_asset->info) {
+        auto anim_it = oval_edit_.target_asset->info->animations.find(next_animation);
+        if (anim_it != oval_edit_.target_asset->info->animations.end() && anim_it->second.has_frames()) {
+            next_frame_index =
+                devmode::room_anchor_mode::wrap_index(next_frame_index, static_cast<int>(anim_it->second.frame_count()));
+        } else {
+            next_frame_index = 0;
+        }
+    }
+
+    (void)apply_oval_animation_and_frame(next_animation, next_frame_index);
+}
+
+void RoomEditor::navigate_oval_frame(int delta) {
+    if (!oval_mode_active() || delta == 0 || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
+        return;
+    }
+    auto anim_it = oval_edit_.target_asset->info->animations.find(oval_edit_.animation_id);
+    if (anim_it == oval_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
+        return;
+    }
+    const int next_frame =
+        devmode::room_anchor_mode::wrap_index(oval_edit_.frame_index + delta, static_cast<int>(anim_it->second.frame_count()));
+    (void)apply_oval_animation_and_frame(oval_edit_.animation_id, next_frame);
 }
 
 std::vector<std::string> RoomEditor::movement_mode_animation_names() const {
@@ -11374,6 +12536,21 @@ bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
     return false;
 }
 
+bool RoomEditor::is_oval_ui_blocking_point(int x, int y) const {
+    if (!enabled_) {
+        return false;
+    }
+    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
+        anchor_navigation_panel_->is_point_inside(x, y)) {
+        return true;
+    }
+    if (oval_mode_active() && oval_tools_panel_ && oval_tools_panel_->is_visible() &&
+        oval_tools_panel_->is_point_inside(x, y)) {
+        return true;
+    }
+    return false;
+}
+
 bool RoomEditor::is_hitbox_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
@@ -11406,6 +12583,8 @@ bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
 
 bool RoomEditor::any_editor_point_selected() const {
     const bool anchor_selected = anchor_mode_active() && (anchor_edit_.point_selected || anchor_edit_.dragging);
+    const bool oval_selected =
+        oval_mode_active() && (oval_edit_.selected_point_index >= 0 || oval_edit_.dragging_point);
     const bool movement_selected =
         movement_mode_active() && (movement_edit_.point_selected || movement_edit_.dragging_point);
     const bool hitbox_selected =
@@ -11414,7 +12593,7 @@ bool RoomEditor::any_editor_point_selected() const {
     const bool attack_box_selected =
         attack_box_mode_active() &&
         (attack_box_edit_.point_selected || attack_box_edit_.dragging_corner || attack_box_edit_.dragging_box || attack_box_edit_.dragging_rotation);
-    return anchor_selected || movement_selected || hitbox_selected || attack_box_selected;
+    return anchor_selected || oval_selected || movement_selected || hitbox_selected || attack_box_selected;
 }
 
 int RoomEditor::find_hitbox_corner_at_screen_point(SDL_Point screen_point,
@@ -12748,6 +13927,37 @@ void RoomEditor::validate_anchor_edit_target() {
     }
 }
 
+void RoomEditor::validate_oval_edit_target() {
+    if (!oval_mode_active()) {
+        return;
+    }
+
+    Asset* target = oval_edit_.target_asset;
+    if (!enabled_ || !target || !target->info || target->dead) {
+        exit_oval_anchor_edit_mode(true);
+        return;
+    }
+    if (selected_assets_.empty() || selected_assets_.front() != target) {
+        selected_assets_.clear();
+        selected_assets_.push_back(target);
+        hovered_asset_ = target;
+        sync_spawn_group_panel_with_selection();
+        mark_highlight_dirty();
+    }
+
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, oval_edit_.animation_id);
+    if (!selection.has_selection()) {
+        exit_oval_anchor_edit_mode(true);
+        return;
+    }
+    if (selection.resolved_animation_id != oval_edit_.animation_id) {
+        apply_oval_animation_and_frame(selection.resolved_animation_id, 0);
+    } else {
+        refresh_oval_mode_handles();
+        sync_oval_tools_panel();
+    }
+}
+
 void RoomEditor::validate_hitbox_edit_target() {
     if (!hitbox_mode_active()) {
         return;
@@ -12838,6 +14048,7 @@ bool RoomEditor::is_ui_blocking_input(int mx, int my) const {
         }
     }
     if (is_anchor_ui_blocking_point(mx, my) ||
+        is_oval_ui_blocking_point(mx, my) ||
         is_movement_ui_blocking_point(mx, my) ||
         is_hitbox_ui_blocking_point(mx, my) ||
         is_attack_box_ui_blocking_point(mx, my)) {
@@ -12858,6 +14069,9 @@ bool RoomEditor::is_ui_blocking_input(int mx, int my) const {
         return true;
     }
     if (is_anchor_ui_blocking_point(mx, my)) {
+        return true;
+    }
+    if (is_oval_ui_blocking_point(mx, my)) {
         return true;
     }
     auto floating = DockManager::instance().open_panels();

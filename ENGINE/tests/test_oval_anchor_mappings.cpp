@@ -119,6 +119,21 @@ bool frame_has_anchor(const AnimationFrame& frame, const std::string& anchor_nam
     return frame.find_anchor(anchor_name) != nullptr;
 }
 
+bool frame_anchor_payload_has_name(const nlohmann::json& frame_payload, const std::string& anchor_name) {
+    if (!frame_payload.is_array()) {
+        return false;
+    }
+    for (const auto& entry : frame_payload) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        if (entry.value("name", std::string{}) == anchor_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
@@ -218,6 +233,54 @@ TEST_CASE("AssetInfo oval rename appends legacy alias and renames anchor candida
         REQUIRE(frame != nullptr);
         CHECK(frame_has_anchor(*frame, "eyes_front_oval_center"));
         CHECK_FALSE(frame_has_anchor(*frame, "eyes_oval_center"));
+    }
+}
+
+TEST_CASE("AssetInfo oval delete removes center anchors for canonical and legacy names") {
+    AssetInfo info("oval_delete_asset");
+    set_animation_with_empty_anchor_frames(info, "default", 3);
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes_front";
+    mapping.asset_name = "oval_delete_asset";
+    mapping.legacy_names = {"eyes"};
+    mapping.width_radius_x = 40.0f;
+    mapping.height_radius_z = 20.0f;
+    mapping.points = {
+        make_oval_point(0.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(180.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+    REQUIRE(info.upsert_oval_anchor_mapping(mapping));
+
+    auto before_it = info.animations.find("default");
+    REQUIRE(before_it != info.animations.end());
+    for (std::size_t frame_index = 0; frame_index < before_it->second.frame_count(); ++frame_index) {
+        const AnimationFrame* frame = before_it->second.primary_frame_at(frame_index);
+        REQUIRE(frame != nullptr);
+        CHECK(frame_has_anchor(*frame, "eyes_front_oval_center"));
+        CHECK(frame_has_anchor(*frame, "eyes_oval_center"));
+    }
+
+    REQUIRE(info.remove_oval_anchor_mapping("eyes_front"));
+    CHECK(info.find_oval_anchor_mapping("eyes_front", true) == nullptr);
+
+    auto after_it = info.animations.find("default");
+    REQUIRE(after_it != info.animations.end());
+    for (std::size_t frame_index = 0; frame_index < after_it->second.frame_count(); ++frame_index) {
+        const AnimationFrame* frame = after_it->second.primary_frame_at(frame_index);
+        REQUIRE(frame != nullptr);
+        CHECK_FALSE(frame_has_anchor(*frame, "eyes_front_oval_center"));
+        CHECK_FALSE(frame_has_anchor(*frame, "eyes_oval_center"));
+    }
+
+    const nlohmann::json payload = info.animation_payload("default");
+    REQUIRE(payload.is_object());
+    const auto anchor_points_it = payload.find("anchor_points");
+    REQUIRE(anchor_points_it != payload.end());
+    REQUIRE(anchor_points_it->is_array());
+    for (const auto& frame_payload : *anchor_points_it) {
+        CHECK_FALSE(frame_anchor_payload_has_name(frame_payload, "eyes_front_oval_center"));
+        CHECK_FALSE(frame_anchor_payload_has_name(frame_payload, "eyes_oval_center"));
     }
 }
 

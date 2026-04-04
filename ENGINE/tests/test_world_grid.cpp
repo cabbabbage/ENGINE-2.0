@@ -480,31 +480,31 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
     CHECK(after.base_height_px == doctest::Approx(before.base_height_px));
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
-    CHECK(after.number_of_layers == before.number_of_layers);
+    CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
+    CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
 }
 
-TEST_CASE("WarpedScreenGrid camera settings roundtrip includes DOF and layer controls") {
+TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and layer controls") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{
         {"max_cull_depth", 2500.0},
-        {"number_of_layers", 12},
+        {"layer_depth_interval", 180.0},
+        {"layer_depth_curve", 1.75},
         {"aperture_f_stop", 4.0},
         {"focal_length_mm", 35.0},
-        {"dof_strength", 1.5},
-        {"dof_falloff", 1.2},
         {"max_blur_px", 20.0}
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
-    CHECK(settings.number_of_layers == 12);
+    CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
+    CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
     CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
     CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
-    CHECK(settings.dof_strength == doctest::Approx(1.5f));
-    CHECK(settings.dof_falloff == doctest::Approx(1.2f));
     CHECK(settings.max_blur_px == doctest::Approx(20.0f));
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
-    CHECK(serialized["number_of_layers"] == 12);
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
+    CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
+    CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
     CHECK_FALSE(serialized.contains("focus_depth"));
 }

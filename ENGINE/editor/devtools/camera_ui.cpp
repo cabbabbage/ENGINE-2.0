@@ -144,8 +144,6 @@ void CameraUIPanel::sync_from_camera() {
     if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
     if (aperture_f_stop_slider_) aperture_f_stop_slider_->set_value(settings.aperture_f_stop);
     if (focal_length_mm_slider_) focal_length_mm_slider_->set_value(settings.focal_length_mm);
-    if (dof_strength_slider_) dof_strength_slider_->set_value(settings.dof_strength);
-    if (dof_falloff_slider_) dof_falloff_slider_->set_value(settings.dof_falloff);
     if (max_blur_px_slider_) max_blur_px_slider_->set_value(settings.max_blur_px);
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
@@ -219,10 +217,6 @@ void CameraUIPanel::build_ui() {
     aperture_f_stop_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     focal_length_mm_slider_ = std::make_unique<FloatSliderWidget>("Focal Length (mm)", 0.01f, 500.0f, 0.1f, defaults.focal_length_mm, 1);
     focal_length_mm_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    dof_strength_slider_ = std::make_unique<FloatSliderWidget>("DOF Strength", 0.0f, 64.0f, 0.01f, defaults.dof_strength, 2);
-    dof_strength_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    dof_falloff_slider_ = std::make_unique<FloatSliderWidget>("DOF Falloff", 0.01f, 32.0f, 0.01f, defaults.dof_falloff, 2);
-    dof_falloff_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     max_blur_px_slider_ = std::make_unique<FloatSliderWidget>("Max Blur (px)", 0.0f, 128.0f, 0.25f, defaults.max_blur_px, 2);
     max_blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
@@ -306,8 +300,6 @@ void CameraUIPanel::rebuild_rows() {
     if (layer_depth_curve_slider_) rows.push_back({ layer_depth_curve_slider_.get() });
     if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
     if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
-    if (dof_strength_slider_) rows.push_back({ dof_strength_slider_.get() });
-    if (dof_falloff_slider_) rows.push_back({ dof_falloff_slider_.get() });
     if (max_blur_px_slider_) rows.push_back({ max_blur_px_slider_.get() });
 
     // Camera height bounds section
@@ -338,8 +330,6 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
     if (aperture_f_stop_slider_) updated.aperture_f_stop = aperture_f_stop_slider_->value();
     if (focal_length_mm_slider_) updated.focal_length_mm = focal_length_mm_slider_->value();
-    if (dof_strength_slider_) updated.dof_strength = dof_strength_slider_->value();
-    if (dof_falloff_slider_) updated.dof_falloff = dof_falloff_slider_->value();
     if (max_blur_px_slider_) updated.max_blur_px = max_blur_px_slider_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
@@ -352,8 +342,6 @@ void CameraUIPanel::apply_settings_if_needed() {
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
         float_changed(updated.aperture_f_stop, current.aperture_f_stop) ||
         float_changed(updated.focal_length_mm, current.focal_length_mm) ||
-        float_changed(updated.dof_strength, current.dof_strength) ||
-        float_changed(updated.dof_falloff, current.dof_falloff) ||
         float_changed(updated.max_blur_px, current.max_blur_px);
     float boundary_value = assets_->boundary_min_visible_screen_ratio();
     if (boundary_min_render_size_slider_) {

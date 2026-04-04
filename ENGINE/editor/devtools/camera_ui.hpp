@@ -61,8 +61,6 @@ private:
     std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
     std::unique_ptr<FloatSliderWidget> aperture_f_stop_slider_;
     std::unique_ptr<FloatSliderWidget> focal_length_mm_slider_;
-    std::unique_ptr<FloatSliderWidget> dof_strength_slider_;
-    std::unique_ptr<FloatSliderWidget> dof_falloff_slider_;
     std::unique_ptr<FloatSliderWidget> max_blur_px_slider_;
 
     // Global camera height bounds

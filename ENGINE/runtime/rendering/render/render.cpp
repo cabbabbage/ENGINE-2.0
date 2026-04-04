@@ -56,6 +56,188 @@ inline std::int64_t quantize_depth(double depth) {
     return static_cast<std::int64_t>(clamped);
 }
 
+inline double radial_lens_factor_from_optics(double focal_length_mm, double f_stop) {
+    const double safe_f_stop = std::max(0.01, f_stop);
+    const double ratio = std::max(0.0, focal_length_mm / safe_f_stop);
+    return std::clamp(ratio / 24.0, 0.25, 2.0);
+}
+
+inline double coc_blur_radius_from_depth_delta(double depth_delta,
+                                               double max_cull_depth,
+                                               double focal_length_mm,
+                                               double f_stop,
+                                               double max_blur_px) {
+    const double safe_max_blur = std::max(0.0, max_blur_px);
+    if (safe_max_blur <= 0.0) {
+        return 0.0;
+    }
+    const double safe_max_depth = std::max(1.0, max_cull_depth);
+    const double safe_f_stop = std::max(0.01, f_stop);
+    const double safe_focal = std::max(0.01, focal_length_mm);
+    const double aperture_diameter_mm = safe_focal / safe_f_stop;
+    const double optical_scale = std::clamp(aperture_diameter_mm / 18.0, 0.08, 2.5);
+    const double normalized_delta = std::clamp(std::fabs(depth_delta) / safe_max_depth, 0.0, 1.0);
+    const double depth_scale = std::pow(normalized_delta, 1.1);
+    return std::clamp(safe_max_blur * optical_scale * depth_scale, 0.0, safe_max_blur);
+}
+
+inline bool apply_lens_blur_texture(SDL_Renderer* renderer,
+                                    SDL_Texture* src,
+                                    SDL_Texture* dst,
+                                    SDL_Texture* scratch,
+                                    int target_w,
+                                    int target_h,
+                                    float radius_px,
+                                    const SDL_FPoint& optical_center,
+                                    float radial_radius_px) {
+    if (!renderer || !src || !dst || !scratch || target_w <= 0 || target_h <= 0) {
+        return false;
+    }
+    if (scratch == src || scratch == dst) {
+        return false;
+    }
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    const SDL_BlendMode src_old_blend = SDL_GetTextureBlendMode(src);
+    const SDL_BlendMode scratch_old_blend = SDL_GetTextureBlendMode(scratch);
+    Uint8 src_old_alpha = 255;
+    Uint8 scratch_old_alpha = 255;
+    SDL_GetTextureAlphaMod(src, &src_old_alpha);
+    SDL_GetTextureAlphaMod(scratch, &scratch_old_alpha);
+
+    const SDL_BlendMode sum_blend = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+    if (sum_blend == SDL_BLENDMODE_INVALID) {
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(src, 255);
+        SDL_SetRenderTarget(renderer, dst);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        SDL_RenderTexture(renderer, src, nullptr, nullptr);
+        SDL_SetTextureBlendMode(src, src_old_blend);
+        SDL_SetTextureAlphaMod(src, src_old_alpha);
+        SDL_SetTextureBlendMode(scratch, scratch_old_blend);
+        SDL_SetTextureAlphaMod(scratch, scratch_old_alpha);
+        SDL_SetRenderTarget(renderer, previous_target);
+        return true;
+    }
+
+    auto clear_target = [&](SDL_Texture* target) {
+        SDL_SetRenderTarget(renderer, target);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+    };
+    auto draw_weighted_sample = [&](SDL_Texture* tex, float offset_x, float offset_y, float weight) {
+        if (weight <= 0.0f) {
+            return;
+        }
+        const Uint8 alpha = static_cast<Uint8>(std::clamp(
+            static_cast<int>(std::lround(weight * 255.0f)), 1, 255));
+        SDL_SetTextureAlphaMod(tex, alpha);
+        SDL_FRect dst_rect{
+            offset_x,
+            offset_y,
+            static_cast<float>(target_w),
+            static_cast<float>(target_h)
+        };
+        SDL_RenderTexture(renderer, tex, nullptr, &dst_rect);
+    };
+
+    const float clamped_radius = std::max(0.0f, radius_px);
+    if (clamped_radius <= 0.01f) {
+        clear_target(dst);
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(src, 255);
+        SDL_RenderTexture(renderer, src, nullptr, nullptr);
+    } else {
+        const int kernel = std::clamp(static_cast<int>(std::ceil(clamped_radius)), 1, 10);
+        const float sigma = std::max(0.75f, clamped_radius * 0.6f);
+        std::vector<float> weights(static_cast<std::size_t>(kernel + 1), 0.0f);
+        float weight_sum = 0.0f;
+        for (int i = 0; i <= kernel; ++i) {
+            const float x = static_cast<float>(i);
+            const float w = std::exp(-(x * x) / (2.0f * sigma * sigma));
+            weights[static_cast<std::size_t>(i)] = w;
+            weight_sum += (i == 0) ? w : (2.0f * w);
+        }
+        if (weight_sum > 1e-6f) {
+            for (float& w : weights) {
+                w /= weight_sum;
+            }
+        }
+
+        clear_target(scratch);
+        SDL_SetTextureBlendMode(src, sum_blend);
+        for (int i = -kernel; i <= kernel; ++i) {
+            const float w = weights[static_cast<std::size_t>(std::abs(i))];
+            draw_weighted_sample(src, static_cast<float>(i), 0.0f, w);
+        }
+
+        clear_target(dst);
+        SDL_SetTextureBlendMode(scratch, sum_blend);
+        for (int i = -kernel; i <= kernel; ++i) {
+            const float w = weights[static_cast<std::size_t>(std::abs(i))];
+            draw_weighted_sample(scratch, 0.0f, static_cast<float>(i), w);
+        }
+    }
+
+    const float clamped_radial_radius = std::max(0.0f, radial_radius_px);
+    const float max_dimension = static_cast<float>(std::max(target_w, target_h));
+    if (clamped_radial_radius > 0.01f && max_dimension > 1.0f) {
+        clear_target(scratch);
+        SDL_SetTextureBlendMode(dst, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(dst, 255);
+        SDL_RenderTexture(renderer, dst, nullptr, nullptr);
+
+        clear_target(dst);
+        SDL_SetTextureBlendMode(scratch, sum_blend);
+
+        const int radial_steps = std::clamp(static_cast<int>(std::ceil(clamped_radial_radius * 1.2f)), 1, 12);
+        const float base_weight = 0.58f;
+        const float side_total_weight = std::max(0.0f, 1.0f - base_weight);
+        const float side_weight = side_total_weight / static_cast<float>(radial_steps * 2);
+        const float max_scale_delta = std::min(0.16f, (clamped_radial_radius / max_dimension) * 2.4f);
+
+        draw_weighted_sample(scratch, 0.0f, 0.0f, base_weight);
+        for (int step = 1; step <= radial_steps; ++step) {
+            const float t = static_cast<float>(step) / static_cast<float>(radial_steps + 1);
+            const float scale_delta = max_scale_delta * t;
+            for (int sign = -1; sign <= 1; sign += 2) {
+                const float scale = 1.0f + static_cast<float>(sign) * scale_delta;
+                if (scale <= 0.05f) {
+                    continue;
+                }
+                const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                    static_cast<int>(std::lround(side_weight * 255.0f)), 1, 255));
+                SDL_SetTextureAlphaMod(scratch, alpha);
+                SDL_FRect dst_rect{
+                    optical_center.x - optical_center.x * scale,
+                    optical_center.y - optical_center.y * scale,
+                    static_cast<float>(target_w) * scale,
+                    static_cast<float>(target_h) * scale
+                };
+                SDL_RenderTexture(renderer, scratch, nullptr, &dst_rect);
+            }
+        }
+    }
+
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureBlendMode(scratch, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(scratch, 255);
+    SDL_SetTextureBlendMode(src, src_old_blend);
+    SDL_SetTextureAlphaMod(src, src_old_alpha);
+    SDL_SetTextureBlendMode(scratch, scratch_old_blend);
+    SDL_SetTextureAlphaMod(scratch, scratch_old_alpha);
+    SDL_SetRenderTarget(renderer, previous_target);
+    return true;
+}
+
 bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points);
 }
 
@@ -1046,6 +1228,46 @@ bool SceneRenderer::ensure_sky_texture() {
         return false;
     }
 
+    WarpedScreenGrid::RealismSettings realism{};
+    if (assets_) {
+        realism = assets_->getView().get_settings();
+    }
+    const double f_stop = std::max(0.01, static_cast<double>(realism.aperture_f_stop));
+    const double focal_length = std::max(0.01, static_cast<double>(realism.focal_length_mm));
+    const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
+    const double max_blur = std::max(0.0, static_cast<double>(realism.max_blur_px));
+    const double sky_blur_radius = coc_blur_radius_from_depth_delta(max_cull_depth,
+                                                                     max_cull_depth,
+                                                                     focal_length,
+                                                                     f_stop,
+                                                                     max_blur);
+    if (sky_blur_radius > 0.01) {
+        SDL_Texture* blurred_sky = SDL_CreateTexture(
+            renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+            static_cast<int>(std::lround(tex_w)), static_cast<int>(std::lround(tex_h)));
+        if (blurred_sky) {
+            SDL_SetTextureBlendMode(blurred_sky, SDL_BLENDMODE_BLEND);
+            const double radial_factor = radial_lens_factor_from_optics(focal_length, f_stop);
+            const double radial_radius = std::clamp(sky_blur_radius * radial_factor, 0.0, max_blur * 2.0);
+            const SDL_FPoint sky_optical_center{tex_w * 0.5f, tex_h * 0.5f};
+            if (apply_lens_blur_texture(renderer_,
+                                        tex,
+                                        blurred_sky,
+                                        static_cast<int>(std::lround(tex_w)),
+                                        static_cast<int>(std::lround(tex_h)),
+                                        static_cast<float>(sky_blur_radius),
+                                        sky_optical_center,
+                                        static_cast<float>(radial_radius))) {
+                SDL_DestroyTexture(tex);
+                tex = blurred_sky;
+            } else {
+                SDL_DestroyTexture(blurred_sky);
+            }
+        } else {
+            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate blurred sky target: "} + SDL_GetError());
+        }
+    }
+
     sky_texture_ = tex;
     sky_texture_width_ = static_cast<int>(std::lround(tex_w));
     sky_texture_height_ = static_cast<int>(std::lround(tex_h));
@@ -1674,80 +1896,14 @@ void SceneRenderer::render() {
                             float radius_px,
                             const SDL_FPoint& optical_center,
                             float radial_radius_px) {
-        if (!src || !dst || radius_px <= 0.01f) {
-            return;
-        }
-        SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
-        SDL_SetRenderTarget(renderer_, dst);
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-        SDL_RenderClear(renderer_);
-        const int kernel = std::clamp(static_cast<int>(std::ceil(radius_px)), 1, 6);
-        const int taps = (kernel * 2 + 1) * (kernel * 2 + 1);
-        const float inv_taps = 1.0f / static_cast<float>(taps);
-        const Uint8 tap_alpha = static_cast<Uint8>(
-            std::clamp(static_cast<int>(std::lround(inv_taps * 255.0f)), 1, 255));
-        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(src, tap_alpha);
-        for (int ox = -kernel; ox <= kernel; ++ox) {
-            for (int oy = -kernel; oy <= kernel; ++oy) {
-                SDL_FRect dst_rect{
-                    static_cast<float>(ox),
-                    static_cast<float>(oy),
-                    static_cast<float>(screen_width_),
-                    static_cast<float>(screen_height_)
-                };
-                SDL_RenderTexture(renderer_, src, nullptr, &dst_rect);
-            }
-        }
-        SDL_SetTextureAlphaMod(src, 255);
-        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-
-        const float clamped_radial_radius = std::max(0.0f, radial_radius_px);
-        const float max_dimension = static_cast<float>(std::max(screen_width_, screen_height_));
-        if (clamped_radial_radius > 0.01f && max_dimension > 1.0f) {
-            const int radial_steps = std::clamp(static_cast<int>(std::ceil(clamped_radial_radius)), 1, 8);
-            const float max_scale_delta = std::min(0.08f, clamped_radial_radius / max_dimension);
-            const int radial_taps = radial_steps * 2;
-            const Uint8 radial_alpha = static_cast<Uint8>(
-                std::clamp(static_cast<int>(std::lround((0.35f / static_cast<float>(radial_taps)) * 255.0f)), 1, 255));
-            SDL_SetTextureAlphaMod(src, radial_alpha);
-            for (int step = 1; step <= radial_steps; ++step) {
-                const float t = static_cast<float>(step) / static_cast<float>(radial_steps + 1);
-                const float scale_delta = max_scale_delta * t;
-                for (int sign = -1; sign <= 1; sign += 2) {
-                    const float scale = 1.0f + static_cast<float>(sign) * scale_delta;
-                    if (scale <= 0.05f) {
-                        continue;
-                    }
-                    SDL_FRect dst_rect{
-                        optical_center.x - optical_center.x * scale,
-                        optical_center.y - optical_center.y * scale,
-                        static_cast<float>(screen_width_) * scale,
-                        static_cast<float>(screen_height_) * scale
-                    };
-                    SDL_RenderTexture(renderer_, src, nullptr, &dst_rect);
-                }
-            }
-            SDL_SetTextureAlphaMod(src, 255);
-        }
-
-        // Preserve original opacity floors so fully solid source pixels remain solid
-        // after blur accumulation while edge smearing can still fade naturally.
-        const SDL_BlendMode preserve_alpha_mode = SDL_ComposeCustomBlendMode(
-            SDL_BLENDFACTOR_ZERO,
-            SDL_BLENDFACTOR_ONE,
-            SDL_BLENDOPERATION_ADD,
-            SDL_BLENDFACTOR_ONE,
-            SDL_BLENDFACTOR_ONE,
-            SDL_BLENDOPERATION_MAXIMUM);
-        if (preserve_alpha_mode != SDL_BLENDMODE_INVALID) {
-            SDL_SetTextureBlendMode(src, preserve_alpha_mode);
-            SDL_SetTextureAlphaMod(src, 255);
-            SDL_RenderTexture(renderer_, src, nullptr, nullptr);
-        }
-        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(src, 255);
-        SDL_SetRenderTarget(renderer_, previous_target);
+        (void)apply_lens_blur_texture(renderer_,
+                                      src,
+                                      dst,
+                                      screen_width_,
+                                      screen_height_,
+                                      radius_px,
+                                      optical_center,
+                                      radial_radius_px);
     };
 
     if (dof_targets_ready) {
@@ -1771,11 +1927,8 @@ void SceneRenderer::render() {
         const int focus_layer = std::clamp(depth_to_layer_index(focus_depth), 0, layer_count - 1);
         const double f_stop = std::max(0.01, static_cast<double>(realism.aperture_f_stop));
         const double focal_length = std::max(0.01, static_cast<double>(realism.focal_length_mm));
-        const double dof_strength = std::max(0.0, static_cast<double>(realism.dof_strength));
-        const double dof_falloff = std::max(0.01, static_cast<double>(realism.dof_falloff));
         const double max_blur = std::max(0.0, static_cast<double>(realism.max_blur_px));
-        const double lens_aperture_ratio = focal_length / f_stop;
-        const double radial_lens_factor = std::clamp(lens_aperture_ratio / 64.0, 0.05, 0.75);
+        const double radial_lens_factor = radial_lens_factor_from_optics(focal_length, f_stop);
         const SDL_Point screen_center_i = cam.get_screen_center();
         const SDL_FPoint optical_center{
             std::clamp(static_cast<float>(screen_center_i.x), 0.0f, static_cast<float>(screen_width_)),
@@ -1791,12 +1944,15 @@ void SceneRenderer::render() {
             double blur_radius = 0.0;
             if (i != focus_layer && !layer_contains_focus_depth(i, focus_depth)) {
                 const double delta = std::fabs(representative_depth - focus_depth);
-                const double coc = (focal_length / f_stop) * std::pow(delta / std::max(1.0, max_cull_depth), dof_falloff);
-                blur_radius = std::clamp(coc * dof_strength * max_blur, 0.0, max_blur);
+                blur_radius = coc_blur_radius_from_depth_delta(delta,
+                                                               max_cull_depth,
+                                                               focal_length,
+                                                               f_stop,
+                                                               max_blur);
             }
             SDL_Texture* composite_texture = dof_layer_textures_[i];
             if (blur_radius > 0.01 && dof_blur_textures_[i]) {
-                const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur);
+                const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur * 2.0);
                 blur_texture(dof_layer_textures_[i],
                              dof_blur_textures_[i],
                              static_cast<float>(blur_radius),

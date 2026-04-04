@@ -673,12 +673,6 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     if (!std::isfinite(settings_.focal_length_mm) || settings_.focal_length_mm <= 0.01f) {
         settings_.focal_length_mm = 0.01f;
     }
-    if (!std::isfinite(settings_.dof_strength) || settings_.dof_strength < 0.0f) {
-        settings_.dof_strength = 0.0f;
-    }
-    if (!std::isfinite(settings_.dof_falloff) || settings_.dof_falloff < 0.01f) {
-        settings_.dof_falloff = 0.01f;
-    }
     if (!std::isfinite(settings_.max_blur_px) || settings_.max_blur_px < 0.0f) {
         settings_.max_blur_px = 0.0f;
     }
@@ -1156,8 +1150,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 16.0f);
     read_float("aperture_f_stop", updated.aperture_f_stop, 0.01f, 64.0f);
     read_float("focal_length_mm", updated.focal_length_mm, 0.01f, 500.0f);
-    read_float("dof_strength", updated.dof_strength, 0.0f, 64.0f);
-    read_float("dof_falloff", updated.dof_falloff, 0.01f, 32.0f);
     read_float("max_blur_px", updated.max_blur_px, 0.0f, 128.0f);
     set_realism_settings(updated);
 }
@@ -1171,8 +1163,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["layer_depth_curve"] = settings_.layer_depth_curve;
     result["aperture_f_stop"] = settings_.aperture_f_stop;
     result["focal_length_mm"] = settings_.focal_length_mm;
-    result["dof_strength"] = settings_.dof_strength;
-    result["dof_falloff"] = settings_.dof_falloff;
     result["max_blur_px"] = settings_.max_blur_px;
     return result;
 }

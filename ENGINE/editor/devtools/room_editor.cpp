@@ -11343,6 +11343,15 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
         oval_edit_.dragging_point_index = -1;
     }
 
+    if (left_released &&
+        !pointer_blocked &&
+        !oval_edit_.dragging_point &&
+        oval_edit_.hovered_point_index >= 0 &&
+        oval_edit_.selected_point_index != oval_edit_.hovered_point_index) {
+        oval_edit_.selected_point_index = oval_edit_.hovered_point_index;
+        sync_oval_tools_panel();
+    }
+
     if (!oval_edit_.dragging_point && !pointer_blocked) {
         oval_edit_.hovered_point_index = find_oval_point_handle_at_point(
             screen_pt,

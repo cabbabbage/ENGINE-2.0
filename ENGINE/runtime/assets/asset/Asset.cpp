@@ -1907,7 +1907,16 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                         if (center_name.empty() || center_name == name) {
                                 continue;
                         }
-                        if (!current_frame || !current_frame->find_anchor(center_name)) {
+                        const DisplacedAssetAnchorPoint* center_anchor_in_frame =
+                            current_frame ? current_frame->find_anchor(center_name) : nullptr;
+                        if (!center_anchor_in_frame) {
+                                continue;
+                        }
+                        const bool likely_placeholder_center =
+                            center_anchor_in_frame->texture_x == 0 &&
+                            center_anchor_in_frame->texture_y == 0 &&
+                            std::fabs(center_anchor_in_frame->depth_offset) <= 1e-6f;
+                        if (likely_placeholder_center) {
                                 continue;
                         }
                         std::optional<AnchorPoint> candidate_center =

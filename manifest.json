@@ -5193,12 +5193,6 @@
     "vibble": {
       "anchor_point_child_candidates": [
         {
-          "anchor_point_name": "eyes",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
           "anchor_point_name": "eyes_oval_center",
           "candidates": {
             "candidates": [
@@ -5210,19 +5204,7 @@
           }
         },
         {
-          "anchor_point_name": "hat",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
           "anchor_point_name": "hat_oval_center",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "mouth",
           "candidates": {
             "candidates": []
           }
@@ -5234,19 +5216,7 @@
           }
         },
         {
-          "anchor_point_name": "neck",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
           "anchor_point_name": "neck_oval_center",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "weapon",
           "candidates": {
             "candidates": []
           }
@@ -5263,67 +5233,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 129
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 207,
-                "texture_y": 179
-              },
-              {
-                "depth_offset": -0.10000001639127731,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 219,
-                "texture_y": 191
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 164
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -5331,8 +5241,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 0,
+                "texture_y": 165
               },
               {
                 "depth_offset": 0.0,
@@ -5455,67 +5365,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -5523,8 +5373,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -5577,67 +5427,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -5645,8 +5435,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -5699,67 +5489,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -5767,8 +5497,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -5821,67 +5551,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -5889,8 +5559,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -5943,67 +5613,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6011,8 +5621,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -6065,67 +5675,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6133,8 +5683,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -6187,67 +5737,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6255,8 +5745,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -6309,67 +5799,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -0.09999968856573105,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 212,
-                "texture_y": 172
-              },
-              {
-                "depth_offset": -0.0999961718916893,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 3.0,
-                "scaling_method": "parent",
-                "texture_x": 211,
-                "texture_y": 210
-              },
-              {
-                "depth_offset": -0.30000004172325134,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 160
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6377,8 +5807,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -6841,67 +6271,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6909,8 +6279,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -6963,67 +6333,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7031,8 +6341,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -7085,67 +6395,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7153,8 +6403,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -7207,67 +6457,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7275,8 +6465,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -7329,67 +6519,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7397,8 +6527,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -7451,67 +6581,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7519,8 +6589,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -7573,67 +6643,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7641,8 +6651,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -7695,67 +6705,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7763,8 +6713,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -8218,67 +7168,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8286,8 +7176,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -8340,67 +7230,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8408,8 +7238,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -8462,67 +7292,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8530,8 +7300,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -8584,67 +7354,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8652,8 +7362,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -8706,67 +7416,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8774,8 +7424,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -8828,67 +7478,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8896,8 +7486,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -8950,67 +7540,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9018,8 +7548,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -9072,67 +7602,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9140,8 +7610,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -9595,67 +8065,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9663,8 +8073,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -9717,67 +8127,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9785,8 +8135,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -9839,67 +8189,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9907,8 +8197,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -9961,67 +8251,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -10029,8 +8259,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -10083,67 +8313,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -10151,8 +8321,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -10205,67 +8375,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -10273,8 +8383,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -10327,67 +8437,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -10395,8 +8445,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -10449,67 +8499,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 38.0,
-                "scaling_method": "parent",
-                "texture_x": 215,
-                "texture_y": 145
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 187,
-                "texture_y": 187
-              },
-              {
-                "depth_offset": -1.399999976158142,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 20.0,
-                "scaling_method": "parent",
-                "texture_x": 164,
-                "texture_y": 209
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 162
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -10517,8 +8507,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -11501,67 +9491,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 10.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 142
-              },
-              {
-                "depth_offset": -0.19999980926513672,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 175
-              },
-              {
-                "depth_offset": 1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": -0.6000000238418579,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": -5.0,
-                "scaling_method": "parent",
-                "texture_x": 134,
-                "texture_y": 212
-              },
-              {
-                "depth_offset": 0.29999998211860657,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 203,
-                "texture_y": 153
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11569,8 +9499,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -11623,7 +9553,7 @@
             ],
             [
               {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11631,8 +9561,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -11681,71 +9611,11 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
               {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11753,8 +9623,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -11803,71 +9673,11 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
               {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11875,8 +9685,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -11925,71 +9735,11 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
               {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11997,8 +9747,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -12047,71 +9797,11 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
               {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12119,8 +9809,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -12169,71 +9859,11 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
               {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12241,8 +9871,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -12291,71 +9921,11 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
               {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12363,8 +9933,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -12413,66 +9983,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -12608,67 +10118,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12676,8 +10126,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -12730,67 +10180,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12798,8 +10188,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -12852,67 +10242,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12920,8 +10250,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -12974,67 +10304,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13042,8 +10312,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -13096,67 +10366,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13164,8 +10374,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -13218,67 +10428,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13286,8 +10436,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -13340,67 +10490,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13408,8 +10498,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -13462,67 +10552,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 200,
-                "texture_y": 133
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 146,
-                "texture_y": 174
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 177
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 223,
-                "texture_y": 182
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 206,
-                "texture_y": 157
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13530,8 +10560,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -13994,67 +11024,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14062,8 +11032,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -14116,67 +11086,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14184,8 +11094,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -14238,67 +11148,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14306,8 +11156,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -14360,67 +11210,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14428,8 +11218,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -14482,67 +11272,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14550,8 +11280,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -14604,67 +11334,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14672,8 +11342,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -14726,67 +11396,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14794,8 +11404,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -14848,67 +11458,7 @@
             ],
             [
               {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hat",
-                "resolve_x": true,
-                "rotation_degrees": -20.0,
-                "scaling_method": "parent",
-                "texture_x": 204,
-                "texture_y": 132
-              },
-              {
-                "depth_offset": -2.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "mouth",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 216,
-                "texture_y": 173
-              },
-              {
-                "depth_offset": -0.7999999523162842,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 188
-              },
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "weapon",
-                "resolve_x": true,
-                "rotation_degrees": 5.0,
-                "scaling_method": "parent",
-                "texture_x": 209,
-                "texture_y": 214
-              },
-              {
-                "depth_offset": -1.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 214,
-                "texture_y": 163
-              },
-              {
-                "depth_offset": -0.7000000476837158,
+                "depth_offset": 1.4000000953674316,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14916,8 +11466,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 146
+                "texture_x": 185,
+                "texture_y": 231
               },
               {
                 "depth_offset": 0.0,
@@ -16625,9 +13175,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            143,
-            36,
             242,
+            36,
+            152,
             255
           ],
           "edge_smoothness": 49,
@@ -16653,9 +13203,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            157,
             242,
+            166,
+            36,
             255
           ],
           "edge_smoothness": 24,
@@ -16774,16 +13324,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -2524,
-              "dz": -3320,
+              "dx": -3792,
+              "dz": -3360,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12304,
-              "origional_width": 22664,
+              "origional_height": 12272,
+              "origional_width": 23104,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

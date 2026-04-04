@@ -16238,9 +16238,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            240,
             242,
-            85,
+            36,
+            152,
             255
           ],
           "edge_smoothness": 49,
@@ -16259,15 +16259,15 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": -3298,
-          "camera_center_dz": -3228,
-          "camera_height_px": 200,
-          "camera_tilt_deg": 24.15909194946289,
+          "camera_center_dx": 2279,
+          "camera_center_dz": -2677,
+          "camera_height_px": 919,
+          "camera_tilt_deg": 49.15909194946289,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            37,
             242,
+            166,
             36,
             255
           ],

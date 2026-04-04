@@ -22,9 +22,9 @@ public:
                          int target_h,
                          float radius_px,
                          const SDL_FPoint& optical_center,
-                         float radial_radius_px) const;
+                         float radial_radius_px,
+                         float quality_scale = 1.0f) const;
 
 private:
     SDL_Renderer* renderer_ = nullptr;
 };
-

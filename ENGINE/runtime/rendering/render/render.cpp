@@ -1081,7 +1081,8 @@ bool SceneRenderer::ensure_sky_texture() {
                                                             static_cast<int>(std::lround(tex_h)),
                                                             static_cast<float>(sky_blur_radius),
                                                             sky_optical_center,
-                                                            static_cast<float>(radial_radius))) {
+                                                            static_cast<float>(radial_radius),
+                                                            0.55f)) {
                     SDL_DestroyTexture(tex);
                     tex = blurred_sky;
                 } else {
@@ -1730,7 +1731,8 @@ void SceneRenderer::render() {
                             SDL_Texture* dst,
                             float radius_px,
                             const SDL_FPoint& optical_center,
-                            float radial_radius_px) -> bool {
+                            float radial_radius_px,
+                            float quality_scale) -> bool {
         return layer_effect_processor_.apply_lens_blur(src,
                                                        dst,
                                                        blur_tex_,
@@ -1738,7 +1740,8 @@ void SceneRenderer::render() {
                                                        screen_height_,
                                                        radius_px,
                                                        optical_center,
-                                                       radial_radius_px);
+                                                       radial_radius_px,
+                                                       quality_scale);
     };
 
     if (dof_targets_ready) {
@@ -1788,11 +1791,18 @@ void SceneRenderer::render() {
             SDL_Texture* composite_texture = dof_layer_textures_[i];
             if (blur_radius > 0.01 && dof_blur_textures_[i]) {
                 const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur * 2.0);
+                const double depth_norm = std::clamp(representative_depth / std::max(1.0, max_cull_depth), 0.0, 1.0);
+                float effect_quality = static_cast<float>(std::clamp(
+                    1.0 - 0.55 * std::pow(depth_norm, 1.35), 0.45, 1.0));
+                if (blur_radius < 1.5) {
+                    effect_quality = 1.0f;
+                }
                 if (blur_texture(dof_layer_textures_[i],
                                  dof_blur_textures_[i],
                                  static_cast<float>(blur_radius),
                                  optical_center,
-                                 static_cast<float>(radial_radius))) {
+                                 static_cast<float>(radial_radius),
+                                 effect_quality)) {
                     composite_texture = dof_blur_textures_[i];
                 }
             }

@@ -24,7 +24,7 @@
             "render_dark_mask": false,
             "types": {
                 "area": true,
-                "boundary": false,
+                "boundary": true,
                 "enemy": true,
                 "npc": true,
                 "object": true,
@@ -53,7 +53,7 @@
             "boundary_min_visible_screen_ratio": 0.05000000074505806,
             "extra_cull_margin": 2870.0,
             "meters_per_100_world_px": 0.5499999523162842,
-            "min_visible_screen_ratio": 0.004000000189989805,
+            "min_visible_screen_ratio": 0.003000000026077032,
             "near_camera_fade_end_ratio": 1.6699999570846558,
             "near_camera_fade_start_ratio": 0.550000011920929,
             "near_camera_max_perspective_scale": 2.549999952316284,

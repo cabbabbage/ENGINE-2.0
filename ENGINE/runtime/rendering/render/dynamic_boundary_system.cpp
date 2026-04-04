@@ -409,8 +409,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const double anchor_depth = cam.anchor_world_z();
     std::sort(active_boundary_sprites_.begin(), active_boundary_sprites_.end(),
         [anchor_depth](const BoundarySprite& a, const BoundarySprite& b) {
-            const double da = std::fabs(render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_z)));
-            const double db = std::fabs(render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_z)));
+            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_z));
+            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_z));
             if (da != db) return da > db;
             return a.world_pos.x < b.world_pos.x;
         });

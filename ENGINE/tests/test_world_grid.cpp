@@ -488,7 +488,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes DOF and layer con
     camera_grid.apply_camera_settings(nlohmann::json{
         {"max_cull_depth", 2500.0},
         {"number_of_layers", 12},
-        {"focus_depth", 420.0},
         {"aperture_f_stop", 4.0},
         {"focal_length_mm", 35.0},
         {"dof_strength", 1.5},
@@ -498,7 +497,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes DOF and layer con
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
     CHECK(settings.number_of_layers == 12);
-    CHECK(settings.focus_depth == doctest::Approx(420.0f));
     CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
     CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
     CHECK(settings.dof_strength == doctest::Approx(1.5f));
@@ -508,5 +506,5 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes DOF and layer con
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
     CHECK(serialized["number_of_layers"] == 12);
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
-    CHECK(serialized["focus_depth"] == doctest::Approx(420.0));
+    CHECK_FALSE(serialized.contains("focus_depth"));
 }

@@ -11,8 +11,6 @@ class FloatSliderWidget;
 class PitchDialWidget;
 class SliderWidget;
 class DMSlider;
-class DMNumericStepper;
-class StepperWidget;
 
 
 class CameraUIPanel : public DockableCollapsible {
@@ -59,14 +57,13 @@ private:
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> boundary_min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
-    std::unique_ptr<FloatSliderWidget> focus_depth_slider_;
+    std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
+    std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
     std::unique_ptr<FloatSliderWidget> aperture_f_stop_slider_;
     std::unique_ptr<FloatSliderWidget> focal_length_mm_slider_;
     std::unique_ptr<FloatSliderWidget> dof_strength_slider_;
     std::unique_ptr<FloatSliderWidget> dof_falloff_slider_;
     std::unique_ptr<FloatSliderWidget> max_blur_px_slider_;
-    std::unique_ptr<DMNumericStepper> number_of_layers_stepper_;
-    std::unique_ptr<StepperWidget> number_of_layers_widget_;
 
     // Global camera height bounds
     std::unique_ptr<DMSlider> camera_height_min_slider_;

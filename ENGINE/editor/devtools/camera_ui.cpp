@@ -140,13 +140,13 @@ void CameraUIPanel::sync_from_camera() {
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
     if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
-    if (focus_depth_slider_) focus_depth_slider_->set_value(settings.focus_depth);
+    if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
+    if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
     if (aperture_f_stop_slider_) aperture_f_stop_slider_->set_value(settings.aperture_f_stop);
     if (focal_length_mm_slider_) focal_length_mm_slider_->set_value(settings.focal_length_mm);
     if (dof_strength_slider_) dof_strength_slider_->set_value(settings.dof_strength);
     if (dof_falloff_slider_) dof_falloff_slider_->set_value(settings.dof_falloff);
     if (max_blur_px_slider_) max_blur_px_slider_->set_value(settings.max_blur_px);
-    if (number_of_layers_stepper_) number_of_layers_stepper_->set_value(settings.number_of_layers);
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
     }
@@ -197,8 +197,24 @@ void CameraUIPanel::build_ui() {
     boundary_min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     max_cull_depth_slider_ = std::make_unique<FloatSliderWidget>("Max Cull Depth", 1.0f, 50000.0f, 1.0f, defaults.max_cull_depth, 0);
     max_cull_depth_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    focus_depth_slider_ = std::make_unique<FloatSliderWidget>("Focus Depth", 0.0f, 50000.0f, 1.0f, defaults.focus_depth, 0);
-    focus_depth_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    layer_depth_interval_slider_ = std::make_unique<FloatSliderWidget>(
+        "Layer Depth Interval",
+        1.0f,
+        5000.0f,
+        1.0f,
+        defaults.layer_depth_interval,
+        0);
+    layer_depth_interval_slider_->set_tooltip("Base world-depth step for near DOF bins. Lower values increase near detail.");
+    layer_depth_interval_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    layer_depth_curve_slider_ = std::make_unique<FloatSliderWidget>(
+        "Layer Depth Curve",
+        0.0f,
+        8.0f,
+        0.01f,
+        defaults.layer_depth_curve,
+        2);
+    layer_depth_curve_slider_->set_tooltip("Non-linear bin growth with distance. Higher values create fewer far-depth layers.");
+    layer_depth_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     aperture_f_stop_slider_ = std::make_unique<FloatSliderWidget>("Aperture (f-stop)", 0.01f, 64.0f, 0.01f, defaults.aperture_f_stop, 2);
     aperture_f_stop_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     focal_length_mm_slider_ = std::make_unique<FloatSliderWidget>("Focal Length (mm)", 0.01f, 500.0f, 0.1f, defaults.focal_length_mm, 1);
@@ -209,10 +225,6 @@ void CameraUIPanel::build_ui() {
     dof_falloff_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     max_blur_px_slider_ = std::make_unique<FloatSliderWidget>("Max Blur (px)", 0.0f, 128.0f, 0.25f, defaults.max_blur_px, 2);
     max_blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    number_of_layers_stepper_ = std::make_unique<DMNumericStepper>("Number of Layers", 1, 256, defaults.number_of_layers);
-    number_of_layers_stepper_->set_step(1);
-    number_of_layers_stepper_->set_on_change([this](int) { on_control_value_changed(); });
-    number_of_layers_widget_ = std::make_unique<StepperWidget>(number_of_layers_stepper_.get());
 
     // Global camera height bounds
     const auto [saved_min, saved_max] = load_camera_height_bounds();
@@ -290,8 +302,8 @@ void CameraUIPanel::rebuild_rows() {
     if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
     if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
     if (max_cull_depth_slider_) rows.push_back({ max_cull_depth_slider_.get() });
-    if (number_of_layers_widget_) rows.push_back({ number_of_layers_widget_.get() });
-    if (focus_depth_slider_) rows.push_back({ focus_depth_slider_.get() });
+    if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
+    if (layer_depth_curve_slider_) rows.push_back({ layer_depth_curve_slider_.get() });
     if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
     if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
     if (dof_strength_slider_) rows.push_back({ dof_strength_slider_.get() });
@@ -322,13 +334,13 @@ void CameraUIPanel::apply_settings_if_needed() {
 
     if (min_render_size_slider_) updated.min_visible_screen_ratio = min_render_size_slider_->value();
     if (max_cull_depth_slider_) updated.max_cull_depth = max_cull_depth_slider_->value();
-    if (focus_depth_slider_) updated.focus_depth = focus_depth_slider_->value();
+    if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
+    if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
     if (aperture_f_stop_slider_) updated.aperture_f_stop = aperture_f_stop_slider_->value();
     if (focal_length_mm_slider_) updated.focal_length_mm = focal_length_mm_slider_->value();
     if (dof_strength_slider_) updated.dof_strength = dof_strength_slider_->value();
     if (dof_falloff_slider_) updated.dof_falloff = dof_falloff_slider_->value();
     if (max_blur_px_slider_) updated.max_blur_px = max_blur_px_slider_->value();
-    if (number_of_layers_stepper_) updated.number_of_layers = number_of_layers_stepper_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
@@ -336,8 +348,8 @@ void CameraUIPanel::apply_settings_if_needed() {
     const bool realism_changed =
         float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio) ||
         float_changed(updated.max_cull_depth, current.max_cull_depth) ||
-        (updated.number_of_layers != current.number_of_layers) ||
-        float_changed(updated.focus_depth, current.focus_depth) ||
+        float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
+        float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
         float_changed(updated.aperture_f_stop, current.aperture_f_stop) ||
         float_changed(updated.focal_length_mm, current.focal_length_mm) ||
         float_changed(updated.dof_strength, current.dof_strength) ||

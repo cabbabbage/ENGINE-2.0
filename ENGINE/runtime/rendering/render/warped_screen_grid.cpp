@@ -659,11 +659,14 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     if (!std::isfinite(settings_.max_cull_depth) || settings_.max_cull_depth < 1.0f) {
         settings_.max_cull_depth = 1.0f;
     }
-    settings_.number_of_layers = std::max(1, settings_.number_of_layers);
-    if (!std::isfinite(settings_.focus_depth) || settings_.focus_depth < 0.0f) {
-        settings_.focus_depth = 0.0f;
+    if (!std::isfinite(settings_.layer_depth_interval) || settings_.layer_depth_interval < 1.0f) {
+        settings_.layer_depth_interval = 1.0f;
     }
-    settings_.focus_depth = std::min(settings_.focus_depth, settings_.max_cull_depth);
+    settings_.layer_depth_interval = std::min(settings_.layer_depth_interval, 100000.0f);
+    if (!std::isfinite(settings_.layer_depth_curve) || settings_.layer_depth_curve < 0.0f) {
+        settings_.layer_depth_curve = 0.0f;
+    }
+    settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 16.0f);
     if (!std::isfinite(settings_.aperture_f_stop) || settings_.aperture_f_stop <= 0.01f) {
         settings_.aperture_f_stop = 0.01f;
     }
@@ -1145,19 +1148,12 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         }
         target = std::clamp(value, min_value, max_value);
     };
-    auto read_int = [&](const char* key, int& target, int min_value, int max_value) {
-        auto it = data.find(key);
-        if (it == data.end() || !it->is_number_integer()) {
-            return;
-        }
-        target = std::clamp(it->get<int>(), min_value, max_value);
-    };
     RealismSettings updated = settings_;
     read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
-    read_int("number_of_layers", updated.number_of_layers, 1, 256);
-    read_float("focus_depth", updated.focus_depth, 0.0f, 1000000.0f);
+    read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
+    read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 16.0f);
     read_float("aperture_f_stop", updated.aperture_f_stop, 0.01f, 64.0f);
     read_float("focal_length_mm", updated.focal_length_mm, 0.01f, 500.0f);
     read_float("dof_strength", updated.dof_strength, 0.0f, 64.0f);
@@ -1171,8 +1167,8 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["min_visible_screen_ratio"] = settings_.min_visible_screen_ratio;
     result["base_height_px"] = settings_.base_height_px;
     result["max_cull_depth"] = settings_.max_cull_depth;
-    result["number_of_layers"] = settings_.number_of_layers;
-    result["focus_depth"] = settings_.focus_depth;
+    result["layer_depth_interval"] = settings_.layer_depth_interval;
+    result["layer_depth_curve"] = settings_.layer_depth_curve;
     result["aperture_f_stop"] = settings_.aperture_f_stop;
     result["focal_length_mm"] = settings_.focal_length_mm;
     result["dof_strength"] = settings_.dof_strength;
@@ -1594,14 +1590,17 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 if (!visible_asset) {
                     continue;
                 }
+                const double depth_from_anchor = render_depth::depth_from_anchor(
+                    anchor_depth,
+                    static_cast<double>(visible_asset->world_z()),
+                    visible_asset->render_depth_bias());
+                const double depth_distance = std::fabs(depth_from_anchor);
                 visible_traversal_entries_.push_back(VisibleTraversalEntry{
                     visible_asset,
                     gp,
-                    std::fabs(render_depth::depth_from_anchor(anchor_depth,
-                                                              static_cast<double>(visible_asset->world_z()),
-                                                              visible_asset->render_depth_bias()))});
+                    depth_from_anchor});
                 if (!std::isfinite(visible_traversal_entries_.back().depth_from_anchor) ||
-                    visible_traversal_entries_.back().depth_from_anchor > static_cast<double>(settings_.max_cull_depth)) {
+                    depth_distance > static_cast<double>(settings_.max_cull_depth)) {
                     visible_traversal_entries_.pop_back();
                     ++last_depth_culled_;
                 }

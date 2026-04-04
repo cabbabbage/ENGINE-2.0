@@ -69,8 +69,8 @@ public:
         float min_visible_screen_ratio     = 0.015f;
         float base_height_px               = 1000.0f;
         float max_cull_depth               = 5000.0f;
-        int   number_of_layers             = 10;
-        float focus_depth                  = 500.0f;
+        float layer_depth_interval         = 250.0f;
+        float layer_depth_curve            = 1.0f;
         float aperture_f_stop              = 2.8f;
         float focal_length_mm              = 50.0f;
         float dof_strength                 = 1.0f;

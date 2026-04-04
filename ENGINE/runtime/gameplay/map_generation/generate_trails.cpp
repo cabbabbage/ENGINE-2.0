@@ -1,6 +1,5 @@
 #include "generate_trails.hpp"
 #include "generate_rooms.hpp"
-#include "trail_geometry.hpp"
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <iostream>
@@ -94,560 +93,35 @@ std::pair<double, double> room_center(Room* room) {
     return {static_cast<double>(room->map_origin.first), static_cast<double>(room->map_origin.second)};
 }
 
-std::vector<SDL_Point> build_centerline(const SDL_Point& start,
-                                        const SDL_Point& end,
-                                        int curvyness,
-                                        std::mt19937& rng)
+std::vector<SDL_Point> build_straight_trail_polygon(const SDL_Point& start,
+                                                    const SDL_Point& end,
+                                                    int width)
 {
-    std::vector<SDL_Point> line;
-    line.reserve(static_cast<size_t>(curvyness) + 2);
-    line.push_back(start);
-    if (curvyness > 0) {
-        double dx = static_cast<double>(end.x - start.x);
-        double dy = static_cast<double>(end.y - start.y);
-        double len = std::hypot(dx, dy);
-        if (len <= 0.0) len = 1.0;
-        double max_offset = len * 0.25 * (static_cast<double>(curvyness) / 8.0);
-        std::uniform_real_distribution<double> offset_dist(-max_offset, max_offset);
-        for (int i = 1; i <= curvyness; ++i) {
-            double t  = static_cast<double>(i) / (curvyness + 1);
-            double px = start.x + t * dx;
-            double py = start.y + t * dy;
-            double nx = -dy / len;
-            double ny =  dx / len;
-            double off = offset_dist(rng);
-            line.push_back(SDL_Point{
-                static_cast<int>(std::lround(px + nx * off)),
-                static_cast<int>(std::lround(py + ny * off))
-            });
-        }
+    if (width <= 0) {
+        return {};
     }
-    line.push_back(end);
-    return line;
-}
-
-namespace detail {
-
-struct Vec2 {
-    double x = 0.0;
-    double y = 0.0;
-};
-
-constexpr double kCenterlineSpacingMin = 4.0;
-constexpr double kCenterlineSpacingMax = 16.0;
-
-inline Vec2 to_vec(const SDL_Point& raw_point) {
-    return Vec2{ static_cast<double>(raw_point.x), static_cast<double>(raw_point.y) };
-}
-
-inline SDL_Point to_point(const Vec2& point) {
-    return SDL_Point{
-        static_cast<int>(std::lround(point.x)),
-        static_cast<int>(std::lround(point.y))
+    double dx = static_cast<double>(end.x - start.x);
+    double dy = static_cast<double>(end.y - start.y);
+    double len = std::hypot(dx, dy);
+    if (len <= 0.0) {
+        return {};
+    }
+    double nx = -dy / len;
+    double ny = dx / len;
+    double half = static_cast<double>(width) * 0.5;
+    return {
+        SDL_Point{static_cast<int>(std::lround(start.x + nx * half)),
+                  static_cast<int>(std::lround(start.y + ny * half))},
+        SDL_Point{static_cast<int>(std::lround(start.x - nx * half)),
+                  static_cast<int>(std::lround(start.y - ny * half))},
+        SDL_Point{static_cast<int>(std::lround(end.x - nx * half)),
+                  static_cast<int>(std::lround(end.y - ny * half))},
+        SDL_Point{static_cast<int>(std::lround(end.x + nx * half)),
+                  static_cast<int>(std::lround(end.y + ny * half))}
     };
 }
-
-inline Vec2 lerp(const Vec2& a, const Vec2& b, double t) {
-    return Vec2{
-        a.x + (b.x - a.x) * t,
-        a.y + (b.y - a.y) * t
-    };
-}
-
-inline double length(const Vec2& value) {
-    return std::hypot(value.x, value.y);
-}
-
-inline Vec2 normalize(const Vec2& value) {
-    double len = length(value);
-    if (len <= 1e-6) {
-        return Vec2{ 1.0, 0.0 };
-    }
-    return Vec2{ value.x / len, value.y / len };
-}
-
-inline Vec2 perp(const Vec2& value) {
-    return Vec2{ -value.y, value.x };
-}
-
-inline double dot(const Vec2& a, const Vec2& b) {
-    return a.x * b.x + a.y * b.y;
-}
-
-inline double cross(const Vec2& a, const Vec2& b) {
-    return a.x * b.y - a.y * b.x;
-}
-
-double endpoint_fade(size_t index, size_t count) {
-    if (count < 2) {
-        return 0.0;
-    }
-    double relative = static_cast<double>(index) / (count - 1);
-    double fade = std::min(relative, 1.0 - relative);
-    return std::clamp(fade * 4.0, 0.0, 1.0);
-}
-
-Vec2 compute_tangent(const std::vector<Vec2>& line, size_t index) {
-    if (line.empty()) {
-        return Vec2{ 1.0, 0.0 };
-    }
-    Vec2 previous = line[index];
-    Vec2 next = line[index];
-    if (index > 0) {
-        previous = line[index - 1];
-    }
-    if (index + 1 < line.size()) {
-        next = line[index + 1];
-    }
-    return normalize(Vec2{ next.x - previous.x, next.y - previous.y });
-}
-
-void smooth_profile(std::vector<double>& values, int passes) {
-    if (values.size() < 3 || passes <= 0) {
-        return;
-    }
-    std::vector<double> buffer(values.size());
-    for (int pass_idx = 0; pass_idx < passes; ++pass_idx) {
-        buffer = values;
-        for (size_t i = 1; i + 1 < values.size(); ++i) {
-            buffer[i] = (values[i - 1] + values[i] * 2.0 + values[i + 1]) * 0.25;
-        }
-        values.swap(buffer);
-    }
-}
-
-std::vector<Vec2> resample_polyline(const std::vector<Vec2>& raw, double spacing) {
-    if (raw.size() < 2) {
-        return raw;
-    }
-    double total_length = 0.0;
-    std::vector<double> segment_lengths;
-    segment_lengths.reserve(raw.size() - 1);
-    for (size_t i = 0; i + 1 < raw.size(); ++i) {
-        double seg_len = length(Vec2{ raw[i + 1].x - raw[i].x, raw[i + 1].y - raw[i].y });
-        segment_lengths.push_back(seg_len);
-        total_length += seg_len;
-    }
-    if (total_length <= 0.0 || spacing <= 0.0) {
-        if (raw.size() <= trail_generation::kTrailGeometryMaxSamples) {
-            return raw;
-        }
-        return std::vector<Vec2>(raw.begin(), raw.begin() + trail_generation::kTrailGeometryMaxSamples);
-    }
-    double clamped_spacing = std::clamp(spacing, kCenterlineSpacingMin, kCenterlineSpacingMax);
-    size_t target_samples = static_cast<size_t>(std::ceil(total_length / clamped_spacing)) + 1;
-    target_samples = std::clamp(target_samples, static_cast<size_t>(2), trail_generation::kTrailGeometryMaxSamples);
-    std::vector<Vec2> result;
-    result.reserve(target_samples);
-    double step = (target_samples > 1) ? (total_length / (target_samples - 1)) : 0.0;
-    size_t segment_index = 0;
-    double consumed = 0.0;
-    result.push_back(raw.front());
-    for (size_t sample = 1; sample + 1 < target_samples; ++sample) {
-        double target = step * sample;
-        while (segment_index < segment_lengths.size() && consumed + segment_lengths[segment_index] < target) {
-            consumed += segment_lengths[segment_index];
-            ++segment_index;
-        }
-        if (segment_index >= segment_lengths.size()) {
-            break;
-        }
-        double seg_length = segment_lengths[segment_index];
-        double local_target = target - consumed;
-        double t = (seg_length <= 0.0) ? 0.0 : (local_target / seg_length);
-        result.push_back(lerp(raw[segment_index], raw[segment_index + 1], t));
-    }
-    result.push_back(raw.back());
-    if (result.size() > trail_generation::kTrailGeometryMaxSamples) {
-        result.resize(trail_generation::kTrailGeometryMaxSamples);
-    }
-    return result;
-}
-
-std::vector<Vec2> chaikin_smooth(const std::vector<Vec2>& chain, int passes) {
-    if (chain.size() < 2 || passes <= 0) {
-        return chain;
-    }
-    std::vector<Vec2> current = chain;
-    for (int pass_idx = 0; pass_idx < passes && current.size() < trail_generation::kTrailGeometryMaxSamples; ++pass_idx) {
-        std::vector<Vec2> next;
-        next.reserve(std::min(trail_generation::kTrailGeometryMaxSamples, current.size() * 2));
-        next.push_back(current.front());
-        for (size_t i = 0; i + 1 < current.size(); ++i) {
-            next.push_back(lerp(current[i], current[i + 1], 0.25));
-            if (next.size() >= trail_generation::kTrailGeometryMaxSamples) {
-                break;
-            }
-            next.push_back(lerp(current[i], current[i + 1], 0.75));
-            if (next.size() >= trail_generation::kTrailGeometryMaxSamples) {
-                break;
-            }
-        }
-        next.push_back(current.back());
-        current.swap(next);
-    }
-    return current;
-}
-
-Vec2 catmull_rom(const Vec2& p0, const Vec2& p1, const Vec2& p2, const Vec2& p3, double t) {
-    const double t2 = t * t;
-    const double t3 = t2 * t;
-    return Vec2{
-        0.5 * ((2.0 * p1.x) + (-p0.x + p2.x) * t + (2.0 * p0.x - 5.0 * p1.x + 4.0 * p2.x - p3.x) * t2 + (-p0.x + 3.0 * p1.x - 3.0 * p2.x + p3.x) * t3),
-        0.5 * ((2.0 * p1.y) + (-p0.y + p2.y) * t + (2.0 * p0.y - 5.0 * p1.y + 4.0 * p2.y - p3.y) * t2 + (-p0.y + 3.0 * p1.y - 3.0 * p2.y + p3.y) * t3)
-    };
-}
-
-std::vector<Vec2> catmull_rom_resample(const std::vector<Vec2>& anchors, double spacing) {
-    if (anchors.size() < 2) {
-        return anchors;
-    }
-    std::vector<Vec2> sampled;
-    sampled.reserve(std::min(static_cast<size_t>(anchors.size() * 8), trail_generation::kTrailGeometryMaxSamples));
-    sampled.push_back(anchors.front());
-    const double segment_step = std::clamp(spacing / 16.0, 0.05, 0.25);
-    for (size_t i = 0; i + 1 < anchors.size() && sampled.size() < trail_generation::kTrailGeometryMaxSamples; ++i) {
-        const Vec2& p0 = (i == 0) ? anchors[i] : anchors[i - 1];
-        const Vec2& p1 = anchors[i];
-        const Vec2& p2 = anchors[i + 1];
-        const Vec2& p3 = (i + 2 < anchors.size()) ? anchors[i + 2] : anchors[i + 1];
-        for (double t = segment_step; t < 1.0 && sampled.size() < trail_generation::kTrailGeometryMaxSamples; t += segment_step) {
-            sampled.push_back(catmull_rom(p0, p1, p2, p3, t));
-        }
-        sampled.push_back(p2);
-    }
-    return resample_polyline(sampled, spacing);
-}
-
-double curvature_at(const std::vector<Vec2>& line, size_t index) {
-    if (line.size() < 3 || index == 0 || index + 1 >= line.size()) {
-        return 0.0;
-    }
-    Vec2 a{ line[index].x - line[index - 1].x, line[index].y - line[index - 1].y };
-    Vec2 b{ line[index + 1].x - line[index].x, line[index + 1].y - line[index].y };
-    double len_a = length(a);
-    double len_b = length(b);
-    if (len_a <= 1e-6 || len_b <= 1e-6) {
-        return 0.0;
-    }
-    double sin_theta = std::abs(cross(a, b)) / (len_a * len_b);
-    return std::clamp(sin_theta, 0.0, 1.0);
-}
-
-bool point_in_polygon(const Vec2& point, const std::vector<Vec2>& poly) {
-    if (poly.size() < 3) {
-        return false;
-    }
-    bool inside = false;
-    for (size_t i = 0, j = poly.size() - 1; i < poly.size(); j = i++) {
-        const Vec2& a = poly[i];
-        const Vec2& b = poly[j];
-        const bool intersect = ((a.y > point.y) != (b.y > point.y)) &&
-                               (point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y + 1e-12) + a.x);
-        if (intersect) {
-            inside = !inside;
-        }
-    }
-    return inside;
-}
-
-bool segments_intersect(const Vec2& p1, const Vec2& p2, const Vec2& q1, const Vec2& q2) {
-    const auto orientation = [](const Vec2& a, const Vec2& b, const Vec2& c) {
-        return cross(Vec2{ b.x - a.x, b.y - a.y }, Vec2{ c.x - a.x, c.y - a.y });
-    };
-    const auto on_segment = [](const Vec2& a, const Vec2& b, const Vec2& c) {
-        return b.x <= std::max(a.x, c.x) + 1e-6 && b.x + 1e-6 >= std::min(a.x, c.x) &&
-               b.y <= std::max(a.y, c.y) + 1e-6 && b.y + 1e-6 >= std::min(a.y, c.y);
-    };
-
-    const double o1 = orientation(p1, p2, q1);
-    const double o2 = orientation(p1, p2, q2);
-    const double o3 = orientation(q1, q2, p1);
-    const double o4 = orientation(q1, q2, p2);
-    const double eps = 1e-6;
-
-    if ((o1 > eps && o2 < -eps || o1 < -eps && o2 > eps) &&
-        (o3 > eps && o4 < -eps || o3 < -eps && o4 > eps)) {
-        return true;
-    }
-    if (std::abs(o1) <= eps && on_segment(p1, q1, p2)) return true;
-    if (std::abs(o2) <= eps && on_segment(p1, q2, p2)) return true;
-    if (std::abs(o3) <= eps && on_segment(q1, p1, q2)) return true;
-    if (std::abs(o4) <= eps && on_segment(q1, p2, q2)) return true;
-    return false;
-}
-
-bool boundaries_valid(const std::vector<Vec2>& left, const std::vector<Vec2>& right) {
-    if (left.size() < 2 || right.size() < 2 || left.size() != right.size()) {
-        return false;
-    }
-    for (size_t i = 0; i + 1 < left.size(); ++i) {
-        for (size_t j = i + 2; j + 1 < left.size(); ++j) {
-            if (segments_intersect(left[i], left[i + 1], left[j], left[j + 1])) {
-                return false;
-            }
-            if (segments_intersect(right[i], right[i + 1], right[j], right[j + 1])) {
-                return false;
-            }
-        }
-    }
-    for (size_t i = 0; i + 1 < left.size(); ++i) {
-        for (size_t j = 0; j + 1 < right.size(); ++j) {
-            if (i == j || (i + 1 == j) || (j + 1 == i)) {
-                continue;
-            }
-            if (segments_intersect(left[i], left[i + 1], right[j], right[j + 1])) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-}  // namespace detail
 
 }  // namespace
-
-namespace trail_generation {
-
-std::vector<SDL_Point> build_trail_polygon(const std::vector<SDL_Point>& base_centerline,
-                                           int min_width,
-                                           int max_width,
-                                           int curvyness,
-                                           std::mt19937& rng,
-                                           TrailGeometryReport* report)
-{
-    if (base_centerline.size() < 2) {
-        if (report) {
-            report->centerline.clear();
-            report->local_widths.clear();
-            report->left_half_widths.clear();
-            report->right_half_widths.clear();
-            report->left_boundary.clear();
-            report->right_boundary.clear();
-            report->resampled_points = 0;
-            report->boundary_points = 0;
-            report->smoothing_passes = 0;
-        }
-        return {};
-    }
-
-    std::vector<detail::Vec2> anchors;
-    anchors.reserve(base_centerline.size());
-    for (const auto& point : base_centerline) {
-        anchors.push_back(detail::to_vec(point));
-    }
-
-    const double sorted_min = static_cast<double>(std::min(min_width, max_width));
-    const double sorted_max = static_cast<double>(std::max(min_width, max_width));
-    const double width_range = std::max(0.0, sorted_max - sorted_min);
-    const double desired_spacing = std::clamp(sorted_max * 0.2, detail::kCenterlineSpacingMin, detail::kCenterlineSpacingMax);
-
-    auto dense = detail::catmull_rom_resample(anchors, desired_spacing);
-    if (dense.size() < 2) {
-        return {};
-    }
-
-    const double curvy_factor = std::clamp(static_cast<double>(curvyness) / 8.0, 0.0, 1.0);
-    std::vector<double> total_widths(dense.size(), sorted_min);
-    std::vector<double> asymmetry(dense.size(), 0.0);
-
-    auto fill_low_frequency_noise = [&](std::vector<double>& values, double amplitude) {
-        if (values.empty()) {
-            return;
-        }
-        const size_t stride = std::max<size_t>(3, dense.size() / 10);
-        std::uniform_real_distribution<double> dist(-amplitude, amplitude);
-        std::vector<double> controls((values.size() + stride - 1) / stride + 1, 0.0);
-        for (double& v : controls) {
-            v = dist(rng);
-        }
-        for (size_t i = 0; i < values.size(); ++i) {
-            size_t c0 = i / stride;
-            size_t c1 = std::min(c0 + 1, controls.size() - 1);
-            double t = static_cast<double>(i % stride) / static_cast<double>(stride);
-            values[i] = controls[c0] * (1.0 - t) + controls[c1] * t;
-        }
-        detail::smooth_profile(values, 3);
-    };
-
-    if (width_range > 0.0) {
-        std::vector<double> width_noise(dense.size(), 0.0);
-        fill_low_frequency_noise(width_noise, 0.5 + 0.35 * curvy_factor);
-        for (size_t i = 0; i < total_widths.size(); ++i) {
-            double fade = detail::endpoint_fade(i, total_widths.size());
-            double normalized = std::clamp(0.5 + width_noise[i] * (0.6 + 0.2 * curvy_factor) * fade, 0.0, 1.0);
-            total_widths[i] = sorted_min + normalized * width_range;
-        }
-    }
-    fill_low_frequency_noise(asymmetry, 0.3 + 0.2 * curvy_factor);
-
-    std::vector<double> left_half(total_widths.size(), sorted_min * 0.5);
-    std::vector<double> right_half(total_widths.size(), sorted_min * 0.5);
-    std::vector<double> taper(total_widths.size(), 1.0);
-    for (size_t i = 0; i < dense.size(); ++i) {
-        double curvature = detail::curvature_at(dense, i);
-        taper[i] = std::clamp(1.0 - curvature * (0.55 + 0.35 * curvy_factor), 0.35, 1.0);
-        double base_width = total_widths[i] * taper[i];
-        double split = std::clamp(0.5 + 0.25 * asymmetry[i], 0.2, 0.8);
-        left_half[i] = std::max(1.0, base_width * split);
-        right_half[i] = std::max(1.0, base_width - left_half[i]);
-    }
-
-    auto build_boundaries = [&](const std::vector<double>& left_widths,
-                                const std::vector<double>& right_widths,
-                                std::vector<detail::Vec2>& left,
-                                std::vector<detail::Vec2>& right) {
-        left.clear();
-        right.clear();
-        left.reserve(dense.size());
-        right.reserve(dense.size());
-        for (size_t i = 0; i < dense.size(); ++i) {
-            detail::Vec2 tan_prev = (i == 0) ? detail::compute_tangent(dense, i) : detail::normalize(detail::Vec2{dense[i].x - dense[i - 1].x, dense[i].y - dense[i - 1].y});
-            detail::Vec2 tan_next = (i + 1 >= dense.size()) ? detail::compute_tangent(dense, i) : detail::normalize(detail::Vec2{dense[i + 1].x - dense[i].x, dense[i + 1].y - dense[i].y});
-            detail::Vec2 n_prev = detail::perp(tan_prev);
-            detail::Vec2 n_next = detail::perp(tan_next);
-            detail::Vec2 join_normal = detail::normalize(detail::Vec2{n_prev.x + n_next.x, n_prev.y + n_next.y});
-            if (std::abs(join_normal.x) < 1e-6 && std::abs(join_normal.y) < 1e-6) {
-                join_normal = n_next;
-            }
-            double denom = std::max(0.3, std::abs(detail::dot(join_normal, n_next)));
-            double miter = std::clamp(1.0 / denom, 1.0, 2.4);
-            left.push_back(detail::Vec2{dense[i].x + join_normal.x * left_widths[i] * miter,
-                                        dense[i].y + join_normal.y * left_widths[i] * miter});
-            right.push_back(detail::Vec2{dense[i].x - join_normal.x * right_widths[i] * miter,
-                                         dense[i].y - join_normal.y * right_widths[i] * miter});
-        }
-    };
-
-    std::vector<detail::Vec2> left;
-    std::vector<detail::Vec2> right;
-    build_boundaries(left_half, right_half, left, right);
-
-    for (int repair = 0; repair < 3 && !detail::boundaries_valid(left, right); ++repair) {
-        for (size_t i = 0; i < dense.size(); ++i) {
-            double local = std::clamp(taper[i] * (0.82 - 0.08 * repair), 0.25, 1.0);
-            double total = std::max(2.0, total_widths[i] * local);
-            double split = std::clamp(left_half[i] / std::max(1e-6, left_half[i] + right_half[i]), 0.2, 0.8);
-            left_half[i] = std::max(1.0, total * split);
-            right_half[i] = std::max(1.0, total - left_half[i]);
-        }
-        build_boundaries(left_half, right_half, left, right);
-    }
-
-    if (!detail::boundaries_valid(left, right)) {
-        for (size_t i = 0; i < dense.size(); ++i) {
-            double fade = detail::endpoint_fade(i, dense.size());
-            double total = std::max(2.0, sorted_min * (0.65 + 0.35 * fade));
-            left_half[i] = total * 0.5;
-            right_half[i] = total * 0.5;
-        }
-        build_boundaries(left_half, right_half, left, right);
-    }
-
-    auto smooth_left = detail::chaikin_smooth(left, kTrailGeometryBoundarySmoothPasses);
-    auto smooth_right = detail::chaikin_smooth(right, kTrailGeometryBoundarySmoothPasses);
-
-    std::vector<SDL_Point> polygon;
-    polygon.reserve(smooth_left.size() + smooth_right.size());
-    for (const auto& point : smooth_left) {
-        polygon.push_back(detail::to_point(point));
-    }
-    for (auto it = smooth_right.rbegin(); it != smooth_right.rend(); ++it) {
-        polygon.push_back(detail::to_point(*it));
-    }
-
-    if (polygon.size() < 4) {
-        return {};
-    }
-
-    if (report) {
-        report->centerline.clear();
-        report->centerline.reserve(dense.size());
-        for (const auto& center : dense) {
-            report->centerline.push_back({center.x, center.y});
-        }
-        report->local_widths.resize(left_half.size());
-        for (size_t i = 0; i < left_half.size(); ++i) {
-            report->local_widths[i] = left_half[i] + right_half[i];
-        }
-        report->left_half_widths = left_half;
-        report->right_half_widths = right_half;
-        report->left_boundary.clear();
-        report->right_boundary.clear();
-        for (const auto& point : smooth_left) {
-            report->left_boundary.push_back({point.x, point.y});
-        }
-        for (const auto& point : smooth_right) {
-            report->right_boundary.push_back({point.x, point.y});
-        }
-        report->resampled_points = dense.size();
-        report->boundary_points = polygon.size();
-        report->smoothing_passes = kTrailGeometryBoundarySmoothPasses;
-    }
-
-    return polygon;
-}
-
-bool polygons_overlap_precise(const std::vector<SDL_Point>& a, const std::vector<SDL_Point>& b)
-{
-    if (a.size() < 3 || b.size() < 3) {
-        return false;
-    }
-    auto to_vecs = [](const std::vector<SDL_Point>& poly) {
-        std::vector<detail::Vec2> out;
-        out.reserve(poly.size());
-        for (const auto& point : poly) {
-            out.push_back(detail::to_vec(point));
-        }
-        return out;
-    };
-
-    const auto av = to_vecs(a);
-    const auto bv = to_vecs(b);
-
-    auto bounds = [](const std::vector<detail::Vec2>& poly) {
-        double minx = poly.front().x;
-        double maxx = poly.front().x;
-        double miny = poly.front().y;
-        double maxy = poly.front().y;
-        for (const auto& p : poly) {
-            minx = std::min(minx, p.x);
-            maxx = std::max(maxx, p.x);
-            miny = std::min(miny, p.y);
-            maxy = std::max(maxy, p.y);
-        }
-        return std::array<double, 4>{minx, miny, maxx, maxy};
-    };
-
-    auto ba = bounds(av);
-    auto bb = bounds(bv);
-    if (ba[2] < bb[0] || bb[2] < ba[0] || ba[3] < bb[1] || bb[3] < ba[1]) {
-        return false;
-    }
-
-    for (size_t i = 0; i < av.size(); ++i) {
-        size_t ni = (i + 1) % av.size();
-        for (size_t j = 0; j < bv.size(); ++j) {
-            size_t nj = (j + 1) % bv.size();
-            if (detail::segments_intersect(av[i], av[ni], bv[j], bv[nj])) {
-                return true;
-            }
-        }
-    }
-
-    if (detail::point_in_polygon(av.front(), bv)) {
-        return true;
-    }
-    if (detail::point_in_polygon(bv.front(), av)) {
-        return true;
-    }
-
-    return false;
-}
-
-
-}  // namespace trail_generation
 
 SDL_Point compute_edge_point(const SDL_Point& center,
                              const SDL_Point& toward,
@@ -760,20 +234,8 @@ bool attempt_trail_connection(Room* a,
     auto [aminx, aminy, amaxx, amaxy] = a->room_area->get_bounds();
     auto [bminx, bminy, bmaxx, bmaxy] = b->room_area->get_bounds();
 
-    std::vector<SDL_Point> base_line;
-    base_line.reserve(static_cast<size_t>(curvyness) + 6);
-    base_line.push_back(a_interior);
-    base_line.push_back(a_edge);
-    auto middle = build_centerline(a_outside, b_outside, curvyness, rng);
-    base_line.insert(base_line.end(), middle.begin(), middle.end());
-    base_line.push_back(b_edge);
-    base_line.push_back(b_interior);
-
-    auto polygon = trail_generation::build_trail_polygon(base_line, min_width, max_width, curvyness, rng);
+    auto polygon = build_straight_trail_polygon(a_edge, b_edge, width_for_depth);
     if (polygon.empty()) {
-        if (testing) {
-            std::cout << "[TrailGeometry] Geometry builder produced no polygon\n";
-        }
         return false;
     }
 
@@ -787,7 +249,6 @@ bool attempt_trail_connection(Room* a,
     }
 
     Area candidate("trail_candidate", polygon, 3);
-
     int intersection_count = 0;
     for (auto& area : existing_areas) {
         auto [minx, miny, maxx, maxy] = area.get_bounds();
@@ -797,12 +258,7 @@ bool attempt_trail_connection(Room* a,
         if (cmaxx < minx || maxx < cminx || cmaxy < miny || maxy < cminy) {
             continue;
         }
-        std::vector<SDL_Point> area_polygon;
-        area_polygon.reserve(area.get_points().size());
-        for (const auto& point : area.get_points()) {
-            area_polygon.push_back(SDL_Point{point.x, point.y});
-        }
-        if (trail_generation::polygons_overlap_precise(polygon, area_polygon)) {
+        if (candidate.intersects(area)) {
             if (++intersection_count > allowed_intersections) {
                 break;
             }

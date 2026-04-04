@@ -300,7 +300,6 @@ add_executable(engine_tests
     ENGINE/tests/test_tag_editor_widget_recommendations.cpp
     ENGINE/tests/test_geometry_batcher_ordering.cpp
     ENGINE/tests/test_screen_space_math.cpp
-    ENGINE/tests/test_trail_geometry.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
   )
 

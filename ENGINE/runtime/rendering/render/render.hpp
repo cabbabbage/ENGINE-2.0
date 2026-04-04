@@ -192,6 +192,7 @@ private:
     std::vector<SDL_Texture*> motion_blur_history_textures_;
     int motion_blur_history_write_index_ = 0;
     int motion_blur_valid_history_frames_ = 0;
+    int motion_blur_history_capacity_    = 0;
     std::vector<SDL_Texture*> dof_layer_textures_;
     std::vector<SDL_Texture*> dof_blur_textures_;
     std::filesystem::path sky_texture_path_;

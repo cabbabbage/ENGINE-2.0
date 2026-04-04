@@ -97,8 +97,14 @@ double LayerEffectProcessor::fog_alpha_from_depth(double layer_depth,
     }
     const double safe_curve = std::clamp(fog_depth_curve, 0.01, 16.0);
     const double depth_norm = std::clamp(std::fabs(layer_depth) / safe_max_depth, 0.0, 1.0);
+
+    // Use depth‑normalized exponential extinction but renormalize so that full cull depth = full opacity.
+    // This guarantees the farthest layer is completely hidden by fog regardless of density, while still
+    // keeping near depths clear when density is low.
+    const double max_depth_transmittance = std::exp(-safe_density);
     const double transmittance = std::exp(-safe_density * std::pow(depth_norm, safe_curve));
-    return std::clamp(1.0 - transmittance, 0.0, 1.0);
+    const double normalized = (1.0 - transmittance) / std::max(1e-6, 1.0 - max_depth_transmittance);
+    return std::clamp(normalized, 0.0, 1.0);
 }
 
 bool LayerEffectProcessor::ensure_fog_noise_tile() const {
@@ -538,10 +544,12 @@ bool LayerEffectProcessor::apply_atmospheric_fog(SDL_Texture* src,
     SDL_BlendMode dst_old_blend = SDL_BLENDMODE_BLEND;
     SDL_BlendMode scratch_old_blend = SDL_BLENDMODE_BLEND;
     SDL_BlendMode fog_old_blend = SDL_BLENDMODE_BLEND;
+    SDL_BlendMode old_draw_blend = SDL_BLENDMODE_NONE;
     SDL_GetTextureBlendMode(src, &src_old_blend);
     SDL_GetTextureBlendMode(dst, &dst_old_blend);
     SDL_GetTextureBlendMode(scratch, &scratch_old_blend);
     SDL_GetTextureBlendMode(fog_sheet_tex_, &fog_old_blend);
+    SDL_GetRenderDrawBlendMode(renderer_, &old_draw_blend);
     Uint8 src_old_alpha = 255;
     Uint8 dst_old_alpha = 255;
     Uint8 scratch_old_alpha = 255;
@@ -549,11 +557,13 @@ bool LayerEffectProcessor::apply_atmospheric_fog(SDL_Texture* src,
     Uint8 fog_old_r = 255;
     Uint8 fog_old_g = 255;
     Uint8 fog_old_b = 255;
+    Uint8 old_draw_r = 0, old_draw_g = 0, old_draw_b = 0, old_draw_a = 0;
     SDL_GetTextureAlphaMod(src, &src_old_alpha);
     SDL_GetTextureAlphaMod(dst, &dst_old_alpha);
     SDL_GetTextureAlphaMod(scratch, &scratch_old_alpha);
     SDL_GetTextureAlphaMod(fog_sheet_tex_, &fog_old_alpha);
     SDL_GetTextureColorMod(fog_sheet_tex_, &fog_old_r, &fog_old_g, &fog_old_b);
+    SDL_GetRenderDrawColor(renderer_, &old_draw_r, &old_draw_g, &old_draw_b, &old_draw_a);
 
     auto clear_target = [&](SDL_Texture* target) {
         SDL_SetRenderTarget(renderer_, target);
@@ -561,14 +571,21 @@ bool LayerEffectProcessor::apply_atmospheric_fog(SDL_Texture* src,
         SDL_RenderClear(renderer_);
     };
 
-    // True source-over fog: affects both color and alpha so transparent layer regions
-    // can still carry atmospheric haze and occlude farther layers.
+    // True source-over fog for color; alpha channel is preserved separately using a color-only blend.
     const SDL_BlendMode fog_blend = SDL_ComposeCustomBlendMode(
         SDL_BLENDFACTOR_SRC_ALPHA,
         SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
         SDL_BLENDOPERATION_ADD,
         SDL_BLENDFACTOR_ONE,
         SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD);
+    // Color-only blend: write color with src alpha but keep destination alpha unchanged.
+    const SDL_BlendMode fog_color_only_blend = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_SRC_ALPHA,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
         SDL_BLENDOPERATION_ADD);
 
     const float clamped_quality = std::clamp(quality_scale, 0.35f, 1.0f);
@@ -598,23 +615,36 @@ bool LayerEffectProcessor::apply_atmospheric_fog(SDL_Texture* src,
         const SDL_BlendMode active_fog_blend = (fog_blend == SDL_BLENDMODE_INVALID)
             ? SDL_BLENDMODE_BLEND
             : fog_blend;
-        SDL_SetTextureBlendMode(fog_sheet_tex_, active_fog_blend);
-        SDL_SetTextureColorMod(fog_sheet_tex_, fog_color.r, fog_color.g, fog_color.b);
-        SDL_SetTextureAlphaMod(fog_sheet_tex_, fog_alpha_u8);
-        SDL_SetRenderTarget(renderer_, reduced_resolution ? scratch : dst);
-        SDL_FRect src_rect{
-            0.0f,
-            0.0f,
-            static_cast<float>(target_w),
-            static_cast<float>(target_h)
-        };
-        SDL_FRect dst_rect{
-            0.0f,
-            0.0f,
-            static_cast<float>(process_w),
-            static_cast<float>(process_h)
-        };
-        SDL_RenderTexture(renderer_, fog_sheet_tex_, &src_rect, &dst_rect);
+        SDL_Texture* fog_target = reduced_resolution ? scratch : dst;
+
+        // 1) Uniform coverage so deep layers are actually hidden.
+        SDL_SetRenderTarget(renderer_, fog_target);
+        SDL_SetRenderDrawBlendMode(renderer_, fog_color_only_blend);
+        SDL_SetRenderDrawColor(renderer_, fog_color.r, fog_color.g, fog_color.b, fog_alpha_u8);
+        SDL_RenderFillRect(renderer_, nullptr);
+
+        // 2) Add subtle noise on top for natural variation without reducing coverage.
+        const float noise_strength = 0.35f;
+        const int noise_alpha_i = static_cast<int>(std::lround(static_cast<float>(fog_alpha_u8) * noise_strength));
+        const Uint8 noise_alpha = static_cast<Uint8>(std::clamp(noise_alpha_i, 0, 255));
+        if (noise_alpha > 0) {
+            SDL_SetTextureBlendMode(fog_sheet_tex_, fog_color_only_blend);
+            SDL_SetTextureColorMod(fog_sheet_tex_, fog_color.r, fog_color.g, fog_color.b);
+            SDL_SetTextureAlphaMod(fog_sheet_tex_, noise_alpha);
+            SDL_FRect src_rect{
+                0.0f,
+                0.0f,
+                static_cast<float>(target_w),
+                static_cast<float>(target_h)
+            };
+            SDL_FRect dst_rect{
+                0.0f,
+                0.0f,
+                static_cast<float>(process_w),
+                static_cast<float>(process_h)
+            };
+            SDL_RenderTexture(renderer_, fog_sheet_tex_, &src_rect, &dst_rect);
+        }
     }
 
     if (reduced_resolution) {
@@ -639,6 +669,8 @@ bool LayerEffectProcessor::apply_atmospheric_fog(SDL_Texture* src,
     SDL_SetTextureAlphaMod(scratch, scratch_old_alpha);
     SDL_SetTextureAlphaMod(fog_sheet_tex_, fog_old_alpha);
     SDL_SetTextureColorMod(fog_sheet_tex_, fog_old_r, fog_old_g, fog_old_b);
+    SDL_SetRenderDrawBlendMode(renderer_, old_draw_blend);
+    SDL_SetRenderDrawColor(renderer_, old_draw_r, old_draw_g, old_draw_b, old_draw_a);
     SDL_SetRenderTarget(renderer_, previous_target);
     return true;
 }

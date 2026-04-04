@@ -538,7 +538,7 @@ TEST_CASE("LayerEffectProcessor fog alpha is monotonic with depth and disables a
     CHECK(near_alpha >= 0.0);
     CHECK(mid_alpha >= near_alpha);
     CHECK(far_alpha >= mid_alpha);
-    CHECK(far_alpha <= 1.0);
+    CHECK(far_alpha == doctest::Approx(1.0)); // deepest layer is fully occluded
 
     const double gentle_curve = LayerEffectProcessor::fog_alpha_from_depth(1000.0, max_depth, 1.2, 0.8);
     const double steep_curve = LayerEffectProcessor::fog_alpha_from_depth(1000.0, max_depth, 1.2, 2.0);

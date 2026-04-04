@@ -47,8 +47,8 @@
 namespace {
 constexpr double kDepthBucketSize = 0.0625;
 constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
-constexpr int kMotionBlurHistoryFrameCount = 4;
-constexpr std::array<Uint8, kMotionBlurHistoryFrameCount> kMotionBlurHistoryAlpha = {104, 72, 44, 28};
+constexpr int kMotionBlurHistoryFrameCount = 2;
+constexpr std::array<Uint8, kMotionBlurHistoryFrameCount> kMotionBlurHistoryAlpha = {120, 60};
 
 inline std::int64_t quantize_depth(double depth) {
     const double scaled = std::floor(depth * kDepthBucketScale);
@@ -1012,6 +1012,7 @@ SceneRenderer::~SceneRenderer() {
     for (SDL_Texture* tex : motion_blur_history_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
+    motion_blur_history_capacity_ = 0;
     for (SDL_Texture* tex : dof_layer_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
@@ -1021,6 +1022,7 @@ SceneRenderer::~SceneRenderer() {
     motion_blur_history_textures_.clear();
     motion_blur_history_write_index_ = 0;
     motion_blur_valid_history_frames_ = 0;
+    motion_blur_history_capacity_ = 0;
     dof_layer_textures_.clear();
     dof_blur_textures_.clear();
 }
@@ -1491,8 +1493,9 @@ void SceneRenderer::render() {
         scene_composite_tex_ = create_target_texture(screen_width_, screen_height_);
     }
 
-    bool motion_blur_targets_ready = scene_composite_tex_ != nullptr;
-    if (motion_blur_targets_ready) {
+    const bool scene_targets_ready = scene_composite_tex_ != nullptr;
+    int available_history_textures = 0;
+    if (scene_targets_ready) {
         if (static_cast<int>(motion_blur_history_textures_.size()) != kMotionBlurHistoryFrameCount) {
             for (SDL_Texture* tex : motion_blur_history_textures_) {
                 if (tex) {
@@ -1507,16 +1510,21 @@ void SceneRenderer::render() {
             if (!motion_blur_history_textures_[i]) {
                 motion_blur_history_textures_[i] = create_target_texture(screen_width_, screen_height_);
             }
-            if (!motion_blur_history_textures_[i]) {
-                motion_blur_targets_ready = false;
+            if (motion_blur_history_textures_[i]) {
+                ++available_history_textures;
             }
         }
     }
+    motion_blur_history_capacity_ = available_history_textures;
 
+    const bool motion_blur_targets_ready =
+        scene_targets_ready && motion_blur_history_capacity_ > 0;
     if (!motion_blur_targets_ready) {
         motion_blur_history_write_index_ = 0;
         motion_blur_valid_history_frames_ = 0;
     }
+    motion_blur_valid_history_frames_ =
+        std::min(motion_blur_valid_history_frames_, motion_blur_history_capacity_);
 
     SDL_Texture* const gameplay_target = scene_composite_tex_;
     SDL_SetRenderTarget(renderer_, gameplay_target);
@@ -1998,10 +2006,49 @@ void SceneRenderer::render() {
         SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
 
         if (motion_blur_targets_ready) {
-            const int blur_layers = std::min(motion_blur_valid_history_frames_, kMotionBlurHistoryFrameCount);
+            const int blur_layers = std::min(motion_blur_valid_history_frames_, motion_blur_history_capacity_);
+            auto advance_index = [&](int idx) {
+                idx += 1;
+                if (idx >= kMotionBlurHistoryFrameCount) {
+                    idx -= kMotionBlurHistoryFrameCount;
+                }
+                return idx;
+            };
+            auto retreat_index = [&](int idx) {
+                idx -= 1;
+                if (idx < 0) {
+                    idx += kMotionBlurHistoryFrameCount;
+                }
+                return idx;
+            };
+            auto find_previous_valid_slot = [&](int start_idx) -> int {
+                int candidate = start_idx;
+                for (int attempt = 0; attempt < kMotionBlurHistoryFrameCount; ++attempt) {
+                    if (motion_blur_history_textures_[candidate]) {
+                        return candidate;
+                    }
+                    candidate = retreat_index(candidate);
+                }
+                return -1;
+            };
+            auto find_next_valid_slot = [&](int start_idx) -> int {
+                int candidate = start_idx;
+                for (int attempt = 0; attempt < kMotionBlurHistoryFrameCount; ++attempt) {
+                    if (motion_blur_history_textures_[candidate]) {
+                        return candidate;
+                    }
+                    candidate = advance_index(candidate);
+                }
+                return -1;
+            };
+
+            int history_index = motion_blur_history_write_index_;
             for (int i = blur_layers - 1; i >= 0; --i) {
-                const int history_index =
-                    (motion_blur_history_write_index_ - 1 - i + kMotionBlurHistoryFrameCount) % kMotionBlurHistoryFrameCount;
+                history_index = retreat_index(history_index);
+                history_index = find_previous_valid_slot(history_index);
+                if (history_index < 0) {
+                    break;
+                }
                 SDL_Texture* history_texture = motion_blur_history_textures_[history_index];
                 if (!history_texture) {
                     continue;
@@ -2013,19 +2060,21 @@ void SceneRenderer::render() {
                 SDL_SetTextureAlphaMod(history_texture, 255);
             }
 
-            SDL_Texture* write_target = motion_blur_history_textures_[motion_blur_history_write_index_];
-            if (write_target) {
-                SDL_SetRenderTarget(renderer_, write_target);
-                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-                SDL_RenderClear(renderer_);
-                SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
-                SDL_SetRenderTarget(renderer_, nullptr);
+            int write_slot = find_next_valid_slot(motion_blur_history_write_index_);
+            if (write_slot >= 0) {
+                SDL_Texture* write_target = motion_blur_history_textures_[write_slot];
+                if (write_target) {
+                    SDL_SetRenderTarget(renderer_, write_target);
+                    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+                    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+                    SDL_RenderClear(renderer_);
+                    SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
+                    SDL_SetRenderTarget(renderer_, nullptr);
 
-                motion_blur_history_write_index_ =
-                    (motion_blur_history_write_index_ + 1) % kMotionBlurHistoryFrameCount;
-                motion_blur_valid_history_frames_ =
-                    std::min(motion_blur_valid_history_frames_ + 1, kMotionBlurHistoryFrameCount);
+                    motion_blur_history_write_index_ = advance_index(write_slot);
+                    motion_blur_valid_history_frames_ =
+                        std::min(motion_blur_valid_history_frames_ + 1, motion_blur_history_capacity_);
+                }
             }
         }
     } else {

@@ -182,6 +182,20 @@ void GeometryBatcher::clear() {
     index_buffer_.clear();
 }
 
+void GeometryBatcher::for_each_item_far_to_near(const std::function<void(const DrawItem&)>& fn) const {
+    if (!fn) {
+        return;
+    }
+    for (auto bucket_it = depth_buckets_.rbegin(); bucket_it != depth_buckets_.rend(); ++bucket_it) {
+        for (const DrawItem& item : bucket_it->second.items) {
+            fn(item);
+        }
+    }
+    for (const DrawItem& item : invalid_depth_bucket_.items) {
+        fn(item);
+    }
+}
+
 void GridTileRenderer::invalidate_texture_cache() {
     texture_size_cache_.clear();
 }
@@ -990,6 +1004,14 @@ SceneRenderer::~SceneRenderer() {
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
+    for (SDL_Texture* tex : dof_layer_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    for (SDL_Texture* tex : dof_blur_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    dof_layer_textures_.clear();
+    dof_blur_textures_.clear();
 }
 
 bool SceneRenderer::ensure_sky_texture() {
@@ -1067,6 +1089,14 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
         SDL_DestroyTexture(blur_tex_);
         blur_tex_ = nullptr;
     }
+    for (SDL_Texture* tex : dof_layer_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    for (SDL_Texture* tex : dof_blur_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    dof_layer_textures_.clear();
+    dof_blur_textures_.clear();
 }
 
 std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
@@ -1326,6 +1356,10 @@ void SceneRenderer::render() {
     const auto& boundary_sprites = should_render_boundaries
         ? dynamic_boundary_system_->get_boundary_sprites()
         : kEmptyBoundarySprites;
+    const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
+    const int layer_count = std::max(1, realism.number_of_layers);
+    const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
+    const double layer_span = max_cull_depth / static_cast<double>(layer_count);
 
     // 3) Assets + boundaries (depth-sorted painter's algorithm)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
@@ -1342,6 +1376,9 @@ void SceneRenderer::render() {
     float max_boundary_height = 0.0f;
 
     auto queue_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite, double depth) {
+        if (depth < 0.0 || depth > max_cull_depth) {
+            return;
+        }
         if (!sprite.texture ||
             sprite.texture_w <= 0 || sprite.texture_h <= 0 ||
             sprite.world_width <= 0.0f || sprite.world_height <= 0.0f) {
@@ -1420,6 +1457,17 @@ void SceneRenderer::render() {
     auto depth_for_boundary = [&](const DynamicBoundarySystem::BoundarySprite& sprite) -> double {
         return render_depth::depth_from_anchor(anchor_depth, static_cast<double>(sprite.world_z));
     };
+    auto depth_to_layer_index = [&](double depth) -> int {
+        if (!std::isfinite(depth) || depth < 0.0) {
+            return -1;
+        }
+        const double clamped = std::min(depth, max_cull_depth);
+        int idx = static_cast<int>(clamped / std::max(1e-6, layer_span));
+        if (idx >= layer_count) {
+            idx = layer_count - 1;
+        }
+        return idx;
+    };
 
     const auto& active_traversal = assets_->active_traversal();
     std::vector<Asset*> rendered_assets_for_debug;
@@ -1490,7 +1538,125 @@ void SceneRenderer::render() {
         }
     }
 
-    geometry_batcher_->flush();
+    struct LayerSubmission {
+        std::vector<GeometryBatcher::DrawItem> draws;
+        double submitted_depth_sum = 0.0;
+        int submitted_depth_count = 0;
+    };
+    std::vector<LayerSubmission> layers(static_cast<std::size_t>(layer_count));
+    geometry_batcher_->for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
+        const int layer_idx = depth_to_layer_index(item.depth);
+        if (layer_idx < 0 || layer_idx >= layer_count) {
+            return;
+        }
+        LayerSubmission& layer = layers[static_cast<std::size_t>(layer_idx)];
+        layer.draws.push_back(item);
+        if (std::isfinite(item.depth)) {
+            layer.submitted_depth_sum += item.depth;
+            ++layer.submitted_depth_count;
+        }
+    });
+
+    auto destroy_texture_array = [](std::vector<SDL_Texture*>& textures) {
+        for (SDL_Texture* tex : textures) {
+            if (tex) {
+                SDL_DestroyTexture(tex);
+            }
+        }
+        textures.clear();
+    };
+    auto create_target_texture = [&](int w, int h) -> SDL_Texture* {
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+        if (!texture) {
+            return nullptr;
+        }
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        return texture;
+    };
+    if (static_cast<int>(dof_layer_textures_.size()) != layer_count ||
+        static_cast<int>(dof_blur_textures_.size()) != layer_count) {
+        destroy_texture_array(dof_layer_textures_);
+        destroy_texture_array(dof_blur_textures_);
+        dof_layer_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
+        dof_blur_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
+    }
+    for (int i = 0; i < layer_count; ++i) {
+        if (!dof_layer_textures_[i]) {
+            dof_layer_textures_[i] = create_target_texture(screen_width_, screen_height_);
+        }
+        if (!dof_blur_textures_[i]) {
+            dof_blur_textures_[i] = create_target_texture(screen_width_, screen_height_);
+        }
+    }
+
+    auto blur_texture = [&](SDL_Texture* src, SDL_Texture* dst, float radius_px) {
+        if (!src || !dst || radius_px <= 0.01f) {
+            return;
+        }
+        SDL_SetRenderTarget(renderer_, dst);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        const int kernel = std::clamp(static_cast<int>(std::ceil(radius_px)), 1, 6);
+        const float inv_taps = 1.0f / static_cast<float>((kernel * 2 + 1) * (kernel * 2 + 1));
+        SDL_SetTextureAlphaMod(src, static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(inv_taps * 255.0f)), 1, 255)));
+        for (int ox = -kernel; ox <= kernel; ++ox) {
+            for (int oy = -kernel; oy <= kernel; ++oy) {
+                SDL_FRect dst_rect{
+                    static_cast<float>(ox),
+                    static_cast<float>(oy),
+                    static_cast<float>(screen_width_),
+                    static_cast<float>(screen_height_)
+                };
+                SDL_RenderTexture(renderer_, src, nullptr, &dst_rect);
+            }
+        }
+        SDL_SetTextureAlphaMod(src, 255);
+    };
+
+    for (int i = 0; i < layer_count; ++i) {
+        SDL_Texture* layer_tex = dof_layer_textures_[i];
+        if (!layer_tex) {
+            continue;
+        }
+        SDL_SetRenderTarget(renderer_, layer_tex);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        for (const GeometryBatcher::DrawItem& draw : layers[static_cast<std::size_t>(i)].draws) {
+            SDL_SetTextureBlendMode(draw.texture, draw.blend_mode);
+            SDL_RenderGeometry(renderer_, draw.texture, draw.vertices, 4, kQuadIndices, 6);
+        }
+    }
+
+    SDL_SetRenderTarget(renderer_, nullptr);
+    const double focus_depth = std::clamp(static_cast<double>(realism.focus_depth), 0.0, max_cull_depth);
+    const int focus_layer = std::clamp(depth_to_layer_index(focus_depth), 0, layer_count - 1);
+    const double f_stop = std::max(0.01, static_cast<double>(realism.aperture_f_stop));
+    const double focal_length = std::max(0.01, static_cast<double>(realism.focal_length_mm));
+    const double dof_strength = std::max(0.0, static_cast<double>(realism.dof_strength));
+    const double dof_falloff = std::max(0.01, static_cast<double>(realism.dof_falloff));
+    const double max_blur = std::max(0.0, static_cast<double>(realism.max_blur_px));
+
+    for (int i = layer_count - 1; i >= 0; --i) {
+        const LayerSubmission& layer = layers[static_cast<std::size_t>(i)];
+        double representative_depth = (static_cast<double>(i) + 0.5) * layer_span;
+        if (layer.submitted_depth_count > 0) {
+            representative_depth = layer.submitted_depth_sum / static_cast<double>(layer.submitted_depth_count);
+        }
+        double blur_radius = 0.0;
+        if (i != focus_layer) {
+            const double delta = std::fabs(representative_depth - focus_depth);
+            const double coc = (focal_length / f_stop) * std::pow(delta / std::max(1.0, max_cull_depth), dof_falloff);
+            blur_radius = std::clamp(coc * dof_strength * max_blur, 0.0, max_blur);
+        }
+        SDL_Texture* composite_texture = dof_layer_textures_[i];
+        if (blur_radius > 0.01 && dof_blur_textures_[i]) {
+            blur_texture(dof_layer_textures_[i], dof_blur_textures_[i], static_cast<float>(blur_radius));
+            composite_texture = dof_blur_textures_[i];
+        }
+        if (composite_texture) {
+            SDL_RenderTexture(renderer_, composite_texture, nullptr, nullptr);
+        }
+    }
 
     if (debug_auto_paths_ && movement_debug_visible_) {
         refresh_movement_debug_snapshots(rendered_assets_for_debug);

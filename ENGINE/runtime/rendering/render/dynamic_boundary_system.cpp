@@ -305,6 +305,13 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             continue;
         }
 
+        const double depth_from_anchor =
+            render_depth::depth_from_anchor(cam.anchor_world_z(), static_cast<double>(assignment.world_z));
+        const double max_cull_depth = static_cast<double>(cam.get_settings().max_cull_depth);
+        if (!std::isfinite(depth_from_anchor) || depth_from_anchor < 0.0 || depth_from_anchor > max_cull_depth) {
+            continue;
+        }
+
         SDL_FPoint screen_pos{};
         if (!cam.project_world_point(assignment.world_pos, static_cast<float>(assignment.world_z), screen_pos)) {
             continue;

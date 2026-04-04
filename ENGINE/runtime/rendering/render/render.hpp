@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -26,6 +27,13 @@ class GeometryBatcher {
 public:
     explicit GeometryBatcher(SDL_Renderer* renderer);
 
+    struct DrawItem {
+        SDL_Texture* texture = nullptr;
+        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+        SDL_Vertex vertices[4];
+        double depth = 0.0;
+    };
+
     // Add a quad to the batch with depth for sorting
     void addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4], const int indices[6],
                  SDL_BlendMode blend_mode, double depth);
@@ -35,6 +43,7 @@ public:
 
     // Clear all batches (call at start of frame)
     void clear();
+    void for_each_item_far_to_near(const std::function<void(const DrawItem&)>& fn) const;
 
     // Get statistics for profiling
     size_t getDrawCallCount() const { return draw_call_count_; }
@@ -42,13 +51,6 @@ public:
     double getLastFlushCpuMs() const { return last_flush_cpu_ms_; }
 
 private:
-    struct DrawItem {
-        SDL_Texture* texture = nullptr;
-        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
-        SDL_Vertex vertices[4];
-        double depth = 0.0;
-    };
-
     struct DepthBucket {
         std::vector<DrawItem> items;
     };
@@ -179,6 +181,8 @@ private:
     SDL_Texture* scene_composite_tex_ = nullptr;
     SDL_Texture* postprocess_tex_     = nullptr;
     SDL_Texture* blur_tex_            = nullptr;
+    std::vector<SDL_Texture*> dof_layer_textures_;
+    std::vector<SDL_Texture*> dof_blur_textures_;
     std::filesystem::path sky_texture_path_;
     double                map_radius_world_ = 0.0;
     SDL_Texture*          sky_texture_       = nullptr;

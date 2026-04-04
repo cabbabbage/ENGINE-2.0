@@ -189,6 +189,9 @@ private:
     SDL_Texture* scene_composite_tex_ = nullptr;
     SDL_Texture* postprocess_tex_     = nullptr;
     SDL_Texture* blur_tex_            = nullptr;
+    std::vector<SDL_Texture*> motion_blur_history_textures_;
+    int motion_blur_history_write_index_ = 0;
+    int motion_blur_valid_history_frames_ = 0;
     std::vector<SDL_Texture*> dof_layer_textures_;
     std::vector<SDL_Texture*> dof_blur_textures_;
     std::filesystem::path sky_texture_path_;

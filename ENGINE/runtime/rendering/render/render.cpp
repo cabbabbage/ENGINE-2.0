@@ -47,6 +47,8 @@
 namespace {
 constexpr double kDepthBucketSize = 0.0625;
 constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
+constexpr int kMotionBlurHistoryFrameCount = 4;
+constexpr std::array<Uint8, kMotionBlurHistoryFrameCount> kMotionBlurHistoryAlpha = {104, 72, 44, 28};
 
 inline std::int64_t quantize_depth(double depth) {
     const double scaled = std::floor(depth * kDepthBucketScale);
@@ -1007,12 +1009,18 @@ SceneRenderer::~SceneRenderer() {
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
+    for (SDL_Texture* tex : motion_blur_history_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
     for (SDL_Texture* tex : dof_layer_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
     for (SDL_Texture* tex : dof_blur_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
+    motion_blur_history_textures_.clear();
+    motion_blur_history_write_index_ = 0;
+    motion_blur_valid_history_frames_ = 0;
     dof_layer_textures_.clear();
     dof_blur_textures_.clear();
 }
@@ -1228,12 +1236,18 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
         SDL_DestroyTexture(blur_tex_);
         blur_tex_ = nullptr;
     }
+    for (SDL_Texture* tex : motion_blur_history_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
     for (SDL_Texture* tex : dof_layer_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
     for (SDL_Texture* tex : dof_blur_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
+    motion_blur_history_textures_.clear();
+    motion_blur_history_write_index_ = 0;
+    motion_blur_valid_history_frames_ = 0;
     dof_layer_textures_.clear();
     dof_blur_textures_.clear();
 }
@@ -1463,7 +1477,49 @@ void SceneRenderer::render() {
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
-    SDL_SetRenderTarget(renderer_, nullptr);
+
+    auto create_target_texture = [&](int w, int h) -> SDL_Texture* {
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+        if (!texture) {
+            return nullptr;
+        }
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        return texture;
+    };
+
+    if (!scene_composite_tex_) {
+        scene_composite_tex_ = create_target_texture(screen_width_, screen_height_);
+    }
+
+    bool motion_blur_targets_ready = scene_composite_tex_ != nullptr;
+    if (motion_blur_targets_ready) {
+        if (static_cast<int>(motion_blur_history_textures_.size()) != kMotionBlurHistoryFrameCount) {
+            for (SDL_Texture* tex : motion_blur_history_textures_) {
+                if (tex) {
+                    SDL_DestroyTexture(tex);
+                }
+            }
+            motion_blur_history_textures_.assign(kMotionBlurHistoryFrameCount, nullptr);
+            motion_blur_history_write_index_ = 0;
+            motion_blur_valid_history_frames_ = 0;
+        }
+        for (int i = 0; i < kMotionBlurHistoryFrameCount; ++i) {
+            if (!motion_blur_history_textures_[i]) {
+                motion_blur_history_textures_[i] = create_target_texture(screen_width_, screen_height_);
+            }
+            if (!motion_blur_history_textures_[i]) {
+                motion_blur_targets_ready = false;
+            }
+        }
+    }
+
+    if (!motion_blur_targets_ready) {
+        motion_blur_history_write_index_ = 0;
+        motion_blur_valid_history_frames_ = 0;
+    }
+
+    SDL_Texture* const gameplay_target = scene_composite_tex_;
+    SDL_SetRenderTarget(renderer_, gameplay_target);
     SDL_SetRenderViewport(renderer_, nullptr);
     SDL_SetRenderClipRect(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -1770,14 +1826,6 @@ void SceneRenderer::render() {
         }
         textures.clear();
     };
-    auto create_target_texture = [&](int w, int h) -> SDL_Texture* {
-        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
-        if (!texture) {
-            return nullptr;
-        }
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-        return texture;
-    };
     if (static_cast<int>(dof_layer_textures_.size()) != layer_count ||
         static_cast<int>(dof_blur_textures_.size()) != layer_count) {
         destroy_texture_array(dof_layer_textures_);
@@ -1807,7 +1855,7 @@ void SceneRenderer::render() {
         dof_targets_ready = false;
     }
     if (!dof_targets_ready) {
-        SDL_SetRenderTarget(renderer_, nullptr);
+        SDL_SetRenderTarget(renderer_, gameplay_target);
         vibble::log::warn(std::string{"[SceneRenderer] DOF targets unavailable; falling back to direct scene flush. SDL error: "} +
                           SDL_GetError());
         geometry_batcher_->flush();
@@ -1861,7 +1909,7 @@ void SceneRenderer::render() {
             }
         }
 
-        SDL_SetRenderTarget(renderer_, nullptr);
+        SDL_SetRenderTarget(renderer_, gameplay_target);
         // The camera focus point is the depth anchor in this pipeline, so it is always depth 0.
         const double focus_depth = 0.0;
         const int focus_layer = std::clamp(depth_to_layer_index(focus_depth), 0, layer_count - 1);
@@ -1934,10 +1982,54 @@ void SceneRenderer::render() {
                 }
             }
             if (composite_texture) {
-                SDL_SetRenderTarget(renderer_, nullptr);
                 SDL_RenderTexture(renderer_, composite_texture, nullptr, nullptr);
             }
         }
+    }
+
+    if (gameplay_target) {
+        SDL_SetRenderTarget(renderer_, nullptr);
+        SDL_SetRenderViewport(renderer_, nullptr);
+        SDL_SetRenderClipRect(renderer_, nullptr);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
+        SDL_RenderClear(renderer_);
+
+        SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
+
+        if (motion_blur_targets_ready) {
+            const int blur_layers = std::min(motion_blur_valid_history_frames_, kMotionBlurHistoryFrameCount);
+            for (int i = blur_layers - 1; i >= 0; --i) {
+                const int history_index =
+                    (motion_blur_history_write_index_ - 1 - i + kMotionBlurHistoryFrameCount) % kMotionBlurHistoryFrameCount;
+                SDL_Texture* history_texture = motion_blur_history_textures_[history_index];
+                if (!history_texture) {
+                    continue;
+                }
+
+                SDL_SetTextureBlendMode(history_texture, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureAlphaMod(history_texture, kMotionBlurHistoryAlpha[static_cast<std::size_t>(i)]);
+                SDL_RenderTexture(renderer_, history_texture, nullptr, nullptr);
+                SDL_SetTextureAlphaMod(history_texture, 255);
+            }
+
+            SDL_Texture* write_target = motion_blur_history_textures_[motion_blur_history_write_index_];
+            if (write_target) {
+                SDL_SetRenderTarget(renderer_, write_target);
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+                SDL_RenderClear(renderer_);
+                SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
+                SDL_SetRenderTarget(renderer_, nullptr);
+
+                motion_blur_history_write_index_ =
+                    (motion_blur_history_write_index_ + 1) % kMotionBlurHistoryFrameCount;
+                motion_blur_valid_history_frames_ =
+                    std::min(motion_blur_valid_history_frames_ + 1, kMotionBlurHistoryFrameCount);
+            }
+        }
+    } else {
+        SDL_SetRenderTarget(renderer_, nullptr);
     }
 
     if (debug_auto_paths_ && movement_debug_visible_) {

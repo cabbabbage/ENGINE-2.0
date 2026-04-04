@@ -777,6 +777,112 @@ TEST_CASE("CustomAssetController resolves anchor child candidates in constructor
     CHECK(candidate_child->world_z() == owner->world_z() + 3);
 }
 
+TEST_CASE("CustomAssetController falls back to oval mapping asset_name when explicit candidates are absent") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 32, 48, 64, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    owner->info->anchor_point_child_candidates.clear();
+    owner->info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "hat";
+    mapping.asset_name = "vibble_hat";
+    mapping.width_radius_x = 18.0f;
+    mapping.height_radius_z = 12.0f;
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    Asset* fallback_child = find_owner_child_named(owner, "vibble_hat");
+    REQUIRE(fallback_child != nullptr);
+    CHECK(fallback_child->world_x() == owner->world_x() + 18);
+    CHECK(fallback_child->world_y() == owner->world_y());
+    CHECK(fallback_child->world_z() == owner->world_z());
+}
+
+TEST_CASE("CustomAssetController explicit anchor candidates take precedence over oval fallback asset_name") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 20, 30, 40, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    owner->info->anchor_point_child_candidates.clear();
+    owner->info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "hat";
+    mapping.asset_name = "vibble_hat";
+    mapping.width_radius_x = 10.0f;
+    mapping.height_radius_z = 10.0f;
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_entry(
+            "hat",
+            nlohmann::json::array({nlohmann::json{
+                {"name", "vibble_mouth"},
+                {"chance", 100}
+            }}))
+    };
+
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+    assets_scope.assets->library().add_asset("vibble_mouth", nlohmann::json::object());
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    CHECK(find_owner_child_named(owner, "vibble_hat") == nullptr);
+    REQUIRE(find_owner_child_named(owner, "vibble_mouth") != nullptr);
+}
+
+TEST_CASE("CustomAssetController skips oval fallback when fallback asset is missing") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 12, 24, 36, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    owner->info->anchor_point_child_candidates.clear();
+    owner->info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "hat";
+    mapping.asset_name = "missing_hat_asset";
+    mapping.width_radius_x = 10.0f;
+    mapping.height_radius_z = 10.0f;
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    CHECK(find_owner_child_named(owner, "missing_hat_asset") == nullptr);
+}
+
 TEST_CASE("CustomAssetController skips null anchor child candidate resolution") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(

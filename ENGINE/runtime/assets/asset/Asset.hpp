@@ -270,6 +270,9 @@ class Asset {
     void clear_directional_heading_radians();
     bool has_directional_heading_radians() const { return directional_heading_valid_; }
     float directional_heading_radians() const { return directional_heading_radians_; }
+    bool set_directional_target_world_xz(float world_x, float world_z);
+    void clear_directional_target_world_xz();
+    bool has_directional_target_world_xz() const { return directional_target_valid_; }
     void set_render_anchor_offset(float x, float y, float z);
     void clear_render_anchor_offset();
     float render_anchor_offset_x() const { return render_anchor_offset_x_; }
@@ -443,6 +446,9 @@ class Asset {
         float world_z_offset = 0.0f;        // render depth offset used by cached anchor screen projection
         float directional_heading_radians = 0.0f; // runtime directional heading used by oval anchor mappings
         bool  directional_heading_valid = false;
+        float directional_target_world_x = 0.0f; // runtime pointer target used by oval anchor mappings
+        float directional_target_world_z = 0.0f;
+        bool  directional_target_valid = false;
         int   resolution_layer = 0;         // grid resolution used for anchor materialization
         std::uint64_t camera_state_version = 0; // camera snapshot that produced cached anchor placement
     };
@@ -558,6 +564,9 @@ private:
     int          anchor_perspective_override_resolution_layer_ = 0;
     float        directional_heading_radians_ = 0.0f;
     bool         directional_heading_valid_ = false;
+    float        directional_target_world_x_ = 0.0f;
+    float        directional_target_world_z_ = 0.0f;
+    bool         directional_target_valid_ = false;
     bool         mesh_dirty_        = true;
 
     void initialize_anchor_registry_from_animations();

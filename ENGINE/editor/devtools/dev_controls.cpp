@@ -4956,7 +4956,7 @@ bool DevControls::passes_asset_filters(Asset* asset) const {
 }
 
 bool DevControls::fog_visible() const {
-    return other_settings_.fog_visible();
+    return false;
 }
 
 bool DevControls::boundary_assets_visible() const {

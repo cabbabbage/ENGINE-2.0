@@ -487,7 +487,7 @@ void Assets::reload_camera_settings() {
     mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
     camera_view_dirty_ = true;
     vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
-    log_camera_fog_state("startup-normal");
+    // Fog logging removed
 }
 
 void Assets::force_camera_view_refresh() {
@@ -596,10 +596,7 @@ void Assets::set_movement_debug_visible(bool visible) {
 }
 
 bool Assets::fog_visible() const {
-    if (!dev_controls_ || !dev_controls_->is_enabled()) {
-        return true;
-    }
-    return dev_controls_->fog_visible();
+    return false;
 }
 
 bool Assets::boundary_assets_visible() const {
@@ -1789,7 +1786,7 @@ void Assets::set_dev_mode(bool mode) {
     } catch (...) {
         std::cerr << "[Assets] force_camera_view_refresh failed after mode toggle: unknown error\n";
     }
-    log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
+    // Fog logging removed
 }
 
 bool Assets::run_exit_save_sequence(const std::string& reason) {

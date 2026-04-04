@@ -163,8 +163,8 @@ TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
     REQUIRE(!stored_eyes->points.empty());
     CHECK(stored_eyes->points.front().angle_degrees == doctest::Approx(315.0f));
     CHECK(stored_eyes->points.front().texture_x == 34);
-    CHECK(stored_eyes->points.front().texture_y == 0);
-    CHECK(stored_eyes->points.front().depth_offset == doctest::Approx(-16.97056f).epsilon(1e-4f));
+    CHECK(stored_eyes->points.front().texture_y == -17);
+    CHECK(stored_eyes->points.front().depth_offset == doctest::Approx(0.0f).epsilon(1e-4f));
     CHECK(stored_eyes->points.front().rotation_degrees == doctest::Approx(0.0f));
     CHECK(stored_eyes->asset_name == "oval_asset");
 
@@ -186,6 +186,27 @@ TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
     AssetInfo copy("oval_asset_copy");
     copy.set_oval_anchor_mappings_payload(payload);
     CHECK(copy.oval_anchor_mappings_payload() == payload);
+}
+
+TEST_CASE("AssetInfo oval mappings drop duplicate point angles and keep valid ordering") {
+    AssetInfo info("oval_dedupe_asset");
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "hat";
+    mapping.asset_name = "vibble_hat";
+    mapping.width_radius_x = 20.0f;
+    mapping.height_radius_z = 10.0f;
+    mapping.points = {
+        make_oval_point(0.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(360.0f, 0, 0, 1.0f, 5.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(45.0f, 0, 0, 2.0f, 10.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+
+    REQUIRE(info.upsert_oval_anchor_mapping(mapping));
+    const AssetInfo::OvalAnchorMapping* stored = info.find_oval_anchor_mapping("hat", false);
+    REQUIRE(stored != nullptr);
+    REQUIRE(stored->points.size() == 2);
+    CHECK(stored->points[0].angle_degrees == doctest::Approx(0.0f));
+    CHECK(stored->points[1].angle_degrees == doctest::Approx(45.0f));
 }
 
 TEST_CASE("AssetInfo oval rename appends legacy alias and renames anchor candidate entries") {
@@ -318,7 +339,7 @@ TEST_CASE("Oval runtime interpolation blends numeric fields and uses nearest dis
     auto mid = asset.anchor_state("eyes");
     REQUIRE(mid.has_value());
     CHECK(mid->is_active());
-    CHECK(mid->depth_offset == doctest::Approx(10.0f).epsilon(1e-4));
+    CHECK(mid->depth_offset == doctest::Approx(5.0f).epsilon(1e-4));
     CHECK(mid->rotation_degrees == doctest::Approx(45.0f).epsilon(1e-4));
     CHECK(mid->hidden == false);
     CHECK(mid->resolve_x == true);
@@ -327,11 +348,74 @@ TEST_CASE("Oval runtime interpolation blends numeric fields and uses nearest dis
     REQUIRE(asset.set_directional_heading_radians(degrees_to_radians(80.0f)));
     auto near_ninety = asset.anchor_state("eyes");
     REQUIRE(near_ninety.has_value());
-    CHECK(near_ninety->depth_offset == doctest::Approx(17.77778f).epsilon(1e-4));
+    CHECK(near_ninety->depth_offset == doctest::Approx(8.88889f).epsilon(1e-4));
     CHECK(near_ninety->rotation_degrees == doctest::Approx(80.0f).epsilon(1e-4));
     CHECK(near_ninety->hidden == true);
     CHECK(near_ninety->resolve_x == false);
     CHECK(near_ninety->scaling_method == AnchorScalingMethod::Real3DPoint);
+}
+
+TEST_CASE("Oval runtime resolves anchors on the XZ plane and applies depth_offset vertically") {
+    auto info = std::make_shared<AssetInfo>("oval_xz_runtime_asset");
+    info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "weapon";
+    mapping.asset_name = "vibble_weapon";
+    mapping.width_radius_x = 40.0f;
+    mapping.height_radius_z = 20.0f;
+    mapping.points = {
+        make_oval_point(0.0f, 0, 0, 1.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(90.0f, 0, 0, 7.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+    REQUIRE(info->upsert_oval_anchor_mapping(mapping));
+
+    Area spawn_area("oval_xz_runtime_area", 0);
+    Asset asset(info, spawn_area, SDL_Point{100, 200}, 0);
+    asset.move_to_world_position(100, 40, 200, 0);
+
+    REQUIRE(asset.set_directional_heading_radians(degrees_to_radians(90.0f)));
+    const auto resolved = asset.anchor_state("weapon");
+    REQUIRE(resolved.has_value());
+    CHECK(resolved->is_active());
+    CHECK(resolved->world_exact_pos_2d.x == doctest::Approx(100.0f).epsilon(1e-4f));
+    CHECK(resolved->world_exact_pos_2d.y == doctest::Approx(47.0f).epsilon(1e-4f));
+    CHECK(resolved->world_exact_z == doctest::Approx(220.0f).epsilon(1e-4f));
+    CHECK(resolved->flat_world_exact_pos_2d.x == doctest::Approx(100.0f).epsilon(1e-4f));
+    CHECK(resolved->flat_world_exact_pos_2d.y == doctest::Approx(40.0f).epsilon(1e-4f));
+    CHECK(resolved->flat_world_exact_z == doctest::Approx(220.0f).epsilon(1e-4f));
+    CHECK(resolved->depth_offset == doctest::Approx(7.0f).epsilon(1e-4f));
+}
+
+TEST_CASE("AssetInfo migrates legacy oval depth payloads to XZ texture_y offsets") {
+    AssetInfo info("oval_legacy_migration_asset");
+    const nlohmann::json legacy_payload = nlohmann::json::array({
+        nlohmann::json{
+            {"name", "eyes"},
+            {"asset_name", "vibble_eyes"},
+            {"width_radius_x", 30.0},
+            {"height_radius_z", 20.0},
+            {"points", nlohmann::json::array({
+                nlohmann::json{{"angle_degrees", 0.0}, {"texture_y", 0}, {"depth_offset", 0.0}},
+                nlohmann::json{{"angle_degrees", 90.0}, {"texture_y", 0}, {"depth_offset", 20.0}},
+                nlohmann::json{{"angle_degrees", 180.0}, {"texture_y", 0}, {"depth_offset", 0.0}},
+                nlohmann::json{{"angle_degrees", 270.0}, {"texture_y", 0}, {"depth_offset", -20.0}},
+            })}
+        }
+    });
+
+    info.set_oval_anchor_mappings_payload(legacy_payload);
+    const AssetInfo::OvalAnchorMapping* mapping = info.find_oval_anchor_mapping("eyes", false);
+    REQUIRE(mapping != nullptr);
+    REQUIRE(mapping->points.size() == 4);
+    CHECK(mapping->points[0].texture_y == 0);
+    CHECK(mapping->points[1].texture_y == 20);
+    CHECK(mapping->points[2].texture_y == 0);
+    CHECK(mapping->points[3].texture_y == -20);
+    CHECK(mapping->points[0].depth_offset == doctest::Approx(0.0f));
+    CHECK(mapping->points[1].depth_offset == doctest::Approx(0.0f));
+    CHECK(mapping->points[2].depth_offset == doctest::Approx(0.0f));
+    CHECK(mapping->points[3].depth_offset == doctest::Approx(0.0f));
 }
 
 TEST_CASE("Oval runtime uses per-frame center anchor and keeps offset non-zero") {

@@ -137,6 +137,15 @@ void RoomOvalToolsPanel::set_oval_properties(const OvalProperties& properties) {
     }
 }
 
+void RoomOvalToolsPanel::set_asset_binding_status(const AssetBindingStatus& status) {
+    if (asset_binding_status_.kind == status.kind &&
+        asset_binding_status_.detail == status.detail) {
+        return;
+    }
+    asset_binding_status_ = status;
+    layout_dirty_ = true;
+}
+
 void RoomOvalToolsPanel::set_center_anchor_status(const std::string& center_name, bool present) {
     center_anchor_name_ = center_name;
     center_anchor_present_ = present;
@@ -210,6 +219,10 @@ void RoomOvalToolsPanel::set_on_jump_to_center_anchor(JumpToCenterAnchorCallback
     on_jump_to_center_anchor_ = std::move(callback);
 }
 
+void RoomOvalToolsPanel::set_on_open_candidates(OpenCandidatesCallback callback) {
+    on_open_candidates_ = std::move(callback);
+}
+
 void RoomOvalToolsPanel::set_on_select_point(SelectPointCallback callback) {
     on_select_point_ = std::move(callback);
 }
@@ -262,6 +275,25 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
         DMButton* button = oval_buttons_[i].get();
         if (!button) {
             continue;
+        }
+        const SDL_Rect row_rect = button->rect();
+        const bool row_visible = row_rect.y + row_rect.h >= oval_list_clip_rect_.y &&
+                                 row_rect.y <= oval_list_clip_rect_.y + oval_list_clip_rect_.h;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_RIGHT &&
+            i < oval_names_.size() &&
+            row_visible &&
+            point_in_rect(pointer_x, pointer_y, oval_list_clip_rect_) &&
+            point_in_rect(pointer_x, pointer_y, row_rect)) {
+            selected_oval_index_ = static_cast<int>(i);
+            layout_dirty_ = true;
+            if (on_select_oval_) {
+                on_select_oval_(static_cast<int>(i));
+            }
+            if (on_open_candidates_) {
+                on_open_candidates_(oval_names_[i], SDL_Point{pointer_x, pointer_y}, row_rect);
+            }
+            return true;
         }
         if (button->handle_event(event)) {
             handled = true;
@@ -470,6 +502,58 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
         if (width_textbox_) width_textbox_->render(renderer);
         if (height_textbox_) height_textbox_->render(renderer);
         if (asset_name_textbox_) asset_name_textbox_->render(renderer);
+
+        DMLabelStyle asset_status_style = label_style;
+        std::string asset_status_text = "Attach Asset: <none>";
+        switch (asset_binding_status_.kind) {
+            case AssetBindingStatusKind::ExplicitCandidates:
+                asset_status_style.color = SDL_Color{110, 210, 120, 240};
+                asset_status_text = "Attach Asset: explicit candidates";
+                if (!asset_binding_status_.detail.empty()) {
+                    asset_status_text += " (" + asset_binding_status_.detail + ")";
+                }
+                break;
+            case AssetBindingStatusKind::OvalFallback:
+                asset_status_style.color = SDL_Color{110, 210, 120, 240};
+                asset_status_text = "Attach Asset: oval fallback";
+                if (!asset_binding_status_.detail.empty()) {
+                    asset_status_text += " (" + asset_binding_status_.detail + ")";
+                }
+                break;
+            case AssetBindingStatusKind::Missing:
+                asset_status_style.color = SDL_Color{230, 140, 120, 240};
+                asset_status_text = "Attach Asset: missing";
+                if (!asset_binding_status_.detail.empty()) {
+                    asset_status_text += " (" + asset_binding_status_.detail + ")";
+                }
+                break;
+            case AssetBindingStatusKind::Invalid:
+                asset_status_style.color = SDL_Color{230, 140, 120, 240};
+                asset_status_text = "Attach Asset: invalid";
+                if (!asset_binding_status_.detail.empty()) {
+                    asset_status_text += " (" + asset_binding_status_.detail + ")";
+                }
+                break;
+            case AssetBindingStatusKind::None:
+            default:
+                asset_status_style.color = SDL_Color{180, 190, 205, 220};
+                if (!asset_binding_status_.detail.empty()) {
+                    asset_status_text = "Attach Asset: " + asset_binding_status_.detail;
+                }
+                break;
+        }
+        DMFontCache::instance().draw_text(renderer,
+                                          asset_status_style,
+                                          asset_status_text,
+                                          asset_status_rect_.x,
+                                          asset_status_rect_.y);
+        DMLabelStyle candidate_hint_style = label_style;
+        candidate_hint_style.color = SDL_Color{150, 165, 190, 220};
+        DMFontCache::instance().draw_text(renderer,
+                                          candidate_hint_style,
+                                          "Right-click an oval name to edit candidates.",
+                                          candidate_hint_rect_.x,
+                                          candidate_hint_rect_.y);
         if (apply_oval_properties_button_) apply_oval_properties_button_->render(renderer);
 
         const SDL_Color status_color = center_anchor_present_
@@ -593,6 +677,12 @@ void RoomOvalToolsPanel::update_layout() const {
         }
         y += asset_h + kRowGap;
 
+        asset_status_rect_ = SDL_Rect{content_x, y, content_w, kLineHeight};
+        y += kLineHeight + kRowGap;
+
+        candidate_hint_rect_ = SDL_Rect{content_x, y, content_w, kLineHeight};
+        y += kLineHeight + kRowGap;
+
         if (apply_oval_properties_button_) {
             apply_oval_properties_button_->set_rect(SDL_Rect{content_x, y, content_w, DMButton::height()});
         }
@@ -618,6 +708,8 @@ void RoomOvalToolsPanel::update_layout() const {
         if (apply_oval_properties_button_) apply_oval_properties_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (center_anchor_jump_button_) center_anchor_jump_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (delete_oval_button_) delete_oval_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        asset_status_rect_ = SDL_Rect{0, 0, 0, 0};
+        candidate_hint_rect_ = SDL_Rect{0, 0, 0, 0};
         center_status_rect_ = SDL_Rect{0, 0, 0, 0};
     }
 

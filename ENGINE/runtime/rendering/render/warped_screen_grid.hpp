@@ -74,8 +74,6 @@ public:
         float aperture_f_stop              = 2.8f;
         float focal_length_mm              = 50.0f;
         float max_blur_px                  = 12.0f;
-        float fog_density                  = 1.2f;
-        float fog_depth_curve              = 1.35f;
 };
 
     struct FloorDepthParams {

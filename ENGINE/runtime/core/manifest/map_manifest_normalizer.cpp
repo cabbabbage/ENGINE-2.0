@@ -21,21 +21,6 @@ bool ensure_object_section(nlohmann::json& root, const char* key) {
     return false;
 }
 
-bool ensure_fog_defaults(nlohmann::json& root) {
-    bool changed = false;
-    if (ensure_object_section(root, "fog_settings")) {
-        changed = true;
-    }
-
-    nlohmann::json& fog = root["fog_settings"];
-    auto jitter = fog.find("max_random_jitter");
-    if (jitter == fog.end() || !jitter->is_number()) {
-        fog["max_random_jitter"] = 0;
-        changed = true;
-    }
-    return changed;
-}
-
 bool ensure_map_layers_settings_defaults(nlohmann::json& root) {
     bool changed = false;
     if (ensure_object_section(root, "map_layers_settings")) {
@@ -224,7 +209,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"spawn_groups",
          nlohmann::json::array({make_batch_spawn_group(map_name, "map_assets", "batch_map_assets")})}
     });
-    map_info["fog_settings"] = nlohmann::json::object({{"max_random_jitter", 0}});
     map_info["map_boundary_data"] = nlohmann::json::object({
         {"inherits_map_assets", false},
         {"candidate_selectors",
@@ -326,9 +310,6 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         }
     }
 
-    if (ensure_fog_defaults(map_manifest)) {
-        changed = true;
-    }
     if (ensure_map_layers_settings_defaults(map_manifest)) {
         changed = true;
     }

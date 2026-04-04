@@ -111,7 +111,7 @@ public:
     bool fog_visible() const;
 
 private:
-    enum class FilterKind { MapAssets, CurrentRoom, Fog, Type };
+    enum class FilterKind { MapAssets, CurrentRoom, Type };
 
     struct FilterEntry {
         std::string id;
@@ -122,7 +122,7 @@ private:
     struct FilterState {
         bool map_assets = false;
         bool current_room = true;
-        bool fog = true;
+        bool fog = false;
         std::unordered_map<std::string, bool> type_filters;
 };
 

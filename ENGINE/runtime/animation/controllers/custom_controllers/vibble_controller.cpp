@@ -149,19 +149,26 @@ void vibble_controller::on_update(const Input& input) {
     Asset* player = self_ptr();
 
     if (player) {
+        bool anchor_heading_changed = false;
         if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
+            anchor_heading_changed =
+                player->set_directional_target_world_xz(static_cast<float>(mouse_world->x),
+                                                        static_cast<float>(mouse_world->y)) ||
+                anchor_heading_changed;
             const float dx = static_cast<float>(mouse_world->x - player->world_x());
             const float dy = static_cast<float>(mouse_world->y - player->world_z());
             constexpr float kMinHeadingVectorLengthSq = 1e-4f;
             const float length_sq = dx * dx + dy * dy;
             if (length_sq > kMinHeadingVectorLengthSq) {
                 const float heading_radians = std::atan2(dy, dx);
-                if (player->set_directional_heading_radians(heading_radians)) {
-                    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
-                        player,
-                        std::string{});
-                }
+                anchor_heading_changed =
+                    player->set_directional_heading_radians(heading_radians) || anchor_heading_changed;
             }
+        }
+        if (anchor_heading_changed) {
+            anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+                player,
+                std::string{});
         }
     }
 

@@ -477,6 +477,9 @@ private:
     void layout_anchor_candidate_editor_popup();
     void open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect);
     void close_anchor_candidate_editor();
+    Asset* active_anchor_candidate_target_asset() const;
+    bool anchor_candidate_editor_mode_active() const;
+    bool anchor_candidate_anchor_exists_for_target(const Asset* target, const std::string& anchor_name) const;
     bool handle_anchor_candidate_editor_event(const SDL_Event& event);
     void render_anchor_candidate_editor(SDL_Renderer* renderer) const;
     bool mutate_anchor_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
@@ -514,9 +517,9 @@ private:
     float movement_base_world_z() const;
     devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,
                                                                                               const std::string& animation_id) const;
-    int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px) const;
+    int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px, const std::string& preferred_anchor = {}) const;
     bool handle_anchor_mode_mouse_input(const Input& input);
-    int find_oval_point_handle_at_point(SDL_Point screen_point, int radius_px) const;
+    int find_oval_point_handle_at_point(SDL_Point screen_point, int radius_px, int preferred_point_index = -1) const;
     bool handle_oval_mode_mouse_input(const Input& input);
     bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
                                      devmode::core::DevSaveCoordinator::Priority priority);
@@ -726,6 +729,11 @@ private:
         bool dirty_since_last_flush = false;
         SDL_FPoint center_screen_px{0.0f, 0.0f};
         bool has_center_screen_px = false;
+        float center_world_x = 0.0f;
+        float center_world_y = 0.0f;
+        float center_world_z = 0.0f;
+        bool has_center_world = false;
+        std::vector<SDL_FPoint> guide_screen_samples;
         std::vector<OvalPointHandleSample> handles;
     };
     OvalAnchorEditState oval_edit_;
@@ -733,6 +741,7 @@ private:
     struct AnchorCandidateEditorState {
         bool open = false;
         std::string anchor_name;
+        Asset* target_asset = nullptr;
         SDL_Point open_point{0, 0};
         SDL_Rect anchor_row_rect{0, 0, 0, 0};
         std::unique_ptr<DockableCollapsible> panel{};

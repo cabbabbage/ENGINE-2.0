@@ -677,14 +677,6 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.max_blur_px = 0.0f;
     }
     settings_.max_blur_px = std::min(settings_.max_blur_px, 128.0f);
-    if (!std::isfinite(settings_.fog_density) || settings_.fog_density < 0.0f) {
-        settings_.fog_density = 0.0f;
-    }
-    settings_.fog_density = std::min(settings_.fog_density, 16.0f);
-    if (!std::isfinite(settings_.fog_depth_curve) || settings_.fog_depth_curve < 0.01f) {
-        settings_.fog_depth_curve = 0.01f;
-    }
-    settings_.fog_depth_curve = std::min(settings_.fog_depth_curve, 16.0f);
     camera_.set_fallback_height(settings_.base_height_px);
     invalidate_camera_cache();
 
@@ -1159,8 +1151,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("aperture_f_stop", updated.aperture_f_stop, 0.01f, 64.0f);
     read_float("focal_length_mm", updated.focal_length_mm, 0.01f, 500.0f);
     read_float("max_blur_px", updated.max_blur_px, 0.0f, 128.0f);
-    read_float("fog_density", updated.fog_density, 0.0f, 16.0f);
-    read_float("fog_depth_curve", updated.fog_depth_curve, 0.01f, 16.0f);
     set_realism_settings(updated);
 }
 
@@ -1174,8 +1164,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["aperture_f_stop"] = settings_.aperture_f_stop;
     result["focal_length_mm"] = settings_.focal_length_mm;
     result["max_blur_px"] = settings_.max_blur_px;
-    result["fog_density"] = settings_.fog_density;
-    result["fog_depth_curve"] = settings_.fog_depth_curve;
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {

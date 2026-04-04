@@ -33,11 +33,25 @@ public:
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
     };
 
+    enum class AssetBindingStatusKind {
+        None = 0,
+        ExplicitCandidates = 1,
+        OvalFallback = 2,
+        Missing = 3,
+        Invalid = 4,
+    };
+
+    struct AssetBindingStatus {
+        AssetBindingStatusKind kind = AssetBindingStatusKind::None;
+        std::string detail;
+    };
+
     using SelectOvalCallback = std::function<void(int)>;
     using AddOvalCallback = std::function<void()>;
     using DeleteOvalCallback = std::function<void()>;
     using ApplyOvalPropertiesCallback = std::function<void(const OvalProperties&)>;
     using JumpToCenterAnchorCallback = std::function<void()>;
+    using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
 
     using SelectPointCallback = std::function<void(int)>;
     using AddPointCallback = std::function<void()>;
@@ -58,6 +72,7 @@ public:
     void set_selected_oval_index(int index);
     int selected_oval_index() const { return selected_oval_index_; }
     void set_oval_properties(const OvalProperties& properties);
+    void set_asset_binding_status(const AssetBindingStatus& status);
     void set_center_anchor_status(const std::string& center_name, bool present);
 
     void set_point_names(const std::vector<std::string>& names);
@@ -70,6 +85,7 @@ public:
     void set_on_delete_oval(DeleteOvalCallback callback);
     void set_on_apply_oval_properties(ApplyOvalPropertiesCallback callback);
     void set_on_jump_to_center_anchor(JumpToCenterAnchorCallback callback);
+    void set_on_open_candidates(OpenCandidatesCallback callback);
 
     void set_on_select_point(SelectPointCallback callback);
     void set_on_add_point(AddPointCallback callback);
@@ -105,6 +121,8 @@ private:
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
     mutable SDL_Rect oval_list_clip_rect_{0, 0, 0, 0};
     mutable SDL_Rect point_list_clip_rect_{0, 0, 0, 0};
+    mutable SDL_Rect asset_status_rect_{0, 0, 0, 0};
+    mutable SDL_Rect candidate_hint_rect_{0, 0, 0, 0};
     mutable SDL_Rect center_status_rect_{0, 0, 0, 0};
     mutable SDL_Rect point_detail_title_rect_{0, 0, 0, 0};
     mutable SDL_Rect advanced_card_rect_{0, 0, 0, 0};
@@ -113,6 +131,7 @@ private:
     std::vector<std::unique_ptr<DMButton>> oval_buttons_;
     int selected_oval_index_ = -1;
     OvalProperties oval_properties_{};
+    AssetBindingStatus asset_binding_status_{};
     std::string center_anchor_name_;
     bool center_anchor_present_ = false;
 
@@ -145,6 +164,7 @@ private:
     DeleteOvalCallback on_delete_oval_;
     ApplyOvalPropertiesCallback on_apply_oval_properties_;
     JumpToCenterAnchorCallback on_jump_to_center_anchor_;
+    OpenCandidatesCallback on_open_candidates_;
 
     SelectPointCallback on_select_point_;
     AddPointCallback on_add_point_;

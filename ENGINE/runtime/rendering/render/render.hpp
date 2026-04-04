@@ -124,9 +124,6 @@ public:
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     void set_map_clear_color(SDL_Color color) {
         map_clear_color_ = color;
-        if (!sky_texture_) {
-            fog_tint_color_ = color;
-        }
     }
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
@@ -154,7 +151,6 @@ private:
 
     bool ensure_sky_texture();
     void destroy_sky_texture();
-    void update_fog_tint_from_sky(SDL_Texture* sky_texture);
     void render_sky_layer(const WarpedScreenGrid& cam);
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
     void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
@@ -201,5 +197,4 @@ private:
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
-    SDL_Color             fog_tint_color_{69, 101, 74, 255};
 };

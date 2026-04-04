@@ -12,6 +12,7 @@
 #include "utils/grid.hpp"
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
+#include "utils/oval_anchor_math.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <iostream>
@@ -139,17 +140,7 @@ std::string runtime_box_ids_csv(const std::vector<Asset::RuntimeBoxVolume>& volu
 constexpr float kPi = 3.14159265358979323846f;
 
 float normalize_degrees(float degrees) {
-    if (!std::isfinite(degrees)) {
-        return 0.0f;
-    }
-    float normalized = std::fmod(degrees, 360.0f);
-    if (normalized < 0.0f) {
-        normalized += 360.0f;
-    }
-    if (normalized >= 360.0f) {
-        normalized -= 360.0f;
-    }
-    return normalized;
+    return oval_anchor_math::normalize_angle_degrees(degrees);
 }
 
 float normalize_radians(float radians) {
@@ -167,7 +158,7 @@ float normalize_radians(float radians) {
 }
 
 float radians_to_degrees(float radians) {
-    return normalize_degrees(normalize_radians(radians) * (180.0f / kPi));
+    return oval_anchor_math::radians_to_degrees(normalize_radians(radians));
 }
 
 template <typename T>
@@ -250,11 +241,17 @@ std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_headi
     const AssetInfo::OvalAnchorPoint& prev = *sorted_points[prev_index];
     const AssetInfo::OvalAnchorPoint& next = *sorted_points[next_index];
     const AssetInfo::OvalAnchorPoint& nearest = (blend_t <= 0.5f) ? prev : next;
+    const float sampled_geometry_angle = (count == 1)
+        ? normalize_degrees(prev.angle_degrees)
+        : heading_degrees;
 
     DisplacedAssetAnchorPoint synthesized{};
     synthesized.name = requested_anchor_name.empty() ? mapping.name : requested_anchor_name;
-    synthesized.texture_x = static_cast<int>(std::lround(lerp_value(prev.texture_x, next.texture_x, blend_t)));
-    synthesized.texture_y = static_cast<int>(std::lround(lerp_value(prev.texture_y, next.texture_y, blend_t)));
+    oval_anchor_math::compute_xz_offsets_from_angle(sampled_geometry_angle,
+                                                    mapping.width_radius_x,
+                                                    mapping.height_radius_z,
+                                                    synthesized.texture_x,
+                                                    synthesized.texture_y);
     synthesized.depth_offset = lerp_value(prev.depth_offset, next.depth_offset, blend_t);
     synthesized.flip_horizontal = nearest.flip_horizontal;
     synthesized.flip_vertical = nearest.flip_vertical;
@@ -285,6 +282,25 @@ std::vector<std::string> center_anchor_name_candidates(const AssetInfo::OvalAnch
         append_center_name(alias);
     }
     return names;
+}
+
+oval_anchor_math::WorldPoint3 resolve_flat_oval_world_point(float center_x,
+                                                            float center_y,
+                                                            float center_z,
+                                                            const DisplacedAssetAnchorPoint& anchor) {
+    return oval_anchor_math::make_flat_xz_point(center_x,
+                                                center_y,
+                                                center_z,
+                                                anchor.texture_x,
+                                                anchor.texture_y);
+}
+
+oval_anchor_math::WorldPoint3 resolve_final_oval_world_point(float center_x,
+                                                             float center_y,
+                                                             float center_z,
+                                                             const DisplacedAssetAnchorPoint& anchor) {
+    const auto flat_point = resolve_flat_oval_world_point(center_x, center_y, center_z, anchor);
+    return oval_anchor_math::apply_vertical_offset(flat_point, anchor.depth_offset);
 }
 
 }
@@ -456,6 +472,9 @@ Asset::Asset(const Asset& o)
     , anchor_sprite_transform_override_angle_degrees_(o.anchor_sprite_transform_override_angle_degrees_)
     , directional_heading_radians_(o.directional_heading_radians_)
     , directional_heading_valid_(o.directional_heading_valid_)
+    , directional_target_world_x_(o.directional_target_world_x_)
+    , directional_target_world_z_(o.directional_target_world_z_)
+    , directional_target_valid_(o.directional_target_valid_)
 {
 
         clear_render_caches();
@@ -541,6 +560,9 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_sprite_transform_override_angle_degrees_ = o.anchor_sprite_transform_override_angle_degrees_;
         directional_heading_radians_ = o.directional_heading_radians_;
         directional_heading_valid_ = o.directional_heading_valid_;
+        directional_target_world_x_ = o.directional_target_world_x_;
+        directional_target_world_z_ = o.directional_target_world_z_;
+        directional_target_valid_ = o.directional_target_valid_;
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
@@ -1714,6 +1736,9 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         sig.world_z_offset = world_z_offset_;
         sig.directional_heading_valid = directional_heading_valid_;
         sig.directional_heading_radians = directional_heading_valid_ ? normalize_radians(directional_heading_radians_) : 0.0f;
+        sig.directional_target_valid = directional_target_valid_;
+        sig.directional_target_world_x = directional_target_valid_ ? directional_target_world_x_ : 0.0f;
+        sig.directional_target_world_z = directional_target_valid_ ? directional_target_world_z_ : 0.0f;
         sig.resolution_layer = perspective_sample.resolution_layer;
         sig.camera_state_version = (assets_ ? assets_->getView().camera_state_version() : 0);
         return sig;
@@ -1748,6 +1773,10 @@ bool Asset::update_anchor_basis_if_needed() {
                 signature.directional_heading_valid != last_anchor_basis_signature_.directional_heading_valid ||
                 (signature.directional_heading_valid &&
                  !almost_equal(signature.directional_heading_radians, last_anchor_basis_signature_.directional_heading_radians)) ||
+                signature.directional_target_valid != last_anchor_basis_signature_.directional_target_valid ||
+                (signature.directional_target_valid &&
+                 (!almost_equal(signature.directional_target_world_x, last_anchor_basis_signature_.directional_target_world_x) ||
+                  !almost_equal(signature.directional_target_world_z, last_anchor_basis_signature_.directional_target_world_z))) ||
                 signature.resolution_layer != last_anchor_basis_signature_.resolution_layer ||
                 signature.camera_state_version != last_anchor_basis_signature_.camera_state_version ||
                 !almost_equal(signature.remainder_scale, last_anchor_basis_signature_.remainder_scale) ||
@@ -1871,64 +1900,69 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
         std::optional<DisplacedAssetAnchorPoint> synthesized_anchor;
         const DisplacedAssetAnchorPoint* frame_anchor = current_frame ? current_frame->find_anchor(name) : nullptr;
         if (oval_mapping) {
-                const float heading_radians = directional_heading_valid_ ? directional_heading_radians_ : 0.0f;
-                synthesized_anchor = interpolate_oval_anchor_point_for_heading(*oval_mapping, name, heading_radians);
+                std::optional<AnchorPoint> center_anchor_state;
+                const std::vector<std::string> center_candidates =
+                    center_anchor_name_candidates(*oval_mapping, name);
+                for (const auto& center_name : center_candidates) {
+                        if (center_name.empty() || center_name == name) {
+                                continue;
+                        }
+                        if (!current_frame || !current_frame->find_anchor(center_name)) {
+                                continue;
+                        }
+                        std::optional<AnchorPoint> candidate_center =
+                            anchor_state(center_name, grid_policy, resolve_mode);
+                        if (!candidate_center.has_value() || !candidate_center->exists) {
+                                continue;
+                        }
+                        center_anchor_state = candidate_center;
+                        break;
+                }
+
+                const AnchorPoint* center = center_anchor_state.has_value() ? &(*center_anchor_state) : nullptr;
+                const SDL_Point origin_world = world_xy_point();
+                const float fallback_world_z = static_cast<float>(world_z()) + world_z_offset();
+                const int fallback_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
+                const PerspectiveSample perspective_sample = runtime_perspective_sample();
+                const bool fallback_has_flat_perspective =
+                    std::isfinite(perspective_sample.scale) && perspective_sample.scale > 0.0f;
+                const float fallback_flat_perspective =
+                    fallback_has_flat_perspective ? std::max(0.0001f, perspective_sample.scale) : 1.0f;
+
+                const float center_x = center ? center->world_exact_pos_2d.x : static_cast<float>(origin_world.x);
+                const float center_y = center ? center->world_exact_pos_2d.y : static_cast<float>(origin_world.y);
+                const float center_z = center ? center->world_exact_z : fallback_world_z;
+                const int center_layer = center ? center->resolution_layer : fallback_layer;
+                const float center_flat_perspective =
+                    center ? center->flat_perspective_scale : fallback_flat_perspective;
+                const bool center_has_flat_perspective =
+                    center ? center->has_flat_perspective_scale : fallback_has_flat_perspective;
+
+                float effective_heading_radians = directional_heading_valid_ ? directional_heading_radians_ : 0.0f;
+                if (directional_target_valid_) {
+                        const float heading_dx = directional_target_world_x_ - center_x;
+                        const float heading_dz = directional_target_world_z_ - center_z;
+                        const float heading_len_sq = heading_dx * heading_dx + heading_dz * heading_dz;
+                        if (std::isfinite(heading_dx) &&
+                            std::isfinite(heading_dz) &&
+                            heading_len_sq > 1e-6f) {
+                                effective_heading_radians = std::atan2(heading_dz, heading_dx);
+                        }
+                }
+
+                synthesized_anchor = interpolate_oval_anchor_point_for_heading(*oval_mapping, name, effective_heading_radians);
                 if (synthesized_anchor.has_value() && synthesized_anchor->is_valid()) {
-                        std::optional<AnchorPoint> center_anchor_state;
-                        const std::vector<std::string> center_candidates =
-                            center_anchor_name_candidates(*oval_mapping, name);
-                        for (const auto& center_name : center_candidates) {
-                                if (center_name.empty() || center_name == name) {
-                                        continue;
-                                }
-                                std::optional<AnchorPoint> candidate_center =
-                                    anchor_state(center_name, grid_policy, resolve_mode);
-                                if (!candidate_center.has_value() || !candidate_center->exists) {
-                                        continue;
-                                }
-                                center_anchor_state = candidate_center;
-                                break;
-                        }
 
-                        const AnchorPoint* center = center_anchor_state.has_value() ? &(*center_anchor_state) : nullptr;
-                        const SDL_Point origin_world = world_xy_point();
-                        const float fallback_world_z = static_cast<float>(world_z()) + world_z_offset();
-                        const int fallback_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
-                        const PerspectiveSample perspective_sample = runtime_perspective_sample();
-                        const bool fallback_has_flat_perspective =
-                            std::isfinite(perspective_sample.scale) && perspective_sample.scale > 0.0f;
-                        const float fallback_flat_perspective =
-                            fallback_has_flat_perspective ? std::max(0.0001f, perspective_sample.scale) : 1.0f;
-
-                        const float center_x = center ? center->world_exact_pos_2d.x : static_cast<float>(origin_world.x);
-                        const float center_y = center ? center->world_exact_pos_2d.y : static_cast<float>(origin_world.y);
-                        const float center_z = center ? center->world_exact_z : fallback_world_z;
-                        const int center_layer = center ? center->resolution_layer : fallback_layer;
-                        const float center_flat_perspective =
-                            center ? center->flat_perspective_scale : fallback_flat_perspective;
-                        const bool center_has_flat_perspective =
-                            center ? center->has_flat_perspective_scale : fallback_has_flat_perspective;
-
-                        const float flat_x = center_x + static_cast<float>(synthesized_anchor->texture_x);
-                        const float flat_y = center_y + static_cast<float>(synthesized_anchor->texture_y);
-                        const float flat_z = center_z;
-                        anchor_points::AnchorWorldPoint3 flat_point{flat_x, flat_y, flat_z, true};
-                        anchor_points::AnchorWorldPoint3 final_point = flat_point;
-                        if (!anchor_points::displace_along_camera_to_point_ray(
-                                *this,
-                                flat_point,
-                                synthesized_anchor->depth_offset,
-                                final_point)) {
-                                final_point = flat_point;
-                        }
-                        if (!synthesized_anchor->resolve_x && flat_point.valid && final_point.valid) {
-                                final_point.x = flat_point.x;
-                                final_point.y = flat_point.y;
-                                final_point.valid =
-                                    std::isfinite(final_point.x) &&
-                                    std::isfinite(final_point.y) &&
-                                    std::isfinite(final_point.z);
-                        }
+                        oval_anchor_math::WorldPoint3 flat_point =
+                            resolve_flat_oval_world_point(center_x,
+                                                          center_y,
+                                                          center_z,
+                                                          *synthesized_anchor);
+                        oval_anchor_math::WorldPoint3 final_point =
+                            resolve_final_oval_world_point(center_x,
+                                                           center_y,
+                                                           center_z,
+                                                           *synthesized_anchor);
                         if (!final_point.valid) {
                                 final_point = flat_point;
                         }
@@ -2174,6 +2208,36 @@ void Asset::clear_directional_heading_radians() {
         }
         directional_heading_radians_ = 0.0f;
         directional_heading_valid_ = false;
+        mark_anchors_dirty();
+}
+
+bool Asset::set_directional_target_world_xz(float world_x, float world_z) {
+        if (!std::isfinite(world_x) || !std::isfinite(world_z)) {
+                return false;
+        }
+        constexpr float kTargetEpsilon = 1e-4f;
+        const bool changed = !directional_target_valid_ ||
+                             std::fabs(directional_target_world_x_ - world_x) > kTargetEpsilon ||
+                             std::fabs(directional_target_world_z_ - world_z) > kTargetEpsilon;
+        if (!changed) {
+                return false;
+        }
+        directional_target_world_x_ = world_x;
+        directional_target_world_z_ = world_z;
+        directional_target_valid_ = true;
+        mark_anchors_dirty();
+        return true;
+}
+
+void Asset::clear_directional_target_world_xz() {
+        if (!directional_target_valid_ &&
+            std::fabs(directional_target_world_x_) < 1e-6f &&
+            std::fabs(directional_target_world_z_) < 1e-6f) {
+                return;
+        }
+        directional_target_world_x_ = 0.0f;
+        directional_target_world_z_ = 0.0f;
+        directional_target_valid_ = false;
         mark_anchors_dirty();
 }
 

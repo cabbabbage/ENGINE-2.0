@@ -4,6 +4,7 @@
 #include "assets/asset/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "utils/log.hpp"
+#include "utils/oval_anchor_math.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include <algorithm>
 #include <iomanip>
@@ -56,7 +57,6 @@ constexpr const char* kAnchorPointChildCandidatesKey = "anchor_point_child_candi
 constexpr const char* kAnchorPointChildCandidatesLegacyKey = "anchor_point_child_cndidates";
 constexpr const char* kOvalAnchorMappingsKey = "oval_anchor_mappings";
 constexpr double kAnchorCandidateMissingChanceDefault = 100.0;
-constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDefaultOvalWidthRadius = 48.0f;
 constexpr float kDefaultOvalHeightRadius = 24.0f;
 constexpr std::size_t kDefaultOvalPointCount = 8;
@@ -282,17 +282,7 @@ nlohmann::json build_anchor_point_child_candidates_payload(
 }
 
 float normalize_angle_degrees(float angle_degrees) {
-    if (!std::isfinite(angle_degrees)) {
-        return 0.0f;
-    }
-    float normalized = std::fmod(angle_degrees, 360.0f);
-    if (normalized < 0.0f) {
-        normalized += 360.0f;
-    }
-    if (normalized >= 360.0f) {
-        normalized -= 360.0f;
-    }
-    return normalized;
+    return oval_anchor_math::normalize_angle_degrees(angle_degrees);
 }
 
 float sanitize_oval_radius(float radius, float fallback) {
@@ -300,19 +290,6 @@ float sanitize_oval_radius(float radius, float fallback) {
         return fallback;
     }
     return radius;
-}
-
-int rounded_int(float value) {
-    if (!std::isfinite(value)) {
-        return 0;
-    }
-    if (value > static_cast<float>(std::numeric_limits<int>::max())) {
-        return std::numeric_limits<int>::max();
-    }
-    if (value < static_cast<float>(std::numeric_limits<int>::min())) {
-        return std::numeric_limits<int>::min();
-    }
-    return static_cast<int>(std::lround(value));
 }
 
 std::string oval_center_anchor_name(std::string mapping_name) {
@@ -326,10 +303,112 @@ std::string oval_center_anchor_name(std::string mapping_name) {
 void recompute_oval_point_position(AssetInfo::OvalAnchorPoint& point,
                                    float width_radius_x,
                                    float height_radius_z) {
-    const float angle_radians = normalize_angle_degrees(point.angle_degrees) * (kPi / 180.0f);
-    point.texture_x = rounded_int(std::cos(angle_radians) * width_radius_x);
-    point.texture_y = 0;
-    point.depth_offset = std::sin(angle_radians) * height_radius_z;
+    point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
+    oval_anchor_math::compute_xz_offsets_from_angle(point.angle_degrees,
+                                                    width_radius_x,
+                                                    height_radius_z,
+                                                    point.texture_x,
+                                                    point.texture_y);
+    if (!std::isfinite(point.depth_offset)) {
+        point.depth_offset = 0.0f;
+    }
+}
+
+void normalize_and_sort_oval_points(std::vector<AssetInfo::OvalAnchorPoint>& points) {
+    for (auto& point : points) {
+        point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
+        if (!std::isfinite(point.rotation_degrees)) {
+            point.rotation_degrees = 0.0f;
+        }
+        if (!std::isfinite(point.depth_offset)) {
+            point.depth_offset = 0.0f;
+        }
+    }
+
+    std::sort(points.begin(),
+              points.end(),
+              [](const AssetInfo::OvalAnchorPoint& lhs, const AssetInfo::OvalAnchorPoint& rhs) {
+                  return normalize_angle_degrees(lhs.angle_degrees) < normalize_angle_degrees(rhs.angle_degrees);
+              });
+
+    constexpr float kDuplicateAngleEpsilon = 1e-3f;
+    std::vector<AssetInfo::OvalAnchorPoint> deduped;
+    deduped.reserve(points.size());
+    for (const auto& point : points) {
+        if (deduped.empty()) {
+            deduped.push_back(point);
+            continue;
+        }
+        const float current_angle = normalize_angle_degrees(point.angle_degrees);
+        const float previous_angle = normalize_angle_degrees(deduped.back().angle_degrees);
+        if (std::fabs(current_angle - previous_angle) <= kDuplicateAngleEpsilon) {
+            continue;
+        }
+        deduped.push_back(point);
+    }
+    points = std::move(deduped);
+}
+
+float read_point_angle_for_legacy_detection(const nlohmann::json& payload,
+                                            std::size_t fallback_index,
+                                            std::size_t fallback_count) {
+    float angle = normalize_angle_degrees(
+        (360.0f * static_cast<float>(fallback_index)) /
+        static_cast<float>(std::max<std::size_t>(1, fallback_count)));
+    if (!payload.is_object()) {
+        return angle;
+    }
+    if (payload.contains("angle_degrees")) {
+        if (const auto parsed = parse_number_like_json(payload["angle_degrees"])) {
+            angle = normalize_angle_degrees(static_cast<float>(*parsed));
+        }
+    }
+    return angle;
+}
+
+bool points_payload_looks_legacy_x_depth_model(const nlohmann::json& points_payload,
+                                               float height_radius_z) {
+    if (!points_payload.is_array() || points_payload.empty()) {
+        return false;
+    }
+    const std::size_t point_count = std::max<std::size_t>(1, points_payload.size());
+    int comparable_points = 0;
+    int matched_points = 0;
+    for (std::size_t idx = 0; idx < point_count; ++idx) {
+        const auto& entry = points_payload[idx];
+        if (!entry.is_object()) {
+            continue;
+        }
+        const float angle = read_point_angle_for_legacy_detection(entry, idx, point_count);
+        const int expected_offset_z = [&]() {
+            int offset_x = 0;
+            int offset_z = 0;
+            oval_anchor_math::compute_xz_offsets_from_angle(angle,
+                                                            1.0f,
+                                                            height_radius_z,
+                                                            offset_x,
+                                                            offset_z);
+            return offset_z;
+        }();
+        if (std::abs(expected_offset_z) <= 1) {
+            continue;
+        }
+        ++comparable_points;
+
+        const float raw_texture_y = entry.contains("texture_y")
+            ? static_cast<float>(parse_number_like_json(entry["texture_y"]).value_or(0.0))
+            : 0.0f;
+        const float raw_depth_offset = entry.contains("depth_offset")
+            ? static_cast<float>(parse_number_like_json(entry["depth_offset"]).value_or(0.0))
+            : 0.0f;
+        const bool texture_y_legacy = std::fabs(raw_texture_y) <= 0.5f;
+        const bool depth_matches_legacy =
+            std::fabs(raw_depth_offset - static_cast<float>(expected_offset_z)) <= 0.75f;
+        if (texture_y_legacy && depth_matches_legacy) {
+            ++matched_points;
+        }
+    }
+    return comparable_points > 0 && matched_points == comparable_points;
 }
 
 AssetInfo::OvalAnchorPoint make_default_oval_anchor_point(std::size_t point_index,
@@ -379,7 +458,8 @@ AssetInfo::OvalAnchorPoint normalize_oval_anchor_point(const nlohmann::json& pay
                                                        int center_texture_x,
                                                        int center_texture_y,
                                                        float width_radius_x,
-                                                       float height_radius_z) {
+                                                       float height_radius_z,
+                                                       bool legacy_x_depth_model) {
     (void)center_texture_x;
     (void)center_texture_y;
     AssetInfo::OvalAnchorPoint point =
@@ -403,6 +483,13 @@ AssetInfo::OvalAnchorPoint normalize_oval_anchor_point(const nlohmann::json& pay
         if (const auto parsed = parse_number_like_json(payload["rotation_degrees"])) {
             point.rotation_degrees = std::isfinite(*parsed) ? static_cast<float>(*parsed) : 0.0f;
         }
+    }
+    if (!legacy_x_depth_model && payload.contains("depth_offset")) {
+        if (const auto parsed = parse_number_like_json(payload["depth_offset"])) {
+            point.depth_offset = std::isfinite(*parsed) ? static_cast<float>(*parsed) : 0.0f;
+        }
+    } else {
+        point.depth_offset = 0.0f;
     }
     if (payload.contains("hidden") && payload["hidden"].is_boolean()) {
         point.hidden = payload["hidden"].get<bool>();
@@ -475,6 +562,10 @@ std::vector<AssetInfo::OvalAnchorMapping> parse_oval_anchor_mappings_payload(con
         }
 
         const auto points_it = entry.find("points");
+        const bool legacy_x_depth_model =
+            points_it != entry.end() &&
+            points_it->is_array() &&
+            points_payload_looks_legacy_x_depth_model(*points_it, mapping.height_radius_z);
         if (points_it != entry.end() && points_it->is_array()) {
             const std::size_t point_count = std::max<std::size_t>(1, points_it->size());
             mapping.points.reserve(point_count);
@@ -486,7 +577,8 @@ std::vector<AssetInfo::OvalAnchorMapping> parse_oval_anchor_mappings_payload(con
                                                                      0,
                                                                      0,
                                                                      mapping.width_radius_x,
-                                                                     mapping.height_radius_z));
+                                                                     mapping.height_radius_z,
+                                                                     legacy_x_depth_model));
                 ++idx;
             }
         }
@@ -494,11 +586,11 @@ std::vector<AssetInfo::OvalAnchorMapping> parse_oval_anchor_mappings_payload(con
             mapping.points =
                 make_default_oval_anchor_points(0, 0, mapping.width_radius_x, mapping.height_radius_z, kDefaultOvalPointCount);
         }
-        std::sort(mapping.points.begin(),
-                  mapping.points.end(),
-                  [](const AssetInfo::OvalAnchorPoint& lhs, const AssetInfo::OvalAnchorPoint& rhs) {
-                      return normalize_angle_degrees(lhs.angle_degrees) < normalize_angle_degrees(rhs.angle_degrees);
-                  });
+        normalize_and_sort_oval_points(mapping.points);
+        if (mapping.points.empty()) {
+            mapping.points =
+                make_default_oval_anchor_points(0, 0, mapping.width_radius_x, mapping.height_radius_z, kDefaultOvalPointCount);
+        }
         parsed.push_back(std::move(mapping));
     }
     return parsed;
@@ -2361,13 +2453,16 @@ bool AssetInfo::upsert_oval_anchor_mapping(const OvalAnchorMapping& mapping) {
             if (!std::isfinite(point.rotation_degrees)) {
                 point.rotation_degrees = 0.0f;
             }
+            if (!std::isfinite(point.depth_offset)) {
+                point.depth_offset = 0.0f;
+            }
             recompute_oval_point_position(point, normalized.width_radius_x, normalized.height_radius_z);
         }
-        std::sort(normalized.points.begin(),
-                  normalized.points.end(),
-                  [](const OvalAnchorPoint& lhs, const OvalAnchorPoint& rhs) {
-                      return normalize_angle_degrees(lhs.angle_degrees) < normalize_angle_degrees(rhs.angle_degrees);
-                  });
+        normalize_and_sort_oval_points(normalized.points);
+        if (normalized.points.empty()) {
+            normalized.points =
+                make_default_oval_anchor_points(0, 0, normalized.width_radius_x, normalized.height_radius_z, kDefaultOvalPointCount);
+        }
     }
     {
         std::unordered_set<std::string> seen_legacy;

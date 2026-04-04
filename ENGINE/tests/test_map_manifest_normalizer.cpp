@@ -17,7 +17,6 @@ TEST_CASE("normalize_map_manifest keeps default map manifest stable") {
     CHECK(first.map_manifest.is_object());
     CHECK(first.map_manifest.contains("map_layers"));
     CHECK(first.map_manifest.contains("map_grid_settings"));
-    CHECK(first.map_manifest.contains("fog_settings"));
 
     const manifest::MapManifestNormalizationResult second =
         manifest::normalize_map_manifest(first.map_manifest, "base_case", root);
@@ -38,7 +37,6 @@ TEST_CASE("map data manifest roundtrip preserves canonical sections") {
     CHECK(roundtrip.contains("map_layers"));
     CHECK(roundtrip.contains("map_layers_settings"));
     CHECK(roundtrip.contains("map_boundary_data"));
-    CHECK(roundtrip.contains("fog_settings"));
     CHECK(roundtrip.contains("map_assets_data"));
     CHECK(roundtrip.contains("dev_map_settings"));
 }

@@ -2548,8 +2548,9 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
         modified = true;
     }
 
-    const std::string branch = "                if (matches(\"" + key + "\"))\n"
-                               "                        return std::make_unique<" + class_name + ">(self);\n";
+    const std::string entry = "        { \"" + key + "\", [](Asset* asset) {\n"
+                              "                return std::make_unique<" + class_name + ">(asset);\n"
+                              "        } },\n";
 
     const std::string marker = "// <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>";
     auto marker_pos = content.find(marker);
@@ -2557,8 +2558,8 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
         auto insert_pos = content.find('\n', marker_pos);
         if (insert_pos != std::string::npos) {
             insert_pos += 1;
-            if (content.find(branch, marker_pos) == std::string::npos) {
-                content.insert(insert_pos, branch);
+            if (content.find(entry, marker_pos) == std::string::npos) {
+                content.insert(insert_pos, entry);
                 modified = true;
             }
         }

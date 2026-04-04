@@ -1544,9 +1544,9 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
 
         const double base_world_z = static_cast<double>(gp->world_z());
         const double point_depth_from_anchor = render_depth::depth_from_anchor(anchor_depth, base_world_z);
-        if (!std::isfinite(point_depth_from_anchor) ||
-            point_depth_from_anchor < 0.0 ||
-            point_depth_from_anchor > static_cast<double>(settings_.max_cull_depth)) {
+        const double point_depth_distance = std::fabs(point_depth_from_anchor);
+        if (!std::isfinite(point_depth_distance) ||
+            point_depth_distance > static_cast<double>(settings_.max_cull_depth)) {
             ++last_depth_culled_;
             continue;
         }
@@ -1597,11 +1597,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 visible_traversal_entries_.push_back(VisibleTraversalEntry{
                     visible_asset,
                     gp,
-                    render_depth::depth_from_anchor(anchor_depth,
-                                                    static_cast<double>(visible_asset->world_z()),
-                                                    visible_asset->render_depth_bias())});
-                if (visible_traversal_entries_.back().depth_from_anchor > static_cast<double>(settings_.max_cull_depth) ||
-                    visible_traversal_entries_.back().depth_from_anchor < 0.0) {
+                    std::fabs(render_depth::depth_from_anchor(anchor_depth,
+                                                              static_cast<double>(visible_asset->world_z()),
+                                                              visible_asset->render_depth_bias()))});
+                if (!std::isfinite(visible_traversal_entries_.back().depth_from_anchor) ||
+                    visible_traversal_entries_.back().depth_from_anchor > static_cast<double>(settings_.max_cull_depth)) {
                     visible_traversal_entries_.pop_back();
                     ++last_depth_culled_;
                 }

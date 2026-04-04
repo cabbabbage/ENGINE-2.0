@@ -1,5 +1,5 @@
 #include "spider_controller.hpp"
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
@@ -25,9 +25,9 @@ void spider_controller::on_update(const Input&) {
     if (!self || !self->anim_ || !assets) {
         return;
     }
-    Asset* player = assets->player;
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(self, assets);
 
-    if (!player || player == self || player->dead || !player->active) {
+    if (!player) {
         return;
     }
 
@@ -40,7 +40,7 @@ void spider_controller::on_update(const Input&) {
         self->anim_->auto_move(player);
     }
 
-    animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(self, player);
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {

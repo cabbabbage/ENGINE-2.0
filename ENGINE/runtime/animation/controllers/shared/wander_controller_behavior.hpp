@@ -21,7 +21,7 @@ public:
     void tick(const Input& in);
 
 private:
-    SDL_Point get_random_target() const;
+    SDL_Point get_random_target();
 
     CustomAssetController* controller_;
     WanderControllerBehaviorConfig config_;

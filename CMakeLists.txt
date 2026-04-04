@@ -285,6 +285,7 @@ add_executable(engine_tests
     ENGINE/tests/test_room_selection_filter_utils.cpp
     ENGINE/tests/test_spawn_group_codec.cpp
     ENGINE/tests/test_runtime_candidates.cpp
+    ENGINE/tests/test_custom_controller_update_utils.cpp
     ENGINE/tests/test_runtime_ownership.cpp
     ENGINE/tests/test_world_grid.cpp
     ENGINE/tests/test_input_activity.cpp

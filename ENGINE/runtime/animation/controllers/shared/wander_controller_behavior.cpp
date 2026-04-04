@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "animation/controllers/shared/custom_asset_controller.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
@@ -42,8 +42,8 @@ void WanderControllerBehavior::tick([[maybe_unused]] const Input& in) {
         return;
     }
 
-    Asset* player = assets->player;
-    if (!player || player == self || player->dead || !player->active) {
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(self, assets);
+    if (!player) {
         return;
     }
 
@@ -58,10 +58,10 @@ void WanderControllerBehavior::tick([[maybe_unused]] const Input& in) {
         self->anim_->auto_move(get_random_target());
     }
 
-    AttackDetectionHelper::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(self, player);
 }
 
-SDL_Point WanderControllerBehavior::get_random_target() const {
+SDL_Point WanderControllerBehavior::get_random_target() {
     if (!controller_) {
         return {0, 0};
     }

@@ -1,5 +1,5 @@
 #include "davey_controller.hpp"
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -19,14 +19,14 @@ void davey_controller::on_update(const Input&) {
         return;
     }
 
-    Asset* player = assets->player;
-    if (!player || player == self || player->dead || !player->active) {
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(self, assets);
+    if (!player) {
         return;
     }
 
     self->anim_->auto_move(player);
 
-    animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(self, player);
 }
 
 void davey_controller::on_process_pending_attacks(Asset& self) {

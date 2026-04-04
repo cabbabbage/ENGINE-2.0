@@ -8,6 +8,7 @@
 
 #include "spawn_group_codec.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "utils/string_utils.hpp"
 
 namespace vibble::spawn {
 
@@ -39,50 +40,66 @@ std::shared_ptr<AssetInfo> RuntimeCandidates::AssetCatalogView::find_info(
         return nullptr;
     }
 
-    const std::string wanted_lower = RuntimeCandidates::to_lower_copy(name);
+    ensure_alias_index();
+    if (!alias_index_) {
+        return nullptr;
+    }
+
+    const std::string wanted_lower = vibble::strings::to_lower_copy(name);
+    const auto alias_it = alias_index_->find(wanted_lower);
+    if (alias_it == alias_index_->end()) {
+        return nullptr;
+    }
+
+    const auto& [resolved_alias, info] = alias_it->second;
+    if (!info) {
+        return nullptr;
+    }
+    if (resolved_name) {
+        *resolved_name = resolved_alias;
+    }
+    return info;
+}
+
+void RuntimeCandidates::AssetCatalogView::ensure_alias_index() const {
+    if (!assets) {
+        alias_index_.reset();
+        alias_index_assets_ptr_ = nullptr;
+        return;
+    }
+
+    const void* current_ptr = static_cast<const void*>(assets);
+    if (alias_index_assets_ptr_ == current_ptr && alias_index_.has_value()) {
+        return;
+    }
+
+    alias_index_assets_ptr_ = current_ptr;
+    alias_index_.emplace();
+    auto& index = alias_index_.value();
+    index.reserve(assets->size() * 2);
+
     for (const auto& [asset_name, info] : *assets) {
         if (!info) {
             continue;
         }
-        if (RuntimeCandidates::to_lower_copy(asset_name) == wanted_lower) {
-            if (resolved_name) {
-                *resolved_name = asset_name;
+        const auto insert_alias = [&](const std::string& alias) {
+            if (alias.empty()) {
+                return;
             }
-            return info;
-        }
-        if (!info->name.empty() && RuntimeCandidates::to_lower_copy(info->name) == wanted_lower) {
-            if (resolved_name) {
-                *resolved_name = asset_name;
-            }
-            return info;
-        }
-    }
+            const std::string lowered = vibble::strings::to_lower_copy(alias);
+            index.try_emplace(lowered, asset_name, info);
+        };
 
-    return nullptr;
-}
-
-std::string RuntimeCandidates::trim_copy(const std::string& value) {
-    auto is_not_space = [](unsigned char ch) { return !std::isspace(ch); };
-    auto begin = std::find_if(value.begin(), value.end(), is_not_space);
-    auto end = std::find_if(value.rbegin(), value.rend(), is_not_space).base();
-    if (begin >= end) {
-        return {};
+        insert_alias(asset_name);
+        insert_alias(info->name);
     }
-    return std::string(begin, end);
 }
 
 std::string RuntimeCandidates::sanitize_key(std::string value) {
-    value = trim_copy(value);
+    value = vibble::strings::trim_copy(value);
     if (!value.empty() && value.front() == '#') {
         value.erase(0, 1);
     }
-    return value;
-}
-
-std::string RuntimeCandidates::to_lower_copy(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
     return value;
 }
 
@@ -152,8 +169,8 @@ RuntimeCandidates RuntimeCandidates::from_json(const nlohmann::json& candidates_
             entry.weight = candidate_json.get<double>();
         }
 
-        entry.raw_identifier = trim_copy(name);
-        const std::string lowered_name = to_lower_copy(sanitize_key(name));
+        entry.raw_identifier = vibble::strings::trim_copy(name);
+        const std::string lowered_name = vibble::strings::to_lower_copy(sanitize_key(name));
         if (lowered_name == "null") {
             entry.is_null = true;
         }

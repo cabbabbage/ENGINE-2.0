@@ -1375,8 +1375,8 @@ void SceneRenderer::render() {
     float min_boundary_height = std::numeric_limits<float>::max();
     float max_boundary_height = 0.0f;
 
-    auto queue_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite, double depth) {
-        if (depth < 0.0 || depth > max_cull_depth) {
+    auto queue_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite, double depth_distance) {
+        if (!std::isfinite(depth_distance) || depth_distance > max_cull_depth) {
             return;
         }
         if (!sprite.texture ||
@@ -1435,7 +1435,7 @@ void SceneRenderer::render() {
 
         SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
         SDL_SetTextureAlphaMod(sprite.texture, 255);
-        geometry_batcher_->addQuad(sprite.texture, vertices, kQuadIndices, SDL_BLENDMODE_BLEND, depth);
+        geometry_batcher_->addQuad(sprite.texture, vertices, kQuadIndices, SDL_BLENDMODE_BLEND, depth_distance);
         ++queued_boundary_sprites;
         min_boundary_width = std::min(min_boundary_width, sprite.world_width);
         max_boundary_width = std::max(max_boundary_width, sprite.world_width);
@@ -1443,25 +1443,31 @@ void SceneRenderer::render() {
         max_boundary_height = std::max(max_boundary_height, sprite.world_height);
     };
 
+    auto depth_magnitude = [](double depth) -> double {
+        if (!std::isfinite(depth)) {
+            return std::numeric_limits<double>::lowest();
+        }
+        return std::fabs(depth);
+    };
     auto depth_for_traversal = [&](const Assets::ActiveTraversalEntry& entry) -> double {
         if (!entry.asset) {
             return std::numeric_limits<double>::lowest();
         }
         if (std::isfinite(entry.depth_from_anchor)) {
-            return entry.depth_from_anchor;
+            return depth_magnitude(entry.depth_from_anchor);
         }
-        return render_depth::depth_from_anchor(anchor_depth,
-                                               static_cast<double>(entry.asset->world_z()),
-                                               entry.asset->render_depth_bias());
+        return depth_magnitude(render_depth::depth_from_anchor(anchor_depth,
+                                                               static_cast<double>(entry.asset->world_z()),
+                                                               entry.asset->render_depth_bias()));
     };
     auto depth_for_boundary = [&](const DynamicBoundarySystem::BoundarySprite& sprite) -> double {
-        return render_depth::depth_from_anchor(anchor_depth, static_cast<double>(sprite.world_z));
+        return depth_magnitude(render_depth::depth_from_anchor(anchor_depth, static_cast<double>(sprite.world_z)));
     };
     auto depth_to_layer_index = [&](double depth) -> int {
-        if (!std::isfinite(depth) || depth < 0.0) {
+        if (!std::isfinite(depth)) {
             return -1;
         }
-        const double clamped = std::min(depth, max_cull_depth);
+        const double clamped = std::min(std::fabs(depth), max_cull_depth);
         int idx = static_cast<int>(clamped / std::max(1e-6, layer_span));
         if (idx >= layer_count) {
             idx = layer_count - 1;
@@ -1521,7 +1527,8 @@ void SceneRenderer::render() {
                 if (!mesh.valid) {
                     continue;
                 }
-                const double draw_depth = asset_depth_from_anchor - static_cast<double>(obj.world_z_offset);
+                const double draw_depth =
+                    std::fabs(asset_depth_from_anchor - static_cast<double>(obj.world_z_offset));
                 geometry_batcher_->addQuad(obj.texture,
                                            mesh.vertices.data(),
                                            mesh.indices.data(),
@@ -1597,8 +1604,12 @@ void SceneRenderer::render() {
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
         SDL_RenderClear(renderer_);
         const int kernel = std::clamp(static_cast<int>(std::ceil(radius_px)), 1, 6);
-        const float inv_taps = 1.0f / static_cast<float>((kernel * 2 + 1) * (kernel * 2 + 1));
-        SDL_SetTextureAlphaMod(src, static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(inv_taps * 255.0f)), 1, 255)));
+        const int taps = (kernel * 2 + 1) * (kernel * 2 + 1);
+        const float inv_taps = 1.0f / static_cast<float>(taps);
+        const Uint8 tap_alpha = static_cast<Uint8>(
+            std::clamp(static_cast<int>(std::lround(inv_taps * 255.0f)), 1, 255));
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_ADD);
+        SDL_SetTextureAlphaMod(src, tap_alpha);
         for (int ox = -kernel; ox <= kernel; ++ox) {
             for (int oy = -kernel; oy <= kernel; ++oy) {
                 SDL_FRect dst_rect{
@@ -1611,6 +1622,7 @@ void SceneRenderer::render() {
             }
         }
         SDL_SetTextureAlphaMod(src, 255);
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
     };
 
     for (int i = 0; i < layer_count; ++i) {

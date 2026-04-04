@@ -50,8 +50,20 @@ public:
         const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>* assets = nullptr;
         bool case_insensitive_lookup = false;
 
+        AssetCatalogView(
+            const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>* assets_ptr,
+            bool case_insensitive_lookup_value)
+            : assets(assets_ptr), case_insensitive_lookup(case_insensitive_lookup_value) {}
+
         std::shared_ptr<AssetInfo> find_info(const std::string& name,
                                              std::string* resolved_name = nullptr) const;
+
+    private:
+        void ensure_alias_index() const;
+
+        mutable const void* alias_index_assets_ptr_ = nullptr;
+        mutable std::optional<std::unordered_map<std::string, std::pair<std::string, std::shared_ptr<AssetInfo>>>>
+            alias_index_;
     };
 
     static RuntimeCandidates from_json(const nlohmann::json& candidates_json);
@@ -87,9 +99,7 @@ private:
                                std::vector<std::pair<std::string, std::shared_ptr<AssetInfo>>>>
         tag_matches_cache_;
 
-    static std::string trim_copy(const std::string& value);
     static std::string sanitize_key(std::string value);
-    static std::string to_lower_copy(std::string value);
 
     struct WeightedEntry {
         int entry_index = -1;

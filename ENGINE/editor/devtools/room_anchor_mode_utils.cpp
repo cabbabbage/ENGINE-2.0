@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include "utils/string_utils.hpp"
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
@@ -16,22 +17,10 @@ int wrap_index(int index, int count) {
     return wrapped < 0 ? (wrapped + count) : wrapped;
 }
 
-std::string trim_copy(std::string_view value) {
-    auto is_space = [](unsigned char ch) { return std::isspace(ch) != 0; };
-    std::string out(value);
-    out.erase(out.begin(), std::find_if(out.begin(), out.end(), [&](unsigned char ch) {
-        return !is_space(ch);
-    }));
-    out.erase(std::find_if(out.rbegin(), out.rend(), [&](unsigned char ch) {
-        return !is_space(ch);
-    }).base(), out.end());
-    return out;
-}
-
 std::string make_unique_anchor_name(const std::string& desired_name,
                                     const std::vector<std::string>& existing_names,
                                     const std::string& excluded_name) {
-    const std::string trimmed = trim_copy(desired_name);
+    const std::string trimmed = vibble::strings::trim_copy(desired_name);
     const std::string base = trimmed.empty() ? std::string("anchor") : trimmed;
 
     std::unordered_set<std::string> used;

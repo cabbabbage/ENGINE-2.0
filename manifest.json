@@ -16114,7 +16114,7 @@
             "explicit_flip": false,
             "force_flipped": false,
             "grid_resolution": 5,
-            "jitter": 87,
+            "jitter": 259,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -16187,7 +16187,7 @@
           }
         ],
         "inherits_map_assets": false,
-        "regen_seed": 1
+        "regen_seed": 3
       },
       "map_grid_settings": {
         "grid_resolution": 6,
@@ -16238,9 +16238,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            61,
             242,
-            36,
-            152,
+            242,
             255
           ],
           "edge_smoothness": 49,
@@ -16266,8 +16266,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            37,
             242,
-            166,
             36,
             255
           ],

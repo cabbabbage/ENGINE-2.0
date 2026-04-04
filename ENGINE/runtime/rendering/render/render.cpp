@@ -940,6 +940,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 {
 
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
+    fog_tint_color_ = map_clear_color_;
 
     // Initialize dynamic boundary system
     if (dynamic_boundary_system_) {
@@ -1102,7 +1103,92 @@ bool SceneRenderer::ensure_sky_texture() {
     sky_texture_width_ = static_cast<int>(std::lround(tex_w));
     sky_texture_height_ = static_cast<int>(std::lround(tex_h));
     sky_texture_failed_ = false;
+    update_fog_tint_from_sky(sky_texture_);
     return true;
+}
+
+void SceneRenderer::update_fog_tint_from_sky(SDL_Texture* sky_texture) {
+    fog_tint_color_ = map_clear_color_;
+    if (!renderer_ || !sky_texture) {
+        return;
+    }
+
+    constexpr int kSampleSize = 32;
+    SDL_Texture* sample_target = SDL_CreateTexture(renderer_,
+                                                   SDL_PIXELFORMAT_RGBA8888,
+                                                   SDL_TEXTUREACCESS_TARGET,
+                                                   kSampleSize,
+                                                   kSampleSize);
+    if (!sample_target) {
+        return;
+    }
+    SDL_SetTextureBlendMode(sample_target, SDL_BLENDMODE_NONE);
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
+    SDL_BlendMode sky_old_blend = SDL_BLENDMODE_BLEND;
+    Uint8 sky_old_alpha = 255;
+    Uint8 sky_old_r = 255;
+    Uint8 sky_old_g = 255;
+    Uint8 sky_old_b = 255;
+    SDL_GetTextureBlendMode(sky_texture, &sky_old_blend);
+    SDL_GetTextureAlphaMod(sky_texture, &sky_old_alpha);
+    SDL_GetTextureColorMod(sky_texture, &sky_old_r, &sky_old_g, &sky_old_b);
+
+    if (!SDL_SetRenderTarget(renderer_, sample_target)) {
+        SDL_DestroyTexture(sample_target);
+        return;
+    }
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+    SDL_RenderClear(renderer_);
+    SDL_SetTextureBlendMode(sky_texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureColorMod(sky_texture, 255, 255, 255);
+    SDL_SetTextureAlphaMod(sky_texture, 255);
+    SDL_RenderTexture(renderer_, sky_texture, nullptr, nullptr);
+
+    SDL_Surface* sampled = SDL_RenderReadPixels(renderer_, nullptr);
+    SDL_SetRenderTarget(renderer_, previous_target);
+    SDL_SetTextureBlendMode(sky_texture, sky_old_blend);
+    SDL_SetTextureAlphaMod(sky_texture, sky_old_alpha);
+    SDL_SetTextureColorMod(sky_texture, sky_old_r, sky_old_g, sky_old_b);
+    SDL_DestroyTexture(sample_target);
+    if (!sampled || !sampled->pixels || sampled->w <= 0 || sampled->h <= 0) {
+        if (sampled) {
+            SDL_DestroySurface(sampled);
+        }
+        return;
+    }
+
+    const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(sampled->format);
+    if (!format) {
+        SDL_DestroySurface(sampled);
+        return;
+    }
+    const int pixel_count = sampled->w * sampled->h;
+    std::uint64_t sum_r = 0;
+    std::uint64_t sum_g = 0;
+    std::uint64_t sum_b = 0;
+    std::uint64_t sum_a = 0;
+    const Uint32* pixels = static_cast<const Uint32*>(sampled->pixels);
+    for (int i = 0; i < pixel_count; ++i) {
+        Uint8 r = 0;
+        Uint8 g = 0;
+        Uint8 b = 0;
+        Uint8 a = 0;
+        SDL_GetRGBA(pixels[i], format, SDL_GetSurfacePalette(sampled), &r, &g, &b, &a);
+        sum_r += static_cast<std::uint64_t>(r) * static_cast<std::uint64_t>(a);
+        sum_g += static_cast<std::uint64_t>(g) * static_cast<std::uint64_t>(a);
+        sum_b += static_cast<std::uint64_t>(b) * static_cast<std::uint64_t>(a);
+        sum_a += static_cast<std::uint64_t>(a);
+    }
+    SDL_DestroySurface(sampled);
+    if (sum_a == 0) {
+        return;
+    }
+
+    fog_tint_color_.r = static_cast<Uint8>(std::clamp<std::uint64_t>(sum_r / sum_a, 0, 255));
+    fog_tint_color_.g = static_cast<Uint8>(std::clamp<std::uint64_t>(sum_g / sum_a, 0, 255));
+    fog_tint_color_.b = static_cast<Uint8>(std::clamp<std::uint64_t>(sum_b / sum_a, 0, 255));
+    fog_tint_color_.a = 255;
 }
 
 void SceneRenderer::destroy_sky_texture() {
@@ -1743,6 +1829,22 @@ void SceneRenderer::render() {
                                                        radial_radius_px,
                                                        quality_scale);
     };
+    auto fog_texture = [&](SDL_Texture* src,
+                           SDL_Texture* dst,
+                           SDL_Color fog_color,
+                           float fog_alpha,
+                           float time_seconds,
+                           float quality_scale) -> bool {
+        return layer_effect_processor_.apply_atmospheric_fog(src,
+                                                             dst,
+                                                             blur_tex_,
+                                                             screen_width_,
+                                                             screen_height_,
+                                                             fog_color,
+                                                             fog_alpha,
+                                                             time_seconds,
+                                                             quality_scale);
+    };
 
     if (dof_targets_ready) {
         for (int i = 0; i < layer_count; ++i) {
@@ -1767,6 +1869,11 @@ void SceneRenderer::render() {
         const double focal_length = std::max(0.01, static_cast<double>(realism.focal_length_mm));
         const double max_blur = std::max(0.0, static_cast<double>(realism.max_blur_px));
         const double radial_lens_factor = LayerEffectProcessor::radial_lens_factor_from_optics(focal_length, f_stop);
+        const double fog_density = std::max(0.0, static_cast<double>(realism.fog_density));
+        const double fog_depth_curve = std::clamp(static_cast<double>(realism.fog_depth_curve), 0.01, 16.0);
+        const bool fog_enabled = fog_density > 1e-6;
+        const float fog_time_seconds = static_cast<float>(SDL_GetTicks()) * 0.001f;
+        const SDL_Color fog_tint = fog_tint_color_;
         const SDL_Point screen_center_i = cam.get_screen_center();
         const SDL_FPoint optical_center{
             std::clamp(static_cast<float>(screen_center_i.x), 0.0f, static_cast<float>(screen_width_)),
@@ -1788,15 +1895,15 @@ void SceneRenderer::render() {
                                                                                       f_stop,
                                                                                       max_blur);
             }
+            const double depth_norm = std::clamp(std::fabs(representative_depth) / std::max(1.0, max_cull_depth), 0.0, 1.0);
+            float effect_quality = static_cast<float>(std::clamp(
+                1.0 - 0.55 * std::pow(depth_norm, 1.35), 0.45, 1.0));
+            if (blur_radius < 1.5 && depth_norm < 0.1) {
+                effect_quality = 1.0f;
+            }
             SDL_Texture* composite_texture = dof_layer_textures_[i];
             if (blur_radius > 0.01 && dof_blur_textures_[i]) {
                 const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur * 2.0);
-                const double depth_norm = std::clamp(representative_depth / std::max(1.0, max_cull_depth), 0.0, 1.0);
-                float effect_quality = static_cast<float>(std::clamp(
-                    1.0 - 0.55 * std::pow(depth_norm, 1.35), 0.45, 1.0));
-                if (blur_radius < 1.5) {
-                    effect_quality = 1.0f;
-                }
                 if (blur_texture(dof_layer_textures_[i],
                                  dof_blur_textures_[i],
                                  static_cast<float>(blur_radius),
@@ -1804,6 +1911,26 @@ void SceneRenderer::render() {
                                  static_cast<float>(radial_radius),
                                  effect_quality)) {
                     composite_texture = dof_blur_textures_[i];
+                }
+            }
+            if (fog_enabled && composite_texture && dof_layer_textures_[i] && dof_blur_textures_[i]) {
+                const double fog_alpha = LayerEffectProcessor::fog_alpha_from_depth(representative_depth,
+                                                                                     max_cull_depth,
+                                                                                     fog_density,
+                                                                                     fog_depth_curve);
+                if (fog_alpha > 0.0005) {
+                    SDL_Texture* fogged_target = (composite_texture == dof_layer_textures_[i])
+                        ? dof_blur_textures_[i]
+                        : dof_layer_textures_[i];
+                    if (fogged_target && fogged_target != composite_texture &&
+                        fog_texture(composite_texture,
+                                    fogged_target,
+                                    fog_tint,
+                                    static_cast<float>(fog_alpha),
+                                    fog_time_seconds,
+                                    effect_quality)) {
+                        composite_texture = fogged_target;
+                    }
                 }
             }
             if (composite_texture) {

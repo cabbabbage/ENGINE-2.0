@@ -145,6 +145,8 @@ void CameraUIPanel::sync_from_camera() {
     if (aperture_f_stop_slider_) aperture_f_stop_slider_->set_value(settings.aperture_f_stop);
     if (focal_length_mm_slider_) focal_length_mm_slider_->set_value(settings.focal_length_mm);
     if (max_blur_px_slider_) max_blur_px_slider_->set_value(settings.max_blur_px);
+    if (fog_density_slider_) fog_density_slider_->set_value(settings.fog_density);
+    if (fog_depth_curve_slider_) fog_depth_curve_slider_->set_value(settings.fog_depth_curve);
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
     }
@@ -219,6 +221,12 @@ void CameraUIPanel::build_ui() {
     focal_length_mm_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     max_blur_px_slider_ = std::make_unique<FloatSliderWidget>("Max Blur (px)", 0.0f, 128.0f, 0.25f, defaults.max_blur_px, 2);
     max_blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    fog_density_slider_ = std::make_unique<FloatSliderWidget>("Fog Density", 0.0f, 16.0f, 0.01f, defaults.fog_density, 2);
+    fog_density_slider_->set_tooltip("Atmospheric density coefficient. Higher values increase haze toward the cull-depth limit.");
+    fog_density_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    fog_depth_curve_slider_ = std::make_unique<FloatSliderWidget>("Fog Depth Curve", 0.01f, 16.0f, 0.01f, defaults.fog_depth_curve, 2);
+    fog_depth_curve_slider_->set_tooltip("Depth response exponent for fog buildup. Higher values keep near depths clearer and thicken far haze faster.");
+    fog_depth_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     // Global camera height bounds
     const auto [saved_min, saved_max] = load_camera_height_bounds();
@@ -301,6 +309,8 @@ void CameraUIPanel::rebuild_rows() {
     if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
     if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
     if (max_blur_px_slider_) rows.push_back({ max_blur_px_slider_.get() });
+    if (fog_density_slider_) rows.push_back({ fog_density_slider_.get() });
+    if (fog_depth_curve_slider_) rows.push_back({ fog_depth_curve_slider_.get() });
 
     // Camera height bounds section
     if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
@@ -331,6 +341,8 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (aperture_f_stop_slider_) updated.aperture_f_stop = aperture_f_stop_slider_->value();
     if (focal_length_mm_slider_) updated.focal_length_mm = focal_length_mm_slider_->value();
     if (max_blur_px_slider_) updated.max_blur_px = max_blur_px_slider_->value();
+    if (fog_density_slider_) updated.fog_density = fog_density_slider_->value();
+    if (fog_depth_curve_slider_) updated.fog_depth_curve = fog_depth_curve_slider_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
@@ -342,7 +354,9 @@ void CameraUIPanel::apply_settings_if_needed() {
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
         float_changed(updated.aperture_f_stop, current.aperture_f_stop) ||
         float_changed(updated.focal_length_mm, current.focal_length_mm) ||
-        float_changed(updated.max_blur_px, current.max_blur_px);
+        float_changed(updated.max_blur_px, current.max_blur_px) ||
+        float_changed(updated.fog_density, current.fog_density) ||
+        float_changed(updated.fog_depth_curve, current.fog_depth_curve);
     float boundary_value = assets_->boundary_min_visible_screen_ratio();
     if (boundary_min_render_size_slider_) {
         boundary_value = boundary_min_render_size_slider_->value();

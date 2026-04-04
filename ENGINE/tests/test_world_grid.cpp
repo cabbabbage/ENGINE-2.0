@@ -15,6 +15,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -492,7 +493,9 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
         {"layer_depth_curve", 1.75},
         {"aperture_f_stop", 4.0},
         {"focal_length_mm", 35.0},
-        {"max_blur_px", 20.0}
+        {"max_blur_px", 20.0},
+        {"fog_density", 1.8},
+        {"fog_depth_curve", 1.4}
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
@@ -501,10 +504,43 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
     CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
     CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
     CHECK(settings.max_blur_px == doctest::Approx(20.0f));
+    CHECK(settings.fog_density == doctest::Approx(1.8f));
+    CHECK(settings.fog_depth_curve == doctest::Approx(1.4f));
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
+    CHECK(serialized["fog_density"] == doctest::Approx(1.8));
+    CHECK(serialized["fog_depth_curve"] == doctest::Approx(1.4));
     CHECK_FALSE(serialized.contains("focus_depth"));
+}
+
+TEST_CASE("WarpedScreenGrid fog settings are clamped to safe ranges") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"fog_density", -5.0},
+        {"fog_depth_curve", -2.0}
+    });
+    const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    CHECK(settings.fog_density == doctest::Approx(0.0f));
+    CHECK(settings.fog_depth_curve == doctest::Approx(0.01f));
+}
+
+TEST_CASE("LayerEffectProcessor fog alpha is monotonic with depth and disables at zero density") {
+    const double max_depth = 5000.0;
+    CHECK(LayerEffectProcessor::fog_alpha_from_depth(0.0, max_depth, 0.0, 1.25) == doctest::Approx(0.0));
+    CHECK(LayerEffectProcessor::fog_alpha_from_depth(2500.0, max_depth, 0.0, 1.25) == doctest::Approx(0.0));
+
+    const double near_alpha = LayerEffectProcessor::fog_alpha_from_depth(500.0, max_depth, 1.2, 1.3);
+    const double mid_alpha = LayerEffectProcessor::fog_alpha_from_depth(2500.0, max_depth, 1.2, 1.3);
+    const double far_alpha = LayerEffectProcessor::fog_alpha_from_depth(5000.0, max_depth, 1.2, 1.3);
+    CHECK(near_alpha >= 0.0);
+    CHECK(mid_alpha >= near_alpha);
+    CHECK(far_alpha >= mid_alpha);
+    CHECK(far_alpha <= 1.0);
+
+    const double gentle_curve = LayerEffectProcessor::fog_alpha_from_depth(1000.0, max_depth, 1.2, 0.8);
+    const double steep_curve = LayerEffectProcessor::fog_alpha_from_depth(1000.0, max_depth, 1.2, 2.0);
+    CHECK(gentle_curve > steep_curve);
 }

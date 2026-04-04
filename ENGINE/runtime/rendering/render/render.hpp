@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "rendering/render/composite_asset_renderer.hpp"
+#include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include <SDL3/SDL.h>
@@ -176,6 +177,7 @@ private:
     std::unordered_map<const Asset*, MovementDebugObservedState> movement_debug_observed_state_;
 
     CompositeAssetRenderer composite_renderer_;
+    LayerEffectProcessor layer_effect_processor_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
 
     SDL_Texture* scene_composite_tex_ = nullptr;

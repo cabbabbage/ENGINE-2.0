@@ -5258,7 +5258,12 @@
         {
           "anchor_point_name": "weapon",
           "candidates": {
-            "candidates": []
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "vibble_attack_1"
+              }
+            ]
           }
         },
         {
@@ -5281,8 +5286,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 208,
-                "texture_y": 128
+                "texture_x": 200,
+                "texture_y": 143
               },
               {
                 "depth_offset": 0.0,
@@ -5313,24 +5318,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 191,
-                "texture_y": 168
+                "texture_x": 196,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 203,
-                "texture_y": 149
+                "texture_x": 195,
+                "texture_y": 171
               }
             ]
           ],
@@ -5413,8 +5418,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5445,24 +5450,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -5475,8 +5480,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5507,24 +5512,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -5537,8 +5542,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5569,24 +5574,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -5599,8 +5604,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5631,24 +5636,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -5661,8 +5666,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5693,24 +5698,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -5723,8 +5728,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5755,24 +5760,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -5785,8 +5790,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5817,24 +5822,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -5847,8 +5852,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5879,24 +5884,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ]
           ],
@@ -6319,8 +6324,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6351,24 +6356,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -6381,8 +6386,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6413,24 +6418,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -6443,8 +6448,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6475,24 +6480,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -6505,8 +6510,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6537,24 +6542,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -6567,8 +6572,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6599,24 +6604,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -6629,8 +6634,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6661,24 +6666,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -6691,8 +6696,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6723,24 +6728,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -6753,8 +6758,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -6785,24 +6790,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ]
           ],
@@ -7216,8 +7221,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7248,24 +7253,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -7278,8 +7283,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7310,24 +7315,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -7340,8 +7345,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7372,24 +7377,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -7402,8 +7407,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7434,24 +7439,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -7464,8 +7469,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7496,24 +7501,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -7526,8 +7531,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7558,24 +7563,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -7588,8 +7593,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7620,24 +7625,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -7650,8 +7655,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -7682,24 +7687,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ]
           ],
@@ -8113,8 +8118,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8145,24 +8150,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -8175,8 +8180,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8207,24 +8212,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -8237,8 +8242,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8269,24 +8274,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -8299,8 +8304,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8331,24 +8336,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -8361,8 +8366,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8393,24 +8398,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -8423,8 +8428,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8455,24 +8460,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -8485,8 +8490,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8517,24 +8522,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -8547,8 +8552,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -8579,24 +8584,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ]
           ],
@@ -9015,18 +9020,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9064,6 +9057,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9077,18 +9082,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9126,6 +9119,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9139,18 +9144,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9188,6 +9181,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9201,18 +9206,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9250,6 +9243,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9263,18 +9268,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9312,6 +9305,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9325,18 +9330,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9374,6 +9367,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9387,18 +9392,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9436,6 +9429,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9449,18 +9454,6 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
@@ -9498,6 +9491,18 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
@@ -9539,8 +9544,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -9571,24 +9576,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -9601,8 +9606,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -9633,24 +9638,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -9663,8 +9668,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -9695,24 +9700,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -9725,8 +9730,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -9757,24 +9762,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -9787,8 +9792,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -9819,24 +9824,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -9849,8 +9854,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -9881,24 +9886,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -9911,8 +9916,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -9943,24 +9948,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -9973,8 +9978,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10005,24 +10010,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ]
           ],
@@ -10166,8 +10171,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10198,24 +10203,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -10228,8 +10233,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10260,24 +10265,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -10290,8 +10295,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10322,24 +10327,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -10352,8 +10357,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10384,24 +10389,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -10414,8 +10419,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10446,24 +10451,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -10476,8 +10481,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10508,24 +10513,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -10538,8 +10543,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10570,24 +10575,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -10600,8 +10605,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -10632,24 +10637,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ]
           ],
@@ -11072,8 +11077,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11104,24 +11109,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -11134,8 +11139,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11166,24 +11171,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -11196,8 +11201,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11228,24 +11233,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -11258,8 +11263,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11290,24 +11295,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -11320,8 +11325,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11352,24 +11357,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -11382,8 +11387,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11414,24 +11419,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -11444,8 +11449,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11476,24 +11481,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ],
             [
@@ -11506,8 +11511,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 192,
-                "texture_y": 127
+                "texture_x": 197,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -11538,24 +11543,24 @@
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "weapon_oval_center",
+                "name": "oval_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 204,
+                "texture_y": 150
               },
               {
                 "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "oval_oval_center",
+                "name": "weapon_oval_center",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
+                "texture_x": 195,
+                "texture_y": 173
               }
             ]
           ],
@@ -11969,7 +11974,7 @@
       "oval_anchor_mappings": [
         {
           "asset_name": "vibble",
-          "height_radius_z": 24.0,
+          "height_radius_z": 4.0,
           "legacy_names": [],
           "name": "hat",
           "points": [
@@ -11995,7 +12000,7 @@
               "rotation_degrees": -10.0,
               "scaling_method": "parent",
               "texture_x": 34,
-              "texture_y": 17
+              "texture_y": 3
             },
             {
               "angle_degrees": 90.0,
@@ -12007,7 +12012,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": 24
+              "texture_y": 4
             },
             {
               "angle_degrees": 135.0,
@@ -12019,7 +12024,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": -34,
-              "texture_y": 17
+              "texture_y": 3
             },
             {
               "angle_degrees": 180.0,
@@ -12043,7 +12048,7 @@
               "rotation_degrees": -5.0,
               "scaling_method": "parent",
               "texture_x": -34,
-              "texture_y": -17
+              "texture_y": -3
             },
             {
               "angle_degrees": 270.0,
@@ -12055,7 +12060,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": -24
+              "texture_y": -4
             },
             {
               "angle_degrees": 315.0,
@@ -12067,9 +12072,10 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 34,
-              "texture_y": -17
+              "texture_y": -3
             }
           ],
+          "radius_offset_degrees": 176.0,
           "width_radius_x": 48.0
         },
         {
@@ -12175,6 +12181,7 @@
               "texture_y": -17
             }
           ],
+          "radius_offset_degrees": 0.0,
           "width_radius_x": 48.0
         },
         {
@@ -12280,111 +12287,7 @@
               "texture_y": -17
             }
           ],
-          "width_radius_x": 48.0
-        },
-        {
-          "asset_name": "vibble",
-          "height_radius_z": 24.0,
-          "legacy_names": [],
-          "name": "weapon",
-          "points": [
-            {
-              "angle_degrees": 0.0,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 48,
-              "texture_y": 0
-            },
-            {
-              "angle_degrees": 0.27326852083206177,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 48,
-              "texture_y": 0
-            },
-            {
-              "angle_degrees": 153.3187713623047,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": -43,
-              "texture_y": 11
-            },
-            {
-              "angle_degrees": 270.0,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 0,
-              "texture_y": -24
-            },
-            {
-              "angle_degrees": 315.0,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 34,
-              "texture_y": -17
-            },
-            {
-              "angle_degrees": 358.2694091796875,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 48,
-              "texture_y": -1
-            },
-            {
-              "angle_degrees": 358.2987976074219,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 48,
-              "texture_y": -1
-            },
-            {
-              "angle_degrees": 358.32720947265625,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 48,
-              "texture_y": -1
-            }
-          ],
+          "radius_offset_degrees": 0.0,
           "width_radius_x": 48.0
         },
         {
@@ -12442,7 +12345,66 @@
               "texture_y": -24
             }
           ],
+          "radius_offset_degrees": 0.0,
           "width_radius_x": 48.0
+        },
+        {
+          "asset_name": "vibble",
+          "height_radius_z": 24.0,
+          "legacy_names": [],
+          "name": "weapon",
+          "points": [
+            {
+              "angle_degrees": 0.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "texture_x": 55,
+              "texture_y": 0
+            },
+            {
+              "angle_degrees": 90.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "texture_x": 0,
+              "texture_y": 24
+            },
+            {
+              "angle_degrees": 180.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "texture_x": -55,
+              "texture_y": 0
+            },
+            {
+              "angle_degrees": 270.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "texture_x": 0,
+              "texture_y": -24
+            }
+          ],
+          "radius_offset_degrees": 90.0,
+          "width_radius_x": 55.0
         }
       ],
       "render_radius": 0,
@@ -13223,9 +13185,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            36,
-            145,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 49,
@@ -13251,8 +13213,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            104,
             36,
+            165,
             242,
             255
           ],
@@ -13372,16 +13334,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -6792,
-              "dz": -1448,
+              "dx": -4116,
+              "dz": -3052,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12160,
-              "origional_width": 25616,
+              "origional_height": 11864,
+              "origional_width": 21912,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

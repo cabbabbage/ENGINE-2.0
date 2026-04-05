@@ -34,9 +34,11 @@ public:
                          const SDL_FPoint& optical_center,
                          float radial_radius_px,
                          float quality_scale = 1.0f) const;
+    void set_skip(bool val){skip = val;};
 
 private:
     void destroy_fog_resources();
+    bool skip = true;
 
     SDL_Renderer* renderer_ = nullptr;
 };

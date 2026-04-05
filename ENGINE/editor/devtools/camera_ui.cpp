@@ -301,6 +301,7 @@ void CameraUIPanel::rebuild_rows() {
     if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
     if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
     if (max_blur_px_slider_) rows.push_back({ max_blur_px_slider_.get() });
+    if (enable_aperture_) rows.push_back({ enable_aperture_.get() });
 
     // Camera height bounds section
     if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });

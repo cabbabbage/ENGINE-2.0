@@ -1071,7 +1071,7 @@ bool SceneRenderer::ensure_sky_texture() {
                                                                                             focal_length,
                                                                                             f_stop,
                                                                                             max_blur);
-    if (sky_blur_radius > 0.01) {
+    if ((sky_blur_radius > 0.01) && (enable_the_thing)) {
         SDL_Texture* blurred_sky = SDL_CreateTexture(
             renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
             static_cast<int>(std::lround(tex_w)), static_cast<int>(std::lround(tex_h)));

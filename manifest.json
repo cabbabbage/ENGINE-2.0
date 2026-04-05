@@ -314,6 +314,10 @@
               {
                 "chance": 5,
                 "name": "skull_pile_1"
+              },
+              {
+                "chance": 0,
+                "name": "#book"
               }
             ]
           }
@@ -324,7 +328,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.800000011920929,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -332,8 +336,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 184,
-                "texture_y": 157
+                "texture_x": 185,
+                "texture_y": 158
               }
             ]
           ],
@@ -377,6 +381,7 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
         "scale_percentage": 99.0
@@ -13175,9 +13180,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            61,
             242,
-            36,
-            152,
+            242,
             255
           ],
           "edge_smoothness": 49,
@@ -13196,15 +13201,15 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": -2723,
-          "camera_center_dz": -2635,
-          "camera_height_px": 1335,
-          "camera_tilt_deg": 32.862342834472656,
+          "camera_center_dx": -4267,
+          "camera_center_dz": -1604,
+          "camera_height_px": 276,
+          "camera_tilt_deg": 30.727893829345703,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            37,
             242,
-            166,
             36,
             255
           ],

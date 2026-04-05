@@ -68,6 +68,7 @@ private:
     std::unique_ptr<DMSlider> camera_height_max_slider_;
     std::unique_ptr<SliderWidget> camera_height_min_widget_;
     std::unique_ptr<SliderWidget> camera_height_max_widget_;
+    std::unique_ptr<CheckboxWidget> enable_aperture_;
 
     bool applying_settings_ = false;
     int last_screen_w_ = 0;

@@ -36,12 +36,11 @@ namespace {
 
 const int kButtonHeight = DMButton::height();
 const int kButtonWidth = 160;
-constexpr std::size_t kModeButtonCount = 2;
+constexpr std::size_t kModeButtonCount = 1;
 
 std::size_t mode_index(FrameEditorLaunchMode mode) {
     switch (mode) {
         case FrameEditorLaunchMode::Movement: return 0;
-        case FrameEditorLaunchMode::AnchorPoints: return 1;
     }
     return 0;
 }
@@ -411,7 +410,7 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
             int label_y = button_rect_.y + (button_rect_.h - button_style.label.font_size) / 2;
             render_summary_label(renderer, button_text, label_x, label_y, button_style.text);
         } else {
-            static const char* kLabels[2] = {"Movement", "Anchors"};
+            static const char* kLabels[1] = {"Movement"};
             for (std::size_t i = 0; i < kModeButtonCount; ++i) {
                 if (!mode_enabled_[i]) {
                     continue;
@@ -491,7 +490,6 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             }
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AnchorPoints, 1, p, true) || handled;
             return handled;
         }
         case SDL_EVENT_MOUSE_BUTTON_UP: {
@@ -517,7 +515,6 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             }
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AnchorPoints, 1, p, false) || handled;
             return handled;
         }
         default:

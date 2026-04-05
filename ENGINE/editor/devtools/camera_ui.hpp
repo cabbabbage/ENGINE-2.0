@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include "DockableCollapsible.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
@@ -32,6 +33,7 @@ public:
     void render(SDL_Renderer* renderer) const;
 
     void sync_from_camera();
+    void set_dirty_callback(std::function<void()> callback);
 
 
 
@@ -76,6 +78,7 @@ private:
     bool applying_settings_ = false;
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;
+    std::function<void()> dirty_callback_;
 
 protected:
     std::string_view lock_settings_namespace() const override { return "camera"; }

@@ -471,6 +471,10 @@ private:
     void refresh_anchor_mode_handles();
     void sync_anchor_tools_panel();
     void sync_oval_tools_panel();
+    bool selected_oval_mapping_binding_valid() const;
+    bool resolve_selected_oval_lock_target(float& out_world_x, float& out_world_z, float& out_heading_radians) const;
+    void sync_oval_attachment_lock();
+    void release_oval_attachment_lock();
     void sync_anchor_candidate_editor();
     void refresh_anchor_candidate_editor_widget();
     void update_anchor_candidate_editor_search(const Input& input);
@@ -724,6 +728,12 @@ private:
         int selected_oval_index = -1;
         int selected_point_index = -1;
         int hovered_point_index = -1;
+        bool attachment_lock_active = false;
+        bool attachment_lock_had_heading = false;
+        float attachment_lock_heading_radians = 0.0f;
+        bool attachment_lock_had_target = false;
+        float attachment_lock_target_world_x = 0.0f;
+        float attachment_lock_target_world_z = 0.0f;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;

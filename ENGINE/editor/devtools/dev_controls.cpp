@@ -919,6 +919,11 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     apply_header_suppression();
     camera_panel_ = std::make_unique<CameraUIPanel>(assets_, 72, 72);
     if (camera_panel_) {
+        camera_panel_->set_dirty_callback([this]() {
+            this->mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
+    }
+    if (camera_panel_) {
         camera_panel_->close();
     }
     if (map_editor_) {

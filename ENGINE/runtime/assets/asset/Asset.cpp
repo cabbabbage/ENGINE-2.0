@@ -2002,14 +2002,31 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                                 assets_->world_grid().find_or_create_grid_point(key);
                         }
 
+                        const SDL_FlipMode owner_flip = effective_render_flip();
+                        const bool owner_flip_horizontal = (owner_flip & SDL_FLIP_HORIZONTAL) != 0;
+                        const bool owner_flip_vertical = (owner_flip & SDL_FLIP_VERTICAL) != 0;
+                        const auto combine_inherit_parity = [](bool parent_axis_flip, bool preserve_parent_axis) {
+                                return preserve_parent_axis ? parent_axis_flip : !parent_axis_flip;
+                        };
+                        const bool runtime_flip_horizontal =
+                            combine_inherit_parity(owner_flip_horizontal, synthesized_anchor->flip_horizontal);
+                        const bool runtime_flip_vertical =
+                            combine_inherit_parity(owner_flip_vertical, synthesized_anchor->flip_vertical);
+                        const float local_rotation = std::isfinite(synthesized_anchor->rotation_degrees)
+                            ? synthesized_anchor->rotation_degrees
+                            : 0.0f;
+                        const double owner_rotation = effective_render_angle();
+                        const float owner_rotation_f =
+                            std::isfinite(owner_rotation) ? static_cast<float>(owner_rotation) : 0.0f;
+
                         AnchorPoint resolved{};
                         resolved.name = anchor_handles_[resolved_index].name;
                         resolved.frame_index = current_frame ? current_frame->frame_index : -1;
                         resolved.exists = true;
                         resolved.depth_offset = synthesized_anchor->depth_offset;
-                        resolved.flip_horizontal = synthesized_anchor->flip_horizontal;
-                        resolved.flip_vertical = synthesized_anchor->flip_vertical;
-                        resolved.rotation_degrees = synthesized_anchor->rotation_degrees;
+                        resolved.flip_horizontal = runtime_flip_horizontal;
+                        resolved.flip_vertical = runtime_flip_vertical;
+                        resolved.rotation_degrees = owner_rotation_f + local_rotation;
                         resolved.hidden = synthesized_anchor->hidden;
                         resolved.resolve_x = synthesized_anchor->resolve_x;
                         resolved.scaling_method = synthesized_anchor->scaling_method;

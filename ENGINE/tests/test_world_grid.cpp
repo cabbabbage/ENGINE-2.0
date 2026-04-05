@@ -485,6 +485,24 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
 }
 
+TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys handled by Assets") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    const WarpedScreenGrid::RealismSettings before = camera_grid.get_settings();
+
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"boundary_min_visible_screen_ratio", 0.25},
+        {"camera_height_min_px", 32},
+        {"camera_height_max_px", 4096}
+    });
+
+    const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
+    CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
+    CHECK(after.base_height_px == doctest::Approx(before.base_height_px));
+    CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
+    CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
+    CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
+}
+
 TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and layer controls") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{

@@ -33,7 +33,7 @@ class FrameEditorBase;
 
 class FrameEditorSession {
 public:
-    enum class Mode { Movement, AnchorPoints };
+    enum class Mode { Movement };
 
     FrameEditorSession();
     ~FrameEditorSession();

@@ -13,6 +13,7 @@
 #include <optional>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -158,6 +159,9 @@ public:
     bool boundary_assets_visible() const;
     float boundary_min_visible_screen_ratio() const;
     void set_boundary_min_visible_screen_ratio(float value);
+    std::pair<int, int> camera_height_bounds_px() const;
+    void set_camera_height_bounds_px(int min_value, int max_value);
+    void sync_camera_settings_to_map_info_json();
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 
@@ -343,6 +347,8 @@ private:
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
     float boundary_min_visible_screen_ratio_ = 0.015f;
+    int camera_height_min_px_ = 1;
+    int camera_height_max_px_ = 100000;
     struct AssetDimensionCache {
         float width = 0.0f;
         float height = 0.0f;

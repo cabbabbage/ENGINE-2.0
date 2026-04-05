@@ -14,6 +14,7 @@
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
+#include "devtools/dev_camera_controls.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/font_cache.hpp"
@@ -64,6 +65,9 @@ constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
 constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
+constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
+constexpr int kDefaultCameraHeightMinPx = 1;
+constexpr int kDefaultCameraHeightMaxPx = 100000;
 
 float normalize_depth_axis_sign(float sign) {
     if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
@@ -458,7 +462,53 @@ void Assets::load_camera_settings_from_json() {
     if (!map_info_json_.contains("camera_settings") || !map_info_json_["camera_settings"].is_object()) {
         map_info_json_["camera_settings"] = nlohmann::json::object();
     }
-    camera_.apply_camera_settings(map_info_json_["camera_settings"]);
+    const nlohmann::json& camera_settings = map_info_json_["camera_settings"];
+    camera_.apply_camera_settings(camera_settings);
+
+    const auto parse_boundary_ratio = [&](const nlohmann::json& source) {
+        auto it = source.find("boundary_min_visible_screen_ratio");
+        if (it == source.end() || !it->is_number()) {
+            return kDefaultBoundaryMinVisibleScreenRatio;
+        }
+        float value = kDefaultBoundaryMinVisibleScreenRatio;
+        try {
+            value = it->get<float>();
+        } catch (...) {
+            return kDefaultBoundaryMinVisibleScreenRatio;
+        }
+        if (!std::isfinite(value)) {
+            return kDefaultBoundaryMinVisibleScreenRatio;
+        }
+        return std::clamp(value, 0.0f, 0.5f);
+    };
+    const auto parse_height_bound = [&](const nlohmann::json& source,
+                                        const char* key,
+                                        int fallback) {
+        auto it = source.find(key);
+        if (it == source.end() || !it->is_number_integer()) {
+            return fallback;
+        }
+        try {
+            const int value = it->get<int>();
+            return value;
+        } catch (...) {
+            return fallback;
+        }
+    };
+
+    const float boundary_ratio = parse_boundary_ratio(camera_settings);
+    const int min_height = parse_height_bound(camera_settings, "camera_height_min_px", kDefaultCameraHeightMinPx);
+    int max_height = parse_height_bound(camera_settings, "camera_height_max_px", kDefaultCameraHeightMaxPx);
+    if (max_height < min_height) {
+        max_height = kDefaultCameraHeightMaxPx;
+    }
+    if (max_height < min_height) {
+        max_height = min_height;
+    }
+
+    set_boundary_min_visible_screen_ratio(boundary_ratio);
+    set_camera_height_bounds_px(min_height, max_height);
+    sync_camera_settings_to_map_info_json();
     apply_camera_runtime_settings();
     camera_view_dirty_ = true;
 }
@@ -467,11 +517,16 @@ void Assets::write_camera_settings_to_json() {
     if (!map_info_json_.is_object()) {
         return;
     }
-    map_info_json_["camera_settings"] = camera_.camera_settings_to_json();
+    nlohmann::json camera_settings = camera_.camera_settings_to_json();
+    camera_settings["boundary_min_visible_screen_ratio"] = boundary_min_visible_screen_ratio_;
+    camera_settings["camera_height_min_px"] = camera_height_min_px_;
+    camera_settings["camera_height_max_px"] = camera_height_max_px_;
+    map_info_json_["camera_settings"] = std::move(camera_settings);
 }
 
 void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
+    sync_camera_settings_to_map_info_json();
     mark_camera_dirty();
     camera_view_dirty_ = true;
 }
@@ -612,6 +667,24 @@ float Assets::boundary_min_visible_screen_ratio() const {
 
 void Assets::set_boundary_min_visible_screen_ratio(float value) {
     boundary_min_visible_screen_ratio_ = std::clamp(value, 0.0f, 0.5f);
+}
+
+std::pair<int, int> Assets::camera_height_bounds_px() const {
+    return {camera_height_min_px_, camera_height_max_px_};
+}
+
+void Assets::set_camera_height_bounds_px(int min_value, int max_value) {
+    const int clamped_min = std::clamp(min_value, kDefaultCameraHeightMinPx, kDefaultCameraHeightMaxPx);
+    const int clamped_max = std::max(clamped_min,
+                                     std::clamp(max_value, kDefaultCameraHeightMinPx, kDefaultCameraHeightMaxPx));
+    camera_height_min_px_ = clamped_min;
+    camera_height_max_px_ = clamped_max;
+    DevCameraHeightBounds::set(static_cast<double>(camera_height_min_px_),
+                               static_cast<double>(camera_height_max_px_));
+}
+
+void Assets::sync_camera_settings_to_map_info_json() {
+    write_camera_settings_to_json();
 }
 
 Assets::~Assets() {

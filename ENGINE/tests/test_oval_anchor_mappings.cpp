@@ -14,7 +14,9 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "oval_point_topology.hpp"
 #include "utils/input.hpp"
+#include "utils/oval_anchor_math.hpp"
 
 namespace {
 
@@ -134,7 +136,126 @@ bool frame_anchor_payload_has_name(const nlohmann::json& frame_payload, const st
     return false;
 }
 
+std::vector<float> sorted_normalized_angles(const std::vector<AssetInfo::OvalAnchorPoint>& points) {
+    const std::vector<AssetInfo::OvalAnchorPoint> sorted =
+        devmode::oval_point_topology::sort_points_by_angle(points);
+    std::vector<float> angles;
+    angles.reserve(sorted.size());
+    for (const auto& point : sorted) {
+        angles.push_back(oval_anchor_math::normalize_angle_degrees(point.angle_degrees));
+    }
+    return angles;
+}
+
+const AssetInfo::OvalAnchorPoint* find_point_by_angle(const std::vector<AssetInfo::OvalAnchorPoint>& points,
+                                                       float angle_degrees) {
+    const float normalized_target = oval_anchor_math::normalize_angle_degrees(angle_degrees);
+    for (const auto& point : points) {
+        const float normalized = oval_anchor_math::normalize_angle_degrees(point.angle_degrees);
+        if (std::fabs(normalized - normalized_target) <= 0.001f) {
+            return &point;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
+
+TEST_CASE("Oval topology doubling inserts midpoint angles and keeps representative point fields") {
+    std::vector<AssetInfo::OvalAnchorPoint> points = {
+        make_oval_point(180.0f, 300, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(0.0f, 100, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(270.0f, 400, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(90.0f, 200, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+
+    const std::vector<AssetInfo::OvalAnchorPoint> doubled =
+        devmode::oval_point_topology::double_point_count(points);
+    REQUIRE(doubled.size() == 8);
+
+    const std::vector<float> angles = sorted_normalized_angles(doubled);
+    const std::vector<float> expected_angles = {0.0f, 45.0f, 90.0f, 135.0f, 180.0f, 225.0f, 270.0f, 315.0f};
+    REQUIRE(angles.size() == expected_angles.size());
+    for (std::size_t i = 0; i < expected_angles.size(); ++i) {
+        CHECK(angles[i] == doctest::Approx(expected_angles[i]));
+    }
+
+    const AssetInfo::OvalAnchorPoint* p45 = find_point_by_angle(doubled, 45.0f);
+    const AssetInfo::OvalAnchorPoint* p135 = find_point_by_angle(doubled, 135.0f);
+    const AssetInfo::OvalAnchorPoint* p225 = find_point_by_angle(doubled, 225.0f);
+    const AssetInfo::OvalAnchorPoint* p315 = find_point_by_angle(doubled, 315.0f);
+    REQUIRE(p45 != nullptr);
+    REQUIRE(p135 != nullptr);
+    REQUIRE(p225 != nullptr);
+    REQUIRE(p315 != nullptr);
+    CHECK(p45->texture_x == 100);
+    CHECK(p135->texture_x == 200);
+    CHECK(p225->texture_x == 300);
+    CHECK(p315->texture_x == 400);
+}
+
+TEST_CASE("Oval topology halving evenly spaced points keeps every other sorted point") {
+    std::vector<AssetInfo::OvalAnchorPoint> points = {
+        make_oval_point(315.0f, 7, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(180.0f, 4, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(45.0f, 1, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(225.0f, 5, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(0.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(90.0f, 2, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(270.0f, 6, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(135.0f, 3, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+
+    const std::vector<AssetInfo::OvalAnchorPoint> halved =
+        devmode::oval_point_topology::halve_point_count(points);
+    REQUIRE(halved.size() == 4);
+
+    const std::vector<float> angles = sorted_normalized_angles(halved);
+    const std::vector<float> expected_angles = {0.0f, 90.0f, 180.0f, 270.0f};
+    REQUIRE(angles.size() == expected_angles.size());
+    for (std::size_t i = 0; i < expected_angles.size(); ++i) {
+        CHECK(angles[i] == doctest::Approx(expected_angles[i]));
+    }
+}
+
+TEST_CASE("Oval topology halving enforces minimum of four points") {
+    const std::vector<AssetInfo::OvalAnchorPoint> points = {
+        make_oval_point(0.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(90.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(180.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(270.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+
+    const std::vector<AssetInfo::OvalAnchorPoint> halved =
+        devmode::oval_point_topology::halve_point_count(points);
+    REQUIRE(halved.size() == 4);
+
+    const std::vector<float> angles = sorted_normalized_angles(halved);
+    const std::vector<float> expected_angles = {0.0f, 90.0f, 180.0f, 270.0f};
+    for (std::size_t i = 0; i < expected_angles.size(); ++i) {
+        CHECK(angles[i] == doctest::Approx(expected_angles[i]));
+    }
+}
+
+TEST_CASE("Oval topology halving falls back to truncation for non-even spacing") {
+    const std::vector<AssetInfo::OvalAnchorPoint> points = {
+        make_oval_point(7.0f, 10, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(38.0f, 11, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(91.0f, 12, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(173.0f, 13, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(221.0f, 14, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(286.0f, 15, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(333.0f, 16, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+
+    const std::vector<AssetInfo::OvalAnchorPoint> halved =
+        devmode::oval_point_topology::halve_point_count(points);
+    REQUIRE(halved.size() == 4);
+    for (std::size_t i = 0; i < halved.size(); ++i) {
+        CHECK(halved[i].angle_degrees == doctest::Approx(points[i].angle_degrees));
+        CHECK(halved[i].texture_x == points[i].texture_x);
+    }
+}
 
 TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
     AssetInfo info("oval_asset");
@@ -341,6 +462,8 @@ TEST_CASE("Oval runtime interpolation blends numeric fields and uses nearest dis
     CHECK(mid->is_active());
     CHECK(mid->depth_offset == doctest::Approx(5.0f).epsilon(1e-4));
     CHECK(mid->rotation_degrees == doctest::Approx(45.0f).epsilon(1e-4));
+    CHECK(mid->flip_horizontal == false);
+    CHECK(mid->flip_vertical == false);
     CHECK(mid->hidden == false);
     CHECK(mid->resolve_x == true);
     CHECK(mid->scaling_method == AnchorScalingMethod::Parent);
@@ -350,9 +473,45 @@ TEST_CASE("Oval runtime interpolation blends numeric fields and uses nearest dis
     REQUIRE(near_ninety.has_value());
     CHECK(near_ninety->depth_offset == doctest::Approx(8.88889f).epsilon(1e-4));
     CHECK(near_ninety->rotation_degrees == doctest::Approx(80.0f).epsilon(1e-4));
+    CHECK(near_ninety->flip_horizontal == true);
+    CHECK(near_ninety->flip_vertical == true);
     CHECK(near_ninety->hidden == true);
     CHECK(near_ninety->resolve_x == false);
     CHECK(near_ninety->scaling_method == AnchorScalingMethod::Real3DPoint);
+}
+
+TEST_CASE("Oval runtime anchor transform composes with owner sprite transform") {
+    auto info = std::make_shared<AssetInfo>("oval_runtime_owner_transform_asset");
+    info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "weapon";
+    mapping.asset_name = "oval_runtime_owner_transform_asset";
+    mapping.width_radius_x = 25.0f;
+    mapping.height_radius_z = 15.0f;
+    mapping.points = {
+        make_oval_point(0.0f, 0, 0, 0.0f, 15.0f, false, true, true, false, AnchorScalingMethod::Parent),
+        make_oval_point(180.0f, 0, 0, 0.0f, 15.0f, false, true, true, false, AnchorScalingMethod::Parent),
+    };
+    REQUIRE(info->upsert_oval_anchor_mapping(mapping));
+
+    Area spawn_area("oval_runtime_owner_transform_area", 0);
+    Asset asset(info, spawn_area, SDL_Point{30, 40}, 0);
+    REQUIRE(asset.set_directional_heading_radians(0.0f));
+
+    auto base = asset.anchor_state("weapon", anchor_points::GridMaterialization::None, Asset::AnchorResolveMode::ForceRecompute);
+    REQUIRE(base.has_value());
+    CHECK(base->rotation_degrees == doctest::Approx(15.0f).epsilon(1e-4));
+    CHECK(base->flip_horizontal == false);
+    CHECK(base->flip_vertical == true);
+
+    REQUIRE(asset.set_anchor_sprite_transform_override(SDL_FLIP_HORIZONTAL, 30.0));
+    auto composed =
+        asset.anchor_state("weapon", anchor_points::GridMaterialization::None, Asset::AnchorResolveMode::ForceRecompute);
+    REQUIRE(composed.has_value());
+    CHECK(composed->rotation_degrees == doctest::Approx(45.0f).epsilon(1e-4));
+    CHECK(composed->flip_horizontal == true);
+    CHECK(composed->flip_vertical == true);
 }
 
 TEST_CASE("Oval runtime resolves anchors on the XZ plane and applies depth_offset vertically") {

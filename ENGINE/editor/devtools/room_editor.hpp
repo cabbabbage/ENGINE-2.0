@@ -542,6 +542,8 @@ private:
                                const char* reason,
                                const char* flush_tag);
     void refresh_oval_mode_handles();
+    std::vector<bool> anchor_row_valid_oval_center_flags(const std::vector<std::string>& anchor_names) const;
+    std::unordered_set<std::string> valid_oval_center_anchor_names(const AssetInfo& info) const;
     bool is_valid_oval_center_anchor_name(const std::string& anchor_name) const;
     bool selected_anchor_is_oval_center() const;
     bool apply_anchor_current_frame_to_scope(EditorFramePropagationScope scope);

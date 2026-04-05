@@ -8620,7 +8620,7 @@ void RoomEditor::sync_anchor_tools_panel() {
 
     if (!anchor_mode_active()) {
         anchor_tools_panel_->set_visible(false);
-        anchor_tools_panel_->set_anchor_names({});
+        anchor_tools_panel_->set_anchor_rows({}, {});
         anchor_tools_panel_->set_selected_anchor({});
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
         if (!oval_mode_active()) {
@@ -8642,15 +8642,9 @@ void RoomEditor::sync_anchor_tools_panel() {
 
     anchor_tools_panel_->set_visible(true);
     anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
-    std::vector<RoomAnchorToolsPanel::AnchorRowModel> anchor_rows;
-    anchor_rows.reserve(names.size());
-    for (const std::string& name : names) {
-        anchor_rows.push_back(RoomAnchorToolsPanel::AnchorRowModel{
-            name,
-            is_valid_oval_center_anchor_name(name)
-        });
-    }
-    anchor_tools_panel_->set_anchor_rows(anchor_rows);
+    const std::vector<bool> oval_center_validity_flags = anchor_row_valid_oval_center_flags(names);
+    SDL_assert(oval_center_validity_flags.size() == names.size());
+    anchor_tools_panel_->set_anchor_rows(names, oval_center_validity_flags);
     ensure_anchor_selection_valid();
     anchor_tools_panel_->set_selected_anchor(anchor_edit_.selected_anchor_name);
     auto selected_it = std::find_if(anchor_edit_.handles.begin(),
@@ -10558,6 +10552,38 @@ bool RoomEditor::add_anchor_in_current_frame() {
     return true;
 }
 
+std::unordered_set<std::string> RoomEditor::valid_oval_center_anchor_names(const AssetInfo& info) const {
+    std::unordered_set<std::string> valid_names;
+    const auto& mappings = info.oval_anchor_mappings;
+    valid_names.reserve(mappings.size() * 2);
+    for (const auto& mapping : mappings) {
+        if (!mapping.valid()) {
+            continue;
+        }
+        valid_names.insert(AssetInfo::oval_center_anchor_name_for_mapping(mapping.name));
+        for (const auto& legacy_name : mapping.legacy_names) {
+            valid_names.insert(AssetInfo::oval_center_anchor_name_for_mapping(legacy_name));
+        }
+    }
+    return valid_names;
+}
+
+std::vector<bool> RoomEditor::anchor_row_valid_oval_center_flags(const std::vector<std::string>& anchor_names) const {
+    std::vector<bool> flags(anchor_names.size(), false);
+    if (anchor_names.empty() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+        return flags;
+    }
+
+    const std::unordered_set<std::string> valid_names = valid_oval_center_anchor_names(*anchor_edit_.target_asset->info);
+    for (std::size_t i = 0; i < anchor_names.size(); ++i) {
+        const std::string& anchor_name = anchor_names[i];
+        flags[i] = is_oval_center_anchor_name(anchor_name) &&
+                   valid_names.find(anchor_name) != valid_names.end();
+    }
+    SDL_assert(flags.size() == anchor_names.size());
+    return flags;
+}
+
 bool RoomEditor::selected_anchor_is_oval_center() const {
     if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
         return false;
@@ -10573,21 +10599,8 @@ bool RoomEditor::is_valid_oval_center_anchor_name(const std::string& anchor_name
         return false;
     }
 
-    const auto& mappings = anchor_edit_.target_asset->info->oval_anchor_mappings;
-    for (const auto& mapping : mappings) {
-        if (!mapping.valid()) {
-            continue;
-        }
-        if (anchor_name == AssetInfo::oval_center_anchor_name_for_mapping(mapping.name)) {
-            return true;
-        }
-        for (const auto& legacy_name : mapping.legacy_names) {
-            if (anchor_name == AssetInfo::oval_center_anchor_name_for_mapping(legacy_name)) {
-                return true;
-            }
-        }
-    }
-    return false;
+    const std::unordered_set<std::string> valid_names = valid_oval_center_anchor_names(*anchor_edit_.target_asset->info);
+    return valid_names.find(anchor_name) != valid_names.end();
 }
 
 bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desired_name) {

@@ -1478,6 +1478,9 @@ void SceneRenderer::render() {
     // 3) Assets + boundaries (depth-sorted painter's algorithm)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
     const double anchor_depth = cam.anchor_world_z();
+    const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
+    const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
+    const bool depth_of_field_enabled = realism.depth_of_field_enabled;
     const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
     const float boundary_cull_margin = 64.0f;
     const float boundary_min_visible_px =

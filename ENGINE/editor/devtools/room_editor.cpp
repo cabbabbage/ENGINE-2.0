@@ -5146,7 +5146,8 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
     RoomConfigurator::CameraAdjustment adjustment{};
 
     const int scroll_y = input.getScrollY();
-    if (scroll_y != 0) {
+    const bool center_depth_scroll_override = oval_mode_active() && oval_edit_.center_selected;
+    if (scroll_y != 0 && !center_depth_scroll_override) {
         const int ticks = std::abs(scroll_y);
         const int direction = (scroll_y > 0) ? 1 : -1;
         if (shift_down) {
@@ -7192,7 +7193,7 @@ void RoomEditor::ensure_oval_editor_widgets() {
             oval_edit_.selected_oval_index = index;
             oval_edit_.selected_point_index = -1;
             oval_edit_.hovered_point_index = -1;
-            oval_edit_.center_selected = false;
+            oval_edit_.center_selected = true;
             oval_edit_.center_hovered = false;
             oval_edit_.center_dragging = false;
             refresh_oval_mode_handles();
@@ -9150,9 +9151,19 @@ void RoomEditor::sync_oval_tools_panel() {
 
     if (oval_edit_.selected_oval_index < 0 && !mappings.empty()) {
         oval_edit_.selected_oval_index = 0;
+        oval_edit_.selected_point_index = -1;
+        oval_edit_.center_selected = true;
+        oval_edit_.center_hovered = false;
+        oval_edit_.center_dragging = false;
     }
     if (oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
         oval_edit_.selected_oval_index = mappings.empty() ? -1 : static_cast<int>(mappings.size()) - 1;
+        if (oval_edit_.selected_oval_index >= 0) {
+            oval_edit_.selected_point_index = -1;
+            oval_edit_.center_selected = true;
+            oval_edit_.center_hovered = false;
+            oval_edit_.center_dragging = false;
+        }
     }
     oval_tools_panel_->set_selected_oval_index(oval_edit_.selected_oval_index);
 
@@ -11193,7 +11204,10 @@ bool RoomEditor::add_oval_mapping() {
         }
     }
     oval_edit_.selected_oval_index = new_index;
-    oval_edit_.selected_point_index = 0;
+    oval_edit_.selected_point_index = -1;
+    oval_edit_.center_selected = true;
+    oval_edit_.center_hovered = false;
+    oval_edit_.center_dragging = false;
     refresh_oval_mode_handles();
     sync_oval_tools_panel();
     return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
@@ -11224,9 +11238,20 @@ bool RoomEditor::delete_selected_oval_mapping() {
     if (mapping_count <= 0) {
         oval_edit_.selected_oval_index = -1;
         oval_edit_.selected_point_index = -1;
+        oval_edit_.center_selected = false;
+        oval_edit_.center_hovered = false;
+        oval_edit_.center_dragging = false;
     } else if (oval_edit_.selected_oval_index >= mapping_count) {
         oval_edit_.selected_oval_index = mapping_count - 1;
         oval_edit_.selected_point_index = -1;
+        oval_edit_.center_selected = true;
+        oval_edit_.center_hovered = false;
+        oval_edit_.center_dragging = false;
+    } else {
+        oval_edit_.selected_point_index = -1;
+        oval_edit_.center_selected = true;
+        oval_edit_.center_hovered = false;
+        oval_edit_.center_dragging = false;
     }
     refresh_oval_mode_handles();
     sync_oval_tools_panel();
@@ -11847,6 +11872,25 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
     }
     if (left_released) {
         oval_edit_.center_dragging = false;
+    }
+
+    const int scroll_y = input.getScrollY();
+    if (scroll_y != 0 && oval_edit_.center_selected && !pointer_blocked) {
+        if (mutate_selected_oval_center_anchor(
+                [scroll_y](DisplacedAssetAnchorPoint& center_anchor) {
+                    const float next_depth =
+                        center_anchor.depth_offset + static_cast<float>(scroll_y) * kAnchorDepthScrollStepWorldPx;
+                    if (!std::isfinite(next_depth) ||
+                        std::fabs(next_depth - center_anchor.depth_offset) < 1e-4f) {
+                        return false;
+                    }
+                    center_anchor.depth_offset = next_depth;
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced) &&
+            input_) {
+            input_->consumeScroll();
+        }
     }
 
     return true;

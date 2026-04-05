@@ -47,10 +47,20 @@ RoomOvalToolsPanel::RoomOvalToolsPanel() {
     oval_name_textbox_ = std::make_unique<DMTextBox>("Name", "");
     width_textbox_ = std::make_unique<DMTextBox>("Width Radius X", "48");
     height_textbox_ = std::make_unique<DMTextBox>("Height Radius Z", "24");
-    asset_name_textbox_ = std::make_unique<DMTextBox>("Asset Name", "");
     apply_oval_properties_button_ = std::make_unique<DMButton>("Apply Oval Properties", &DMStyles::PrimaryButton(), 180, DMButton::height());
-    center_anchor_jump_button_ = std::make_unique<DMButton>("Edit Center Anchor In Anchor Mode", &DMStyles::HeaderButton(), 180, DMButton::height());
     delete_oval_button_ = std::make_unique<DMButton>("Delete Oval", &DMStyles::DeleteButton(), 180, DMButton::height());
+
+    center_depth_textbox_ = std::make_unique<DMTextBox>("Depth Offset", "0");
+    center_rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
+    center_hidden_checkbox_ = std::make_unique<DMCheckbox>("Hidden", false);
+    center_advanced_options_button_ = std::make_unique<DMButton>("Advanced Options (Show)", &DMStyles::ListButton(), 180, DMButton::height());
+    center_flip_horizontal_checkbox_ = std::make_unique<DMCheckbox>("Flip Horizontal", true);
+    center_flip_vertical_checkbox_ = std::make_unique<DMCheckbox>("Flip Vertical", true);
+    center_resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
+    center_scaling_method_dropdown_ = std::make_unique<DMDropdown>("Scaling Method", scaling_method_options(), 0);
+    center_apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
+    center_apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
+    center_apply_asset_button_ = std::make_unique<DMButton>("Copy To Asset", &DMStyles::PrimaryButton(), 170, DMButton::height());
 
     point_count_stepper_ = std::make_unique<DMNumericStepper>("Point Count", 0, 4096, 0);
     point_count_stepper_->set_step(1);
@@ -146,9 +156,6 @@ void RoomOvalToolsPanel::set_oval_properties(const OvalProperties& properties) {
     if (height_textbox_ && !height_textbox_->is_editing()) {
         height_textbox_->set_value(format_float(properties.height_radius_z));
     }
-    if (asset_name_textbox_ && !asset_name_textbox_->is_editing()) {
-        asset_name_textbox_->set_value(properties.asset_name);
-    }
 }
 
 void RoomOvalToolsPanel::set_asset_binding_status(const AssetBindingStatus& status) {
@@ -166,21 +173,36 @@ void RoomOvalToolsPanel::set_center_anchor_status(const std::string& center_name
     layout_dirty_ = true;
 }
 
-void RoomOvalToolsPanel::set_point_names(const std::vector<std::string>& names) {
-    if (point_names_ == names) {
+void RoomOvalToolsPanel::set_center_selected(bool selected) {
+    if (center_selected_ == selected) {
         return;
     }
-    point_names_ = names;
-    point_buttons_.clear();
-    point_buttons_.reserve(point_names_.size());
-    for (const std::string& name : point_names_) {
-        point_buttons_.push_back(std::make_unique<DMButton>(name, &DMStyles::ListButton(), 220, DMButton::height()));
-    }
-    if (selected_point_index_ >= static_cast<int>(point_names_.size())) {
-        selected_point_index_ = point_names_.empty() ? -1 : static_cast<int>(point_names_.size()) - 1;
-    }
-    set_point_count(static_cast<int>(point_names_.size()));
+    center_selected_ = selected;
     layout_dirty_ = true;
+}
+
+void RoomOvalToolsPanel::set_center_detail_values(const CenterDetailValues& values) {
+    if (center_depth_textbox_ && !center_depth_textbox_->is_editing()) {
+        center_depth_textbox_->set_value(format_float(values.depth_offset));
+    }
+    if (center_rotation_slider_) {
+        center_rotation_slider_->set_value(static_cast<int>(std::lround(values.rotation_degrees)));
+    }
+    if (center_hidden_checkbox_) {
+        center_hidden_checkbox_->set_value(values.hidden);
+    }
+    if (center_resolve_x_checkbox_) {
+        center_resolve_x_checkbox_->set_value(values.resolve_x);
+    }
+    if (center_flip_horizontal_checkbox_) {
+        center_flip_horizontal_checkbox_->set_value(values.flip_horizontal);
+    }
+    if (center_flip_vertical_checkbox_) {
+        center_flip_vertical_checkbox_->set_value(values.flip_vertical);
+    }
+    if (center_scaling_method_dropdown_) {
+        center_scaling_method_dropdown_->set_selected(scaling_method_to_dropdown_index(values.scaling_method));
+    }
 }
 
 void RoomOvalToolsPanel::set_point_count(int count) {
@@ -194,11 +216,14 @@ void RoomOvalToolsPanel::set_point_count(int count) {
         point_count_stepper_->set_range(0, stepper_max);
         point_count_stepper_->set_value(point_count_);
     }
+    if (selected_point_index_ >= point_count_) {
+        selected_point_index_ = point_count_ > 0 ? point_count_ - 1 : -1;
+    }
+    layout_dirty_ = true;
 }
 
 void RoomOvalToolsPanel::set_selected_point_index(int index) {
-    const int clamped_index =
-        (index >= 0 && index < static_cast<int>(point_names_.size())) ? index : -1;
+    const int clamped_index = (index >= 0 && index < point_count_) ? index : -1;
     if (selected_point_index_ == clamped_index) {
         return;
     }
@@ -243,16 +268,8 @@ void RoomOvalToolsPanel::set_on_apply_oval_properties(ApplyOvalPropertiesCallbac
     on_apply_oval_properties_ = std::move(callback);
 }
 
-void RoomOvalToolsPanel::set_on_jump_to_center_anchor(JumpToCenterAnchorCallback callback) {
-    on_jump_to_center_anchor_ = std::move(callback);
-}
-
 void RoomOvalToolsPanel::set_on_open_candidates(OpenCandidatesCallback callback) {
     on_open_candidates_ = std::move(callback);
-}
-
-void RoomOvalToolsPanel::set_on_select_point(SelectPointCallback callback) {
-    on_select_point_ = std::move(callback);
 }
 
 void RoomOvalToolsPanel::set_on_increment_point_count(IncrementPointCountCallback callback) {
@@ -265,6 +282,14 @@ void RoomOvalToolsPanel::set_on_decrement_point_count(DecrementPointCountCallbac
 
 void RoomOvalToolsPanel::set_on_apply_point_details(ApplyPointDetailsCallback callback) {
     on_apply_point_details_ = std::move(callback);
+}
+
+void RoomOvalToolsPanel::set_on_apply_center_details(ApplyCenterDetailsCallback callback) {
+    on_apply_center_details_ = std::move(callback);
+}
+
+void RoomOvalToolsPanel::set_on_propagate_center(PropagateCenterCallback callback) {
+    on_propagate_center_ = std::move(callback);
 }
 
 bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
@@ -289,15 +314,18 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
         sdl_mouse_util::GetMouseState(&pointer_x, &pointer_y);
     }
 
-    const bool pointer_inside_panel = point_in_rect(pointer_x, pointer_y, panel_rect_);
+    const bool pointer_inside_panel =
+        point_in_rect(pointer_x, pointer_y, panel_rect_) ||
+        point_in_rect(pointer_x, pointer_y, center_panel_rect_);
     bool handled = false;
     const bool has_selected_oval = selected_oval_index_ >= 0 &&
                                    selected_oval_index_ < static_cast<int>(oval_names_.size());
-    const bool has_selected_point = selected_point_index_ >= 0 &&
-                                    selected_point_index_ < static_cast<int>(point_names_.size());
+    const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
+    const bool has_selected_point = !has_selected_center &&
+                                    selected_point_index_ >= 0 &&
+                                    selected_point_index_ < point_count_;
 
     layout_oval_buttons();
-    layout_point_buttons();
 
     for (std::size_t i = 0; i < oval_buttons_.size(); ++i) {
         DMButton* button = oval_buttons_[i].get();
@@ -343,34 +371,28 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
     }
 
     if (has_selected_oval) {
+        bool oval_properties_changed = false;
         if (oval_name_textbox_ && oval_name_textbox_->handle_event(event)) {
             handled = true;
+            oval_properties_changed = true;
         }
         if (width_textbox_ && width_textbox_->handle_event(event)) {
             handled = true;
+            oval_properties_changed = true;
         }
         if (height_textbox_ && height_textbox_->handle_event(event)) {
             handled = true;
+            oval_properties_changed = true;
         }
-        if (asset_name_textbox_ && asset_name_textbox_->handle_event(event)) {
-            handled = true;
+        if (oval_properties_changed && on_apply_oval_properties_) {
+            on_apply_oval_properties_(collect_oval_properties());
         }
-
         if (apply_oval_properties_button_ && apply_oval_properties_button_->handle_event(event)) {
             handled = true;
             if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
                 event.button.button == SDL_BUTTON_LEFT &&
                 on_apply_oval_properties_) {
                 on_apply_oval_properties_(collect_oval_properties());
-            }
-        }
-
-        if (center_anchor_jump_button_ && center_anchor_jump_button_->handle_event(event)) {
-            handled = true;
-            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-                event.button.button == SDL_BUTTON_LEFT &&
-                on_jump_to_center_anchor_) {
-                on_jump_to_center_anchor_();
             }
         }
 
@@ -384,23 +406,81 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    for (std::size_t i = 0; i < point_buttons_.size(); ++i) {
-        DMButton* button = point_buttons_[i].get();
-        if (!button) {
-            continue;
-        }
-        if (button->handle_event(event)) {
-            handled = true;
-            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-                event.button.button == SDL_BUTTON_LEFT &&
-                on_select_point_) {
-                on_select_point_(static_cast<int>(i));
-            }
-        }
-    }
-
     if (point_count_stepper_ && point_count_stepper_->handle_event(event)) {
         handled = true;
+    }
+
+    bool center_details_changed = false;
+    if (has_selected_center && center_depth_textbox_ && center_depth_textbox_->handle_event(event)) {
+        handled = true;
+        center_details_changed = true;
+    }
+    if (has_selected_center && center_rotation_slider_ && center_rotation_slider_->handle_event(event)) {
+        handled = true;
+        center_details_changed = true;
+    }
+    if (has_selected_center && center_hidden_checkbox_ && center_hidden_checkbox_->handle_event(event)) {
+        handled = true;
+        center_details_changed = true;
+    }
+    if (has_selected_center && center_advanced_options_button_ &&
+        center_advanced_options_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            center_advanced_options_expanded_ = !center_advanced_options_expanded_;
+            layout_dirty_ = true;
+        }
+    }
+    if (has_selected_center && center_advanced_options_expanded_ &&
+        center_resolve_x_checkbox_ && center_resolve_x_checkbox_->handle_event(event)) {
+        handled = true;
+        center_details_changed = true;
+    }
+    if (has_selected_center && center_advanced_options_expanded_ &&
+        center_flip_vertical_checkbox_ && center_flip_vertical_checkbox_->handle_event(event)) {
+        handled = true;
+        center_details_changed = true;
+    }
+    if (has_selected_center && center_advanced_options_expanded_ &&
+        center_flip_horizontal_checkbox_ && center_flip_horizontal_checkbox_->handle_event(event)) {
+        handled = true;
+        center_details_changed = true;
+    }
+    if (has_selected_center && center_advanced_options_expanded_ &&
+        center_scaling_method_dropdown_ && center_scaling_method_dropdown_->handle_event(event)) {
+        handled = true;
+        center_details_changed = true;
+    }
+    if (center_details_changed && on_apply_center_details_) {
+        on_apply_center_details_(collect_center_detail_values());
+    }
+
+    if (has_selected_center && center_apply_next_frame_button_ &&
+        center_apply_next_frame_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_center_) {
+            on_propagate_center_(PropagationScope::NextFrame);
+        }
+    }
+    if (has_selected_center && center_apply_animation_button_ &&
+        center_apply_animation_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_center_) {
+            on_propagate_center_(PropagationScope::Animation);
+        }
+    }
+    if (has_selected_center && center_apply_asset_button_ &&
+        center_apply_asset_button_->handle_event(event)) {
+        handled = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_LEFT &&
+            on_propagate_center_) {
+            on_propagate_center_(PropagationScope::Asset);
+        }
     }
 
     bool details_changed = false;
@@ -447,7 +527,7 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
         (oval_name_textbox_ && oval_name_textbox_->is_editing()) ||
         (width_textbox_ && width_textbox_->is_editing()) ||
         (height_textbox_ && height_textbox_->is_editing()) ||
-        (asset_name_textbox_ && asset_name_textbox_->is_editing());
+        (center_depth_textbox_ && center_depth_textbox_->is_editing());
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) && text_editing) {
         handled = true;
     }
@@ -463,6 +543,12 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
         return;
     }
     const_cast<RoomOvalToolsPanel*>(this)->update_layout();
+    const bool has_selected_oval = selected_oval_index_ >= 0 &&
+                                   selected_oval_index_ < static_cast<int>(oval_names_.size());
+    const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
+    const bool has_selected_point = !has_selected_center &&
+                                    selected_point_index_ >= 0 &&
+                                    selected_point_index_ < point_count_;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color bg = DMStyles::PanelBG();
@@ -484,8 +570,6 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawColor(renderer, 20, 24, 30, 180);
     sdl_render::FillRect(renderer, &oval_list_clip_rect_);
     dm_draw::DrawRoundedOutline(renderer, oval_list_clip_rect_, 4, 1, DMStyles::Border());
-    sdl_render::FillRect(renderer, &point_list_clip_rect_);
-    dm_draw::DrawRoundedOutline(renderer, point_list_clip_rect_, 4, 1, DMStyles::Border());
 
     SDL_Rect previous_clip{};
     SDL_GetRenderClipRect(renderer, &previous_clip);
@@ -497,12 +581,6 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
             button->render(renderer);
         }
     }
-    SDL_SetRenderClipRect(renderer, &point_list_clip_rect_);
-    for (const auto& button : point_buttons_) {
-        if (button) {
-            button->render(renderer);
-        }
-    }
     if (was_clipping) {
         SDL_SetRenderClipRect(renderer, &previous_clip);
     } else {
@@ -510,13 +588,10 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
     }
 
     if (add_oval_button_) add_oval_button_->render(renderer);
-    const bool has_selected_oval = selected_oval_index_ >= 0 &&
-                                   selected_oval_index_ < static_cast<int>(oval_names_.size());
     if (has_selected_oval) {
         if (oval_name_textbox_) oval_name_textbox_->render(renderer);
         if (width_textbox_) width_textbox_->render(renderer);
         if (height_textbox_) height_textbox_->render(renderer);
-        if (asset_name_textbox_) asset_name_textbox_->render(renderer);
 
         DMLabelStyle asset_status_style = label_style;
         std::string asset_status_text = "Attach Asset: <none>";
@@ -580,15 +655,11 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
         DMLabelStyle status_style = label_style;
         status_style.color = status_color;
         DMFontCache::instance().draw_text(renderer, status_style, center_text, center_status_rect_.x, center_status_rect_.y);
-
-        if (center_anchor_jump_button_) center_anchor_jump_button_->render(renderer);
         if (delete_oval_button_) delete_oval_button_->render(renderer);
     }
 
     if (point_count_stepper_) point_count_stepper_->render(renderer);
 
-    const bool has_selected_point = selected_point_index_ >= 0 &&
-                                    selected_point_index_ < static_cast<int>(point_names_.size());
     if (has_selected_point) {
         if (advanced_card_rect_.w > 0 && advanced_card_rect_.h > 0) {
             const SDL_Color fill = dm_draw::LightenColor(DMStyles::PanelBG(), 0.04f);
@@ -604,7 +675,9 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
                                      DMStyles::ShadowIntensity());
             dm_draw::DrawRoundedOutline(renderer, advanced_card_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
         }
+    }
 
+    if (has_selected_point) {
         DMFontCache::instance().draw_text(renderer, label_style, "Point Properties", point_detail_title_rect_.x, point_detail_title_rect_.y);
         if (point_rotation_slider_) point_rotation_slider_->render(renderer);
         if (point_hidden_checkbox_) point_hidden_checkbox_->render(renderer);
@@ -616,6 +689,51 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
             if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->render(renderer);
         }
     }
+
+    if (has_selected_center && center_panel_rect_.w > 0 && center_panel_rect_.h > 0) {
+        dm_draw::DrawBeveledRect(renderer,
+                                 center_panel_rect_,
+                                 DMStyles::CornerRadius(),
+                                 DMStyles::BevelDepth(),
+                                 bg,
+                                 DMStyles::HighlightColor(),
+                                 DMStyles::ShadowColor(),
+                                 false,
+                                 DMStyles::HighlightIntensity(),
+                                 DMStyles::ShadowIntensity());
+        dm_draw::DrawRoundedOutline(renderer, center_panel_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
+        DMFontCache::instance().draw_text(renderer, label_style, "Center Anchor Tools", center_header_rect_.x, center_header_rect_.y);
+
+        if (advanced_card_rect_.w > 0 && advanced_card_rect_.h > 0) {
+            const SDL_Color fill = dm_draw::LightenColor(DMStyles::PanelBG(), 0.04f);
+            dm_draw::DrawBeveledRect(renderer,
+                                     advanced_card_rect_,
+                                     DMStyles::CornerRadius(),
+                                     DMStyles::BevelDepth(),
+                                     fill,
+                                     DMStyles::HighlightColor(),
+                                     DMStyles::ShadowColor(),
+                                     false,
+                                     DMStyles::HighlightIntensity(),
+                                     DMStyles::ShadowIntensity());
+            dm_draw::DrawRoundedOutline(renderer, advanced_card_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
+        }
+
+        DMFontCache::instance().draw_text(renderer, label_style, "Center Anchor Properties", point_detail_title_rect_.x, point_detail_title_rect_.y);
+        if (center_depth_textbox_) center_depth_textbox_->render(renderer);
+        if (center_rotation_slider_) center_rotation_slider_->render(renderer);
+        if (center_hidden_checkbox_) center_hidden_checkbox_->render(renderer);
+        if (center_advanced_options_button_) center_advanced_options_button_->render(renderer);
+        if (center_advanced_options_expanded_) {
+            if (center_resolve_x_checkbox_) center_resolve_x_checkbox_->render(renderer);
+            if (center_flip_vertical_checkbox_) center_flip_vertical_checkbox_->render(renderer);
+            if (center_flip_horizontal_checkbox_) center_flip_horizontal_checkbox_->render(renderer);
+            if (center_scaling_method_dropdown_) center_scaling_method_dropdown_->render(renderer);
+        }
+        if (center_apply_next_frame_button_) center_apply_next_frame_button_->render(renderer);
+        if (center_apply_animation_button_) center_apply_animation_button_->render(renderer);
+        if (center_apply_asset_button_) center_apply_asset_button_->render(renderer);
+    }
 }
 
 bool RoomOvalToolsPanel::is_point_inside(int x, int y) const {
@@ -623,7 +741,7 @@ bool RoomOvalToolsPanel::is_point_inside(int x, int y) const {
         return false;
     }
     const_cast<RoomOvalToolsPanel*>(this)->update_layout();
-    return point_in_rect(x, y, panel_rect_);
+    return point_in_rect(x, y, panel_rect_) || point_in_rect(x, y, center_panel_rect_);
 }
 
 void RoomOvalToolsPanel::update_layout() const {
@@ -631,14 +749,51 @@ void RoomOvalToolsPanel::update_layout() const {
         return;
     }
 
+    const bool has_selected_oval = selected_oval_index_ >= 0 &&
+                                   selected_oval_index_ < static_cast<int>(oval_names_.size());
+    const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
+    const bool has_selected_point = !has_selected_center &&
+                                    selected_point_index_ >= 0 &&
+                                    selected_point_index_ < point_count_;
+
     const int safe_w = std::max(screen_w_, 360);
     const int safe_h = std::max(screen_h_, 420);
-    const int panel_w = std::min(kPanelWidth, std::max(260, safe_w - kPanelMargin * 2));
     const int available_h = std::max(kPanelMinHeight, safe_h - kTopOffset - kPanelMargin);
     const int panel_h = std::clamp(available_h, kPanelMinHeight, kPanelMaxHeight);
-    panel_rect_ = panel_bounds_override_active_
-        ? panel_bounds_override_
-        : SDL_Rect{kPanelMargin, kTopOffset, panel_w, panel_h};
+    const int panel_gap = kPanelMargin;
+    if (panel_bounds_override_active_) {
+        panel_rect_ = panel_bounds_override_;
+        if (panel_rect_.w <= 0) {
+            panel_rect_.w = std::min(kPanelWidth, std::max(260, safe_w - kPanelMargin * 2));
+        }
+        if (panel_rect_.h <= 0) {
+            panel_rect_.h = panel_h;
+        }
+        if (has_selected_center) {
+            const int center_w = panel_rect_.w;
+            int center_x = panel_rect_.x + panel_rect_.w + panel_gap;
+            if (center_x + center_w > safe_w - kPanelMargin) {
+                center_x = std::max(kPanelMargin, panel_rect_.x - panel_gap - center_w);
+            }
+            center_panel_rect_ = SDL_Rect{center_x, panel_rect_.y, center_w, panel_rect_.h};
+        } else {
+            center_panel_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
+    } else {
+        const int max_w = std::max(260, safe_w - kPanelMargin * 2);
+        if (has_selected_center) {
+            int panel_w = std::max(180, (max_w - panel_gap) / 2);
+            if (panel_w * 2 + panel_gap > max_w) {
+                panel_w = std::max(160, (max_w - panel_gap) / 2);
+            }
+            panel_rect_ = SDL_Rect{kPanelMargin, kTopOffset, panel_w, panel_h};
+            center_panel_rect_ = SDL_Rect{panel_rect_.x + panel_rect_.w + panel_gap, kTopOffset, panel_w, panel_h};
+        } else {
+            const int panel_w = std::min(kPanelWidth, max_w);
+            panel_rect_ = SDL_Rect{kPanelMargin, kTopOffset, panel_w, panel_h};
+            center_panel_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
+    }
 
     const int content_x = panel_rect_.x + kPanelPadding;
     const int content_w = std::max(0, panel_rect_.w - (kPanelPadding * 2));
@@ -660,13 +815,10 @@ void RoomOvalToolsPanel::update_layout() const {
     }
     y += DMButton::height() + kSectionGap;
 
-    const bool has_selected_oval = selected_oval_index_ >= 0 &&
-                                   selected_oval_index_ < static_cast<int>(oval_names_.size());
     if (has_selected_oval) {
         const int name_h = oval_name_textbox_ ? oval_name_textbox_->preferred_height(content_w) : DMTextBox::height();
         const int width_h = width_textbox_ ? width_textbox_->preferred_height(content_w) : DMTextBox::height();
         const int height_h = height_textbox_ ? height_textbox_->preferred_height(content_w) : DMTextBox::height();
-        const int asset_h = asset_name_textbox_ ? asset_name_textbox_->preferred_height(content_w) : DMTextBox::height();
 
         if (oval_name_textbox_) {
             oval_name_textbox_->set_rect(SDL_Rect{content_x, y, content_w, name_h});
@@ -686,11 +838,6 @@ void RoomOvalToolsPanel::update_layout() const {
         }
         y += row_h + kRowGap;
 
-        if (asset_name_textbox_) {
-            asset_name_textbox_->set_rect(SDL_Rect{content_x, y, content_w, asset_h});
-        }
-        y += asset_h + kRowGap;
-
         asset_status_rect_ = SDL_Rect{content_x, y, content_w, kLineHeight};
         y += kLineHeight + kRowGap;
 
@@ -705,11 +852,6 @@ void RoomOvalToolsPanel::update_layout() const {
         center_status_rect_ = SDL_Rect{content_x, y, content_w, kLineHeight};
         y += kLineHeight + kRowGap;
 
-        if (center_anchor_jump_button_) {
-            center_anchor_jump_button_->set_rect(SDL_Rect{content_x, y, content_w, DMButton::height()});
-        }
-        y += DMButton::height() + kRowGap;
-
         if (delete_oval_button_) {
             delete_oval_button_->set_rect(SDL_Rect{content_x, y, content_w, DMButton::height()});
         }
@@ -718,23 +860,12 @@ void RoomOvalToolsPanel::update_layout() const {
         if (oval_name_textbox_) oval_name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (width_textbox_) width_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (height_textbox_) height_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (asset_name_textbox_) asset_name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (apply_oval_properties_button_) apply_oval_properties_button_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (center_anchor_jump_button_) center_anchor_jump_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (delete_oval_button_) delete_oval_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         asset_status_rect_ = SDL_Rect{0, 0, 0, 0};
         candidate_hint_rect_ = SDL_Rect{0, 0, 0, 0};
         center_status_rect_ = SDL_Rect{0, 0, 0, 0};
     }
-
-    const int remaining_for_points = std::max(kListMinHeight, (panel_rect_.y + panel_rect_.h - kPanelPadding) - y - 220);
-    const int point_rows = std::max(2, std::min(6, static_cast<int>(point_names_.size()) + 1));
-    const int point_list_h = std::clamp(
-        point_rows * (DMButton::height() + DMSpacing::small_gap()) - DMSpacing::small_gap(),
-        kListMinHeight,
-        std::max(kListMinHeight, remaining_for_points));
-    point_list_clip_rect_ = SDL_Rect{content_x, y, content_w, point_list_h};
-    y += point_list_h + kSectionGap;
 
     const int stepper_h = point_count_stepper_ ? point_count_stepper_->preferred_height(content_w) : DMNumericStepper::height();
     if (point_count_stepper_) {
@@ -742,8 +873,8 @@ void RoomOvalToolsPanel::update_layout() const {
     }
     y += stepper_h + kSectionGap;
 
-    const bool has_selected_point = selected_point_index_ >= 0 &&
-                                    selected_point_index_ < static_cast<int>(point_names_.size());
+    point_detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
+    advanced_card_rect_ = SDL_Rect{0, 0, 0, 0};
     if (has_selected_point) {
         const int split_gap = DMSpacing::small_gap();
         const int split_w = std::max(0, content_w - split_gap);
@@ -808,9 +939,9 @@ void RoomOvalToolsPanel::update_layout() const {
         const int card_top = std::max(panel_rect_.y + kPanelPadding, advanced_top - kAdvancedCardPadding);
         const int card_bottom = std::min(panel_rect_.y + panel_rect_.h - kPanelPadding, advanced_bottom + kAdvancedCardPadding);
         advanced_card_rect_ = SDL_Rect{content_x, card_top, content_w, std::max(0, card_bottom - card_top)};
-    } else {
-        point_detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
-        advanced_card_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
+
+    if (!has_selected_point) {
         if (point_rotation_slider_) point_rotation_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (point_hidden_checkbox_) point_hidden_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (advanced_options_button_) advanced_options_button_->set_rect(SDL_Rect{0, 0, 0, 0});
@@ -820,8 +951,116 @@ void RoomOvalToolsPanel::update_layout() const {
         if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
 
+    if (has_selected_center && center_panel_rect_.w > 0 && center_panel_rect_.h > 0) {
+        const int center_content_x = center_panel_rect_.x + kPanelPadding;
+        const int center_content_w = std::max(0, center_panel_rect_.w - (kPanelPadding * 2));
+        int center_y = center_panel_rect_.y + kPanelPadding;
+        center_header_rect_ = SDL_Rect{center_content_x, center_y, center_content_w, kHeaderHeight};
+        center_y += kHeaderHeight + kSectionGap;
+
+        const int split_gap = DMSpacing::small_gap();
+        const int split_w = std::max(0, center_content_w - split_gap);
+        const int left_w = split_w / 2;
+        const int right_w = std::max(0, center_content_w - left_w - split_gap);
+        const int depth_h = center_depth_textbox_ ? center_depth_textbox_->preferred_height(center_content_w) : DMTextBox::height();
+        const int rotation_h = center_rotation_slider_ ? center_rotation_slider_->preferred_height(center_content_w) : DMSlider::height();
+        const int hidden_h = center_hidden_checkbox_ ? DMCheckbox::height() : 0;
+        const int advanced_h = center_advanced_options_button_ ? DMButton::height() : 0;
+        const int resolve_h = center_resolve_x_checkbox_ ? DMCheckbox::height() : 0;
+        const int flip_h = std::max(center_flip_vertical_checkbox_ ? DMCheckbox::height() : 0,
+                                    center_flip_horizontal_checkbox_ ? DMCheckbox::height() : 0);
+        const int scale_h = center_scaling_method_dropdown_
+            ? center_scaling_method_dropdown_->preferred_height(center_content_w)
+            : DMDropdown::height();
+
+        point_detail_title_rect_ = SDL_Rect{center_content_x, center_y, center_content_w, kLineHeight};
+        center_y += kLineHeight + kRowGap;
+        if (center_depth_textbox_) {
+            center_depth_textbox_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, depth_h});
+        }
+        center_y += depth_h + kRowGap;
+        if (center_rotation_slider_) {
+            center_rotation_slider_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, rotation_h});
+        }
+        center_y += rotation_h + kRowGap;
+        if (center_hidden_checkbox_) {
+            center_hidden_checkbox_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, hidden_h});
+        }
+        center_y += hidden_h + kRowGap;
+
+        int advanced_top = center_y;
+        if (center_advanced_options_button_) {
+            center_advanced_options_button_->set_text(
+                center_advanced_options_expanded_ ? "Advanced Options (Hide)" : "Advanced Options (Show)");
+            center_advanced_options_button_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, advanced_h});
+        }
+        center_y += advanced_h;
+        int advanced_bottom = center_y;
+        if (center_advanced_options_expanded_) {
+            center_y += kRowGap;
+            if (center_resolve_x_checkbox_) {
+                center_resolve_x_checkbox_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, resolve_h});
+                center_y += resolve_h + kRowGap;
+            }
+            if (center_flip_vertical_checkbox_ && center_flip_horizontal_checkbox_) {
+                center_flip_vertical_checkbox_->set_rect(SDL_Rect{center_content_x, center_y, left_w, flip_h});
+                center_flip_horizontal_checkbox_->set_rect(SDL_Rect{center_content_x + left_w + split_gap, center_y, right_w, flip_h});
+            } else if (center_flip_vertical_checkbox_) {
+                center_flip_vertical_checkbox_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, flip_h});
+            } else if (center_flip_horizontal_checkbox_) {
+                center_flip_horizontal_checkbox_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, flip_h});
+            }
+            center_y += flip_h + kRowGap;
+            if (center_scaling_method_dropdown_) {
+                center_scaling_method_dropdown_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, scale_h});
+                center_y += scale_h;
+            }
+            advanced_bottom = center_y;
+        } else {
+            if (center_resolve_x_checkbox_) center_resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            if (center_flip_vertical_checkbox_) center_flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            if (center_flip_horizontal_checkbox_) center_flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            if (center_scaling_method_dropdown_) center_scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+
+        const int card_top = std::max(center_panel_rect_.y + kPanelPadding, advanced_top - kAdvancedCardPadding);
+        const int card_bottom = std::min(center_panel_rect_.y + center_panel_rect_.h - kPanelPadding, advanced_bottom + kAdvancedCardPadding);
+        advanced_card_rect_ = SDL_Rect{center_content_x, card_top, center_content_w, std::max(0, card_bottom - card_top)};
+
+        center_y += kSectionGap;
+        if (center_apply_next_frame_button_) {
+            center_apply_next_frame_button_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, DMButton::height()});
+        }
+        center_y += DMButton::height() + kRowGap;
+        if (center_apply_animation_button_) {
+            center_apply_animation_button_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, DMButton::height()});
+        }
+        center_y += DMButton::height() + kRowGap;
+        if (center_apply_asset_button_) {
+            center_apply_asset_button_->set_rect(SDL_Rect{center_content_x, center_y, center_content_w, DMButton::height()});
+        }
+    } else {
+        center_panel_rect_ = SDL_Rect{0, 0, 0, 0};
+        center_header_rect_ = SDL_Rect{0, 0, 0, 0};
+        if (center_depth_textbox_) center_depth_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_rotation_slider_) center_rotation_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_hidden_checkbox_) center_hidden_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_advanced_options_button_) center_advanced_options_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_resolve_x_checkbox_) center_resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_flip_vertical_checkbox_) center_flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_flip_horizontal_checkbox_) center_flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_scaling_method_dropdown_) center_scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_apply_next_frame_button_) center_apply_next_frame_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_apply_animation_button_) center_apply_animation_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (center_apply_asset_button_) center_apply_asset_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+    }
+
+    if (!has_selected_center && !has_selected_point) {
+        point_detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
+        advanced_card_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
+
     const_cast<RoomOvalToolsPanel*>(this)->layout_oval_buttons();
-    const_cast<RoomOvalToolsPanel*>(this)->layout_point_buttons();
     layout_dirty_ = false;
 }
 
@@ -835,21 +1074,6 @@ void RoomOvalToolsPanel::layout_oval_buttons() const {
         }
         button->set_rect(SDL_Rect{oval_list_clip_rect_.x, y, w, DMButton::height()});
         const bool selected = static_cast<int>(i) == selected_oval_index_;
-        button->set_style(selected ? &DMStyles::AccentButton() : &DMStyles::ListButton());
-        y += DMButton::height() + DMSpacing::small_gap();
-    }
-}
-
-void RoomOvalToolsPanel::layout_point_buttons() const {
-    int y = point_list_clip_rect_.y;
-    const int w = std::max(0, point_list_clip_rect_.w);
-    for (std::size_t i = 0; i < point_buttons_.size(); ++i) {
-        DMButton* button = point_buttons_[i].get();
-        if (!button) {
-            continue;
-        }
-        button->set_rect(SDL_Rect{point_list_clip_rect_.x, y, w, DMButton::height()});
-        const bool selected = static_cast<int>(i) == selected_point_index_;
         button->set_style(selected ? &DMStyles::AccentButton() : &DMStyles::ListButton());
         y += DMButton::height() + DMSpacing::small_gap();
     }
@@ -931,12 +1155,30 @@ RoomOvalToolsPanel::PointDetailValues RoomOvalToolsPanel::collect_point_detail_v
     return values;
 }
 
+RoomOvalToolsPanel::CenterDetailValues RoomOvalToolsPanel::collect_center_detail_values() const {
+    CenterDetailValues values{};
+    values.depth_offset = parse_float_or(center_depth_textbox_ ? center_depth_textbox_->value() : std::string{}, 0.0f);
+    values.rotation_degrees = center_rotation_slider_ ? static_cast<float>(center_rotation_slider_->value()) : 0.0f;
+    values.hidden = center_hidden_checkbox_ ? center_hidden_checkbox_->value() : false;
+    values.resolve_x = center_resolve_x_checkbox_ ? center_resolve_x_checkbox_->value() : true;
+    values.flip_horizontal = center_flip_horizontal_checkbox_ ? center_flip_horizontal_checkbox_->value() : true;
+    values.flip_vertical = center_flip_vertical_checkbox_ ? center_flip_vertical_checkbox_->value() : true;
+    values.scaling_method = dropdown_index_to_scaling_method(
+        center_scaling_method_dropdown_ ? center_scaling_method_dropdown_->selected() : 0);
+    if (!std::isfinite(values.depth_offset)) {
+        values.depth_offset = 0.0f;
+    }
+    if (!std::isfinite(values.rotation_degrees)) {
+        values.rotation_degrees = 0.0f;
+    }
+    return values;
+}
+
 RoomOvalToolsPanel::OvalProperties RoomOvalToolsPanel::collect_oval_properties() const {
     OvalProperties values = oval_properties_;
     values.name = oval_name_textbox_ ? oval_name_textbox_->value() : values.name;
     values.width_radius_x = parse_float_or(width_textbox_ ? width_textbox_->value() : std::string{}, values.width_radius_x);
     values.height_radius_z = parse_float_or(height_textbox_ ? height_textbox_->value() : std::string{}, values.height_radius_z);
-    values.asset_name = asset_name_textbox_ ? asset_name_textbox_->value() : values.asset_name;
     if (!std::isfinite(values.width_radius_x)) {
         values.width_radius_x = 48.0f;
     }

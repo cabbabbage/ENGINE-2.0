@@ -540,12 +540,18 @@ private:
     bool increment_selected_oval_point_count();
     bool decrement_selected_oval_point_count();
     bool apply_selected_oval_point_details(const RoomOvalToolsPanel::PointDetailValues& values);
+    bool apply_selected_oval_center_details(const RoomOvalToolsPanel::CenterDetailValues& values);
+    bool apply_oval_center_current_frame_to_scope(EditorFramePropagationScope scope);
+    bool drag_oval_center_to_screen(SDL_Point screen_point);
+    std::string selected_oval_center_anchor_name() const;
+    bool mutate_selected_oval_center_anchor(
+        const std::function<bool(DisplacedAssetAnchorPoint&)>& mutator,
+        devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority priority,
                                bool flush_now,
                                const char* reason,
                                const char* flush_tag);
     void refresh_oval_mode_handles();
-    std::vector<bool> anchor_row_valid_oval_center_flags(const std::vector<std::string>& anchor_names) const;
     std::unordered_set<std::string> valid_oval_center_anchor_names(const AssetInfo& info) const;
     bool is_valid_oval_center_anchor_name(const std::string& anchor_name) const;
     bool selected_anchor_is_oval_center() const;
@@ -728,6 +734,9 @@ private:
         int selected_oval_index = -1;
         int selected_point_index = -1;
         int hovered_point_index = -1;
+        bool center_selected = false;
+        bool center_hovered = false;
+        bool center_dragging = false;
         bool attachment_lock_active = false;
         bool attachment_lock_had_heading = false;
         float attachment_lock_heading_radians = 0.0f;

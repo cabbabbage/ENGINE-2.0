@@ -5239,6 +5239,23 @@
           }
         },
         {
+          "anchor_point_name": "oval",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "vibble_eyes"
+              }
+            ]
+          }
+        },
+        {
+          "anchor_point_name": "oval_oval_center",
+          "candidates": {
+            "candidates": []
+          }
+        },
+        {
           "anchor_point_name": "weapon",
           "candidates": {
             "candidates": []
@@ -5264,8 +5281,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 144
+                "texture_x": 208,
+                "texture_y": 128
               },
               {
                 "depth_offset": 0.0,
@@ -5302,6 +5319,18 @@
                 "scaling_method": "parent",
                 "texture_x": 191,
                 "texture_y": 168
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 203,
+                "texture_y": 149
               }
             ]
           ],
@@ -5384,8 +5413,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5422,6 +5451,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -5434,8 +5475,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5472,6 +5513,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -5484,8 +5537,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5522,6 +5575,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -5534,8 +5599,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5572,6 +5637,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -5584,8 +5661,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5622,6 +5699,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -5634,8 +5723,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5672,6 +5761,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -5684,8 +5785,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5722,6 +5823,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -5734,8 +5847,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -5772,6 +5885,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -6194,8 +6319,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6232,6 +6357,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -6244,8 +6381,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6282,6 +6419,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -6294,8 +6443,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6332,6 +6481,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -6344,8 +6505,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6382,6 +6543,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -6394,8 +6567,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6432,6 +6605,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -6444,8 +6629,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6482,6 +6667,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -6494,8 +6691,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6532,6 +6729,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -6544,8 +6753,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -6582,6 +6791,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -6995,8 +7216,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7033,6 +7254,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7045,8 +7278,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7083,6 +7316,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7095,8 +7340,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7133,6 +7378,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7145,8 +7402,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7183,6 +7440,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7195,8 +7464,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7233,6 +7502,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7245,8 +7526,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7283,6 +7564,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7295,8 +7588,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7333,6 +7626,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7345,8 +7650,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7383,6 +7688,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -7796,8 +8113,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7834,6 +8151,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7846,8 +8175,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7884,6 +8213,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7896,8 +8237,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7934,6 +8275,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7946,8 +8299,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -7984,6 +8337,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -7996,8 +8361,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -8034,6 +8399,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8046,8 +8423,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -8084,6 +8461,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8096,8 +8485,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -8134,6 +8523,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8146,8 +8547,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -8184,6 +8585,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -8644,6 +9057,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8694,6 +9119,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8744,6 +9181,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8794,6 +9243,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8844,6 +9305,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8894,6 +9367,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8944,6 +9429,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -8994,6 +9491,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -9030,8 +9539,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9068,6 +9577,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9080,8 +9601,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9118,6 +9639,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9130,8 +9663,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9168,6 +9701,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9180,8 +9725,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9218,6 +9763,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9230,8 +9787,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9268,6 +9825,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9280,8 +9849,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9318,6 +9887,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9330,8 +9911,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9368,6 +9949,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9380,8 +9973,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9418,6 +10011,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -9561,8 +10166,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9599,6 +10204,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9611,8 +10228,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9649,6 +10266,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9661,8 +10290,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9699,6 +10328,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9711,8 +10352,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9749,6 +10390,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9761,8 +10414,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9799,6 +10452,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9811,8 +10476,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9849,6 +10514,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9861,8 +10538,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9899,6 +10576,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -9911,8 +10600,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -9949,6 +10638,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -10371,8 +11072,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10409,6 +11110,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -10421,8 +11134,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10459,6 +11172,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -10471,8 +11196,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10509,6 +11234,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -10521,8 +11258,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10559,6 +11296,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -10571,8 +11320,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10609,6 +11358,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -10621,8 +11382,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10659,6 +11420,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -10671,8 +11444,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10709,6 +11482,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ],
             [
@@ -10721,8 +11506,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 190,
-                "texture_y": 155
+                "texture_x": 192,
+                "texture_y": 127
               },
               {
                 "depth_offset": 0.0,
@@ -10759,6 +11544,18 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "oval_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
               }
             ]
           ],
@@ -11183,7 +11980,7 @@
               "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
-              "rotation_degrees": 0.0,
+              "rotation_degrees": -10.0,
               "scaling_method": "parent",
               "texture_x": 48,
               "texture_y": 0
@@ -11195,7 +11992,7 @@
               "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
-              "rotation_degrees": 0.0,
+              "rotation_degrees": -10.0,
               "scaling_method": "parent",
               "texture_x": 34,
               "texture_y": 17
@@ -11231,7 +12028,7 @@
               "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
-              "rotation_degrees": -5.0,
+              "rotation_degrees": -48.0,
               "scaling_method": "parent",
               "texture_x": -48,
               "texture_y": 0
@@ -11243,7 +12040,7 @@
               "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
-              "rotation_degrees": 0.0,
+              "rotation_degrees": -5.0,
               "scaling_method": "parent",
               "texture_x": -34,
               "texture_y": -17
@@ -11586,6 +12383,63 @@
               "scaling_method": "parent",
               "texture_x": 48,
               "texture_y": -1
+            }
+          ],
+          "width_radius_x": 48.0
+        },
+        {
+          "asset_name": "vibble",
+          "height_radius_z": 24.0,
+          "legacy_names": [],
+          "name": "oval",
+          "points": [
+            {
+              "angle_degrees": 0.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": -50.0,
+              "scaling_method": "parent",
+              "texture_x": 48,
+              "texture_y": 0
+            },
+            {
+              "angle_degrees": 90.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "texture_x": 0,
+              "texture_y": 24
+            },
+            {
+              "angle_degrees": 180.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 50.0,
+              "scaling_method": "parent",
+              "texture_x": -48,
+              "texture_y": 0
+            },
+            {
+              "angle_degrees": 270.0,
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "texture_x": 0,
+              "texture_y": -24
             }
           ],
           "width_radius_x": 48.0
@@ -12369,9 +13223,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            32,
-            31,
-            204,
+            242,
+            36,
+            145,
             255
           ],
           "edge_smoothness": 49,
@@ -12397,8 +13251,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            104,
             36,
-            242,
             242,
             255
           ],
@@ -12518,16 +13372,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -4612,
-              "dz": -2692,
+              "dx": -6792,
+              "dz": -1448,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12792,
-              "origional_width": 23832,
+              "origional_height": 12160,
+              "origional_width": 25616,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -12638,20 +13492,20 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": -595,
-              "dz": -2033,
+              "dx": -2128,
+              "dz": -3688,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 7016,
-              "origional_width": 6960,
+              "origional_height": 12528,
+              "origional_width": 21808,
               "position": "Exact",
               "priority": 7,
               "quantity": 1,
-              "resolution": 4,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-fc947d4d25f4"

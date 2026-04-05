@@ -51,8 +51,6 @@ public:
     void set_screen_dimensions(int width, int height);
     void set_panel_bounds_override(const SDL_Rect& bounds);
     void clear_panel_bounds_override();
-    void set_anchor_rows(const std::vector<std::string>& names,
-                         const std::vector<bool>& valid_oval_center_flags);
     void set_anchor_names(const std::vector<std::string>& names);
     void set_selected_anchor(const std::string& name);
     const std::string& selected_anchor() const { return selected_anchor_name_; }
@@ -100,7 +98,6 @@ private:
     mutable int scroll_offset_ = 0;
 
     std::vector<std::string> anchor_names_;
-    std::vector<bool> anchor_valid_oval_center_flags_;
     std::string selected_anchor_name_;
     std::vector<std::unique_ptr<DMButton>> anchor_buttons_;
 

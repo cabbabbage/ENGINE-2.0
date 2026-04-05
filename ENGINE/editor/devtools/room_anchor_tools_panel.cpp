@@ -146,24 +146,12 @@ void RoomAnchorToolsPanel::clear_panel_bounds_override() {
     layout_dirty_ = true;
 }
 
-void RoomAnchorToolsPanel::set_anchor_rows(const std::vector<std::string>& names,
-                                           const std::vector<bool>& valid_oval_center_flags) {
-    SDL_assert(names.size() == valid_oval_center_flags.size());
-
-    std::vector<bool> normalized_validity(names.size(), false);
-    const std::size_t aligned_count = std::min(names.size(), valid_oval_center_flags.size());
-    for (std::size_t i = 0; i < aligned_count; ++i) {
-        normalized_validity[i] = valid_oval_center_flags[i];
-    }
-
-    const bool rows_match = anchor_names_ == names &&
-                            anchor_valid_oval_center_flags_ == normalized_validity;
-    if (rows_match) {
+void RoomAnchorToolsPanel::set_anchor_names(const std::vector<std::string>& names) {
+    if (anchor_names_ == names) {
         return;
     }
 
     anchor_names_ = names;
-    anchor_valid_oval_center_flags_ = std::move(normalized_validity);
 
     anchor_buttons_.clear();
     anchor_buttons_.reserve(anchor_names_.size());
@@ -179,10 +167,6 @@ void RoomAnchorToolsPanel::set_anchor_rows(const std::vector<std::string>& names
         }
     }
     layout_dirty_ = true;
-}
-
-void RoomAnchorToolsPanel::set_anchor_names(const std::vector<std::string>& names) {
-    set_anchor_rows(names, std::vector<bool>(names.size(), false));
 }
 
 void RoomAnchorToolsPanel::set_selected_anchor(const std::string& name) {
@@ -328,7 +312,6 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
 
     layout_anchor_buttons();
     SDL_assert(anchor_buttons_.size() == anchor_names_.size());
-    SDL_assert(anchor_names_.size() == anchor_valid_oval_center_flags_.size());
     const bool has_selected_anchor = !selected_anchor_name_.empty();
 
     for (std::size_t i = 0; i < anchor_buttons_.size(); ++i) {
@@ -354,9 +337,7 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
             if (on_select_) {
                 on_select_(selected_anchor_name_);
             }
-            const bool is_oval_center_anchor =
-                i < anchor_valid_oval_center_flags_.size() && anchor_valid_oval_center_flags_[i];
-            if (!is_oval_center_anchor && on_open_candidates_) {
+            if (on_open_candidates_) {
                 on_open_candidates_(selected_anchor_name_, SDL_Point{pointer_x, pointer_y}, row_rect);
             }
             return true;
@@ -869,7 +850,6 @@ void RoomAnchorToolsPanel::update_layout() const {
 
 void RoomAnchorToolsPanel::layout_anchor_buttons() const {
     SDL_assert(anchor_buttons_.size() == anchor_names_.size());
-    SDL_assert(anchor_names_.size() == anchor_valid_oval_center_flags_.size());
 
     const int button_w = std::max(0, list_clip_rect_.w);
     int y = list_clip_rect_.y - scroll_offset_;
@@ -880,13 +860,7 @@ void RoomAnchorToolsPanel::layout_anchor_buttons() const {
         }
         button->set_rect(SDL_Rect{list_clip_rect_.x, y, button_w, DMButton::height()});
         const bool selected = (i < anchor_names_.size() && anchor_names_[i] == selected_anchor_name_);
-        const bool is_oval_center_anchor =
-            i < anchor_valid_oval_center_flags_.size() && anchor_valid_oval_center_flags_[i];
-        if (is_oval_center_anchor) {
-            button->set_style(&DMStyles::DeleteButton());
-        } else {
-            button->set_style(selected ? &DMStyles::AccentButton() : &DMStyles::ListButton());
-        }
+        button->set_style(selected ? &DMStyles::AccentButton() : &DMStyles::ListButton());
         y += DMButton::height() + DMSpacing::small_gap();
     }
 }

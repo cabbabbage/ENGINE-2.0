@@ -533,10 +533,9 @@ private:
     bool add_oval_mapping();
     bool delete_selected_oval_mapping();
     bool apply_selected_oval_properties(const RoomOvalToolsPanel::OvalProperties& properties);
-    bool add_oval_point();
-    bool delete_selected_oval_point();
+    bool increment_selected_oval_point_count();
+    bool decrement_selected_oval_point_count();
     bool apply_selected_oval_point_details(const RoomOvalToolsPanel::PointDetailValues& values);
-    bool drag_oval_point_to_screen(int point_index, SDL_Point screen_point);
     bool persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority priority,
                                bool flush_now,
                                const char* reason,
@@ -725,8 +724,6 @@ private:
         int selected_oval_index = -1;
         int selected_point_index = -1;
         int hovered_point_index = -1;
-        int dragging_point_index = -1;
-        bool dragging_point = false;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;

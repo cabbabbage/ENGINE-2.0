@@ -52,8 +52,22 @@ RoomOvalToolsPanel::RoomOvalToolsPanel() {
     center_anchor_jump_button_ = std::make_unique<DMButton>("Edit Center Anchor In Anchor Mode", &DMStyles::HeaderButton(), 180, DMButton::height());
     delete_oval_button_ = std::make_unique<DMButton>("Delete Oval", &DMStyles::DeleteButton(), 180, DMButton::height());
 
-    add_point_button_ = std::make_unique<DMButton>("Add Point", &DMStyles::CreateButton(), 120, DMButton::height());
-    delete_point_button_ = std::make_unique<DMButton>("Delete Point", &DMStyles::DeleteButton(), 120, DMButton::height());
+    point_count_stepper_ = std::make_unique<DMNumericStepper>("Point Count", 0, 4096, 0);
+    point_count_stepper_->set_step(1);
+    point_count_stepper_->set_on_change([this](int requested_value) {
+        if (requested_value > point_count_) {
+            if (on_increment_point_count_) {
+                on_increment_point_count_();
+            }
+        } else if (requested_value < point_count_) {
+            if (on_decrement_point_count_) {
+                on_decrement_point_count_();
+            }
+        }
+        if (point_count_stepper_) {
+            point_count_stepper_->set_value(point_count_);
+        }
+    });
 
     point_rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
     point_hidden_checkbox_ = std::make_unique<DMCheckbox>("Hidden", false);
@@ -165,7 +179,21 @@ void RoomOvalToolsPanel::set_point_names(const std::vector<std::string>& names) 
     if (selected_point_index_ >= static_cast<int>(point_names_.size())) {
         selected_point_index_ = point_names_.empty() ? -1 : static_cast<int>(point_names_.size()) - 1;
     }
+    set_point_count(static_cast<int>(point_names_.size()));
     layout_dirty_ = true;
+}
+
+void RoomOvalToolsPanel::set_point_count(int count) {
+    const int clamped = std::max(0, count);
+    if (point_count_ == clamped) {
+        return;
+    }
+    point_count_ = clamped;
+    if (point_count_stepper_) {
+        const int stepper_max = std::max(4096, point_count_);
+        point_count_stepper_->set_range(0, stepper_max);
+        point_count_stepper_->set_value(point_count_);
+    }
 }
 
 void RoomOvalToolsPanel::set_selected_point_index(int index) {
@@ -227,12 +255,12 @@ void RoomOvalToolsPanel::set_on_select_point(SelectPointCallback callback) {
     on_select_point_ = std::move(callback);
 }
 
-void RoomOvalToolsPanel::set_on_add_point(AddPointCallback callback) {
-    on_add_point_ = std::move(callback);
+void RoomOvalToolsPanel::set_on_increment_point_count(IncrementPointCountCallback callback) {
+    on_increment_point_count_ = std::move(callback);
 }
 
-void RoomOvalToolsPanel::set_on_delete_point(DeletePointCallback callback) {
-    on_delete_point_ = std::move(callback);
+void RoomOvalToolsPanel::set_on_decrement_point_count(DecrementPointCountCallback callback) {
+    on_decrement_point_count_ = std::move(callback);
 }
 
 void RoomOvalToolsPanel::set_on_apply_point_details(ApplyPointDetailsCallback callback) {
@@ -371,21 +399,8 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    if (add_point_button_ && add_point_button_->handle_event(event)) {
+    if (point_count_stepper_ && point_count_stepper_->handle_event(event)) {
         handled = true;
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            event.button.button == SDL_BUTTON_LEFT &&
-            on_add_point_) {
-            on_add_point_();
-        }
-    }
-    if (delete_point_button_ && delete_point_button_->handle_event(event)) {
-        handled = true;
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            event.button.button == SDL_BUTTON_LEFT &&
-            on_delete_point_) {
-            on_delete_point_();
-        }
     }
 
     bool details_changed = false;
@@ -570,8 +585,7 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
         if (delete_oval_button_) delete_oval_button_->render(renderer);
     }
 
-    if (add_point_button_) add_point_button_->render(renderer);
-    if (delete_point_button_) delete_point_button_->render(renderer);
+    if (point_count_stepper_) point_count_stepper_->render(renderer);
 
     const bool has_selected_point = selected_point_index_ >= 0 &&
                                     selected_point_index_ < static_cast<int>(point_names_.size());
@@ -722,21 +736,19 @@ void RoomOvalToolsPanel::update_layout() const {
     point_list_clip_rect_ = SDL_Rect{content_x, y, content_w, point_list_h};
     y += point_list_h + kSectionGap;
 
-    const int split_gap = DMSpacing::small_gap();
-    const int split_w = std::max(0, content_w - split_gap);
-    const int left_w = split_w / 2;
-    const int right_w = std::max(0, content_w - left_w - split_gap);
-    if (add_point_button_) {
-        add_point_button_->set_rect(SDL_Rect{content_x, y, left_w, DMButton::height()});
+    const int stepper_h = point_count_stepper_ ? point_count_stepper_->preferred_height(content_w) : DMNumericStepper::height();
+    if (point_count_stepper_) {
+        point_count_stepper_->set_rect(SDL_Rect{content_x, y, content_w, stepper_h});
     }
-    if (delete_point_button_) {
-        delete_point_button_->set_rect(SDL_Rect{content_x + left_w + split_gap, y, right_w, DMButton::height()});
-    }
-    y += DMButton::height() + kSectionGap;
+    y += stepper_h + kSectionGap;
 
     const bool has_selected_point = selected_point_index_ >= 0 &&
                                     selected_point_index_ < static_cast<int>(point_names_.size());
     if (has_selected_point) {
+        const int split_gap = DMSpacing::small_gap();
+        const int split_w = std::max(0, content_w - split_gap);
+        const int left_w = split_w / 2;
+        const int right_w = std::max(0, content_w - left_w - split_gap);
         const int rotation_h = point_rotation_slider_ ? point_rotation_slider_->preferred_height(content_w) : DMSlider::height();
         const int hidden_h = point_hidden_checkbox_ ? DMCheckbox::height() : 0;
         const int advanced_h = advanced_options_button_ ? DMButton::height() : 0;

@@ -14,6 +14,7 @@ class DMTextBox;
 class DMSlider;
 class DMCheckbox;
 class DMDropdown;
+class DMNumericStepper;
 
 class RoomOvalToolsPanel {
 public:
@@ -54,8 +55,8 @@ public:
     using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
 
     using SelectPointCallback = std::function<void(int)>;
-    using AddPointCallback = std::function<void()>;
-    using DeletePointCallback = std::function<void()>;
+    using IncrementPointCountCallback = std::function<void()>;
+    using DecrementPointCountCallback = std::function<void()>;
     using ApplyPointDetailsCallback = std::function<void(const PointDetailValues&)>;
 
     RoomOvalToolsPanel();
@@ -76,6 +77,7 @@ public:
     void set_center_anchor_status(const std::string& center_name, bool present);
 
     void set_point_names(const std::vector<std::string>& names);
+    void set_point_count(int count);
     void set_selected_point_index(int index);
     int selected_point_index() const { return selected_point_index_; }
     void set_point_detail_values(const PointDetailValues& values);
@@ -88,8 +90,8 @@ public:
     void set_on_open_candidates(OpenCandidatesCallback callback);
 
     void set_on_select_point(SelectPointCallback callback);
-    void set_on_add_point(AddPointCallback callback);
-    void set_on_delete_point(DeletePointCallback callback);
+    void set_on_increment_point_count(IncrementPointCountCallback callback);
+    void set_on_decrement_point_count(DecrementPointCountCallback callback);
     void set_on_apply_point_details(ApplyPointDetailsCallback callback);
 
     bool handle_event(const SDL_Event& event);
@@ -137,6 +139,7 @@ private:
 
     std::vector<std::string> point_names_;
     std::vector<std::unique_ptr<DMButton>> point_buttons_;
+    int point_count_ = 0;
     int selected_point_index_ = -1;
 
     std::unique_ptr<DMButton> add_oval_button_;
@@ -148,8 +151,7 @@ private:
     std::unique_ptr<DMButton> center_anchor_jump_button_;
     std::unique_ptr<DMButton> delete_oval_button_;
 
-    std::unique_ptr<DMButton> add_point_button_;
-    std::unique_ptr<DMButton> delete_point_button_;
+    std::unique_ptr<DMNumericStepper> point_count_stepper_;
     std::unique_ptr<DMSlider> point_rotation_slider_;
     std::unique_ptr<DMCheckbox> point_hidden_checkbox_;
     std::unique_ptr<DMButton> advanced_options_button_;
@@ -167,7 +169,7 @@ private:
     OpenCandidatesCallback on_open_candidates_;
 
     SelectPointCallback on_select_point_;
-    AddPointCallback on_add_point_;
-    DeletePointCallback on_delete_point_;
+    IncrementPointCountCallback on_increment_point_count_;
+    DecrementPointCountCallback on_decrement_point_count_;
     ApplyPointDetailsCallback on_apply_point_details_;
 };

@@ -5198,12 +5198,6 @@
     "vibble": {
       "anchor_point_child_candidates": [
         {
-          "anchor_point_name": "anchor_1",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
           "anchor_point_name": "hat",
           "candidates": {
             "candidates": [
@@ -5270,8 +5264,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 243
+                "texture_x": 195,
+                "texture_y": 144
               },
               {
                 "depth_offset": 0.0,
@@ -5308,18 +5302,6 @@
                 "scaling_method": "parent",
                 "texture_x": 191,
                 "texture_y": 168
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -5440,18 +5422,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -5502,18 +5472,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -5564,18 +5522,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -5626,18 +5572,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -5688,18 +5622,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -5750,18 +5672,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -5812,18 +5722,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -5874,18 +5772,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -6346,18 +6232,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -6408,18 +6282,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -6470,18 +6332,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -6532,18 +6382,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -6594,18 +6432,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -6656,18 +6482,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -6718,18 +6532,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -6780,18 +6582,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -7243,18 +7033,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -7305,18 +7083,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -7367,18 +7133,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -7429,18 +7183,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -7491,18 +7233,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -7553,18 +7283,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -7615,18 +7333,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -7677,18 +7383,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -8140,18 +7834,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -8202,18 +7884,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -8264,18 +7934,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -8326,18 +7984,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -8388,18 +8034,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -8450,18 +8084,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -8512,18 +8134,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -8574,18 +8184,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -9470,18 +9068,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -9532,18 +9118,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -9594,18 +9168,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -9656,18 +9218,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -9718,18 +9268,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -9780,18 +9318,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -9842,18 +9368,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -9904,18 +9418,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -10097,18 +9599,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -10159,18 +9649,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -10221,18 +9699,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -10283,18 +9749,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -10345,18 +9799,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -10407,18 +9849,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -10469,18 +9899,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -10531,18 +9949,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -11003,18 +10409,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -11065,18 +10459,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -11127,18 +10509,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -11189,18 +10559,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -11251,18 +10609,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -11313,18 +10659,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -11375,18 +10709,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ],
             [
@@ -11437,18 +10759,6 @@
                 "scaling_method": "parent",
                 "texture_x": 0,
                 "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 210,
-                "texture_y": 235
               }
             ]
           ],
@@ -12841,10 +12151,18 @@
       "camera_height_max_px": 6503,
       "camera_height_min_px": 200,
       "camera_settings": {
+        "aperture_f_stop": 2.799999952316284,
         "base_height_px": 720.0,
-        "min_visible_screen_ratio": 0.01,
-        "render_quality_percent": 80,
-        "smooth_motion_height": true
+        "boundary_min_visible_screen_ratio": 0.014999999664723873,
+        "camera_height_max_px": 100000,
+        "camera_height_min_px": 1,
+        "depth_of_field_enabled": false,
+        "focal_length_mm": 50.0099983215332,
+        "layer_depth_curve": 1.0,
+        "layer_depth_interval": 250.0,
+        "max_blur_px": 12.0,
+        "max_cull_depth": 5000.0,
+        "min_visible_screen_ratio": 0.010000000707805157
       },
       "content_root": "content/forrest",
       "dev_map_settings": {},
@@ -13051,9 +12369,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            240,
-            242,
-            85,
+            32,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 49,
@@ -13079,9 +12397,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            37,
-            242,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 24,
@@ -13200,16 +12518,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -4056,
-              "dz": -2256,
+              "dx": -4612,
+              "dz": -2692,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12304,
-              "origional_width": 23008,
+              "origional_height": 12792,
+              "origional_width": 23832,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,

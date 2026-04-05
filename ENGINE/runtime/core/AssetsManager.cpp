@@ -980,6 +980,25 @@ void Assets::refresh_filtered_active_assets() {
     update_filtered_active_assets();
 }
 
+namespace {
+
+bool asset_is_focus_descendant(const Asset* owner, const Asset* candidate) {
+    if (!owner) {
+        return false;
+    }
+    for (const Asset* child : owner->children()) {
+        if (child == candidate) {
+            return true;
+        }
+        if (asset_is_focus_descendant(child, candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 bool Assets::asset_matches_focus_filter(const Asset* asset) const {
     if (!focus_filter_active_) {
         return true;
@@ -988,7 +1007,10 @@ bool Assets::asset_matches_focus_filter(const Asset* asset) const {
         return false;
     }
     if (focus_filter_asset_) {
-        return asset == focus_filter_asset_;
+        if (asset == focus_filter_asset_) {
+            return true;
+        }
+        return asset_is_focus_descendant(focus_filter_asset_, asset);
     }
     if (!focus_filter_spawn_id_.empty()) {
         return asset->spawn_id == focus_filter_spawn_id_;

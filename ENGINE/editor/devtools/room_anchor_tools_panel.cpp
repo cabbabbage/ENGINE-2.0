@@ -146,15 +146,30 @@ void RoomAnchorToolsPanel::clear_panel_bounds_override() {
     layout_dirty_ = true;
 }
 
-void RoomAnchorToolsPanel::set_anchor_names(const std::vector<std::string>& names) {
-    if (anchor_names_ == names) {
+void RoomAnchorToolsPanel::set_anchor_rows(const std::vector<AnchorRowModel>& rows) {
+    const bool rows_match = anchor_rows_.size() == rows.size() &&
+                            std::equal(anchor_rows_.begin(),
+                                       anchor_rows_.end(),
+                                       rows.begin(),
+                                       [](const AnchorRowModel& lhs, const AnchorRowModel& rhs) {
+                                           return lhs.name == rhs.name &&
+                                                  lhs.is_valid_oval_center_anchor == rhs.is_valid_oval_center_anchor;
+                                       });
+    if (rows_match) {
         return;
     }
-    anchor_names_ = names;
+
+    anchor_rows_ = rows;
+    anchor_names_.clear();
+    anchor_names_.reserve(anchor_rows_.size());
+    for (const AnchorRowModel& row : anchor_rows_) {
+        anchor_names_.push_back(row.name);
+    }
+
     anchor_buttons_.clear();
-    anchor_buttons_.reserve(anchor_names_.size());
-    for (const std::string& name : anchor_names_) {
-        anchor_buttons_.push_back(std::make_unique<DMButton>(name, &DMStyles::ListButton(), 220, DMButton::height()));
+    anchor_buttons_.reserve(anchor_rows_.size());
+    for (const AnchorRowModel& row : anchor_rows_) {
+        anchor_buttons_.push_back(std::make_unique<DMButton>(row.name, &DMStyles::ListButton(), 220, DMButton::height()));
     }
     if (!selected_anchor_name_.empty()) {
         const bool still_present = std::find(anchor_names_.begin(),
@@ -165,6 +180,15 @@ void RoomAnchorToolsPanel::set_anchor_names(const std::vector<std::string>& name
         }
     }
     layout_dirty_ = true;
+}
+
+void RoomAnchorToolsPanel::set_anchor_names(const std::vector<std::string>& names) {
+    std::vector<AnchorRowModel> rows;
+    rows.reserve(names.size());
+    for (const std::string& name : names) {
+        rows.push_back(AnchorRowModel{name, false});
+    }
+    set_anchor_rows(rows);
 }
 
 void RoomAnchorToolsPanel::set_selected_anchor(const std::string& name) {
@@ -334,7 +358,9 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
             if (on_select_) {
                 on_select_(selected_anchor_name_);
             }
-            if (on_open_candidates_) {
+            const bool is_oval_center_anchor =
+                i < anchor_rows_.size() && anchor_rows_[i].is_valid_oval_center_anchor;
+            if (!is_oval_center_anchor && on_open_candidates_) {
                 on_open_candidates_(selected_anchor_name_, SDL_Point{pointer_x, pointer_y}, row_rect);
             }
             return true;
@@ -855,7 +881,13 @@ void RoomAnchorToolsPanel::layout_anchor_buttons() const {
         }
         button->set_rect(SDL_Rect{list_clip_rect_.x, y, button_w, DMButton::height()});
         const bool selected = (i < anchor_names_.size() && anchor_names_[i] == selected_anchor_name_);
-        button->set_style(selected ? &DMStyles::AccentButton() : &DMStyles::ListButton());
+        const bool is_oval_center_anchor =
+            i < anchor_rows_.size() && anchor_rows_[i].is_valid_oval_center_anchor;
+        if (is_oval_center_anchor) {
+            button->set_style(&DMStyles::DeleteButton());
+        } else {
+            button->set_style(selected ? &DMStyles::AccentButton() : &DMStyles::ListButton());
+        }
         y += DMButton::height() + DMSpacing::small_gap();
     }
 }

@@ -8642,7 +8642,15 @@ void RoomEditor::sync_anchor_tools_panel() {
 
     anchor_tools_panel_->set_visible(true);
     anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
-    anchor_tools_panel_->set_anchor_names(names);
+    std::vector<RoomAnchorToolsPanel::AnchorRowModel> anchor_rows;
+    anchor_rows.reserve(names.size());
+    for (const std::string& name : names) {
+        anchor_rows.push_back(RoomAnchorToolsPanel::AnchorRowModel{
+            name,
+            is_valid_oval_center_anchor_name(name)
+        });
+    }
+    anchor_tools_panel_->set_anchor_rows(anchor_rows);
     ensure_anchor_selection_valid();
     anchor_tools_panel_->set_selected_anchor(anchor_edit_.selected_anchor_name);
     auto selected_it = std::find_if(anchor_edit_.handles.begin(),
@@ -9169,6 +9177,10 @@ void RoomEditor::sync_anchor_candidate_editor() {
 void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect) {
     Asset* target_asset = active_anchor_candidate_target_asset();
     if (anchor_name.empty() || !anchor_candidate_editor_mode_active() || !target_asset || !target_asset->info) {
+        close_anchor_candidate_editor();
+        return;
+    }
+    if (anchor_mode_active() && is_valid_oval_center_anchor_name(anchor_name)) {
         close_anchor_candidate_editor();
         return;
     }
@@ -10547,26 +10559,30 @@ bool RoomEditor::add_anchor_in_current_frame() {
 }
 
 bool RoomEditor::selected_anchor_is_oval_center() const {
-    if (!anchor_mode_active() ||
-        anchor_edit_.selected_anchor_name.empty() ||
+    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+        return false;
+    }
+    return is_valid_oval_center_anchor_name(anchor_edit_.selected_anchor_name);
+}
+
+bool RoomEditor::is_valid_oval_center_anchor_name(const std::string& anchor_name) const {
+    if (anchor_name.empty() ||
         !anchor_edit_.target_asset ||
-        !anchor_edit_.target_asset->info) {
+        !anchor_edit_.target_asset->info ||
+        !is_oval_center_anchor_name(anchor_name)) {
         return false;
     }
-    const std::string& selected_name = anchor_edit_.selected_anchor_name;
-    if (!is_oval_center_anchor_name(selected_name)) {
-        return false;
-    }
+
     const auto& mappings = anchor_edit_.target_asset->info->oval_anchor_mappings;
     for (const auto& mapping : mappings) {
         if (!mapping.valid()) {
             continue;
         }
-        if (selected_name == AssetInfo::oval_center_anchor_name_for_mapping(mapping.name)) {
+        if (anchor_name == AssetInfo::oval_center_anchor_name_for_mapping(mapping.name)) {
             return true;
         }
         for (const auto& legacy_name : mapping.legacy_names) {
-            if (selected_name == AssetInfo::oval_center_anchor_name_for_mapping(legacy_name)) {
+            if (anchor_name == AssetInfo::oval_center_anchor_name_for_mapping(legacy_name)) {
                 return true;
             }
         }

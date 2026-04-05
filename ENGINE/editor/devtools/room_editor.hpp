@@ -542,6 +542,7 @@ private:
                                const char* reason,
                                const char* flush_tag);
     void refresh_oval_mode_handles();
+    bool is_valid_oval_center_anchor_name(const std::string& anchor_name) const;
     bool selected_anchor_is_oval_center() const;
     bool apply_anchor_current_frame_to_scope(EditorFramePropagationScope scope);
     bool normalize_anchor_invariants_for_eligible_animations(Asset* target,

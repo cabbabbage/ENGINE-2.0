@@ -59,6 +59,7 @@ constexpr const char* kOvalAnchorMappingsKey = "oval_anchor_mappings";
 constexpr double kAnchorCandidateMissingChanceDefault = 100.0;
 constexpr float kDefaultOvalWidthRadius = 48.0f;
 constexpr float kDefaultOvalHeightRadius = 24.0f;
+constexpr float kDefaultOvalRadiusOffsetDegrees = 0.0f;
 constexpr std::size_t kDefaultOvalPointCount = 8;
 constexpr const char* kOvalCenterSuffix = "_oval_center";
 
@@ -290,6 +291,13 @@ float sanitize_oval_radius(float radius, float fallback) {
         return fallback;
     }
     return radius;
+}
+
+float sanitize_oval_radius_offset_degrees(float value) {
+    if (!std::isfinite(value)) {
+        return kDefaultOvalRadiusOffsetDegrees;
+    }
+    return std::clamp(value, 0.0f, 360.0f);
 }
 
 std::string oval_center_anchor_name(std::string mapping_name) {
@@ -544,6 +552,9 @@ std::vector<AssetInfo::OvalAnchorMapping> parse_oval_anchor_mappings_payload(con
         mapping.height_radius_z =
             sanitize_oval_radius(height_value ? static_cast<float>(*height_value) : kDefaultOvalHeightRadius,
                                  kDefaultOvalHeightRadius);
+        const auto offset_value = parse_number_like_json(entry.value("radius_offset_degrees", nlohmann::json{}));
+        mapping.radius_offset_degrees = sanitize_oval_radius_offset_degrees(
+            offset_value ? static_cast<float>(*offset_value) : kDefaultOvalRadiusOffsetDegrees);
 
         std::unordered_set<std::string> seen_legacy;
         if (entry.contains("legacy_names") && entry["legacy_names"].is_array()) {
@@ -626,6 +637,7 @@ nlohmann::json build_oval_anchor_mappings_payload(const std::vector<AssetInfo::O
         encoded["asset_name"] = mapping.asset_name.empty() ? mapping.name : mapping.asset_name;
         encoded["width_radius_x"] = sanitize_oval_radius(mapping.width_radius_x, kDefaultOvalWidthRadius);
         encoded["height_radius_z"] = sanitize_oval_radius(mapping.height_radius_z, kDefaultOvalHeightRadius);
+        encoded["radius_offset_degrees"] = sanitize_oval_radius_offset_degrees(mapping.radius_offset_degrees);
 
         nlohmann::json legacy_names = nlohmann::json::array();
         std::unordered_set<std::string> seen_legacy;
@@ -2415,6 +2427,7 @@ void AssetInfo::set_oval_anchor_mappings_payload(const nlohmann::json& mappings)
     for (auto& mapping : oval_anchor_mappings) {
         mapping.width_radius_x = sanitize_oval_radius(mapping.width_radius_x, kDefaultOvalWidthRadius);
         mapping.height_radius_z = sanitize_oval_radius(mapping.height_radius_z, kDefaultOvalHeightRadius);
+        mapping.radius_offset_degrees = sanitize_oval_radius_offset_degrees(mapping.radius_offset_degrees);
         for (auto& point : mapping.points) {
             point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
             recompute_oval_point_position(point, mapping.width_radius_x, mapping.height_radius_z);
@@ -2444,6 +2457,7 @@ bool AssetInfo::upsert_oval_anchor_mapping(const OvalAnchorMapping& mapping) {
     }
     normalized.width_radius_x = sanitize_oval_radius(normalized.width_radius_x, kDefaultOvalWidthRadius);
     normalized.height_radius_z = sanitize_oval_radius(normalized.height_radius_z, kDefaultOvalHeightRadius);
+    normalized.radius_offset_degrees = sanitize_oval_radius_offset_degrees(normalized.radius_offset_degrees);
     if (normalized.points.empty()) {
         normalized.points =
             make_default_oval_anchor_points(0, 0, normalized.width_radius_x, normalized.height_radius_z, kDefaultOvalPointCount);

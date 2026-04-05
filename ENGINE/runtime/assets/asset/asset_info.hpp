@@ -120,6 +120,7 @@ class AssetInfo {
         std::string asset_name;
         float width_radius_x = 48.0f;
         float height_radius_z = 24.0f;
+        float radius_offset_degrees = 0.0f;
         std::vector<std::string> legacy_names;
         std::vector<OvalAnchorPoint> points;
 

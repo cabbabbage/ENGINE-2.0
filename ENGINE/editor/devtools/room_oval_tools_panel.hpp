@@ -22,6 +22,7 @@ public:
         std::string name;
         float width_radius_x = 48.0f;
         float height_radius_z = 24.0f;
+        float radius_offset_degrees = 0.0f;
     };
 
     struct PointDetailValues {
@@ -163,6 +164,7 @@ private:
     std::unique_ptr<DMTextBox> oval_name_textbox_;
     std::unique_ptr<DMTextBox> width_textbox_;
     std::unique_ptr<DMTextBox> height_textbox_;
+    std::unique_ptr<DMSlider> radius_offset_slider_;
     std::unique_ptr<DMButton> apply_oval_properties_button_;
     std::unique_ptr<DMButton> delete_oval_button_;
 

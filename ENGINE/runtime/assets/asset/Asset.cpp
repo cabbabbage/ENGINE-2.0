@@ -161,6 +161,13 @@ float radians_to_degrees(float radians) {
     return oval_anchor_math::radians_to_degrees(normalize_radians(radians));
 }
 
+float sanitize_oval_radius_offset_degrees(float value) {
+    if (!std::isfinite(value)) {
+        return 0.0f;
+    }
+    return std::clamp(value, 0.0f, 360.0f);
+}
+
 template <typename T>
 T lerp_value(const T& a, const T& b, float t) {
     return static_cast<T>(static_cast<float>(a) + (static_cast<float>(b) - static_cast<float>(a)) * t);
@@ -194,6 +201,8 @@ std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_headi
               });
 
     const float heading_degrees = radians_to_degrees(heading_radians);
+    const float effective_heading_degrees = normalize_degrees(
+        heading_degrees + sanitize_oval_radius_offset_degrees(mapping.radius_offset_degrees));
     const std::size_t count = sorted_points.size();
     std::size_t prev_index = 0;
     std::size_t next_index = 0;
@@ -208,7 +217,7 @@ std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_headi
             const std::size_t j = (i + 1) % count;
             const float a = normalize_degrees(sorted_points[i]->angle_degrees);
             float b = normalize_degrees(sorted_points[j]->angle_degrees);
-            float h = heading_degrees;
+            float h = effective_heading_degrees;
             if (j == 0 && b <= a) {
                 b += 360.0f;
                 if (h < a) {
@@ -241,9 +250,7 @@ std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_headi
     const AssetInfo::OvalAnchorPoint& prev = *sorted_points[prev_index];
     const AssetInfo::OvalAnchorPoint& next = *sorted_points[next_index];
     const AssetInfo::OvalAnchorPoint& nearest = (blend_t <= 0.5f) ? prev : next;
-    const float sampled_geometry_angle = (count == 1)
-        ? normalize_degrees(prev.angle_degrees)
-        : heading_degrees;
+    const float sampled_geometry_angle = effective_heading_degrees;
 
     DisplacedAssetAnchorPoint synthesized{};
     synthesized.name = requested_anchor_name.empty() ? mapping.name : requested_anchor_name;

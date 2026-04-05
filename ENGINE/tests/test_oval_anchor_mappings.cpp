@@ -264,6 +264,7 @@ TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
     mapping.name = "eyes";
     mapping.width_radius_x = -10.0f;
     mapping.height_radius_z = 0.0f;
+    mapping.radius_offset_degrees = 999.0f;
     mapping.points.push_back(make_oval_point(-45.0f,
                                              100,
                                              25,
@@ -281,6 +282,7 @@ TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
     REQUIRE(stored_eyes != nullptr);
     CHECK(stored_eyes->width_radius_x == doctest::Approx(48.0f));
     CHECK(stored_eyes->height_radius_z == doctest::Approx(24.0f));
+    CHECK(stored_eyes->radius_offset_degrees == doctest::Approx(360.0f));
     REQUIRE(!stored_eyes->points.empty());
     CHECK(stored_eyes->points.front().angle_degrees == doctest::Approx(315.0f));
     CHECK(stored_eyes->points.front().texture_x == 34);
@@ -293,10 +295,12 @@ TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
     auto_points.name = "hat";
     auto_points.width_radius_x = 60.0f;
     auto_points.height_radius_z = 30.0f;
+    auto_points.radius_offset_degrees = 90.0f;
     REQUIRE(info.upsert_oval_anchor_mapping(auto_points));
     const AssetInfo::OvalAnchorMapping* stored_hat = info.find_oval_anchor_mapping("hat", false);
     REQUIRE(stored_hat != nullptr);
     REQUIRE(stored_hat->points.size() == 8);
+    CHECK(stored_hat->radius_offset_degrees == doctest::Approx(90.0f));
     CHECK(stored_hat->points[0].angle_degrees == doctest::Approx(0.0f));
     CHECK(stored_hat->points[1].angle_degrees == doctest::Approx(45.0f));
 
@@ -307,6 +311,9 @@ TEST_CASE("AssetInfo oval mappings normalize defaults and round-trip") {
     AssetInfo copy("oval_asset_copy");
     copy.set_oval_anchor_mappings_payload(payload);
     CHECK(copy.oval_anchor_mappings_payload() == payload);
+    const AssetInfo::OvalAnchorMapping* copied_hat = copy.find_oval_anchor_mapping("hat", false);
+    REQUIRE(copied_hat != nullptr);
+    CHECK(copied_hat->radius_offset_degrees == doctest::Approx(90.0f));
 }
 
 TEST_CASE("AssetInfo oval mappings drop duplicate point angles and keep valid ordering") {
@@ -478,6 +485,36 @@ TEST_CASE("Oval runtime interpolation blends numeric fields and uses nearest dis
     CHECK(near_ninety->hidden == true);
     CHECK(near_ninety->resolve_x == false);
     CHECK(near_ninety->scaling_method == AnchorScalingMethod::Real3DPoint);
+}
+
+TEST_CASE("Oval runtime applies mapping radius offset to interpreted heading angle") {
+    auto info = std::make_shared<AssetInfo>("oval_runtime_offset_asset");
+    info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "oval_runtime_offset_asset";
+    mapping.width_radius_x = 50.0f;
+    mapping.height_radius_z = 20.0f;
+    mapping.radius_offset_degrees = 90.0f;
+    mapping.points = {
+        make_oval_point(0.0f, 0, 0, 0.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(90.0f, 0, 0, 10.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(180.0f, 0, 0, 20.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+        make_oval_point(270.0f, 0, 0, 30.0f, 0.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+    REQUIRE(info->upsert_oval_anchor_mapping(mapping));
+
+    Area spawn_area("oval_runtime_offset_area", 0);
+    Asset asset(info, spawn_area, SDL_Point{100, 200}, 0);
+
+    REQUIRE(asset.set_directional_heading_radians(0.0f));
+    const auto resolved = asset.anchor_state("eyes");
+    REQUIRE(resolved.has_value());
+    CHECK(resolved->is_active());
+    CHECK(resolved->world_exact_pos_2d.x == doctest::Approx(100.0f).epsilon(1e-4f));
+    CHECK(resolved->world_exact_z == doctest::Approx(220.0f).epsilon(1e-4f));
+    CHECK(resolved->depth_offset == doctest::Approx(10.0f).epsilon(1e-4f));
 }
 
 TEST_CASE("Oval runtime anchor transform composes with owner sprite transform") {

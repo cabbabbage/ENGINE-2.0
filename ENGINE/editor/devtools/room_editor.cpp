@@ -282,6 +282,13 @@ float normalize_oval_angle_degrees(float degrees) {
     return oval_anchor_math::normalize_angle_degrees(degrees);
 }
 
+float clamp_oval_radius_offset_degrees(float degrees) {
+    if (!std::isfinite(degrees)) {
+        return 0.0f;
+    }
+    return std::clamp(degrees, 0.0f, 360.0f);
+}
+
 std::vector<AssetInfo::OvalAnchorPoint> sort_oval_points_by_angle(
     const std::vector<AssetInfo::OvalAnchorPoint>& points) {
     return devmode::oval_point_topology::sort_points_by_angle(points);
@@ -8891,9 +8898,11 @@ bool RoomEditor::resolve_selected_oval_lock_target(float& out_world_x,
         oval_edit_.selected_point_index < static_cast<int>(mapping.points.size())) {
         const AssetInfo::OvalAnchorPoint& point =
             mapping.points[static_cast<std::size_t>(oval_edit_.selected_point_index)];
+        const float compensated_angle = normalize_oval_angle_degrees(
+            point.angle_degrees - clamp_oval_radius_offset_degrees(mapping.radius_offset_degrees));
         int offset_x = 0;
         int offset_z = 0;
-        oval_anchor_math::compute_xz_offsets_from_angle(point.angle_degrees,
+        oval_anchor_math::compute_xz_offsets_from_angle(compensated_angle,
                                                         mapping.width_radius_x,
                                                         mapping.height_radius_z,
                                                         offset_x,
@@ -9154,6 +9163,7 @@ void RoomEditor::sync_oval_tools_panel() {
         properties.name = mapping.name;
         properties.width_radius_x = mapping.width_radius_x;
         properties.height_radius_z = mapping.height_radius_z;
+        properties.radius_offset_degrees = mapping.radius_offset_degrees;
         oval_tools_panel_->set_oval_properties(properties);
         oval_tools_panel_->set_asset_binding_status(resolve_binding_status(mapping));
 
@@ -11265,6 +11275,7 @@ bool RoomEditor::apply_selected_oval_properties(const RoomOvalToolsPanel::OvalPr
     const float height = std::max(1.0f, std::fabs(properties.height_radius_z));
     updated.width_radius_x = width;
     updated.height_radius_z = height;
+    updated.radius_offset_degrees = clamp_oval_radius_offset_degrees(properties.radius_offset_degrees);
     for (auto& point : updated.points) {
         recompute_oval_point_from_angle(point, updated.width_radius_x, updated.height_radius_z);
     }

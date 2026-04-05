@@ -47,6 +47,7 @@ RoomOvalToolsPanel::RoomOvalToolsPanel() {
     oval_name_textbox_ = std::make_unique<DMTextBox>("Name", "");
     width_textbox_ = std::make_unique<DMTextBox>("Width Radius X", "48");
     height_textbox_ = std::make_unique<DMTextBox>("Height Radius Z", "24");
+    radius_offset_slider_ = std::make_unique<DMSlider>("Radius Offset (deg)", 0, 360, 0);
     apply_oval_properties_button_ = std::make_unique<DMButton>("Apply Oval Properties", &DMStyles::PrimaryButton(), 180, DMButton::height());
     delete_oval_button_ = std::make_unique<DMButton>("Delete Oval", &DMStyles::DeleteButton(), 180, DMButton::height());
 
@@ -155,6 +156,10 @@ void RoomOvalToolsPanel::set_oval_properties(const OvalProperties& properties) {
     }
     if (height_textbox_ && !height_textbox_->is_editing()) {
         height_textbox_->set_value(format_float(properties.height_radius_z));
+    }
+    if (radius_offset_slider_) {
+        const int slider_value = static_cast<int>(std::lround(std::clamp(properties.radius_offset_degrees, 0.0f, 360.0f)));
+        radius_offset_slider_->set_value(slider_value);
     }
 }
 
@@ -384,6 +389,10 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
             handled = true;
             oval_properties_changed = true;
         }
+        if (radius_offset_slider_ && radius_offset_slider_->handle_event(event)) {
+            handled = true;
+            oval_properties_changed = true;
+        }
         if (oval_properties_changed && on_apply_oval_properties_) {
             on_apply_oval_properties_(collect_oval_properties());
         }
@@ -592,6 +601,7 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
         if (oval_name_textbox_) oval_name_textbox_->render(renderer);
         if (width_textbox_) width_textbox_->render(renderer);
         if (height_textbox_) height_textbox_->render(renderer);
+        if (radius_offset_slider_) radius_offset_slider_->render(renderer);
 
         DMLabelStyle asset_status_style = label_style;
         std::string asset_status_text = "Attach Asset: <none>";
@@ -819,6 +829,7 @@ void RoomOvalToolsPanel::update_layout() const {
         const int name_h = oval_name_textbox_ ? oval_name_textbox_->preferred_height(content_w) : DMTextBox::height();
         const int width_h = width_textbox_ ? width_textbox_->preferred_height(content_w) : DMTextBox::height();
         const int height_h = height_textbox_ ? height_textbox_->preferred_height(content_w) : DMTextBox::height();
+        const int offset_h = radius_offset_slider_ ? radius_offset_slider_->preferred_height(content_w) : DMSlider::height();
 
         if (oval_name_textbox_) {
             oval_name_textbox_->set_rect(SDL_Rect{content_x, y, content_w, name_h});
@@ -837,6 +848,11 @@ void RoomOvalToolsPanel::update_layout() const {
             height_textbox_->set_rect(SDL_Rect{content_x + left_w + split_gap, y, right_w, row_h});
         }
         y += row_h + kRowGap;
+
+        if (radius_offset_slider_) {
+            radius_offset_slider_->set_rect(SDL_Rect{content_x, y, content_w, offset_h});
+        }
+        y += offset_h + kRowGap;
 
         asset_status_rect_ = SDL_Rect{content_x, y, content_w, kLineHeight};
         y += kLineHeight + kRowGap;
@@ -860,6 +876,7 @@ void RoomOvalToolsPanel::update_layout() const {
         if (oval_name_textbox_) oval_name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (width_textbox_) width_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (height_textbox_) height_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (radius_offset_slider_) radius_offset_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (apply_oval_properties_button_) apply_oval_properties_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (delete_oval_button_) delete_oval_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         asset_status_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -1179,11 +1196,17 @@ RoomOvalToolsPanel::OvalProperties RoomOvalToolsPanel::collect_oval_properties()
     values.name = oval_name_textbox_ ? oval_name_textbox_->value() : values.name;
     values.width_radius_x = parse_float_or(width_textbox_ ? width_textbox_->value() : std::string{}, values.width_radius_x);
     values.height_radius_z = parse_float_or(height_textbox_ ? height_textbox_->value() : std::string{}, values.height_radius_z);
+    values.radius_offset_degrees =
+        radius_offset_slider_ ? static_cast<float>(radius_offset_slider_->value()) : values.radius_offset_degrees;
     if (!std::isfinite(values.width_radius_x)) {
         values.width_radius_x = 48.0f;
     }
     if (!std::isfinite(values.height_radius_z)) {
         values.height_radius_z = 24.0f;
     }
+    if (!std::isfinite(values.radius_offset_degrees)) {
+        values.radius_offset_degrees = 0.0f;
+    }
+    values.radius_offset_degrees = std::clamp(values.radius_offset_degrees, 0.0f, 360.0f);
     return values;
 }

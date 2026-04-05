@@ -115,7 +115,6 @@ public:
     int output_width() const { return screen_width_; }
     int output_height() const { return screen_height_; }
     std::optional<SDL_Point> postprocess_target_size() const;
-    bool enable_the_thing;
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return debug_auto_paths_; }
     void set_movement_debug_visible(bool visible);

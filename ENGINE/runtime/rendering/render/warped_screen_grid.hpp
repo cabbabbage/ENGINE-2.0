@@ -74,6 +74,7 @@ public:
         float aperture_f_stop              = 2.8f;
         float focal_length_mm              = 50.0f;
         float max_blur_px                  = 12.0f;
+        bool depth_of_field_enabled         = false;
 };
 
     struct FloorDepthParams {

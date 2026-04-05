@@ -145,6 +145,9 @@ void CameraUIPanel::sync_from_camera() {
     if (aperture_f_stop_slider_) aperture_f_stop_slider_->set_value(settings.aperture_f_stop);
     if (focal_length_mm_slider_) focal_length_mm_slider_->set_value(settings.focal_length_mm);
     if (max_blur_px_slider_) max_blur_px_slider_->set_value(settings.max_blur_px);
+    if (depth_of_field_checkbox_) {
+        depth_of_field_checkbox_->set_value(settings.depth_of_field_enabled);
+    }
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
     }
@@ -219,6 +222,11 @@ void CameraUIPanel::build_ui() {
     focal_length_mm_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     max_blur_px_slider_ = std::make_unique<FloatSliderWidget>("Max Blur (px)", 0.0f, 128.0f, 0.25f, defaults.max_blur_px, 2);
     max_blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    auto dof_checkbox = std::make_unique<DMCheckbox>("Enable Depth Of Field", defaults.depth_of_field_enabled);
+    depth_of_field_checkbox_ = dof_checkbox.get();
+    depth_of_field_widget_ = std::make_unique<CallbackCheckboxWidget>(
+        std::move(dof_checkbox),
+        [this](bool) { on_control_value_changed(); });
 
     // Global camera height bounds
     const auto [saved_min, saved_max] = load_camera_height_bounds();
@@ -301,7 +309,7 @@ void CameraUIPanel::rebuild_rows() {
     if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
     if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
     if (max_blur_px_slider_) rows.push_back({ max_blur_px_slider_.get() });
-    if (enable_aperture_) rows.push_back({ enable_aperture_.get() });
+    if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
 
     // Camera height bounds section
     if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
@@ -332,6 +340,7 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (aperture_f_stop_slider_) updated.aperture_f_stop = aperture_f_stop_slider_->value();
     if (focal_length_mm_slider_) updated.focal_length_mm = focal_length_mm_slider_->value();
     if (max_blur_px_slider_) updated.max_blur_px = max_blur_px_slider_->value();
+    if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
@@ -343,7 +352,8 @@ void CameraUIPanel::apply_settings_if_needed() {
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
         float_changed(updated.aperture_f_stop, current.aperture_f_stop) ||
         float_changed(updated.focal_length_mm, current.focal_length_mm) ||
-        float_changed(updated.max_blur_px, current.max_blur_px);
+        float_changed(updated.max_blur_px, current.max_blur_px) ||
+        (updated.depth_of_field_enabled != current.depth_of_field_enabled);
 
     float boundary_value = assets_->boundary_min_visible_screen_ratio();
     if (boundary_min_render_size_slider_) {

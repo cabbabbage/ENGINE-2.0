@@ -1142,6 +1142,13 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         }
         target = std::clamp(value, min_value, max_value);
     };
+    auto read_bool = [&](const char* key, bool& target) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_boolean()) {
+            return;
+        }
+        target = it->get<bool>();
+    };
     RealismSettings updated = settings_;
     read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
@@ -1151,6 +1158,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("aperture_f_stop", updated.aperture_f_stop, 0.01f, 64.0f);
     read_float("focal_length_mm", updated.focal_length_mm, 0.01f, 500.0f);
     read_float("max_blur_px", updated.max_blur_px, 0.0f, 128.0f);
+    read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
     set_realism_settings(updated);
 }
 
@@ -1164,6 +1172,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["aperture_f_stop"] = settings_.aperture_f_stop;
     result["focal_length_mm"] = settings_.focal_length_mm;
     result["max_blur_px"] = settings_.max_blur_px;
+    result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {

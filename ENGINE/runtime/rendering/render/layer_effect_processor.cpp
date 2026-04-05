@@ -50,7 +50,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
                                            const SDL_FPoint& optical_center,
                                            float radial_radius_px,
                                            float quality_scale) const {
-    if (!renderer_ || !src || !dst || !scratch || target_w <= 0 || target_h <= 0 || skip == true) {
+    if (!renderer_ || !src || !dst || !scratch || target_w <= 0 || target_h <= 0) {
         return false;
     }
     if (scratch == src || scratch == dst) {

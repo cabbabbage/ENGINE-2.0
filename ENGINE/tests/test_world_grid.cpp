@@ -493,7 +493,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
         {"layer_depth_curve", 1.75},
         {"aperture_f_stop", 4.0},
         {"focal_length_mm", 35.0},
-        {"max_blur_px", 20.0}
+        {"max_blur_px", 20.0},
+        {"depth_of_field_enabled", true}
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
@@ -502,10 +503,12 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
     CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
     CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
     CHECK(settings.max_blur_px == doctest::Approx(20.0f));
+    CHECK(settings.depth_of_field_enabled);
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
+    CHECK(serialized["depth_of_field_enabled"] == true);
     CHECK_FALSE(serialized.contains("focus_depth"));
 }

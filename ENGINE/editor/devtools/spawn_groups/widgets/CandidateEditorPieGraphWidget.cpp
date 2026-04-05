@@ -174,6 +174,9 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         int new_hover = -1;
         if (SDL_PointInRect(&point, &rect_)) {
             new_hover = hit_test_candidate(layout, point, total);
+            if (new_hover >= static_cast<int>(candidates_.size())) {
+                new_hover = -1;
+            }
         }
 
         bool changed = false;
@@ -198,7 +201,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             return true;
         }
 
-        if (target_index >= 0) {
+        if (target_index >= 0 && target_index < static_cast<int>(candidates_.size())) {
             hovered_index_ = target_index;
             if (e.button.clicks >= 2) {
                 if (!is_null_candidate_name(candidates_[target_index].name) && on_delete_) {
@@ -422,6 +425,11 @@ void CandidateEditorPieGraphWidget::set_weights(std::vector<float> weights) {
     hovered_index_ = -1;
     legend_row_rects_.clear();
     legend_row_height_ = 0;
+    pending_delta_ = 0.0;
+    if (active_index_ >= static_cast<int>(candidates_.size())) {
+        active_index_ = -1;
+        release_scroll_capture();
+    }
 }
 
 void CandidateEditorPieGraphWidget::set_candidates_from_json(const nlohmann::json& entry) {
@@ -579,14 +587,29 @@ void CandidateEditorPieGraphWidget::update_search(const Input& input) {
 }
 
 void CandidateEditorPieGraphWidget::flush_pending_adjustment() {
-    if (defer_adjust_until_release_ && std::abs(pending_delta_) >= 1e-9 && active_index_ >= 0 && on_adjust_) {
-        on_adjust_(active_index_, pending_delta_);
+    if (!defer_adjust_until_release_ || std::abs(pending_delta_) < 1e-9) {
+        pending_delta_ = 0.0;
+        return;
     }
+
+    const int commit_index = active_index_;
+    const double commit_delta = pending_delta_;
     pending_delta_ = 0.0;
+
+    if (commit_index < 0 ||
+        commit_index >= static_cast<int>(candidates_.size()) ||
+        !on_adjust_) {
+        return;
+    }
+
+    on_adjust_(commit_index, commit_delta);
 }
 
 bool CandidateEditorPieGraphWidget::submit_adjustment(double delta) {
-    if (active_index_ < 0 || !on_adjust_ || std::abs(delta) < 1e-9) {
+    if (active_index_ < 0 ||
+        active_index_ >= static_cast<int>(candidates_.size()) ||
+        !on_adjust_ ||
+        std::abs(delta) < 1e-9) {
         return false;
     }
     if (defer_adjust_until_release_) {

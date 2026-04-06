@@ -363,6 +363,7 @@ private:
         std::uint64_t processed_camera_state_version = 0;
         int processed_frame_index = std::numeric_limits<int>::min();
         std::uint32_t last_audio_frame_id = 0;
+        std::uint32_t non_player_update_visit_epoch = 0;
     };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
     std::uint64_t anchor_invalidation_version_counter_ = 1;
@@ -371,6 +372,7 @@ private:
     Asset* max_asset_height_holder_ = nullptr;
     std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
+    std::uint32_t non_player_update_visit_epoch_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
     std::uint32_t last_post_flush_refresh_frame_id_ = std::numeric_limits<std::uint32_t>::max();
@@ -380,6 +382,7 @@ private:
     bool frame_rebuild_metrics_initialized_ = false;
 
     bool pending_initial_rebuild_ = false;
+    bool post_runtime_traversal_refresh_pending_ = false;
     bool logged_initial_rebuild_warning_ = false;
     bool grid_dirty_ = true;
     bool camera_view_dirty_ = true;
@@ -426,7 +429,7 @@ private:
     void run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved);
     void run_visibility_build_stage();
     void run_post_flush_traversal_refresh_once();
-    void run_runtime_effects_stage();
+    void run_runtime_effects_stage(bool include_audio_update = true);
     void sync_dev_controls_for_frame(const Input& input);
     void refresh_filtered_active_assets_if_needed();
     void render_runtime_frame();

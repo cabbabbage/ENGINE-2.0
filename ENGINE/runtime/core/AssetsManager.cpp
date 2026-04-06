@@ -1236,10 +1236,8 @@ void Assets::set_input(Input* m) {
 }
 
 void Assets::run_idle_frame_pipeline(const Input& input) {
-    refresh_visible_asset_scaling_only();
     run_visibility_build_stage();
-    refresh_visible_asset_scaling_only();
-    run_active_runtime_single_pass(false);
+    run_runtime_effects_stage(false);
     sync_dev_controls_for_frame(input);
     refresh_filtered_active_assets_if_needed();
     render_runtime_frame();
@@ -1389,6 +1387,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
 
 void Assets::run_visibility_build_stage() {
     run_frame_rebuild_stage();
+    refresh_visible_asset_scaling_only();
 }
 
 void Assets::run_post_flush_traversal_refresh_once() {
@@ -1397,39 +1396,14 @@ void Assets::run_post_flush_traversal_refresh_once() {
     }
     last_post_flush_refresh_frame_id_ = frame_id_;
 
-    const SDL_Point center_px = camera_.get_screen_center();
-    const world::GridPoint current_center = world::GridPoint::make_virtual(
-        center_px.x,
-        0,
-        center_px.y,
-        world_grid_.max_resolution_layers());
-    const double current_scale = camera_.get_scale();
-    const double current_pitch = camera_.current_pitch_radians();
-    const std::uint64_t current_projection_version = camera_.camera_state_version();
-
-    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_, frame_id_);
-    world_grid_.update_active_chunks(screen_world_rect(), 0);
-    rebuild_active_from_screen_grid();
+    post_runtime_traversal_refresh_pending_ = true;
+    note_frame_rebuild_request();
+    run_frame_rebuild_stage();
     refresh_visible_asset_scaling_only();
-
-    grid_dirty_ = false;
-    camera_view_dirty_ = false;
-    last_grid_rebuild_frame_ = frame_id_;
-    last_camera_center_for_grid_ = world::GridPoint::make_virtual(
-        current_center.world_x(),
-        current_center.world_y(),
-        current_center.world_z(),
-        current_center.resolution_layer());
-    last_camera_scale_for_grid_ = current_scale;
-    last_camera_pitch_for_grid_ = current_pitch;
-    last_camera_projection_state_version_for_grid_ = current_projection_version;
 }
 
-void Assets::run_runtime_effects_stage() {
-    // Rebuild traversal after controller-driven child updates and other runtime changes.
-    run_visibility_build_stage();
-    refresh_visible_asset_scaling_only();
-    run_active_runtime_single_pass();
+void Assets::run_runtime_effects_stage(bool include_audio_update) {
+    run_active_runtime_single_pass(include_audio_update);
 }
 
 void Assets::sync_dev_controls_for_frame(const Input& input) {
@@ -1545,10 +1519,10 @@ void Assets::update(const Input& input)
     bool player_moved = false;
     run_world_update_stage(input, room_changed, player_moved);
 
-    // Stage: visibility or traversal build from movement/controller updates.
+    // Stage: visibility/traversal refresh.
     run_visibility_build_stage();
 
-    // Stage: runtime effects + traversal refresh.
+    // Stage: runtime effects (with optional one-time post-runtime traversal refresh).
     run_runtime_effects_stage();
 
     // Stage: render + UI refresh.
@@ -1583,28 +1557,39 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(
         std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
-    std::unordered_set<const Asset*> buffer_set;
-    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
-    const auto append_unique_traversal = [&](const std::vector<ActiveTraversalEntry>& source) {
-        for (const ActiveTraversalEntry& entry : source) {
-            Asset* asset = entry.asset;
-            if (!asset || asset == player || asset->dead) {
-                continue;
-            }
-            if (buffer_set.insert(asset).second) {
-                non_player_update_buffer_.push_back(asset);
-                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
-                    break;
-                }
-            }
-        }
-    };
 
     if (active_traversal.size() > kMaxBufferEntries) {
         std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
                   << active_traversal.size() << "); truncating to cap\n";
     }
-    append_unique_traversal(active_traversal);
+
+    ++non_player_update_visit_epoch_;
+    if (non_player_update_visit_epoch_ == 0) {
+        non_player_update_visit_epoch_ = 1;
+        for (auto& [asset, state] : runtime_traversal_state_) {
+            (void)asset;
+            state.non_player_update_visit_epoch = 0;
+        }
+    }
+    const std::uint32_t current_visit_epoch = non_player_update_visit_epoch_;
+
+    for (const ActiveTraversalEntry& entry : active_traversal) {
+        Asset* asset = entry.asset;
+        if (!asset || asset == player || asset->dead) {
+            continue;
+        }
+
+        RuntimeTraversalState& state = runtime_traversal_state_[asset];
+        if (state.non_player_update_visit_epoch == current_visit_epoch) {
+            continue;
+        }
+
+        state.non_player_update_visit_epoch = current_visit_epoch;
+        non_player_update_buffer_.push_back(asset);
+        if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
+            break;
+        }
+    }
 
     non_player_update_buffer_dirty_.store(false, std::memory_order_release);
 }
@@ -2194,7 +2179,7 @@ bool Assets::run_frame_rebuild_stage() {
 }
 
 bool Assets::maybe_rebuild_world_grid() {
-    if (frame_id_ == last_grid_rebuild_frame_) {
+    if (frame_id_ == last_grid_rebuild_frame_ && !post_runtime_traversal_refresh_pending_) {
         return false;
     }
 
@@ -2216,8 +2201,9 @@ bool Assets::maybe_rebuild_world_grid() {
         std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon ||
         current_projection_version != last_camera_projection_state_version_for_grid_;
 
-    const bool camera_dirty = camera_view_dirty_ || camera_changed;
+    const bool camera_dirty = camera_view_dirty_ || camera_changed || post_runtime_traversal_refresh_pending_;
     if (!grid_dirty_ && !camera_dirty && !active_dirty) {
+        post_runtime_traversal_refresh_pending_ = false;
         return false;
     }
 
@@ -2233,6 +2219,7 @@ bool Assets::maybe_rebuild_world_grid() {
                                          current_scale,
                                          current_pitch,
                                          current_projection_version);
+    post_runtime_traversal_refresh_pending_ = false;
     return true;
 }
 

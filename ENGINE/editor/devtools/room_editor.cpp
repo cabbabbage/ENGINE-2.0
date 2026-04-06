@@ -1329,6 +1329,23 @@ bool copy_anchor_authoring_fields(DisplacedAssetAnchorPoint& target, const Displ
         target.scaling_method = source.scaling_method;
         changed = true;
     }
+    if (target.has_light_data != source.has_light_data) {
+        target.has_light_data = source.has_light_data;
+        changed = true;
+    }
+    if (target.light.enabled != source.light.enabled ||
+        target.light.color_r != source.light.color_r ||
+        target.light.color_g != source.light.color_g ||
+        target.light.color_b != source.light.color_b ||
+        std::fabs(target.light.intensity - source.light.intensity) > 1e-4f ||
+        std::fabs(target.light.radius - source.light.radius) > 1e-4f ||
+        std::fabs(target.light.falloff - source.light.falloff) > 1e-4f ||
+        std::fabs(target.light.shadow_strength - source.light.shadow_strength) > 1e-4f ||
+        target.light.cast_shadows != source.light.cast_shadows) {
+        target.light = source.light;
+        target.light.sanitize();
+        changed = true;
+    }
     return changed;
 }
 
@@ -2448,7 +2465,8 @@ if (auto selected = library_ui_->consume_selection()) {
 
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        anchor_tools_panel_->set_visible(anchor_mode_active());
+        anchor_tools_panel_->set_visible(anchor_mode_active() || light_mode_active());
+        anchor_tools_panel_->set_light_editor_mode(light_mode_active());
         anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
     if (oval_tools_panel_) {
@@ -7080,7 +7098,11 @@ void RoomEditor::update_highlighted_assets() {
 }
 
 bool RoomEditor::anchor_mode_active() const {
-    return editor_mode_ == EditorMode::AnchorEdit;
+    return editor_mode_ == EditorMode::AnchorEdit || editor_mode_ == EditorMode::LightEdit;
+}
+
+bool RoomEditor::light_mode_active() const {
+    return editor_mode_ == EditorMode::LightEdit;
 }
 
 bool RoomEditor::oval_mode_active() const {
@@ -7103,8 +7125,13 @@ bool RoomEditor::is_anchor_edit_mode_active() const {
     return anchor_mode_active();
 }
 
+bool RoomEditor::is_light_edit_mode_active() const {
+    return light_mode_active();
+}
+
 bool RoomEditor::is_asset_stack_editor_active() const {
-    return anchor_mode_active() || oval_mode_active() || movement_mode_active() || hitbox_mode_active() || attack_box_mode_active();
+    return anchor_mode_active() || light_mode_active() || oval_mode_active() ||
+           movement_mode_active() || hitbox_mode_active() || attack_box_mode_active();
 }
 
 Asset* RoomEditor::selected_anchor_mode_asset() const {
@@ -7156,6 +7183,9 @@ void RoomEditor::ensure_anchor_editor_widgets() {
         anchor_tools_panel_->set_on_apply_details([this](const RoomAnchorToolsPanel::DetailValues& values) {
             apply_anchor_panel_detail_update(values);
         });
+        anchor_tools_panel_->set_on_apply_light_details([this](const RoomAnchorToolsPanel::LightValues& values) {
+            apply_anchor_panel_light_update(values);
+        });
         anchor_tools_panel_->set_on_propagate([this](RoomAnchorToolsPanel::PropagationScope scope) {
             switch (scope) {
                 case RoomAnchorToolsPanel::PropagationScope::NextFrame:
@@ -7181,7 +7211,8 @@ void RoomEditor::ensure_anchor_editor_widgets() {
 
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        anchor_tools_panel_->set_visible(anchor_mode_active());
+        anchor_tools_panel_->set_visible(anchor_mode_active() || light_mode_active());
+        anchor_tools_panel_->set_light_editor_mode(light_mode_active());
         anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
 }
@@ -7946,7 +7977,8 @@ RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditor
     switch (subview) {
         case AssetEditorSubview::AssetInfo: return AssetEditorSubview::AnimationEditor;
         case AssetEditorSubview::AnimationEditor: return AssetEditorSubview::Anchor;
-        case AssetEditorSubview::Anchor: return AssetEditorSubview::OvalAnchor;
+        case AssetEditorSubview::Anchor: return AssetEditorSubview::Light;
+        case AssetEditorSubview::Light: return AssetEditorSubview::OvalAnchor;
         case AssetEditorSubview::OvalAnchor: return AssetEditorSubview::Movement;
         case AssetEditorSubview::Movement: return AssetEditorSubview::Hitbox;
         case AssetEditorSubview::Hitbox: return AssetEditorSubview::AttackBox;
@@ -7969,7 +8001,7 @@ bool RoomEditor::can_enter_asset_editor_subview(AssetEditorSubview subview) cons
     }
 
     const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
-    if (subview == AssetEditorSubview::Anchor) {
+    if (subview == AssetEditorSubview::Anchor || subview == AssetEditorSubview::Light) {
         return !selection.navigable_animation_ids.empty();
     }
     if (subview == AssetEditorSubview::OvalAnchor) {
@@ -7984,7 +8016,7 @@ void RoomEditor::cycle_asset_editor_subview() {
     }
 
     AssetEditorSubview candidate = asset_editor_subview_;
-    constexpr int kAssetEditorSubviewCount = 7;
+    constexpr int kAssetEditorSubviewCount = 8;
     for (int i = 0; i < kAssetEditorSubviewCount; ++i) {
         candidate = next_asset_editor_subview(candidate);
         if (!can_enter_asset_editor_subview(candidate)) {
@@ -8030,7 +8062,14 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
         info_ui_->set_animation_editor_fullscreen_mode(false);
         info_ui_->close_animation_editor_panel();
     }
-    if (previous == AssetEditorSubview::Anchor && subview != AssetEditorSubview::Anchor) {
+    if (previous == AssetEditorSubview::Anchor &&
+        subview != AssetEditorSubview::Anchor &&
+        subview != AssetEditorSubview::Light) {
+        exit_anchor_edit_mode(true);
+    }
+    if (previous == AssetEditorSubview::Light &&
+        subview != AssetEditorSubview::Light &&
+        subview != AssetEditorSubview::Anchor) {
         exit_anchor_edit_mode(true);
     }
     if (previous == AssetEditorSubview::OvalAnchor && subview != AssetEditorSubview::OvalAnchor) {
@@ -8055,7 +8094,11 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
             info_ui_->open_animation_editor_panel();
         }
     } else if (subview == AssetEditorSubview::Anchor) {
-        if (!enter_anchor_edit_mode()) {
+        if (!enter_anchor_edit_mode(false)) {
+            enter_success = false;
+        }
+    } else if (subview == AssetEditorSubview::Light) {
+        if (!enter_anchor_edit_mode(true)) {
             enter_success = false;
         }
     } else if (subview == AssetEditorSubview::OvalAnchor) {
@@ -8089,7 +8132,9 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
             }
             active_modal_ = ActiveModal::AssetInfo;
         } else if (previous == AssetEditorSubview::Anchor) {
-            (void)enter_anchor_edit_mode();
+            (void)enter_anchor_edit_mode(false);
+        } else if (previous == AssetEditorSubview::Light) {
+            (void)enter_anchor_edit_mode(true);
         } else if (previous == AssetEditorSubview::OvalAnchor) {
             (void)enter_oval_anchor_edit_mode();
         } else if (previous == AssetEditorSubview::Movement) {
@@ -8239,8 +8284,11 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     ensure_hitbox_editor_widgets();
     ensure_attack_box_editor_widgets();
     if (anchor_tools_panel_) {
-        if (anchor_mode_active() || asset_editor_transition_.active) {
-            anchor_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Anchor, left_panel_rect));
+        if (anchor_mode_active() || light_mode_active() || asset_editor_transition_.active) {
+            const AssetEditorSubview anchor_subject = light_mode_active()
+                ? AssetEditorSubview::Light
+                : AssetEditorSubview::Anchor;
+            anchor_tools_panel_->set_panel_bounds_override(place_rect(anchor_subject, left_panel_rect));
         } else {
             anchor_tools_panel_->clear_panel_bounds_override();
         }
@@ -8422,7 +8470,8 @@ void RoomEditor::update_asset_editor_layout() {
 
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        anchor_tools_panel_->set_visible(anchor_mode_active());
+        anchor_tools_panel_->set_visible(anchor_mode_active() || light_mode_active());
+        anchor_tools_panel_->set_light_editor_mode(light_mode_active());
         anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
     if (oval_tools_panel_) {
@@ -8625,9 +8674,11 @@ void RoomEditor::sync_anchor_tools_panel() {
 
     if (!anchor_mode_active()) {
         anchor_tools_panel_->set_visible(false);
+        anchor_tools_panel_->set_light_editor_mode(false);
         anchor_tools_panel_->set_anchor_names({});
         anchor_tools_panel_->set_selected_anchor({});
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
+        anchor_tools_panel_->set_light_values(RoomAnchorToolsPanel::LightValues{});
         if (!oval_mode_active()) {
             close_anchor_candidate_editor();
         }
@@ -8652,6 +8703,7 @@ void RoomEditor::sync_anchor_tools_panel() {
     }
 
     anchor_tools_panel_->set_visible(true);
+    anchor_tools_panel_->set_light_editor_mode(light_mode_active());
     anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     anchor_tools_panel_->set_anchor_names(names);
     ensure_anchor_selection_valid();
@@ -8671,8 +8723,22 @@ void RoomEditor::sync_anchor_tools_panel() {
         detail.resolve_x = selected_it->resolve_x;
         detail.scaling_method = selected_it->scaling_method;
         anchor_tools_panel_->set_detail_values(detail);
+
+        RoomAnchorToolsPanel::LightValues light_values{};
+        light_values.has_light_data = selected_it->has_light_data;
+        light_values.enabled = selected_it->light.enabled;
+        light_values.color_r = static_cast<int>(selected_it->light.color_r);
+        light_values.color_g = static_cast<int>(selected_it->light.color_g);
+        light_values.color_b = static_cast<int>(selected_it->light.color_b);
+        light_values.intensity = selected_it->light.intensity;
+        light_values.radius = selected_it->light.radius;
+        light_values.falloff = selected_it->light.falloff;
+        light_values.shadow_strength = selected_it->light.shadow_strength;
+        light_values.cast_shadows = selected_it->light.cast_shadows;
+        anchor_tools_panel_->set_light_values(light_values);
     } else {
         anchor_tools_panel_->set_detail_values(RoomAnchorToolsPanel::DetailValues{});
+        anchor_tools_panel_->set_light_values(RoomAnchorToolsPanel::LightValues{});
     }
     sync_anchor_candidate_editor();
 }
@@ -9796,6 +9862,8 @@ void RoomEditor::refresh_anchor_mode_handles() {
         handle.hidden = anchor.hidden;
         handle.resolve_x = anchor.resolve_x;
         handle.scaling_method = anchor.scaling_method;
+        handle.has_light_data = anchor.has_light_data;
+        handle.light = anchor.light;
         handle.flat_screen_px = sample.flat_screen_px;
         handle.has_flat_screen_px = sample.has_flat_screen_px;
         handle.final_screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
@@ -10409,6 +10477,66 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
                 target,
                 anchor_name);
         }
+    }
+    return changed;
+}
+
+bool RoomEditor::apply_anchor_panel_light_update(const RoomAnchorToolsPanel::LightValues& values) {
+    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+        return false;
+    }
+    if (!anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+        return false;
+    }
+
+    const bool changed = mutate_anchor_current_frame(
+        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
+            auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
+                return anchor.name == anchor_edit_.selected_anchor_name;
+            });
+            if (it == anchors.end()) {
+                return false;
+            }
+
+            AnchorLightData next_light = it->light;
+            next_light.enabled = values.enabled;
+            next_light.color_r = static_cast<std::uint8_t>(std::clamp(values.color_r, 0, 255));
+            next_light.color_g = static_cast<std::uint8_t>(std::clamp(values.color_g, 0, 255));
+            next_light.color_b = static_cast<std::uint8_t>(std::clamp(values.color_b, 0, 255));
+            next_light.intensity = values.intensity;
+            next_light.radius = values.radius;
+            next_light.falloff = values.falloff;
+            next_light.shadow_strength = values.shadow_strength;
+            next_light.cast_shadows = values.cast_shadows;
+            next_light.sanitize();
+
+            const bool light_payload_changed =
+                it->light.enabled != next_light.enabled ||
+                it->light.color_r != next_light.color_r ||
+                it->light.color_g != next_light.color_g ||
+                it->light.color_b != next_light.color_b ||
+                std::fabs(it->light.intensity - next_light.intensity) > 1e-4f ||
+                std::fabs(it->light.radius - next_light.radius) > 1e-4f ||
+                std::fabs(it->light.falloff - next_light.falloff) > 1e-4f ||
+                std::fabs(it->light.shadow_strength - next_light.shadow_strength) > 1e-4f ||
+                it->light.cast_shadows != next_light.cast_shadows;
+            if (it->has_light_data == values.has_light_data && !light_payload_changed) {
+                return false;
+            }
+
+            it->has_light_data = values.has_light_data;
+            it->light = next_light;
+            if (!it->has_light_data) {
+                it->light.enabled = false;
+            }
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+
+    if (changed && anchor_edit_.target_asset) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            anchor_edit_.target_asset,
+            anchor_edit_.selected_anchor_name);
     }
     return changed;
 }
@@ -12154,8 +12282,16 @@ void RoomEditor::navigate_anchor_frame(int delta) {
     }
 }
 
-bool RoomEditor::enter_anchor_edit_mode() {
+bool RoomEditor::enter_anchor_edit_mode(bool light_editor_mode) {
     if (anchor_mode_active()) {
+        const EditorMode target_mode =
+            light_editor_mode ? EditorMode::LightEdit : EditorMode::AnchorEdit;
+        if (editor_mode_ != target_mode) {
+            editor_mode_ = target_mode;
+            anchor_edit_.light_editor_mode = light_editor_mode;
+            sync_anchor_tools_panel();
+            update_asset_editor_layout();
+        }
         return true;
     }
     close_anchor_candidate_editor();
@@ -12175,7 +12311,8 @@ bool RoomEditor::enter_anchor_edit_mode() {
     anchor_edit_.had_static_frame_before = true;
     anchor_edit_.static_frame_before = target->static_frame;
 
-    editor_mode_ = EditorMode::AnchorEdit;
+    editor_mode_ = light_editor_mode ? EditorMode::LightEdit : EditorMode::AnchorEdit;
+    anchor_edit_.light_editor_mode = light_editor_mode;
     anchor_edit_.animation_id = selection.resolved_animation_id;
     anchor_edit_.frame_index = 0;
 

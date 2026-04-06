@@ -3664,6 +3664,13 @@ bool DevControls::is_frame_editor_session_active() const {
     return frame_editor_session_ && frame_editor_session_->is_active();
 }
 
+bool DevControls::is_runtime_light_editor_active() const {
+    if (!room_editor_) {
+        return false;
+    }
+    return room_editor_->is_light_edit_mode_active();
+}
+
 const Asset* DevControls::frame_editor_target() const {
     if (!frame_editor_session_ || !frame_editor_session_->is_active()) {
         return nullptr;

@@ -83,6 +83,7 @@ public:
     void set_enabled(bool enabled, bool preserve_camera_state = false);
     bool is_enabled() const { return enabled_; }
     bool is_anchor_edit_mode_active() const;
+    bool is_light_edit_mode_active() const;
     bool is_asset_stack_editor_active() const;
     void set_room_trail_nav_visibility(bool visible);
 
@@ -399,6 +400,7 @@ private:
     void update_asset_editor_layout();
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
+    bool light_mode_active() const;
     bool oval_mode_active() const;
     bool movement_mode_active() const;
     bool hitbox_mode_active() const;
@@ -414,7 +416,7 @@ private:
     void apply_asset_editor_panel_overrides();
     bool asset_editor_tab_scope_active() const;
     void toggle_anchor_edit_mode();
-    bool enter_anchor_edit_mode();
+    bool enter_anchor_edit_mode(bool light_editor_mode = false);
     void exit_anchor_edit_mode(bool flush_immediately);
     bool enter_oval_anchor_edit_mode();
     void exit_oval_anchor_edit_mode(bool flush_immediately);
@@ -529,6 +531,7 @@ private:
                                      devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::DetailValues& values);
+    bool apply_anchor_panel_light_update(const RoomAnchorToolsPanel::LightValues& values);
     bool update_anchor_depth(const std::string& anchor_name, float delta_world);
     bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
     bool add_anchor_in_current_frame();
@@ -654,6 +657,7 @@ private:
     enum class EditorMode {
         Normal,
         AnchorEdit,
+        LightEdit,
         OvalAnchorEdit,
         MovementEdit,
         HitBoxEdit,
@@ -664,6 +668,7 @@ private:
         AssetInfo,
         AnimationEditor,
         Anchor,
+        Light,
         OvalAnchor,
         Movement,
         Hitbox,
@@ -695,6 +700,8 @@ private:
         bool hidden = false;
         bool resolve_x = true;
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+        bool has_light_data = false;
+        AnchorLightData light{};
         SDL_FPoint flat_screen_px{0.0f, 0.0f};
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};
@@ -714,6 +721,7 @@ private:
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
+        bool light_editor_mode = false;
         std::vector<AnchorHandleSample> handles;
     };
     AnchorEditState anchor_edit_;

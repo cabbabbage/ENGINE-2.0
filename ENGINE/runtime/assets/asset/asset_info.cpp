@@ -719,6 +719,18 @@ nlohmann::json encode_anchor_point_json(const DisplacedAssetAnchorPoint& anchor)
     encoded["hidden"] = anchor.hidden;
     encoded["resolve_x"] = anchor.resolve_x;
     encoded["scaling_method"] = std::string(anchor_points::anchor_scaling_method_to_token(anchor.scaling_method));
+    if (anchor.has_light_data) {
+        nlohmann::json light_json = nlohmann::json::object();
+        light_json["enabled"] = anchor.light.enabled;
+        light_json["color"] = nlohmann::json::array(
+            {anchor.light.color_r, anchor.light.color_g, anchor.light.color_b});
+        light_json["intensity"] = anchor.light.intensity;
+        light_json["radius"] = anchor.light.radius;
+        light_json["falloff"] = anchor.light.falloff;
+        light_json["shadow_strength"] = anchor.light.shadow_strength;
+        light_json["cast_shadows"] = anchor.light.cast_shadows;
+        encoded["light"] = std::move(light_json);
+    }
     return encoded;
 }
 

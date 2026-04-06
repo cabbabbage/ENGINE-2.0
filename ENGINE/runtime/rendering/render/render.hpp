@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -156,6 +157,32 @@ private:
                                          int screen_width,
                                          int screen_height,
                                          const std::vector<Asset*>& visible_assets) const;
+    struct RuntimeLightInstance {
+        SDL_FPoint screen_center{0.0f, 0.0f};
+        SDL_Color color{255, 255, 255, 255};
+        float intensity = 1.0f;
+        float radius_px = 220.0f;
+        float falloff = 1.8f;
+        float shadow_strength = 0.82f;
+        bool cast_shadows = true;
+    };
+
+    struct RuntimeLightOccluder {
+        std::array<SDL_FPoint, 4> points{};
+        SDL_FPoint center{0.0f, 0.0f};
+    };
+
+    void destroy_lighting_resources();
+    SDL_Texture* light_falloff_texture(float falloff);
+    SDL_BlendMode multiply_blend_mode();
+    void gather_runtime_lights(const WarpedScreenGrid& cam,
+                               const std::vector<Asset*>& rendered_assets,
+                               std::vector<RuntimeLightInstance>& out_lights) const;
+    void gather_runtime_occluders(const std::vector<GeometryBatcher::DrawItem>& draws,
+                                  std::vector<RuntimeLightOccluder>& out_occluders) const;
+    void render_runtime_lighting(SDL_Texture* gameplay_target,
+                                 const std::vector<RuntimeLightInstance>& lights,
+                                 const std::vector<RuntimeLightOccluder>& occluders);
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -184,6 +211,11 @@ private:
     SDL_Texture* scene_composite_tex_ = nullptr;
     SDL_Texture* postprocess_tex_     = nullptr;
     SDL_Texture* blur_tex_            = nullptr;
+    SDL_Texture* light_base_tex_      = nullptr;
+    SDL_Texture* light_accum_tex_     = nullptr;
+    std::unordered_map<int, SDL_Texture*> light_falloff_textures_;
+    SDL_BlendMode light_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
+    bool light_multiply_blend_mode_ready_ = false;
     std::vector<SDL_Texture*> motion_blur_history_textures_;
     int motion_blur_history_write_index_ = 0;
     int motion_blur_valid_history_frames_ = 0;

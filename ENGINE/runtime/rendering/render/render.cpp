@@ -1006,6 +1006,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 
 SceneRenderer::~SceneRenderer() {
     destroy_sky_texture();
+    destroy_lighting_resources();
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
@@ -1154,6 +1155,7 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
         SDL_DestroyTexture(blur_tex_);
         blur_tex_ = nullptr;
     }
+    destroy_lighting_resources();
     for (SDL_Texture* tex : motion_blur_history_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
@@ -1215,6 +1217,343 @@ const std::vector<DynamicBoundarySystem::BoundarySprite>& SceneRenderer::dynamic
         return kEmptyBoundarySprites;
     }
     return dynamic_boundary_system_->get_boundary_sprites();
+}
+
+void SceneRenderer::destroy_lighting_resources() {
+    if (light_base_tex_) {
+        SDL_DestroyTexture(light_base_tex_);
+        light_base_tex_ = nullptr;
+    }
+    if (light_accum_tex_) {
+        SDL_DestroyTexture(light_accum_tex_);
+        light_accum_tex_ = nullptr;
+    }
+    for (auto& [key, tex] : light_falloff_textures_) {
+        (void)key;
+        if (tex) {
+            SDL_DestroyTexture(tex);
+        }
+    }
+    light_falloff_textures_.clear();
+    light_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
+    light_multiply_blend_mode_ready_ = false;
+}
+
+SDL_BlendMode SceneRenderer::multiply_blend_mode() {
+    if (light_multiply_blend_mode_ready_) {
+        return light_multiply_blend_mode_;
+    }
+    light_multiply_blend_mode_ready_ = true;
+    light_multiply_blend_mode_ = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_DST_COLOR,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+    return light_multiply_blend_mode_;
+}
+
+SDL_Texture* SceneRenderer::light_falloff_texture(float falloff) {
+    if (!renderer_) {
+        return nullptr;
+    }
+    const int quantized_falloff = std::clamp(static_cast<int>(std::lround(falloff * 100.0f)), 5, 800);
+    auto it = light_falloff_textures_.find(quantized_falloff);
+    if (it != light_falloff_textures_.end()) {
+        return it->second;
+    }
+
+    constexpr int kTextureSize = 128;
+    SDL_Texture* tex = SDL_CreateTexture(
+        renderer_,
+        SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_STREAMING,
+        kTextureSize,
+        kTextureSize);
+    if (!tex) {
+        return nullptr;
+    }
+
+    void* pixels = nullptr;
+    int pitch = 0;
+    if (!SDL_LockTexture(tex, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
+        SDL_DestroyTexture(tex);
+        return nullptr;
+    }
+
+    const float center = (static_cast<float>(kTextureSize) - 1.0f) * 0.5f;
+    const float max_radius = std::max(1.0f, center);
+    const float exponent = std::clamp(static_cast<float>(quantized_falloff) / 100.0f, 0.05f, 8.0f);
+    auto* base = static_cast<std::uint8_t*>(pixels);
+    for (int y = 0; y < kTextureSize; ++y) {
+        auto* row = base + (pitch * y);
+        for (int x = 0; x < kTextureSize; ++x) {
+            const float dx = (static_cast<float>(x) - center) / max_radius;
+            const float dy = (static_cast<float>(y) - center) / max_radius;
+            const float distance = std::sqrt(dx * dx + dy * dy);
+            const float radial = std::clamp(1.0f - distance, 0.0f, 1.0f);
+            const float curved = std::pow(radial, exponent);
+            const std::uint8_t alpha = static_cast<std::uint8_t>(
+                std::clamp(static_cast<int>(std::lround(curved * 255.0f)), 0, 255));
+            std::uint8_t* p = row + (x * 4);
+            p[0] = 255;
+            p[1] = 255;
+            p[2] = 255;
+            p[3] = alpha;
+        }
+    }
+    SDL_UnlockTexture(tex);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_ADD);
+    light_falloff_textures_.emplace(quantized_falloff, tex);
+    return tex;
+}
+
+void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
+                                          const std::vector<Asset*>& rendered_assets,
+                                          std::vector<RuntimeLightInstance>& out_lights) const {
+    out_lights.clear();
+    if (!assets_) {
+        return;
+    }
+    out_lights.reserve(rendered_assets.size());
+
+    constexpr float kCullingMargin = 128.0f;
+    for (Asset* asset : rendered_assets) {
+        if (!asset || asset->dead || !asset->current_frame) {
+            continue;
+        }
+        for (const DisplacedAssetAnchorPoint& anchor : asset->current_frame->anchor_points) {
+            if (!anchor.is_valid() || !anchor.has_light_data || !anchor.light.enabled) {
+                continue;
+            }
+            const std::optional<AnchorPoint> resolved = asset->anchor_state(
+                anchor.name,
+                anchor_points::GridMaterialization::None,
+                Asset::AnchorResolveMode::Cached);
+            if (!resolved.has_value() || !resolved->exists) {
+                continue;
+            }
+
+            SDL_FPoint screen{};
+            if (!cam.project_world_point(SDL_FPoint{resolved->world_exact_pos_2d.x, resolved->world_exact_pos_2d.y},
+                                         resolved->world_exact_z,
+                                         screen)) {
+                continue;
+            }
+            if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
+                continue;
+            }
+
+            AnchorLightData light = anchor.light;
+            light.sanitize();
+            const float perspective_scale = resolved->has_flat_perspective_scale
+                ? std::max(0.05f, resolved->flat_perspective_scale)
+                : 1.0f;
+            const float radius_px = std::max(4.0f, light.radius * perspective_scale);
+            if (screen.x + radius_px < -kCullingMargin ||
+                screen.x - radius_px > static_cast<float>(screen_width_) + kCullingMargin ||
+                screen.y + radius_px < -kCullingMargin ||
+                screen.y - radius_px > static_cast<float>(screen_height_) + kCullingMargin) {
+                continue;
+            }
+
+            RuntimeLightInstance instance{};
+            instance.screen_center = screen;
+            instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
+            instance.intensity = light.intensity;
+            instance.radius_px = radius_px;
+            instance.falloff = light.falloff;
+            instance.shadow_strength = light.shadow_strength;
+            instance.cast_shadows = light.cast_shadows;
+            out_lights.push_back(instance);
+        }
+    }
+}
+
+void SceneRenderer::gather_runtime_occluders(const std::vector<GeometryBatcher::DrawItem>& draws,
+                                             std::vector<RuntimeLightOccluder>& out_occluders) const {
+    out_occluders.clear();
+    out_occluders.reserve(std::min<std::size_t>(draws.size(), 512));
+
+    constexpr double kMaxGroundDepth = 900000.0;
+    constexpr float kMinOccluderSize = 8.0f;
+    constexpr std::size_t kMaxOccluders = 512;
+    for (const GeometryBatcher::DrawItem& draw : draws) {
+        if (!std::isfinite(draw.depth) || draw.depth >= kMaxGroundDepth) {
+            continue;
+        }
+
+        float min_x = std::numeric_limits<float>::max();
+        float min_y = std::numeric_limits<float>::max();
+        float max_x = std::numeric_limits<float>::lowest();
+        float max_y = std::numeric_limits<float>::lowest();
+        for (const SDL_Vertex& vertex : draw.vertices) {
+            min_x = std::min(min_x, vertex.position.x);
+            min_y = std::min(min_y, vertex.position.y);
+            max_x = std::max(max_x, vertex.position.x);
+            max_y = std::max(max_y, vertex.position.y);
+        }
+        if (!std::isfinite(min_x) || !std::isfinite(min_y) ||
+            !std::isfinite(max_x) || !std::isfinite(max_y)) {
+            continue;
+        }
+        const float width = max_x - min_x;
+        const float height = max_y - min_y;
+        if (width < kMinOccluderSize || height < kMinOccluderSize) {
+            continue;
+        }
+
+        RuntimeLightOccluder occluder{};
+        occluder.points[0] = SDL_FPoint{min_x, min_y};
+        occluder.points[1] = SDL_FPoint{max_x, min_y};
+        occluder.points[2] = SDL_FPoint{max_x, max_y};
+        occluder.points[3] = SDL_FPoint{min_x, max_y};
+        occluder.center = SDL_FPoint{(min_x + max_x) * 0.5f, (min_y + max_y) * 0.5f};
+        out_occluders.push_back(occluder);
+        if (out_occluders.size() >= kMaxOccluders) {
+            break;
+        }
+    }
+}
+
+void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
+                                            const std::vector<RuntimeLightInstance>& lights,
+                                            const std::vector<RuntimeLightOccluder>& occluders) {
+    if (!renderer_ || !gameplay_target || screen_width_ <= 0 || screen_height_ <= 0) {
+        return;
+    }
+
+    auto create_target_texture = [&](int w, int h) -> SDL_Texture* {
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+        if (!texture) {
+            return nullptr;
+        }
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        return texture;
+    };
+
+    if (!light_base_tex_) {
+        light_base_tex_ = create_target_texture(screen_width_, screen_height_);
+    }
+    if (!light_accum_tex_) {
+        light_accum_tex_ = create_target_texture(screen_width_, screen_height_);
+    }
+    if (!light_base_tex_ || !light_accum_tex_) {
+        return;
+    }
+
+    SDL_SetRenderTarget(renderer_, light_base_tex_);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+    SDL_RenderClear(renderer_);
+    SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
+
+    SDL_SetRenderTarget(renderer_, light_accum_tex_);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 10, 10, 12, 255);
+    SDL_RenderClear(renderer_);
+
+    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
+    for (const RuntimeLightInstance& light : lights) {
+        SDL_Texture* falloff_tex = light_falloff_texture(light.falloff);
+        if (!falloff_tex) {
+            continue;
+        }
+        const int pass_count = std::clamp(static_cast<int>(std::ceil(light.intensity)), 1, 4);
+        const float per_pass = std::max(0.0f, light.intensity) / static_cast<float>(pass_count);
+        const Uint8 alpha = static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(per_pass * 255.0f)), 0, 255));
+        const Uint8 color_r = static_cast<Uint8>(std::clamp(static_cast<int>(
+            std::lround(static_cast<float>(light.color.r) * std::min(1.0f, per_pass))), 0, 255));
+        const Uint8 color_g = static_cast<Uint8>(std::clamp(static_cast<int>(
+            std::lround(static_cast<float>(light.color.g) * std::min(1.0f, per_pass))), 0, 255));
+        const Uint8 color_b = static_cast<Uint8>(std::clamp(static_cast<int>(
+            std::lround(static_cast<float>(light.color.b) * std::min(1.0f, per_pass))), 0, 255));
+
+        SDL_SetTextureBlendMode(falloff_tex, SDL_BLENDMODE_ADD);
+        SDL_SetTextureColorMod(falloff_tex, color_r, color_g, color_b);
+        SDL_SetTextureAlphaMod(falloff_tex, alpha);
+
+        const float radius = std::max(4.0f, light.radius_px);
+        SDL_FRect light_dst{
+            light.screen_center.x - radius,
+            light.screen_center.y - radius,
+            radius * 2.0f,
+            radius * 2.0f,
+        };
+        for (int pass = 0; pass < pass_count; ++pass) {
+            SDL_RenderTexture(renderer_, falloff_tex, nullptr, &light_dst);
+        }
+
+        if (light.cast_shadows && light.shadow_strength > 0.001f && !occluders.empty()) {
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+            for (const RuntimeLightOccluder& occluder : occluders) {
+                const float dx = occluder.center.x - light.screen_center.x;
+                const float dy = occluder.center.y - light.screen_center.y;
+                const float dist_sq = (dx * dx) + (dy * dy);
+                const float max_dist = light.radius_px * 1.5f;
+                if (dist_sq > max_dist * max_dist || dist_sq < 1.0f) {
+                    continue;
+                }
+                const float dist = std::sqrt(dist_sq);
+                const float inv_dist = 1.0f / dist;
+                const SDL_FPoint dir{dx * inv_dist, dy * inv_dist};
+                const SDL_FPoint perp{-dir.y, dir.x};
+                const float occluder_width = std::max(
+                    std::fabs(occluder.points[1].x - occluder.points[0].x),
+                    std::fabs(occluder.points[2].y - occluder.points[1].y));
+                const float half_width = std::clamp(occluder_width * 0.5f, 6.0f, 128.0f);
+                const float extrusion = std::max(light.radius_px * 1.35f, 32.0f);
+                const float atten = std::clamp(1.0f - (dist / max_dist), 0.0f, 1.0f);
+                const Uint8 shadow_alpha = static_cast<Uint8>(
+                    std::clamp(static_cast<int>(std::lround(255.0f * light.shadow_strength * atten)), 0, 255));
+                if (shadow_alpha == 0) {
+                    continue;
+                }
+
+                SDL_Vertex shadow_quad[4]{};
+                const SDL_FPoint near_left{
+                    occluder.center.x - (perp.x * half_width),
+                    occluder.center.y - (perp.y * half_width)};
+                const SDL_FPoint near_right{
+                    occluder.center.x + (perp.x * half_width),
+                    occluder.center.y + (perp.y * half_width)};
+                const SDL_FPoint far_right{
+                    near_right.x + (dir.x * extrusion),
+                    near_right.y + (dir.y * extrusion)};
+                const SDL_FPoint far_left{
+                    near_left.x + (dir.x * extrusion),
+                    near_left.y + (dir.y * extrusion)};
+                shadow_quad[0].position = near_left;
+                shadow_quad[1].position = near_right;
+                shadow_quad[2].position = far_right;
+                shadow_quad[3].position = far_left;
+                for (SDL_Vertex& vertex : shadow_quad) {
+                    vertex.color = SDL_FColor{0.0f, 0.0f, 0.0f, static_cast<float>(shadow_alpha) / 255.0f};
+                    vertex.tex_coord = SDL_FPoint{0.0f, 0.0f};
+                }
+                SDL_RenderGeometry(renderer_, nullptr, shadow_quad, 4, kQuadIndices, 6);
+            }
+        }
+    }
+
+    SDL_SetRenderTarget(renderer_, gameplay_target);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+    SDL_RenderClear(renderer_);
+    SDL_SetTextureBlendMode(light_base_tex_, SDL_BLENDMODE_BLEND);
+    SDL_RenderTexture(renderer_, light_base_tex_, nullptr, nullptr);
+
+    const SDL_BlendMode mul_mode = multiply_blend_mode();
+    if (mul_mode != SDL_BLENDMODE_INVALID) {
+        SDL_SetTextureBlendMode(light_accum_tex_, mul_mode);
+        SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
+    } else {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 190);
+        const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
+        SDL_RenderFillRect(renderer_, &full_rect);
+        SDL_SetTextureBlendMode(light_accum_tex_, SDL_BLENDMODE_ADD);
+        SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
+    }
 }
 
 void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets) {
@@ -1651,6 +1990,19 @@ void SceneRenderer::render() {
         }
     }
 
+    const bool runtime_lighting_enabled = assets_->should_render_runtime_lighting();
+    std::vector<RuntimeLightInstance> runtime_lights;
+    std::vector<RuntimeLightOccluder> runtime_occluders;
+    if (runtime_lighting_enabled) {
+        gather_runtime_lights(cam, rendered_assets_for_debug, runtime_lights);
+        std::vector<GeometryBatcher::DrawItem> light_draws;
+        light_draws.reserve(1024);
+        geometry_batcher_->for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
+            light_draws.push_back(item);
+        });
+        gather_runtime_occluders(light_draws, runtime_occluders);
+    }
+
     if (depth_of_field_enabled) {
         const double base_layer_interval = std::max(1.0, static_cast<double>(realism.layer_depth_interval));
         const double depth_curve = std::max(0.0, static_cast<double>(realism.layer_depth_curve));
@@ -1872,6 +2224,10 @@ void SceneRenderer::render() {
     } else {
         SDL_SetRenderTarget(renderer_, gameplay_target);
         geometry_batcher_->flush();
+    }
+
+    if (runtime_lighting_enabled) {
+        render_runtime_lighting(gameplay_target, runtime_lights, runtime_occluders);
     }
 
     if (gameplay_target) {

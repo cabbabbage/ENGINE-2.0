@@ -33,11 +33,25 @@ public:
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
     };
 
+    struct LightValues {
+        bool has_light_data = false;
+        bool enabled = false;
+        int color_r = 255;
+        int color_g = 236;
+        int color_b = 196;
+        float intensity = 1.0f;
+        float radius = 220.0f;
+        float falloff = 1.8f;
+        float shadow_strength = 0.82f;
+        bool cast_shadows = true;
+    };
+
     using SelectCallback = std::function<void(const std::string&)>;
     using AddCallback = std::function<void()>;
     using RenameCallback = std::function<void(const std::string&)>;
     using DeleteCallback = std::function<void()>;
     using ApplyDetailsCallback = std::function<void(const DetailValues&)>;
+    using ApplyLightDetailsCallback = std::function<void(const LightValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
     using OnionSkinToggleCallback = std::function<void(bool)>;
     using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
@@ -57,6 +71,9 @@ public:
     void set_rename_text(const std::string& value);
     std::string rename_text() const;
     void set_detail_values(const DetailValues& values);
+    void set_light_editor_mode(bool enabled);
+    bool light_editor_mode() const { return light_editor_mode_; }
+    void set_light_values(const LightValues& values);
     void set_onion_skin_enabled(bool enabled);
     bool onion_skin_enabled() const;
 
@@ -65,6 +82,7 @@ public:
     void set_on_rename(RenameCallback callback);
     void set_on_delete(DeleteCallback callback);
     void set_on_apply_details(ApplyDetailsCallback callback);
+    void set_on_apply_light_details(ApplyLightDetailsCallback callback);
     void set_on_propagate(PropagateCallback callback);
     void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
     void set_on_open_candidates(OpenCandidatesCallback callback);
@@ -78,6 +96,7 @@ private:
     void layout_anchor_buttons() const;
     void scroll_by(int delta);
     DetailValues collect_detail_values() const;
+    LightValues collect_light_values() const;
     static bool point_in_rect(int x, int y, const SDL_Rect& rect);
 
 private:
@@ -92,6 +111,8 @@ private:
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
     mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
     mutable SDL_Rect advanced_card_rect_{0, 0, 0, 0};
+    mutable SDL_Rect light_title_rect_{0, 0, 0, 0};
+    mutable SDL_Rect light_card_rect_{0, 0, 0, 0};
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
     mutable int content_height_ = 0;
     mutable int max_scroll_ = 0;
@@ -111,18 +132,30 @@ private:
     std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> resolve_x_checkbox_;
     std::unique_ptr<DMDropdown> scaling_method_dropdown_;
+    std::unique_ptr<DMCheckbox> light_attachment_checkbox_;
+    std::unique_ptr<DMCheckbox> light_enabled_checkbox_;
+    std::unique_ptr<DMTextBox> light_color_r_textbox_;
+    std::unique_ptr<DMTextBox> light_color_g_textbox_;
+    std::unique_ptr<DMTextBox> light_color_b_textbox_;
+    std::unique_ptr<DMSlider> light_intensity_slider_;
+    std::unique_ptr<DMSlider> light_radius_slider_;
+    std::unique_ptr<DMSlider> light_falloff_slider_;
+    std::unique_ptr<DMSlider> light_shadow_strength_slider_;
+    std::unique_ptr<DMCheckbox> light_cast_shadows_checkbox_;
     std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;
     std::unique_ptr<DMButton> apply_asset_button_;
     bool advanced_options_expanded_ = false;
+    bool light_editor_mode_ = false;
 
     SelectCallback on_select_;
     AddCallback on_add_;
     RenameCallback on_rename_;
     DeleteCallback on_delete_;
     ApplyDetailsCallback on_apply_details_;
+    ApplyLightDetailsCallback on_apply_light_details_;
     PropagateCallback on_propagate_;
     OnionSkinToggleCallback on_onion_skin_toggle_;
     OpenCandidatesCallback on_open_candidates_;

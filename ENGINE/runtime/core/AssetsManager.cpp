@@ -3357,6 +3357,16 @@ bool Assets::should_run_runtime_updates() const {
     return false;
 }
 
+bool Assets::should_render_runtime_lighting() const {
+    if (dev_controls_ && dev_controls_->is_runtime_light_editor_active()) {
+        return true;
+    }
+    if (dev_mode) {
+        return false;
+    }
+    return true;
+}
+
 bool Assets::should_advance_animation_for(const Asset* asset) const {
     if (!asset) {
         return false;

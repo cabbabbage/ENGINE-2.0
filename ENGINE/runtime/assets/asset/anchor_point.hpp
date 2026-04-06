@@ -3,6 +3,8 @@
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -73,6 +75,46 @@ struct Vec2 {
     Vec2(float x_, float y_) : x(x_), y(y_) {}
 };
 
+struct AnchorLightData {
+    bool enabled = false;
+    std::uint8_t color_r = 255;
+    std::uint8_t color_g = 236;
+    std::uint8_t color_b = 196;
+    float intensity = 1.0f;
+    float radius = 220.0f;
+    float falloff = 1.8f;
+    float shadow_strength = 0.82f;
+    bool cast_shadows = true;
+
+    static constexpr float kMinRadius = 4.0f;
+    static constexpr float kMaxRadius = 4096.0f;
+    static constexpr float kMinIntensity = 0.0f;
+    static constexpr float kMaxIntensity = 8.0f;
+    static constexpr float kMinFalloff = 0.05f;
+    static constexpr float kMaxFalloff = 8.0f;
+    static constexpr float kMinShadowStrength = 0.0f;
+    static constexpr float kMaxShadowStrength = 1.0f;
+
+    void sanitize() {
+        intensity = std::clamp(intensity, kMinIntensity, kMaxIntensity);
+        radius = std::clamp(radius, kMinRadius, kMaxRadius);
+        if (!std::isfinite(intensity)) {
+            intensity = 1.0f;
+        }
+        if (!std::isfinite(radius)) {
+            radius = 220.0f;
+        }
+        if (!std::isfinite(falloff)) {
+            falloff = 1.8f;
+        }
+        if (!std::isfinite(shadow_strength)) {
+            shadow_strength = 0.82f;
+        }
+        falloff = std::clamp(falloff, kMinFalloff, kMaxFalloff);
+        shadow_strength = std::clamp(shadow_strength, kMinShadowStrength, kMaxShadowStrength);
+    }
+};
+
 // Canonical anchor contract:
 // - texture_x/texture_y name an integer pixel in the un-flipped source texture.
 // - The anchor refers to the *center* of that pixel: (x + 0.5, y + 0.5).
@@ -94,6 +136,8 @@ struct DisplacedAssetAnchorPoint {
     bool        hidden = false;
     bool        resolve_x = true;
     AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+    bool        has_light_data = false;
+    AnchorLightData light{};
 
     DisplacedAssetAnchorPoint() = default;
     DisplacedAssetAnchorPoint(std::string name_,
@@ -115,7 +159,9 @@ struct DisplacedAssetAnchorPoint {
         , rotation_degrees(rotation_degrees_)
         , hidden(hidden_)
         , resolve_x(resolve_x_)
-        , scaling_method(scaling_method_) {}
+        , scaling_method(scaling_method_) {
+        light.sanitize();
+    }
 
     bool is_valid() const {
         return !name.empty();

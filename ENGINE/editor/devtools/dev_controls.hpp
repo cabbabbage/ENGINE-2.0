@@ -148,6 +148,7 @@ public:
                                     std::function<void(const std::string&)> on_host_closed);
     void end_frame_editor_session();
     bool is_frame_editor_session_active() const;
+    bool is_runtime_light_editor_active() const;
     const Asset* frame_editor_target() const;
 
     struct DropPreviewState {

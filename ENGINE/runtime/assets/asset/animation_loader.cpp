@@ -238,6 +238,38 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node,
                 "scaling_method",
                 std::string(anchor_points::anchor_scaling_method_to_token(default_scaling_method))),
             default_scaling_method);
+        if (const auto light_it = node.find("light");
+            light_it != node.end() && light_it->is_object()) {
+                const nlohmann::json& light = *light_it;
+                anchor.has_light_data = true;
+                anchor.light.enabled = read_bool_field_like(light, "enabled", false);
+                anchor.light.intensity = read_float_field_like(light, "intensity", anchor.light.intensity);
+                anchor.light.radius = read_float_field_like(light, "radius", anchor.light.radius);
+                anchor.light.falloff = read_float_field_like(light, "falloff", anchor.light.falloff);
+                anchor.light.shadow_strength =
+                    read_float_field_like(light, "shadow_strength", anchor.light.shadow_strength);
+                anchor.light.cast_shadows = read_bool_field_like(light, "cast_shadows", anchor.light.cast_shadows);
+
+                if (light.contains("color")) {
+                        const nlohmann::json& color_node = light["color"];
+                        int r = static_cast<int>(anchor.light.color_r);
+                        int g = static_cast<int>(anchor.light.color_g);
+                        int b = static_cast<int>(anchor.light.color_b);
+                        if (color_node.is_array() && color_node.size() >= 3) {
+                                if (color_node[0].is_number()) r = static_cast<int>(color_node[0].get<double>());
+                                if (color_node[1].is_number()) g = static_cast<int>(color_node[1].get<double>());
+                                if (color_node[2].is_number()) b = static_cast<int>(color_node[2].get<double>());
+                        } else if (color_node.is_object()) {
+                                r = read_int_field_like(color_node, "r", r);
+                                g = read_int_field_like(color_node, "g", g);
+                                b = read_int_field_like(color_node, "b", b);
+                        }
+                        anchor.light.color_r = static_cast<std::uint8_t>(std::clamp(r, 0, 255));
+                        anchor.light.color_g = static_cast<std::uint8_t>(std::clamp(g, 0, 255));
+                        anchor.light.color_b = static_cast<std::uint8_t>(std::clamp(b, 0, 255));
+                }
+                anchor.light.sanitize();
+        }
         if (!std::isfinite(anchor.rotation_degrees)) {
                 anchor.rotation_degrees = default_rotation_degrees;
         }

@@ -50,6 +50,8 @@ constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
 constexpr int kMotionBlurHistoryFrameCount = 2;
 constexpr std::array<Uint8, kMotionBlurHistoryFrameCount> kMotionBlurHistoryAlpha = {120, 60};
 constexpr bool kSceneMotionBlurEnabled = false;
+// Temporary kill-switch for runtime casted shadows. Flip to true to re-enable.
+constexpr bool kRuntimeCastedShadowsEnabled = false;
 
 inline std::int64_t quantize_depth(double depth) {
     const double scaled = std::floor(depth * kDepthBucketScale);
@@ -1434,6 +1436,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                         floor_screen) &&
                 std::isfinite(floor_screen.x) &&
                 std::isfinite(floor_screen.y)) {
+                floor_screen.y = cam.warp_floor_screen_y(0.0f, floor_screen.y);
                 instance.floor_screen_center = floor_screen;
                 instance.has_floor_screen_center = true;
             }
@@ -1554,14 +1557,48 @@ void SceneRenderer::append_runtime_shadow_geometry(const std::vector<RuntimeLigh
     }
 
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
-    for (const RuntimeLightInstance& light : lights) {
-        if (!light.cast_shadows || light.shadow_strength <= 0.001f) {
-            continue;
-        }
-        const SDL_FPoint light_floor = light.has_floor_screen_center
+    const std::size_t light_count = lights.size();
+    std::vector<SDL_FPoint> light_floor_positions(light_count, SDL_FPoint{0.0f, 0.0f});
+    std::vector<float> light_height_px(light_count, 24.0f);
+    std::vector<float> light_intensity_scale(light_count, 0.0f);
+    for (std::size_t i = 0; i < light_count; ++i) {
+        const RuntimeLightInstance& light = lights[i];
+        const SDL_FPoint floor = light.has_floor_screen_center
             ? light.floor_screen_center
             : light.screen_center;
-        const float shadow_height_factor = std::clamp(1.0f + (std::max(0.0f, light.world_z) / 120.0f), 1.0f, 2.75f);
+        light_floor_positions[i] = floor;
+
+        const float dx = light.screen_center.x - floor.x;
+        const float dy = light.screen_center.y - floor.y;
+        const float inferred_screen_height = std::hypot(dx, dy);
+        const float fallback_height_from_world = std::clamp(
+            std::max(0.0f, light.world_z) * 0.45f,
+            12.0f,
+            240.0f);
+        light_height_px[i] = std::max(12.0f, std::max(inferred_screen_height, fallback_height_from_world));
+        light_intensity_scale[i] = std::clamp(light.intensity, 0.0f, 4.0f);
+    }
+
+    auto radial_falloff = [](float distance, float radius) -> float {
+        if (!std::isfinite(distance) || !std::isfinite(radius) || radius <= 1e-3f) {
+            return 0.0f;
+        }
+        const float t = std::clamp(1.0f - (distance / radius), 0.0f, 1.0f);
+        return t * t;
+    };
+
+    for (std::size_t source_index = 0; source_index < light_count; ++source_index) {
+        const RuntimeLightInstance& light = lights[source_index];
+        if (!light.cast_shadows || light.shadow_strength <= 0.001f || light_intensity_scale[source_index] <= 0.001f) {
+            continue;
+        }
+        const SDL_FPoint light_floor = light_floor_positions[source_index];
+        const float source_height_px = light_height_px[source_index];
+        const float source_radius = std::max(6.0f, light.radius_px);
+        const float source_shadow_power = std::clamp(
+            0.35f + (light_intensity_scale[source_index] * 0.45f),
+            0.2f,
+            1.5f);
 
         for (const RuntimeLightOccluder& occluder : occluders) {
             if (point_inside_convex_quad(occluder.points, light_floor)) {
@@ -1581,37 +1618,76 @@ void SceneRenderer::append_runtime_shadow_geometry(const std::vector<RuntimeLigh
             const float to_light_x = seg_center.x - light_floor.x;
             const float to_light_y = seg_center.y - light_floor.y;
             const float dist_sq = (to_light_x * to_light_x) + (to_light_y * to_light_y);
-            const float max_dist = light.radius_px * 1.4f;
+            const float max_dist = source_radius * 1.2f;
             if (dist_sq > (max_dist * max_dist) || dist_sq < 1.0f) {
                 continue;
             }
             const float dist = std::sqrt(dist_sq);
-            const float atten = std::clamp(1.0f - (dist / max_dist), 0.0f, 1.0f);
+            const float atten = radial_falloff(dist, max_dist);
+            if (atten <= 0.001f) {
+                continue;
+            }
+
+            const float top_mid_y = 0.5f * (occluder.points[0].y + occluder.points[1].y);
+            const float floor_mid_y = 0.5f * (near_left.y + near_right.y);
+            const float occluder_height_px = std::clamp(
+                std::fabs(floor_mid_y - top_mid_y),
+                4.0f,
+                512.0f);
+
+            const float geometric_shadow_length = occluder_height_px * (dist / source_height_px);
+            const float min_shadow_length = std::max(8.0f, occluder_height_px * 0.35f);
+            const float max_shadow_length = std::max(
+                24.0f,
+                std::min(source_radius * 0.95f, (occluder_height_px * 6.5f) + (source_radius * 0.35f)));
+            const float extrusion = std::clamp(geometric_shadow_length, min_shadow_length, max_shadow_length) *
+                                    (0.70f + (0.30f * atten));
+            if (!std::isfinite(extrusion) || extrusion <= 1.0f) {
+                continue;
+            }
+
+            float fill_lighting = 0.0f;
+            for (std::size_t other_index = 0; other_index < light_count; ++other_index) {
+                if (other_index == source_index || light_intensity_scale[other_index] <= 0.001f) {
+                    continue;
+                }
+                const RuntimeLightInstance& other_light = lights[other_index];
+                const float other_radius = std::max(6.0f, other_light.radius_px);
+                const SDL_FPoint other_floor = light_floor_positions[other_index];
+                const float fill_dx = seg_center.x - other_floor.x;
+                const float fill_dy = seg_center.y - other_floor.y;
+                const float fill_dist = std::sqrt((fill_dx * fill_dx) + (fill_dy * fill_dy));
+                const float fill_atten = radial_falloff(fill_dist, other_radius * 1.1f);
+                if (fill_atten <= 0.0f) {
+                    continue;
+                }
+                fill_lighting += light_intensity_scale[other_index] * fill_atten;
+                if (fill_lighting >= 4.0f) {
+                    break;
+                }
+            }
+            const float fill_shadow_factor = 1.0f / (1.0f + (fill_lighting * 1.2f));
+            const float near_alpha_f = 205.0f * light.shadow_strength * source_shadow_power * atten * fill_shadow_factor;
             const Uint8 near_alpha = static_cast<Uint8>(std::clamp(
-                static_cast<int>(std::lround(205.0f * light.shadow_strength * atten)),
+                static_cast<int>(std::lround(near_alpha_f)),
                 0,
                 205));
             if (near_alpha == 0) {
                 continue;
             }
 
-            const float ray_left_x = near_left.x - light_floor.x;
-            const float ray_left_y = near_left.y - light_floor.y;
-            const float ray_right_x = near_right.x - light_floor.x;
-            const float ray_right_y = near_right.y - light_floor.y;
-            const float ray_left_len = std::sqrt((ray_left_x * ray_left_x) + (ray_left_y * ray_left_y));
-            const float ray_right_len = std::sqrt((ray_right_x * ray_right_x) + (ray_right_y * ray_right_y));
-            if (ray_left_len < 1.0f || ray_right_len < 1.0f) {
+            const float shadow_dir_x = to_light_x / dist;
+            const float shadow_dir_y = to_light_y / dist;
+            const SDL_FPoint far_left{
+                near_left.x + (shadow_dir_x * extrusion),
+                near_left.y + (shadow_dir_y * extrusion)};
+            const SDL_FPoint far_right{
+                near_right.x + (shadow_dir_x * extrusion),
+                near_right.y + (shadow_dir_y * extrusion)};
+            if (!std::isfinite(far_left.x) || !std::isfinite(far_left.y) ||
+                !std::isfinite(far_right.x) || !std::isfinite(far_right.y)) {
                 continue;
             }
-
-            const float extrusion = std::max(light.radius_px * (0.95f * shadow_height_factor), 28.0f);
-            const SDL_FPoint far_left{
-                near_left.x + ((ray_left_x / ray_left_len) * extrusion),
-                near_left.y + ((ray_left_y / ray_left_len) * extrusion)};
-            const SDL_FPoint far_right{
-                near_right.x + ((ray_right_x / ray_right_len) * extrusion),
-                near_right.y + ((ray_right_y / ray_right_len) * extrusion)};
 
             SDL_Vertex shadow_quad[4]{};
             shadow_quad[0].position = near_left;
@@ -2162,13 +2238,15 @@ void SceneRenderer::render() {
     std::vector<RuntimeLightOccluder> runtime_occluders;
     if (runtime_lighting_enabled) {
         gather_runtime_lights(cam, rendered_assets_for_debug, runtime_lights);
-        std::vector<GeometryBatcher::DrawItem> light_draws;
-        light_draws.reserve(1024);
-        geometry_batcher_->for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
-            light_draws.push_back(item);
-        });
-        gather_runtime_occluders(light_draws, runtime_occluders);
-        append_runtime_shadow_geometry(runtime_lights, runtime_occluders);
+        if (kRuntimeCastedShadowsEnabled) {
+            std::vector<GeometryBatcher::DrawItem> light_draws;
+            light_draws.reserve(1024);
+            geometry_batcher_->for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
+                light_draws.push_back(item);
+            });
+            gather_runtime_occluders(light_draws, runtime_occluders);
+            append_runtime_shadow_geometry(runtime_lights, runtime_occluders);
+        }
     }
 
     if (depth_of_field_enabled) {

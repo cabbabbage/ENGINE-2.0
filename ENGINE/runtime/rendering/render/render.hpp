@@ -159,17 +159,23 @@ private:
                                          const std::vector<Asset*>& visible_assets) const;
     struct RuntimeLightInstance {
         SDL_FPoint screen_center{0.0f, 0.0f};
+        SDL_FPoint floor_screen_center{0.0f, 0.0f};
+        bool has_floor_screen_center = false;
         SDL_Color color{255, 255, 255, 255};
         float intensity = 1.0f;
         float radius_px = 220.0f;
         float falloff = 1.8f;
         float shadow_strength = 0.82f;
         bool cast_shadows = true;
+        float world_z = 0.0f;
     };
 
     struct RuntimeLightOccluder {
         std::array<SDL_FPoint, 4> points{};
         SDL_FPoint center{0.0f, 0.0f};
+        SDL_FPoint floor_left{0.0f, 0.0f};
+        SDL_FPoint floor_right{0.0f, 0.0f};
+        double depth = 0.0;
     };
 
     void destroy_lighting_resources();
@@ -180,6 +186,8 @@ private:
                                std::vector<RuntimeLightInstance>& out_lights) const;
     void gather_runtime_occluders(const std::vector<GeometryBatcher::DrawItem>& draws,
                                   std::vector<RuntimeLightOccluder>& out_occluders) const;
+    void append_runtime_shadow_geometry(const std::vector<RuntimeLightInstance>& lights,
+                                        const std::vector<RuntimeLightOccluder>& occluders);
     void render_runtime_lighting(SDL_Texture* gameplay_target,
                                  const std::vector<RuntimeLightInstance>& lights,
                                  const std::vector<RuntimeLightOccluder>& occluders);
@@ -213,6 +221,7 @@ private:
     SDL_Texture* blur_tex_            = nullptr;
     SDL_Texture* light_base_tex_      = nullptr;
     SDL_Texture* light_accum_tex_     = nullptr;
+    SDL_Texture* light_white_tex_     = nullptr;
     std::unordered_map<int, SDL_Texture*> light_falloff_textures_;
     SDL_BlendMode light_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
     bool light_multiply_blend_mode_ready_ = false;

@@ -108,7 +108,9 @@ private:
     bool panel_bounds_override_active_ = false;
     SDL_Rect panel_bounds_override_{0, 0, 0, 0};
     mutable SDL_Rect panel_rect_{12, 56, 300, 420};
+    mutable SDL_Rect light_panel_rect_{0, 0, 0, 0};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect light_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
     mutable SDL_Rect advanced_card_rect_{0, 0, 0, 0};
     mutable SDL_Rect light_title_rect_{0, 0, 0, 0};
@@ -132,7 +134,6 @@ private:
     std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> resolve_x_checkbox_;
     std::unique_ptr<DMDropdown> scaling_method_dropdown_;
-    std::unique_ptr<DMCheckbox> light_attachment_checkbox_;
     std::unique_ptr<DMCheckbox> light_enabled_checkbox_;
     std::unique_ptr<DMTextBox> light_color_r_textbox_;
     std::unique_ptr<DMTextBox> light_color_g_textbox_;

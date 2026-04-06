@@ -477,6 +477,7 @@ private:
     bool resolve_selected_oval_lock_target(float& out_world_x, float& out_world_z, float& out_heading_radians) const;
     void sync_oval_attachment_lock();
     void release_oval_attachment_lock();
+    bool ensure_selected_anchor_light_attachment();
     void sync_anchor_candidate_editor();
     void refresh_anchor_candidate_editor_widget();
     void update_anchor_candidate_editor_search(const Input& input);

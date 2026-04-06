@@ -8666,6 +8666,42 @@ void RoomEditor::ensure_anchor_selection_valid() {
     }
 }
 
+bool RoomEditor::ensure_selected_anchor_light_attachment() {
+    if (!light_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+        return false;
+    }
+
+    const bool changed = mutate_anchor_current_frame(
+        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
+            auto it = std::find_if(anchors.begin(), anchors.end(), [&](const DisplacedAssetAnchorPoint& anchor) {
+                return anchor.name == anchor_edit_.selected_anchor_name;
+            });
+            if (it == anchors.end()) {
+                return false;
+            }
+
+            bool changed = false;
+            const bool needs_attachment = !it->has_light_data;
+            if (needs_attachment) {
+                it->has_light_data = true;
+                changed = true;
+            }
+            it->light.sanitize();
+            if (needs_attachment && !it->light.enabled) {
+                it->light.enabled = true;
+                changed = true;
+            }
+            return changed;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (changed && anchor_edit_.target_asset) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            anchor_edit_.target_asset,
+            anchor_edit_.selected_anchor_name);
+    }
+    return changed;
+}
+
 void RoomEditor::sync_anchor_tools_panel() {
     ensure_anchor_editor_widgets();
     if (!anchor_tools_panel_) {
@@ -8707,6 +8743,9 @@ void RoomEditor::sync_anchor_tools_panel() {
     anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     anchor_tools_panel_->set_anchor_names(names);
     ensure_anchor_selection_valid();
+    if (light_mode_active()) {
+        ensure_selected_anchor_light_attachment();
+    }
     anchor_tools_panel_->set_selected_anchor(anchor_edit_.selected_anchor_name);
     auto selected_it = std::find_if(anchor_edit_.handles.begin(),
                                     anchor_edit_.handles.end(),
@@ -8725,7 +8764,7 @@ void RoomEditor::sync_anchor_tools_panel() {
         anchor_tools_panel_->set_detail_values(detail);
 
         RoomAnchorToolsPanel::LightValues light_values{};
-        light_values.has_light_data = selected_it->has_light_data;
+        light_values.has_light_data = light_mode_active() || selected_it->has_light_data;
         light_values.enabled = selected_it->light.enabled;
         light_values.color_r = static_cast<int>(selected_it->light.color_r);
         light_values.color_g = static_cast<int>(selected_it->light.color_g);
@@ -10520,11 +10559,12 @@ bool RoomEditor::apply_anchor_panel_light_update(const RoomAnchorToolsPanel::Lig
                 std::fabs(it->light.falloff - next_light.falloff) > 1e-4f ||
                 std::fabs(it->light.shadow_strength - next_light.shadow_strength) > 1e-4f ||
                 it->light.cast_shadows != next_light.cast_shadows;
-            if (it->has_light_data == values.has_light_data && !light_payload_changed) {
+            const bool next_has_light_data = light_mode_active() ? true : values.has_light_data;
+            if (it->has_light_data == next_has_light_data && !light_payload_changed) {
                 return false;
             }
 
-            it->has_light_data = values.has_light_data;
+            it->has_light_data = next_has_light_data;
             it->light = next_light;
             if (!it->has_light_data) {
                 it->light.enabled = false;

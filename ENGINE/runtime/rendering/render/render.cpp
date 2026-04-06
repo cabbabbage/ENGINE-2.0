@@ -60,6 +60,67 @@ inline std::int64_t quantize_depth(double depth) {
 }
 
 bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points);
+
+float point_segment_distance_sq(const SDL_FPoint& point,
+                                const SDL_FPoint& seg_a,
+                                const SDL_FPoint& seg_b) {
+    const float vx = seg_b.x - seg_a.x;
+    const float vy = seg_b.y - seg_a.y;
+    const float wx = point.x - seg_a.x;
+    const float wy = point.y - seg_a.y;
+    const float denom = (vx * vx) + (vy * vy);
+    if (denom <= 1e-5f) {
+        const float dx = point.x - seg_a.x;
+        const float dy = point.y - seg_a.y;
+        return (dx * dx) + (dy * dy);
+    }
+    const float t = std::clamp(((wx * vx) + (wy * vy)) / denom, 0.0f, 1.0f);
+    const float cx = seg_a.x + (vx * t);
+    const float cy = seg_a.y + (vy * t);
+    const float dx = point.x - cx;
+    const float dy = point.y - cy;
+    return (dx * dx) + (dy * dy);
+}
+
+float min_distance_sq_to_quad_edges(const std::array<SDL_FPoint, 4>& quad,
+                                    const SDL_FPoint& point) {
+    float best = std::numeric_limits<float>::max();
+    for (int i = 0; i < 4; ++i) {
+        const SDL_FPoint& a = quad[static_cast<std::size_t>(i)];
+        const SDL_FPoint& b = quad[static_cast<std::size_t>((i + 1) % 4)];
+        best = std::min(best, point_segment_distance_sq(point, a, b));
+    }
+    return best;
+}
+
+bool point_inside_convex_quad(const std::array<SDL_FPoint, 4>& quad,
+                              const SDL_FPoint& point) {
+    float sign = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        const SDL_FPoint& a = quad[static_cast<std::size_t>(i)];
+        const SDL_FPoint& b = quad[static_cast<std::size_t>((i + 1) % 4)];
+        const float value = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
+        if (std::fabs(value) <= 1e-5f) {
+            continue;
+        }
+        if (sign == 0.0f) {
+            sign = value;
+        } else if ((sign > 0.0f) != (value > 0.0f)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+float quad_area(const std::array<SDL_FPoint, 4>& quad) {
+    float area = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        const SDL_FPoint& a = quad[static_cast<std::size_t>(i)];
+        const SDL_FPoint& b = quad[static_cast<std::size_t>((i + 1) % 4)];
+        area += (a.x * b.y) - (b.x * a.y);
+    }
+    return std::fabs(area) * 0.5f;
+}
 }
 
 // ============================================================================
@@ -1228,6 +1289,10 @@ void SceneRenderer::destroy_lighting_resources() {
         SDL_DestroyTexture(light_accum_tex_);
         light_accum_tex_ = nullptr;
     }
+    if (light_white_tex_) {
+        SDL_DestroyTexture(light_white_tex_);
+        light_white_tex_ = nullptr;
+    }
     for (auto& [key, tex] : light_falloff_textures_) {
         (void)key;
         if (tex) {
@@ -1264,7 +1329,7 @@ SDL_Texture* SceneRenderer::light_falloff_texture(float falloff) {
         return it->second;
     }
 
-    constexpr int kTextureSize = 128;
+    constexpr int kTextureSize = 256;
     SDL_Texture* tex = SDL_CreateTexture(
         renderer_,
         SDL_PIXELFORMAT_RGBA8888,
@@ -1293,14 +1358,17 @@ SDL_Texture* SceneRenderer::light_falloff_texture(float falloff) {
             const float dy = (static_cast<float>(y) - center) / max_radius;
             const float distance = std::sqrt(dx * dx + dy * dy);
             const float radial = std::clamp(1.0f - distance, 0.0f, 1.0f);
-            const float curved = std::pow(radial, exponent);
-            const std::uint8_t alpha = static_cast<std::uint8_t>(
+            const float smoothed = radial * radial * (3.0f - (2.0f * radial));
+            const float curved = std::pow(smoothed, exponent);
+            const std::uint8_t value = static_cast<std::uint8_t>(
                 std::clamp(static_cast<int>(std::lround(curved * 255.0f)), 0, 255));
             std::uint8_t* p = row + (x * 4);
-            p[0] = 255;
-            p[1] = 255;
-            p[2] = 255;
-            p[3] = alpha;
+            // Keep color channels tied to radial intensity so custom/additive blend modes still produce
+            // a smooth circular profile without square-edge artifacts.
+            p[0] = value;
+            p[1] = value;
+            p[2] = value;
+            p[3] = value;
         }
     }
     SDL_UnlockTexture(tex);
@@ -1360,12 +1428,22 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
 
             RuntimeLightInstance instance{};
             instance.screen_center = screen;
+            SDL_FPoint floor_screen{};
+            if (cam.project_world_point(SDL_FPoint{resolved->world_exact_pos_2d.x, resolved->world_exact_pos_2d.y},
+                                        0.0f,
+                                        floor_screen) &&
+                std::isfinite(floor_screen.x) &&
+                std::isfinite(floor_screen.y)) {
+                instance.floor_screen_center = floor_screen;
+                instance.has_floor_screen_center = true;
+            }
             instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
             instance.intensity = light.intensity;
             instance.radius_px = radius_px;
             instance.falloff = light.falloff;
             instance.shadow_strength = light.shadow_strength;
             instance.cast_shadows = light.cast_shadows;
+            instance.world_z = resolved->world_exact_z;
             out_lights.push_back(instance);
         }
     }
@@ -1377,42 +1455,187 @@ void SceneRenderer::gather_runtime_occluders(const std::vector<GeometryBatcher::
     out_occluders.reserve(std::min<std::size_t>(draws.size(), 512));
 
     constexpr double kMaxGroundDepth = 900000.0;
-    constexpr float kMinOccluderSize = 8.0f;
+    constexpr float kMinOccluderExtent = 6.0f;
+    constexpr float kMinOccluderArea = 36.0f;
     constexpr std::size_t kMaxOccluders = 512;
     for (const GeometryBatcher::DrawItem& draw : draws) {
         if (!std::isfinite(draw.depth) || draw.depth >= kMaxGroundDepth) {
             continue;
         }
 
+        std::array<SDL_FPoint, 4> quad{};
         float min_x = std::numeric_limits<float>::max();
         float min_y = std::numeric_limits<float>::max();
         float max_x = std::numeric_limits<float>::lowest();
         float max_y = std::numeric_limits<float>::lowest();
-        for (const SDL_Vertex& vertex : draw.vertices) {
-            min_x = std::min(min_x, vertex.position.x);
-            min_y = std::min(min_y, vertex.position.y);
-            max_x = std::max(max_x, vertex.position.x);
-            max_y = std::max(max_y, vertex.position.y);
+        for (int i = 0; i < 4; ++i) {
+            quad[static_cast<std::size_t>(i)] = draw.vertices[i].position;
+            min_x = std::min(min_x, draw.vertices[i].position.x);
+            min_y = std::min(min_y, draw.vertices[i].position.y);
+            max_x = std::max(max_x, draw.vertices[i].position.x);
+            max_y = std::max(max_y, draw.vertices[i].position.y);
         }
         if (!std::isfinite(min_x) || !std::isfinite(min_y) ||
             !std::isfinite(max_x) || !std::isfinite(max_y)) {
             continue;
         }
+        enforce_trapezoid(quad);
+
         const float width = max_x - min_x;
         const float height = max_y - min_y;
-        if (width < kMinOccluderSize || height < kMinOccluderSize) {
+        if (width < kMinOccluderExtent || height < kMinOccluderExtent) {
+            continue;
+        }
+        if (quad_area(quad) < kMinOccluderArea) {
             continue;
         }
 
         RuntimeLightOccluder occluder{};
-        occluder.points[0] = SDL_FPoint{min_x, min_y};
-        occluder.points[1] = SDL_FPoint{max_x, min_y};
-        occluder.points[2] = SDL_FPoint{max_x, max_y};
-        occluder.points[3] = SDL_FPoint{min_x, max_y};
+        occluder.points = quad;
         occluder.center = SDL_FPoint{(min_x + max_x) * 0.5f, (min_y + max_y) * 0.5f};
+        std::array<int, 4> by_y{0, 1, 2, 3};
+        std::sort(by_y.begin(), by_y.end(), [&](int a, int b) {
+            if (quad[static_cast<std::size_t>(a)].y != quad[static_cast<std::size_t>(b)].y) {
+                return quad[static_cast<std::size_t>(a)].y > quad[static_cast<std::size_t>(b)].y;
+            }
+            return quad[static_cast<std::size_t>(a)].x < quad[static_cast<std::size_t>(b)].x;
+        });
+        SDL_FPoint floor_a = quad[static_cast<std::size_t>(by_y[0])];
+        SDL_FPoint floor_b = quad[static_cast<std::size_t>(by_y[1])];
+        if (floor_a.x <= floor_b.x) {
+            occluder.floor_left = floor_a;
+            occluder.floor_right = floor_b;
+        } else {
+            occluder.floor_left = floor_b;
+            occluder.floor_right = floor_a;
+        }
+        occluder.depth = draw.depth;
         out_occluders.push_back(occluder);
         if (out_occluders.size() >= kMaxOccluders) {
             break;
+        }
+    }
+}
+
+void SceneRenderer::append_runtime_shadow_geometry(const std::vector<RuntimeLightInstance>& lights,
+                                                   const std::vector<RuntimeLightOccluder>& occluders) {
+    if (!renderer_ || !geometry_batcher_ || lights.empty() || occluders.empty()) {
+        return;
+    }
+
+    if (!light_white_tex_) {
+        light_white_tex_ = SDL_CreateTexture(
+            renderer_,
+            SDL_PIXELFORMAT_RGBA8888,
+            SDL_TEXTUREACCESS_STREAMING,
+            1,
+            1);
+        if (light_white_tex_) {
+            void* pixels = nullptr;
+            int pitch = 0;
+            if (SDL_LockTexture(light_white_tex_, nullptr, &pixels, &pitch) && pixels && pitch >= 4) {
+                auto* p = static_cast<std::uint8_t*>(pixels);
+                p[0] = 255;
+                p[1] = 255;
+                p[2] = 255;
+                p[3] = 255;
+                SDL_UnlockTexture(light_white_tex_);
+            } else if (light_white_tex_) {
+                SDL_DestroyTexture(light_white_tex_);
+                light_white_tex_ = nullptr;
+            }
+            if (light_white_tex_) {
+                SDL_SetTextureBlendMode(light_white_tex_, SDL_BLENDMODE_BLEND);
+            }
+        }
+    }
+    if (!light_white_tex_) {
+        return;
+    }
+
+    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
+    for (const RuntimeLightInstance& light : lights) {
+        if (!light.cast_shadows || light.shadow_strength <= 0.001f) {
+            continue;
+        }
+        const SDL_FPoint light_floor = light.has_floor_screen_center
+            ? light.floor_screen_center
+            : light.screen_center;
+        const float shadow_height_factor = std::clamp(1.0f + (std::max(0.0f, light.world_z) / 120.0f), 1.0f, 2.75f);
+
+        for (const RuntimeLightOccluder& occluder : occluders) {
+            if (point_inside_convex_quad(occluder.points, light_floor)) {
+                continue;
+            }
+            constexpr float kSelfOccluderSkipRadius = 10.0f;
+            if (min_distance_sq_to_quad_edges(occluder.points, light_floor) <
+                (kSelfOccluderSkipRadius * kSelfOccluderSkipRadius)) {
+                continue;
+            }
+
+            const SDL_FPoint near_left = occluder.floor_left;
+            const SDL_FPoint near_right = occluder.floor_right;
+            const SDL_FPoint seg_center{
+                (near_left.x + near_right.x) * 0.5f,
+                (near_left.y + near_right.y) * 0.5f};
+            const float to_light_x = seg_center.x - light_floor.x;
+            const float to_light_y = seg_center.y - light_floor.y;
+            const float dist_sq = (to_light_x * to_light_x) + (to_light_y * to_light_y);
+            const float max_dist = light.radius_px * 1.4f;
+            if (dist_sq > (max_dist * max_dist) || dist_sq < 1.0f) {
+                continue;
+            }
+            const float dist = std::sqrt(dist_sq);
+            const float atten = std::clamp(1.0f - (dist / max_dist), 0.0f, 1.0f);
+            const Uint8 near_alpha = static_cast<Uint8>(std::clamp(
+                static_cast<int>(std::lround(205.0f * light.shadow_strength * atten)),
+                0,
+                205));
+            if (near_alpha == 0) {
+                continue;
+            }
+
+            const float ray_left_x = near_left.x - light_floor.x;
+            const float ray_left_y = near_left.y - light_floor.y;
+            const float ray_right_x = near_right.x - light_floor.x;
+            const float ray_right_y = near_right.y - light_floor.y;
+            const float ray_left_len = std::sqrt((ray_left_x * ray_left_x) + (ray_left_y * ray_left_y));
+            const float ray_right_len = std::sqrt((ray_right_x * ray_right_x) + (ray_right_y * ray_right_y));
+            if (ray_left_len < 1.0f || ray_right_len < 1.0f) {
+                continue;
+            }
+
+            const float extrusion = std::max(light.radius_px * (0.95f * shadow_height_factor), 28.0f);
+            const SDL_FPoint far_left{
+                near_left.x + ((ray_left_x / ray_left_len) * extrusion),
+                near_left.y + ((ray_left_y / ray_left_len) * extrusion)};
+            const SDL_FPoint far_right{
+                near_right.x + ((ray_right_x / ray_right_len) * extrusion),
+                near_right.y + ((ray_right_y / ray_right_len) * extrusion)};
+
+            SDL_Vertex shadow_quad[4]{};
+            shadow_quad[0].position = near_left;
+            shadow_quad[1].position = near_right;
+            shadow_quad[2].position = far_right;
+            shadow_quad[3].position = far_left;
+            shadow_quad[0].color = SDL_FColor{0.0f, 0.0f, 0.0f, static_cast<float>(near_alpha) / 255.0f};
+            shadow_quad[1].color = SDL_FColor{0.0f, 0.0f, 0.0f, static_cast<float>(near_alpha) / 255.0f};
+            shadow_quad[2].color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
+            shadow_quad[3].color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
+            shadow_quad[0].tex_coord = SDL_FPoint{0.0f, 0.0f};
+            shadow_quad[1].tex_coord = SDL_FPoint{1.0f, 0.0f};
+            shadow_quad[2].tex_coord = SDL_FPoint{1.0f, 1.0f};
+            shadow_quad[3].tex_coord = SDL_FPoint{0.0f, 1.0f};
+
+            const double shadow_depth = std::isfinite(occluder.depth)
+                ? (occluder.depth + 0.0005)
+                : std::numeric_limits<double>::lowest();
+            geometry_batcher_->addQuad(
+                light_white_tex_,
+                shadow_quad,
+                kQuadIndices,
+                SDL_BLENDMODE_BLEND,
+                shadow_depth);
         }
     }
 }
@@ -1423,6 +1646,7 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
     if (!renderer_ || !gameplay_target || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
+    (void)occluders;
 
     auto create_target_texture = [&](int w, int h) -> SDL_Texture* {
         SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
@@ -1462,15 +1686,9 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
         const int pass_count = std::clamp(static_cast<int>(std::ceil(light.intensity)), 1, 4);
         const float per_pass = std::max(0.0f, light.intensity) / static_cast<float>(pass_count);
         const Uint8 alpha = static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(per_pass * 255.0f)), 0, 255));
-        const Uint8 color_r = static_cast<Uint8>(std::clamp(static_cast<int>(
-            std::lround(static_cast<float>(light.color.r) * std::min(1.0f, per_pass))), 0, 255));
-        const Uint8 color_g = static_cast<Uint8>(std::clamp(static_cast<int>(
-            std::lround(static_cast<float>(light.color.g) * std::min(1.0f, per_pass))), 0, 255));
-        const Uint8 color_b = static_cast<Uint8>(std::clamp(static_cast<int>(
-            std::lround(static_cast<float>(light.color.b) * std::min(1.0f, per_pass))), 0, 255));
 
         SDL_SetTextureBlendMode(falloff_tex, SDL_BLENDMODE_ADD);
-        SDL_SetTextureColorMod(falloff_tex, color_r, color_g, color_b);
+        SDL_SetTextureColorMod(falloff_tex, light.color.r, light.color.g, light.color.b);
         SDL_SetTextureAlphaMod(falloff_tex, alpha);
 
         const float radius = std::max(4.0f, light.radius_px);
@@ -1482,57 +1700,6 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
         };
         for (int pass = 0; pass < pass_count; ++pass) {
             SDL_RenderTexture(renderer_, falloff_tex, nullptr, &light_dst);
-        }
-
-        if (light.cast_shadows && light.shadow_strength > 0.001f && !occluders.empty()) {
-            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-            for (const RuntimeLightOccluder& occluder : occluders) {
-                const float dx = occluder.center.x - light.screen_center.x;
-                const float dy = occluder.center.y - light.screen_center.y;
-                const float dist_sq = (dx * dx) + (dy * dy);
-                const float max_dist = light.radius_px * 1.5f;
-                if (dist_sq > max_dist * max_dist || dist_sq < 1.0f) {
-                    continue;
-                }
-                const float dist = std::sqrt(dist_sq);
-                const float inv_dist = 1.0f / dist;
-                const SDL_FPoint dir{dx * inv_dist, dy * inv_dist};
-                const SDL_FPoint perp{-dir.y, dir.x};
-                const float occluder_width = std::max(
-                    std::fabs(occluder.points[1].x - occluder.points[0].x),
-                    std::fabs(occluder.points[2].y - occluder.points[1].y));
-                const float half_width = std::clamp(occluder_width * 0.5f, 6.0f, 128.0f);
-                const float extrusion = std::max(light.radius_px * 1.35f, 32.0f);
-                const float atten = std::clamp(1.0f - (dist / max_dist), 0.0f, 1.0f);
-                const Uint8 shadow_alpha = static_cast<Uint8>(
-                    std::clamp(static_cast<int>(std::lround(255.0f * light.shadow_strength * atten)), 0, 255));
-                if (shadow_alpha == 0) {
-                    continue;
-                }
-
-                SDL_Vertex shadow_quad[4]{};
-                const SDL_FPoint near_left{
-                    occluder.center.x - (perp.x * half_width),
-                    occluder.center.y - (perp.y * half_width)};
-                const SDL_FPoint near_right{
-                    occluder.center.x + (perp.x * half_width),
-                    occluder.center.y + (perp.y * half_width)};
-                const SDL_FPoint far_right{
-                    near_right.x + (dir.x * extrusion),
-                    near_right.y + (dir.y * extrusion)};
-                const SDL_FPoint far_left{
-                    near_left.x + (dir.x * extrusion),
-                    near_left.y + (dir.y * extrusion)};
-                shadow_quad[0].position = near_left;
-                shadow_quad[1].position = near_right;
-                shadow_quad[2].position = far_right;
-                shadow_quad[3].position = far_left;
-                for (SDL_Vertex& vertex : shadow_quad) {
-                    vertex.color = SDL_FColor{0.0f, 0.0f, 0.0f, static_cast<float>(shadow_alpha) / 255.0f};
-                    vertex.tex_coord = SDL_FPoint{0.0f, 0.0f};
-                }
-                SDL_RenderGeometry(renderer_, nullptr, shadow_quad, 4, kQuadIndices, 6);
-            }
         }
     }
 
@@ -2001,6 +2168,7 @@ void SceneRenderer::render() {
             light_draws.push_back(item);
         });
         gather_runtime_occluders(light_draws, runtime_occluders);
+        append_runtime_shadow_geometry(runtime_lights, runtime_occluders);
     }
 
     if (depth_of_field_enabled) {

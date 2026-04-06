@@ -115,7 +115,6 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     flip_vertical_checkbox_ = std::make_unique<DMCheckbox>("Flip Vertical", true);
     resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
     scaling_method_dropdown_ = std::make_unique<DMDropdown>("Scaling Method", scaling_method_options(), 0);
-    light_attachment_checkbox_ = std::make_unique<DMCheckbox>("Light Attachment", false);
     light_enabled_checkbox_ = std::make_unique<DMCheckbox>("Light Enabled", true);
     light_color_r_textbox_ = std::make_unique<DMTextBox>("Color R", "255");
     light_color_g_textbox_ = std::make_unique<DMTextBox>("Color G", "236");
@@ -246,9 +245,6 @@ void RoomAnchorToolsPanel::set_light_editor_mode(bool enabled) {
 }
 
 void RoomAnchorToolsPanel::set_light_values(const LightValues& values) {
-    if (light_attachment_checkbox_) {
-        light_attachment_checkbox_->set_value(values.has_light_data);
-    }
     if (light_enabled_checkbox_) {
         light_enabled_checkbox_->set_value(values.enabled);
     }
@@ -345,7 +341,7 @@ RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values()
 
 RoomAnchorToolsPanel::LightValues RoomAnchorToolsPanel::collect_light_values() const {
     LightValues values{};
-    values.has_light_data = light_attachment_checkbox_ ? light_attachment_checkbox_->value() : false;
+    values.has_light_data = light_editor_mode_;
     values.enabled = light_enabled_checkbox_ ? light_enabled_checkbox_->value() : false;
     values.color_r = std::clamp(parse_int_or(light_color_r_textbox_ ? light_color_r_textbox_->value() : "255", 255), 0, 255);
     values.color_g = std::clamp(parse_int_or(light_color_g_textbox_ ? light_color_g_textbox_->value() : "236", 236), 0, 255);
@@ -382,7 +378,11 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         sdl_mouse_util::GetMouseState(&pointer_x, &pointer_y);
     }
 
-    const bool pointer_inside_panel = point_in_rect(pointer_x, pointer_y, panel_rect_);
+    const bool pointer_inside_anchor_panel = point_in_rect(pointer_x, pointer_y, panel_rect_);
+    const bool pointer_inside_light_panel =
+        light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0 &&
+        point_in_rect(pointer_x, pointer_y, light_panel_rect_);
+    const bool pointer_inside_panel = pointer_inside_anchor_panel || pointer_inside_light_panel;
     bool handled = false;
 
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
@@ -520,47 +520,40 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
 
     bool light_changed = false;
     const bool light_controls_visible = light_editor_mode_ && has_selected_anchor;
-    const bool has_light_attachment =
-        light_controls_visible && light_attachment_checkbox_ && light_attachment_checkbox_->value();
-    if (light_controls_visible && light_attachment_checkbox_ && light_attachment_checkbox_->handle_event(event)) {
-        handled = true;
-        light_changed = true;
-        layout_dirty_ = true;
-    }
     if (light_controls_visible && light_enabled_checkbox_ && light_enabled_checkbox_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_color_r_textbox_ && light_color_r_textbox_->handle_event(event)) {
+    if (light_controls_visible && light_color_r_textbox_ && light_color_r_textbox_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_color_g_textbox_ && light_color_g_textbox_->handle_event(event)) {
+    if (light_controls_visible && light_color_g_textbox_ && light_color_g_textbox_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_color_b_textbox_ && light_color_b_textbox_->handle_event(event)) {
+    if (light_controls_visible && light_color_b_textbox_ && light_color_b_textbox_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_intensity_slider_ && light_intensity_slider_->handle_event(event)) {
+    if (light_controls_visible && light_intensity_slider_ && light_intensity_slider_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_radius_slider_ && light_radius_slider_->handle_event(event)) {
+    if (light_controls_visible && light_radius_slider_ && light_radius_slider_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_falloff_slider_ && light_falloff_slider_->handle_event(event)) {
+    if (light_controls_visible && light_falloff_slider_ && light_falloff_slider_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_shadow_strength_slider_ &&
+    if (light_controls_visible && light_shadow_strength_slider_ &&
         light_shadow_strength_slider_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
-    if (has_light_attachment && light_cast_shadows_checkbox_ &&
+    if (light_controls_visible && light_cast_shadows_checkbox_ &&
         light_cast_shadows_checkbox_->handle_event(event)) {
         handled = true;
         light_changed = true;
@@ -650,6 +643,26 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                                       header_rect_.x,
                                       header_rect_.y);
 
+    if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0) {
+        const SDL_Color light_bg = DMStyles::PanelBG();
+        dm_draw::DrawBeveledRect(renderer,
+                                 light_panel_rect_,
+                                 DMStyles::CornerRadius(),
+                                 DMStyles::BevelDepth(),
+                                 light_bg,
+                                 DMStyles::HighlightColor(),
+                                 DMStyles::ShadowColor(),
+                                 false,
+                                 DMStyles::HighlightIntensity(),
+                                 DMStyles::ShadowIntensity());
+        dm_draw::DrawRoundedOutline(renderer, light_panel_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
+        DMFontCache::instance().draw_text(renderer,
+                                          label_style,
+                                          "Light Tools",
+                                          light_header_rect_.x,
+                                          light_header_rect_.y);
+    }
+
     SDL_SetRenderDrawColor(renderer, 20, 24, 30, 180);
     sdl_render::FillRect(renderer, &list_clip_rect_);
     dm_draw::DrawRoundedOutline(renderer, list_clip_rect_, 4, 1, DMStyles::Border());
@@ -737,38 +750,32 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                 dm_draw::DrawRoundedOutline(renderer, light_card_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
             }
             DMFontCache::instance().draw_text(renderer, label_style, "Light Attachment", light_title_rect_.x, light_title_rect_.y);
-            if (light_attachment_checkbox_) {
-                light_attachment_checkbox_->render(renderer);
+            if (light_enabled_checkbox_) {
+                light_enabled_checkbox_->render(renderer);
             }
-            const bool has_light_attachment = light_attachment_checkbox_ && light_attachment_checkbox_->value();
-            if (has_light_attachment) {
-                if (light_enabled_checkbox_) {
-                    light_enabled_checkbox_->render(renderer);
-                }
-                if (light_color_r_textbox_) {
-                    light_color_r_textbox_->render(renderer);
-                }
-                if (light_color_g_textbox_) {
-                    light_color_g_textbox_->render(renderer);
-                }
-                if (light_color_b_textbox_) {
-                    light_color_b_textbox_->render(renderer);
-                }
-                if (light_intensity_slider_) {
-                    light_intensity_slider_->render(renderer);
-                }
-                if (light_radius_slider_) {
-                    light_radius_slider_->render(renderer);
-                }
-                if (light_falloff_slider_) {
-                    light_falloff_slider_->render(renderer);
-                }
-                if (light_shadow_strength_slider_) {
-                    light_shadow_strength_slider_->render(renderer);
-                }
-                if (light_cast_shadows_checkbox_) {
-                    light_cast_shadows_checkbox_->render(renderer);
-                }
+            if (light_color_r_textbox_) {
+                light_color_r_textbox_->render(renderer);
+            }
+            if (light_color_g_textbox_) {
+                light_color_g_textbox_->render(renderer);
+            }
+            if (light_color_b_textbox_) {
+                light_color_b_textbox_->render(renderer);
+            }
+            if (light_intensity_slider_) {
+                light_intensity_slider_->render(renderer);
+            }
+            if (light_radius_slider_) {
+                light_radius_slider_->render(renderer);
+            }
+            if (light_falloff_slider_) {
+                light_falloff_slider_->render(renderer);
+            }
+            if (light_shadow_strength_slider_) {
+                light_shadow_strength_slider_->render(renderer);
+            }
+            if (light_cast_shadows_checkbox_) {
+                light_cast_shadows_checkbox_->render(renderer);
             }
         }
     }
@@ -791,7 +798,11 @@ bool RoomAnchorToolsPanel::is_point_inside(int x, int y) const {
         return false;
     }
     const_cast<RoomAnchorToolsPanel*>(this)->update_layout();
-    return point_in_rect(x, y, panel_rect_);
+    const bool inside_anchor = point_in_rect(x, y, panel_rect_);
+    const bool inside_light =
+        light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0 &&
+        point_in_rect(x, y, light_panel_rect_);
+    return inside_anchor || inside_light;
 }
 
 void RoomAnchorToolsPanel::update_layout() const {
@@ -811,10 +822,24 @@ void RoomAnchorToolsPanel::update_layout() const {
         panel_rect_ = SDL_Rect{kPanelMargin, kTopOffset, panel_w, panel_h};
     }
 
+    light_panel_rect_ = SDL_Rect{0, 0, 0, 0};
+    if (light_editor_mode_) {
+        int light_panel_x = panel_rect_.x + panel_rect_.w + kPanelMargin;
+        if (light_panel_x + panel_rect_.w > safe_w - kPanelMargin) {
+            light_panel_x = std::max(kPanelMargin, safe_w - panel_rect_.w - kPanelMargin);
+        }
+        light_panel_rect_ = SDL_Rect{light_panel_x, panel_rect_.y, panel_rect_.w, panel_rect_.h};
+    }
+
     header_rect_ = SDL_Rect{
         panel_rect_.x + kPanelPadding,
         panel_rect_.y + kPanelPadding,
         std::max(0, panel_rect_.w - kPanelPadding * 2),
+        kHeaderHeight};
+    light_header_rect_ = SDL_Rect{
+        light_panel_rect_.x + kPanelPadding,
+        light_panel_rect_.y + kPanelPadding,
+        std::max(0, light_panel_rect_.w - kPanelPadding * 2),
         kHeaderHeight};
 
     const int list_top = header_rect_.y + header_rect_.h + kSectionGap;
@@ -832,17 +857,24 @@ void RoomAnchorToolsPanel::update_layout() const {
         scaling_method_dropdown_ ? scaling_method_dropdown_->preferred_height(controls_width) : DMDropdown::height();
     const int rotation_h = rotation_slider_ ? rotation_slider_->preferred_height(controls_width) : DMSlider::height();
     const int hidden_h = hidden_checkbox_ ? DMCheckbox::height() : 0;
-    const int light_attachment_h = light_attachment_checkbox_ ? DMCheckbox::height() : 0;
     const int light_enabled_h = light_enabled_checkbox_ ? DMCheckbox::height() : 0;
-    const int light_color_h = light_color_r_textbox_ ? light_color_r_textbox_->preferred_height(controls_width) : DMTextBox::height();
-    const int light_intensity_h = light_intensity_slider_ ? light_intensity_slider_->preferred_height(controls_width) : DMSlider::height();
-    const int light_radius_h = light_radius_slider_ ? light_radius_slider_->preferred_height(controls_width) : DMSlider::height();
-    const int light_falloff_h = light_falloff_slider_ ? light_falloff_slider_->preferred_height(controls_width) : DMSlider::height();
+    const int light_panel_controls_width = std::max(0, light_panel_rect_.w - kPanelPadding * 2);
+    const int light_color_h = light_color_r_textbox_
+        ? light_color_r_textbox_->preferred_height(light_panel_controls_width)
+        : DMTextBox::height();
+    const int light_intensity_h = light_intensity_slider_
+        ? light_intensity_slider_->preferred_height(light_panel_controls_width)
+        : DMSlider::height();
+    const int light_radius_h = light_radius_slider_
+        ? light_radius_slider_->preferred_height(light_panel_controls_width)
+        : DMSlider::height();
+    const int light_falloff_h = light_falloff_slider_
+        ? light_falloff_slider_->preferred_height(light_panel_controls_width)
+        : DMSlider::height();
     const int light_shadow_h = light_shadow_strength_slider_
-        ? light_shadow_strength_slider_->preferred_height(controls_width)
+        ? light_shadow_strength_slider_->preferred_height(light_panel_controls_width)
         : DMSlider::height();
     const int light_cast_h = light_cast_shadows_checkbox_ ? DMCheckbox::height() : 0;
-    const bool has_light_attachment = light_attachment_checkbox_ ? light_attachment_checkbox_->value() : false;
     int controls_height = 0;
     controls_height += DMButton::height();                          // add
     controls_height += kSectionGap;
@@ -867,29 +899,6 @@ void RoomAnchorToolsPanel::update_layout() const {
             controls_height += flips_height;
             controls_height += row_gap;
             controls_height += scaling_method_h;
-        }
-        if (light_editor_mode_) {
-            controls_height += row_gap;
-            controls_height += kLineHeight;
-            controls_height += row_gap;
-            controls_height += light_attachment_h;
-            controls_height += row_gap;
-            if (has_light_attachment) {
-                controls_height += light_enabled_h;
-                controls_height += row_gap;
-                controls_height += light_color_h;
-                controls_height += row_gap;
-                controls_height += light_intensity_h;
-                controls_height += row_gap;
-                controls_height += light_radius_h;
-                controls_height += row_gap;
-                controls_height += light_falloff_h;
-                controls_height += row_gap;
-                controls_height += light_shadow_h;
-                controls_height += row_gap;
-                controls_height += light_cast_h;
-            }
-            controls_height += kSectionGap;
         }
         controls_height += kSectionGap;
     }
@@ -1015,130 +1024,6 @@ void RoomAnchorToolsPanel::update_layout() const {
         card_bottom = std::min(panel_rect_.y + panel_rect_.h - kPanelPadding, card_bottom);
         advanced_card_rect_ = SDL_Rect{controls_x, card_top, controls_width, std::max(0, card_bottom - card_top)};
         row_y += kSectionGap;
-
-        if (light_editor_mode_) {
-            light_title_rect_ = SDL_Rect{controls_x, row_y, controls_width, kLineHeight};
-            row_y += kLineHeight + row_gap;
-
-            int light_card_top = row_y;
-            if (light_attachment_checkbox_) {
-                light_attachment_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, light_attachment_h});
-                row_y += light_attachment_h + row_gap;
-            }
-
-            const bool attachment_enabled = light_attachment_checkbox_ ? light_attachment_checkbox_->value() : false;
-            if (attachment_enabled) {
-                if (light_enabled_checkbox_) {
-                    light_enabled_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, light_enabled_h});
-                    row_y += light_enabled_h + row_gap;
-                }
-
-                const int split_width = std::max(0, controls_width - (kColorTextboxGap * 2));
-                const int col_width = split_width / 3;
-                const int color_mid_x = controls_x + col_width + kColorTextboxGap;
-                const int color_right_w = std::max(0, controls_width - (col_width * 2) - (kColorTextboxGap * 2));
-                if (light_color_r_textbox_) {
-                    light_color_r_textbox_->set_rect(SDL_Rect{controls_x, row_y, col_width, light_color_h});
-                }
-                if (light_color_g_textbox_) {
-                    light_color_g_textbox_->set_rect(SDL_Rect{color_mid_x, row_y, col_width, light_color_h});
-                }
-                if (light_color_b_textbox_) {
-                    light_color_b_textbox_->set_rect(
-                        SDL_Rect{color_mid_x + col_width + kColorTextboxGap, row_y, color_right_w, light_color_h});
-                }
-                row_y += light_color_h + row_gap;
-
-                if (light_intensity_slider_) {
-                    light_intensity_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, light_intensity_h});
-                    row_y += light_intensity_h + row_gap;
-                }
-                if (light_radius_slider_) {
-                    light_radius_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, light_radius_h});
-                    row_y += light_radius_h + row_gap;
-                }
-                if (light_falloff_slider_) {
-                    light_falloff_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, light_falloff_h});
-                    row_y += light_falloff_h + row_gap;
-                }
-                if (light_shadow_strength_slider_) {
-                    light_shadow_strength_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, light_shadow_h});
-                    row_y += light_shadow_h + row_gap;
-                }
-                if (light_cast_shadows_checkbox_) {
-                    light_cast_shadows_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, light_cast_h});
-                    row_y += light_cast_h;
-                }
-            } else {
-                if (light_enabled_checkbox_) {
-                    light_enabled_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_color_r_textbox_) {
-                    light_color_r_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_color_g_textbox_) {
-                    light_color_g_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_color_b_textbox_) {
-                    light_color_b_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_intensity_slider_) {
-                    light_intensity_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_radius_slider_) {
-                    light_radius_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_falloff_slider_) {
-                    light_falloff_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_shadow_strength_slider_) {
-                    light_shadow_strength_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-                if (light_cast_shadows_checkbox_) {
-                    light_cast_shadows_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-                }
-            }
-
-            const int light_card_bottom = std::max(light_card_top + light_attachment_h, row_y);
-            const int card_top_y = std::max(panel_rect_.y + kPanelPadding, light_card_top - kLightCardPadding);
-            const int card_bottom_y = std::min(panel_rect_.y + panel_rect_.h - kPanelPadding,
-                                               light_card_bottom + kLightCardPadding);
-            light_card_rect_ = SDL_Rect{controls_x, card_top_y, controls_width, std::max(0, card_bottom_y - card_top_y)};
-            row_y += kSectionGap;
-        } else {
-            light_title_rect_ = SDL_Rect{0, 0, 0, 0};
-            light_card_rect_ = SDL_Rect{0, 0, 0, 0};
-            if (light_attachment_checkbox_) {
-                light_attachment_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_enabled_checkbox_) {
-                light_enabled_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_color_r_textbox_) {
-                light_color_r_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_color_g_textbox_) {
-                light_color_g_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_color_b_textbox_) {
-                light_color_b_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_intensity_slider_) {
-                light_intensity_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_radius_slider_) {
-                light_radius_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_falloff_slider_) {
-                light_falloff_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_shadow_strength_slider_) {
-                light_shadow_strength_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-            if (light_cast_shadows_checkbox_) {
-                light_cast_shadows_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-        }
     } else {
         detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
         if (depth_textbox_) {
@@ -1166,11 +1051,69 @@ void RoomAnchorToolsPanel::update_layout() const {
             scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         advanced_card_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
+
+    if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0 && has_selected_anchor) {
+        const int light_controls_x = light_panel_rect_.x + kPanelPadding;
+        const int light_controls_w = std::max(0, light_panel_rect_.w - kPanelPadding * 2);
+        int light_row_y = light_header_rect_.y + light_header_rect_.h + kSectionGap;
+        light_title_rect_ = SDL_Rect{light_controls_x, light_row_y, light_controls_w, kLineHeight};
+        light_row_y += kLineHeight + row_gap;
+
+        const int light_card_top = light_row_y;
+        if (light_enabled_checkbox_) {
+            light_enabled_checkbox_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_enabled_h});
+            light_row_y += light_enabled_h + row_gap;
+        }
+
+        const int split_width = std::max(0, light_controls_w - (kColorTextboxGap * 2));
+        const int col_width = split_width / 3;
+        const int color_mid_x = light_controls_x + col_width + kColorTextboxGap;
+        const int color_right_w = std::max(0, light_controls_w - (col_width * 2) - (kColorTextboxGap * 2));
+        if (light_color_r_textbox_) {
+            light_color_r_textbox_->set_rect(SDL_Rect{light_controls_x, light_row_y, col_width, light_color_h});
+        }
+        if (light_color_g_textbox_) {
+            light_color_g_textbox_->set_rect(SDL_Rect{color_mid_x, light_row_y, col_width, light_color_h});
+        }
+        if (light_color_b_textbox_) {
+            light_color_b_textbox_->set_rect(
+                SDL_Rect{color_mid_x + col_width + kColorTextboxGap, light_row_y, color_right_w, light_color_h});
+        }
+        light_row_y += light_color_h + row_gap;
+
+        if (light_intensity_slider_) {
+            light_intensity_slider_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_intensity_h});
+            light_row_y += light_intensity_h + row_gap;
+        }
+        if (light_radius_slider_) {
+            light_radius_slider_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_radius_h});
+            light_row_y += light_radius_h + row_gap;
+        }
+        if (light_falloff_slider_) {
+            light_falloff_slider_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_falloff_h});
+            light_row_y += light_falloff_h + row_gap;
+        }
+        if (light_shadow_strength_slider_) {
+            light_shadow_strength_slider_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_shadow_h});
+            light_row_y += light_shadow_h + row_gap;
+        }
+        if (light_cast_shadows_checkbox_) {
+            light_cast_shadows_checkbox_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_cast_h});
+            light_row_y += light_cast_h;
+        }
+
+        const int card_top_y = std::max(light_panel_rect_.y + kPanelPadding, light_card_top - kLightCardPadding);
+        const int card_bottom_y = std::min(light_panel_rect_.y + light_panel_rect_.h - kPanelPadding,
+                                           light_row_y + kLightCardPadding);
+        light_card_rect_ = SDL_Rect{
+            light_controls_x,
+            card_top_y,
+            light_controls_w,
+            std::max(0, card_bottom_y - card_top_y)};
+    } else {
         light_title_rect_ = SDL_Rect{0, 0, 0, 0};
         light_card_rect_ = SDL_Rect{0, 0, 0, 0};
-        if (light_attachment_checkbox_) {
-            light_attachment_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
         if (light_enabled_checkbox_) {
             light_enabled_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }

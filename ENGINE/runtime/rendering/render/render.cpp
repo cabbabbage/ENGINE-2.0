@@ -51,7 +51,7 @@ constexpr int kMotionBlurHistoryFrameCount = 2;
 constexpr std::array<Uint8, kMotionBlurHistoryFrameCount> kMotionBlurHistoryAlpha = {120, 60};
 constexpr bool kSceneMotionBlurEnabled = false;
 // Temporary kill-switch for runtime casted shadows. Flip to true to re-enable.
-constexpr bool kRuntimeCastedShadowsEnabled = false;
+constexpr bool kRuntimeCastedShadowsEnabled = true;
 
 inline std::int64_t quantize_depth(double depth) {
     const double scaled = std::floor(depth * kDepthBucketScale);

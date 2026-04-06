@@ -530,6 +530,7 @@ void CandidateEditorPieGraphWidget::show_search(const SDL_Rect& anchor_rect,
                                                 std::function<void(const std::string&)> on_select) {
     (void)anchor_rect;
     ensure_search_created();
+    flush_pending_adjustment();
     hovered_index_ = -1;
     active_index_ = -1;
     release_scroll_capture();

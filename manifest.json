@@ -1652,7 +1652,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 189.0
+        "scale_percentage": 103.0
       },
       "start": "default",
       "tags": [
@@ -1702,7 +1702,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 205.0
+        "scale_percentage": 112.0
       },
       "start": "default",
       "tags": [
@@ -1752,7 +1752,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 42.0
+        "scale_percentage": 22.0
       },
       "start": "default",
       "tags": [
@@ -1802,7 +1802,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 52.0
+        "scale_percentage": 27.0
       },
       "start": "default",
       "tags": [
@@ -5935,13 +5935,41 @@
           }
         },
         {
+          "anchor_point_name": "hat",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "vibble_hat"
+              }
+            ]
+          }
+        },
+        {
           "anchor_point_name": "hat_oval_center",
           "candidates": {
             "candidates": []
           }
         },
         {
+          "anchor_point_name": "mouth",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "vibble_mouth"
+              }
+            ]
+          }
+        },
+        {
           "anchor_point_name": "mouth_oval_center",
+          "candidates": {
+            "candidates": []
+          }
+        },
+        {
+          "anchor_point_name": "neck",
           "candidates": {
             "candidates": []
           }
@@ -5953,9 +5981,31 @@
           }
         },
         {
+          "anchor_point_name": "oval",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "vibble_eyes"
+              }
+            ]
+          }
+        },
+        {
           "anchor_point_name": "oval_oval_center",
           "candidates": {
             "candidates": []
+          }
+        },
+        {
+          "anchor_point_name": "weapon",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "vibble_attack_1"
+              }
+            ]
           }
         },
         {
@@ -5990,8 +6040,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6002,8 +6052,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6035,7 +6085,7 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
@@ -6127,7 +6177,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6147,8 +6197,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6159,8 +6209,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6192,29 +6242,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6234,8 +6284,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6246,8 +6296,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6279,29 +6329,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6321,8 +6371,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6333,8 +6383,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6366,29 +6416,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6408,8 +6458,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6420,8 +6470,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6453,29 +6503,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6495,8 +6545,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6507,8 +6557,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6540,29 +6590,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6582,8 +6632,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6594,8 +6644,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6627,29 +6677,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6669,8 +6719,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6681,8 +6731,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6714,29 +6764,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -6756,8 +6806,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -6768,8 +6818,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -6801,24 +6851,24 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ]
           ],
@@ -7233,7 +7283,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7253,8 +7303,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7265,8 +7315,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7298,29 +7348,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7340,8 +7390,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7352,8 +7402,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7385,29 +7435,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7427,8 +7477,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7439,8 +7489,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7472,29 +7522,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7514,8 +7564,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7526,8 +7576,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7559,29 +7609,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7601,8 +7651,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7613,8 +7663,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7646,29 +7696,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7688,8 +7738,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7700,8 +7750,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7733,29 +7783,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7775,8 +7825,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7787,8 +7837,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7820,29 +7870,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -7862,8 +7912,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -7874,8 +7924,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -7907,24 +7957,24 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ]
           ],
@@ -8330,7 +8380,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8350,8 +8400,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8362,8 +8412,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -8395,29 +8445,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8437,8 +8487,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8449,8 +8499,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -8482,29 +8532,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8524,8 +8574,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8536,8 +8586,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -8569,29 +8619,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8611,8 +8661,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8623,8 +8673,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -8656,29 +8706,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8698,8 +8748,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8710,8 +8760,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -8743,29 +8793,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8785,8 +8835,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8797,8 +8847,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -8830,29 +8880,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8872,8 +8922,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8884,8 +8934,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -8917,29 +8967,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -8959,8 +9009,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -8971,8 +9021,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -9004,24 +9054,24 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ]
           ],
@@ -9427,7 +9477,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9447,8 +9497,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -9459,8 +9509,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -9492,29 +9542,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9534,8 +9584,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -9546,8 +9596,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -9579,29 +9629,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9621,8 +9671,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -9633,8 +9683,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -9666,29 +9716,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9708,8 +9758,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -9720,8 +9770,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -9753,29 +9803,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9795,8 +9845,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -9807,8 +9857,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -9840,29 +9890,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9882,8 +9932,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -9894,8 +9944,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -9927,29 +9977,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -9969,8 +10019,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -9981,8 +10031,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -10014,29 +10064,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -10056,8 +10106,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -10068,8 +10118,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -10101,24 +10151,24 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ]
           ],
@@ -11053,7 +11103,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11061,8 +11111,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11073,8 +11123,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11085,8 +11135,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11118,29 +11168,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11148,8 +11198,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11160,8 +11210,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11172,8 +11222,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11205,29 +11255,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11235,8 +11285,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11247,8 +11297,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11259,8 +11309,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11292,29 +11342,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11322,8 +11372,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11334,8 +11384,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11346,8 +11396,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11379,29 +11429,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11409,8 +11459,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11421,8 +11471,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11433,8 +11483,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11466,29 +11516,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11496,8 +11546,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11508,8 +11558,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11520,8 +11570,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11553,29 +11603,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11583,8 +11633,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11595,8 +11645,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11607,8 +11657,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11640,29 +11690,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.8999994993209839,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11670,8 +11720,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 198,
-                "texture_y": 131
+                "texture_x": 224,
+                "texture_y": 137
               },
               {
                 "depth_offset": 0.0,
@@ -11682,8 +11732,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11694,8 +11744,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11727,24 +11777,24 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ]
           ],
@@ -11880,7 +11930,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11900,8 +11950,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11912,8 +11962,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -11945,29 +11995,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -11987,8 +12037,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -11999,8 +12049,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -12032,29 +12082,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12074,8 +12124,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -12086,8 +12136,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -12119,29 +12169,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12161,8 +12211,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -12173,8 +12223,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -12206,29 +12256,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12248,8 +12298,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -12260,8 +12310,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -12293,29 +12343,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12335,8 +12385,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -12347,8 +12397,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -12380,29 +12430,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12422,8 +12472,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -12434,8 +12484,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -12467,29 +12517,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -12509,8 +12559,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -12521,8 +12571,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -12554,24 +12604,24 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ]
           ],
@@ -12986,7 +13036,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13006,8 +13056,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13018,8 +13068,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13051,29 +13101,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13093,8 +13143,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13105,8 +13155,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13138,29 +13188,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13180,8 +13230,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13192,8 +13242,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13225,29 +13275,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13267,8 +13317,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13279,8 +13329,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13312,29 +13362,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13354,8 +13404,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13366,8 +13416,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13399,29 +13449,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13441,8 +13491,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13453,8 +13503,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13486,29 +13536,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13528,8 +13578,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13540,8 +13590,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13573,29 +13623,29 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ],
             [
               {
-                "depth_offset": -1.2999995946884155,
+                "depth_offset": -1.5999996662139893,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -13615,8 +13665,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 193,
+                "texture_y": 158
               },
               {
                 "depth_offset": 0.0,
@@ -13627,8 +13677,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 192,
+                "texture_y": 151
               },
               {
                 "depth_offset": -0.6000000238418579,
@@ -13660,24 +13710,24 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     196
                   ],
                   "enabled": true,
-                  "falloff": 0.9700000286102295,
-                  "intensity": 1.0,
-                  "radius": 1306.0,
-                  "shadow_strength": 1.0
+                  "falloff": 2.7699999809265137,
+                  "intensity": 0.9800000190734863,
+                  "radius": 2780.0,
+                  "shadow_strength": 0.4399999976158142
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 173
+                "texture_y": 154
               }
             ]
           ],
@@ -14298,7 +14348,7 @@
               "texture_y": -17
             }
           ],
-          "radius_offset_degrees": 0.0,
+          "radius_offset_degrees": 26.0,
           "width_radius_x": 48.0
         },
         {
@@ -15089,12 +15139,12 @@
         "boundary_min_visible_screen_ratio": 0.018000001087784767,
         "camera_height_max_px": 100000,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "focal_length_mm": 10.110000610351563,
         "layer_depth_curve": 8.0,
         "layer_depth_interval": 550.0,
         "max_blur_px": 30.25,
-        "max_cull_depth": 7960.0,
+        "max_cull_depth": 6952.0,
         "min_visible_screen_ratio": 0.010000000707805157
       },
       "content_root": "content/forrest",
@@ -15125,6 +15175,14 @@
               {
                 "chance": 0,
                 "name": "#tree"
+              },
+              {
+                "chance": 16,
+                "name": "fog_3"
+              },
+              {
+                "chance": 10.2,
+                "name": "fog_4"
               }
             ],
             "display_name": "batch_map_assets",
@@ -15132,7 +15190,7 @@
             "execution_mode": "batch_grid",
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 7,
+            "grid_resolution": 6,
             "jitter": 0,
             "locked": false,
             "max_number": 1,
@@ -15152,24 +15210,16 @@
           {
             "candidates": [
               {
-                "chance": 3.55,
+                "chance": 4.55,
                 "name": "#tree"
               },
               {
-                "chance": 4,
+                "chance": 1,
                 "name": "null"
               },
               {
-                "chance": 6.0275,
-                "name": "#tree"
-              },
-              {
-                "chance": 4.0275,
-                "name": "#tree"
-              },
-              {
-                "chance": 6.301375,
-                "name": "tree_dark"
+                "chance": 3.2,
+                "name": "fog_1"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -15191,10 +15241,6 @@
           },
           {
             "candidates": [
-              {
-                "chance": 5,
-                "name": "big_rock"
-              },
               {
                 "chance": 0,
                 "name": "null"
@@ -15226,41 +15272,15 @@
           {
             "candidates": [
               {
-                "chance": 3,
-                "name": "grass_fps_2"
-              },
-              {
-                "chance": 0,
-                "name": "null"
-              }
-            ],
-            "display_name": "batch_map_boundary",
-            "enforce_spacing": false,
-            "explicit_flip": false,
-            "force_flipped": false,
-            "grid_resolution": 7,
-            "jitter": 0,
-            "locked": false,
-            "max_number": 1,
-            "min_number": 1,
-            "position": "Random",
-            "resolution": 0,
-            "resolve_geometry_to_room_size": false,
-            "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-be5b8b8ad3ad"
-          },
-          {
-            "candidates": [
-              {
-                "chance": 5,
+                "chance": 83,
                 "name": "fog_1"
               },
               {
-                "chance": 0,
+                "chance": 47,
                 "name": "null"
               },
               {
-                "chance": 0.25,
+                "chance": 86,
                 "name": "fog_2"
               }
             ],
@@ -15268,7 +15288,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 3,
+            "grid_resolution": 4,
             "jitter": 0,
             "locked": false,
             "max_number": 1,
@@ -15281,7 +15301,7 @@
           }
         ],
         "inherits_map_assets": false,
-        "regen_seed": 5
+        "regen_seed": 7
       },
       "map_grid_settings": {
         "grid_resolution": 6,
@@ -15332,9 +15352,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            61,
             242,
-            36,
-            152,
+            242,
             255
           ],
           "edge_smoothness": 49,
@@ -15353,15 +15373,15 @@
           "spawn_groups": []
         },
         "spawn": {
-          "camera_center_dx": -5955,
-          "camera_center_dz": 1578,
-          "camera_height_px": 360,
-          "camera_tilt_deg": 26.166973114013672,
-          "camera_zoom_percent": 19,
+          "camera_center_dx": 5474,
+          "camera_center_dz": -1202,
+          "camera_height_px": 1507,
+          "camera_tilt_deg": 33.636009216308594,
+          "camera_zoom_percent": 9,
           "curvyness": 2,
           "display_color": [
+            37,
             242,
-            166,
             36,
             255
           ],
@@ -15481,16 +15501,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1800,
-              "dz": -4160,
+              "dx": 6648,
+              "dz": -1232,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12880,
-              "origional_width": 21792,
+              "origional_height": 12528,
+              "origional_width": 21952,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -15676,11 +15696,11 @@
           "spawn_groups": []
         },
         "NewTrail1": {
-          "camera_center_dx": 260,
-          "camera_center_dz": -1394,
-          "camera_height_px": 200,
-          "camera_tilt_deg": 27.0,
-          "camera_zoom_percent": 31,
+          "camera_center_dx": 2230,
+          "camera_center_dz": -4607,
+          "camera_height_px": 292,
+          "camera_tilt_deg": 48.490535736083984,
+          "camera_zoom_percent": 29,
           "display_color": [
             36,
             38,

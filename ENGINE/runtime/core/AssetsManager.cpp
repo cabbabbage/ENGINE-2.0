@@ -25,6 +25,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
+#include "utils/integer_grid_math.hpp"
 #include "utils/area.hpp"
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
@@ -143,6 +144,12 @@ bool vibble_scale_trace_enabled() {
                value == "ON";
     }();
     return enabled;
+}
+
+std::uint64_t hash_grid_cell(const world::GridCoord& coord) {
+    const std::uint64_t ux = static_cast<std::uint32_t>(coord.x);
+    const std::uint64_t uz = static_cast<std::uint32_t>(coord.z);
+    return (ux << 32) | uz;
 }
 
 }
@@ -901,6 +908,9 @@ void Assets::rebuild_frame_collision_context() const {
 
     frame_collision_entries_.clear();
     frame_collision_entries_.reserve(active_assets.size());
+    frame_collision_index_.clear();
+    frame_collision_index_.reserve(active_assets.size());
+    const int index_layer = world_grid_.grid_resolution();
 
     for (Asset* asset : active_assets) {
         if (!asset || asset->dead || !asset->info) {
@@ -926,8 +936,9 @@ void Assets::rebuild_frame_collision_context() const {
             continue;
         }
 
+        const SDL_Point world_center = asset->world_xz_point();
         const world::GridPoint center = world::grid_math::from_sdl(
-            asset->world_xz_point(),
+            world_center,
             asset->world_y(),
             asset->grid_resolution);
         const world::GridPoint bottom_middle =
@@ -936,8 +947,17 @@ void Assets::rebuild_frame_collision_context() const {
         frame_collision_entries_.push_back(FrameCollisionEntry{
             asset,
             std::move(collision),
-            bottom_middle
+            world_center,
+            bottom_middle,
+            canonical_type
         });
+        FrameCollisionEntry& entry = frame_collision_entries_.back();
+        const world::GridPoint origin = world_grid_.origin();
+        const int spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
+        const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), spacing);
+        const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), spacing);
+        const world::GridCoord cell{cell_x, cell_z};
+        frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
     }
 
     frame_collision_context_frame_id_ = frame_id_;
@@ -957,22 +977,52 @@ void Assets::query_impassable_entries(const Asset& self,
     const int radius = std::max(0, search_radius);
     const std::int64_t radius_sq = static_cast<std::int64_t>(radius) * static_cast<std::int64_t>(radius);
     const SDL_Point self_center = self.world_xz_point();
+    const int index_layer = world_grid_.grid_resolution();
+    const world::GridPoint origin = world_grid_.origin();
+    const int cell_spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
+    const int self_cell_x = vibble::math::floor_div(self_center.x - origin.world_x(), cell_spacing);
+    const int self_cell_z = vibble::math::floor_div(self_center.y - origin.world_z(), cell_spacing);
+    const world::GridCoord self_cell{self_cell_x, self_cell_z};
 
-    out.reserve(frame_collision_entries_.size());
-    for (const FrameCollisionEntry& entry : frame_collision_entries_) {
-        if (!entry.asset || entry.asset == &self || !entry.asset->info) {
-            continue;
+    auto consider_entry = [&](const FrameCollisionEntry* entry) {
+        if (!entry || !entry->asset || entry->asset == &self || !entry->asset->info) {
+            return;
         }
         if (radius > 0) {
-            const SDL_Point candidate = entry.asset->world_xz_point();
-            const std::int64_t dx = static_cast<std::int64_t>(candidate.x) - static_cast<std::int64_t>(self_center.x);
-            const std::int64_t dy = static_cast<std::int64_t>(candidate.y) - static_cast<std::int64_t>(self_center.y);
+            const std::int64_t dx = static_cast<std::int64_t>(entry->world_center.x) - static_cast<std::int64_t>(self_center.x);
+            const std::int64_t dy = static_cast<std::int64_t>(entry->world_center.y) - static_cast<std::int64_t>(self_center.y);
             const std::int64_t dist_sq = dx * dx + dy * dy;
             if (dist_sq > radius_sq) {
-                continue;
+                return;
             }
         }
-        out.push_back(&entry);
+        out.push_back(entry);
+    };
+
+    out.reserve(frame_collision_entries_.size());
+
+    if (radius <= 0) {
+        for (const auto& bucket : frame_collision_index_) {
+            for (const FrameCollisionEntry* entry : bucket.second) {
+                consider_entry(entry);
+            }
+        }
+        return;
+    }
+
+    const int cell_radius = (radius + cell_spacing - 1) / cell_spacing;
+    for (int dz = -cell_radius; dz <= cell_radius; ++dz) {
+        for (int dx = -cell_radius; dx <= cell_radius; ++dx) {
+            world::GridCoord neighbor{self_cell.x + dx, self_cell.z + dz};
+            const std::uint64_t cell_hash = hash_grid_cell(neighbor);
+            const auto it = frame_collision_index_.find(cell_hash);
+            if (it == frame_collision_index_.end()) {
+                continue;
+            }
+            for (const FrameCollisionEntry* entry : it->second) {
+                consider_entry(entry);
+            }
+        }
     }
 }
 

@@ -107,7 +107,9 @@ public:
     struct FrameCollisionEntry {
         const Asset* asset = nullptr;
         Area area{"impassable"};
+        SDL_Point world_center{0, 0};
         world::GridPoint bottom_middle = world::GridPoint::make_virtual(0, 0, 0, 0);
+        std::string canonical_type;
     };
     const std::vector<ActiveTraversalEntry>& active_traversal() const { return camera_.visible_traversal_entries(); }
     const std::vector<FrameCollisionEntry>& frame_collision_entries() const { return frame_collision_entries_; }
@@ -321,6 +323,7 @@ private:
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
+    mutable std::unordered_map<std::uint64_t, std::vector<const FrameCollisionEntry*>> frame_collision_index_;
     mutable std::uint32_t frame_collision_context_frame_id_ = 0;
     mutable bool frame_collision_context_dirty_ = true;
     std::vector<Asset*> removal_queue;

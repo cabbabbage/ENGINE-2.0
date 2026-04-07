@@ -9512,6 +9512,14 @@
             "name": "",
             "path": "up"
           }
+        },
+        "up_left": {
+          "locked": false,
+          "on_end": "default",
+          "source": {
+            "kind": "folder",
+            "path": "up_left"
+          }
         }
       },
       "anti_tags": [],
@@ -10578,6 +10586,11 @@
         "min_visible_screen_ratio": 0.010000000707805157
       },
       "content_root": "content/forrest",
+      "depth_cue_settings": {
+        "background_max_depth_offset": 600.0,
+        "center_depth_offset": 0.0,
+        "foreground_max_depth_offset": -600.0
+      },
       "dev_map_settings": {},
       "fog_settings": {
         "max_random_jitter": 0
@@ -10738,7 +10751,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 11372.0,
+          "bounding_extent": 5686.0,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -10754,12 +10767,12 @@
           ]
         },
         {
-          "bounding_extent": 2090.0,
+          "bounding_extent": 1045.0,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 14462.0,
+          "ring_radius": 7731.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -10781,9 +10794,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            61,
             242,
-            36,
-            145,
+            242,
             255
           ],
           "edge_smoothness": 49,
@@ -10809,9 +10822,9 @@
           "camera_zoom_percent": 5,
           "curvyness": 2,
           "display_color": [
-            104,
-            36,
+            37,
             242,
+            36,
             255
           ],
           "edge_smoothness": 24,

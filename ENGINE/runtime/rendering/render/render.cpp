@@ -251,6 +251,121 @@ void for_each_spatial_candidate(const SpatialIndex& index,
     }
 }
 
+constexpr bool kBackgroundLayerFogEnabled = true;
+constexpr int kFogBandTextureWidth = 256;
+constexpr int kFogBandTextureHeight = 128;
+
+struct SharedFogBandTextureState {
+    SDL_Renderer* renderer = nullptr;
+    SDL_Texture* texture = nullptr;
+    int width = 0;
+    int height = 0;
+};
+
+SharedFogBandTextureState& shared_fog_band_texture_state() {
+    static SharedFogBandTextureState state;
+    return state;
+}
+
+void destroy_shared_fog_band_texture(SDL_Renderer* renderer) {
+    auto& state = shared_fog_band_texture_state();
+    if (!state.texture) {
+        state.renderer = nullptr;
+        state.width = 0;
+        state.height = 0;
+        return;
+    }
+    if (renderer && state.renderer != renderer) {
+        return;
+    }
+    SDL_DestroyTexture(state.texture);
+    state.texture = nullptr;
+    state.renderer = nullptr;
+    state.width = 0;
+    state.height = 0;
+}
+
+SDL_Texture* ensure_shared_fog_band_texture(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return nullptr;
+    }
+
+    auto& state = shared_fog_band_texture_state();
+    if (state.texture && state.renderer == renderer) {
+        return state.texture;
+    }
+
+    destroy_shared_fog_band_texture(nullptr);
+
+    SDL_Texture* texture = SDL_CreateTexture(renderer,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_STREAMING,
+                                             kFogBandTextureWidth,
+                                             kFogBandTextureHeight);
+    if (!texture) {
+        return nullptr;
+    }
+
+    void* pixels = nullptr;
+    int pitch = 0;
+    if (!SDL_LockTexture(texture, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
+        SDL_DestroyTexture(texture);
+        return nullptr;
+    }
+
+    auto* base = static_cast<std::uint8_t*>(pixels);
+    for (int y = 0; y < kFogBandTextureHeight; ++y) {
+        auto* row = base + (pitch * y);
+        const float v = static_cast<float>(y) / static_cast<float>(kFogBandTextureHeight - 1);
+        const float vertical_fade = 1.0f - (v * v * (3.0f - (2.0f * v)));
+
+        for (int x = 0; x < kFogBandTextureWidth; ++x) {
+            const float fx = static_cast<float>(x);
+            const float fy = static_cast<float>(y);
+            const float n0 = 0.5f + 0.5f * std::sin(fx * 0.055f + fy * 0.013f);
+            const float n1 = 0.5f + 0.5f * std::sin(fx * 0.113f + 1.7f);
+            const float n2 = 0.5f + 0.5f * std::sin((fx + fy * 2.0f) * 0.037f + 4.1f);
+            const float noise = std::clamp((n0 * 0.50f) + (n1 * 0.30f) + (n2 * 0.20f), 0.0f, 1.0f);
+            const float alpha_f = std::clamp(vertical_fade * (0.72f + 0.28f * noise), 0.0f, 1.0f);
+            const std::uint8_t alpha = static_cast<std::uint8_t>(std::lround(alpha_f * 255.0f));
+
+            auto* p = row + (x * 4);
+            p[0] = 255;
+            p[1] = 255;
+            p[2] = 255;
+            p[3] = alpha;
+        }
+    }
+
+    SDL_UnlockTexture(texture);
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+    state.renderer = renderer;
+    state.texture = texture;
+    state.width = kFogBandTextureWidth;
+    state.height = kFogBandTextureHeight;
+    return state.texture;
+}
+
+bool project_depth_to_floor_screen_y(const WarpedScreenGrid& cam,
+                                     double world_depth,
+                                     int screen_height,
+                                     float& out_y) {
+    SDL_FPoint projected{};
+    if (!cam.project_world_point(SDL_FPoint{0.0f, 0.0f}, static_cast<float>(world_depth), projected)) {
+        return false;
+    }
+    if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
+        return false;
+    }
+    projected.y = cam.warp_floor_screen_y(0.0f, projected.y);
+    if (!std::isfinite(projected.y)) {
+        return false;
+    }
+    out_y = std::clamp(projected.y, 0.0f, static_cast<float>(screen_height));
+    return true;
+}
+
 
 }
 
@@ -1257,6 +1372,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 SceneRenderer::~SceneRenderer() {
     destroy_sky_texture();
     destroy_lighting_resources();
+    destroy_shared_fog_band_texture(renderer_);
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
@@ -1318,6 +1434,7 @@ bool SceneRenderer::ensure_sky_texture() {
     const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
     const double max_blur = std::max(0.0, static_cast<double>(realism.max_blur_px));
     const bool depth_of_field_enabled = realism.depth_of_field_enabled;
+    const bool background_layer_fog_enabled = kBackgroundLayerFogEnabled;
     const double sky_blur_radius = LayerEffectProcessor::coc_blur_radius_from_depth_delta(max_cull_depth,
                                                                                             max_cull_depth,
                                                                                             focal_length,
@@ -2182,58 +2299,88 @@ void SceneRenderer::render() {
         runtime_occluders.clear();
     }
 
-    if (depth_of_field_enabled) {
+    if (depth_of_field_enabled ) {
         const double base_layer_interval = std::max(1.0, static_cast<double>(realism.layer_depth_interval));
         const double depth_curve = std::max(0.0, static_cast<double>(realism.layer_depth_curve));
         constexpr int kMaxDofLayers = 512;
         constexpr int kMaxLayersPerSide = kMaxDofLayers / 2;
-        std::vector<double> positive_depth_edges;
-        positive_depth_edges.reserve(static_cast<std::size_t>(kMaxLayersPerSide + 1));
-        positive_depth_edges.push_back(0.0);
-        while (positive_depth_edges.back() < max_cull_depth &&
-               static_cast<int>(positive_depth_edges.size()) - 1 < kMaxLayersPerSide) {
-            const double distance = positive_depth_edges.back();
-            const double t = std::clamp(distance / std::max(1.0, max_cull_depth), 0.0, 1.0);
-            const double growth = 1.0 + depth_curve * t * t;
-            const double step = std::max(1.0, base_layer_interval * growth);
-            const double next_distance = std::min(max_cull_depth, distance + step);
-            if (next_distance <= distance) {
-                break;
+
+        auto build_linear_depth_edges = [&](double max_depth) {
+            std::vector<double> edges;
+            edges.reserve(static_cast<std::size_t>(kMaxLayersPerSide + 1));
+            edges.push_back(0.0);
+            while (edges.back() < max_depth &&
+                   static_cast<int>(edges.size()) - 1 < kMaxLayersPerSide) {
+                const double distance = edges.back();
+                const double next_distance = std::min(max_depth, distance + base_layer_interval);
+                if (next_distance <= distance) {
+                    break;
+                }
+                edges.push_back(next_distance);
             }
-            positive_depth_edges.push_back(next_distance);
-        }
-        if (positive_depth_edges.size() == 1) {
-            positive_depth_edges.push_back(max_cull_depth);
-        } else if (positive_depth_edges.back() < max_cull_depth) {
-            positive_depth_edges.back() = max_cull_depth;
-        }
-        const int side_layer_count = std::max(1, static_cast<int>(positive_depth_edges.size()) - 1);
-        const int layer_count = side_layer_count * 2;
+            if (edges.size() == 1) {
+                edges.push_back(max_depth);
+            } else if (edges.back() < max_depth) {
+                edges.back() = max_depth;
+            }
+            return edges;
+        };
+
+        auto build_background_depth_edges = [&](double max_depth) {
+            std::vector<double> edges;
+            edges.reserve(static_cast<std::size_t>(kMaxLayersPerSide + 1));
+            edges.push_back(0.0);
+            while (edges.back() < max_depth &&
+                   static_cast<int>(edges.size()) - 1 < kMaxLayersPerSide) {
+                const double distance = edges.back();
+                const double t = std::clamp(distance / std::max(1.0, max_depth), 0.0, 1.0);
+                const double growth = 1.0 + depth_curve * t * t;
+                const double step = std::max(1.0, base_layer_interval * growth);
+                const double next_distance = std::min(max_depth, distance + step);
+                if (next_distance <= distance) {
+                    break;
+                }
+                edges.push_back(next_distance);
+            }
+            if (edges.size() == 1) {
+                edges.push_back(max_depth);
+            } else if (edges.back() < max_depth) {
+                edges.back() = max_depth;
+            }
+            return edges;
+        };
+
+        const std::vector<double> foreground_depth_edges = build_linear_depth_edges(max_cull_depth);
+        const std::vector<double> background_depth_edges = build_background_depth_edges(max_cull_depth);
+        const int foreground_layer_count = std::max(1, static_cast<int>(foreground_depth_edges.size()) - 1);
+        const int background_layer_count = std::max(1, static_cast<int>(background_depth_edges.size()) - 1);
+        const int layer_count = foreground_layer_count + background_layer_count;
+
         auto layer_midpoint_depth = [&](int layer_idx) -> double {
             const int clamped_idx = std::clamp(layer_idx, 0, layer_count - 1);
-            if (clamped_idx < side_layer_count) {
-                const int seg = side_layer_count - 1 - clamped_idx;
-                const double low_abs = positive_depth_edges[static_cast<std::size_t>(seg)];
-                const double high_abs = positive_depth_edges[static_cast<std::size_t>(seg + 1)];
+            if (clamped_idx < foreground_layer_count) {
+                const int seg = foreground_layer_count - 1 - clamped_idx;
+                const double low_abs = foreground_depth_edges[static_cast<std::size_t>(seg)];
+                const double high_abs = foreground_depth_edges[static_cast<std::size_t>(seg + 1)];
                 return -0.5 * (low_abs + high_abs);
             }
-            const int seg = clamped_idx - side_layer_count;
-            const double low_abs = positive_depth_edges[static_cast<std::size_t>(seg)];
-            const double high_abs = positive_depth_edges[static_cast<std::size_t>(seg + 1)];
+            const int seg = clamped_idx - foreground_layer_count;
+            const double low_abs = background_depth_edges[static_cast<std::size_t>(seg)];
+            const double high_abs = background_depth_edges[static_cast<std::size_t>(seg + 1)];
             return 0.5 * (low_abs + high_abs);
         };
         auto layer_contains_focus_depth = [&](int layer_idx, double focus_depth) -> bool {
             const int clamped_idx = std::clamp(layer_idx, 0, layer_count - 1);
             double low = 0.0;
             double high = 0.0;
-            if (clamped_idx < side_layer_count) {
-                const int seg = side_layer_count - 1 - clamped_idx;
-                low = -positive_depth_edges[static_cast<std::size_t>(seg + 1)];
-                high = -positive_depth_edges[static_cast<std::size_t>(seg)];
+            if (clamped_idx < foreground_layer_count) {
+                const int seg = foreground_layer_count - 1 - clamped_idx;
+                low = -foreground_depth_edges[static_cast<std::size_t>(seg + 1)];
+                high = -foreground_depth_edges[static_cast<std::size_t>(seg)];
             } else {
-                const int seg = clamped_idx - side_layer_count;
-                low = positive_depth_edges[static_cast<std::size_t>(seg)];
-                high = positive_depth_edges[static_cast<std::size_t>(seg + 1)];
+                const int seg = clamped_idx - foreground_layer_count;
+                low = background_depth_edges[static_cast<std::size_t>(seg)];
+                high = background_depth_edges[static_cast<std::size_t>(seg + 1)];
             }
             return focus_depth >= low && focus_depth <= high;
         };
@@ -2243,15 +2390,17 @@ void SceneRenderer::render() {
             }
             const double clamped = std::clamp(depth, -max_cull_depth, max_cull_depth);
             const double abs_depth = std::fabs(clamped);
-            auto upper = std::upper_bound(positive_depth_edges.begin(), positive_depth_edges.end(), abs_depth);
-            std::ptrdiff_t seg = std::distance(positive_depth_edges.begin(), upper) - 1;
-            seg = std::clamp<std::ptrdiff_t>(seg, 0, static_cast<std::ptrdiff_t>(side_layer_count - 1));
-            int idx = 0;
             if (clamped < 0.0) {
-                idx = side_layer_count - 1 - static_cast<int>(seg);
-            } else {
-                idx = side_layer_count + static_cast<int>(seg);
+                auto upper = std::upper_bound(foreground_depth_edges.begin(), foreground_depth_edges.end(), abs_depth);
+                std::ptrdiff_t seg = std::distance(foreground_depth_edges.begin(), upper) - 1;
+                seg = std::clamp<std::ptrdiff_t>(seg, 0, static_cast<std::ptrdiff_t>(foreground_layer_count - 1));
+                const int idx = foreground_layer_count - 1 - static_cast<int>(seg);
+                return std::clamp(idx, 0, layer_count - 1);
             }
+            auto upper = std::upper_bound(background_depth_edges.begin(), background_depth_edges.end(), abs_depth);
+            std::ptrdiff_t seg = std::distance(background_depth_edges.begin(), upper) - 1;
+            seg = std::clamp<std::ptrdiff_t>(seg, 0, static_cast<std::ptrdiff_t>(background_layer_count - 1));
+            const int idx = foreground_layer_count + static_cast<int>(seg);
             return std::clamp(idx, 0, layer_count - 1);
         };
 
@@ -2308,7 +2457,7 @@ void SceneRenderer::render() {
                 dof_layer_textures_[i] = create_target_texture(screen_width_, screen_height_);
             }
         }
-        const bool need_blur_scratch = !non_empty_layers.empty();
+        const bool need_blur_scratch = depth_of_field_enabled && !non_empty_layers.empty();
         if (need_blur_scratch && !blur_tex_) {
             blur_tex_ = create_target_texture(screen_width_, screen_height_);
         }
@@ -2325,7 +2474,7 @@ void SceneRenderer::render() {
         if (!dof_targets_ready) {
             SDL_SetRenderTarget(renderer_, gameplay_target);
             if (!non_empty_layers.empty()) {
-                vibble::log::warn(std::string{"[SceneRenderer] DOF targets unavailable; falling back to direct scene flush. SDL error: "} +
+                vibble::log::warn(std::string{"[SceneRenderer] Layer targets unavailable; falling back to direct scene flush. SDL error: "} +
                                   SDL_GetError());
             }
             geometry_batcher_->flush();
@@ -2389,7 +2538,7 @@ void SceneRenderer::render() {
                     representative_depth = layer.submitted_depth_sum / static_cast<double>(layer.submitted_depth_count);
                 }
                 double blur_radius = 0.0;
-                if (i != focus_layer && !layer_contains_focus_depth(i, focus_depth)) {
+                if (depth_of_field_enabled && i != focus_layer && !layer_contains_focus_depth(i, focus_depth)) {
                     const double delta = std::fabs(representative_depth - focus_depth);
                     blur_radius = LayerEffectProcessor::coc_blur_radius_from_depth_delta(delta,
                                                                                           max_cull_depth,
@@ -2425,6 +2574,63 @@ void SceneRenderer::render() {
                 }
             }
         }
+
+
+            SDL_Texture* fog_texture = ensure_shared_fog_band_texture(renderer_);
+            if (fog_texture && background_layer_count > 0) {
+                SDL_SetRenderTarget(renderer_, gameplay_target);
+                SDL_SetTextureBlendMode(fog_texture, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureColorMod(fog_texture, 222, 232, 242);
+
+                double cumulative_opacity = 0.0;
+                for (int seg = 0; seg < background_layer_count; ++seg) {
+                    const double far_depth = background_depth_edges[static_cast<std::size_t>(seg + 1)];
+                    const double depth_t = std::clamp(far_depth / std::max(1.0, max_cull_depth), 0.0, 1.0);
+                    const float shaped_depth_t = std::pow(static_cast<float>(depth_t), 0.65f);
+                    const double target_cumulative_opacity = std::clamp(
+                        static_cast<double>(smoothstep(0.0f, 0.82f, shaped_depth_t)) * 1.18,
+                        0.0,
+                        1.0);
+
+                    const double remaining_visibility = std::max(1e-6, 1.0 - cumulative_opacity);
+                    double fog_layer_alpha = (target_cumulative_opacity - cumulative_opacity) / remaining_visibility;
+                    fog_layer_alpha = std::clamp(fog_layer_alpha, 0.0, 1.0);
+                    cumulative_opacity += remaining_visibility * fog_layer_alpha;
+
+                    if (fog_layer_alpha <= 0.001) {
+                        continue;
+                    }
+
+                    float fog_bottom_y = 0.0f;
+                    if (!project_depth_to_floor_screen_y(cam, anchor_depth + far_depth, screen_height_, fog_bottom_y)) {
+                        continue;
+                    }
+                    if (fog_bottom_y <= 1.0f) {
+                        continue;
+                    }
+
+                    const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                        static_cast<int>(std::lround(fog_layer_alpha * 255.0)),
+                        0,
+                        255));
+                    if (alpha == 0) {
+                        continue;
+                    }
+
+                    SDL_SetTextureAlphaMod(fog_texture, alpha);
+                    const SDL_FRect dst_rect{
+                        0.0f,
+                        0.0f,
+                        static_cast<float>(screen_width_),
+                        fog_bottom_y
+                    };
+                    SDL_RenderTexture(renderer_, fog_texture, nullptr, &dst_rect);
+                }
+
+                SDL_SetTextureAlphaMod(fog_texture, 255);
+                SDL_SetTextureColorMod(fog_texture, 255, 255, 255);
+            }
+        
     } else {
         SDL_SetRenderTarget(renderer_, gameplay_target);
         geometry_batcher_->flush();

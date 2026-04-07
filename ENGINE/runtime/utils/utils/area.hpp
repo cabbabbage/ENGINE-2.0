@@ -29,7 +29,7 @@ class Area {
     void apply_offset(int dx, int dy);
     void align(SDL_Point target);
     std::tuple<int, int, int, int> get_bounds() const;
-    void generate_circle(SDL_Point center, int radius, int edge_smoothness, int map_width, int map_height);
+    void generate_circle(SDL_Point center, int horizontal_radius, int vertical_radius, int edge_smoothness, int map_width, int map_height);
     void generate_square(SDL_Point center, int w, int h, int edge_smoothness, int map_width, int map_height);
     void generate_point(SDL_Point center, int map_width, int map_height);
     void contract(int inset);

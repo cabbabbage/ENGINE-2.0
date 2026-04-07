@@ -1278,6 +1278,16 @@ void AnimationEditorWindow::refresh_inspector_animation_callback() {
         }
         if (external_animation_properties_changed_) {
             external_animation_properties_changed_(animation_id, payload);
+            return;
+        }
+        if (document_) {
+            if (!document_->save_to_file_checked(true)) {
+                const std::string manifest_key = document_->manifest_asset_key_debug();
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "AnimationEditorWindow: fallback save failed for animation '%s' (manifest key: '%s').",
+                            animation_id.c_str(),
+                            manifest_key.empty() ? "<unknown>" : manifest_key.c_str());
+            }
         }
     });
 }
@@ -2235,7 +2245,9 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     };
 
     auto on_success = [this, finalize]() {
-        handle_document_saved();
+        if (finalize) {
+            handle_document_saved();
+        }
         set_status_message(finalize ? "Animations saved." : "Animations updated.", finalize ? 200 : 120);
     };
 
@@ -2536,8 +2548,9 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
         modified = true;
     }
 
-    const std::string branch = "                if (matches(\"" + key + "\"))\n"
-                               "                        return std::make_unique<" + class_name + ">(self);\n";
+    const std::string entry = "        { \"" + key + "\", [](Asset* asset) {\n"
+                              "                return std::make_unique<" + class_name + ">(asset);\n"
+                              "        } },\n";
 
     const std::string marker = "// <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>";
     auto marker_pos = content.find(marker);
@@ -2545,8 +2558,8 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
         auto insert_pos = content.find('\n', marker_pos);
         if (insert_pos != std::string::npos) {
             insert_pos += 1;
-            if (content.find(branch, marker_pos) == std::string::npos) {
-                content.insert(insert_pos, branch);
+            if (content.find(entry, marker_pos) == std::string::npos) {
+                content.insert(insert_pos, entry);
                 modified = true;
             }
         }

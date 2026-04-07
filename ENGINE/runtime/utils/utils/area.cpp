@@ -46,7 +46,7 @@ Area::Area(const std::string& name, SDL_Point center, int w, int h,
         }
         resolution_ = vibble::grid::clamp_resolution(resolution);
         if (geometry == "Circle") {
-                generate_circle(center, w / 2, edge_smoothness, map_width, map_height);
+                generate_circle(center, w / 2, h / 2, edge_smoothness, map_width, map_height);
         } else if (geometry == "Square") {
                 generate_square(center, w, h, edge_smoothness, map_width, map_height);
         } else if (geometry == "Point") {
@@ -144,16 +144,18 @@ void Area::generate_point(SDL_Point center, int map_width, int map_height) {
         apply_resolution_to_points();
 }
 
-void Area::generate_circle(SDL_Point center, int radius, int edge_smoothness, int map_width, int map_height) {
+void Area::generate_circle(SDL_Point center, int horizontal_radius, int vertical_radius, int edge_smoothness, int map_width, int map_height) {
         int s = std::clamp(edge_smoothness, 0, 100);
         int count = std::max(12, 6 + s * 2);
 	double max_dev = 0.20 * (100 - s) / 100.0;
 	std::uniform_real_distribution<double> dist(1.0 - max_dev, 1.0 + max_dev);
+        const int clamped_horizontal_radius = std::max(1, horizontal_radius);
+        const int clamped_vertical_radius = std::max(1, vertical_radius);
 	points.clear();
 	points.reserve(count);
 	for (int i = 0; i < count; ++i) {
 		double theta = 2 * SDL_PI_D * i / count;
-		double rx = radius * dist(rng), ry = radius * dist(rng);
+		double rx = clamped_horizontal_radius * dist(rng), ry = clamped_vertical_radius * dist(rng);
 		double x = center.x + rx * std::cos(theta);
 		double y = center.y + ry * std::sin(theta);
                 int xi = static_cast<int>(std::round(std::clamp(x, 0.0, static_cast<double>(map_width))));

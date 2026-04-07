@@ -31,8 +31,8 @@ namespace {
     constexpr double PI_D       = 3.14159265358979323846;
     constexpr double kHalfFovY  = PI_D / 4.0;
     constexpr double kWorldUnitScale = 0.01;
-    constexpr float  kHorizontalCullOverscanRatio = 0.10f;
-    constexpr float  kBottomCullOverscanRatio = 0.15f;
+    constexpr float  kHorizontalCullOverscanRatio = 0.20f;
+    constexpr float  kBottomCullOverscanRatio = 0.40f;
     constexpr float  kNearHorizonSampleOffsetRatio = 0.02f;
     constexpr float  kMinNearHorizonSampleOffsetPx = 8.0f;
 
@@ -652,9 +652,31 @@ void WarpedScreenGrid::set_frustum_padding_world(float padding) {
 
 void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     settings_ = settings;
+    settings_.min_visible_screen_ratio = std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
     if (!std::isfinite(settings_.base_height_px) || settings_.base_height_px <= 0.0f) {
         settings_.base_height_px = 720.0f;
     }
+    if (!std::isfinite(settings_.max_cull_depth) || settings_.max_cull_depth < 1.0f) {
+        settings_.max_cull_depth = 1.0f;
+    }
+    if (!std::isfinite(settings_.layer_depth_interval) || settings_.layer_depth_interval < 1.0f) {
+        settings_.layer_depth_interval = 1.0f;
+    }
+    settings_.layer_depth_interval = std::min(settings_.layer_depth_interval, 100000.0f);
+    if (!std::isfinite(settings_.layer_depth_curve) || settings_.layer_depth_curve < 0.0f) {
+        settings_.layer_depth_curve = 0.0f;
+    }
+    settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
+    if (!std::isfinite(settings_.aperture_f_stop) || settings_.aperture_f_stop <= 0.01f) {
+        settings_.aperture_f_stop = 0.01f;
+    }
+    if (!std::isfinite(settings_.focal_length_mm) || settings_.focal_length_mm <= 0.01f) {
+        settings_.focal_length_mm = 0.01f;
+    }
+    if (!std::isfinite(settings_.max_blur_px) || settings_.max_blur_px < 0.0f) {
+        settings_.max_blur_px = 0.0f;
+    }
+    settings_.max_blur_px = std::min(settings_.max_blur_px, 128.0f);
     camera_.set_fallback_height(settings_.base_height_px);
     invalidate_camera_cache();
 
@@ -1120,9 +1142,23 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         }
         target = std::clamp(value, min_value, max_value);
     };
+    auto read_bool = [&](const char* key, bool& target) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_boolean()) {
+            return;
+        }
+        target = it->get<bool>();
+    };
     RealismSettings updated = settings_;
     read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
+    read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
+    read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
+    read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
+    read_float("aperture_f_stop", updated.aperture_f_stop, 0.01f, 64.0f);
+    read_float("focal_length_mm", updated.focal_length_mm, 0.01f, 500.0f);
+    read_float("max_blur_px", updated.max_blur_px, 0.0f, 128.0f);
+    read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
     set_realism_settings(updated);
 }
 
@@ -1130,6 +1166,13 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     nlohmann::json result = nlohmann::json::object();
     result["min_visible_screen_ratio"] = settings_.min_visible_screen_ratio;
     result["base_height_px"] = settings_.base_height_px;
+    result["max_cull_depth"] = settings_.max_cull_depth;
+    result["layer_depth_interval"] = settings_.layer_depth_interval;
+    result["layer_depth_curve"] = settings_.layer_depth_curve;
+    result["aperture_f_stop"] = settings_.aperture_f_stop;
+    result["focal_length_mm"] = settings_.focal_length_mm;
+    result["max_blur_px"] = settings_.max_blur_px;
+    result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
@@ -1255,10 +1298,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         0,
         world_grid.default_resolution_layer());
     const ScreenBounds cull_bounds = expanded_screen_bounds(screen_width_, screen_height_);
+    const CameraState& cam_state = camera_state_cached();
 
     world::WorldGrid::RegionMetrics region_metrics{};
     const int min_world_z = std::numeric_limits<int>::min();
-    const int max_world_z = std::numeric_limits<int>::max();
+    const int max_world_z = static_cast<int>(std::ceil(cam_state.anchor_world_z + static_cast<double>(settings_.max_cull_depth)));
     std::vector<world::GridPoint*> grid_points = world_grid.query_region(
         world_bounds,
         0,
@@ -1273,7 +1317,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     warped_points_.reserve(grid_points.size());
     visible_traversal_entries_.reserve(grid_points.size() * 2);
 
-    const CameraState& cam_state = camera_state_cached();
     const double anchor_depth = cam_state.anchor_world_z;
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;
@@ -1495,6 +1538,13 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         }
 
         const double base_world_z = static_cast<double>(gp->world_z());
+        const double point_depth_from_anchor = render_depth::depth_from_anchor(anchor_depth, base_world_z);
+        const double point_depth_distance = std::fabs(point_depth_from_anchor);
+        if (!std::isfinite(point_depth_distance) ||
+            point_depth_distance > static_cast<double>(settings_.max_cull_depth)) {
+            ++last_depth_culled_;
+            continue;
+        }
 
         const bool needs_projection = gp->needs_projection_update(frame_stamp, camera_state_version_);
 
@@ -1539,12 +1589,20 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 if (!visible_asset) {
                     continue;
                 }
+                const double depth_from_anchor = render_depth::depth_from_anchor(
+                    anchor_depth,
+                    static_cast<double>(visible_asset->world_z()),
+                    visible_asset->render_depth_bias());
+                const double depth_distance = std::fabs(depth_from_anchor);
                 visible_traversal_entries_.push_back(VisibleTraversalEntry{
                     visible_asset,
                     gp,
-                    render_depth::depth_from_anchor(anchor_depth,
-                                                    static_cast<double>(visible_asset->world_z()),
-                                                    visible_asset->render_depth_bias())});
+                    depth_from_anchor});
+                if (!std::isfinite(visible_traversal_entries_.back().depth_from_anchor) ||
+                    depth_distance > static_cast<double>(settings_.max_cull_depth)) {
+                    visible_traversal_entries_.pop_back();
+                    ++last_depth_culled_;
+                }
             }
         }
     }

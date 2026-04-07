@@ -4,6 +4,7 @@
 #include "assets/asset/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "utils/log.hpp"
+#include "utils/oval_anchor_math.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include <algorithm>
 #include <iomanip>
@@ -18,10 +19,12 @@
 #include <filesystem>
 #include <system_error>
 #include <utility>
+#include <optional>
 #include <unordered_set>
 #include <SDL3/SDL.h>
 
 #include "devtools/core/manifest_store.hpp"
+#include "gameplay/spawn/spawn_group_codec.hpp"
 #include "utils/grid.hpp"
 
 namespace fs = std::filesystem;
@@ -52,6 +55,179 @@ std::vector<std::string> parse_string_array(const nlohmann::json& json_value) {
 
 constexpr const char* kAnchorPointChildCandidatesKey = "anchor_point_child_candidates";
 constexpr const char* kAnchorPointChildCandidatesLegacyKey = "anchor_point_child_cndidates";
+constexpr const char* kOvalAnchorMappingsKey = "oval_anchor_mappings";
+constexpr double kAnchorCandidateMissingChanceDefault = 100.0;
+constexpr float kDefaultOvalWidthRadius = 48.0f;
+constexpr float kDefaultOvalHeightRadius = 24.0f;
+constexpr float kDefaultOvalRadiusOffsetDegrees = 0.0f;
+constexpr std::size_t kDefaultOvalPointCount = 8;
+constexpr const char* kOvalCenterSuffix = "_oval_center";
+
+std::string trim_copy(std::string value) {
+    const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+    auto begin_it = std::find_if_not(value.begin(), value.end(),
+                                     [&](char c) { return is_space(static_cast<unsigned char>(c)); });
+    auto end_it = std::find_if_not(value.rbegin(), value.rend(),
+                                   [&](char c) { return is_space(static_cast<unsigned char>(c)); }).base();
+    if (begin_it >= end_it) {
+        return {};
+    }
+    return std::string(begin_it, end_it);
+}
+
+bool is_integral_number(double value) {
+    return std::isfinite(value) && std::fabs(value - std::round(value)) <= 1e-9;
+}
+
+double clamp_non_negative_finite(double value) {
+    if (!std::isfinite(value) || value < 0.0) {
+        return 0.0;
+    }
+    return value;
+}
+
+std::optional<double> parse_number_like_json(const nlohmann::json& value) {
+    if (value.is_number_float()) {
+        return value.get<double>();
+    }
+    if (value.is_number_integer()) {
+        return static_cast<double>(value.get<std::int64_t>());
+    }
+    if (value.is_number_unsigned()) {
+        return static_cast<double>(value.get<std::uint64_t>());
+    }
+    if (value.is_string()) {
+        const std::string text = trim_copy(value.get<std::string>());
+        if (text.empty()) {
+            return std::nullopt;
+        }
+        try {
+            std::size_t idx = 0;
+            const double parsed = std::stod(text, &idx);
+            if (idx == text.size()) {
+                return parsed;
+            }
+        } catch (...) {
+        }
+    }
+    return std::nullopt;
+}
+
+std::string ensure_tag_prefix(std::string value) {
+    value = trim_copy(std::move(value));
+    if (!value.empty() && value.front() != '#') {
+        value.insert(value.begin(), '#');
+    }
+    return value;
+}
+
+bool is_vibble_asset_name(const std::string& raw_name) {
+    std::string lowered = trim_copy(raw_name);
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return lowered == "vibble";
+}
+
+std::string normalize_anchor_candidate_name(const nlohmann::json& candidate_json,
+                                            const std::string& legacy_key = std::string{}) {
+    std::string name = trim_copy(legacy_key);
+    std::string explicit_tag_name;
+    bool tag_flag = false;
+
+    if (candidate_json.is_object()) {
+        if (candidate_json.contains("name") && candidate_json["name"].is_string()) {
+            name = trim_copy(candidate_json["name"].get<std::string>());
+        } else if (candidate_json.contains("asset_name") && candidate_json["asset_name"].is_string()) {
+            name = trim_copy(candidate_json["asset_name"].get<std::string>());
+        }
+
+        if (candidate_json.contains("tag_name") && candidate_json["tag_name"].is_string()) {
+            explicit_tag_name = trim_copy(candidate_json["tag_name"].get<std::string>());
+        }
+
+        if (candidate_json.contains("tag")) {
+            const auto& tag_value = candidate_json["tag"];
+            if (tag_value.is_boolean()) {
+                tag_flag = tag_value.get<bool>();
+            } else if (tag_value.is_string()) {
+                explicit_tag_name = trim_copy(tag_value.get<std::string>());
+            }
+        }
+    }
+
+    if (!explicit_tag_name.empty()) {
+        name = ensure_tag_prefix(explicit_tag_name);
+    } else if (tag_flag && !name.empty()) {
+        name = ensure_tag_prefix(name);
+    }
+
+    return name;
+}
+
+nlohmann::json encode_anchor_candidate_entry(const std::string& name, double chance) {
+    nlohmann::json candidate = nlohmann::json::object();
+    candidate["name"] = name.empty() ? std::string("null") : name;
+    chance = clamp_non_negative_finite(chance);
+    if (is_integral_number(chance)) {
+        candidate["chance"] = static_cast<int>(std::llround(chance));
+    } else {
+        candidate["chance"] = chance;
+    }
+    return candidate;
+}
+
+nlohmann::json normalize_single_anchor_candidate(const nlohmann::json& candidate_json,
+                                                 const std::string& legacy_key = std::string{}) {
+    const std::string normalized_name = normalize_anchor_candidate_name(candidate_json, legacy_key);
+
+    bool had_explicit_weight = false;
+    double chance = 0.0;
+    if (candidate_json.is_object()) {
+        if (candidate_json.contains("chance") || candidate_json.contains("weight")) {
+            had_explicit_weight = true;
+            chance = vibble::spawn_group_codec::read_candidate_chance(candidate_json, 0.0);
+        }
+    } else {
+        const auto parsed = parse_number_like_json(candidate_json);
+        if (parsed.has_value()) {
+            had_explicit_weight = true;
+            chance = *parsed;
+        }
+    }
+
+    if (!had_explicit_weight) {
+        chance = normalized_name.empty() ? 0.0 : kAnchorCandidateMissingChanceDefault;
+    }
+    return encode_anchor_candidate_entry(normalized_name, chance);
+}
+
+nlohmann::json normalize_anchor_candidate_payload(const nlohmann::json& payload) {
+    nlohmann::json normalized = nlohmann::json::object();
+    normalized["candidates"] = nlohmann::json::array();
+    auto& normalized_candidates = normalized["candidates"];
+
+    if (payload.is_object()) {
+        auto candidates_it = payload.find("candidates");
+        if (candidates_it != payload.end() && candidates_it->is_array()) {
+            for (const auto& candidate_json : *candidates_it) {
+                normalized_candidates.push_back(normalize_single_anchor_candidate(candidate_json));
+            }
+        } else {
+            for (auto it = payload.begin(); it != payload.end(); ++it) {
+                normalized_candidates.push_back(normalize_single_anchor_candidate(it.value(), it.key()));
+            }
+        }
+    } else if (payload.is_array()) {
+        for (const auto& candidate_json : payload) {
+            normalized_candidates.push_back(normalize_single_anchor_candidate(candidate_json));
+        }
+    } else if (!payload.is_null()) {
+        normalized_candidates.push_back(normalize_single_anchor_candidate(payload));
+    }
+
+    return normalized;
+}
 
 std::vector<AssetInfo::AnchorChildPointCandidate> parse_anchor_point_child_candidates_payload(
     const nlohmann::json& payload) {
@@ -76,10 +252,10 @@ std::vector<AssetInfo::AnchorChildPointCandidate> parse_anchor_point_child_candi
 
         AssetInfo::AnchorChildPointCandidate candidate{};
         candidate.anchor_point_name = anchor_point_name;
-        if (entry.contains("candidates") && entry["candidates"].is_object()) {
-            candidate.candidates = entry["candidates"];
+        if (entry.contains("candidates")) {
+            candidate.candidates = normalize_anchor_candidate_payload(entry["candidates"]);
         } else {
-            candidate.candidates = nlohmann::json::object();
+            candidate.candidates = normalize_anchor_candidate_payload(nlohmann::json::object());
         }
         parsed.push_back(std::move(candidate));
     }
@@ -100,10 +276,652 @@ nlohmann::json build_anchor_point_child_candidates_payload(
         }
         nlohmann::json encoded = nlohmann::json::object();
         encoded["anchor_point_name"] = candidate.anchor_point_name;
-        encoded["candidates"] = candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+        encoded["candidates"] = normalize_anchor_candidate_payload(candidate.candidates);
         payload.push_back(std::move(encoded));
     }
     return payload;
+}
+
+float normalize_angle_degrees(float angle_degrees) {
+    return oval_anchor_math::normalize_angle_degrees(angle_degrees);
+}
+
+float sanitize_oval_radius(float radius, float fallback) {
+    if (!std::isfinite(radius) || radius <= 0.0f) {
+        return fallback;
+    }
+    return radius;
+}
+
+float sanitize_oval_radius_offset_degrees(float value) {
+    if (!std::isfinite(value)) {
+        return kDefaultOvalRadiusOffsetDegrees;
+    }
+    return std::clamp(value, 0.0f, 360.0f);
+}
+
+std::string oval_center_anchor_name(std::string mapping_name) {
+    mapping_name = trim_copy(std::move(mapping_name));
+    if (mapping_name.empty()) {
+        return {};
+    }
+    return mapping_name + kOvalCenterSuffix;
+}
+
+void recompute_oval_point_position(AssetInfo::OvalAnchorPoint& point,
+                                   float width_radius_x,
+                                   float height_radius_z) {
+    point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
+    oval_anchor_math::compute_xz_offsets_from_angle(point.angle_degrees,
+                                                    width_radius_x,
+                                                    height_radius_z,
+                                                    point.texture_x,
+                                                    point.texture_y);
+    if (!std::isfinite(point.depth_offset)) {
+        point.depth_offset = 0.0f;
+    }
+}
+
+void normalize_and_sort_oval_points(std::vector<AssetInfo::OvalAnchorPoint>& points) {
+    for (auto& point : points) {
+        point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
+        if (!std::isfinite(point.rotation_degrees)) {
+            point.rotation_degrees = 0.0f;
+        }
+        if (!std::isfinite(point.depth_offset)) {
+            point.depth_offset = 0.0f;
+        }
+    }
+
+    std::sort(points.begin(),
+              points.end(),
+              [](const AssetInfo::OvalAnchorPoint& lhs, const AssetInfo::OvalAnchorPoint& rhs) {
+                  return normalize_angle_degrees(lhs.angle_degrees) < normalize_angle_degrees(rhs.angle_degrees);
+              });
+
+    constexpr float kDuplicateAngleEpsilon = 1e-3f;
+    std::vector<AssetInfo::OvalAnchorPoint> deduped;
+    deduped.reserve(points.size());
+    for (const auto& point : points) {
+        if (deduped.empty()) {
+            deduped.push_back(point);
+            continue;
+        }
+        const float current_angle = normalize_angle_degrees(point.angle_degrees);
+        const float previous_angle = normalize_angle_degrees(deduped.back().angle_degrees);
+        if (std::fabs(current_angle - previous_angle) <= kDuplicateAngleEpsilon) {
+            continue;
+        }
+        deduped.push_back(point);
+    }
+    points = std::move(deduped);
+}
+
+float read_point_angle_for_legacy_detection(const nlohmann::json& payload,
+                                            std::size_t fallback_index,
+                                            std::size_t fallback_count) {
+    float angle = normalize_angle_degrees(
+        (360.0f * static_cast<float>(fallback_index)) /
+        static_cast<float>(std::max<std::size_t>(1, fallback_count)));
+    if (!payload.is_object()) {
+        return angle;
+    }
+    if (payload.contains("angle_degrees")) {
+        if (const auto parsed = parse_number_like_json(payload["angle_degrees"])) {
+            angle = normalize_angle_degrees(static_cast<float>(*parsed));
+        }
+    }
+    return angle;
+}
+
+bool points_payload_looks_legacy_x_depth_model(const nlohmann::json& points_payload,
+                                               float height_radius_z) {
+    if (!points_payload.is_array() || points_payload.empty()) {
+        return false;
+    }
+    const std::size_t point_count = std::max<std::size_t>(1, points_payload.size());
+    int comparable_points = 0;
+    int matched_points = 0;
+    for (std::size_t idx = 0; idx < point_count; ++idx) {
+        const auto& entry = points_payload[idx];
+        if (!entry.is_object()) {
+            continue;
+        }
+        const float angle = read_point_angle_for_legacy_detection(entry, idx, point_count);
+        const int expected_offset_z = [&]() {
+            int offset_x = 0;
+            int offset_z = 0;
+            oval_anchor_math::compute_xz_offsets_from_angle(angle,
+                                                            1.0f,
+                                                            height_radius_z,
+                                                            offset_x,
+                                                            offset_z);
+            return offset_z;
+        }();
+        if (std::abs(expected_offset_z) <= 1) {
+            continue;
+        }
+        ++comparable_points;
+
+        const float raw_texture_y = entry.contains("texture_y")
+            ? static_cast<float>(parse_number_like_json(entry["texture_y"]).value_or(0.0))
+            : 0.0f;
+        const float raw_depth_offset = entry.contains("depth_offset")
+            ? static_cast<float>(parse_number_like_json(entry["depth_offset"]).value_or(0.0))
+            : 0.0f;
+        const bool texture_y_legacy = std::fabs(raw_texture_y) <= 0.5f;
+        const bool depth_matches_legacy =
+            std::fabs(raw_depth_offset - static_cast<float>(expected_offset_z)) <= 0.75f;
+        if (texture_y_legacy && depth_matches_legacy) {
+            ++matched_points;
+        }
+    }
+    return comparable_points > 0 && matched_points == comparable_points;
+}
+
+AssetInfo::OvalAnchorPoint make_default_oval_anchor_point(std::size_t point_index,
+                                                          std::size_t point_count,
+                                                          int center_texture_x,
+                                                          int center_texture_y,
+                                                          float width_radius_x,
+                                                          float height_radius_z) {
+    (void)center_texture_x;
+    (void)center_texture_y;
+    AssetInfo::OvalAnchorPoint point{};
+    const std::size_t clamped_count = std::max<std::size_t>(1, point_count);
+    point.angle_degrees =
+        normalize_angle_degrees((360.0f * static_cast<float>(point_index)) / static_cast<float>(clamped_count));
+    recompute_oval_point_position(point, width_radius_x, height_radius_z);
+    point.flip_horizontal = true;
+    point.flip_vertical = true;
+    point.rotation_degrees = 0.0f;
+    point.hidden = false;
+    point.resolve_x = true;
+    point.scaling_method = AnchorScalingMethod::Parent;
+    return point;
+}
+
+std::vector<AssetInfo::OvalAnchorPoint> make_default_oval_anchor_points(int center_texture_x,
+                                                                         int center_texture_y,
+                                                                         float width_radius_x,
+                                                                         float height_radius_z,
+                                                                         std::size_t count = kDefaultOvalPointCount) {
+    const std::size_t point_count = std::max<std::size_t>(1, count);
+    std::vector<AssetInfo::OvalAnchorPoint> points;
+    points.reserve(point_count);
+    for (std::size_t i = 0; i < point_count; ++i) {
+        points.push_back(make_default_oval_anchor_point(i,
+                                                        point_count,
+                                                        center_texture_x,
+                                                        center_texture_y,
+                                                        width_radius_x,
+                                                        height_radius_z));
+    }
+    return points;
+}
+
+AssetInfo::OvalAnchorPoint normalize_oval_anchor_point(const nlohmann::json& payload,
+                                                       std::size_t fallback_index,
+                                                       std::size_t fallback_count,
+                                                       int center_texture_x,
+                                                       int center_texture_y,
+                                                       float width_radius_x,
+                                                       float height_radius_z,
+                                                       bool legacy_x_depth_model) {
+    (void)center_texture_x;
+    (void)center_texture_y;
+    AssetInfo::OvalAnchorPoint point =
+        make_default_oval_anchor_point(fallback_index,
+                                       fallback_count,
+                                       center_texture_x,
+                                       center_texture_y,
+                                       width_radius_x,
+                                       height_radius_z);
+
+    if (!payload.is_object()) {
+        return point;
+    }
+
+    if (payload.contains("angle_degrees")) {
+        if (const auto parsed_angle = parse_number_like_json(payload["angle_degrees"])) {
+            point.angle_degrees = normalize_angle_degrees(static_cast<float>(*parsed_angle));
+        }
+    }
+    if (payload.contains("rotation_degrees")) {
+        if (const auto parsed = parse_number_like_json(payload["rotation_degrees"])) {
+            point.rotation_degrees = std::isfinite(*parsed) ? static_cast<float>(*parsed) : 0.0f;
+        }
+    }
+    if (!legacy_x_depth_model && payload.contains("depth_offset")) {
+        if (const auto parsed = parse_number_like_json(payload["depth_offset"])) {
+            point.depth_offset = std::isfinite(*parsed) ? static_cast<float>(*parsed) : 0.0f;
+        }
+    } else {
+        point.depth_offset = 0.0f;
+    }
+    if (payload.contains("hidden") && payload["hidden"].is_boolean()) {
+        point.hidden = payload["hidden"].get<bool>();
+    }
+    if (payload.contains("resolve_x") && payload["resolve_x"].is_boolean()) {
+        point.resolve_x = payload["resolve_x"].get<bool>();
+    }
+    if (payload.contains("flip_horizontal") && payload["flip_horizontal"].is_boolean()) {
+        point.flip_horizontal = payload["flip_horizontal"].get<bool>();
+    }
+    if (payload.contains("flip_vertical") && payload["flip_vertical"].is_boolean()) {
+        point.flip_vertical = payload["flip_vertical"].get<bool>();
+    }
+    if (payload.contains("scaling_method") && payload["scaling_method"].is_string()) {
+        point.scaling_method = anchor_points::anchor_scaling_method_from_token(
+            payload["scaling_method"].get<std::string>(),
+            AnchorScalingMethod::Parent);
+    }
+    recompute_oval_point_position(point, width_radius_x, height_radius_z);
+    return point;
+}
+
+std::vector<AssetInfo::OvalAnchorMapping> parse_oval_anchor_mappings_payload(const nlohmann::json& payload,
+                                                                              const std::string& fallback_asset_name = std::string{}) {
+    std::vector<AssetInfo::OvalAnchorMapping> parsed;
+    if (!payload.is_array()) {
+        return parsed;
+    }
+
+    std::unordered_set<std::string> seen_names;
+    parsed.reserve(payload.size());
+    for (const auto& entry : payload) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        AssetInfo::OvalAnchorMapping mapping{};
+        mapping.name = trim_copy(entry.value("name", std::string{}));
+        if (mapping.name.empty()) {
+            continue;
+        }
+        if (!seen_names.insert(mapping.name).second) {
+            continue;
+        }
+        mapping.asset_name = trim_copy(entry.value("asset_name", std::string{}));
+        if (mapping.asset_name.empty()) {
+            mapping.asset_name = fallback_asset_name.empty() ? mapping.name : fallback_asset_name;
+        }
+        const auto width_value = parse_number_like_json(entry.value("width_radius_x", nlohmann::json{}));
+        const auto height_value = parse_number_like_json(entry.value("height_radius_z", nlohmann::json{}));
+        mapping.width_radius_x = sanitize_oval_radius(width_value ? static_cast<float>(*width_value) : kDefaultOvalWidthRadius,
+                                                      kDefaultOvalWidthRadius);
+        mapping.height_radius_z =
+            sanitize_oval_radius(height_value ? static_cast<float>(*height_value) : kDefaultOvalHeightRadius,
+                                 kDefaultOvalHeightRadius);
+        const auto offset_value = parse_number_like_json(entry.value("radius_offset_degrees", nlohmann::json{}));
+        mapping.radius_offset_degrees = sanitize_oval_radius_offset_degrees(
+            offset_value ? static_cast<float>(*offset_value) : kDefaultOvalRadiusOffsetDegrees);
+
+        std::unordered_set<std::string> seen_legacy;
+        if (entry.contains("legacy_names") && entry["legacy_names"].is_array()) {
+            for (const auto& legacy : entry["legacy_names"]) {
+                if (!legacy.is_string()) {
+                    continue;
+                }
+                std::string legacy_name = trim_copy(legacy.get<std::string>());
+                if (legacy_name.empty() || legacy_name == mapping.name) {
+                    continue;
+                }
+                if (seen_legacy.insert(legacy_name).second) {
+                    mapping.legacy_names.push_back(std::move(legacy_name));
+                }
+            }
+        }
+
+        const auto points_it = entry.find("points");
+        const bool legacy_x_depth_model =
+            points_it != entry.end() &&
+            points_it->is_array() &&
+            points_payload_looks_legacy_x_depth_model(*points_it, mapping.height_radius_z);
+        if (points_it != entry.end() && points_it->is_array()) {
+            const std::size_t point_count = std::max<std::size_t>(1, points_it->size());
+            mapping.points.reserve(point_count);
+            std::size_t idx = 0;
+            for (const auto& point_entry : *points_it) {
+                mapping.points.push_back(normalize_oval_anchor_point(point_entry,
+                                                                     idx,
+                                                                     point_count,
+                                                                     0,
+                                                                     0,
+                                                                     mapping.width_radius_x,
+                                                                     mapping.height_radius_z,
+                                                                     legacy_x_depth_model));
+                ++idx;
+            }
+        }
+        if (mapping.points.empty()) {
+            mapping.points =
+                make_default_oval_anchor_points(0, 0, mapping.width_radius_x, mapping.height_radius_z, kDefaultOvalPointCount);
+        }
+        normalize_and_sort_oval_points(mapping.points);
+        if (mapping.points.empty()) {
+            mapping.points =
+                make_default_oval_anchor_points(0, 0, mapping.width_radius_x, mapping.height_radius_z, kDefaultOvalPointCount);
+        }
+        parsed.push_back(std::move(mapping));
+    }
+    return parsed;
+}
+
+nlohmann::json encode_oval_anchor_point(const AssetInfo::OvalAnchorPoint& point) {
+    nlohmann::json encoded = nlohmann::json::object();
+    encoded["angle_degrees"] = normalize_angle_degrees(point.angle_degrees);
+    encoded["texture_x"] = point.texture_x;
+    encoded["texture_y"] = point.texture_y;
+    encoded["depth_offset"] = std::isfinite(point.depth_offset) ? point.depth_offset : 0.0f;
+    encoded["flip_horizontal"] = point.flip_horizontal;
+    encoded["flip_vertical"] = point.flip_vertical;
+    encoded["rotation_degrees"] = std::isfinite(point.rotation_degrees) ? point.rotation_degrees : 0.0f;
+    encoded["hidden"] = point.hidden;
+    encoded["resolve_x"] = point.resolve_x;
+    encoded["scaling_method"] = std::string(anchor_points::anchor_scaling_method_to_token(point.scaling_method));
+    return encoded;
+}
+
+nlohmann::json build_oval_anchor_mappings_payload(const std::vector<AssetInfo::OvalAnchorMapping>& mappings) {
+    nlohmann::json payload = nlohmann::json::array();
+    std::unordered_set<std::string> seen_names;
+    for (const auto& mapping : mappings) {
+        if (!mapping.valid()) {
+            continue;
+        }
+        if (!seen_names.insert(mapping.name).second) {
+            continue;
+        }
+        nlohmann::json encoded = nlohmann::json::object();
+        encoded["name"] = mapping.name;
+        encoded["asset_name"] = mapping.asset_name.empty() ? mapping.name : mapping.asset_name;
+        encoded["width_radius_x"] = sanitize_oval_radius(mapping.width_radius_x, kDefaultOvalWidthRadius);
+        encoded["height_radius_z"] = sanitize_oval_radius(mapping.height_radius_z, kDefaultOvalHeightRadius);
+        encoded["radius_offset_degrees"] = sanitize_oval_radius_offset_degrees(mapping.radius_offset_degrees);
+
+        nlohmann::json legacy_names = nlohmann::json::array();
+        std::unordered_set<std::string> seen_legacy;
+        for (const auto& legacy_name : mapping.legacy_names) {
+            if (legacy_name.empty() || legacy_name == mapping.name) {
+                continue;
+            }
+            if (seen_legacy.insert(legacy_name).second) {
+                legacy_names.push_back(legacy_name);
+            }
+        }
+        encoded["legacy_names"] = std::move(legacy_names);
+
+        nlohmann::json points = nlohmann::json::array();
+        if (mapping.points.empty()) {
+            for (const auto& point :
+                 make_default_oval_anchor_points(0,
+                                                 0,
+                                                 sanitize_oval_radius(mapping.width_radius_x, kDefaultOvalWidthRadius),
+                                                 sanitize_oval_radius(mapping.height_radius_z, kDefaultOvalHeightRadius),
+                                                 kDefaultOvalPointCount)) {
+                points.push_back(encode_oval_anchor_point(point));
+            }
+        } else {
+            for (const auto& point : mapping.points) {
+                points.push_back(encode_oval_anchor_point(point));
+            }
+        }
+        encoded["points"] = std::move(points);
+        payload.push_back(std::move(encoded));
+    }
+    return payload;
+}
+
+SDL_Point resolve_anchor_frame_dimensions(const AssetInfo& info, const AnimationFrame* frame) {
+    int frame_w = 0;
+    int frame_h = 0;
+
+    if (frame && !frame->variants.empty()) {
+        const FrameVariant& variant = frame->variants.front();
+        if (variant.source_rect.w > 0 && variant.source_rect.h > 0) {
+            frame_w = variant.source_rect.w;
+            frame_h = variant.source_rect.h;
+        } else if (SDL_Texture* texture = variant.get_base_texture()) {
+            float tex_w = 0.0f;
+            float tex_h = 0.0f;
+            if (SDL_GetTextureSize(texture, &tex_w, &tex_h)) {
+                frame_w = static_cast<int>(std::lround(tex_w));
+                frame_h = static_cast<int>(std::lround(tex_h));
+            }
+        }
+    }
+
+    if (frame_w <= 0) {
+        frame_w = std::max(1, info.original_canvas_width);
+    }
+    if (frame_h <= 0) {
+        frame_h = std::max(1, info.original_canvas_height);
+    }
+    return SDL_Point{std::max(1, frame_w), std::max(1, frame_h)};
+}
+
+DisplacedAssetAnchorPoint make_default_center_anchor(const std::string& center_anchor_name,
+                                                     const SDL_Point& frame_dims) {
+    const int center_x = std::max(1, frame_dims.x) / 2;
+    const int center_y = std::max(1, frame_dims.y) - 1;
+    return DisplacedAssetAnchorPoint{center_anchor_name, center_x, center_y, 0.0f};
+}
+
+nlohmann::json encode_anchor_point_json(const DisplacedAssetAnchorPoint& anchor) {
+    nlohmann::json encoded = nlohmann::json::object();
+    encoded["name"] = anchor.name;
+    encoded["texture_x"] = anchor.texture_x;
+    encoded["texture_y"] = anchor.texture_y;
+    encoded["depth_offset"] = std::isfinite(anchor.depth_offset) ? anchor.depth_offset : 0.0f;
+    encoded["flip_horizontal"] = anchor.flip_horizontal;
+    encoded["flip_vertical"] = anchor.flip_vertical;
+    encoded["rotation_degrees"] = std::isfinite(anchor.rotation_degrees) ? anchor.rotation_degrees : 0.0f;
+    encoded["hidden"] = anchor.hidden;
+    encoded["resolve_x"] = anchor.resolve_x;
+    encoded["scaling_method"] = std::string(anchor_points::anchor_scaling_method_to_token(anchor.scaling_method));
+    if (anchor.has_light_data) {
+        nlohmann::json light_json = nlohmann::json::object();
+        light_json["enabled"] = anchor.light.enabled;
+        light_json["color"] = nlohmann::json::array(
+            {anchor.light.color_r, anchor.light.color_g, anchor.light.color_b});
+        light_json["intensity"] = anchor.light.intensity;
+        light_json["radius"] = anchor.light.radius;
+        light_json["falloff"] = anchor.light.falloff;
+        light_json["shadow_strength"] = anchor.light.shadow_strength;
+        light_json["cast_shadows"] = anchor.light.cast_shadows;
+        encoded["light"] = std::move(light_json);
+    }
+    return encoded;
+}
+
+nlohmann::json encode_anchor_frame_json(const std::vector<DisplacedAssetAnchorPoint>& anchors) {
+    nlohmann::json frame_json = nlohmann::json::array();
+    for (const auto& anchor : anchors) {
+        if (anchor.is_valid()) {
+            frame_json.push_back(encode_anchor_point_json(anchor));
+        }
+    }
+    return frame_json;
+}
+
+void normalize_anchor_points_payload(nlohmann::json& animation_payload, std::size_t frame_count) {
+    if (!animation_payload.is_object()) {
+        animation_payload = nlohmann::json::object();
+    }
+    nlohmann::json anchor_points = nlohmann::json::array();
+    auto existing_it = animation_payload.find("anchor_points");
+    if (existing_it != animation_payload.end() && existing_it->is_array()) {
+        anchor_points = *existing_it;
+    }
+
+    nlohmann::json normalized = nlohmann::json::array();
+    for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+        if (frame_index < anchor_points.size() && anchor_points[frame_index].is_array()) {
+            normalized.push_back(anchor_points[frame_index]);
+        } else {
+            normalized.push_back(nlohmann::json::array());
+        }
+    }
+    animation_payload["anchor_points"] = std::move(normalized);
+}
+
+bool write_anchor_frame_to_animation_payload(nlohmann::json& animation_payload,
+                                             std::size_t frame_count,
+                                             std::size_t frame_index,
+                                             const std::vector<DisplacedAssetAnchorPoint>& anchors) {
+    if (frame_count == 0 || frame_index >= frame_count) {
+        return false;
+    }
+    normalize_anchor_points_payload(animation_payload, frame_count);
+    auto it = animation_payload.find("anchor_points");
+    if (it == animation_payload.end() || !it->is_array() || frame_index >= it->size()) {
+        return false;
+    }
+    (*it)[frame_index] = encode_anchor_frame_json(anchors);
+    return true;
+}
+
+bool upsert_anchor_in_frame(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                            const DisplacedAssetAnchorPoint& anchor) {
+    if (!anchor.is_valid()) {
+        return false;
+    }
+    for (auto& existing : anchors) {
+        if (existing.name == anchor.name) {
+            return false;
+        }
+    }
+    anchors.push_back(anchor);
+    return true;
+}
+
+bool rename_anchor_in_frame(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                            const std::string& old_name,
+                            const std::string& new_name) {
+    if (old_name.empty() || new_name.empty() || old_name == new_name) {
+        return false;
+    }
+    bool changed = false;
+    bool has_new = false;
+    for (const auto& anchor : anchors) {
+        if (anchor.name == new_name) {
+            has_new = true;
+            break;
+        }
+    }
+
+    for (auto it = anchors.begin(); it != anchors.end();) {
+        if (it->name != old_name) {
+            ++it;
+            continue;
+        }
+        if (has_new) {
+            it = anchors.erase(it);
+            changed = true;
+            continue;
+        }
+        it->name = new_name;
+        has_new = true;
+        changed = true;
+        ++it;
+    }
+    return changed;
+}
+
+bool upsert_anchor_in_frame_json(nlohmann::json& frame_anchor_array,
+                                 const DisplacedAssetAnchorPoint& anchor) {
+    if (!anchor.is_valid()) {
+        return false;
+    }
+    if (!frame_anchor_array.is_array()) {
+        frame_anchor_array = nlohmann::json::array();
+    }
+    for (const auto& entry : frame_anchor_array) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        if (entry.value("name", std::string{}) == anchor.name) {
+            return false;
+        }
+    }
+    frame_anchor_array.push_back(encode_anchor_point_json(anchor));
+    return true;
+}
+
+bool rename_anchor_in_frame_json(nlohmann::json& frame_anchor_array,
+                                 const std::string& old_name,
+                                 const std::string& new_name) {
+    if (old_name.empty() || new_name.empty() || old_name == new_name) {
+        return false;
+    }
+    if (!frame_anchor_array.is_array()) {
+        return false;
+    }
+
+    bool changed = false;
+    bool has_new = false;
+    for (const auto& entry : frame_anchor_array) {
+        if (entry.is_object() && entry.value("name", std::string{}) == new_name) {
+            has_new = true;
+            break;
+        }
+    }
+
+    for (auto it = frame_anchor_array.begin(); it != frame_anchor_array.end();) {
+        if (!it->is_object() || it->value("name", std::string{}) != old_name) {
+            ++it;
+            continue;
+        }
+        if (has_new) {
+            it = frame_anchor_array.erase(it);
+            changed = true;
+            continue;
+        }
+        (*it)["name"] = new_name;
+        has_new = true;
+        changed = true;
+        ++it;
+    }
+    return changed;
+}
+
+bool remove_anchor_in_frame(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                            const std::unordered_set<std::string>& names) {
+    if (anchors.empty() || names.empty()) {
+        return false;
+    }
+    const auto erase_it = std::remove_if(anchors.begin(),
+                                         anchors.end(),
+                                         [&](const DisplacedAssetAnchorPoint& anchor) {
+                                             return names.find(anchor.name) != names.end();
+                                         });
+    if (erase_it == anchors.end()) {
+        return false;
+    }
+    anchors.erase(erase_it, anchors.end());
+    return true;
+}
+
+bool remove_anchor_in_frame_json(nlohmann::json& frame_anchor_array,
+                                 const std::unordered_set<std::string>& names) {
+    if (!frame_anchor_array.is_array() || names.empty()) {
+        return false;
+    }
+    bool changed = false;
+    for (auto it = frame_anchor_array.begin(); it != frame_anchor_array.end();) {
+        if (!it->is_object()) {
+            ++it;
+            continue;
+        }
+        const std::string anchor_name = it->value("name", std::string{});
+        if (names.find(anchor_name) == names.end()) {
+            ++it;
+            continue;
+        }
+        it = frame_anchor_array.erase(it);
+        changed = true;
+    }
+    return changed;
 }
 
 const nlohmann::json* locate_animation_payloads(const nlohmann::json& root);
@@ -1053,8 +1871,10 @@ nlohmann::json AssetInfo::manifest_payload() const {
         if (!payload.is_object()) {
                 payload = nlohmann::json::object();
         }
+        payload["weight_kg"] = weight_kg;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
+        payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
                 payload["asset_name"] = name;
         }
@@ -1179,6 +1999,14 @@ void AssetInfo::set_scale_percentage(float percent) {
                 info_json_["size_settings"] = nlohmann::json::object();
         }
         info_json_["size_settings"]["scale_percentage"] = percent;
+}
+
+void AssetInfo::set_weight_kg(float weight) {
+        if (weight < 0.0f) {
+                weight = 0.0f;
+        }
+        weight_kg = weight;
+        info_json_["weight_kg"] = weight;
 }
 
 void AssetInfo::set_scale_filter(bool smooth) {
@@ -1451,6 +2279,11 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         } else {
                 set_anchor_point_child_candidates_payload(nlohmann::json::array());
         }
+        if (data.contains(kOvalAnchorMappingsKey)) {
+                set_oval_anchor_mappings_payload(data[kOvalAnchorMappingsKey]);
+        } else {
+                set_oval_anchor_mappings_payload(nlohmann::json::array());
+        }
         load_animations(data);
 
         mappings.clear();
@@ -1508,9 +2341,40 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 if (data.contains("canvas_height") && data["canvas_height"].is_number_integer()) {
                         original_canvas_height = std::max(0, data["canvas_height"].get<int>());
                 }
+                if (data.contains("weight_kg") && data["weight_kg"].is_number()) {
+                        weight_kg = std::max(0.0f, static_cast<float>(data["weight_kg"].get<double>()));
+                }
         } catch (...) {
 
         }
+
+        if (is_vibble_asset_name(name) && oval_anchor_mappings.empty()) {
+                const std::vector<std::string> vibble_mapping_names{
+                    "eyes",
+                    "hat",
+                    "mouth",
+                    "neck",
+                    "weapon",
+                };
+                std::vector<OvalAnchorMapping> defaults;
+                defaults.reserve(vibble_mapping_names.size());
+                for (const auto& mapping_name : vibble_mapping_names) {
+                        OvalAnchorMapping mapping{};
+                        mapping.name = mapping_name;
+                        mapping.asset_name = name;
+                        mapping.width_radius_x = kDefaultOvalWidthRadius;
+                        mapping.height_radius_z = kDefaultOvalHeightRadius;
+                        mapping.points = make_default_oval_anchor_points(0,
+                                                                          0,
+                                                                          mapping.width_radius_x,
+                                                                          mapping.height_radius_z,
+                                                                          kDefaultOvalPointCount);
+                        defaults.push_back(std::move(mapping));
+                }
+                set_oval_anchor_mappings_payload(build_oval_anchor_mappings_payload(defaults));
+        }
+
+        ensure_oval_center_anchors_for_all_mappings();
 
 }
 
@@ -1554,6 +2418,13 @@ void AssetInfo::sync_anchor_point_child_candidates_info_json() {
     info_json_.erase(kAnchorPointChildCandidatesLegacyKey);
 }
 
+void AssetInfo::sync_oval_anchor_mappings_info_json() {
+    if (!info_json_.is_object()) {
+        info_json_ = nlohmann::json::object();
+    }
+    info_json_[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
+}
+
 void AssetInfo::set_anchor_point_child_candidates_payload(const nlohmann::json& candidates) {
     anchor_point_child_candidates = parse_anchor_point_child_candidates_payload(candidates);
     sync_anchor_point_child_candidates_info_json();
@@ -1563,16 +2434,506 @@ nlohmann::json AssetInfo::anchor_point_child_candidates_payload() const {
     return build_anchor_point_child_candidates_payload(anchor_point_child_candidates);
 }
 
-nlohmann::json AssetInfo::anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const {
-    if (anchor_point_name.empty()) {
-        return nlohmann::json::object();
-    }
-    for (const auto& candidate : anchor_point_child_candidates) {
-        if (candidate.anchor_point_name == anchor_point_name) {
-            return candidate.candidates.is_object() ? candidate.candidates : nlohmann::json::object();
+void AssetInfo::set_oval_anchor_mappings_payload(const nlohmann::json& mappings) {
+    oval_anchor_mappings = parse_oval_anchor_mappings_payload(mappings, name);
+    for (auto& mapping : oval_anchor_mappings) {
+        mapping.width_radius_x = sanitize_oval_radius(mapping.width_radius_x, kDefaultOvalWidthRadius);
+        mapping.height_radius_z = sanitize_oval_radius(mapping.height_radius_z, kDefaultOvalHeightRadius);
+        mapping.radius_offset_degrees = sanitize_oval_radius_offset_degrees(mapping.radius_offset_degrees);
+        for (auto& point : mapping.points) {
+            point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
+            recompute_oval_point_position(point, mapping.width_radius_x, mapping.height_radius_z);
         }
     }
-    return nlohmann::json::object();
+    ensure_oval_center_anchors_for_all_mappings();
+    sync_oval_anchor_mappings_info_json();
+}
+
+nlohmann::json AssetInfo::oval_anchor_mappings_payload() const {
+    return build_oval_anchor_mappings_payload(oval_anchor_mappings);
+}
+
+bool AssetInfo::upsert_oval_anchor_mapping(const OvalAnchorMapping& mapping) {
+    if (!mapping.valid()) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = oval_anchor_mappings_payload();
+    std::vector<OvalAnchorMapping> updated = parse_oval_anchor_mappings_payload(before_payload, name);
+
+    OvalAnchorMapping normalized = mapping;
+    normalized.name = trim_copy(normalized.name);
+    normalized.asset_name = trim_copy(normalized.asset_name);
+    if (normalized.asset_name.empty()) {
+        normalized.asset_name = name;
+    }
+    normalized.width_radius_x = sanitize_oval_radius(normalized.width_radius_x, kDefaultOvalWidthRadius);
+    normalized.height_radius_z = sanitize_oval_radius(normalized.height_radius_z, kDefaultOvalHeightRadius);
+    normalized.radius_offset_degrees = sanitize_oval_radius_offset_degrees(normalized.radius_offset_degrees);
+    if (normalized.points.empty()) {
+        normalized.points =
+            make_default_oval_anchor_points(0, 0, normalized.width_radius_x, normalized.height_radius_z, kDefaultOvalPointCount);
+    } else {
+        for (auto& point : normalized.points) {
+            point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
+            if (!std::isfinite(point.rotation_degrees)) {
+                point.rotation_degrees = 0.0f;
+            }
+            if (!std::isfinite(point.depth_offset)) {
+                point.depth_offset = 0.0f;
+            }
+            recompute_oval_point_position(point, normalized.width_radius_x, normalized.height_radius_z);
+        }
+        normalize_and_sort_oval_points(normalized.points);
+        if (normalized.points.empty()) {
+            normalized.points =
+                make_default_oval_anchor_points(0, 0, normalized.width_radius_x, normalized.height_radius_z, kDefaultOvalPointCount);
+        }
+    }
+    {
+        std::unordered_set<std::string> seen_legacy;
+        std::vector<std::string> filtered_legacy;
+        filtered_legacy.reserve(normalized.legacy_names.size());
+        for (const auto& legacy_name : normalized.legacy_names) {
+            const std::string trimmed = trim_copy(legacy_name);
+            if (trimmed.empty() || trimmed == normalized.name) {
+                continue;
+            }
+            if (seen_legacy.insert(trimmed).second) {
+                filtered_legacy.push_back(trimmed);
+            }
+        }
+        normalized.legacy_names = std::move(filtered_legacy);
+    }
+    const std::string normalized_name = normalized.name;
+
+    auto existing_it = std::find_if(updated.begin(),
+                                    updated.end(),
+                                    [&](const OvalAnchorMapping& current) { return current.name == normalized.name; });
+    if (existing_it != updated.end()) {
+        *existing_it = std::move(normalized);
+    } else {
+        updated.push_back(std::move(normalized));
+    }
+
+    const nlohmann::json after_payload = build_oval_anchor_mappings_payload(updated);
+    if (after_payload == before_payload) {
+        return ensure_oval_center_anchors_for_mapping(normalized_name);
+    }
+
+    oval_anchor_mappings = std::move(updated);
+    (void)ensure_oval_center_anchors_for_mapping(normalized_name);
+    sync_oval_anchor_mappings_info_json();
+    return true;
+}
+
+bool AssetInfo::remove_oval_anchor_mapping(const std::string& mapping_name) {
+    const std::string trimmed_name = trim_copy(mapping_name);
+    if (trimmed_name.empty()) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = oval_anchor_mappings_payload();
+    std::vector<OvalAnchorMapping> updated = parse_oval_anchor_mappings_payload(before_payload, name);
+    auto remove_it = std::find_if(updated.begin(),
+                                  updated.end(),
+                                  [&](const OvalAnchorMapping& mapping) { return mapping.name == trimmed_name; });
+    if (remove_it == updated.end()) {
+        return false;
+    }
+
+    std::unordered_set<std::string> center_anchor_names;
+    auto append_center_name = [&](const std::string& source_name) {
+        const std::string center_name = oval_center_anchor_name(source_name);
+        if (!center_name.empty()) {
+            center_anchor_names.insert(center_name);
+        }
+    };
+    append_center_name(remove_it->name);
+    for (const auto& legacy_name : remove_it->legacy_names) {
+        append_center_name(legacy_name);
+    }
+
+    updated.erase(remove_it);
+
+    const nlohmann::json after_payload = build_oval_anchor_mappings_payload(updated);
+    const bool oval_changed = (after_payload != before_payload);
+
+    bool center_anchor_changed = false;
+    if (!center_anchor_names.empty()) {
+        for (auto& [animation_id, animation] : animations) {
+            (void)animation_id;
+            for (std::size_t path_index = 0; path_index < animation.movement_path_count(); ++path_index) {
+                auto& path = animation.movement_path(path_index);
+                for (auto& frame : path) {
+                    if (remove_anchor_in_frame(frame.anchor_points, center_anchor_names)) {
+                        frame.rebuild_anchor_lookup();
+                        center_anchor_changed = true;
+                    }
+                }
+            }
+        }
+
+        if (!anims_json_.is_object()) {
+            anims_json_ = nlohmann::json::object();
+        }
+        if (!info_json_.is_object()) {
+            info_json_ = nlohmann::json::object();
+        }
+        if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
+            info_json_["animations"] = nlohmann::json::object();
+        }
+
+        for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+            if (!it.value().is_object()) {
+                continue;
+            }
+            auto anchor_points_it = it.value().find("anchor_points");
+            if (anchor_points_it == it.value().end() || !anchor_points_it->is_array()) {
+                continue;
+            }
+            for (auto& frame_anchors_json : *anchor_points_it) {
+                center_anchor_changed =
+                    remove_anchor_in_frame_json(frame_anchors_json, center_anchor_names) || center_anchor_changed;
+            }
+        }
+    }
+
+    if (!oval_changed && !center_anchor_changed) {
+        return false;
+    }
+
+    if (oval_changed) {
+        oval_anchor_mappings = std::move(updated);
+        sync_oval_anchor_mappings_info_json();
+    }
+    if (center_anchor_changed) {
+        info_json_["animations"] = anims_json_;
+    }
+    return true;
+}
+
+bool AssetInfo::rename_oval_anchor_mapping(const std::string& old_name,
+                                           const std::string& new_name,
+                                           bool append_legacy_alias) {
+    const std::string trimmed_old = trim_copy(old_name);
+    const std::string trimmed_new = trim_copy(new_name);
+    if (trimmed_old.empty() || trimmed_new.empty()) {
+        return false;
+    }
+    if (trimmed_old == trimmed_new) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = oval_anchor_mappings_payload();
+    std::vector<OvalAnchorMapping> updated = parse_oval_anchor_mappings_payload(before_payload, name);
+
+    auto old_it = std::find_if(updated.begin(),
+                               updated.end(),
+                               [&](const OvalAnchorMapping& mapping) { return mapping.name == trimmed_old; });
+    if (old_it == updated.end()) {
+        return false;
+    }
+    const auto conflict_it = std::find_if(updated.begin(),
+                                          updated.end(),
+                                          [&](const OvalAnchorMapping& mapping) { return mapping.name == trimmed_new; });
+    if (conflict_it != updated.end()) {
+        return false;
+    }
+
+    old_it->name = trimmed_new;
+    if (append_legacy_alias && trimmed_old != trimmed_new) {
+        auto has_legacy = std::find(old_it->legacy_names.begin(), old_it->legacy_names.end(), trimmed_old);
+        if (has_legacy == old_it->legacy_names.end()) {
+            old_it->legacy_names.push_back(trimmed_old);
+        }
+    }
+    old_it->legacy_names.erase(std::remove(old_it->legacy_names.begin(),
+                                           old_it->legacy_names.end(),
+                                           trimmed_new),
+                               old_it->legacy_names.end());
+
+    const nlohmann::json after_payload = build_oval_anchor_mappings_payload(updated);
+    const bool oval_changed = (after_payload != before_payload);
+    bool candidate_changed = false;
+    bool center_anchor_changed = false;
+    if (trimmed_old != trimmed_new) {
+        candidate_changed = rename_anchor_point_child_candidate(trimmed_old, trimmed_new);
+        center_anchor_changed = rename_oval_center_anchors_for_mapping(trimmed_old, trimmed_new, true);
+    }
+
+    if (!oval_changed && !candidate_changed && !center_anchor_changed) {
+        return false;
+    }
+    if (oval_changed) {
+        oval_anchor_mappings = std::move(updated);
+        sync_oval_anchor_mappings_info_json();
+    }
+    return true;
+}
+
+const AssetInfo::OvalAnchorMapping* AssetInfo::find_oval_anchor_mapping(const std::string& mapping_name,
+                                                                        bool include_legacy_aliases) const {
+    if (mapping_name.empty()) {
+        return nullptr;
+    }
+    auto direct_it = std::find_if(oval_anchor_mappings.begin(),
+                                  oval_anchor_mappings.end(),
+                                  [&](const OvalAnchorMapping& mapping) { return mapping.name == mapping_name; });
+    if (direct_it != oval_anchor_mappings.end()) {
+        return &(*direct_it);
+    }
+    if (!include_legacy_aliases) {
+        return nullptr;
+    }
+    for (const auto& mapping : oval_anchor_mappings) {
+        if (std::find(mapping.legacy_names.begin(), mapping.legacy_names.end(), mapping_name) !=
+            mapping.legacy_names.end()) {
+            return &mapping;
+        }
+    }
+    return nullptr;
+}
+
+std::string AssetInfo::oval_center_anchor_name_for_mapping(const std::string& mapping_name) {
+    return oval_center_anchor_name(mapping_name);
+}
+
+bool AssetInfo::ensure_oval_center_anchors_for_mapping(const std::string& mapping_name,
+                                                       bool include_legacy_aliases) {
+    const std::string trimmed_mapping_name = trim_copy(mapping_name);
+    if (trimmed_mapping_name.empty()) {
+        return false;
+    }
+
+    const OvalAnchorMapping* mapping = find_oval_anchor_mapping(trimmed_mapping_name, include_legacy_aliases);
+    if (!mapping) {
+        return false;
+    }
+
+    std::vector<std::string> center_anchor_names;
+    {
+        std::unordered_set<std::string> seen_names;
+        auto add_center_name = [&](const std::string& source_name) {
+            const std::string center_name = oval_center_anchor_name(source_name);
+            if (!center_name.empty() && seen_names.insert(center_name).second) {
+                center_anchor_names.push_back(center_name);
+            }
+        };
+        add_center_name(mapping->name);
+        if (include_legacy_aliases) {
+            for (const auto& legacy_name : mapping->legacy_names) {
+                add_center_name(legacy_name);
+            }
+        }
+    }
+    if (center_anchor_names.empty()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (auto& [animation_id, animation] : animations) {
+        (void)animation_id;
+        for (std::size_t path_index = 0; path_index < animation.movement_path_count(); ++path_index) {
+            auto& path = animation.movement_path(path_index);
+            for (auto& frame : path) {
+                const SDL_Point frame_dims = resolve_anchor_frame_dimensions(*this, &frame);
+                bool frame_changed = false;
+                for (const auto& center_name : center_anchor_names) {
+                    const DisplacedAssetAnchorPoint default_anchor = make_default_center_anchor(center_name, frame_dims);
+                    frame_changed = upsert_anchor_in_frame(frame.anchor_points, default_anchor) || frame_changed;
+                }
+                if (frame_changed) {
+                    frame.rebuild_anchor_lookup();
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (!anims_json_.is_object()) {
+        anims_json_ = nlohmann::json::object();
+    }
+    if (!info_json_.is_object()) {
+        info_json_ = nlohmann::json::object();
+    }
+    if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
+        info_json_["animations"] = nlohmann::json::object();
+    }
+
+    const SDL_Point fallback_dims{
+        std::max(1, original_canvas_width > 0 ? original_canvas_width : 1),
+        std::max(1, original_canvas_height > 0 ? original_canvas_height : 1),
+    };
+
+    for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+
+        const std::string animation_id = it.key();
+        Animation* runtime_animation = nullptr;
+        auto runtime_it = animations.find(animation_id);
+        if (runtime_it != animations.end()) {
+            runtime_animation = &runtime_it->second;
+        }
+
+        std::size_t frame_count = 0;
+        auto anchor_points_it = it.value().find("anchor_points");
+        if (anchor_points_it != it.value().end() && anchor_points_it->is_array()) {
+            frame_count = anchor_points_it->size();
+        }
+        if (frame_count == 0 && runtime_animation && runtime_animation->has_frames()) {
+            frame_count = runtime_animation->frame_count();
+        }
+        if (frame_count == 0) {
+            continue;
+        }
+
+        normalize_anchor_points_payload(it.value(), frame_count);
+        auto normalized_anchor_points_it = it.value().find("anchor_points");
+        if (normalized_anchor_points_it == it.value().end() || !normalized_anchor_points_it->is_array()) {
+            continue;
+        }
+
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            if (frame_index >= normalized_anchor_points_it->size()) {
+                continue;
+            }
+            nlohmann::json& frame_anchors_json = (*normalized_anchor_points_it)[frame_index];
+            if (!frame_anchors_json.is_array()) {
+                frame_anchors_json = nlohmann::json::array();
+            }
+
+            SDL_Point frame_dims = fallback_dims;
+            if (runtime_animation) {
+                if (AnimationFrame* frame = runtime_animation->primary_frame_at(frame_index)) {
+                    frame_dims = resolve_anchor_frame_dimensions(*this, frame);
+                }
+            }
+
+            for (const auto& center_name : center_anchor_names) {
+                const DisplacedAssetAnchorPoint default_anchor = make_default_center_anchor(center_name, frame_dims);
+                if (upsert_anchor_in_frame_json(frame_anchors_json, default_anchor)) {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (changed) {
+        info_json_["animations"] = anims_json_;
+    }
+    return changed;
+}
+
+bool AssetInfo::ensure_oval_center_anchors_for_all_mappings() {
+    bool changed = false;
+    for (const auto& mapping : oval_anchor_mappings) {
+        changed = ensure_oval_center_anchors_for_mapping(mapping.name, true) || changed;
+    }
+    return changed;
+}
+
+bool AssetInfo::rename_oval_center_anchors_for_mapping(const std::string& old_mapping_name,
+                                                       const std::string& new_mapping_name,
+                                                       bool include_legacy_aliases) {
+    const std::string trimmed_old = trim_copy(old_mapping_name);
+    const std::string trimmed_new = trim_copy(new_mapping_name);
+    if (trimmed_old.empty() || trimmed_new.empty() || trimmed_old == trimmed_new) {
+        return false;
+    }
+
+    std::vector<std::string> old_center_names;
+    {
+        std::unordered_set<std::string> seen_old_centers;
+        auto add_old = [&](const std::string& source_name) {
+            const std::string center_name = oval_center_anchor_name(source_name);
+            if (!center_name.empty() && seen_old_centers.insert(center_name).second) {
+                old_center_names.push_back(center_name);
+            }
+        };
+        add_old(trimmed_old);
+        if (include_legacy_aliases) {
+            if (const OvalAnchorMapping* old_mapping = find_oval_anchor_mapping(trimmed_old, true)) {
+                for (const auto& legacy_name : old_mapping->legacy_names) {
+                    if (legacy_name != trimmed_new) {
+                        add_old(legacy_name);
+                    }
+                }
+            }
+        }
+    }
+
+    const std::string new_center_name = oval_center_anchor_name(trimmed_new);
+    if (new_center_name.empty() || old_center_names.empty()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (auto& [animation_id, animation] : animations) {
+        (void)animation_id;
+        for (std::size_t path_index = 0; path_index < animation.movement_path_count(); ++path_index) {
+            auto& path = animation.movement_path(path_index);
+            for (auto& frame : path) {
+                bool frame_changed = false;
+                for (const auto& old_center_name : old_center_names) {
+                    frame_changed = rename_anchor_in_frame(frame.anchor_points, old_center_name, new_center_name) || frame_changed;
+                }
+                if (frame_changed) {
+                    frame.rebuild_anchor_lookup();
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (!anims_json_.is_object()) {
+        anims_json_ = nlohmann::json::object();
+    }
+    if (!info_json_.is_object()) {
+        info_json_ = nlohmann::json::object();
+    }
+    if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
+        info_json_["animations"] = nlohmann::json::object();
+    }
+
+    for (auto it = anims_json_.begin(); it != anims_json_.end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+        auto anchor_points_it = it.value().find("anchor_points");
+        if (anchor_points_it == it.value().end() || !anchor_points_it->is_array()) {
+            continue;
+        }
+        for (auto& frame_anchors_json : *anchor_points_it) {
+            if (!frame_anchors_json.is_array()) {
+                continue;
+            }
+            for (const auto& old_center_name : old_center_names) {
+                if (rename_anchor_in_frame_json(frame_anchors_json, old_center_name, new_center_name)) {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (changed) {
+        info_json_["animations"] = anims_json_;
+    }
+    return changed;
+}
+
+nlohmann::json AssetInfo::anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const {
+    if (anchor_point_name.empty()) {
+        return normalize_anchor_candidate_payload(nlohmann::json::object());
+    }
+    for (const auto& entry : anchor_point_child_candidates) {
+        if (entry.anchor_point_name == anchor_point_name) {
+            return normalize_anchor_candidate_payload(entry.candidates);
+        }
+    }
+    return normalize_anchor_candidate_payload(nlohmann::json::object());
 }
 
 bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates) {
@@ -1584,13 +2945,18 @@ bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_po
     std::vector<AnchorChildPointCandidate> updated =
         parse_anchor_point_child_candidates_payload(before_payload);
 
-    const nlohmann::json normalized_candidates = candidates.is_object() ? candidates : nlohmann::json::object();
+    nlohmann::json normalized_candidates = normalize_anchor_candidate_payload(candidates);
     auto existing = std::find_if(updated.begin(),
                                  updated.end(),
                                  [&](const AnchorChildPointCandidate& candidate) {
                                      return candidate.anchor_point_name == anchor_point_name;
                                  });
     if (existing != updated.end()) {
+        // Treat an empty object as "ensure exists" instead of destructive reset.
+        const bool request_is_empty_object = candidates.is_object() && candidates.empty();
+        if (request_is_empty_object) {
+            normalized_candidates = normalize_anchor_candidate_payload(existing->candidates);
+        }
         existing->candidates = normalized_candidates;
     } else {
         AnchorChildPointCandidate created{};
@@ -1958,9 +3324,12 @@ bool AssetInfo::reload_animations_from_disk() {
     return apply_payload(*view.data);
 }
 
-bool AssetInfo::update_animation_properties(const std::string& animation_name, const nlohmann::json& properties) {
+AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed(
+    const std::string& animation_name,
+    const nlohmann::json& properties) {
+    AnimationUpdateResult result{};
     if (animation_name.empty() || !properties.is_object()) {
-        return false;
+        return result;
     }
 
     try {
@@ -1996,7 +3365,7 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
         const bool animation_changed = !has_existing_animation || existing_animation != updated_animation;
         const bool start_changed = should_set_start && start_animation != animation_name;
         if (!animation_changed && !start_changed) {
-            return false;
+            return result;
         }
 
         anims_json_[animation_name] = updated_animation;
@@ -2014,22 +3383,32 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
             info_json_["start"] = start_animation;
         }
 
+        result.changed = true;
+        result.animation_changed = animation_changed;
+        result.start_changed = start_changed;
+
         if (animation_changed) {
             if (!has_existing_animation) {
-                mark_texture_rebuild_on_close(animation_name, kTextureVariantAll);
+                result.variant_mask = kTextureVariantAll;
             } else {
                 const auto variants = classify_texture_rebuild_variants(existing_animation, updated_animation);
-                if (variants != kTextureVariantNone) {
-                    mark_texture_rebuild_on_close(animation_name, variants);
-                }
+                result.variant_mask = variants;
+            }
+            if (result.variant_mask != kTextureVariantNone) {
+                mark_texture_rebuild_on_close(animation_name, result.variant_mask);
             }
         }
 
-        return true;
+        result.structural = result.variant_mask != kTextureVariantNone;
+        return result;
     } catch (const std::exception& e) {
         std::cerr << "[AssetInfo] Failed to update animation properties for '" << animation_name << "': " << e.what() << std::endl;
-        return false;
+        return AnimationUpdateResult{};
     }
+}
+
+bool AssetInfo::update_animation_properties(const std::string& animation_name, const nlohmann::json& properties) {
+    return update_animation_properties_detailed(animation_name, properties).changed;
 }
 
 void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations, bool assume_cache_ready) {

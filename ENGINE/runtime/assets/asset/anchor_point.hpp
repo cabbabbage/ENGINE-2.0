@@ -2,9 +2,69 @@
 
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace world { struct GridPoint; }
+
+enum class AnchorScalingMethod {
+    Parent = 0,
+    Real3DPoint,
+    Relative2DAnchorPoint,
+    Real3DFloorPoint,
+};
+
+namespace anchor_points {
+
+inline constexpr std::string_view anchor_scaling_method_to_token(AnchorScalingMethod method) {
+    switch (method) {
+        case AnchorScalingMethod::Parent:
+            return "parent";
+        case AnchorScalingMethod::Real3DPoint:
+            return "real_3d_point";
+        case AnchorScalingMethod::Relative2DAnchorPoint:
+            return "relative_2d_anchor_point";
+        case AnchorScalingMethod::Real3DFloorPoint:
+            return "real_3d_floor_point";
+    }
+    return "parent";
+}
+
+inline bool anchor_scaling_method_token_equals(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        const char ac = static_cast<char>(std::tolower(static_cast<unsigned char>(a[i])));
+        const char bc = static_cast<char>(std::tolower(static_cast<unsigned char>(b[i])));
+        if (ac != bc) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline AnchorScalingMethod anchor_scaling_method_from_token(std::string_view token,
+                                                            AnchorScalingMethod fallback = AnchorScalingMethod::Parent) {
+    if (anchor_scaling_method_token_equals(token, "parent")) {
+        return AnchorScalingMethod::Parent;
+    }
+    if (anchor_scaling_method_token_equals(token, "real_3d_point")) {
+        return AnchorScalingMethod::Real3DPoint;
+    }
+    if (anchor_scaling_method_token_equals(token, "relative_2d_anchor_point")) {
+        return AnchorScalingMethod::Relative2DAnchorPoint;
+    }
+    if (anchor_scaling_method_token_equals(token, "real_3d_floor_point")) {
+        return AnchorScalingMethod::Real3DFloorPoint;
+    }
+    return fallback;
+}
+
+}
 
 // Lightweight 2D vector used by runtime anchor results.
 struct Vec2 {
@@ -13,6 +73,46 @@ struct Vec2 {
 
     Vec2() = default;
     Vec2(float x_, float y_) : x(x_), y(y_) {}
+};
+
+struct AnchorLightData {
+    bool enabled = false;
+    std::uint8_t color_r = 255;
+    std::uint8_t color_g = 236;
+    std::uint8_t color_b = 196;
+    float intensity = 1.0f;
+    float radius = 220.0f;
+    float falloff = 1.8f;
+    float shadow_strength = 0.82f;
+    bool cast_shadows = true;
+
+    static constexpr float kMinRadius = 4.0f;
+    static constexpr float kMaxRadius = 4096.0f;
+    static constexpr float kMinIntensity = 0.0f;
+    static constexpr float kMaxIntensity = 8.0f;
+    static constexpr float kMinFalloff = 0.05f;
+    static constexpr float kMaxFalloff = 8.0f;
+    static constexpr float kMinShadowStrength = 0.0f;
+    static constexpr float kMaxShadowStrength = 1.0f;
+
+    void sanitize() {
+        intensity = std::clamp(intensity, kMinIntensity, kMaxIntensity);
+        radius = std::clamp(radius, kMinRadius, kMaxRadius);
+        if (!std::isfinite(intensity)) {
+            intensity = 1.0f;
+        }
+        if (!std::isfinite(radius)) {
+            radius = 220.0f;
+        }
+        if (!std::isfinite(falloff)) {
+            falloff = 1.8f;
+        }
+        if (!std::isfinite(shadow_strength)) {
+            shadow_strength = 0.82f;
+        }
+        falloff = std::clamp(falloff, kMinFalloff, kMaxFalloff);
+        shadow_strength = std::clamp(shadow_strength, kMinShadowStrength, kMaxShadowStrength);
+    }
 };
 
 // Canonical anchor contract:
@@ -35,6 +135,9 @@ struct DisplacedAssetAnchorPoint {
     float       rotation_degrees = 0.0f;
     bool        hidden = false;
     bool        resolve_x = true;
+    AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+    bool        has_light_data = false;
+    AnchorLightData light{};
 
     DisplacedAssetAnchorPoint() = default;
     DisplacedAssetAnchorPoint(std::string name_,
@@ -45,7 +148,8 @@ struct DisplacedAssetAnchorPoint {
                               bool flip_vertical_ = true,
                               float rotation_degrees_ = 0.0f,
                               bool hidden_ = false,
-                              bool resolve_x_ = true)
+                              bool resolve_x_ = true,
+                              AnchorScalingMethod scaling_method_ = AnchorScalingMethod::Parent)
         : name(std::move(name_))
         , texture_x(tex_x)
         , texture_y(tex_y)
@@ -54,7 +158,10 @@ struct DisplacedAssetAnchorPoint {
         , flip_vertical(flip_vertical_)
         , rotation_degrees(rotation_degrees_)
         , hidden(hidden_)
-        , resolve_x(resolve_x_) {}
+        , resolve_x(resolve_x_)
+        , scaling_method(scaling_method_) {
+        light.sanitize();
+    }
 
     bool is_valid() const {
         return !name.empty();
@@ -90,6 +197,7 @@ struct AnchorPoint {
     float rotation_degrees = 0.0f;
     bool hidden = false;
     bool resolve_x = true;
+    AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
     SDL_FPoint screen_pos_2d{0.0f, 0.0f};
     Vec2 relative_pos_2d{};
     Vec2 world_pos_2d{}; // exact world-space anchor position (render-facing)

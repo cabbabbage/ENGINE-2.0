@@ -1,20 +1,18 @@
 #include "spider_controller.hpp"
-#include "animation/controllers/shared/attack_helpers.hpp"
-#include "animation/controllers/shared/attack_reaction_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
 #include <iostream>
 #include <optional>
 
-namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
-
 spider_controller::spider_controller(Asset* self)
     : CustomAssetController(self) {
         std::cout<<"Spider Controller Connected";
     Asset* owner = self_ptr();
     if (owner && owner->anim_) {
-        owner->anim_->set_debug_enabled(true);
+        owner->anim_->set_debug_enabled(false);
         owner->needs_target = true;
     }
 }
@@ -27,9 +25,9 @@ void spider_controller::on_update(const Input&) {
     if (!self || !self->anim_ || !assets) {
         return;
     }
-    Asset* player = assets->player;
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(self, assets);
 
-    if (!player || player == self || player->dead || !player->active) {
+    if (!player) {
         return;
     }
 
@@ -42,7 +40,7 @@ void spider_controller::on_update(const Input&) {
         self->anim_->auto_move(player);
     }
 
-    attack_helpers::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(self, player);
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {
@@ -54,7 +52,7 @@ void spider_controller::on_process_pending_attacks(Asset& self) {
     std::optional<SDL_Point> bump_delta;
     auto consider_knockback = [&](const animation_update::Attack& attack) {
         SDL_Point candidate_delta{};
-        if (!animation_update::custom_controllers::AttackReactionHelper::compute_knockback_delta(self, attack, candidate_delta)) {
+        if (!animation_update::custom_controllers::AttackProcessingHelper::compute_knockback_delta(self, attack, candidate_delta)) {
             return;
         }
         if (!bump_delta.has_value()) {
@@ -76,13 +74,13 @@ void spider_controller::on_process_pending_attacks(Asset& self) {
     }
 
     if (self.runtime_health < 0) {
-        if (!animation_update::custom_controllers::AttackReactionHelper::try_play_death_animation(self)) {
+        if (!animation_update::custom_controllers::AttackProcessingHelper::try_play_death_animation(self)) {
             self.Delete();
         }
         return;
     }
 
     if (bump_delta.has_value()) {
-        animation_update::custom_controllers::AttackReactionHelper::apply_knockback(self, *bump_delta);
+        animation_update::custom_controllers::AttackProcessingHelper::apply_knockback(self, *bump_delta);
     }
 }

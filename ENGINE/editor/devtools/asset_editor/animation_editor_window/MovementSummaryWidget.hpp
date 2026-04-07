@@ -49,12 +49,12 @@ class MovementSummaryWidget {
     GoToSourceCallback go_to_source_callback_;
     SDL_Rect bounds_{0, 0, 0, 0};
     SDL_Rect button_rect_{0, 0, 0, 0};
-    std::array<SDL_Rect, 2> mode_button_rects_{};
-    std::array<bool, 2> mode_enabled_{{true, true}};
+    std::array<SDL_Rect, 1> mode_button_rects_{};
+    std::array<bool, 1> mode_enabled_{{true}};
     bool button_hovered_ = false;
     bool button_pressed_ = false;
-    std::array<bool, 2> mode_button_hovered_{{false, false}};
-    std::array<bool, 2> mode_button_pressed_{{false, false}};
+    std::array<bool, 1> mode_button_hovered_{{false}};
+    std::array<bool, 1> mode_button_pressed_{{false}};
     float total_dx_ = 0.0f;
     float total_dy_ = 0.0f;
     float total_dz_ = 0.0f;

@@ -4,7 +4,6 @@
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
 #include "utils/map_grid_settings.hpp"
-#include "core/manifest/depth_cue_settings.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <atomic>
@@ -14,6 +13,7 @@
 #include <optional>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -107,7 +107,9 @@ public:
     struct FrameCollisionEntry {
         const Asset* asset = nullptr;
         Area area{"impassable"};
+        SDL_Point world_center{0, 0};
         world::GridPoint bottom_middle = world::GridPoint::make_virtual(0, 0, 0, 0);
+        std::string canonical_type;
     };
     const std::vector<ActiveTraversalEntry>& active_traversal() const { return camera_.visible_traversal_entries(); }
     const std::vector<FrameCollisionEntry>& frame_collision_entries() const { return frame_collision_entries_; }
@@ -149,11 +151,6 @@ public:
     void reload_camera_settings();
     void apply_camera_runtime_settings();
     void force_camera_view_refresh();
-    void set_depth_effects_enabled(bool enabled);
-    bool depth_effects_enabled() const { return depth_effects_enabled_; }
-    const depth_cue::DepthCueSettings& depth_cue_settings() const { return depth_cue_settings_; }
-    void set_depth_cue_settings(const depth_cue::DepthCueSettings& settings);
-    std::uint64_t depth_cue_settings_version() const { return depth_cue_settings_version_; }
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
     void set_movement_debug_visible(bool visible);
@@ -164,6 +161,9 @@ public:
     bool boundary_assets_visible() const;
     float boundary_min_visible_screen_ratio() const;
     void set_boundary_min_visible_screen_ratio(float value);
+    std::pair<int, int> camera_height_bounds_px() const;
+    void set_camera_height_bounds_px(int min_value, int max_value);
+    void sync_camera_settings_to_map_info_json();
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 
@@ -239,6 +239,7 @@ public:
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
 
     bool should_run_runtime_updates() const;
+    bool should_render_runtime_lighting() const;
     bool is_dev_mode() const { return dev_mode; }
     bool is_frame_editor_target_active(const Asset* asset) const;
     bool should_advance_animation_for(const Asset* asset) const;
@@ -317,15 +318,13 @@ private:
 
     bool suppress_dev_renderer_ = false;
     bool force_high_quality_rendering_ = false;
-    bool depth_effects_enabled_ = true;
-    depth_cue::DepthCueSettings depth_cue_settings_{};
-    std::uint64_t depth_cue_settings_version_ = 1;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
+    mutable std::unordered_map<std::uint64_t, std::vector<const FrameCollisionEntry*>> frame_collision_index_;
     mutable std::uint32_t frame_collision_context_frame_id_ = 0;
     mutable bool frame_collision_context_dirty_ = true;
     std::vector<Asset*> removal_queue;
@@ -352,6 +351,8 @@ private:
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
     float boundary_min_visible_screen_ratio_ = 0.015f;
+    int camera_height_min_px_ = 1;
+    int camera_height_max_px_ = 100000;
     struct AssetDimensionCache {
         float width = 0.0f;
         float height = 0.0f;
@@ -366,6 +367,7 @@ private:
         std::uint64_t processed_camera_state_version = 0;
         int processed_frame_index = std::numeric_limits<int>::min();
         std::uint32_t last_audio_frame_id = 0;
+        std::uint32_t non_player_update_visit_epoch = 0;
     };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
     std::uint64_t anchor_invalidation_version_counter_ = 1;
@@ -374,6 +376,7 @@ private:
     Asset* max_asset_height_holder_ = nullptr;
     std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
+    std::uint32_t non_player_update_visit_epoch_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
     std::uint32_t last_post_flush_refresh_frame_id_ = std::numeric_limits<std::uint32_t>::max();
@@ -383,6 +386,7 @@ private:
     bool frame_rebuild_metrics_initialized_ = false;
 
     bool pending_initial_rebuild_ = false;
+    bool post_runtime_traversal_refresh_pending_ = false;
     bool logged_initial_rebuild_warning_ = false;
     bool grid_dirty_ = true;
     bool camera_view_dirty_ = true;
@@ -429,7 +433,7 @@ private:
     void run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved);
     void run_visibility_build_stage();
     void run_post_flush_traversal_refresh_once();
-    void run_runtime_effects_stage();
+    void run_runtime_effects_stage(bool include_audio_update = true);
     void sync_dev_controls_for_frame(const Input& input);
     void refresh_filtered_active_assets_if_needed();
     void render_runtime_frame();

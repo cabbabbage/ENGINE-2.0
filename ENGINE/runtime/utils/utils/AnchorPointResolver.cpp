@@ -164,6 +164,17 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                        sample.flat_relative_pixel_point,
                                        static_cast<float>(anchor.depth_offset),
                                        sample.final_anchor_point);
+    if (!anchor.resolve_x && sample.flat_relative_pixel_point.valid && sample.final_anchor_point.valid) {
+        // Keep ray-derived depth, but pin horizontal world position to the flat source point.
+        // In ENGINE_WORLD_TESTS we treat screen-Y as world-Y, so matching screen height means
+        // restoring the flat point's world Y.
+        sample.final_anchor_point.x = sample.flat_relative_pixel_point.x;
+        sample.final_anchor_point.y = sample.flat_relative_pixel_point.y;
+        sample.final_anchor_point.valid =
+            std::isfinite(sample.final_anchor_point.x) &&
+            std::isfinite(sample.final_anchor_point.y) &&
+            std::isfinite(sample.final_anchor_point.z);
+    }
     sample.resolved.world_exact_pos_2d = Vec2{
         sample.final_anchor_point.x,
         sample.final_anchor_point.y};
@@ -537,6 +548,161 @@ bool build_symmetric_camera_ray_extrusion(const Asset& asset,
     return valid;
 }
 
+bool sample_perspective_scale_at_point(const WarpedScreenGrid& cam,
+                                       const anchor_points::AnchorWorldPoint3& world_point,
+                                       float& out_scale) {
+    out_scale = 1.0f;
+    if (!world_point.valid ||
+        !std::isfinite(world_point.x) ||
+        !std::isfinite(world_point.y) ||
+        !std::isfinite(world_point.z)) {
+        return false;
+    }
+
+    const SDL_Point sample_world{
+        static_cast<int>(std::lround(world_point.x)),
+        static_cast<int>(std::lround(world_point.y)),
+    };
+    const int sample_world_z = static_cast<int>(std::lround(world_point.z));
+    const WarpedScreenGrid::RenderEffects effects =
+        cam.compute_render_effects(sample_world,
+                                   0.0f,
+                                   0.0f,
+                                   WarpedScreenGrid::RenderSmoothingKey{},
+                                   sample_world_z);
+    if (!std::isfinite(effects.distance_scale) || effects.distance_scale <= 0.0f) {
+        return false;
+    }
+
+    out_scale = std::max(0.0001f, effects.distance_scale);
+    return true;
+}
+
+bool has_opposite_sign_or_zero(float lhs, float rhs) {
+    return (lhs == 0.0f) || (rhs == 0.0f) || ((lhs < 0.0f) != (rhs < 0.0f));
+}
+
+bool screen_y_for_world_point(const WarpedScreenGrid& cam,
+                              float world_x,
+                              float world_y,
+                              float world_z,
+                              float& out_screen_y) {
+    const render_projection::WorldPoint3 world_point{
+        world_x,
+        world_y,
+        world_z,
+        true};
+    SDL_FPoint screen_point{};
+    if (!render_projection::project_world_to_screen(cam, world_point, screen_point) ||
+        !std::isfinite(screen_point.y)) {
+        return false;
+    }
+    out_screen_y = screen_point.y;
+    return true;
+}
+
+bool solve_anchor_with_locked_x_and_screen_y(const WarpedScreenGrid& cam,
+                                             const anchor_points::AnchorWorldPoint3& flat_point,
+                                             const anchor_points::AnchorWorldPoint3& ray_point,
+                                             float target_screen_y,
+                                             anchor_points::AnchorWorldPoint3& out_point) {
+    out_point = ray_point;
+    if (!flat_point.valid ||
+        !ray_point.valid ||
+        !std::isfinite(flat_point.x) ||
+        !std::isfinite(ray_point.y) ||
+        !std::isfinite(ray_point.z) ||
+        !std::isfinite(target_screen_y)) {
+        return false;
+    }
+
+    const float fixed_x = flat_point.x;
+    const float fixed_z = ray_point.z;
+    const float initial_y = ray_point.y;
+
+    float initial_screen_y = 0.0f;
+    if (!screen_y_for_world_point(cam, fixed_x, initial_y, fixed_z, initial_screen_y)) {
+        return false;
+    }
+    const float initial_error = initial_screen_y - target_screen_y;
+    if (std::fabs(initial_error) <= 0.25f) {
+        out_point = anchor_points::AnchorWorldPoint3{fixed_x, initial_y, fixed_z, true};
+        return true;
+    }
+
+    float span = std::max(32.0f, std::fabs(ray_point.y - flat_point.y) + 16.0f);
+    float low_y = initial_y - span;
+    float high_y = initial_y + span;
+    float low_screen_y = 0.0f;
+    float high_screen_y = 0.0f;
+    float low_error = 0.0f;
+    float high_error = 0.0f;
+    bool bracketed = false;
+
+    for (int i = 0; i < 12; ++i) {
+        const bool low_valid = screen_y_for_world_point(cam, fixed_x, low_y, fixed_z, low_screen_y);
+        const bool high_valid = screen_y_for_world_point(cam, fixed_x, high_y, fixed_z, high_screen_y);
+        if (low_valid && high_valid) {
+            low_error = low_screen_y - target_screen_y;
+            high_error = high_screen_y - target_screen_y;
+            if (has_opposite_sign_or_zero(low_error, high_error)) {
+                bracketed = true;
+                break;
+            }
+        }
+        span *= 2.0f;
+        low_y = initial_y - span;
+        high_y = initial_y + span;
+    }
+
+    if (!bracketed) {
+        return false;
+    }
+
+    float best_y = initial_y;
+    float best_abs_error = std::fabs(initial_error);
+    if (std::fabs(low_error) < best_abs_error) {
+        best_abs_error = std::fabs(low_error);
+        best_y = low_y;
+    }
+    if (std::fabs(high_error) < best_abs_error) {
+        best_abs_error = std::fabs(high_error);
+        best_y = high_y;
+    }
+
+    for (int i = 0; i < 24; ++i) {
+        const float mid_y = low_y + (high_y - low_y) * 0.5f;
+        float mid_screen_y = 0.0f;
+        if (!screen_y_for_world_point(cam, fixed_x, mid_y, fixed_z, mid_screen_y)) {
+            return false;
+        }
+        const float mid_error = mid_screen_y - target_screen_y;
+        const float mid_abs_error = std::fabs(mid_error);
+        if (mid_abs_error < best_abs_error) {
+            best_abs_error = mid_abs_error;
+            best_y = mid_y;
+        }
+        if (mid_abs_error <= 0.25f) {
+            break;
+        }
+
+        if (has_opposite_sign_or_zero(low_error, mid_error)) {
+            high_y = mid_y;
+            high_error = mid_error;
+        } else {
+            low_y = mid_y;
+            low_error = mid_error;
+        }
+    }
+
+    out_point = anchor_points::AnchorWorldPoint3{
+        fixed_x,
+        best_y,
+        fixed_z,
+        std::isfinite(fixed_x) && std::isfinite(best_y) && std::isfinite(fixed_z)};
+    return out_point.valid;
+}
+
 FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization grid_policy) {
@@ -642,14 +808,12 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.flat_relative_pixel_point.x,
         sample.flat_relative_pixel_point.y};
     sample.resolved.flat_world_exact_z = sample.flat_relative_pixel_point.z;
-    const bool has_propagated_perspective =
+    const bool has_parent_perspective_sample =
         perspective_sample.source != Asset::PerspectiveSource::Default &&
         std::isfinite(perspective_scale) &&
         perspective_scale > 0.0f;
-    if (has_propagated_perspective) {
-        sample.resolved.flat_perspective_scale = std::max(0.0001f, perspective_scale);
-        sample.resolved.has_flat_perspective_scale = true;
-    }
+    const float parent_perspective_sample =
+        has_parent_perspective_sample ? std::max(0.0001f, perspective_scale) : 1.0f;
 
     if (!displace_along_camera_to_point_ray(asset,
                                             sample.flat_relative_pixel_point,
@@ -658,11 +822,67 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.resolved.missing = true;
         return sample;
     }
+
+    const anchor_points::AnchorWorldPoint3 ray_displaced_anchor_point = sample.final_anchor_point;
+    if (!anchor.resolve_x) {
+        anchor_points::AnchorWorldPoint3 no_resolve_x_point{};
+        if (solve_anchor_with_locked_x_and_screen_y(cam,
+                                                    sample.flat_relative_pixel_point,
+                                                    ray_displaced_anchor_point,
+                                                    sample.flat_screen_px.y,
+                                                    no_resolve_x_point)) {
+            sample.final_anchor_point = no_resolve_x_point;
+        } else {
+            // Keep current behavior on solver failure.
+            sample.final_anchor_point = ray_displaced_anchor_point;
+        }
+    }
+
     render_projection::WorldPoint3 final_anchor_point{
         sample.final_anchor_point.x,
         sample.final_anchor_point.y,
         sample.final_anchor_point.z,
         true};
+
+    auto apply_perspective_override = [&](float scale) {
+        sample.resolved.flat_perspective_scale = std::max(0.0001f, scale);
+        sample.resolved.has_flat_perspective_scale = true;
+    };
+
+    float selected_method_scale = 1.0f;
+    bool has_selected_method_scale = false;
+    switch (anchor.scaling_method) {
+        case AnchorScalingMethod::Parent:
+            break;
+        case AnchorScalingMethod::Real3DPoint:
+            has_selected_method_scale =
+                sample_perspective_scale_at_point(cam, sample.final_anchor_point, selected_method_scale);
+            break;
+        case AnchorScalingMethod::Relative2DAnchorPoint:
+            has_selected_method_scale =
+                sample_perspective_scale_at_point(cam, sample.flat_relative_pixel_point, selected_method_scale);
+            break;
+        case AnchorScalingMethod::Real3DFloorPoint: {
+            anchor_points::AnchorWorldPoint3 floor_point = sample.final_anchor_point;
+            floor_point.y = 0.0f;
+            floor_point.valid = std::isfinite(floor_point.x) &&
+                                std::isfinite(floor_point.y) &&
+                                std::isfinite(floor_point.z);
+            has_selected_method_scale =
+                sample_perspective_scale_at_point(cam, floor_point, selected_method_scale);
+            break;
+        }
+    }
+
+    if (anchor.scaling_method == AnchorScalingMethod::Parent) {
+        if (has_parent_perspective_sample) {
+            apply_perspective_override(parent_perspective_sample);
+        }
+    } else if (has_selected_method_scale) {
+        apply_perspective_override(selected_method_scale);
+    } else if (has_parent_perspective_sample) {
+        apply_perspective_override(parent_perspective_sample);
+    }
 
     const int resolved_x = static_cast<int>(std::lround(final_anchor_point.x));
     const int resolved_y = static_cast<int>(std::lround(final_anchor_point.y));

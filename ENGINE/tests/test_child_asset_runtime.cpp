@@ -3,7 +3,9 @@
 #include <filesystem>
 #include <fstream>
 #include <cmath>
+#include <cstdint>
 #include <memory>
+#include <optional>
 
 #include <nlohmann/json.hpp>
 
@@ -161,6 +163,48 @@ AssetInfo::AnchorChildPointCandidate make_anchor_child_candidate_entry(const std
     entry.candidates = nlohmann::json::object();
     entry.candidates["candidates"] = std::move(candidates_array);
     return entry;
+}
+
+AssetInfo::AnchorChildPointCandidate make_anchor_child_candidate_raw_entry(const std::string& anchor_name,
+                                                                           nlohmann::json candidates_payload) {
+    AssetInfo::AnchorChildPointCandidate entry{};
+    entry.anchor_point_name = anchor_name;
+    entry.candidates = std::move(candidates_payload);
+    return entry;
+}
+
+std::optional<double> normalized_anchor_candidate_chance(const nlohmann::json& normalized_entry,
+                                                         const std::string& candidate_name) {
+    if (!normalized_entry.is_object()) {
+        return std::nullopt;
+    }
+    const auto candidates_it = normalized_entry.find("candidates");
+    if (candidates_it == normalized_entry.end() || !candidates_it->is_array()) {
+        return std::nullopt;
+    }
+    for (const auto& candidate : *candidates_it) {
+        if (!candidate.is_object()) {
+            continue;
+        }
+        if (candidate.value("name", std::string{}) != candidate_name) {
+            continue;
+        }
+        const auto chance_it = candidate.find("chance");
+        if (chance_it == candidate.end()) {
+            return std::nullopt;
+        }
+        if (chance_it->is_number_float()) {
+            return chance_it->get<double>();
+        }
+        if (chance_it->is_number_integer()) {
+            return static_cast<double>(chance_it->get<std::int64_t>());
+        }
+        if (chance_it->is_number_unsigned()) {
+            return static_cast<double>(chance_it->get<std::uint64_t>());
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 std::filesystem::path repo_root() {
@@ -733,6 +777,112 @@ TEST_CASE("CustomAssetController resolves anchor child candidates in constructor
     CHECK(candidate_child->world_z() == owner->world_z() + 3);
 }
 
+TEST_CASE("CustomAssetController falls back to oval mapping asset_name when explicit candidates are absent") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 32, 48, 64, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    owner->info->anchor_point_child_candidates.clear();
+    owner->info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "hat";
+    mapping.asset_name = "vibble_hat";
+    mapping.width_radius_x = 18.0f;
+    mapping.height_radius_z = 12.0f;
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    Asset* fallback_child = find_owner_child_named(owner, "vibble_hat");
+    REQUIRE(fallback_child != nullptr);
+    CHECK(fallback_child->world_x() == owner->world_x() + 18);
+    CHECK(fallback_child->world_y() == owner->world_y());
+    CHECK(fallback_child->world_z() == owner->world_z());
+}
+
+TEST_CASE("CustomAssetController explicit anchor candidates take precedence over oval fallback asset_name") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 20, 30, 40, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    owner->info->anchor_point_child_candidates.clear();
+    owner->info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "hat";
+    mapping.asset_name = "vibble_hat";
+    mapping.width_radius_x = 10.0f;
+    mapping.height_radius_z = 10.0f;
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_entry(
+            "hat",
+            nlohmann::json::array({nlohmann::json{
+                {"name", "vibble_mouth"},
+                {"chance", 100}
+            }}))
+    };
+
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+    assets_scope.assets->library().add_asset("vibble_mouth", nlohmann::json::object());
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    CHECK(find_owner_child_named(owner, "vibble_hat") == nullptr);
+    REQUIRE(find_owner_child_named(owner, "vibble_mouth") != nullptr);
+}
+
+TEST_CASE("CustomAssetController skips oval fallback when fallback asset is missing") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 12, 24, 36, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    owner->info->anchor_point_child_candidates.clear();
+    owner->info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "hat";
+    mapping.asset_name = "missing_hat_asset";
+    mapping.width_radius_x = 10.0f;
+    mapping.height_radius_z = 10.0f;
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    CHECK(find_owner_child_named(owner, "missing_hat_asset") == nullptr);
+}
+
 TEST_CASE("CustomAssetController skips null anchor child candidate resolution") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(
@@ -798,7 +948,130 @@ TEST_CASE("CustomAssetController candidate resolution is deterministic for same 
     const bool b_selected_hat = child_b_hat != nullptr;
     const bool a_selected_mouth = child_a_mouth != nullptr;
     const bool b_selected_mouth = child_b_mouth != nullptr;
-    CHECK((a_selected_hat && b_selected_hat) || (a_selected_mouth && b_selected_mouth));
+    const bool same_child_selected =
+        (a_selected_hat && b_selected_hat) || (a_selected_mouth && b_selected_mouth);
+    CHECK(same_child_selected);
+}
+
+TEST_CASE("AssetInfo normalizes legacy anchor candidate formats to canonical chance entries") {
+    AssetInfo info("anchor_legacy_norm");
+    info.anchor_point_child_candidates = {
+        make_anchor_child_candidate_raw_entry(
+            "hat",
+            nlohmann::json::object({
+                {"legacy_scalar", 50},
+                {"legacy_weight_string", nlohmann::json::object({{"weight", "25"}})},
+                {"legacy_missing_weight", nlohmann::json::object()},
+                {"legacy_tag", nlohmann::json::object({{"name", "hat"}, {"tag", true}})}
+            }))
+    };
+
+    const nlohmann::json normalized = info.anchor_point_child_candidate_candidates("hat");
+    REQUIRE(normalized.is_object());
+    REQUIRE(normalized.contains("candidates"));
+    REQUIRE(normalized["candidates"].is_array());
+
+    const auto scalar_chance = normalized_anchor_candidate_chance(normalized, "legacy_scalar");
+    REQUIRE(scalar_chance.has_value());
+    CHECK(*scalar_chance == doctest::Approx(50.0));
+
+    const auto object_chance = normalized_anchor_candidate_chance(normalized, "legacy_weight_string");
+    REQUIRE(object_chance.has_value());
+    CHECK(*object_chance == doctest::Approx(25.0));
+
+    const auto missing_chance = normalized_anchor_candidate_chance(normalized, "legacy_missing_weight");
+    REQUIRE(missing_chance.has_value());
+    CHECK(*missing_chance == doctest::Approx(100.0));
+
+    const auto tag_chance = normalized_anchor_candidate_chance(normalized, "#hat");
+    REQUIRE(tag_chance.has_value());
+    CHECK(*tag_chance == doctest::Approx(100.0));
+}
+
+TEST_CASE("CustomAssetController resolves legacy keyed scalar anchor candidates") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 12, 13, 14, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 2, 3, 4, 0, 0, 0.0f, true});
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_raw_entry(
+            "hat",
+            nlohmann::json::object({
+                {"vibble_hat", 50}
+            }))
+    };
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    Asset* candidate_child = find_owner_child_named(owner, "vibble_hat");
+    REQUIRE(candidate_child != nullptr);
+}
+
+TEST_CASE("CustomAssetController resolves legacy keyed object string weight and missing weight defaults") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 22, 23, 24, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 1, 1, 1, 0, 0, 0.0f, true});
+    assets_scope.assets->library().add_asset("vibble_hat_weight", nlohmann::json::object());
+    assets_scope.assets->library().add_asset("vibble_hat_missing", nlohmann::json::object());
+
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_raw_entry(
+            "hat",
+            nlohmann::json::object({
+                {"vibble_hat_weight", nlohmann::json::object({{"weight", "25"}})},
+                {"vibble_hat_missing", nlohmann::json::object()}
+            }))
+    };
+
+    const nlohmann::json normalized = owner->info->anchor_point_child_candidate_candidates("hat");
+    const auto weighted = normalized_anchor_candidate_chance(normalized, "vibble_hat_weight");
+    const auto missing = normalized_anchor_candidate_chance(normalized, "vibble_hat_missing");
+    REQUIRE(weighted.has_value());
+    REQUIRE(missing.has_value());
+    CHECK(*weighted == doctest::Approx(25.0));
+    CHECK(*missing == doctest::Approx(100.0));
+}
+
+TEST_CASE("CustomAssetController resolves tag anchor candidates from legacy keyed entries") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 31, 41, 51, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 2, 4, 6, 0, 0, 0.0f, true});
+    assets_scope.assets->library().add_asset(
+        "vibble_hat",
+        nlohmann::json::object({{"tags", nlohmann::json::array({"hat"})}}));
+
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_raw_entry(
+            "hat",
+            nlohmann::json::object({
+                {"#hat", nlohmann::json::object()}
+            }))
+    };
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    Asset* candidate_child = find_owner_child_named(owner, "vibble_hat");
+    REQUIRE(candidate_child != nullptr);
 }
 
 TEST_CASE("CustomAssetController anchor candidate retries stop after 60 failed updates") {

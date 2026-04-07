@@ -1,12 +1,15 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <array>
 #include <limits>
 #include <memory>
+#include <vector>
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "utils/AnchorPointResolver.hpp"
 
 namespace {
@@ -22,6 +25,37 @@ float distance_from_asset_origin(const Asset& asset, const anchor_points::Anchor
     const float dy = point.y - static_cast<float>(asset.world_y());
     const float dz = point.z - static_cast<float>(asset.world_z());
     return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+void configure_test_animation_path(Asset& asset,
+                                   const std::vector<std::array<int, 3>>& frame_deltas) {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.reserve(frame_deltas.size());
+    for (const auto& delta : frame_deltas) {
+        AnimationFrame frame{};
+        frame.dx = delta[0];
+        frame.dy = delta[1];
+        frame.dz = delta[2];
+        path.push_back(frame);
+    }
+
+    asset.info->animations.clear();
+    asset.info->animations["default"] = std::move(animation);
+    asset.current_animation = "default";
+
+    Animation& stored_animation = asset.info->animations["default"];
+    auto& stored_path = stored_animation.movement_path(0);
+    for (std::size_t idx = 0; idx < stored_path.size(); ++idx) {
+        AnimationFrame& frame = stored_path[idx];
+        frame.frame_index = static_cast<int>(idx);
+        frame.is_first = (idx == 0);
+        frame.is_last = (idx + 1 == stored_path.size());
+        frame.prev = (idx > 0) ? &stored_path[idx - 1] : nullptr;
+        frame.next = (idx + 1 < stored_path.size()) ? &stored_path[idx + 1] : nullptr;
+    }
+    asset.current_frame = stored_path.empty() ? nullptr : &stored_path.front();
 }
 
 } // namespace
@@ -166,6 +200,176 @@ TEST_CASE("Resolved anchor preserves exact world depth alongside rounded world z
     CHECK(sample.resolved.world_depth == doctest::Approx(sample.final_anchor_point.z).epsilon(1e-6));
     CHECK(sample.resolved.world_z == static_cast<int>(std::lround(sample.final_anchor_point.z)));
     CHECK(sample.resolved.depth_offset == doctest::Approx(2.5f).epsilon(1e-6));
+}
+
+TEST_CASE("Current-frame cumulative movement displacement sums frames 1..N") {
+    Asset asset = make_test_asset(0, 0);
+    configure_test_animation_path(asset,
+                                  {
+                                      std::array<int, 3>{9, 9, 9},
+                                      std::array<int, 3>{1, 2, 3},
+                                      std::array<int, 3>{-4, 6, 2},
+                                      std::array<int, 3>{2, -3, 7},
+                                  });
+
+    auto& path = asset.info->animations["default"].movement_path(0);
+    REQUIRE(path.size() == 4);
+
+    asset.current_frame = &path[0];
+    auto displacement = asset.current_frame_cumulative_movement_displacement();
+    REQUIRE(displacement.valid);
+    CHECK(displacement.dx == doctest::Approx(0.0f).epsilon(1e-6));
+    CHECK(displacement.dy == doctest::Approx(0.0f).epsilon(1e-6));
+    CHECK(displacement.dz == doctest::Approx(0.0f).epsilon(1e-6));
+
+    asset.current_frame = &path[2];
+    displacement = asset.current_frame_cumulative_movement_displacement();
+    REQUIRE(displacement.valid);
+    CHECK(displacement.dx == doctest::Approx(-3.0f).epsilon(1e-6));
+    CHECK(displacement.dy == doctest::Approx(8.0f).epsilon(1e-6));
+    CHECK(displacement.dz == doctest::Approx(5.0f).epsilon(1e-6));
+
+    asset.current_frame = &path[3];
+    displacement = asset.current_frame_cumulative_movement_displacement();
+    REQUIRE(displacement.valid);
+    CHECK(displacement.dx == doctest::Approx(-1.0f).epsilon(1e-6));
+    CHECK(displacement.dy == doctest::Approx(5.0f).epsilon(1e-6));
+    CHECK(displacement.dz == doctest::Approx(12.0f).epsilon(1e-6));
+}
+
+TEST_CASE("Current-frame cumulative movement displacement remains correct during reverse traversal") {
+    Asset asset = make_test_asset(0, 0);
+    configure_test_animation_path(asset,
+                                  {
+                                      std::array<int, 3>{0, 0, 0},
+                                      std::array<int, 3>{3, 1, 2},
+                                      std::array<int, 3>{4, -1, 1},
+                                      std::array<int, 3>{-2, 5, 3},
+                                  });
+
+    auto& path = asset.info->animations["default"].movement_path(0);
+    REQUIRE(path.size() == 4);
+
+    asset.current_frame = &path[3];
+    auto displacement = asset.current_frame_cumulative_movement_displacement();
+    REQUIRE(displacement.valid);
+    CHECK(displacement.dx == doctest::Approx(5.0f).epsilon(1e-6));
+    CHECK(displacement.dy == doctest::Approx(5.0f).epsilon(1e-6));
+    CHECK(displacement.dz == doctest::Approx(6.0f).epsilon(1e-6));
+
+    asset.current_frame = &path[2];
+    displacement = asset.current_frame_cumulative_movement_displacement();
+    REQUIRE(displacement.valid);
+    CHECK(displacement.dx == doctest::Approx(7.0f).epsilon(1e-6));
+    CHECK(displacement.dy == doctest::Approx(0.0f).epsilon(1e-6));
+    CHECK(displacement.dz == doctest::Approx(3.0f).epsilon(1e-6));
+
+    asset.current_frame = &path[1];
+    displacement = asset.current_frame_cumulative_movement_displacement();
+    REQUIRE(displacement.valid);
+    CHECK(displacement.dx == doctest::Approx(3.0f).epsilon(1e-6));
+    CHECK(displacement.dy == doctest::Approx(1.0f).epsilon(1e-6));
+    CHECK(displacement.dz == doctest::Approx(2.0f).epsilon(1e-6));
+}
+
+TEST_CASE("Anchored child placement applies anchor world displacement before child offset") {
+    AnchorPoint anchor{};
+    anchor.exists = true;
+    anchor.world_exact_pos_2d = Vec2{10.0f, 20.0f};
+    anchor.world_depth = 30.0f;
+    anchor.resolution_layer = 2;
+
+    anchored_child_placement::PlacementInput input{};
+    input.anchor_definition.anchor = anchor;
+    input.anchor_world_displacement = anchored_child_placement::ChildOffsetInput{4.0f, -2.0f, 5.0f};
+    input.child_offset = anchored_child_placement::ChildOffsetInput{1.0f, 2.0f, 3.0f};
+
+    anchored_child_placement::PlacementOutput output{};
+    REQUIRE(anchored_child_placement::resolve_child_placement(input, output));
+    REQUIRE(output.anchor_world.valid);
+    REQUIRE(output.child_world.valid);
+
+    CHECK(output.anchor_world.x == doctest::Approx(14.0f).epsilon(1e-6));
+    CHECK(output.anchor_world.y == doctest::Approx(18.0f).epsilon(1e-6));
+    CHECK(output.anchor_world.z == doctest::Approx(35.0f).epsilon(1e-6));
+
+    CHECK(output.child_world.x == doctest::Approx(15.0f).epsilon(1e-6));
+    CHECK(output.child_world.y == doctest::Approx(20.0f).epsilon(1e-6));
+    CHECK(output.child_world.z == doctest::Approx(38.0f).epsilon(1e-6));
+}
+
+TEST_CASE("Resolve X enabled keeps final anchor on camera ray displacement") {
+    Asset asset = make_test_asset(14, -6);
+    asset.set_world_z_offset(9.0f);
+
+    DisplacedAssetAnchorPoint anchor{};
+    anchor.name = "resolve_x_enabled";
+    anchor.texture_x = 8;
+    anchor.texture_y = 13;
+    anchor.depth_offset = 4.0f;
+    anchor.resolve_x = true;
+
+    const auto sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        anchor,
+        anchor_points::GridMaterialization::None);
+
+    REQUIRE_FALSE(sample.resolved.missing);
+    REQUIRE(sample.flat_relative_pixel_point.valid);
+    REQUIRE(sample.final_anchor_point.valid);
+
+    anchor_points::AnchorWorldPoint3 expected{};
+    REQUIRE(anchor_points::displace_along_camera_to_point_ray(
+        asset,
+        sample.flat_relative_pixel_point,
+        anchor.depth_offset,
+        expected));
+    REQUIRE(expected.valid);
+
+    CHECK(sample.final_anchor_point.x == doctest::Approx(expected.x).epsilon(1e-6));
+    CHECK(sample.final_anchor_point.y == doctest::Approx(expected.y).epsilon(1e-6));
+    CHECK(sample.final_anchor_point.z == doctest::Approx(expected.z).epsilon(1e-6));
+}
+
+TEST_CASE("Resolve X disabled locks final world X and preserves ray-derived depth") {
+    Asset asset = make_test_asset(25, 50);
+    asset.set_world_z_offset(6.0f);
+
+    DisplacedAssetAnchorPoint ray_anchor{};
+    ray_anchor.name = "resolve_x_on";
+    ray_anchor.texture_x = 4;
+    ray_anchor.texture_y = 7;
+    ray_anchor.depth_offset = 5.0f;
+    ray_anchor.resolve_x = true;
+
+    const auto ray_sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        ray_anchor,
+        anchor_points::GridMaterialization::None);
+    REQUIRE_FALSE(ray_sample.resolved.missing);
+    REQUIRE(ray_sample.flat_relative_pixel_point.valid);
+    REQUIRE(ray_sample.final_anchor_point.valid);
+
+    DisplacedAssetAnchorPoint lock_x_anchor = ray_anchor;
+    lock_x_anchor.resolve_x = false;
+    const auto lock_x_sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        lock_x_anchor,
+        anchor_points::GridMaterialization::None);
+    REQUIRE_FALSE(lock_x_sample.resolved.missing);
+    REQUIRE(lock_x_sample.flat_relative_pixel_point.valid);
+    REQUIRE(lock_x_sample.final_anchor_point.valid);
+
+    CHECK(lock_x_sample.final_anchor_point.x ==
+          doctest::Approx(lock_x_sample.flat_relative_pixel_point.x).epsilon(1e-6));
+    CHECK(lock_x_sample.final_anchor_point.z ==
+          doctest::Approx(ray_sample.final_anchor_point.z).epsilon(1e-6));
+
+#if defined(ENGINE_WORLD_TESTS)
+    // In ENGINE_WORLD_TESTS screen-y follows world-y directly.
+    CHECK(lock_x_sample.final_anchor_point.y ==
+          doctest::Approx(lock_x_sample.flat_relative_pixel_point.y).epsilon(1e-6));
+#endif
 }
 
 TEST_CASE("Resolved anchor flat perspective scale is driven by effective runtime perspective sample, not anchor texture position") {

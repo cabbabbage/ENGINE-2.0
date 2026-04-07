@@ -4,7 +4,6 @@
 #include <cctype>
 #include <cmath>
 
-#include "core/manifest/depth_cue_settings.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
 
@@ -20,21 +19,6 @@ bool ensure_object_section(nlohmann::json& root, const char* key) {
         return true;
     }
     return false;
-}
-
-bool ensure_fog_defaults(nlohmann::json& root) {
-    bool changed = false;
-    if (ensure_object_section(root, "fog_settings")) {
-        changed = true;
-    }
-
-    nlohmann::json& fog = root["fog_settings"];
-    auto jitter = fog.find("max_random_jitter");
-    if (jitter == fog.end() || !jitter->is_number()) {
-        fog["max_random_jitter"] = 0;
-        changed = true;
-    }
-    return changed;
 }
 
 bool ensure_map_layers_settings_defaults(nlohmann::json& root) {
@@ -225,7 +209,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"spawn_groups",
          nlohmann::json::array({make_batch_spawn_group(map_name, "map_assets", "batch_map_assets")})}
     });
-    map_info["fog_settings"] = nlohmann::json::object({{"max_random_jitter", 0}});
     map_info["map_boundary_data"] = nlohmann::json::object({
         {"inherits_map_assets", false},
         {"candidate_selectors",
@@ -327,9 +310,6 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         }
     }
 
-    if (ensure_fog_defaults(map_manifest)) {
-        changed = true;
-    }
     if (ensure_map_layers_settings_defaults(map_manifest)) {
         changed = true;
     }
@@ -343,17 +323,6 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     ensure_map_grid_settings(map_manifest);
     if (!had_grid_section || map_manifest["map_grid_settings"] != grid_before) {
         changed = true;
-    }
-
-    auto depth_it = map_manifest.find(depth_cue::kMapEntryKey);
-    if (depth_it != map_manifest.end()) {
-        const nlohmann::json depth_before = *depth_it;
-        const depth_cue::DepthCueSettings normalized_depth = depth_cue::from_map_entry(map_manifest);
-        const nlohmann::json depth_after = depth_cue::to_json(normalized_depth);
-        if (!depth_before.is_object() || depth_before != depth_after) {
-            map_manifest[depth_cue::kMapEntryKey] = depth_after;
-            changed = true;
-        }
     }
 
     if (ensure_map_layers(map_manifest, map_id)) {

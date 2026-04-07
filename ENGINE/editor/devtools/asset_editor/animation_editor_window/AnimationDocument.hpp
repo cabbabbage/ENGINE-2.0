@@ -25,6 +25,7 @@ class AnimationDocument {
     bool save_to_file_checked(bool fire_callback = true) const;
 
     bool consume_dirty_flag() const;
+    bool clear_dirty_if_revision_not_newer(std::uint64_t revision) const;
 
     void create_animation(const std::string& animation_id);
     void delete_animation(const std::string& animation_id);

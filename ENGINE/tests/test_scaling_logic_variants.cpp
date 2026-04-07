@@ -28,20 +28,16 @@ TEST_CASE("normalize variant steps enforces canonical 10 variants") {
     }
 }
 
-TEST_CASE("animation frame texture access is bounds-safe") {
+TEST_CASE("animation frame base texture access is bounds-safe") {
     AnimationFrame frame;
     CHECK(frame.get_base_texture(0) == nullptr);
-    CHECK(frame.get_foreground_texture(1) == nullptr);
-    CHECK(frame.get_background_texture(-1) == nullptr);
+    CHECK(frame.get_base_texture(1) == nullptr);
+    CHECK(frame.get_base_texture(-1) == nullptr);
 
     FrameVariant variant;
     variant.base_texture = reinterpret_cast<SDL_Texture*>(0x1);
-    variant.foreground_texture = reinterpret_cast<SDL_Texture*>(0x2);
-    variant.background_texture = reinterpret_cast<SDL_Texture*>(0x3);
     frame.variants.push_back(variant);
 
     CHECK(frame.get_base_texture(0) == reinterpret_cast<SDL_Texture*>(0x1));
-    CHECK(frame.get_foreground_texture(0) == reinterpret_cast<SDL_Texture*>(0x2));
-    CHECK(frame.get_background_texture(0) == reinterpret_cast<SDL_Texture*>(0x3));
     CHECK(frame.get_base_texture(10) == nullptr);
 }

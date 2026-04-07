@@ -124,16 +124,6 @@ bool save_bundle(const std::string& bundle_path, const BundleData& data) {
                     payload.insert(payload.end(), variant.base.pixels.begin(), variant.base.pixels.end());
                     variant_node["base"] = describe_layer(variant.base, base_offset);
                 }
-                if (!variant.foreground.empty()) {
-                    const std::uint64_t fg_offset = payload.size();
-                    payload.insert(payload.end(), variant.foreground.pixels.begin(), variant.foreground.pixels.end());
-                    variant_node["foreground"] = describe_layer(variant.foreground, fg_offset);
-                }
-                if (!variant.background.empty()) {
-                    const std::uint64_t bg_offset = payload.size();
-                    payload.insert(payload.end(), variant.background.pixels.begin(), variant.background.pixels.end());
-                    variant_node["background"] = describe_layer(variant.background, bg_offset);
-                }
 
                 if (variant.use_atlas) {
                     variant_node["atlas_rect"] = {
@@ -249,12 +239,6 @@ bool load_bundle(const std::string& bundle_path, BundleData& out_data) {
                         BundleFrameVariant variant;
                         if (variant_node.contains("base")) {
                             variant.base = read_layer(variant_node["base"], payload);
-                        }
-                        if (variant_node.contains("foreground")) {
-                            variant.foreground = read_layer(variant_node["foreground"], payload);
-                        }
-                        if (variant_node.contains("background")) {
-                            variant.background = read_layer(variant_node["background"], payload);
                         }
                         variant.use_atlas = variant_node.value("use_atlas", false);
                         if (variant_node.contains("atlas_rect") && variant_node["atlas_rect"].is_object()) {

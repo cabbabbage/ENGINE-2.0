@@ -14,17 +14,18 @@
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
+#include "devtools/dev_camera_controls.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
-#include "core/manifest/depth_cue_settings.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
+#include "utils/integer_grid_math.hpp"
 #include "utils/area.hpp"
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
@@ -64,6 +65,29 @@ namespace {
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
+constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
+constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
+constexpr int kDefaultCameraHeightMinPx = 1;
+constexpr int kDefaultCameraHeightMaxPx = 100000;
+
+float normalize_depth_axis_sign(float sign) {
+    if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
+        return 1.0f;
+    }
+    return sign >= 0.0f ? 1.0f : -1.0f;
+}
+
+float depth_axis_sign_from_forward_z(float forward_z) {
+    return normalize_depth_axis_sign(forward_z);
+}
+
+float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth_axis_sign) {
+    if (!std::isfinite(world_z) || !std::isfinite(anchor_world_z)) {
+        return 0.0f;
+    }
+    const float sign = normalize_depth_axis_sign(depth_axis_sign);
+    return (world_z - anchor_world_z) * sign;
+}
 
 struct AssetWorldBounds {
     float left = 0.0f;
@@ -120,6 +144,12 @@ bool vibble_scale_trace_enabled() {
                value == "ON";
     }();
     return enabled;
+}
+
+std::uint64_t hash_grid_cell(const world::GridCoord& coord) {
+    const std::uint64_t ux = static_cast<std::uint32_t>(coord.x);
+    const std::uint64_t uz = static_cast<std::uint32_t>(coord.z);
+    return (ux << 32) | uz;
 }
 
 }
@@ -179,7 +209,6 @@ Assets::Assets(AssetLibrary& library,
     }
 
     hydrate_map_info_sections();
-    depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
     InitializeAssets::initialize(*this, screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
@@ -188,6 +217,7 @@ Assets::Assets(AssetLibrary& library,
     auto& room_refs = rooms();
     finder_ = new CurrentRoomFinder(room_refs, player);
     if (finder_) {
+        finder_->setCamera(&camera_);
         camera_.set_up_rooms(finder_);
     }
 
@@ -430,9 +460,6 @@ void Assets::hydrate_map_info_sections() {
 
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
-    depth_cue_settings_ = depth_cue::from_map_entry(map_info_json_);
-    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
-
 }
 
 void Assets::load_camera_settings_from_json() {
@@ -442,7 +469,53 @@ void Assets::load_camera_settings_from_json() {
     if (!map_info_json_.contains("camera_settings") || !map_info_json_["camera_settings"].is_object()) {
         map_info_json_["camera_settings"] = nlohmann::json::object();
     }
-    camera_.apply_camera_settings(map_info_json_["camera_settings"]);
+    const nlohmann::json& camera_settings = map_info_json_["camera_settings"];
+    camera_.apply_camera_settings(camera_settings);
+
+    const auto parse_boundary_ratio = [&](const nlohmann::json& source) {
+        auto it = source.find("boundary_min_visible_screen_ratio");
+        if (it == source.end() || !it->is_number()) {
+            return kDefaultBoundaryMinVisibleScreenRatio;
+        }
+        float value = kDefaultBoundaryMinVisibleScreenRatio;
+        try {
+            value = it->get<float>();
+        } catch (...) {
+            return kDefaultBoundaryMinVisibleScreenRatio;
+        }
+        if (!std::isfinite(value)) {
+            return kDefaultBoundaryMinVisibleScreenRatio;
+        }
+        return std::clamp(value, 0.0f, 0.5f);
+    };
+    const auto parse_height_bound = [&](const nlohmann::json& source,
+                                        const char* key,
+                                        int fallback) {
+        auto it = source.find(key);
+        if (it == source.end() || !it->is_number_integer()) {
+            return fallback;
+        }
+        try {
+            const int value = it->get<int>();
+            return value;
+        } catch (...) {
+            return fallback;
+        }
+    };
+
+    const float boundary_ratio = parse_boundary_ratio(camera_settings);
+    const int min_height = parse_height_bound(camera_settings, "camera_height_min_px", kDefaultCameraHeightMinPx);
+    int max_height = parse_height_bound(camera_settings, "camera_height_max_px", kDefaultCameraHeightMaxPx);
+    if (max_height < min_height) {
+        max_height = kDefaultCameraHeightMaxPx;
+    }
+    if (max_height < min_height) {
+        max_height = min_height;
+    }
+
+    set_boundary_min_visible_screen_ratio(boundary_ratio);
+    set_camera_height_bounds_px(min_height, max_height);
+    sync_camera_settings_to_map_info_json();
     apply_camera_runtime_settings();
     camera_view_dirty_ = true;
 }
@@ -451,11 +524,16 @@ void Assets::write_camera_settings_to_json() {
     if (!map_info_json_.is_object()) {
         return;
     }
-    map_info_json_["camera_settings"] = camera_.camera_settings_to_json();
+    nlohmann::json camera_settings = camera_.camera_settings_to_json();
+    camera_settings["boundary_min_visible_screen_ratio"] = boundary_min_visible_screen_ratio_;
+    camera_settings["camera_height_min_px"] = camera_height_min_px_;
+    camera_settings["camera_height_max_px"] = camera_height_max_px_;
+    map_info_json_["camera_settings"] = std::move(camera_settings);
 }
 
 void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
+    sync_camera_settings_to_map_info_json();
     mark_camera_dirty();
     camera_view_dirty_ = true;
 }
@@ -471,7 +549,7 @@ void Assets::reload_camera_settings() {
     mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
     camera_view_dirty_ = true;
     vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
-    log_camera_fog_state("startup-normal");
+    // Fog logging removed
 }
 
 void Assets::force_camera_view_refresh() {
@@ -549,37 +627,6 @@ void Assets::log_camera_fog_state(const char* label) const {
     );
 }
 
-void Assets::set_depth_effects_enabled(bool enabled) {
-    if (depth_effects_enabled_ == enabled) {
-        return;
-    }
-    depth_effects_enabled_ = enabled;
-}
-
-void Assets::set_depth_cue_settings(const depth_cue::DepthCueSettings& settings) {
-    depth_cue::DepthCueSettings sanitized = settings;
-    depth_cue::clamp(sanitized);
-    if (depth_cue::nearly_equal(sanitized, depth_cue_settings_)) {
-        return;
-    }
-
-    depth_cue_settings_ = sanitized;
-    depth_cue::write_to_map_entry(map_info_json_, depth_cue_settings_);
-    mark_map_data_dirty();
-
-    for (Asset* asset : all) {
-        if (!asset) {
-            continue;
-        }
-        asset->mark_composite_dirty();
-    }
-
-    ++depth_cue_settings_version_;
-    if (depth_cue_settings_version_ == 0) {
-        ++depth_cue_settings_version_;
-    }
-}
-
 void Assets::set_movement_debug_enabled(bool enabled) {
     if (movement_debug_enabled_ == enabled) {
         return;
@@ -611,10 +658,7 @@ void Assets::set_movement_debug_visible(bool visible) {
 }
 
 bool Assets::fog_visible() const {
-    if (!dev_controls_ || !dev_controls_->is_enabled()) {
-        return true;
-    }
-    return dev_controls_->fog_visible();
+    return false;
 }
 
 bool Assets::boundary_assets_visible() const {
@@ -630,6 +674,24 @@ float Assets::boundary_min_visible_screen_ratio() const {
 
 void Assets::set_boundary_min_visible_screen_ratio(float value) {
     boundary_min_visible_screen_ratio_ = std::clamp(value, 0.0f, 0.5f);
+}
+
+std::pair<int, int> Assets::camera_height_bounds_px() const {
+    return {camera_height_min_px_, camera_height_max_px_};
+}
+
+void Assets::set_camera_height_bounds_px(int min_value, int max_value) {
+    const int clamped_min = std::clamp(min_value, kDefaultCameraHeightMinPx, kDefaultCameraHeightMaxPx);
+    const int clamped_max = std::max(clamped_min,
+                                     std::clamp(max_value, kDefaultCameraHeightMinPx, kDefaultCameraHeightMaxPx));
+    camera_height_min_px_ = clamped_min;
+    camera_height_max_px_ = clamped_max;
+    DevCameraHeightBounds::set(static_cast<double>(camera_height_min_px_),
+                               static_cast<double>(camera_height_max_px_));
+}
+
+void Assets::sync_camera_settings_to_map_info_json() {
+    write_camera_settings_to_json();
 }
 
 Assets::~Assets() {
@@ -732,7 +794,7 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const std::uint64_t camera_state_version = camera_.camera_state_version();
     const float camera_anchor_world_z = static_cast<float>(camera_.anchor_world_z());
     const world::CameraProjectionParams projection = camera_.projection_params();
-    const float depth_axis_sign = depth_cue::depth_axis_sign_from_forward_z(
+    const float depth_axis_sign = depth_axis_sign_from_forward_z(
         static_cast<float>(projection.forward_z));
 
     if (asset_matches_focus_filter(player)) {
@@ -815,12 +877,12 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
     metrics.planar_distance = std::sqrt(dx * dx + dz * dz);
     metrics.planar_angle_radians = std::atan2(dz, dx);
     metrics.anchor_world_z = camera_anchor_world_z;
-    metrics.depth_axis_sign = depth_cue::normalize_depth_axis_sign(depth_axis_sign);
-    metrics.world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+    metrics.depth_axis_sign = normalize_depth_axis_sign(depth_axis_sign);
+    metrics.world_z_depth_offset = depth_offset_from_world_z(
         world_z,
         camera_anchor_world_z,
         metrics.depth_axis_sign);
-    metrics.effective_world_z_depth_offset = depth_cue::depth_offset_from_world_z(
+    metrics.effective_world_z_depth_offset = depth_offset_from_world_z(
         effective_world_z,
         camera_anchor_world_z,
         metrics.depth_axis_sign);
@@ -846,6 +908,9 @@ void Assets::rebuild_frame_collision_context() const {
 
     frame_collision_entries_.clear();
     frame_collision_entries_.reserve(active_assets.size());
+    frame_collision_index_.clear();
+    frame_collision_index_.reserve(active_assets.size());
+    const int index_layer = world_grid_.grid_resolution();
 
     for (Asset* asset : active_assets) {
         if (!asset || asset->dead || !asset->info) {
@@ -871,8 +936,9 @@ void Assets::rebuild_frame_collision_context() const {
             continue;
         }
 
+        const SDL_Point world_center = asset->world_xz_point();
         const world::GridPoint center = world::grid_math::from_sdl(
-            asset->world_xz_point(),
+            world_center,
             asset->world_y(),
             asset->grid_resolution);
         const world::GridPoint bottom_middle =
@@ -881,8 +947,17 @@ void Assets::rebuild_frame_collision_context() const {
         frame_collision_entries_.push_back(FrameCollisionEntry{
             asset,
             std::move(collision),
-            bottom_middle
+            world_center,
+            bottom_middle,
+            canonical_type
         });
+        FrameCollisionEntry& entry = frame_collision_entries_.back();
+        const world::GridPoint origin = world_grid_.origin();
+        const int spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
+        const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), spacing);
+        const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), spacing);
+        const world::GridCoord cell{cell_x, cell_z};
+        frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
     }
 
     frame_collision_context_frame_id_ = frame_id_;
@@ -902,28 +977,77 @@ void Assets::query_impassable_entries(const Asset& self,
     const int radius = std::max(0, search_radius);
     const std::int64_t radius_sq = static_cast<std::int64_t>(radius) * static_cast<std::int64_t>(radius);
     const SDL_Point self_center = self.world_xz_point();
+    const int index_layer = world_grid_.grid_resolution();
+    const world::GridPoint origin = world_grid_.origin();
+    const int cell_spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
+    const int self_cell_x = vibble::math::floor_div(self_center.x - origin.world_x(), cell_spacing);
+    const int self_cell_z = vibble::math::floor_div(self_center.y - origin.world_z(), cell_spacing);
+    const world::GridCoord self_cell{self_cell_x, self_cell_z};
 
-    out.reserve(frame_collision_entries_.size());
-    for (const FrameCollisionEntry& entry : frame_collision_entries_) {
-        if (!entry.asset || entry.asset == &self || !entry.asset->info) {
-            continue;
+    auto consider_entry = [&](const FrameCollisionEntry* entry) {
+        if (!entry || !entry->asset || entry->asset == &self || !entry->asset->info) {
+            return;
         }
         if (radius > 0) {
-            const SDL_Point candidate = entry.asset->world_xz_point();
-            const std::int64_t dx = static_cast<std::int64_t>(candidate.x) - static_cast<std::int64_t>(self_center.x);
-            const std::int64_t dy = static_cast<std::int64_t>(candidate.y) - static_cast<std::int64_t>(self_center.y);
+            const std::int64_t dx = static_cast<std::int64_t>(entry->world_center.x) - static_cast<std::int64_t>(self_center.x);
+            const std::int64_t dy = static_cast<std::int64_t>(entry->world_center.y) - static_cast<std::int64_t>(self_center.y);
             const std::int64_t dist_sq = dx * dx + dy * dy;
             if (dist_sq > radius_sq) {
-                continue;
+                return;
             }
         }
-        out.push_back(&entry);
+        out.push_back(entry);
+    };
+
+    out.reserve(frame_collision_entries_.size());
+
+    if (radius <= 0) {
+        for (const auto& bucket : frame_collision_index_) {
+            for (const FrameCollisionEntry* entry : bucket.second) {
+                consider_entry(entry);
+            }
+        }
+        return;
+    }
+
+    const int cell_radius = (radius + cell_spacing - 1) / cell_spacing;
+    for (int dz = -cell_radius; dz <= cell_radius; ++dz) {
+        for (int dx = -cell_radius; dx <= cell_radius; ++dx) {
+            world::GridCoord neighbor{self_cell.x + dx, self_cell.z + dz};
+            const std::uint64_t cell_hash = hash_grid_cell(neighbor);
+            const auto it = frame_collision_index_.find(cell_hash);
+            if (it == frame_collision_index_.end()) {
+                continue;
+            }
+            for (const FrameCollisionEntry* entry : it->second) {
+                consider_entry(entry);
+            }
+        }
     }
 }
 
 void Assets::refresh_filtered_active_assets() {
     update_filtered_active_assets();
 }
+
+namespace {
+
+bool asset_is_focus_descendant(const Asset* owner, const Asset* candidate) {
+    if (!owner) {
+        return false;
+    }
+    for (const Asset* child : owner->children()) {
+        if (child == candidate) {
+            return true;
+        }
+        if (asset_is_focus_descendant(child, candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 
 bool Assets::asset_matches_focus_filter(const Asset* asset) const {
     if (!focus_filter_active_) {
@@ -933,7 +1057,10 @@ bool Assets::asset_matches_focus_filter(const Asset* asset) const {
         return false;
     }
     if (focus_filter_asset_) {
-        return asset == focus_filter_asset_;
+        if (asset == focus_filter_asset_) {
+            return true;
+        }
+        return asset_is_focus_descendant(focus_filter_asset_, asset);
     }
     if (!focus_filter_spawn_id_.empty()) {
         return asset->spawn_id == focus_filter_spawn_id_;
@@ -1159,10 +1286,8 @@ void Assets::set_input(Input* m) {
 }
 
 void Assets::run_idle_frame_pipeline(const Input& input) {
-    refresh_visible_asset_scaling_only();
     run_visibility_build_stage();
-    refresh_visible_asset_scaling_only();
-    run_active_runtime_single_pass(false);
+    run_runtime_effects_stage(false);
     sync_dev_controls_for_frame(input);
     refresh_filtered_active_assets_if_needed();
     render_runtime_frame();
@@ -1312,6 +1437,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
 
 void Assets::run_visibility_build_stage() {
     run_frame_rebuild_stage();
+    refresh_visible_asset_scaling_only();
 }
 
 void Assets::run_post_flush_traversal_refresh_once() {
@@ -1320,39 +1446,14 @@ void Assets::run_post_flush_traversal_refresh_once() {
     }
     last_post_flush_refresh_frame_id_ = frame_id_;
 
-    const SDL_Point center_px = camera_.get_screen_center();
-    const world::GridPoint current_center = world::GridPoint::make_virtual(
-        center_px.x,
-        0,
-        center_px.y,
-        world_grid_.max_resolution_layers());
-    const double current_scale = camera_.get_scale();
-    const double current_pitch = camera_.current_pitch_radians();
-    const std::uint64_t current_projection_version = camera_.camera_state_version();
-
-    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_, frame_id_);
-    world_grid_.update_active_chunks(screen_world_rect(), 0);
-    rebuild_active_from_screen_grid();
+    post_runtime_traversal_refresh_pending_ = true;
+    note_frame_rebuild_request();
+    run_frame_rebuild_stage();
     refresh_visible_asset_scaling_only();
-
-    grid_dirty_ = false;
-    camera_view_dirty_ = false;
-    last_grid_rebuild_frame_ = frame_id_;
-    last_camera_center_for_grid_ = world::GridPoint::make_virtual(
-        current_center.world_x(),
-        current_center.world_y(),
-        current_center.world_z(),
-        current_center.resolution_layer());
-    last_camera_scale_for_grid_ = current_scale;
-    last_camera_pitch_for_grid_ = current_pitch;
-    last_camera_projection_state_version_for_grid_ = current_projection_version;
 }
 
-void Assets::run_runtime_effects_stage() {
-    // Rebuild traversal after controller-driven child updates and other runtime changes.
-    run_visibility_build_stage();
-    refresh_visible_asset_scaling_only();
-    run_active_runtime_single_pass();
+void Assets::run_runtime_effects_stage(bool include_audio_update) {
+    run_active_runtime_single_pass(include_audio_update);
 }
 
 void Assets::sync_dev_controls_for_frame(const Input& input) {
@@ -1468,10 +1569,10 @@ void Assets::update(const Input& input)
     bool player_moved = false;
     run_world_update_stage(input, room_changed, player_moved);
 
-    // Stage: visibility or traversal build from movement/controller updates.
+    // Stage: visibility/traversal refresh.
     run_visibility_build_stage();
 
-    // Stage: runtime effects + traversal refresh.
+    // Stage: runtime effects (with optional one-time post-runtime traversal refresh).
     run_runtime_effects_stage();
 
     // Stage: render + UI refresh.
@@ -1506,28 +1607,39 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(
         std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
-    std::unordered_set<const Asset*> buffer_set;
-    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries, active_traversal.size()));
-    const auto append_unique_traversal = [&](const std::vector<ActiveTraversalEntry>& source) {
-        for (const ActiveTraversalEntry& entry : source) {
-            Asset* asset = entry.asset;
-            if (!asset || asset == player || asset->dead) {
-                continue;
-            }
-            if (buffer_set.insert(asset).second) {
-                non_player_update_buffer_.push_back(asset);
-                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
-                    break;
-                }
-            }
-        }
-    };
 
     if (active_traversal.size() > kMaxBufferEntries) {
         std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
                   << active_traversal.size() << "); truncating to cap\n";
     }
-    append_unique_traversal(active_traversal);
+
+    ++non_player_update_visit_epoch_;
+    if (non_player_update_visit_epoch_ == 0) {
+        non_player_update_visit_epoch_ = 1;
+        for (auto& [asset, state] : runtime_traversal_state_) {
+            (void)asset;
+            state.non_player_update_visit_epoch = 0;
+        }
+    }
+    const std::uint32_t current_visit_epoch = non_player_update_visit_epoch_;
+
+    for (const ActiveTraversalEntry& entry : active_traversal) {
+        Asset* asset = entry.asset;
+        if (!asset || asset == player || asset->dead) {
+            continue;
+        }
+
+        RuntimeTraversalState& state = runtime_traversal_state_[asset];
+        if (state.non_player_update_visit_epoch == current_visit_epoch) {
+            continue;
+        }
+
+        state.non_player_update_visit_epoch = current_visit_epoch;
+        non_player_update_buffer_.push_back(asset);
+        if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
+            break;
+        }
+    }
 
     non_player_update_buffer_dirty_.store(false, std::memory_order_release);
 }
@@ -1804,7 +1916,7 @@ void Assets::set_dev_mode(bool mode) {
     } catch (...) {
         std::cerr << "[Assets] force_camera_view_refresh failed after mode toggle: unknown error\n";
     }
-    log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
+    // Fog logging removed
 }
 
 bool Assets::run_exit_save_sequence(const std::string& reason) {
@@ -2117,7 +2229,7 @@ bool Assets::run_frame_rebuild_stage() {
 }
 
 bool Assets::maybe_rebuild_world_grid() {
-    if (frame_id_ == last_grid_rebuild_frame_) {
+    if (frame_id_ == last_grid_rebuild_frame_ && !post_runtime_traversal_refresh_pending_) {
         return false;
     }
 
@@ -2139,8 +2251,9 @@ bool Assets::maybe_rebuild_world_grid() {
         std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon ||
         current_projection_version != last_camera_projection_state_version_for_grid_;
 
-    const bool camera_dirty = camera_view_dirty_ || camera_changed;
+    const bool camera_dirty = camera_view_dirty_ || camera_changed || post_runtime_traversal_refresh_pending_;
     if (!grid_dirty_ && !camera_dirty && !active_dirty) {
+        post_runtime_traversal_refresh_pending_ = false;
         return false;
     }
 
@@ -2156,6 +2269,7 @@ bool Assets::maybe_rebuild_world_grid() {
                                          current_scale,
                                          current_pitch,
                                          current_projection_version);
+    post_runtime_traversal_refresh_pending_ = false;
     return true;
 }
 
@@ -3241,6 +3355,16 @@ bool Assets::should_run_runtime_updates() const {
         return true;
     }
     return false;
+}
+
+bool Assets::should_render_runtime_lighting() const {
+    if (dev_controls_ && dev_controls_->is_runtime_light_editor_active()) {
+        return true;
+    }
+    if (dev_mode) {
+        return false;
+    }
+    return true;
 }
 
 bool Assets::should_advance_animation_for(const Asset* asset) const {

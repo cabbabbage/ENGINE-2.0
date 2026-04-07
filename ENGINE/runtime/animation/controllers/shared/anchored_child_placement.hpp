@@ -40,6 +40,7 @@ struct CameraStateInput {
 struct PlacementInput {
     ParentTransformInput parent{};
     AnchorDefinitionInput anchor_definition{};
+    ChildOffsetInput anchor_world_displacement{};
     ChildOffsetInput child_offset{};
     SpriteTransformInput sprite_transform{};
     CameraStateInput camera_state{};

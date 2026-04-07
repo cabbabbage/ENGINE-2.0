@@ -12,7 +12,6 @@
 #include "core/AssetsManager.hpp"
 #include "devtools/frame_editors/FrameEditorBase.hpp"
 #include "devtools/frame_editors/MovementFrameEditor.hpp"
-#include "devtools/anchor_editor/AnchorEditor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
@@ -24,7 +23,6 @@ namespace {
 FrameEditorSession::Mode mode_for_launch(FrameEditorLaunchMode launch_mode) {
     switch (launch_mode) {
         case FrameEditorLaunchMode::Movement: return FrameEditorSession::Mode::Movement;
-        case FrameEditorLaunchMode::AnchorPoints: return FrameEditorSession::Mode::AnchorPoints;
     }
     return FrameEditorSession::Mode::Movement;
 }
@@ -32,7 +30,6 @@ FrameEditorSession::Mode mode_for_launch(FrameEditorLaunchMode launch_mode) {
 FrameEditorLaunchMode launch_mode_for_mode(FrameEditorSession::Mode mode) {
     switch (mode) {
         case FrameEditorSession::Mode::Movement: return FrameEditorLaunchMode::Movement;
-        case FrameEditorSession::Mode::AnchorPoints: return FrameEditorLaunchMode::AnchorPoints;
     }
     return FrameEditorLaunchMode::Movement;
 }
@@ -41,8 +38,6 @@ std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(FrameEdit
     switch (mode) {
         case FrameEditorSession::Mode::Movement:
             return std::make_unique<devmode::frame_editors::MovementFrameEditor>();
-        case FrameEditorSession::Mode::AnchorPoints:
-            return std::make_unique<devmode::anchor_editor::AnchorEditor>();
     }
     return nullptr;
 }

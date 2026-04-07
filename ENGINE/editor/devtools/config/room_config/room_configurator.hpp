@@ -159,6 +159,8 @@ private:
     void initialize_radius_slider(bool request_layout);
     void expand_radius_slider_range_if_needed();
     int compute_radius_slider_initial_range() const;
+    void expand_width_slider_range_if_needed();
+    void expand_height_slider_range_if_needed();
 
     std::unique_ptr<State> state_;
     std::unique_ptr<SlidingWindowContainer> default_container_;
@@ -191,14 +193,12 @@ private:
     std::unique_ptr<TextBoxWidget> name_widget_;
     std::unique_ptr<DMDropdown> geometry_dropdown_;
     std::unique_ptr<DropdownWidget> geometry_widget_;
-    std::unique_ptr<DMTextBox> width_min_box_;
-    std::unique_ptr<TextBoxWidget> width_min_widget_;
-    std::unique_ptr<DMTextBox> width_max_box_;
-    std::unique_ptr<TextBoxWidget> width_max_widget_;
-    std::unique_ptr<DMTextBox> height_min_box_;
-    std::unique_ptr<TextBoxWidget> height_min_widget_;
-    std::unique_ptr<DMTextBox> height_max_box_;
-    std::unique_ptr<TextBoxWidget> height_max_widget_;
+    std::unique_ptr<DMRangeSlider> width_range_slider_;
+    std::unique_ptr<RangeSliderWidget> width_range_widget_;
+    std::unique_ptr<DMRangeSlider> height_range_slider_;
+    std::unique_ptr<RangeSliderWidget> height_range_widget_;
+    int width_slider_max_range_ = 0;
+    int height_slider_max_range_ = 0;
     std::unique_ptr<DMRangeSlider> radius_slider_;
     std::unique_ptr<RangeSliderWidget> radius_widget_;
     int radius_slider_max_range_ = 0;
@@ -214,16 +214,6 @@ private:
     std::unique_ptr<CheckboxWidget> inherit_widget_;
     std::unique_ptr<TagEditorWidget> tag_editor_;
 
-    std::unique_ptr<DMSlider> camera_height_slider_;
-    std::unique_ptr<SliderWidget> camera_height_widget_;
-    std::unique_ptr<DMSlider> camera_tilt_slider_;
-    std::unique_ptr<SliderWidget> camera_tilt_widget_;
-    std::unique_ptr<DMSlider> camera_zoom_slider_;
-    std::unique_ptr<SliderWidget> camera_zoom_widget_;
-    std::unique_ptr<DMSlider> camera_pan_slider_;
-    std::unique_ptr<SliderWidget> camera_pan_widget_;
-
-    std::unique_ptr<DockableCollapsible> camera_panel_;
     std::unique_ptr<DockableCollapsible> geometry_panel_;
     std::unique_ptr<DockableCollapsible> tags_panel_;
     std::unique_ptr<DockableCollapsible> types_panel_;
@@ -259,4 +249,3 @@ private:
     std::function<void(bool)> header_visibility_controller_{};
     std::function<void(Room*)> on_camera_changed_;
 };
-

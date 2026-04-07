@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <chrono>
 #include <cstddef>
 #include <cstdlib>
@@ -118,6 +119,7 @@ class Section_BasicInfo : public DockableCollapsible {
 
     std::unique_ptr<DMDropdown>  dd_type_;
     std::unique_ptr<DMSlider>    s_scale_pct_;
+    std::unique_ptr<DMSlider>    s_weight_kg_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
@@ -174,6 +176,8 @@ inline void Section_BasicInfo::build() {
     int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
     s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
+    int weight_val = std::max(0, static_cast<int>(std::lround(info_->weight_kg)));
+    s_weight_kg_ = std::make_unique<DMSlider>("Weight (kg)", 0, 10000, weight_val);
     if (!is_tiled_asset) {
         c_flipable_  = std::make_unique<DMCheckbox>("Flipable (can invert)", info_->flipable);
     } else {
@@ -188,6 +192,10 @@ inline void Section_BasicInfo::build() {
     auto w_scale = std::make_unique<SliderWidget>(s_scale_pct_.get());
     rows.push_back({ w_scale.get() });
     widgets_.push_back(std::move(w_scale));
+
+    auto w_weight = std::make_unique<SliderWidget>(s_weight_kg_.get());
+    rows.push_back({ w_weight.get() });
+    widgets_.push_back(std::move(w_weight));
 
     tb_starting_health_ = std::make_unique<DMTextBox>("Starting Health", std::to_string(info_->starting_health));
     auto w_health = std::make_unique<TextBoxWidget>(tb_starting_health_.get());
@@ -223,6 +231,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (!used) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
+        if (s_weight_kg_ && s_weight_kg_->handle_event(e)) used = true;
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
@@ -260,6 +269,11 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         }
     }
 
+    if (s_weight_kg_ && info_->weight_kg != static_cast<float>(s_weight_kg_->value())) {
+        info_->set_weight_kg(static_cast<float>(s_weight_kg_->value()));
+        changed = true;
+        render_settings_changed = true;
+    }
     if (c_flipable_ && info_->flipable != c_flipable_->value()) {
         info_->set_flipable(c_flipable_->value());
         changed = true;
@@ -972,19 +986,46 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
         try {
             animation_editor_window_->set_manifest_store(manifest_store_);
             animation_editor_window_->set_on_animation_properties_changed([this](const std::string& animation_id, const nlohmann::json& properties) {
-                if (!info_) {
-                    return;
-                }
-                if (!info_->update_animation_properties(animation_id, properties)) {
+                const std::shared_ptr<AssetInfo> current_info = info_;
+                if (!current_info) {
                     return;
                 }
 
-                auto refresh = [this]() { this->refresh_loaded_asset_instances(); };
-                if (!enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                           "Animation properties",
-                                           refresh)) {
-                    // Even if persistence fails, keep the runtime view in sync.
-                    refresh();
+                const auto result = current_info->update_animation_properties_detailed(animation_id, properties);
+                if (!result.changed) {
+                    return;
+                }
+
+                const RuntimeRefreshScope refresh_scope = result.structural
+                    ? RuntimeRefreshScope::StructuralWithDependents
+                    : RuntimeRefreshScope::LocalOnly;
+                const devmode::core::DevSaveCoordinator::Priority save_priority = result.structural
+                    ? devmode::core::DevSaveCoordinator::Priority::Debounced
+                    : devmode::core::DevSaveCoordinator::Priority::Immediate;
+
+                std::shared_ptr<animation_editor::AnimationDocument> doc = animation_document();
+                const std::uint64_t expected_revision = doc ? doc->revision() : 0;
+
+                if (!result.structural) {
+                    refresh_loaded_asset_instances(RuntimeRefreshScope::LocalOnly, current_info);
+                }
+
+                auto on_saved = [this, current_info, refresh_scope, expected_revision]() {
+                    if (!current_info || !info_ || info_.get() != current_info.get()) {
+                        return;
+                    }
+                    if (refresh_scope == RuntimeRefreshScope::StructuralWithDependents) {
+                        refresh_loaded_asset_instances(refresh_scope, current_info);
+                    }
+                    if (auto doc_after_save = animation_document()) {
+                        doc_after_save->clear_dirty_if_revision_not_newer(expected_revision);
+                    }
+                };
+
+                if (!enqueue_manifest_save(save_priority, "Animation properties", on_saved)) {
+                    if (refresh_scope == RuntimeRefreshScope::StructuralWithDependents) {
+                        refresh_loaded_asset_instances(refresh_scope, current_info);
+                    }
                 }
             });
             animation_editor_window_->set_info(info_);
@@ -2314,32 +2355,50 @@ bool AssetInfoUI::asset_matches_current_info(const Asset* asset) const {
 }
 
 void AssetInfoUI::refresh_loaded_asset_instances() {
-    if (!info_) {
+    refresh_loaded_asset_instances(RuntimeRefreshScope::StructuralWithDependents, info_);
+}
+
+void AssetInfoUI::refresh_loaded_asset_instances(RuntimeRefreshScope scope,
+                                                 const std::shared_ptr<AssetInfo>& context_info) {
+    if (!context_info) {
         return;
     }
 
-    if (!info_->name.empty()) {
+    if (!context_info->name.empty()) {
 
     }
 
-    if (!info_->name.empty()) {
+    if (!context_info->name.empty()) {
 
         render_pipeline::ScalingLogic::LoadPrecomputedProfiles(true);
-        auto profile = render_pipeline::ScalingLogic::ProfileForAsset(info_->name);
+        auto profile = render_pipeline::ScalingLogic::ProfileForAsset(context_info->name);
         (void)profile;
     }
 
+    SDL_Renderer* renderer = nullptr;
     if (assets_) {
-        devmode::refresh_loaded_animation_instances(assets_, info_);
+        renderer = assets_->renderer();
+    }
+    if (renderer) {
+        const bool assume_cache_ready = (scope == RuntimeRefreshScope::LocalOnly);
+        context_info->loadAnimations(renderer, true, assume_cache_ready);
     }
 
-    if (assets_ && !info_->name.empty()) {
+    if (assets_) {
+        devmode::refresh_loaded_animation_instances(assets_, context_info);
+    }
+
+    if (scope == RuntimeRefreshScope::LocalOnly) {
+        return;
+    }
+
+    if (assets_ && !context_info->name.empty()) {
         for (auto& [lib_name, lib_info] : assets_->library().all()) {
-            if (!lib_info || lib_name == info_->name) continue;
+            if (!lib_info || lib_name == context_info->name) continue;
 
             bool needs_refresh = false;
             for (const auto& [anim_id, anim_data] : lib_info->animations) {
-                if (anim_data.source.kind == "animation" && anim_data.source.path == info_->name) {
+                if (anim_data.source.kind == "animation" && anim_data.source.path == context_info->name) {
                     needs_refresh = true;
                     break;
                 }
@@ -2355,37 +2414,40 @@ void AssetInfoUI::refresh_loaded_asset_instances() {
 }
 
 void AssetInfoUI::on_animation_document_saved() {
-    if (!info_) {
+    if (animation_document_save_in_progress_ || !info_) {
         return;
     }
 
-    const nlohmann::json before_snapshot = animation_manifest_snapshot(*info_);
-    const bool reloaded = info_->reload_animations_from_disk();
+    const std::shared_ptr<AssetInfo> current_info = info_;
+    animation_document_save_in_progress_ = true;
+    struct SaveGuard {
+        bool& flag;
+        ~SaveGuard() { flag = false; }
+    } save_guard{animation_document_save_in_progress_};
+
+    const nlohmann::json before_snapshot = animation_manifest_snapshot(*current_info);
+    const bool reloaded = current_info->reload_animations_from_disk();
     if (!reloaded) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", current_info->name.c_str());
+        return;
     }
-    const nlohmann::json after_snapshot = animation_manifest_snapshot(*info_);
-    const bool animation_data_changed = reloaded && before_snapshot != after_snapshot;
+    const nlohmann::json after_snapshot = animation_manifest_snapshot(*current_info);
+    const bool animation_data_changed = before_snapshot != after_snapshot;
+    if (!animation_data_changed) {
+        return;
+    }
 
-    if (animation_data_changed) {
-        info_->classify_animation_snapshot_rebuilds(before_snapshot, after_snapshot);
-        info_->mark_dirty();
+    current_info->classify_animation_snapshot_rebuilds(before_snapshot, after_snapshot);
+    current_info->mark_dirty();
+
+    if (!info_ || info_.get() != current_info.get()) {
+        return;
     }
 
-    SDL_Renderer* renderer = nullptr;
-    if (assets_) {
-        renderer = assets_->renderer();
-    }
-    if (!renderer) {
+    if (!assets_ || !assets_->renderer()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] No renderer available for animation reload");
-        return;
     }
-    if (!reloaded) {
-        return;
-    }
-
-    info_->loadAnimations(renderer);
-    refresh_loaded_asset_instances();
+    refresh_loaded_asset_instances(RuntimeRefreshScope::StructuralWithDependents, current_info);
 }
 
 bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {

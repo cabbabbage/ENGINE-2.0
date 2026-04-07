@@ -15,14 +15,15 @@
 #include <functional>
 #include <sstream>
 
-#include "core/AssetsManager.hpp"
-#include "devtools/depth_cue_settings.hpp"
+#include "devtools/dev_camera_controls.hpp"
 #include "devtools/dm_styles.hpp"
+#include "core/AssetsManager.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/float_slider_widget.hpp"
 #include "devtools/shared/shared/formatting.hpp"
 #include "devtools/widgets.hpp"
+#include "gameplay/map_generation/room.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/input.hpp"
 
@@ -63,6 +64,10 @@ CameraUIPanel::~CameraUIPanel() = default;
 void CameraUIPanel::set_assets(Assets* assets) {
     assets_ = assets;
     sync_from_camera();
+}
+
+void CameraUIPanel::set_dirty_callback(std::function<void()> callback) {
+    dirty_callback_ = std::move(callback);
 }
 
 void CameraUIPanel::open() {
@@ -137,9 +142,26 @@ void CameraUIPanel::sync_from_camera() {
     const auto& settings = cam.get_settings();
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
+    if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
+    if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
+    if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
+    if (aperture_f_stop_slider_) aperture_f_stop_slider_->set_value(settings.aperture_f_stop);
+    if (focal_length_mm_slider_) focal_length_mm_slider_->set_value(settings.focal_length_mm);
+    if (max_blur_px_slider_) max_blur_px_slider_->set_value(settings.max_blur_px);
+    if (depth_of_field_checkbox_) {
+        depth_of_field_checkbox_->set_value(settings.depth_of_field_enabled);
+    }
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
     }
+
+    // Sync camera height bounds
+    const auto [saved_min, saved_max] = load_camera_height_bounds();
+    if (camera_height_min_slider_) camera_height_min_slider_->set_value(saved_min);
+    if (camera_height_max_slider_) camera_height_max_slider_->set_value(saved_max);
+
+    // Initialize the global camera height bounds used by DevCameraControls
+    DevCameraHeightBounds::set(static_cast<double>(saved_min), static_cast<double>(saved_max));
 }
 
 void CameraUIPanel::build_ui() {
@@ -158,10 +180,10 @@ void CameraUIPanel::build_ui() {
     if (assets_) {
         defaults = assets_->getView().get_settings();
     }
-    const float min_visible_default = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
-    defaults.min_visible_screen_ratio = min_visible_default;
-    const float boundary_min_visible_default =
-        devmode::camera_prefs::load_boundary_min_visible_screen_ratio(min_visible_default);
+    const float min_visible_default = defaults.min_visible_screen_ratio;
+    const float boundary_min_visible_default = assets_
+        ? assets_->boundary_min_visible_screen_ratio()
+        : 0.015f;
 
     min_render_size_slider_ = std::make_unique<FloatSliderWidget>("Min On-Screen Size", 0.0f, 0.05f, 0.001f, min_visible_default, 3);
     min_render_size_slider_->set_tooltip("Cull sprites once their height drops below this fraction of the screen (0.01 = 1%).");
@@ -177,6 +199,53 @@ void CameraUIPanel::build_ui() {
     boundary_min_render_size_slider_->set_tooltip(
         "Cull dynamically spawned boundary assets once their height drops below this fraction of the screen (0.01 = 1%).");
     boundary_min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    max_cull_depth_slider_ = std::make_unique<FloatSliderWidget>("Max Cull Depth", 1.0f, 50000.0f, 1.0f, defaults.max_cull_depth, 0);
+    max_cull_depth_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    layer_depth_interval_slider_ = std::make_unique<FloatSliderWidget>(
+        "Layer Depth Interval",
+        1.0f,
+        5000.0f,
+        1.0f,
+        defaults.layer_depth_interval,
+        0);
+    layer_depth_interval_slider_->set_tooltip("Base world-depth step for near DOF bins. Lower values increase near detail.");
+    layer_depth_interval_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    layer_depth_curve_slider_ = std::make_unique<FloatSliderWidget>(
+        "Layer Depth Curve",
+        0.0f,
+        100.0f,
+        0.01f,
+        defaults.layer_depth_curve,
+        2);
+    layer_depth_curve_slider_->set_tooltip("Non-linear bin growth with distance. Higher values create fewer far-depth layers.");
+    layer_depth_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    aperture_f_stop_slider_ = std::make_unique<FloatSliderWidget>("Aperture (f-stop)", 0.01f, 64.0f, 0.01f, defaults.aperture_f_stop, 2);
+    aperture_f_stop_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    focal_length_mm_slider_ = std::make_unique<FloatSliderWidget>("Focal Length (mm)", 0.01f, 500.0f, 0.1f, defaults.focal_length_mm, 1);
+    focal_length_mm_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    max_blur_px_slider_ = std::make_unique<FloatSliderWidget>("Max Blur (px)", 0.0f, 128.0f, 0.25f, defaults.max_blur_px, 2);
+    max_blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    auto dof_checkbox = std::make_unique<DMCheckbox>("Enable Depth Of Field", defaults.depth_of_field_enabled);
+    depth_of_field_checkbox_ = dof_checkbox.get();
+    depth_of_field_widget_ = std::make_unique<CallbackCheckboxWidget>(
+        std::move(dof_checkbox),
+        [this](bool) { on_control_value_changed(); });
+
+    // Global camera height bounds
+    const auto [saved_min, saved_max] = load_camera_height_bounds();
+    const std::string min_label = "Min Camera Height (px): " + std::to_string(saved_min);
+    const std::string max_label = "Max Camera Height (px): " + std::to_string(saved_max);
+
+    camera_height_min_slider_ = std::make_unique<DMSlider>(min_label, 1, 100000, saved_min);
+    camera_height_min_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
+
+    camera_height_max_slider_ = std::make_unique<DMSlider>(max_label, 1, 100000, saved_max);
+    camera_height_max_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
+
+    camera_height_min_widget_ = std::make_unique<SliderWidget>(camera_height_min_slider_.get());
+    camera_height_min_widget_->set_tooltip("Global minimum camera height. All room camera heights will be clamped to this value.");
+    camera_height_max_widget_ = std::make_unique<SliderWidget>(camera_height_max_slider_.get());
+    camera_height_max_widget_->set_tooltip("Global maximum camera height. All room camera heights will be clamped to this value.");
 
     rebuild_rows();
 }
@@ -188,6 +257,38 @@ void CameraUIPanel::on_control_value_changed() {
     apply_settings_if_needed();
 }
 
+std::pair<int, int> CameraUIPanel::load_camera_height_bounds() const {
+    if (!assets_) return {1, 100000};
+    return assets_->camera_height_bounds_px();
+}
+
+void CameraUIPanel::save_camera_height_bounds(int min_val, int max_val) const {
+    if (!assets_) return;
+    assets_->set_camera_height_bounds_px(min_val, max_val);
+    assets_->sync_camera_settings_to_map_info_json();
+}
+
+void CameraUIPanel::clamp_all_room_camera_heights(int min_val, int max_val) {
+    if (!assets_) return;
+    const auto& rooms = assets_->rooms();
+    for (Room* room : rooms) {
+        if (!room) continue;
+        room->camera_height_px = std::clamp(room->camera_height_px, min_val, max_val);
+        // Also update the room's assets_data JSON
+        auto& room_data = room->assets_data();
+        room_data["camera_height_px"] = room->camera_height_px;
+        room->mark_dirty();
+    }
+
+    // Also clamp the live camera view if it's outside the new bounds
+    WarpedScreenGrid& cam = assets_->getView();
+    const int current_height = static_cast<int>(cam.get_scale());
+    const int clamped_height = std::clamp(current_height, min_val, max_val);
+    if (clamped_height != current_height) {
+        cam.set_scale(static_cast<double>(clamped_height));
+    }
+}
+
 
 
 void CameraUIPanel::rebuild_rows() {
@@ -196,6 +297,17 @@ void CameraUIPanel::rebuild_rows() {
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
     if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
+    if (max_cull_depth_slider_) rows.push_back({ max_cull_depth_slider_.get() });
+    if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
+    if (layer_depth_curve_slider_) rows.push_back({ layer_depth_curve_slider_.get() });
+    if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
+    if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
+    if (max_blur_px_slider_) rows.push_back({ max_blur_px_slider_.get() });
+    if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
+
+    // Camera height bounds section
+    if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
+    if (camera_height_max_widget_) rows.push_back({ camera_height_max_widget_.get() });
 
     set_rows(rows);
 }
@@ -216,12 +328,27 @@ void CameraUIPanel::apply_settings_if_needed() {
     WarpedScreenGrid::RealismSettings updated = current;
 
     if (min_render_size_slider_) updated.min_visible_screen_ratio = min_render_size_slider_->value();
+    if (max_cull_depth_slider_) updated.max_cull_depth = max_cull_depth_slider_->value();
+    if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
+    if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
+    if (aperture_f_stop_slider_) updated.aperture_f_stop = aperture_f_stop_slider_->value();
+    if (focal_length_mm_slider_) updated.focal_length_mm = focal_length_mm_slider_->value();
+    if (max_blur_px_slider_) updated.max_blur_px = max_blur_px_slider_->value();
+    if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
     };
     const bool realism_changed =
-        float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio);
+        float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio) ||
+        float_changed(updated.max_cull_depth, current.max_cull_depth) ||
+        float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
+        float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
+        float_changed(updated.aperture_f_stop, current.aperture_f_stop) ||
+        float_changed(updated.focal_length_mm, current.focal_length_mm) ||
+        float_changed(updated.max_blur_px, current.max_blur_px) ||
+        (updated.depth_of_field_enabled != current.depth_of_field_enabled);
+
     float boundary_value = assets_->boundary_min_visible_screen_ratio();
     if (boundary_min_render_size_slider_) {
         boundary_value = boundary_min_render_size_slider_->value();
@@ -230,20 +357,43 @@ void CameraUIPanel::apply_settings_if_needed() {
         boundary_min_render_size_slider_ &&
         float_changed(boundary_value, assets_->boundary_min_visible_screen_ratio());
 
+    bool changed = false;
     if (realism_changed) {
         cam.set_realism_settings(updated);
-        devmode::camera_prefs::save_min_visible_screen_ratio(updated.min_visible_screen_ratio);
+        changed = true;
     }
     if (boundary_changed) {
         assets_->set_boundary_min_visible_screen_ratio(boundary_value);
-        devmode::camera_prefs::save_boundary_min_visible_screen_ratio(boundary_value);
+        changed = true;
     }
 
     if (realism_changed || boundary_changed) {
         assets_->on_camera_settings_changed();
     }
-}
 
+    // Apply camera height bounds
+    if (camera_height_min_slider_ && camera_height_max_slider_) {
+        const int new_min = camera_height_min_slider_->value();
+        const int new_max = camera_height_max_slider_->value();
+        const auto [old_min, old_max] = load_camera_height_bounds();
+
+        if (new_min != old_min || new_max != old_max) {
+            // Ensure min <= max
+            const int clamped_min = std::min(new_min, new_max);
+            const int clamped_max = std::max(new_min, new_max);
+
+            save_camera_height_bounds(clamped_min, clamped_max);
+            changed = true;
+
+            // Clamp all room camera heights
+            clamp_all_room_camera_heights(clamped_min, clamped_max);
+        }
+    }
+
+    if (changed && dirty_callback_) {
+        dirty_callback_();
+    }
+}
 
 
 

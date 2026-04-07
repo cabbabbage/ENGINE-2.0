@@ -10,6 +10,8 @@
 namespace {
 constexpr int kMinResolution = 0;
 constexpr int kMaxResolution = vibble::grid::kMaxResolution;
+constexpr int kMinJitter = 0;
+constexpr int kMaxJitter = 500;
 
 int power_of_three(int exponent) {
     if (exponent <= 0) {
@@ -27,7 +29,7 @@ int power_of_three(int exponent) {
 }
 
 MapGridSettings MapGridSettings::defaults() {
-    return MapGridSettings{0};
+    return MapGridSettings{0, 0};
 }
 
 MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
@@ -40,8 +42,12 @@ MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
         if (obj->contains("grid_resolution") && (*obj)["grid_resolution"].is_number_integer()) {
             settings.grid_resolution = (*obj)["grid_resolution"].get<int>();
         }
+        if (obj->contains("position_jitter_px") && (*obj)["position_jitter_px"].is_number_integer()) {
+            settings.position_jitter_px = (*obj)["position_jitter_px"].get<int>();
+        }
     } catch (...) {
         settings.grid_resolution = defaults().grid_resolution;
+        settings.position_jitter_px = defaults().position_jitter_px;
     }
 
     settings.clamp();
@@ -50,6 +56,7 @@ MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
 
 void MapGridSettings::clamp() {
     grid_resolution = std::clamp(grid_resolution, kMinResolution, kMaxResolution);
+    position_jitter_px = std::clamp(position_jitter_px, kMinJitter, kMaxJitter);
 }
 
 void MapGridSettings::apply_to_json(nlohmann::json& obj) const {
@@ -57,9 +64,8 @@ void MapGridSettings::apply_to_json(nlohmann::json& obj) const {
         obj = nlohmann::json::object();
     }
     obj["grid_resolution"] = grid_resolution;
+    obj["position_jitter_px"] = position_jitter_px;
     obj.erase("resolution");
-    obj.erase("spacing");
-    obj.erase("jitter");
     obj.erase("r_chunk");
     obj.erase("chunk_resolution");
     obj.erase("chunk_size");

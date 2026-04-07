@@ -1,12 +1,24 @@
 #include "anchor_bound_asset_helper.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
 
 #include <algorithm>
 #include <vector>
 
 namespace anchor_bound_asset_helper {
+namespace {
+
+int child_frame_index(const Asset* child_asset) {
+    if (!child_asset) {
+        return -1;
+    }
+    const AnimationFrame* frame = child_asset->current_animation_frame();
+    return frame ? frame->frame_index : -1;
+}
+
+} // namespace
 
 AnchorBoundAssetHelper& AnchorBoundAssetHelper::instance() {
     static AnchorBoundAssetHelper helper;
@@ -20,7 +32,12 @@ void AnchorBoundAssetHelper::register_child(Asset* owner,
     if (!owner || !child || !child_asset || anchor_name.empty()) {
         return;
     }
-    bindings_[child_asset] = BindingRecord{owner, child, child_asset, anchor_name};
+    bindings_[child_asset] = BindingRecord{
+        owner,
+        child,
+        child_asset,
+        anchor_name,
+        child_frame_index(child_asset)};
 }
 
 void AnchorBoundAssetHelper::unregister_child(Asset* child_asset) {
@@ -82,7 +99,23 @@ void AnchorBoundAssetHelper::notify_anchor_changed(Asset* owner, const std::stri
 }
 
 bool AnchorBoundAssetHelper::flush_pending_updates() {
-    if (flush_in_progress_ || pending_children_.empty()) {
+    if (flush_in_progress_) {
+        return false;
+    }
+
+    for (auto& [child_asset, record] : bindings_) {
+        (void)child_asset;
+        if (!record.child) {
+            continue;
+        }
+        const int current_frame_index = child_frame_index(record.child_asset);
+        if (current_frame_index != record.last_child_frame_index) {
+            pending_children_.insert(record.child);
+            record.last_child_frame_index = current_frame_index;
+        }
+    }
+
+    if (pending_children_.empty()) {
         return false;
     }
 
@@ -100,6 +133,11 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
 
     for (ChildAsset* child : to_update) {
         changed = child->update() || changed;
+    }
+
+    for (auto& [child_asset, record] : bindings_) {
+        (void)child_asset;
+        record.last_child_frame_index = child_frame_index(record.child_asset);
     }
 
     flush_in_progress_ = false;

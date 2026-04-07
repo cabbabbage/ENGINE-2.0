@@ -15,6 +15,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -337,6 +338,24 @@ TEST_CASE("WarpedScreenGrid traversal keeps deeper world-z points without depth-
     CHECK(camera_grid.grid_point_for_asset(far_asset) != nullptr);
 }
 
+TEST_CASE("WarpedScreenGrid max_cull_depth filters far depth traversal entries") {
+    world::WorldGrid grid;
+    Asset* near_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 40));
+    Asset* far_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 180));
+    REQUIRE(near_asset != nullptr);
+    REQUIRE(far_asset != nullptr);
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    auto settings = camera_grid.get_settings();
+    settings.max_cull_depth = 80.0f;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+
+    CHECK(camera_grid.grid_point_for_asset(near_asset) != nullptr);
+    CHECK(camera_grid.grid_point_for_asset(far_asset) == nullptr);
+    CHECK(camera_grid.last_depth_culled() > 0);
+}
+
 TEST_CASE("WarpedScreenGrid directional overscan expands left right and bottom only") {
     world::WorldGrid grid;
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
@@ -461,4 +480,53 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
     CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
     CHECK(after.base_height_px == doctest::Approx(before.base_height_px));
+    CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
+    CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
+    CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
+}
+
+TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys handled by Assets") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    const WarpedScreenGrid::RealismSettings before = camera_grid.get_settings();
+
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"boundary_min_visible_screen_ratio", 0.25},
+        {"camera_height_min_px", 32},
+        {"camera_height_max_px", 4096}
+    });
+
+    const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
+    CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
+    CHECK(after.base_height_px == doctest::Approx(before.base_height_px));
+    CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
+    CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
+    CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
+}
+
+TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and layer controls") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"max_cull_depth", 2500.0},
+        {"layer_depth_interval", 180.0},
+        {"layer_depth_curve", 1.75},
+        {"aperture_f_stop", 4.0},
+        {"focal_length_mm", 35.0},
+        {"max_blur_px", 20.0},
+        {"depth_of_field_enabled", true}
+    });
+    const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
+    CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
+    CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
+    CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
+    CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
+    CHECK(settings.max_blur_px == doctest::Approx(20.0f));
+    CHECK(settings.depth_of_field_enabled);
+
+    const nlohmann::json serialized = camera_grid.camera_settings_to_json();
+    CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
+    CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
+    CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
+    CHECK(serialized["depth_of_field_enabled"] == true);
+    CHECK_FALSE(serialized.contains("focus_depth"));
 }

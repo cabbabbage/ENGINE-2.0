@@ -36,10 +36,6 @@ TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
             {"inherits_map_assets", false},
             {"unknown_boundary", 7}
         }},
-        {"fog_settings", {
-            {"max_random_jitter", 0},
-            {"custom_fog", 0.75}
-        }},
         {"map_assets_data", {
             {"spawn_groups", nlohmann::json::array()},
             {"custom_assets_key", {"mode", "dense"}}
@@ -73,7 +69,6 @@ TEST_CASE("MapData writes known section schema keys when entry is missing") {
     CHECK(out.contains("map_layers"));
     CHECK(out.contains("map_layers_settings"));
     CHECK(out.contains("map_boundary_data"));
-    CHECK(out.contains("fog_settings"));
     CHECK(out.contains("map_assets_data"));
     CHECK(out.contains("dev_map_settings"));
 

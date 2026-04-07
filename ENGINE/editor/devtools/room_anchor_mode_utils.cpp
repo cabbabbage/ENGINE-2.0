@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include "utils/string_utils.hpp"
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
@@ -16,22 +17,10 @@ int wrap_index(int index, int count) {
     return wrapped < 0 ? (wrapped + count) : wrapped;
 }
 
-std::string trim_copy(std::string_view value) {
-    auto is_space = [](unsigned char ch) { return std::isspace(ch) != 0; };
-    std::string out(value);
-    out.erase(out.begin(), std::find_if(out.begin(), out.end(), [&](unsigned char ch) {
-        return !is_space(ch);
-    }));
-    out.erase(std::find_if(out.rbegin(), out.rend(), [&](unsigned char ch) {
-        return !is_space(ch);
-    }).base(), out.end());
-    return out;
-}
-
 std::string make_unique_anchor_name(const std::string& desired_name,
                                     const std::vector<std::string>& existing_names,
                                     const std::string& excluded_name) {
-    const std::string trimmed = trim_copy(desired_name);
+    const std::string trimmed = vibble::strings::trim_copy(desired_name);
     const std::string base = trimmed.empty() ? std::string("anchor") : trimmed;
 
     std::unordered_set<std::string> used;
@@ -103,7 +92,20 @@ nlohmann::json serialize_anchor_frame(const std::vector<DisplacedAssetAnchorPoin
             {"rotation_degrees", anchor.rotation_degrees},
             {"hidden", anchor.hidden},
             {"resolve_x", anchor.resolve_x},
+            {"scaling_method", std::string(anchor_points::anchor_scaling_method_to_token(anchor.scaling_method))},
         }));
+        if (anchor.has_light_data) {
+            nlohmann::json light_json = nlohmann::json::object();
+            light_json["enabled"] = anchor.light.enabled;
+            light_json["color"] = nlohmann::json::array(
+                {anchor.light.color_r, anchor.light.color_g, anchor.light.color_b});
+            light_json["intensity"] = anchor.light.intensity;
+            light_json["radius"] = anchor.light.radius;
+            light_json["falloff"] = anchor.light.falloff;
+            light_json["shadow_strength"] = anchor.light.shadow_strength;
+            light_json["cast_shadows"] = anchor.light.cast_shadows;
+            frame_json.back()["light"] = std::move(light_json);
+        }
     }
     return frame_json;
 }

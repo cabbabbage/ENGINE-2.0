@@ -18,6 +18,7 @@
 #include "DockableCollapsible.hpp"
 #include "DockManager.hpp"
 #include "dm_styles.hpp"
+#include "tag_library.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "spawn_groups/widgets/CandidateEditorPieGraphWidget.hpp"
 #include "utils/input.hpp"
@@ -56,6 +57,20 @@ double read_candidate_weight(const json& candidate) {
 
 constexpr std::string_view kNullCandidateName = "null";
 
+std::string trim_copy(std::string_view value) {
+    size_t begin = 0;
+    while (begin < value.size() &&
+           std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
+        ++begin;
+    }
+    size_t end = value.size();
+    while (end > begin &&
+           std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
+        --end;
+    }
+    return std::string(value.substr(begin, end - begin));
+}
+
 bool is_null_candidate_name(std::string_view name) {
     if (name.size() != kNullCandidateName.size()) {
         return false;
@@ -68,8 +83,118 @@ bool is_null_candidate_name(std::string_view name) {
     return true;
 }
 
+std::string read_string_field_no_throw(const json& obj,
+                                       const char* key,
+                                       std::string fallback = {}) {
+    if (!obj.is_object() || key == nullptr) {
+        return fallback;
+    }
+    auto it = obj.find(key);
+    if (it == obj.end()) {
+        return fallback;
+    }
+    if (it->is_string()) {
+        return it->get<std::string>();
+    }
+    return fallback;
+}
+
+std::string candidate_name_from_json(const json& candidate) {
+    if (candidate.is_object()) {
+        return read_string_field_no_throw(candidate, "name");
+    }
+    if (candidate.is_string()) {
+        return candidate.get<std::string>();
+    }
+    return std::string{};
+}
+
+bool candidate_is_null_entry(const json& candidate) {
+    return is_null_candidate_name(trim_copy(candidate_name_from_json(candidate)));
+}
+
+std::string canonical_candidate_identity(const json& candidate) {
+    std::string name = trim_copy(candidate_name_from_json(candidate));
+    if (name.empty()) {
+        return std::string{};
+    }
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return name;
+}
+
+json make_candidate_entry_from_search_value(const std::string& raw_value, double weight) {
+    json candidate = json::object();
+    std::string value = trim_copy(raw_value);
+    if (value.empty()) {
+        value = std::string{kNullCandidateName};
+    }
+
+    std::string tag_name;
+    bool is_tag = false;
+    if (!value.empty() && value.front() == '#') {
+        tag_name = trim_copy(std::string_view(value).substr(1));
+        is_tag = !tag_name.empty();
+    }
+
+    if (is_tag) {
+        const std::string display = "#" + tag_name;
+        candidate["name"] = display;
+        candidate["tag"] = true;
+        candidate["tag_name"] = tag_name;
+        candidate["display_name"] = display;
+    } else {
+        candidate["name"] = value;
+    }
+
+    if (is_integral(weight)) {
+        candidate["chance"] = static_cast<int>(std::llround(weight));
+    } else {
+        candidate["chance"] = weight;
+    }
+
+    return candidate;
+}
+
+std::vector<SearchAssets::Result> build_candidate_search_extra_results() {
+    std::vector<SearchAssets::Result> results;
+    results.reserve(16);
+
+    SearchAssets::Result null_res;
+    null_res.label = "null";
+    null_res.value = "null";
+    null_res.is_tag = false;
+    results.push_back(std::move(null_res));
+
+    std::unordered_set<std::string> seen;
+    for (const auto& tag : TagLibrary::instance().tags()) {
+        std::string normalized = trim_copy(tag);
+        if (normalized.empty()) {
+            continue;
+        }
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (!seen.insert(normalized).second) {
+            continue;
+        }
+
+        SearchAssets::Result tag_res;
+        tag_res.label = "#" + normalized;
+        tag_res.value = normalized;
+        tag_res.is_tag = true;
+        tag_res.tags = {normalized};
+        results.push_back(std::move(tag_res));
+    }
+
+    return results;
+}
+
 constexpr int kMapWideGridResolutionMin = 5;
 constexpr int kMapWideGridResolutionMax = 10;
+constexpr int kMapWidePositionJitterMin = 0;
+constexpr int kMapWidePositionJitterMax = 500;
 
 bool ensure_null_candidate_entry(json& entry) {
     if (!entry.is_object()) return false;
@@ -82,10 +207,8 @@ bool ensure_null_candidate_entry(json& entry) {
         return false;
     }
     for (const auto& candidate : *it) {
-        if (candidate.is_object()) {
-            if (is_null_candidate_name(candidate.value("name", std::string{}))) {
-                return false;
-            }
+        if (candidate_is_null_entry(candidate)) {
+            return false;
         }
     }
     json null_candidate = json::object();
@@ -315,6 +438,8 @@ public:
         pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
         pie_widget_->set_manifest_store(manifest_store_);
         pie_widget_->set_assets(assets_);
+        auto search_extras = std::make_shared<std::vector<SearchAssets::Result>>(build_candidate_search_extra_results());
+        pie_widget_->set_search_extra_results_provider([search_extras]() { return *search_extras; });
         pie_widget_->set_on_request_layout([this]() { this->layout(); });
         // Regular modal writes directly to the section; apply immediately
         pie_widget_->set_defer_adjust_until_release(false);
@@ -340,8 +465,22 @@ public:
             grid_resolution_stepper_->set_value(resolution);
         }
 
+        const int jitter = current_position_jitter();
+        if (!position_jitter_stepper_) {
+            position_jitter_stepper_ = std::make_unique<DMNumericStepper>("Position Jitter (px)",
+                                                                          kMapWidePositionJitterMin,
+                                                                          kMapWidePositionJitterMax,
+                                                                          jitter);
+            position_jitter_stepper_->set_step(1);
+            position_jitter_stepper_->set_on_change([this](int value) { this->update_position_jitter(value); });
+            position_jitter_widget_ = std::make_unique<StepperWidget>(position_jitter_stepper_.get());
+        } else {
+            position_jitter_stepper_->set_value(jitter);
+        }
+
         if (entry_) {
             (*entry_)["grid_resolution"] = resolution;
+            (*entry_)["position_jitter_px"] = jitter;
         }
 
         if (!ownership_label_.empty()) {
@@ -433,7 +572,7 @@ private:
             rows.push_back({ownership_label_widget_.get()});
         }
 
-        const std::string display_name = entry_->value("display_name", default_display_name_);
+        const std::string display_name = read_string_field_no_throw(*entry_, "display_name", default_display_name_);
         if (display_name_widget_) {
             display_name_widget_->set_text("Spawn group: " + display_name);
             display_name_widget_->set_subtle(true);
@@ -459,6 +598,12 @@ private:
             const int resolution = current_grid_resolution();
             grid_resolution_stepper_->set_value(resolution);
             rows.push_back({grid_resolution_widget_.get()});
+        }
+
+        if (position_jitter_widget_ && position_jitter_stepper_) {
+            const int jitter = current_position_jitter();
+            position_jitter_stepper_->set_value(jitter);
+            rows.push_back({position_jitter_widget_.get()});
         }
 
         if (pie_widget_) {
@@ -512,12 +657,14 @@ private:
             new_weight = 5.0;
         }
 
-        json candidate = json::object();
-        candidate["name"] = label;
-        if (is_integral(new_weight)) {
-            candidate["chance"] = static_cast<int>(std::llround(new_weight));
-        } else {
-            candidate["chance"] = new_weight;
+        json candidate = make_candidate_entry_from_search_value(label, new_weight);
+        const std::string new_identity = canonical_candidate_identity(candidate);
+        if (!new_identity.empty()) {
+            for (const auto& existing : candidates) {
+                if (canonical_candidate_identity(existing) == new_identity) {
+                    return;
+                }
+            }
         }
 
         candidates.push_back(std::move(candidate));
@@ -540,7 +687,7 @@ private:
 
     int current_grid_resolution() const {
         if (!entry_) return kMapWideGridResolutionMin;
-        int value = entry_->value("grid_resolution", kMapWideGridResolutionMin);
+        int value = vibble::spawn_group_codec::read_int_field(*entry_, "grid_resolution", kMapWideGridResolutionMin);
         return clamp_map_grid_resolution(value);
     }
 
@@ -578,6 +725,21 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMNumericStepper> grid_resolution_stepper_{};
     std::unique_ptr<StepperWidget> grid_resolution_widget_{};
+    std::unique_ptr<DMNumericStepper> position_jitter_stepper_{};
+    std::unique_ptr<StepperWidget> position_jitter_widget_{};
+
+    int current_position_jitter() const {
+        if (!entry_) return kMapWidePositionJitterMin;
+        int value = vibble::spawn_group_codec::read_int_field(*entry_, "position_jitter_px", kMapWidePositionJitterMin);
+        return std::clamp(value, kMapWidePositionJitterMin, kMapWidePositionJitterMax);
+    }
+
+    void update_position_jitter(int value) {
+        if (!entry_) return;
+        const int clamped = std::clamp(value, kMapWidePositionJitterMin, kMapWidePositionJitterMax);
+        (*entry_)["position_jitter_px"] = clamped;
+        notify_save(false);
+    }
 };
 
 class BoundaryCandidateListPanelImpl : public DockableCollapsible {
@@ -644,7 +806,8 @@ public:
         regen_callback_ = std::move(on_regen);
         pending_rebuild_ = false;
         pending_sync_ = false;
-        in_pie_callback_ = false;
+        pending_sync_spawn_id_.reset();
+        pie_callback_depth_ = 0;
 
         if (!ownership_label_.empty()) {
             if (!ownership_label_widget_) ownership_label_widget_ = std::make_unique<LabelWidget>();
@@ -685,20 +848,38 @@ public:
         rebuild_rows(true);
     }
 
-    void notify_save(bool force_rebuild) {
+    void notify_save(bool force_rebuild, const std::string* changed_spawn_id = nullptr) {
         if (!section_) return;
         bool sanitized = sanitize_groups();
         if (save_callback_) save_callback_();
         const bool needs_rebuild = force_rebuild || sanitized;
-        if (in_pie_callback_) {
+        if (pie_callback_depth_ > 0) {
             pending_rebuild_ = pending_rebuild_ || needs_rebuild;
-            pending_sync_ = pending_sync_ || (!needs_rebuild);
+            if (!needs_rebuild) {
+                pending_sync_ = true;
+                if (changed_spawn_id && !changed_spawn_id->empty()) {
+                    if (!pending_sync_spawn_id_) {
+                        pending_sync_spawn_id_ = *changed_spawn_id;
+                    } else if (*pending_sync_spawn_id_ != *changed_spawn_id) {
+                        pending_sync_spawn_id_.reset();
+                    }
+                } else {
+                    pending_sync_spawn_id_.reset();
+                }
+            } else {
+                pending_sync_spawn_id_.reset();
+            }
             return;
         }
         if (needs_rebuild) {
+            pending_sync_spawn_id_.reset();
             rebuild_rows(false);
         } else {
-            sync_group_widgets();
+            if (changed_spawn_id && !changed_spawn_id->empty()) {
+                sync_group_widget(*changed_spawn_id);
+            } else {
+                sync_group_widgets();
+            }
         }
     }
 
@@ -762,9 +943,9 @@ private:
 
     struct PieCallbackGuard {
         explicit PieCallbackGuard(BoundaryCandidateListPanelImpl* owner) : owner_(owner) {
-            owner_->in_pie_callback_ = true;
+            ++owner_->pie_callback_depth_;
         }
-        ~PieCallbackGuard() { owner_->in_pie_callback_ = false; }
+        ~PieCallbackGuard() { owner_->pie_callback_depth_ = std::max(0, owner_->pie_callback_depth_ - 1); }
         BoundaryCandidateListPanelImpl* owner_;
     };
 
@@ -814,7 +995,7 @@ private:
         if (!selectors.is_array()) return nullptr;
         for (auto& entry : selectors) {
             if (!entry.is_object()) continue;
-            if (entry.value("spawn_id", std::string{}) == spawn_id) {
+            if (read_string_field_no_throw(entry, "spawn_id") == spawn_id) {
                 return &entry;
             }
         }
@@ -863,7 +1044,7 @@ private:
             }
             changed = devmode::spawn::ensure_spawn_group_entry_defaults(entry, default_display_name_) || changed;
             if (ensure_null_candidate_entry(entry)) changed = true;
-            int grid_resolution = entry.value("grid_resolution", 5);
+            int grid_resolution = vibble::spawn_group_codec::read_int_field(entry, "grid_resolution", 5);
             grid_resolution = vibble::grid::clamp_resolution(grid_resolution);
             if (!entry.contains("grid_resolution") || !entry["grid_resolution"].is_number_integer() ||
                 entry["grid_resolution"].get<int>() != grid_resolution) {
@@ -871,7 +1052,7 @@ private:
                 changed = true;
             }
 
-            int jitter = clamp_jitter(entry.value("jitter", 0));
+            int jitter = clamp_jitter(vibble::spawn_group_codec::read_int_field(entry, "jitter", 0));
             if (!entry.contains("jitter") || !entry["jitter"].is_number_integer() ||
                 entry["jitter"].get<int>() != jitter) {
                 entry["jitter"] = jitter;
@@ -882,7 +1063,7 @@ private:
         std::unordered_set<int> used;
         for (auto& entry : selectors) {
             if (!entry.is_object()) continue;
-            int grid_resolution = entry.value("grid_resolution", 5);
+            int grid_resolution = vibble::spawn_group_codec::read_int_field(entry, "grid_resolution", 5);
             int unique = resolve_unique_resolution(grid_resolution, used, grid_resolution);
             if (unique != grid_resolution) {
                 entry["grid_resolution"] = unique;
@@ -929,6 +1110,7 @@ private:
             rows.push_back({add_button_widget_.get()});
         }
 
+        auto search_extras = std::make_shared<std::vector<SearchAssets::Result>>(build_candidate_search_extra_results());
         int index = 0;
         for (auto& entry : selectors) {
             if (!entry.is_object()) {
@@ -937,14 +1119,14 @@ private:
             }
 
             GroupWidgets group;
-            group.spawn_id = entry.value("spawn_id", std::string{});
+            group.spawn_id = read_string_field_no_throw(entry, "spawn_id");
 
             group.header = std::make_unique<LabelWidget>();
             group.header->set_text("Candidate Set " + std::to_string(index + 1));
             group.header->set_subtle(false);
             rows.push_back({group.header.get()});
 
-            const int grid_resolution = entry.value("grid_resolution", 5);
+            const int grid_resolution = vibble::spawn_group_codec::read_int_field(entry, "grid_resolution", 5);
             group.resolution_stepper = std::make_unique<DMNumericStepper>("Grid Resolution (3^r spacing)",
                                                                           0,
                                                                           vibble::grid::kMaxResolution,
@@ -955,7 +1137,7 @@ private:
             });
             group.resolution_widget = std::make_unique<StepperWidget>(group.resolution_stepper.get());
 
-            const int jitter = clamp_jitter(entry.value("jitter", 0));
+            const int jitter = clamp_jitter(vibble::spawn_group_codec::read_int_field(entry, "jitter", 0));
             group.jitter_stepper = std::make_unique<DMNumericStepper>("Jitter (px)",
                                                                       0,
                                                                       kMaxBoundaryJitter,
@@ -978,6 +1160,7 @@ private:
             group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
             group.pie_widget->set_manifest_store(manifest_store_);
             group.pie_widget->set_assets(assets_);
+            group.pie_widget->set_search_extra_results_provider([search_extras]() { return *search_extras; });
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
             // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
             group.pie_widget->set_defer_adjust_until_release(true);
@@ -1021,6 +1204,37 @@ private:
         }
     }
 
+    void sync_group_widget(const std::string& spawn_id) {
+        if (spawn_id.empty()) {
+            sync_group_widgets();
+            return;
+        }
+        json* entry = find_group_by_spawn_id(spawn_id);
+        if (!entry) {
+            return;
+        }
+        ensure_null_candidate_entry(*entry);
+        const int resolved_resolution =
+            vibble::spawn_group_codec::read_int_field(*entry, "grid_resolution", 5);
+        const int resolved_jitter =
+            clamp_jitter(vibble::spawn_group_codec::read_int_field(*entry, "jitter", 0));
+        for (auto& group : group_widgets_) {
+            if (group.spawn_id != spawn_id) {
+                continue;
+            }
+            if (group.pie_widget) {
+                group.pie_widget->set_candidates_from_json(*entry);
+            }
+            if (group.resolution_stepper) {
+                group.resolution_stepper->set_value(resolved_resolution);
+            }
+            if (group.jitter_stepper) {
+                group.jitter_stepper->set_value(resolved_jitter);
+            }
+            break;
+        }
+    }
+
     void add_group() {
         if (!section_) return;
         auto& selectors = ensure_candidate_selectors();
@@ -1031,9 +1245,9 @@ private:
         std::unordered_set<int> used;
         for (const auto& existing : selectors) {
             if (!existing.is_object()) continue;
-            used.insert(existing.value("grid_resolution", 5));
+            used.insert(vibble::spawn_group_codec::read_int_field(existing, "grid_resolution", 5));
         }
-        const int desired_resolution = entry.value("grid_resolution", 5);
+        const int desired_resolution = vibble::spawn_group_codec::read_int_field(entry, "grid_resolution", 5);
         int resolution = resolve_unique_resolution(desired_resolution, used, desired_resolution);
         entry["grid_resolution"] = resolution;
         entry["jitter"] = 0;
@@ -1050,7 +1264,7 @@ private:
         }
         auto it = std::remove_if(selectors.begin(), selectors.end(),
             [&](const json& entry) {
-                return entry.is_object() && entry.value("spawn_id", std::string{}) == spawn_id;
+                return entry.is_object() && read_string_field_no_throw(entry, "spawn_id") == spawn_id;
             });
         if (it != selectors.end()) {
             selectors.erase(it, selectors.end());
@@ -1061,20 +1275,20 @@ private:
     void update_group_resolution(const std::string& spawn_id, int parsed_value) {
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
-        int current = entry->value("grid_resolution", 5);
+        int current = vibble::spawn_group_codec::read_int_field(*entry, "grid_resolution", 5);
         int desired = vibble::grid::clamp_resolution(parsed_value);
 
         std::unordered_set<int> used;
         auto& selectors = ensure_candidate_selectors();
         for (const auto& other : selectors) {
             if (!other.is_object()) continue;
-            if (other.value("spawn_id", std::string{}) == spawn_id) continue;
-            used.insert(other.value("grid_resolution", 5));
+            if (read_string_field_no_throw(other, "spawn_id") == spawn_id) continue;
+            used.insert(vibble::spawn_group_codec::read_int_field(other, "grid_resolution", 5));
         }
 
         int resolved = resolve_unique_resolution(desired, used, current);
         (*entry)["grid_resolution"] = resolved;
-        notify_save(false);
+        notify_save(false, &spawn_id);
 
         for (auto& group : group_widgets_) {
             if (group.spawn_id == spawn_id && group.resolution_stepper) {
@@ -1089,7 +1303,7 @@ private:
         if (!entry) return;
         const int clamped = clamp_jitter(parsed_value);
         (*entry)["jitter"] = clamped;
-        notify_save(false);
+        notify_save(false, &spawn_id);
 
         for (auto& group : group_widgets_) {
             if (group.spawn_id == spawn_id && group.jitter_stepper) {
@@ -1121,7 +1335,7 @@ private:
         } else {
             candidate["chance"] = next;
         }
-        notify_save(false);
+        notify_save(false, &spawn_id);
     }
 
     void remove_candidate(const std::string& spawn_id, int index) {
@@ -1132,7 +1346,7 @@ private:
         if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) return;
         auto it = candidates.begin() + static_cast<json::difference_type>(index);
         candidates.erase(it);
-        notify_save(false);
+        notify_save(false, &spawn_id);
     }
 
     void add_candidate_from_search(const std::string& spawn_id, const std::string& label) {
@@ -1153,31 +1367,21 @@ private:
             new_weight = 5.0;
         }
 
-        json candidate = json::object();
-        candidate["name"] = label;
-        if (is_integral(new_weight)) {
-            candidate["chance"] = static_cast<int>(std::llround(new_weight));
-        } else {
-            candidate["chance"] = new_weight;
-        }
-
-        auto candidate_name = [](const json& value) -> std::string {
-            if (value.is_object()) {
-                auto it = value.find("name");
-                if (it != value.end() && it->is_string()) {
-                    return it->get<std::string>();
+        json candidate = make_candidate_entry_from_search_value(label, new_weight);
+        const std::string new_identity = canonical_candidate_identity(candidate);
+        if (!new_identity.empty()) {
+            for (const auto& existing : candidates) {
+                if (canonical_candidate_identity(existing) == new_identity) {
+                    return;
                 }
-            } else if (value.is_string()) {
-                return value.get<std::string>();
             }
-            return std::string{};
-        };
+        }
 
         bool has_non_null_candidate = false;
         std::vector<size_t> null_indices;
         for (size_t i = 0; i < candidates.size(); ++i) {
-            std::string name = candidate_name(candidates[i]);
-            if (name == "null") {
+            std::string name = trim_copy(candidate_name_from_json(candidates[i]));
+            if (is_null_candidate_name(name)) {
                 null_indices.push_back(i);
             } else if (!name.empty()) {
                 has_non_null_candidate = true;
@@ -1192,7 +1396,7 @@ private:
         } else {
             candidates.push_back(std::move(candidate));
         }
-        notify_save(false);
+        notify_save(false, &spawn_id);
     }
 
     void handle_global_regen() {
@@ -1205,7 +1409,7 @@ private:
         }
         int current_seed = 0;
         try {
-            current_seed = section_->value("regen_seed", 0);
+            current_seed = vibble::spawn_group_codec::read_int_field(*section_, "regen_seed", 0);
         } catch (...) {
             current_seed = 0;
         }
@@ -1252,20 +1456,27 @@ private:
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
-    bool in_pie_callback_ = false;
+    int pie_callback_depth_ = 0;
     bool pending_rebuild_ = false;
     bool pending_sync_ = false;
+    std::optional<std::string> pending_sync_spawn_id_{};
 
     void apply_pending_refresh() {
         if (pending_rebuild_) {
             pending_rebuild_ = false;
             pending_sync_ = false;
+            pending_sync_spawn_id_.reset();
             rebuild_rows(false);
             return;
         }
         if (pending_sync_) {
             pending_sync_ = false;
-            sync_group_widgets();
+            if (pending_sync_spawn_id_ && !pending_sync_spawn_id_->empty()) {
+                sync_group_widget(*pending_sync_spawn_id_);
+            } else {
+                sync_group_widgets();
+            }
+            pending_sync_spawn_id_.reset();
         }
     }
 };

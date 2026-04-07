@@ -13,6 +13,7 @@ namespace map_layers {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
+constexpr double kCircleRoomMaxAspectRatio = 18.0 / 9.0;
 
 double clamp_min_edge(double value) {
     if (!std::isfinite(value)) {
@@ -201,7 +202,10 @@ double room_extent_from_rooms_data(const nlohmann::json* rooms_data,
         if (radius_value <= 0.0) {
             radius_value = 1.0;
         }
-        return radius_value;
+        const double max_horizontal_radius_from_aspect = radius_value * kCircleRoomMaxAspectRatio;
+        const double half_width_extent = std::max(0.0, max_width) * 0.5;
+        const double half_depth_extent = std::max(0.0, max_depth) * 0.5;
+        return std::max({max_horizontal_radius_from_aspect, half_width_extent, half_depth_extent, 1.0});
     }
 
     if (max_width <= 0.0 && max_depth <= 0.0) {

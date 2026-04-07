@@ -1,5 +1,4 @@
-#include "attack_detection_helper.hpp"
-#include "animation/controllers/shared/attack_reaction_helper.hpp"
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 
 #include "animation/attack_validation.hpp"
 #include "assets/asset/Asset.hpp"
@@ -66,23 +65,6 @@ void AttackDetectionHelper::send_attacks_to_active_targets(Asset* attacker, Asse
         const auto attack_opt = AttackValidation::compute_attack_if_hit(*attacker, *target);
         if (attack_opt.has_value()) {
             target->send_attack(*attack_opt);
-        }
-    }
-}
-
-void AttackDetectionHelper::process_pending_attacks_default(Asset* self) {
-    if (!self || self->dead) {
-        return;
-    }
-
-    const auto pending_attacks = self->process_pending_attacks();
-    for (const auto& attack : pending_attacks) {
-        self->runtime_health -= attack.damage_amount;
-    }
-
-    if (self->runtime_health < 0) {
-        if (!animation_update::custom_controllers::AttackReactionHelper::try_play_death_animation(*self)) {
-            self->Delete();
         }
     }
 }

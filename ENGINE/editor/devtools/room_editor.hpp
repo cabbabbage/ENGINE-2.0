@@ -22,6 +22,7 @@
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
+#include "devtools/room_oval_tools_panel.hpp"
 #include "devtools/room_selection_filter_utils.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "animation/combat_geometry.hpp"
@@ -45,6 +46,7 @@ class Grid;
 class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
+class RoomOvalToolsPanel;
 class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
 class DevFooterBar;
@@ -64,7 +66,9 @@ public:
     void set_player(Asset* player);
     void set_active_assets(std::vector<Asset*>& actives, std::uint64_t generation);
     void set_screen_dimensions(int width, int height);
-    void set_current_room(Room* room);
+    void set_current_room(Room* room, bool lock_room = false);
+    void unlock_current_room();
+    bool is_room_locked_for_edit() const { return room_locked_for_edit_; }
     void set_room_config_visible(bool visible);
     void set_shared_footer_bar(DevFooterBar* footer);
     void set_snap_to_grid_enabled(bool enabled);
@@ -79,7 +83,9 @@ public:
     void set_enabled(bool enabled, bool preserve_camera_state = false);
     bool is_enabled() const { return enabled_; }
     bool is_anchor_edit_mode_active() const;
+    bool is_light_edit_mode_active() const;
     bool is_asset_stack_editor_active() const;
+    void set_room_trail_nav_visibility(bool visible);
 
     void update(const Input& input);
     void update_ui(const Input& input);
@@ -282,13 +288,22 @@ private:
     void respawn_spawn_group(const nlohmann::json& entry);
     std::unique_ptr<vibble::grid::Occupancy> build_room_grid(const std::string& ignore_spawn_id) const;
     bool snap_spawn_group_to_resolution(Asset* anchor, int resolution);
-    void render_room_labels(SDL_Renderer* renderer);
-    void render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center);
+    void render_room_trail_nav_buttons(SDL_Renderer* renderer);
+    bool render_room_label(SDL_Renderer* renderer,
+                           Room* room,
+                           SDL_FPoint desired_center,
+                           const SDL_Point& hover_point,
+                           bool hover_enabled,
+                           SDL_Rect* out_rect = nullptr);
+    void clear_room_trail_nav_entries();
+    bool handle_room_nav_click(const SDL_Point& screen_pt);
+    void pan_camera_to_room(Room* room);
     SDL_Rect label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const;
     SDL_Rect resolve_edge_overlap(SDL_Rect rect, SDL_FPoint desired_center);
     SDL_Rect resolve_horizontal_edge_overlap(SDL_Rect rect, float desired_center_x, bool top_edge);
     SDL_Rect resolve_vertical_edge_overlap(SDL_Rect rect, float desired_center_y, bool left_edge);
     static bool rects_overlap(const SDL_Rect& a, const SDL_Rect& b);
+    SDL_Rect effective_label_bounds() const;
     void ensure_label_font();
     void release_label_font();
     void invalidate_label_cache(Room* room);
@@ -378,12 +393,15 @@ private:
     void cycle_selection_filter();
     void reset_selection_filter();
     void ensure_anchor_editor_widgets();
+    void ensure_oval_editor_widgets();
     void ensure_movement_editor_widgets();
     void ensure_hitbox_editor_widgets();
     void ensure_attack_box_editor_widgets();
     void update_asset_editor_layout();
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
+    bool light_mode_active() const;
+    bool oval_mode_active() const;
     bool movement_mode_active() const;
     bool hitbox_mode_active() const;
     bool attack_box_mode_active() const;
@@ -398,8 +416,10 @@ private:
     void apply_asset_editor_panel_overrides();
     bool asset_editor_tab_scope_active() const;
     void toggle_anchor_edit_mode();
-    bool enter_anchor_edit_mode();
+    bool enter_anchor_edit_mode(bool light_editor_mode = false);
     void exit_anchor_edit_mode(bool flush_immediately);
+    bool enter_oval_anchor_edit_mode();
+    void exit_oval_anchor_edit_mode(bool flush_immediately);
     bool enter_movement_edit_mode();
     void exit_movement_edit_mode(bool persist_changes);
     bool enter_hitbox_edit_mode();
@@ -407,10 +427,12 @@ private:
     bool enter_attack_box_edit_mode();
     void exit_attack_box_edit_mode(bool persist_changes);
     void validate_anchor_edit_target();
+    void validate_oval_edit_target();
     void validate_movement_edit_target();
     void validate_hitbox_edit_target();
     void validate_attack_box_edit_target();
     bool is_anchor_ui_blocking_point(int x, int y) const;
+    bool is_oval_ui_blocking_point(int x, int y) const;
     bool is_movement_ui_blocking_point(int x, int y) const;
     bool is_hitbox_ui_blocking_point(int x, int y) const;
     bool is_attack_box_ui_blocking_point(int x, int y) const;
@@ -422,6 +444,8 @@ private:
     };
     void navigate_anchor_animation(int delta);
     void navigate_anchor_frame(int delta);
+    void navigate_oval_animation(int delta);
+    void navigate_oval_frame(int delta);
     void navigate_movement_animation(int delta);
     void navigate_movement_frame(int delta);
     void navigate_hitbox_animation(int delta);
@@ -431,26 +455,38 @@ private:
     void navigate_asset_info_preview_animation(int delta);
     void navigate_asset_info_preview_frame(int delta);
     bool apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_oval_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_movement_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_hitbox_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_asset_preview_animation_and_frame(Asset* target, const std::string& animation_id, int frame_index);
     std::vector<std::string> anchor_mode_animation_names() const;
+    std::vector<std::string> oval_mode_animation_names() const;
     std::vector<std::string> movement_mode_animation_names() const;
     std::vector<std::string> hitbox_mode_animation_names() const;
     std::vector<std::string> attack_box_mode_animation_names() const;
     int resolve_anchor_mode_frame_index() const;
+    int resolve_oval_mode_frame_index() const;
     int resolve_movement_mode_frame_index() const;
     int resolve_hitbox_mode_frame_index() const;
     int resolve_attack_box_mode_frame_index() const;
     void refresh_anchor_mode_handles();
     void sync_anchor_tools_panel();
+    void sync_oval_tools_panel();
+    bool selected_oval_mapping_binding_valid() const;
+    bool resolve_selected_oval_lock_target(float& out_world_x, float& out_world_z, float& out_heading_radians) const;
+    void sync_oval_attachment_lock();
+    void release_oval_attachment_lock();
+    bool ensure_selected_anchor_light_attachment();
     void sync_anchor_candidate_editor();
     void refresh_anchor_candidate_editor_widget();
     void update_anchor_candidate_editor_search(const Input& input);
     void layout_anchor_candidate_editor_popup();
     void open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect);
     void close_anchor_candidate_editor();
+    Asset* active_anchor_candidate_target_asset() const;
+    bool anchor_candidate_editor_mode_active() const;
+    bool anchor_candidate_anchor_exists_for_target(const Asset* target, const std::string& anchor_name) const;
     bool handle_anchor_candidate_editor_event(const SDL_Event& event);
     void render_anchor_candidate_editor(SDL_Renderer* renderer) const;
     bool mutate_anchor_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
@@ -488,17 +524,41 @@ private:
     float movement_base_world_z() const;
     devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,
                                                                                               const std::string& animation_id) const;
-    int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px) const;
+    int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px, const std::string& preferred_anchor = {}) const;
     bool handle_anchor_mode_mouse_input(const Input& input);
+    int find_oval_point_handle_at_point(SDL_Point screen_point, int radius_px, int preferred_point_index = -1) const;
+    bool handle_oval_mode_mouse_input(const Input& input);
     bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
                                      devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::DetailValues& values);
+    bool apply_anchor_panel_light_update(const RoomAnchorToolsPanel::LightValues& values);
     bool update_anchor_depth(const std::string& anchor_name, float delta_world);
     bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
     bool add_anchor_in_current_frame();
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
     bool delete_selected_anchor_in_current_frame();
+    bool add_oval_mapping();
+    bool delete_selected_oval_mapping();
+    bool apply_selected_oval_properties(const RoomOvalToolsPanel::OvalProperties& properties);
+    bool increment_selected_oval_point_count();
+    bool decrement_selected_oval_point_count();
+    bool apply_selected_oval_point_details(const RoomOvalToolsPanel::PointDetailValues& values);
+    bool apply_selected_oval_center_details(const RoomOvalToolsPanel::CenterDetailValues& values);
+    bool apply_oval_center_current_frame_to_scope(EditorFramePropagationScope scope);
+    bool drag_oval_center_to_screen(SDL_Point screen_point);
+    std::string selected_oval_center_anchor_name() const;
+    bool mutate_selected_oval_center_anchor(
+        const std::function<bool(DisplacedAssetAnchorPoint&)>& mutator,
+        devmode::core::DevSaveCoordinator::Priority priority);
+    bool persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority priority,
+                               bool flush_now,
+                               const char* reason,
+                               const char* flush_tag);
+    void refresh_oval_mode_handles();
+    std::unordered_set<std::string> valid_oval_center_anchor_names(const AssetInfo& info) const;
+    bool is_valid_oval_center_anchor_name(const std::string& anchor_name) const;
+    bool selected_anchor_is_oval_center() const;
     bool apply_anchor_current_frame_to_scope(EditorFramePropagationScope scope);
     bool normalize_anchor_invariants_for_eligible_animations(Asset* target,
                                                               const std::shared_ptr<AssetInfo>& target_info,
@@ -579,6 +639,7 @@ private:
     std::uint64_t active_assets_version_ = 0;
     Asset* player_ = nullptr;
     Room* current_room_ = nullptr;
+    bool room_locked_for_edit_ = false;
 
     int screen_w_ = 0;
     int screen_h_ = 0;
@@ -597,6 +658,8 @@ private:
     enum class EditorMode {
         Normal,
         AnchorEdit,
+        LightEdit,
+        OvalAnchorEdit,
         MovementEdit,
         HitBoxEdit,
         AttackBoxEdit,
@@ -606,6 +669,8 @@ private:
         AssetInfo,
         AnimationEditor,
         Anchor,
+        Light,
+        OvalAnchor,
         Movement,
         Hitbox,
         AttackBox,
@@ -619,6 +684,7 @@ private:
     std::unique_ptr<AssetLibraryUI> library_ui_;
     std::unique_ptr<AssetInfoUI> info_ui_;
     std::unique_ptr<RoomAnchorToolsPanel> anchor_tools_panel_;
+    std::unique_ptr<RoomOvalToolsPanel> oval_tools_panel_;
     std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;
@@ -634,6 +700,9 @@ private:
         float rotation_degrees = 0.0f;
         bool hidden = false;
         bool resolve_x = true;
+        AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+        bool has_light_data = false;
+        AnchorLightData light{};
         SDL_FPoint flat_screen_px{0.0f, 0.0f};
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};
@@ -653,13 +722,54 @@ private:
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
+        bool light_editor_mode = false;
         std::vector<AnchorHandleSample> handles;
     };
     AnchorEditState anchor_edit_;
 
+    struct OvalPointHandleSample {
+        int point_index = -1;
+        float angle_degrees = 0.0f;
+        SDL_FPoint flat_screen_px{0.0f, 0.0f};
+        bool has_flat_screen_px = false;
+        SDL_FPoint final_screen_px{0.0f, 0.0f};
+        bool has_final_screen_px = false;
+    };
+
+    struct OvalAnchorEditState {
+        Asset* target_asset = nullptr;
+        std::string animation_id;
+        int frame_index = 0;
+        int selected_oval_index = -1;
+        int selected_point_index = -1;
+        int hovered_point_index = -1;
+        bool center_selected = false;
+        bool center_hovered = false;
+        bool center_dragging = false;
+        bool attachment_lock_active = false;
+        bool attachment_lock_had_heading = false;
+        float attachment_lock_heading_radians = 0.0f;
+        bool attachment_lock_had_target = false;
+        float attachment_lock_target_world_x = 0.0f;
+        float attachment_lock_target_world_z = 0.0f;
+        bool had_static_frame_before = false;
+        bool static_frame_before = false;
+        bool dirty_since_last_flush = false;
+        SDL_FPoint center_screen_px{0.0f, 0.0f};
+        bool has_center_screen_px = false;
+        float center_world_x = 0.0f;
+        float center_world_y = 0.0f;
+        float center_world_z = 0.0f;
+        bool has_center_world = false;
+        std::vector<SDL_FPoint> guide_screen_samples;
+        std::vector<OvalPointHandleSample> handles;
+    };
+    OvalAnchorEditState oval_edit_;
+
     struct AnchorCandidateEditorState {
         bool open = false;
         std::string anchor_name;
+        Asset* target_asset = nullptr;
         SDL_Point open_point{0, 0};
         SDL_Rect anchor_row_rect{0, 0, 0, 0};
         std::unique_ptr<DockableCollapsible> panel{};
@@ -832,8 +942,16 @@ private:
         std::string last_name;
         SDL_Color last_color{0, 0, 0, 0};
         bool dirty = true;
-};
+    };
     std::unordered_map<Room*, LabelCacheEntry> label_cache_;
+    SDL_Rect active_label_bounds_{0, 0, 0, 0};
+    struct RoomNavEntry {
+        Room*   room = nullptr;
+        SDL_Rect rect{0, 0, 0, 0};
+        bool    is_trail = false;
+    };
+    std::vector<RoomNavEntry> room_nav_entries_;
+    bool room_nav_visible_ = false;
 
     double height_scale_factor_ = 1.1;
     DevCameraControls camera_controls_;

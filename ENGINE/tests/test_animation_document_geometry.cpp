@@ -1,10 +1,16 @@
 #include <doctest/doctest.h>
 
+#include <cstdint>
 #include <filesystem>
+#include <memory>
 
 #include <nlohmann/json.hpp>
 
+#include "assets/asset/asset_info.hpp"
+#include "devtools/asset_editor/animation_editor_window/AnimationEditorWindow.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
+#include "devtools/core/manifest_store.hpp"
+#include "core/manifest/manifest_loader.hpp"
 
 namespace {
 
@@ -191,4 +197,90 @@ TEST_CASE("AnimationDocument create_animation emits on_end without loop") {
     CHECK(payload->contains("on_end"));
     CHECK((*payload)["on_end"] == "default");
     CHECK_FALSE(payload->contains("loop"));
+}
+
+TEST_CASE("AnimationDocument clears dirty state only when no newer edits exist") {
+    animation_editor::AnimationDocument document;
+    const nlohmann::json manifest = {
+        {"animations",
+         {{"default",
+           {{"source", {{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
+            {"number_of_frames", 1},
+            {"on_end", "default"}}}}},
+    };
+    document.load_from_manifest(manifest, std::filesystem::path{}, nullptr);
+
+    auto payload = document.animation_payload_json("default");
+    REQUIRE(payload.has_value());
+    (*payload)["on_end"] = "loop";
+    REQUIRE(document.update_animation_payload("default", *payload));
+
+    const std::uint64_t first_revision = document.revision();
+    CHECK(document.clear_dirty_if_revision_not_newer(first_revision));
+    CHECK_FALSE(document.consume_dirty_flag());
+
+    payload = document.animation_payload_json("default");
+    REQUIRE(payload.has_value());
+    (*payload)["on_end"] = "kill";
+    REQUIRE(document.update_animation_payload("default", *payload));
+
+    const std::uint64_t newer_revision = document.revision();
+    CHECK(newer_revision > first_revision);
+    CHECK_FALSE(document.clear_dirty_if_revision_not_newer(first_revision));
+    CHECK(document.consume_dirty_flag());
+}
+
+TEST_CASE("AnimationEditorWindow manifest save fires single document-saved callback") {
+    const std::filesystem::path asset_dir =
+        std::filesystem::temp_directory_path() / "engine_animation_editor_save_chain_asset";
+    std::error_code ec;
+    std::filesystem::create_directories(asset_dir, ec);
+
+    const nlohmann::json asset_manifest = {
+        {"asset_name", "save_chain_asset"},
+        {"asset_directory", asset_dir.generic_string()},
+        {"animations",
+         {{"idle",
+           {{"source", {{"kind", "folder"}, {"path", "idle"}, {"name", ""}}},
+            {"number_of_frames", 1},
+            {"on_end", "default"}}}}},
+        {"start", "idle"},
+    };
+    const nlohmann::json manifest_raw = {
+        {"assets", {{"save_chain_asset", asset_manifest}}},
+        {"maps", nlohmann::json::object()},
+    };
+
+    const std::filesystem::path manifest_path =
+        std::filesystem::temp_directory_path() / "engine_animation_editor_manifest_save_chain_test.json";
+    auto loader = [manifest_raw]() {
+        manifest::ManifestData data;
+        data.raw = manifest_raw;
+        data.assets = manifest_raw.value("assets", nlohmann::json::object());
+        data.maps = manifest_raw.value("maps", nlohmann::json::object());
+        return data;
+    };
+    devmode::core::ManifestStore store(manifest_path, loader);
+
+    animation_editor::AnimationEditorWindow window;
+    window.set_manifest_store(&store);
+    auto info = std::make_shared<AssetInfo>("save_chain_asset", asset_manifest);
+    window.set_info(info);
+
+    int saved_callbacks = 0;
+    window.set_on_document_saved([&saved_callbacks]() { ++saved_callbacks; });
+    saved_callbacks = 0;
+
+    auto document = window.document();
+    REQUIRE(document);
+    auto payload = document->animation_payload_json("idle");
+    REQUIRE(payload.has_value());
+    (*payload)["on_end"] = "loop";
+    REQUIRE(document->update_animation_payload("idle", *payload));
+    CHECK(document->save_to_file_checked(true));
+
+    CHECK(saved_callbacks == 1);
+
+    std::filesystem::remove(manifest_path, ec);
+    std::filesystem::remove_all(asset_dir, ec);
 }

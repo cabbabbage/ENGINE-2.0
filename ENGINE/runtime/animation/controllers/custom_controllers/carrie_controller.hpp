@@ -1,8 +1,6 @@
 #pragma once
 #include "animation/controllers/shared/custom_asset_controller.hpp"
-
-#include <random>
-#include <SDL3/SDL.h>
+#include "animation/controllers/shared/wander_controller_behavior.hpp"
 
 class Asset;
 class Input;
@@ -17,8 +15,5 @@ protected:
     void on_process_pending_attacks(Asset& self) override;
 
 private:
-    SDL_Point get_random_point_in_room();
-
-    std::mt19937 rng_;
-    std::uniform_int_distribution<int> idle_range_{};
+    animation_update::custom_controllers::WanderControllerBehavior wander_behavior_;
 };

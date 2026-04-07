@@ -25,8 +25,6 @@ namespace CacheManager {
 
     struct BundleFrameVariant {
         BundleFrameLayer base;
-        BundleFrameLayer foreground;
-        BundleFrameLayer background;
         bool use_atlas = false;
         SDL_Rect atlas_rect{0, 0, 0, 0};
     };

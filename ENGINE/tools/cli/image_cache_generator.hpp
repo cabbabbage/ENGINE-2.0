@@ -12,7 +12,7 @@
 //   <cache_root>/<asset>/animations/<anim>/scale_<pct>/<variant>/<out_index>.png
 // Where:
 //   cache_root default: <repo_root>/cache
-//   variant in: normal, foreground, background
+//   variant in: normal
 //   pct is one of 100, 90, 80, 70, 60, 50, 40, 30, 20, 10
 //   out_index is integer frame index of the source sequence
 //
@@ -41,45 +41,12 @@ namespace fs = std::filesystem;
 // Core enums and simple structs
 // -----------------------------
 enum class Variant : std::uint8_t {
-    Normal = 0,
-    Foreground,
-    Background
-};
-
-enum class EffectLayerMode : std::uint8_t {
-    Foreground = 0,
-    Background
-};
-
-enum class EffectsBackend : std::uint8_t {
-    Auto = 0,
-    Cpu,
-    D3D11
+    Normal = 0
 };
 
 inline constexpr std::uint8_t kTextureVariantMaskNone = 0u;
 inline constexpr std::uint8_t kTextureVariantMaskNormal = 1u << 0;
-inline constexpr std::uint8_t kTextureVariantMaskForeground = 1u << 1;
-inline constexpr std::uint8_t kTextureVariantMaskBackground = 1u << 2;
-inline constexpr std::uint8_t kTextureVariantMaskAll = static_cast<std::uint8_t>(
-    kTextureVariantMaskNormal | kTextureVariantMaskForeground | kTextureVariantMaskBackground);
-
-struct EffectsParams {
-    // Mirrors effects.py / apply_color_effects.py semantics.
-    // Keep stable and map directly from manifest fields.
-    float hue_shift = 0.0f;
-    float saturation = 0.0f;
-    float brightness = 0.0f;
-    float contrast = 0.0f;
-
-    float blur_radius = 0.0f;
-    float sharpen_amount = 0.0f;
-
-    // Optional per-channel saturation if present in your Python config.
-    float saturation_r = 0.0f;
-    float saturation_g = 0.0f;
-    float saturation_b = 0.0f;
-};
+inline constexpr std::uint8_t kTextureVariantMaskAll = kTextureVariantMaskNormal;
 
 struct ImageRGBA {
     int w = 0;
@@ -105,8 +72,6 @@ struct CachePaths final {
     static constexpr const char* kCacheDirName = "cache";
     static constexpr const char* kAnimationsDirName = "animations";
     static constexpr const char* kNormalDirName = "normal";
-    static constexpr const char* kForegroundDirName = "foreground";
-    static constexpr const char* kBackgroundDirName = "background";
 
     static inline std::string scale_dir_name(int pct) {
         return "scale_" + std::to_string(pct);
@@ -115,8 +80,6 @@ struct CachePaths final {
     static inline const char* variant_dir_name(Variant v) {
         switch (v) {
             case Variant::Normal: return kNormalDirName;
-            case Variant::Foreground: return kForegroundDirName;
-            case Variant::Background: return kBackgroundDirName;
         }
         return kNormalDirName;
     }
@@ -199,12 +162,6 @@ struct GeneratorOptions {
     // If 0: generator chooses (hardware_concurrency - 1, minimum 1)
     std::uint32_t worker_count_override = 0;
 
-    // Preferred effects backend.
-    // - Auto: attempt D3D11 on Windows and fall back to CPU.
-    // - Cpu: force CPU effects path.
-    // - D3D11: prefer D3D11; falls back to CPU if unavailable.
-    EffectsBackend effects_backend = EffectsBackend::Auto;
-
     // Reduce per-task logging noise/IO overhead by default.
     bool quiet_task_logs = true;
 
@@ -223,8 +180,6 @@ struct AnimPayload {
     fs::path src_anim_dir;
     std::vector<fs::path> src_frames;
 
-    EffectsParams fx_foreground;
-    EffectsParams fx_background;
 };
 
 struct WorkItem {
@@ -240,16 +195,7 @@ struct WorkItem {
     fs::path src_png_path;
 
     fs::path out_normal_dir;
-    fs::path out_foreground_dir;
-    fs::path out_background_dir;
-
-    // Per-task write mask. Legacy/full rebuilds write all variants.
     bool write_normal = true;
-    bool write_foreground = true;
-    bool write_background = true;
-
-    EffectsParams fx_foreground;
-    EffectsParams fx_background;
 };
 
 // -----------------------------
@@ -330,10 +276,6 @@ public:
     static bool SavePngRGBA(const fs::path& path, const ImageRGBA& img, std::string& err);
 
     static std::optional<ImageRGBA> ResizeRGBA(const ImageRGBA& src, int dst_w, int dst_h, std::string& err);
-
-    // Normal variant is unchanged (just scaled).
-    // Foreground/background apply effects.
-    static std::optional<ImageRGBA> ApplyEffects(const ImageRGBA& src, const EffectsParams& fx, EffectLayerMode mode, std::string& err);
 
 private:
     ImageCacheGenerator() = delete;

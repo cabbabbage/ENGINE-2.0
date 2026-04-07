@@ -498,6 +498,10 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y)) };
         hovered_ = SDL_PointInRect(&p, &box_rect_);
+        // Consume mouse motion when inside the textbox to block propagation
+        if (hovered_) {
+            return true;
+        }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y)) };
         bool inside = SDL_PointInRect(&p, &box_rect_);
@@ -507,9 +511,19 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
                 SDL_StartTextInput(SDL_GetKeyboardFocus());
             }
             caret_pos_ = text_.size();
+            // Consume click inside textbox to block propagation
+            return true;
         } else if (editing_) {
             editing_ = false;
             SDL_StopTextInput(SDL_GetKeyboardFocus());
+        }
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        // Consume scroll wheel events when hovering over the textbox
+        // to prevent them from propagating to underlying widgets
+        SDL_Point mouse{0, 0};
+        sdl_mouse_util::GetMouseState(&mouse.x, &mouse.y);
+        if (SDL_PointInRect(&mouse, &box_rect_) || SDL_PointInRect(&mouse, &rect_)) {
+            return true;
         }
     } else if (editing_ && e.type == SDL_EVENT_TEXT_INPUT) {
         text_.insert(caret_pos_, e.text.text);
@@ -538,6 +552,8 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
             caret_pos_ = 0;
         } else if (e.key.key == SDLK_END) {
             caret_pos_ = text_.size();
+        } else if (e.key.key == SDLK_ESCAPE) {
+            editing_ = false; SDL_StopTextInput(SDL_GetKeyboardFocus());
         }
     }
     if (changed) {
@@ -2485,7 +2501,14 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
-        if (!(focused_ && active_ == this && !options_.empty())) return false;
+        // Capture all wheel events while this dropdown is active to prevent
+        // scroll events from leaking to underlying widgets (e.g., sliders).
+        if (active_ != this) {
+            return false;
+        }
+        if (options_.empty()) {
+            return true;
+        }
         if (!has_pending_index_) {
             pending_index_ = index_;
             has_pending_index_ = true;

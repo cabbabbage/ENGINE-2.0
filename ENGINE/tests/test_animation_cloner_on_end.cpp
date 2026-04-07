@@ -170,7 +170,7 @@ TEST_CASE("AnimationCloner inherits source on_end and directive when enabled") {
     CHECK(destination.on_end_behavior == Animation::OnEndDirective::Animation);
 }
 
-TEST_CASE("AnimationCloner preserves source overlay texture dimensions") {
+TEST_CASE("AnimationCloner preserves source base texture dimensions") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
     SDL_Renderer* renderer = renderer_scope.get();
@@ -182,11 +182,7 @@ TEST_CASE("AnimationCloner preserves source overlay texture dimensions") {
     cache.textures[0] = create_solid_texture(renderer, 4, 4, SDL_Color{255, 0, 0, 255});
     cache.widths[0] = 4;
     cache.heights[0] = 4;
-    cache.foreground_textures[0] = create_solid_texture(renderer, 8, 8, SDL_Color{0, 255, 0, 255});
-    cache.background_textures[0] = create_solid_texture(renderer, 8, 8, SDL_Color{0, 0, 255, 255});
     REQUIRE(cache.textures[0] != nullptr);
-    REQUIRE(cache.foreground_textures[0] != nullptr);
-    REQUIRE(cache.background_textures[0] != nullptr);
 
     std::vector<Animation::FrameCache> source_caches;
     source_caches.push_back(std::move(cache));
@@ -200,23 +196,15 @@ TEST_CASE("AnimationCloner preserves source overlay texture dimensions") {
     REQUIRE(destination.cached_frame_count() == 1);
     const Animation::FrameCache& cloned = destination.cached_frames()[0];
     REQUIRE(cloned.textures.size() >= 1);
-    REQUIRE(cloned.foreground_textures.size() >= 1);
-    REQUIRE(cloned.background_textures.size() >= 1);
     REQUIRE(cloned.widths.size() >= 1);
     REQUIRE(cloned.heights.size() >= 1);
 
     CHECK(cloned.widths[0] == 4);
     CHECK(cloned.heights[0] == 4);
 
-    int fg_w = 0;
-    int fg_h = 0;
-    REQUIRE(query_texture_size(cloned.foreground_textures[0], fg_w, fg_h));
-    CHECK(fg_w == 8);
-    CHECK(fg_h == 8);
-
-    int bg_w = 0;
-    int bg_h = 0;
-    REQUIRE(query_texture_size(cloned.background_textures[0], bg_w, bg_h));
-    CHECK(bg_w == 8);
-    CHECK(bg_h == 8);
+    int base_w = 0;
+    int base_h = 0;
+    REQUIRE(query_texture_size(cloned.textures[0], base_w, base_h));
+    CHECK(base_w == 4);
+    CHECK(base_h == 4);
 }

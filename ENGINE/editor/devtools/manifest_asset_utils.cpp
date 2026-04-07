@@ -1,23 +1,14 @@
 #include "devtools/manifest_asset_utils.hpp"
 
-#include <algorithm>
-#include <cctype>
 #include <exception>
 #include <iostream>
+
+#include "utils/string_utils.hpp"
 
 #include "devtools/core/manifest_store.hpp"
 #include "core/manifest/manifest_loader.hpp"
 
 namespace devmode::manifest_utils {
-namespace {
-std::string to_lower_copy(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return value;
-}
-}
-
 bool remove_manifest_asset_entry(const std::string& asset_name, std::ostream* log) {
     if (asset_name.empty()) {
         if (log) {
@@ -47,9 +38,9 @@ bool remove_manifest_asset_entry(const std::string& asset_name, std::ostream* lo
 
     auto target_it = assets_it->find(asset_name);
     if (target_it == assets_it->end()) {
-        const std::string needle = to_lower_copy(asset_name);
+        const std::string needle = vibble::strings::to_lower_copy(asset_name);
         for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
-            if (to_lower_copy(it.key()) == needle) {
+            if (vibble::strings::to_lower_copy(it.key()) == needle) {
                 target_it = it;
                 break;
             }

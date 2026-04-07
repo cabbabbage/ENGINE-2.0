@@ -1,7 +1,6 @@
 #pragma once
 
 #include "rendering/render/camera_controller.hpp"
-#include "rendering/render/image_effect_settings.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "utils/area.hpp"
 #include <SDL3/SDL.h>
@@ -68,10 +67,14 @@ public:
     struct RealismSettings {
 
         float min_visible_screen_ratio     = 0.015f;
-
-
-
         float base_height_px               = 1000.0f;
+        float max_cull_depth               = 5000.0f;
+        float layer_depth_interval         = 250.0f;
+        float layer_depth_curve            = 1.0f;
+        float aperture_f_stop              = 2.8f;
+        float focal_length_mm              = 50.0f;
+        float max_blur_px                  = 12.0f;
+        bool depth_of_field_enabled         = false;
 };
 
     struct FloorDepthParams {

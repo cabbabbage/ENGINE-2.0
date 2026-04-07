@@ -2,7 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -11,6 +13,7 @@
 #include <vector>
 
 #include "rendering/render/composite_asset_renderer.hpp"
+#include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include <SDL3/SDL.h>
@@ -26,6 +29,13 @@ class GeometryBatcher {
 public:
     explicit GeometryBatcher(SDL_Renderer* renderer);
 
+    struct DrawItem {
+        SDL_Texture* texture = nullptr;
+        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+        SDL_Vertex vertices[4];
+        double depth = 0.0;
+    };
+
     // Add a quad to the batch with depth for sorting
     void addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4], const int indices[6],
                  SDL_BlendMode blend_mode, double depth);
@@ -35,6 +45,7 @@ public:
 
     // Clear all batches (call at start of frame)
     void clear();
+    void for_each_item_far_to_near(const std::function<void(const DrawItem&)>& fn) const;
 
     // Get statistics for profiling
     size_t getDrawCallCount() const { return draw_call_count_; }
@@ -42,13 +53,6 @@ public:
     double getLastFlushCpuMs() const { return last_flush_cpu_ms_; }
 
 private:
-    struct DrawItem {
-        SDL_Texture* texture = nullptr;
-        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
-        SDL_Vertex vertices[4];
-        double depth = 0.0;
-    };
-
     struct DepthBucket {
         std::vector<DrawItem> items;
     };
@@ -112,14 +116,15 @@ public:
     int output_width() const { return screen_width_; }
     int output_height() const { return screen_height_; }
     std::optional<SDL_Point> postprocess_target_size() const;
-
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return debug_auto_paths_; }
     void set_movement_debug_visible(bool visible);
     bool movement_debug_visible() const { return movement_debug_visible_; }
     void set_anchor_point_debug_enabled(bool enabled);
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
-    void set_map_clear_color(SDL_Color color) { map_clear_color_ = color; }
+    void set_map_clear_color(SDL_Color color) {
+        map_clear_color_ = color;
+    }
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
 private:
@@ -146,12 +151,46 @@ private:
 
     bool ensure_sky_texture();
     void destroy_sky_texture();
-    void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
+    void render_sky_layer(const WarpedScreenGrid& cam);
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
     void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
                                          int screen_width,
                                          int screen_height,
                                          const std::vector<Asset*>& visible_assets) const;
+    struct RuntimeLightInstance {
+        SDL_FPoint screen_center{0.0f, 0.0f};
+        SDL_FPoint floor_screen_center{0.0f, 0.0f};
+        bool has_floor_screen_center = false;
+        SDL_Color color{255, 255, 255, 255};
+        float intensity = 1.0f;
+        float radius_px = 220.0f;
+        float falloff = 1.8f;
+        float shadow_strength = 0.82f;
+        bool cast_shadows = true;
+        float world_z = 0.0f;
+    };
+
+    struct RuntimeLightOccluder {
+        std::array<SDL_FPoint, 4> points{};
+        SDL_FPoint center{0.0f, 0.0f};
+        SDL_FPoint floor_left{0.0f, 0.0f};
+        SDL_FPoint floor_right{0.0f, 0.0f};
+        double depth = 0.0;
+    };
+
+    void destroy_lighting_resources();
+    SDL_Texture* light_falloff_texture(float falloff);
+    SDL_BlendMode multiply_blend_mode();
+    void gather_runtime_lights(const WarpedScreenGrid& cam,
+                               const std::vector<Asset*>& rendered_assets,
+                               std::vector<RuntimeLightInstance>& out_lights) const;
+    void gather_runtime_occluders(const std::vector<GeometryBatcher::DrawItem>& draws,
+                                  std::vector<RuntimeLightOccluder>& out_occluders) const;
+    void append_runtime_shadow_geometry(const std::vector<RuntimeLightInstance>& lights,
+                                        const std::vector<RuntimeLightOccluder>& occluders);
+    void render_runtime_lighting(SDL_Texture* gameplay_target,
+                                 const std::vector<RuntimeLightInstance>& lights,
+                                 const std::vector<RuntimeLightOccluder>& occluders);
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -174,13 +213,24 @@ private:
     std::unordered_map<const Asset*, MovementDebugObservedState> movement_debug_observed_state_;
 
     CompositeAssetRenderer composite_renderer_;
+    LayerEffectProcessor layer_effect_processor_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
-
-    std::uint32_t depthcue_warmup_frames_ = 8;
 
     SDL_Texture* scene_composite_tex_ = nullptr;
     SDL_Texture* postprocess_tex_     = nullptr;
     SDL_Texture* blur_tex_            = nullptr;
+    SDL_Texture* light_base_tex_      = nullptr;
+    SDL_Texture* light_accum_tex_     = nullptr;
+    SDL_Texture* light_white_tex_     = nullptr;
+    std::unordered_map<int, SDL_Texture*> light_falloff_textures_;
+    SDL_BlendMode light_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
+    bool light_multiply_blend_mode_ready_ = false;
+    std::vector<SDL_Texture*> motion_blur_history_textures_;
+    int motion_blur_history_write_index_ = 0;
+    int motion_blur_valid_history_frames_ = 0;
+    int motion_blur_history_capacity_    = 0;
+    std::vector<SDL_Texture*> dof_layer_textures_;
+    std::vector<SDL_Texture*> dof_blur_textures_;
     std::filesystem::path sky_texture_path_;
     double                map_radius_world_ = 0.0;
     SDL_Texture*          sky_texture_       = nullptr;

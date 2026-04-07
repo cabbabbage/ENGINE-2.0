@@ -12,8 +12,11 @@
 #include "assets/asset/asset_info.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
+#include "utils/log.hpp"
+#include "utils/string_utils.hpp"
 
 namespace animation_update::custom_controllers {}
 namespace custom_controllers = animation_update::custom_controllers;
@@ -75,39 +78,89 @@ void CustomAssetController::initialize_anchor_candidate_children() {
     };
 
     std::unordered_set<std::string> seen_anchor_names;
-    for (const auto& candidate_entry : self_->info->anchor_point_child_candidates) {
-        if (candidate_entry.anchor_point_name.empty()) {
-            continue;
-        }
-        if (!seen_anchor_names.insert(candidate_entry.anchor_point_name).second) {
-            continue;
-        }
-        if (!candidate_entry.candidates.is_object()) {
-            continue;
-        }
+    std::unordered_set<std::string> explicit_anchor_names;
 
-        const auto candidates_it = candidate_entry.candidates.find("candidates");
-        if (candidates_it == candidate_entry.candidates.end() || !candidates_it->is_array()) {
+    for (const auto& candidate_entry : self_->info->anchor_point_child_candidates) {
+        const std::string anchor_name = vibble::strings::trim_copy(candidate_entry.anchor_point_name);
+        if (anchor_name.empty()) {
+            continue;
+        }
+        explicit_anchor_names.insert(anchor_name);
+        if (!seen_anchor_names.insert(anchor_name).second) {
+            continue;
+        }
+        const nlohmann::json normalized_candidate_entry =
+            self_->info->anchor_point_child_candidate_candidates(anchor_name);
+        const auto candidates_it = normalized_candidate_entry.find("candidates");
+        if (candidates_it == normalized_candidate_entry.end() || !candidates_it->is_array()) {
+            vibble::log::warn(std::string("[CustomAssetController] Invalid explicit anchor candidate payload for anchor '") +
+                              anchor_name + "' on asset '" + self_->info->name + "'");
             continue;
         }
 
         const vibble::spawn::RuntimeCandidates runtime_candidates =
             vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
         if (runtime_candidates.empty()) {
+            vibble::log::warn(std::string("[CustomAssetController] Empty explicit anchor candidates for anchor '") +
+                              anchor_name + "' on asset '" + self_->info->name + "'");
             continue;
         }
 
         const auto resolved = runtime_candidates.pick_hashed(
-            anchor_candidate_hash(candidate_entry.anchor_point_name),
+            anchor_candidate_hash(anchor_name),
             catalog,
             vibble::spawn::ZeroWeightPolicy::NoSelection);
         if (!resolved || resolved->is_null || resolved->resolved_asset_name.empty()) {
+            vibble::log::warn(std::string("[CustomAssetController] Unable to resolve explicit anchor candidates for anchor '") +
+                              anchor_name + "' on asset '" + self_->info->name + "'");
             continue;
         }
 
         AnchorCandidateAttachment attachment{};
-        attachment.anchor_name = candidate_entry.anchor_point_name;
+        attachment.anchor_name = anchor_name;
         attachment.resolved_asset_name = resolved->resolved_asset_name;
+        attachment.remaining_spawn_retries = kAnchorCandidateSpawnRetryLimit;
+        attachment.exhausted = false;
+        attachment.child.emplace(*self_, attachment.resolved_asset_name);
+        attachment.child->bind(attachment.anchor_name);
+        anchor_candidate_children_.push_back(std::move(attachment));
+    }
+
+    for (const auto& mapping : self_->info->oval_anchor_mappings) {
+        const std::string anchor_name = vibble::strings::trim_copy(mapping.name);
+        if (anchor_name.empty()) {
+            vibble::log::warn(std::string("[CustomAssetController] Skipping oval fallback with invalid mapping name on asset '") +
+                              self_->info->name + "'");
+            continue;
+        }
+        if (explicit_anchor_names.find(anchor_name) != explicit_anchor_names.end()) {
+            continue;
+        }
+        if (!seen_anchor_names.insert(anchor_name).second) {
+            continue;
+        }
+
+        const std::string fallback_asset_name = vibble::strings::trim_copy(mapping.asset_name);
+        if (fallback_asset_name.empty()) {
+            vibble::log::warn(std::string("[CustomAssetController] Skipping oval fallback for anchor '") +
+                              anchor_name + "' on asset '" + self_->info->name +
+                              "' because mapping asset_name is empty");
+            continue;
+        }
+        if (fallback_asset_name == self_->info->name) {
+            // Avoid self-recursive attachment defaults; explicit candidates remain authoritative.
+            continue;
+        }
+        if (!owner_assets->library().get(fallback_asset_name)) {
+            vibble::log::warn(std::string("[CustomAssetController] Missing oval fallback asset '") +
+                              fallback_asset_name + "' for anchor '" + anchor_name +
+                              "' on asset '" + self_->info->name + "'");
+            continue;
+        }
+
+        AnchorCandidateAttachment attachment{};
+        attachment.anchor_name = anchor_name;
+        attachment.resolved_asset_name = fallback_asset_name;
         attachment.remaining_spawn_retries = kAnchorCandidateSpawnRetryLimit;
         attachment.exhausted = false;
         attachment.child.emplace(*self_, attachment.resolved_asset_name);
@@ -189,5 +242,5 @@ void CustomAssetController::on_update(const Input&) {
 }
 
 void CustomAssetController::on_process_pending_attacks(Asset& self) {
-    custom_controllers::AttackDetectionHelper::process_pending_attacks_default(&self);
+    custom_controllers::AttackProcessingHelper::process_pending_attacks(self);
 }

@@ -64,6 +64,17 @@ bool resolve_child_placement(const PlacementInput& input, PlacementOutput& outpu
         ? anchor.resolution_layer
         : input.parent.resolution_layer;
 
+    const auto sanitize_displacement = [](float value) {
+        return std::isfinite(value) ? value : 0.0f;
+    };
+    output.anchor_world.x += sanitize_displacement(input.anchor_world_displacement.x);
+    output.anchor_world.y += sanitize_displacement(input.anchor_world_displacement.y);
+    output.anchor_world.z += sanitize_displacement(input.anchor_world_displacement.z);
+    if (!is_valid_world_point(output.anchor_world)) {
+        output.anchor_world.valid = false;
+        return false;
+    }
+
     // Explicit operation order for local child placement:
     // 1) mirror -> 2) scale -> 3) rotate -> 4) translate by anchor world.
     float local_x = input.child_offset.x;

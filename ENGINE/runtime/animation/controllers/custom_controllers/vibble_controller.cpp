@@ -11,12 +11,13 @@
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
-#include "animation/controllers/shared/attack_reaction_helper.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -52,39 +53,7 @@ vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
 }
 
 vibble_controller::vibble_controller(Asset* player)
-    : CustomAssetController(player) {
-        
-        
-        if (player){
-            if(!eyes_child_.has_value()) {
-                eyes_child_.emplace(*player, "vibble_eyes");
-                eyes_child_->bind("eyes");
-                child_assets_.push_back(&*eyes_child_);
-            }
-            if(!hat_child_.has_value()) {
-                hat_child_.emplace(*player, "vibble_hat");
-                hat_child_->bind("hat");
-                child_assets_.push_back(&*hat_child_);
-            }
-            if (!mouth_child_.has_value()) {
-                mouth_child_.emplace(*player, "vibble_mouth");
-                mouth_child_->bind("mouth");
-                child_assets_.push_back(&*mouth_child_);
-            }
-            if (!neck_child_.has_value()) {
-                neck_child_.emplace(*player, "vibble_neck");
-                neck_child_->bind("neck");
-                child_assets_.push_back(&*neck_child_);   
-            }
-            if (!weapon_child_.has_value()) {
-                weapon_child_.emplace(*player, "vibble_attack_1");
-                weapon_child_->bind("weapon");
-               // weapon_child_->hide();
-                child_assets_.push_back(&*weapon_child_);   
-            }
-        }
-
-    }
+    : CustomAssetController(player) {}
 
     
 
@@ -122,9 +91,9 @@ void vibble_controller::movement(const Input& input) {
         meleeCooldownEndTime = std::chrono::steady_clock::now()
                                + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                                    std::chrono::duration<float>(meleeCooldown));
-        if (weapon_child_.has_value()) {
-            weapon_child_->set_animation("attack");
-        }
+       // if (weapon_child_.has_value()) {
+        //    weapon_child_->set_animation("attack");
+       // }
     }
 
 
@@ -178,6 +147,30 @@ void vibble_controller::on_update(const Input& input) {
     auto now = steady_clock::now();
 
     Asset* player = self_ptr();
+
+    if (player) {
+        bool anchor_heading_changed = false;
+        if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
+            anchor_heading_changed =
+                player->set_directional_target_world_xz(static_cast<float>(mouse_world->x),
+                                                        static_cast<float>(mouse_world->y)) ||
+                anchor_heading_changed;
+            const float dx = static_cast<float>(mouse_world->x - player->world_x());
+            const float dy = static_cast<float>(mouse_world->y - player->world_z());
+            constexpr float kMinHeadingVectorLengthSq = 1e-4f;
+            const float length_sq = dx * dx + dy * dy;
+            if (length_sq > kMinHeadingVectorLengthSq) {
+                const float heading_radians = std::atan2(dy, dx);
+                anchor_heading_changed =
+                    player->set_directional_heading_radians(heading_radians) || anchor_heading_changed;
+            }
+        }
+        if (anchor_heading_changed) {
+            anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+                player,
+                std::string{});
+        }
+    }
 
     if (isDashing && now >= dashEndTime) {
         isDashing = false;
@@ -279,7 +272,7 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
     std::optional<SDL_Point> bump_delta;
     auto consider_knockback = [&](const animation_update::Attack& attack) {
         SDL_Point candidate_delta{};
-        if (!animation_update::custom_controllers::AttackReactionHelper::compute_knockback_delta(self, attack, candidate_delta)) {
+        if (!animation_update::custom_controllers::AttackProcessingHelper::compute_knockback_delta(self, attack, candidate_delta)) {
             return;
         }
         if (!bump_delta.has_value()) {
@@ -301,13 +294,13 @@ void vibble_controller::on_process_pending_attacks(Asset& self) {
     }
 
     if (self.runtime_health < 0) {
-        if (!animation_update::custom_controllers::AttackReactionHelper::try_play_death_animation(self)) {
+        if (!animation_update::custom_controllers::AttackProcessingHelper::try_play_death_animation(self)) {
             self.Delete();
         }
         return;
     }
 
     if (bump_delta.has_value()) {
-        animation_update::custom_controllers::AttackReactionHelper::apply_knockback(self, *bump_delta);
+        animation_update::custom_controllers::AttackProcessingHelper::apply_knockback(self, *bump_delta);
     }
 }

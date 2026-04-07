@@ -74,26 +74,9 @@ struct RenderObject {
     bool has_cached_mesh = false;
     bool mesh_dirty = true;
     SDL_FPoint projection_anchor_uv{0.5f, 1.0f};
-    bool is_depth_cue_overlay = false;
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;
-
-struct DepthCueRenderData {
-    SDL_Texture* base_texture = nullptr;
-    SDL_Texture* foreground_texture = nullptr;
-    SDL_Texture* background_texture = nullptr;
-    bool has_depth_cue = false;
-};
-
-struct DepthCueMergeSignature {
-    SDL_Texture* base_texture = nullptr;
-    SDL_Texture* overlay_texture = nullptr;
-    std::uint8_t overlay_layer = 0; // 0: none, 1: foreground, 2: background
-    Uint8 overlay_alpha = 0;
-    bool overlay_active = false;
-    bool valid = false;
-};
 
 struct RuntimeCameraMetrics {
     std::uint64_t frame_id = 0;
@@ -214,6 +197,13 @@ class Asset {
     bool is_current_animation_last_frame() const;
     bool is_current_animation_looping() const;
     const AnimationFrame* current_animation_frame() const { return current_frame; }
+    struct CumulativeMovementDisplacement {
+        float dx = 0.0f;
+        float dy = 0.0f;
+        float dz = 0.0f;
+        bool valid = false;
+    };
+    CumulativeMovementDisplacement current_frame_cumulative_movement_displacement() const;
 
     struct ScaleUsageStats {
         float requested_scale = 1.0f;
@@ -276,6 +266,13 @@ class Asset {
     void clear_grid_id();
     void set_world_z_offset(float z) { if (world_z_offset_ != z) { world_z_offset_ = z; mark_anchors_dirty(); } }
     float world_z_offset() const { return world_z_offset_; }
+    bool set_directional_heading_radians(float radians);
+    void clear_directional_heading_radians();
+    bool has_directional_heading_radians() const { return directional_heading_valid_; }
+    float directional_heading_radians() const { return directional_heading_radians_; }
+    bool set_directional_target_world_xz(float world_x, float world_z);
+    void clear_directional_target_world_xz();
+    bool has_directional_target_world_xz() const { return directional_target_valid_; }
     void set_render_anchor_offset(float x, float y, float z);
     void clear_render_anchor_offset();
     float render_anchor_offset_x() const { return render_anchor_offset_x_; }
@@ -297,17 +294,6 @@ class Asset {
     void mark_mesh_dirty() { mesh_dirty_ = true; }
     void clear_mesh_dirty() { mesh_dirty_ = false; }
     void refresh_frame_texture_bindings();
-#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
-    void test_set_depth_cue_merge_applied_signature(const DepthCueMergeSignature& signature) {
-        depth_cue_merge_applied_signature_ = signature;
-    }
-    const DepthCueMergeSignature& test_depth_cue_merge_applied_signature() const {
-        return depth_cue_merge_applied_signature_;
-    }
-    const DepthCueMergeSignature& test_depth_cue_merge_desired_signature() const {
-        return depth_cue_merge_desired_signature_;
-    }
-#endif
 
 
     float smoothed_translation_x() const;
@@ -438,7 +424,9 @@ class Asset {
                 }
         } last_update_key_;
 
-        void update(anchor_points::GridMaterialization grid_policy, bool force_recompute = false);
+        void update(anchor_points::GridMaterialization grid_policy,
+                    bool force_recompute = false,
+                    const DisplacedAssetAnchorPoint* override_anchor = nullptr);
     };
 
     // A single source of truth for inputs that influence resolved anchor output
@@ -456,6 +444,11 @@ class Asset {
         float remainder_scale = 1.0f;       // runtime scale applied to rendered frame geometry
         float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
         float world_z_offset = 0.0f;        // render depth offset used by cached anchor screen projection
+        float directional_heading_radians = 0.0f; // runtime directional heading used by oval anchor mappings
+        bool  directional_heading_valid = false;
+        float directional_target_world_x = 0.0f; // runtime pointer target used by oval anchor mappings
+        float directional_target_world_z = 0.0f;
+        bool  directional_target_valid = false;
         int   resolution_layer = 0;         // grid resolution used for anchor materialization
         std::uint64_t camera_state_version = 0; // camera snapshot that produced cached anchor placement
     };
@@ -481,6 +474,7 @@ class Asset {
     void refresh_anchor_point_cache_from_frame();
     void refresh_runtime_box_cache_from_frame();
     void mark_anchors_dirty();
+    void invalidate_anchor_registry();
     bool update_anchor_basis_if_needed();
     AnchorBasisSignature compute_anchor_basis_signature() const;
     void capture_anchor_basis_snapshot(const AnchorBasisSignature& signature);
@@ -558,9 +552,6 @@ private:
     bool         composite_dirty_   = true;
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
-    std::uint64_t composite_depth_cue_settings_version_ = 0;
-    DepthCueMergeSignature depth_cue_merge_desired_signature_{};
-    DepthCueMergeSignature depth_cue_merge_applied_signature_{};
     float        world_z_offset_    = 0.0f;
     float        render_anchor_offset_x_ = 0.0f;
     float        render_anchor_offset_y_ = 0.0f;
@@ -571,6 +562,11 @@ private:
     bool         anchor_perspective_override_active_ = false;
     float        anchor_perspective_override_scale_ = 1.0f;
     int          anchor_perspective_override_resolution_layer_ = 0;
+    float        directional_heading_radians_ = 0.0f;
+    bool         directional_heading_valid_ = false;
+    float        directional_target_world_x_ = 0.0f;
+    float        directional_target_world_z_ = 0.0f;
+    bool         directional_target_valid_ = false;
     bool         mesh_dirty_        = true;
 
     void initialize_anchor_registry_from_animations();

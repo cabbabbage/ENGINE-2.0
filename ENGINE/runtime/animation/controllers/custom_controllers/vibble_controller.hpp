@@ -38,12 +38,6 @@ private:
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
 
-    std::vector<ChildAsset*> child_assets_;
-    std::optional<ChildAsset> neck_child_;
-    std::optional<ChildAsset> hat_child_;
-    std::optional<ChildAsset> mouth_child_;
-    std::optional<ChildAsset> eyes_child_;
-    std::optional<ChildAsset> weapon_child_;
     int    dx_ = 0;
     int    dy_ = 0;
 

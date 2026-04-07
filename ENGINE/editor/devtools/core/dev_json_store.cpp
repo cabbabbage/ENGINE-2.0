@@ -406,6 +406,39 @@ struct DevJsonStore::Impl {
 #endif
     }
 
+    void flush_path(const std::filesystem::path& path) {
+#ifdef DEV_MODE_DISABLE_JSON_DEBOUNCE
+        (void)path;
+        return;
+#else
+        if (path.empty()) {
+            return;
+        }
+
+        std::optional<PendingWrite> ready_write;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto it = pending_writes_.find(path);
+            if (it == pending_writes_.end()) {
+                return;
+            }
+            ready_write = std::move(it->second);
+            pending_writes_.erase(it);
+        }
+
+        std::vector<PendingWrite> ready;
+        ready.reserve(1);
+        ready.push_back(std::move(*ready_write));
+        try {
+            flush_ready(std::move(ready));
+        } catch (const std::exception& ex) {
+            log_error(std::string("[DevJsonStore] flush_path exception: ") + ex.what());
+        } catch (...) {
+            log_error("[DevJsonStore] flush_path unknown exception");
+        }
+#endif
+    }
+
     void shutdown() {
 #ifdef DEV_MODE_DISABLE_JSON_DEBOUNCE
         return;
@@ -579,6 +612,10 @@ void DevJsonStore::submit(const std::filesystem::path& path,
 
 void DevJsonStore::flush_all() {
     impl_->flush_all();
+}
+
+void DevJsonStore::flush_path(const std::filesystem::path& path) {
+    impl_->flush_path(path);
 }
 
 bool DevJsonStore::has_pending_write(const std::filesystem::path& path) const {

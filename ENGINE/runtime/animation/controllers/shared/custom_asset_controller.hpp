@@ -11,6 +11,12 @@ class Asset;
 class Assets;
 class Input;
 
+namespace animation_update::custom_controllers {
+
+class WanderControllerBehavior;
+
+} // namespace animation_update::custom_controllers
+
 // Base for engine custom controllers. Keeps a stable self pointer and routes
 // engine callbacks into controller-specific hooks.
 class CustomAssetController : public AssetController {
@@ -29,6 +35,8 @@ protected:
     virtual void on_process_pending_attacks(Asset& self);
 
 private:
+    friend class animation_update::custom_controllers::WanderControllerBehavior;
+
     struct AnchorCandidateAttachment {
         std::string anchor_name;
         std::string resolved_asset_name;

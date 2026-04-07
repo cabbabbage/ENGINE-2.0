@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include "DockableCollapsible.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
@@ -9,6 +10,10 @@ class Widget;
 class Input;
 class FloatSliderWidget;
 class PitchDialWidget;
+class SliderWidget;
+class DMSlider;
+class DMCheckbox;
+class CallbackCheckboxWidget;
 
 
 class CameraUIPanel : public DockableCollapsible {
@@ -28,6 +33,7 @@ public:
     void render(SDL_Renderer* renderer) const;
 
     void sync_from_camera();
+    void set_dirty_callback(std::function<void()> callback);
 
 
 
@@ -38,6 +44,10 @@ private:
     void apply_settings_if_needed();
 
     void on_control_value_changed();
+
+    std::pair<int, int> load_camera_height_bounds() const;
+    void save_camera_height_bounds(int min_val, int max_val) const;
+    void clamp_all_room_camera_heights(int min_val, int max_val);
 
 private:
     Assets* assets_ = nullptr;
@@ -50,10 +60,25 @@ private:
 
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> boundary_min_render_size_slider_;
+    std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
+    std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
+    std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
+    std::unique_ptr<FloatSliderWidget> aperture_f_stop_slider_;
+    std::unique_ptr<FloatSliderWidget> focal_length_mm_slider_;
+    std::unique_ptr<FloatSliderWidget> max_blur_px_slider_;
+
+    // Global camera height bounds
+    std::unique_ptr<DMSlider> camera_height_min_slider_;
+    std::unique_ptr<DMSlider> camera_height_max_slider_;
+    std::unique_ptr<SliderWidget> camera_height_min_widget_;
+    std::unique_ptr<SliderWidget> camera_height_max_widget_;
+    std::unique_ptr<CallbackCheckboxWidget> depth_of_field_widget_;
+    DMCheckbox* depth_of_field_checkbox_ = nullptr;
 
     bool applying_settings_ = false;
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;
+    std::function<void()> dirty_callback_;
 
 protected:
     std::string_view lock_settings_namespace() const override { return "camera"; }

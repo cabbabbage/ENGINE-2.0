@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <filesystem>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -175,6 +176,7 @@ class AnimationInspectorPanel {
     bool on_end_section_visible_cache_ = true;
     std::string notified_payload_animation_id_;
     std::string notified_payload_signature_;
+    std::optional<std::uint64_t> notified_payload_revision_;
 
     std::unique_ptr<PreviewTimeline> preview_timeline_;
     std::unique_ptr<DMButton> preview_play_button_;

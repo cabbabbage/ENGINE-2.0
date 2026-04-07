@@ -16,6 +16,7 @@
 #include "audio/audio_engine.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "utils/loading_status_notifier.hpp"
+#include "utils/string_utils.hpp"
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -604,40 +605,20 @@ void MainApp::handle_global_shortcuts(const SDL_Event& e) {
 
 namespace {
 
-std::string trim_copy(const std::string& value) {
-    size_t start = 0;
-    while (start < value.size() &&
-           std::isspace(static_cast<unsigned char>(value[start]))) {
-        ++start;
-    }
-    size_t end = value.size();
-    while (end > start &&
-           std::isspace(static_cast<unsigned char>(value[end - 1]))) {
-        --end;
-    }
-    return value.substr(start, end - start);
-}
-
-std::string lowercase_identifier(const std::string& value) {
-    std::string normalized;
-    normalized.reserve(value.size());
-    for (char ch : value) {
-        unsigned char uc = static_cast<unsigned char>(ch);
-        if (std::isalnum(uc) || ch == '_' || ch == '-') {
-            normalized.push_back(static_cast<char>(std::tolower(uc)));
-        } else {
-            return std::string{};
-        }
-    }
-    return normalized;
-}
-
 std::optional<std::string> sanitize_map_name(const std::string& input) {
-    std::string trimmed = trim_copy(input);
+    const std::string trimmed = vibble::strings::trim_copy(input);
     if (trimmed.empty()) {
         return std::nullopt;
     }
-        return lowercase_identifier(trimmed);
+
+    for (char ch : trimmed) {
+        const unsigned char uc = static_cast<unsigned char>(ch);
+        if (!std::isalnum(uc) && ch != '_' && ch != '-') {
+            return std::nullopt;
+        }
+    }
+
+    return vibble::strings::to_lower_copy(trimmed);
 }
 
 std::optional<MapDescriptor> create_new_map_interactively() {

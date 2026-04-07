@@ -218,17 +218,17 @@ void OnEndSelector::commit_selection() {
         selected = "default";
     }
 
-    nlohmann::json payload = document_->animation_payload_json(animation_id_).value_or(nlohmann::json::object());
+    nlohmann::json payload = nlohmann::json::object();
+    if (auto payload_dump = document_->animation_payload(animation_id_)) {
+        payload = nlohmann::json::parse(*payload_dump, nullptr, false);
+        if (!payload.is_object()) {
+            payload = nlohmann::json::object();
+        }
+    }
     payload.erase("loop");
     payload["on_end"] = selected;
 
-    if (!document_->save_animation_payload_immediately(animation_id_, payload)) {
-        const std::string manifest_key = document_->manifest_asset_key_debug();
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "OnEndSelector: immediate save failed for animation '%s' (manifest key: '%s').",
-                    animation_id_.c_str(),
-                    manifest_key.empty() ? "<unknown>" : manifest_key.c_str());
-    }
+    document_->update_animation_payload(animation_id_, payload);
     auto updated = document_->animation_payload(animation_id_);
     payload_signature_ = updated ? *updated : payload.dump();
 }

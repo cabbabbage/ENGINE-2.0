@@ -12,7 +12,7 @@ spider_controller::spider_controller(Asset* self)
         std::cout<<"Spider Controller Connected";
     Asset* owner = self_ptr();
     if (owner && owner->anim_) {
-        owner->anim_->set_debug_enabled(true);
+        owner->anim_->set_debug_enabled(false);
         owner->needs_target = true;
     }
 }

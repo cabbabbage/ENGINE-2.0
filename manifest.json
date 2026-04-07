@@ -10564,13 +10564,13 @@
       "camera_height_max_px": 6503,
       "camera_height_min_px": 200,
       "camera_settings": {
-        "aperture_f_stop": 10.770000457763672,
+        "aperture_f_stop": 21.239999771118164,
         "base_height_px": 720.0,
         "boundary_min_visible_screen_ratio": 0.018000001087784767,
         "camera_height_max_px": 100000,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": false,
-        "focal_length_mm": 181.61000061035156,
+        "depth_of_field_enabled": true,
+        "focal_length_mm": 136.80999755859375,
         "layer_depth_curve": 8.0,
         "layer_depth_interval": 550.0,
         "max_blur_px": 31.0,
@@ -10789,8 +10789,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            61,
-            242,
+            143,
+            36,
             242,
             255
           ],
@@ -10817,8 +10817,8 @@
           "camera_zoom_percent": 5,
           "curvyness": 2,
           "display_color": [
-            94,
             36,
+            157,
             242,
             255
           ],

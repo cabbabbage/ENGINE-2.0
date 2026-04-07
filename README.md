@@ -15,16 +15,6 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - Dev Mode ships in-engine for editing rooms, lighting, assets, and spawns with immediate write-through to content files.
 - Asset tools regenerate animation and lighting caches from explicit requests and missing-file repair.
 
-## Project Layout
-- `ENGINE/runtime/`: Runtime source for assets, controllers, rendering, UI, and shared utilities.
-- `ENGINE/editor/devtools/`: In-engine editors for assets, maps, lighting, and spawn tooling.
-- `resources/`: Source art, icons, loading screens, fog textures, and other media consumed at runtime.
-- `cache/`: Generated texture/cache exports produced by cache tooling.
-- `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
-- `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
-- `ENGINE/tools/`: C++ cache utilities like `asset_tool_cli`.
-- `vcpkg/`, `external/`: Dependency management and bundled libs.
-
 ## Running
 - Preferred: run `run.bat` to configure, build, and start the engine.
 - To build fresh run `compile_and_run.bat`; it launches `release\engine.exe` produced by the build.

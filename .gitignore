@@ -35,4 +35,5 @@ __pycache__/
 *.dll
 *.lib
 *.out
-
+log.txt
+external/

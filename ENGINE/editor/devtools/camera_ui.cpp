@@ -213,7 +213,7 @@ void CameraUIPanel::build_ui() {
     layer_depth_curve_slider_ = std::make_unique<FloatSliderWidget>(
         "Layer Depth Curve",
         0.0f,
-        8.0f,
+        100.0f,
         0.01f,
         defaults.layer_depth_curve,
         2);

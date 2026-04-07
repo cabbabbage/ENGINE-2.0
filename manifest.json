@@ -10564,17 +10564,17 @@
       "camera_height_max_px": 6503,
       "camera_height_min_px": 200,
       "camera_settings": {
-        "aperture_f_stop": 9.770000457763672,
+        "aperture_f_stop": 9.90999984741211,
         "base_height_px": 720.0,
         "boundary_min_visible_screen_ratio": 0.018000001087784767,
         "camera_height_max_px": 100000,
         "camera_height_min_px": 1,
         "depth_of_field_enabled": true,
-        "focal_length_mm": 140.11000061035156,
-        "layer_depth_curve": 8.0,
-        "layer_depth_interval": 70.0,
-        "max_blur_px": 91.0,
-        "max_cull_depth": 6952.0,
+        "focal_length_mm": 84.11000061035156,
+        "layer_depth_curve": 2.4700000286102295,
+        "layer_depth_interval": 2.0,
+        "max_blur_px": 54.5,
+        "max_cull_depth": 11660.0,
         "min_visible_screen_ratio": 0.010000000707805157
       },
       "content_root": "content/forrest",
@@ -10605,14 +10605,6 @@
               {
                 "chance": 0,
                 "name": "#tree"
-              },
-              {
-                "chance": 36,
-                "name": "fog_3"
-              },
-              {
-                "chance": 29.2,
-                "name": "fog_4"
               },
               {
                 "chance": 1,
@@ -10789,9 +10781,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            240,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 49,
@@ -10817,9 +10809,9 @@
           "camera_zoom_percent": 5,
           "curvyness": 2,
           "display_color": [
-            36,
-            165,
+            37,
             242,
+            36,
             255
           ],
           "edge_smoothness": 24,

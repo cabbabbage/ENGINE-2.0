@@ -18,6 +18,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <sstream>
 #include <utility>
@@ -50,8 +51,8 @@ constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
 constexpr int kMotionBlurHistoryFrameCount = 2;
 constexpr std::array<Uint8, kMotionBlurHistoryFrameCount> kMotionBlurHistoryAlpha = {120, 60};
 constexpr bool kSceneMotionBlurEnabled = false;
-// Temporary kill-switch for runtime casted shadows. Flip to true to re-enable.
-constexpr bool kRuntimeCastedShadowsEnabled = true;
+// Runtime casted shadows removed. Lights are additive only.
+constexpr bool kRuntimeCastedShadowsEnabled = false;
 
 inline std::int64_t quantize_depth(double depth) {
     const double scaled = std::floor(depth * kDepthBucketScale);
@@ -123,6 +124,134 @@ float quad_area(const std::array<SDL_FPoint, 4>& quad) {
     }
     return std::fabs(area) * 0.5f;
 }
+
+struct GeometryBatcherDepthBucketCache {
+    const GeometryBatcher* batcher = nullptr;
+    std::int64_t quantized_depth = 0;
+    void* bucket = nullptr;
+};
+
+GeometryBatcherDepthBucketCache& geometry_batcher_depth_bucket_cache() {
+    static thread_local GeometryBatcherDepthBucketCache cache;
+    return cache;
+}
+
+struct CachedGroundTileProjection {
+    SDL_Renderer* renderer = nullptr;
+    SDL_Texture* texture = nullptr;
+    SDL_Rect world_rect{0, 0, 0, 0};
+    std::uint64_t camera_state_version = 0;
+    std::array<SDL_Vertex, 4> vertices{};
+    bool valid = false;
+};
+
+bool cached_ground_tile_projection_matches(const CachedGroundTileProjection& entry,
+                                           SDL_Renderer* renderer,
+                                           SDL_Texture* texture,
+                                           const SDL_Rect& world_rect,
+                                           std::uint64_t camera_state_version) {
+    return entry.valid &&
+           entry.renderer == renderer &&
+           entry.texture == texture &&
+           entry.camera_state_version == camera_state_version &&
+           entry.world_rect.x == world_rect.x &&
+           entry.world_rect.y == world_rect.y &&
+           entry.world_rect.w == world_rect.w &&
+           entry.world_rect.h == world_rect.h;
+}
+
+std::unordered_map<const void*, CachedGroundTileProjection>& ground_tile_projection_cache() {
+    static std::unordered_map<const void*, CachedGroundTileProjection> cache;
+    return cache;
+}
+
+void maybe_prune_ground_tile_projection_cache() {
+    auto& cache = ground_tile_projection_cache();
+    constexpr std::size_t kMaxCachedGroundTiles = 65536;
+    if (cache.size() > kMaxCachedGroundTiles) {
+        cache.clear();
+    }
+}
+
+struct SpatialCellKey {
+    int x = 0;
+    int y = 0;
+
+    bool operator==(const SpatialCellKey& other) const noexcept {
+        return x == other.x && y == other.y;
+    }
+};
+
+struct SpatialCellKeyHash {
+    std::size_t operator()(const SpatialCellKey& key) const noexcept {
+        const std::uint64_t ux = static_cast<std::uint32_t>(key.x);
+        const std::uint64_t uy = static_cast<std::uint32_t>(key.y);
+        return static_cast<std::size_t>((ux << 32) ^ uy);
+    }
+};
+
+using SpatialIndex = std::unordered_map<SpatialCellKey, std::vector<std::size_t>, SpatialCellKeyHash>;
+
+int spatial_cell_coord(float value, float cell_size) {
+    if (!std::isfinite(value) || cell_size <= 0.0f) {
+        return 0;
+    }
+    return static_cast<int>(std::floor(value / cell_size));
+}
+
+SpatialCellKey make_spatial_cell_key(const SDL_FPoint& point, float cell_size) {
+    return SpatialCellKey{
+        spatial_cell_coord(point.x, cell_size),
+        spatial_cell_coord(point.y, cell_size)
+    };
+}
+
+template <typename PointGetter>
+void build_spatial_index(std::size_t item_count,
+                         float cell_size,
+                         PointGetter&& point_getter,
+                         SpatialIndex& out_index) {
+    out_index.clear();
+    if (item_count == 0 || cell_size <= 0.0f) {
+        return;
+    }
+
+    out_index.reserve(item_count * 2);
+    for (std::size_t i = 0; i < item_count; ++i) {
+        const SDL_FPoint point = point_getter(i);
+        out_index[make_spatial_cell_key(point, cell_size)].push_back(i);
+    }
+}
+
+template <typename Fn>
+void for_each_spatial_candidate(const SpatialIndex& index,
+                                const SDL_FPoint& point,
+                                float radius,
+                                float cell_size,
+                                Fn&& fn) {
+    if (index.empty() || cell_size <= 0.0f) {
+        return;
+    }
+
+    const int min_cell_x = spatial_cell_coord(point.x - radius, cell_size);
+    const int max_cell_x = spatial_cell_coord(point.x + radius, cell_size);
+    const int min_cell_y = spatial_cell_coord(point.y - radius, cell_size);
+    const int max_cell_y = spatial_cell_coord(point.y + radius, cell_size);
+
+    for (int cell_y = min_cell_y; cell_y <= max_cell_y; ++cell_y) {
+        for (int cell_x = min_cell_x; cell_x <= max_cell_x; ++cell_x) {
+            const auto it = index.find(SpatialCellKey{cell_x, cell_y});
+            if (it == index.end()) {
+                continue;
+            }
+            for (std::size_t candidate_index : it->second) {
+                fn(candidate_index);
+            }
+        }
+    }
+}
+
+
 }
 
 // ============================================================================
@@ -151,11 +280,24 @@ void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4]
     item.depth = depth;
 
     DepthBucket* bucket = nullptr;
+    auto& bucket_cache = geometry_batcher_depth_bucket_cache();
     if (std::isfinite(depth)) {
         const auto quantized_depth = quantize_depth(depth);
-        bucket = &depth_buckets_[quantized_depth];
+        if (bucket_cache.batcher == this &&
+            bucket_cache.bucket != nullptr &&
+            bucket_cache.quantized_depth == quantized_depth) {
+            bucket = static_cast<DepthBucket*>(bucket_cache.bucket);
+        } else {
+            bucket = &depth_buckets_[quantized_depth];
+            bucket_cache.batcher = this;
+            bucket_cache.quantized_depth = quantized_depth;
+            bucket_cache.bucket = bucket;
+        }
     } else {
         bucket = &invalid_depth_bucket_;
+        if (bucket_cache.batcher == this) {
+            bucket_cache.bucket = nullptr;
+        }
     }
 
     bucket->items.push_back(item);
@@ -247,6 +389,11 @@ void GeometryBatcher::clear() {
     last_flush_cpu_ms_ = 0.0;
     vertex_buffer_.clear();
     index_buffer_.clear();
+
+    auto& bucket_cache = geometry_batcher_depth_bucket_cache();
+    if (bucket_cache.batcher == this) {
+        bucket_cache = GeometryBatcherDepthBucketCache{};
+    }
 }
 
 void GeometryBatcher::for_each_item_far_to_near(const std::function<void(const DrawItem&)>& fn) const {
@@ -310,6 +457,10 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
     const auto& chunks = grid.active_chunks();
     if (chunks.empty()) return;
 
+    maybe_prune_ground_tile_projection_cache();
+    auto& tile_cache = ground_tile_projection_cache();
+    const std::uint64_t camera_state_version = cam.camera_state_version();
+
     const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
     int indices[6] = {0, 1, 2, 0, 2, 3};
 
@@ -335,51 +486,79 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
         for (const auto& tile : chunk->tiles) {
             if (!tile.texture || tile.world_rect.w <= 0 || tile.world_rect.h <= 0) continue;
 
-            SDL_Point world_tl{ tile.world_rect.x, tile.world_rect.y };
-            SDL_Point world_tr{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y };
-            SDL_Point world_br{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y + tile.world_rect.h };
-            SDL_Point world_bl{ tile.world_rect.x, tile.world_rect.y + tile.world_rect.h };
-
-            SDL_FPoint screen_tl{};
-            SDL_FPoint screen_tr{};
-            SDL_FPoint screen_br{};
-            SDL_FPoint screen_bl{};
-            if (!floor_project(world_tl, screen_tl) ||
-                !floor_project(world_tr, screen_tr) ||
-                !floor_project(world_br, screen_br) ||
-                !floor_project(world_bl, screen_bl)) {
-                continue;
-            }
-
-            std::array<SDL_FPoint, 4> tile_points{screen_tl, screen_tr, screen_br, screen_bl};
-            enforce_trapezoid(tile_points);
-            screen_tl = tile_points[0];
-            screen_tr = tile_points[1];
-            screen_br = tile_points[2];
-            screen_bl = tile_points[3];
-
-            SDL_FPoint tex_size{};
-            if (!fetch_texture_size(tile.texture, tex_size)) {
-                continue;
-            }
-            const float tex_w = tex_size.x;
-            const float tex_h = tex_size.y;
-            if (tex_w <= 0.0f || tex_h <= 0.0f) {
-                continue;
-            }
+            const void* tile_key = static_cast<const void*>(&tile);
+            auto cache_it = tile_cache.find(tile_key);
+            const bool can_reuse_cached_projection =
+                cache_it != tile_cache.end() &&
+                cached_ground_tile_projection_matches(cache_it->second,
+                                                      renderer,
+                                                      tile.texture,
+                                                      tile.world_rect,
+                                                      camera_state_version);
 
             SDL_Vertex verts[4]{};
-            verts[0].position = screen_tl;
-            verts[1].position = screen_tr;
-            verts[2].position = screen_br;
-            verts[3].position = screen_bl;
-            for (auto& v : verts) {
-                v.color = white;
+            if (can_reuse_cached_projection) {
+                verts[0] = cache_it->second.vertices[0];
+                verts[1] = cache_it->second.vertices[1];
+                verts[2] = cache_it->second.vertices[2];
+                verts[3] = cache_it->second.vertices[3];
+            } else {
+                SDL_Point world_tl{ tile.world_rect.x, tile.world_rect.y };
+                SDL_Point world_tr{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y };
+                SDL_Point world_br{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y + tile.world_rect.h };
+                SDL_Point world_bl{ tile.world_rect.x, tile.world_rect.y + tile.world_rect.h };
+
+                SDL_FPoint screen_tl{};
+                SDL_FPoint screen_tr{};
+                SDL_FPoint screen_br{};
+                SDL_FPoint screen_bl{};
+                if (!floor_project(world_tl, screen_tl) ||
+                    !floor_project(world_tr, screen_tr) ||
+                    !floor_project(world_br, screen_br) ||
+                    !floor_project(world_bl, screen_bl)) {
+                    continue;
+                }
+
+                std::array<SDL_FPoint, 4> tile_points{screen_tl, screen_tr, screen_br, screen_bl};
+                enforce_trapezoid(tile_points);
+                screen_tl = tile_points[0];
+                screen_tr = tile_points[1];
+                screen_br = tile_points[2];
+                screen_bl = tile_points[3];
+
+                SDL_FPoint tex_size{};
+                if (!fetch_texture_size(tile.texture, tex_size)) {
+                    continue;
+                }
+                const float tex_w = tex_size.x;
+                const float tex_h = tex_size.y;
+                if (tex_w <= 0.0f || tex_h <= 0.0f) {
+                    continue;
+                }
+
+                verts[0].position = screen_tl;
+                verts[1].position = screen_tr;
+                verts[2].position = screen_br;
+                verts[3].position = screen_bl;
+                for (auto& v : verts) {
+                    v.color = white;
+                }
+                verts[0].tex_coord = SDL_FPoint{0.0f, 0.0f};
+                verts[1].tex_coord = SDL_FPoint{tex_w, 0.0f};
+                verts[2].tex_coord = SDL_FPoint{tex_w, tex_h};
+                verts[3].tex_coord = SDL_FPoint{0.0f, tex_h};
+
+                CachedGroundTileProjection& cache_entry = tile_cache[tile_key];
+                cache_entry.renderer = renderer;
+                cache_entry.texture = tile.texture;
+                cache_entry.world_rect = tile.world_rect;
+                cache_entry.camera_state_version = camera_state_version;
+                cache_entry.vertices[0] = verts[0];
+                cache_entry.vertices[1] = verts[1];
+                cache_entry.vertices[2] = verts[2];
+                cache_entry.vertices[3] = verts[3];
+                cache_entry.valid = true;
             }
-            verts[0].tex_coord = SDL_FPoint{0.0f, 0.0f};
-            verts[1].tex_coord = SDL_FPoint{tex_w, 0.0f};
-            verts[2].tex_coord = SDL_FPoint{tex_w, tex_h};
-            verts[3].tex_coord = SDL_FPoint{0.0f, tex_h};
 
             if (batcher) {
                 // Ground tiles sit behind world assets; use a large depth so batch order stays monotonic.
@@ -588,9 +767,13 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
                                  int screen_height,
                                  const std::vector<Asset*>& assets,
                                  bool dev_mode) {
-    if (!renderer) {
+    if (!renderer || assets.empty()) {
         return;
     }
+
+    static std::uint64_t s_anchor_debug_frame_counter = 0;
+    ++s_anchor_debug_frame_counter;
+    const bool emit_parity_logs = (s_anchor_debug_frame_counter % 30u) == 0u;
 
     const SDL_Color kFlatColor{255, 32, 32, 220};
     const SDL_Color kFinalColor{48, 128, 255, 255};
@@ -711,10 +894,18 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
                            actual_child_screen.y);
         }
 
+        if (!emit_parity_logs) {
+            continue;
+        }
+
         const float dx = actual_child_screen.x - expected.child_screen_px.x;
         const float dy = actual_child_screen.y - expected.child_screen_px.y;
         const float delta_px = std::sqrt(dx * dx + dy * dy);
         constexpr float kParityTolerancePx = 0.5f;
+        if (delta_px <= kParityTolerancePx) {
+            continue;
+        }
+
         const std::string mode_label = dev_mode ? "dev" : "normal";
         const std::string message = std::string("[AnchorParity][") + mode_label + "] owner='" +
                                     (owner->info ? owner->info->name : std::string{"<unknown>"}) +
@@ -722,11 +913,7 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
                                     (child->info ? child->info->name : std::string{"<unknown>"}) +
                                     "' anchor='" + binding.anchor_name +
                                     "' delta_px=" + std::to_string(delta_px);
-        if (delta_px > kParityTolerancePx) {
-            vibble::log::warn(message);
-        } else {
-            vibble::log::debug(message);
-        }
+        vibble::log::warn(message);
     }
 }
 
@@ -1397,6 +1584,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             if (!anchor.is_valid() || !anchor.has_light_data || !anchor.light.enabled) {
                 continue;
             }
+
             const std::optional<AnchorPoint> resolved = asset->anchor_state(
                 anchor.name,
                 anchor_points::GridMaterialization::None,
@@ -1408,10 +1596,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             SDL_FPoint screen{};
             if (!cam.project_world_point(SDL_FPoint{resolved->world_exact_pos_2d.x, resolved->world_exact_pos_2d.y},
                                          resolved->world_exact_z,
-                                         screen)) {
-                continue;
-            }
-            if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
+                                         screen) ||
+                !std::isfinite(screen.x) ||
+                !std::isfinite(screen.y)) {
                 continue;
             }
 
@@ -1430,23 +1617,14 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
 
             RuntimeLightInstance instance{};
             instance.screen_center = screen;
-            SDL_FPoint floor_screen{};
-            if (cam.project_world_point(SDL_FPoint{resolved->world_exact_pos_2d.x, resolved->world_exact_pos_2d.y},
-                                        0.0f,
-                                        floor_screen) &&
-                std::isfinite(floor_screen.x) &&
-                std::isfinite(floor_screen.y)) {
-                floor_screen.y = cam.warp_floor_screen_y(0.0f, floor_screen.y);
-                instance.floor_screen_center = floor_screen;
-                instance.has_floor_screen_center = true;
-            }
             instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
             instance.intensity = light.intensity;
             instance.radius_px = radius_px;
             instance.falloff = light.falloff;
-            instance.shadow_strength = light.shadow_strength;
-            instance.cast_shadows = light.cast_shadows;
-            instance.world_z = resolved->world_exact_z;
+            instance.shadow_strength = 0.0f;
+            instance.cast_shadows = false;
+            instance.has_floor_screen_center = false;
+            instance.world_z = 0.0f;
             out_lights.push_back(instance);
         }
     }
@@ -1454,266 +1632,14 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
 
 void SceneRenderer::gather_runtime_occluders(const std::vector<GeometryBatcher::DrawItem>& draws,
                                              std::vector<RuntimeLightOccluder>& out_occluders) const {
+    (void)draws;
     out_occluders.clear();
-    out_occluders.reserve(std::min<std::size_t>(draws.size(), 512));
-
-    constexpr double kMaxGroundDepth = 900000.0;
-    constexpr float kMinOccluderExtent = 6.0f;
-    constexpr float kMinOccluderArea = 36.0f;
-    constexpr std::size_t kMaxOccluders = 512;
-    for (const GeometryBatcher::DrawItem& draw : draws) {
-        if (!std::isfinite(draw.depth) || draw.depth >= kMaxGroundDepth) {
-            continue;
-        }
-
-        std::array<SDL_FPoint, 4> quad{};
-        float min_x = std::numeric_limits<float>::max();
-        float min_y = std::numeric_limits<float>::max();
-        float max_x = std::numeric_limits<float>::lowest();
-        float max_y = std::numeric_limits<float>::lowest();
-        for (int i = 0; i < 4; ++i) {
-            quad[static_cast<std::size_t>(i)] = draw.vertices[i].position;
-            min_x = std::min(min_x, draw.vertices[i].position.x);
-            min_y = std::min(min_y, draw.vertices[i].position.y);
-            max_x = std::max(max_x, draw.vertices[i].position.x);
-            max_y = std::max(max_y, draw.vertices[i].position.y);
-        }
-        if (!std::isfinite(min_x) || !std::isfinite(min_y) ||
-            !std::isfinite(max_x) || !std::isfinite(max_y)) {
-            continue;
-        }
-        enforce_trapezoid(quad);
-
-        const float width = max_x - min_x;
-        const float height = max_y - min_y;
-        if (width < kMinOccluderExtent || height < kMinOccluderExtent) {
-            continue;
-        }
-        if (quad_area(quad) < kMinOccluderArea) {
-            continue;
-        }
-
-        RuntimeLightOccluder occluder{};
-        occluder.points = quad;
-        occluder.center = SDL_FPoint{(min_x + max_x) * 0.5f, (min_y + max_y) * 0.5f};
-        std::array<int, 4> by_y{0, 1, 2, 3};
-        std::sort(by_y.begin(), by_y.end(), [&](int a, int b) {
-            if (quad[static_cast<std::size_t>(a)].y != quad[static_cast<std::size_t>(b)].y) {
-                return quad[static_cast<std::size_t>(a)].y > quad[static_cast<std::size_t>(b)].y;
-            }
-            return quad[static_cast<std::size_t>(a)].x < quad[static_cast<std::size_t>(b)].x;
-        });
-        SDL_FPoint floor_a = quad[static_cast<std::size_t>(by_y[0])];
-        SDL_FPoint floor_b = quad[static_cast<std::size_t>(by_y[1])];
-        if (floor_a.x <= floor_b.x) {
-            occluder.floor_left = floor_a;
-            occluder.floor_right = floor_b;
-        } else {
-            occluder.floor_left = floor_b;
-            occluder.floor_right = floor_a;
-        }
-        occluder.depth = draw.depth;
-        out_occluders.push_back(occluder);
-        if (out_occluders.size() >= kMaxOccluders) {
-            break;
-        }
-    }
 }
 
 void SceneRenderer::append_runtime_shadow_geometry(const std::vector<RuntimeLightInstance>& lights,
                                                    const std::vector<RuntimeLightOccluder>& occluders) {
-    if (!renderer_ || !geometry_batcher_ || lights.empty() || occluders.empty()) {
-        return;
-    }
-
-    if (!light_white_tex_) {
-        light_white_tex_ = SDL_CreateTexture(
-            renderer_,
-            SDL_PIXELFORMAT_RGBA8888,
-            SDL_TEXTUREACCESS_STREAMING,
-            1,
-            1);
-        if (light_white_tex_) {
-            void* pixels = nullptr;
-            int pitch = 0;
-            if (SDL_LockTexture(light_white_tex_, nullptr, &pixels, &pitch) && pixels && pitch >= 4) {
-                auto* p = static_cast<std::uint8_t*>(pixels);
-                p[0] = 255;
-                p[1] = 255;
-                p[2] = 255;
-                p[3] = 255;
-                SDL_UnlockTexture(light_white_tex_);
-            } else if (light_white_tex_) {
-                SDL_DestroyTexture(light_white_tex_);
-                light_white_tex_ = nullptr;
-            }
-            if (light_white_tex_) {
-                SDL_SetTextureBlendMode(light_white_tex_, SDL_BLENDMODE_BLEND);
-            }
-        }
-    }
-    if (!light_white_tex_) {
-        return;
-    }
-
-    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
-    const std::size_t light_count = lights.size();
-    std::vector<SDL_FPoint> light_floor_positions(light_count, SDL_FPoint{0.0f, 0.0f});
-    std::vector<float> light_height_px(light_count, 24.0f);
-    std::vector<float> light_intensity_scale(light_count, 0.0f);
-    for (std::size_t i = 0; i < light_count; ++i) {
-        const RuntimeLightInstance& light = lights[i];
-        const SDL_FPoint floor = light.has_floor_screen_center
-            ? light.floor_screen_center
-            : light.screen_center;
-        light_floor_positions[i] = floor;
-
-        const float dx = light.screen_center.x - floor.x;
-        const float dy = light.screen_center.y - floor.y;
-        const float inferred_screen_height = std::hypot(dx, dy);
-        const float fallback_height_from_world = std::clamp(
-            std::max(0.0f, light.world_z) * 0.45f,
-            12.0f,
-            240.0f);
-        light_height_px[i] = std::max(12.0f, std::max(inferred_screen_height, fallback_height_from_world));
-        light_intensity_scale[i] = std::clamp(light.intensity, 0.0f, 4.0f);
-    }
-
-    auto radial_falloff = [](float distance, float radius) -> float {
-        if (!std::isfinite(distance) || !std::isfinite(radius) || radius <= 1e-3f) {
-            return 0.0f;
-        }
-        const float t = std::clamp(1.0f - (distance / radius), 0.0f, 1.0f);
-        return t * t;
-    };
-
-    for (std::size_t source_index = 0; source_index < light_count; ++source_index) {
-        const RuntimeLightInstance& light = lights[source_index];
-        if (!light.cast_shadows || light.shadow_strength <= 0.001f || light_intensity_scale[source_index] <= 0.001f) {
-            continue;
-        }
-        const SDL_FPoint light_floor = light_floor_positions[source_index];
-        const float source_height_px = light_height_px[source_index];
-        const float source_radius = std::max(6.0f, light.radius_px);
-        const float source_shadow_power = std::clamp(
-            0.35f + (light_intensity_scale[source_index] * 0.45f),
-            0.2f,
-            1.5f);
-
-        for (const RuntimeLightOccluder& occluder : occluders) {
-            if (point_inside_convex_quad(occluder.points, light_floor)) {
-                continue;
-            }
-            constexpr float kSelfOccluderSkipRadius = 10.0f;
-            if (min_distance_sq_to_quad_edges(occluder.points, light_floor) <
-                (kSelfOccluderSkipRadius * kSelfOccluderSkipRadius)) {
-                continue;
-            }
-
-            const SDL_FPoint near_left = occluder.floor_left;
-            const SDL_FPoint near_right = occluder.floor_right;
-            const SDL_FPoint seg_center{
-                (near_left.x + near_right.x) * 0.5f,
-                (near_left.y + near_right.y) * 0.5f};
-            const float to_light_x = seg_center.x - light_floor.x;
-            const float to_light_y = seg_center.y - light_floor.y;
-            const float dist_sq = (to_light_x * to_light_x) + (to_light_y * to_light_y);
-            const float max_dist = source_radius * 1.2f;
-            if (dist_sq > (max_dist * max_dist) || dist_sq < 1.0f) {
-                continue;
-            }
-            const float dist = std::sqrt(dist_sq);
-            const float atten = radial_falloff(dist, max_dist);
-            if (atten <= 0.001f) {
-                continue;
-            }
-
-            const float top_mid_y = 0.5f * (occluder.points[0].y + occluder.points[1].y);
-            const float floor_mid_y = 0.5f * (near_left.y + near_right.y);
-            const float occluder_height_px = std::clamp(
-                std::fabs(floor_mid_y - top_mid_y),
-                4.0f,
-                512.0f);
-
-            const float geometric_shadow_length = occluder_height_px * (dist / source_height_px);
-            const float min_shadow_length = std::max(8.0f, occluder_height_px * 0.35f);
-            const float max_shadow_length = std::max(
-                24.0f,
-                std::min(source_radius * 0.95f, (occluder_height_px * 6.5f) + (source_radius * 0.35f)));
-            const float extrusion = std::clamp(geometric_shadow_length, min_shadow_length, max_shadow_length) *
-                                    (0.70f + (0.30f * atten));
-            if (!std::isfinite(extrusion) || extrusion <= 1.0f) {
-                continue;
-            }
-
-            float fill_lighting = 0.0f;
-            for (std::size_t other_index = 0; other_index < light_count; ++other_index) {
-                if (other_index == source_index || light_intensity_scale[other_index] <= 0.001f) {
-                    continue;
-                }
-                const RuntimeLightInstance& other_light = lights[other_index];
-                const float other_radius = std::max(6.0f, other_light.radius_px);
-                const SDL_FPoint other_floor = light_floor_positions[other_index];
-                const float fill_dx = seg_center.x - other_floor.x;
-                const float fill_dy = seg_center.y - other_floor.y;
-                const float fill_dist = std::sqrt((fill_dx * fill_dx) + (fill_dy * fill_dy));
-                const float fill_atten = radial_falloff(fill_dist, other_radius * 1.1f);
-                if (fill_atten <= 0.0f) {
-                    continue;
-                }
-                fill_lighting += light_intensity_scale[other_index] * fill_atten;
-                if (fill_lighting >= 4.0f) {
-                    break;
-                }
-            }
-            const float fill_shadow_factor = 1.0f / (1.0f + (fill_lighting * 1.2f));
-            const float near_alpha_f = 205.0f * light.shadow_strength * source_shadow_power * atten * fill_shadow_factor;
-            const Uint8 near_alpha = static_cast<Uint8>(std::clamp(
-                static_cast<int>(std::lround(near_alpha_f)),
-                0,
-                205));
-            if (near_alpha == 0) {
-                continue;
-            }
-
-            const float shadow_dir_x = to_light_x / dist;
-            const float shadow_dir_y = to_light_y / dist;
-            const SDL_FPoint far_left{
-                near_left.x + (shadow_dir_x * extrusion),
-                near_left.y + (shadow_dir_y * extrusion)};
-            const SDL_FPoint far_right{
-                near_right.x + (shadow_dir_x * extrusion),
-                near_right.y + (shadow_dir_y * extrusion)};
-            if (!std::isfinite(far_left.x) || !std::isfinite(far_left.y) ||
-                !std::isfinite(far_right.x) || !std::isfinite(far_right.y)) {
-                continue;
-            }
-
-            SDL_Vertex shadow_quad[4]{};
-            shadow_quad[0].position = near_left;
-            shadow_quad[1].position = near_right;
-            shadow_quad[2].position = far_right;
-            shadow_quad[3].position = far_left;
-            shadow_quad[0].color = SDL_FColor{0.0f, 0.0f, 0.0f, static_cast<float>(near_alpha) / 255.0f};
-            shadow_quad[1].color = SDL_FColor{0.0f, 0.0f, 0.0f, static_cast<float>(near_alpha) / 255.0f};
-            shadow_quad[2].color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-            shadow_quad[3].color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-            shadow_quad[0].tex_coord = SDL_FPoint{0.0f, 0.0f};
-            shadow_quad[1].tex_coord = SDL_FPoint{1.0f, 0.0f};
-            shadow_quad[2].tex_coord = SDL_FPoint{1.0f, 1.0f};
-            shadow_quad[3].tex_coord = SDL_FPoint{0.0f, 1.0f};
-
-            const double shadow_depth = std::isfinite(occluder.depth)
-                ? (occluder.depth + 0.0005)
-                : std::numeric_limits<double>::lowest();
-            geometry_batcher_->addQuad(
-                light_white_tex_,
-                shadow_quad,
-                kQuadIndices,
-                SDL_BLENDMODE_BLEND,
-                shadow_depth);
-        }
-    }
+    (void)lights;
+    (void)occluders; // Casted shadows removed. Occluders intentionally unused.
 }
 
 void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
@@ -1722,7 +1648,7 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
     if (!renderer_ || !gameplay_target || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
-    (void)occluders;
+    (void)occluders; // Casted shadows removed. Occluders intentionally unused.
 
     auto create_target_texture = [&](int w, int h) -> SDL_Texture* {
         SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
@@ -1733,27 +1659,21 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
         return texture;
     };
 
-    if (!light_base_tex_) {
-        light_base_tex_ = create_target_texture(screen_width_, screen_height_);
-    }
     if (!light_accum_tex_) {
         light_accum_tex_ = create_target_texture(screen_width_, screen_height_);
     }
-    if (!light_base_tex_ || !light_accum_tex_) {
+    if (!light_accum_tex_) {
         return;
     }
-
-    SDL_SetRenderTarget(renderer_, light_base_tex_);
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-    SDL_RenderClear(renderer_);
-    SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
 
     SDL_SetRenderTarget(renderer_, light_accum_tex_);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 10, 10, 12, 255);
     SDL_RenderClear(renderer_);
 
-    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
+    SDL_Texture* last_falloff_tex = nullptr;
+    SDL_Color last_color{0, 0, 0, 0};
+    Uint8 last_alpha = 0;
     for (const RuntimeLightInstance& light : lights) {
         SDL_Texture* falloff_tex = light_falloff_texture(light.falloff);
         if (!falloff_tex) {
@@ -1763,9 +1683,20 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
         const float per_pass = std::max(0.0f, light.intensity) / static_cast<float>(pass_count);
         const Uint8 alpha = static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(per_pass * 255.0f)), 0, 255));
 
-        SDL_SetTextureBlendMode(falloff_tex, SDL_BLENDMODE_ADD);
-        SDL_SetTextureColorMod(falloff_tex, light.color.r, light.color.g, light.color.b);
-        SDL_SetTextureAlphaMod(falloff_tex, alpha);
+        if (falloff_tex != last_falloff_tex) {
+            SDL_SetTextureBlendMode(falloff_tex, SDL_BLENDMODE_ADD);
+            last_falloff_tex = falloff_tex;
+            last_color = SDL_Color{0, 0, 0, 0};
+            last_alpha = 0;
+        }
+        if (last_color.r != light.color.r || last_color.g != light.color.g || last_color.b != light.color.b) {
+            SDL_SetTextureColorMod(falloff_tex, light.color.r, light.color.g, light.color.b);
+            last_color = SDL_Color{light.color.r, light.color.g, light.color.b, 255};
+        }
+        if (last_alpha != alpha) {
+            SDL_SetTextureAlphaMod(falloff_tex, alpha);
+            last_alpha = alpha;
+        }
 
         const float radius = std::max(4.0f, light.radius_px);
         SDL_FRect light_dst{
@@ -1779,24 +1710,37 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
         }
     }
 
+    const SDL_BlendMode mul_mode = multiply_blend_mode();
+    SDL_SetRenderTarget(renderer_, gameplay_target);
+    if (mul_mode != SDL_BLENDMODE_INVALID) {
+        SDL_SetTextureBlendMode(light_accum_tex_, mul_mode);
+        SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
+        return;
+    }
+
+    if (!light_base_tex_) {
+        light_base_tex_ = create_target_texture(screen_width_, screen_height_);
+    }
+    if (!light_base_tex_) {
+        return;
+    }
+
+    SDL_SetRenderTarget(renderer_, light_base_tex_);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+    SDL_RenderClear(renderer_);
+    SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
+
     SDL_SetRenderTarget(renderer_, gameplay_target);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
     SDL_RenderClear(renderer_);
     SDL_SetTextureBlendMode(light_base_tex_, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(renderer_, light_base_tex_, nullptr, nullptr);
-
-    const SDL_BlendMode mul_mode = multiply_blend_mode();
-    if (mul_mode != SDL_BLENDMODE_INVALID) {
-        SDL_SetTextureBlendMode(light_accum_tex_, mul_mode);
-        SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
-    } else {
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 190);
-        const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
-        SDL_RenderFillRect(renderer_, &full_rect);
-        SDL_SetTextureBlendMode(light_accum_tex_, SDL_BLENDMODE_ADD);
-        SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
-    }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 190);
+    const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
+    SDL_RenderFillRect(renderer_, &full_rect);
+    SDL_SetTextureBlendMode(light_accum_tex_, SDL_BLENDMODE_ADD);
+    SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
 }
 
 void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets) {
@@ -2068,11 +2012,6 @@ void SceneRenderer::render() {
     const float boundary_min_visible_px =
         static_cast<float>(screen_height_) *
         std::clamp(assets_->boundary_min_visible_screen_ratio(), 0.0f, 0.5f);
-    std::size_t queued_boundary_sprites = 0;
-    float min_boundary_width = std::numeric_limits<float>::max();
-    float max_boundary_width = 0.0f;
-    float min_boundary_height = std::numeric_limits<float>::max();
-    float max_boundary_height = 0.0f;
 
     auto queue_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite, double depth_from_anchor) {
         const double depth_distance = std::fabs(depth_from_anchor);
@@ -2136,11 +2075,6 @@ void SceneRenderer::render() {
         SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
         SDL_SetTextureAlphaMod(sprite.texture, 255);
         geometry_batcher_->addQuad(sprite.texture, vertices, kQuadIndices, SDL_BLENDMODE_BLEND, depth_from_anchor);
-        ++queued_boundary_sprites;
-        min_boundary_width = std::min(min_boundary_width, sprite.world_width);
-        max_boundary_width = std::max(max_boundary_width, sprite.world_width);
-        min_boundary_height = std::min(min_boundary_height, sprite.world_height);
-        max_boundary_height = std::max(max_boundary_height, sprite.world_height);
     };
 
     auto normalize_depth = [](double depth) -> double {
@@ -2163,9 +2097,15 @@ void SceneRenderer::render() {
     auto depth_for_boundary = [&](const DynamicBoundarySystem::BoundarySprite& sprite) -> double {
         return normalize_depth(render_depth::depth_from_anchor(anchor_depth, static_cast<double>(sprite.world_z)));
     };
+    const bool runtime_lighting_enabled = assets_->should_render_runtime_lighting();
+    const bool need_rendered_asset_list = runtime_lighting_enabled ||
+                                          (debug_auto_paths_ && movement_debug_visible_) ||
+                                          anchor_point_debug_enabled_;
     const auto& active_traversal = assets_->active_traversal();
     std::vector<Asset*> rendered_assets_for_debug;
-    rendered_assets_for_debug.reserve(active_traversal.size());
+    if (need_rendered_asset_list) {
+        rendered_assets_for_debug.reserve(active_traversal.size());
+    }
 
     std::size_t traversal_index = 0;
     std::size_t boundary_index = 0;
@@ -2187,7 +2127,9 @@ void SceneRenderer::render() {
                 continue;
             }
 
-            rendered_assets_for_debug.push_back(asset);
+            if (need_rendered_asset_list) {
+                rendered_assets_for_debug.push_back(asset);
+            }
             composite_renderer_.update(asset, 0.0f);
             const Asset::PerspectiveSample perspective_sample = asset->runtime_perspective_sample();
             const float perspective_scale = perspective_sample.scale;
@@ -2233,20 +2175,11 @@ void SceneRenderer::render() {
         }
     }
 
-    const bool runtime_lighting_enabled = assets_->should_render_runtime_lighting();
     std::vector<RuntimeLightInstance> runtime_lights;
     std::vector<RuntimeLightOccluder> runtime_occluders;
     if (runtime_lighting_enabled) {
         gather_runtime_lights(cam, rendered_assets_for_debug, runtime_lights);
-        if (kRuntimeCastedShadowsEnabled) {
-            std::vector<GeometryBatcher::DrawItem> light_draws;
-            light_draws.reserve(1024);
-            geometry_batcher_->for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
-                light_draws.push_back(item);
-            });
-            gather_runtime_occluders(light_draws, runtime_occluders);
-            append_runtime_shadow_geometry(runtime_lights, runtime_occluders);
-        }
+        runtime_occluders.clear();
     }
 
     if (depth_of_field_enabled) {
@@ -2323,7 +2256,7 @@ void SceneRenderer::render() {
         };
 
         struct LayerSubmission {
-            std::vector<GeometryBatcher::DrawItem> draws;
+            std::vector<const GeometryBatcher::DrawItem*> draws;
             double submitted_depth_sum = 0.0;
             int submitted_depth_count = 0;
         };
@@ -2334,7 +2267,7 @@ void SceneRenderer::render() {
                 return;
             }
             LayerSubmission& layer = layers[static_cast<std::size_t>(layer_idx)];
-            layer.draws.push_back(item);
+            layer.draws.push_back(&item);
             if (std::isfinite(item.depth)) {
                 layer.submitted_depth_sum += item.depth;
                 ++layer.submitted_depth_count;
@@ -2356,31 +2289,45 @@ void SceneRenderer::render() {
             dof_layer_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
             dof_blur_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
         }
+        std::vector<int> non_empty_layers;
+        non_empty_layers.reserve(static_cast<std::size_t>(layer_count));
         for (int i = 0; i < layer_count; ++i) {
+            if (layers[static_cast<std::size_t>(i)].draws.empty()) {
+                if (dof_layer_textures_[i]) {
+                    SDL_DestroyTexture(dof_layer_textures_[i]);
+                    dof_layer_textures_[i] = nullptr;
+                }
+                if (dof_blur_textures_[i]) {
+                    SDL_DestroyTexture(dof_blur_textures_[i]);
+                    dof_blur_textures_[i] = nullptr;
+                }
+                continue;
+            }
+            non_empty_layers.push_back(i);
             if (!dof_layer_textures_[i]) {
                 dof_layer_textures_[i] = create_target_texture(screen_width_, screen_height_);
             }
-            if (!dof_blur_textures_[i]) {
-                dof_blur_textures_[i] = create_target_texture(screen_width_, screen_height_);
-            }
         }
-        if (!blur_tex_) {
+        const bool need_blur_scratch = !non_empty_layers.empty();
+        if (need_blur_scratch && !blur_tex_) {
             blur_tex_ = create_target_texture(screen_width_, screen_height_);
         }
-        bool dof_targets_ready = true;
-        for (int i = 0; i < layer_count; ++i) {
-            if (!dof_layer_textures_[i] || !dof_blur_textures_[i]) {
+        bool dof_targets_ready = !non_empty_layers.empty();
+        for (int i : non_empty_layers) {
+            if (!dof_layer_textures_[i]) {
                 dof_targets_ready = false;
                 break;
             }
         }
-        if (!blur_tex_) {
+        if (need_blur_scratch && !blur_tex_) {
             dof_targets_ready = false;
         }
         if (!dof_targets_ready) {
             SDL_SetRenderTarget(renderer_, gameplay_target);
-            vibble::log::warn(std::string{"[SceneRenderer] DOF targets unavailable; falling back to direct scene flush. SDL error: "} +
-                              SDL_GetError());
+            if (!non_empty_layers.empty()) {
+                vibble::log::warn(std::string{"[SceneRenderer] DOF targets unavailable; falling back to direct scene flush. SDL error: "} +
+                                  SDL_GetError());
+            }
             geometry_batcher_->flush();
         }
 
@@ -2401,7 +2348,7 @@ void SceneRenderer::render() {
                                                            quality_scale);
         };
         if (dof_targets_ready) {
-            for (int i = 0; i < layer_count; ++i) {
+            for (int i : non_empty_layers) {
                 SDL_Texture* layer_tex = dof_layer_textures_[i];
                 if (!layer_tex) {
                     continue;
@@ -2409,9 +2356,12 @@ void SceneRenderer::render() {
                 SDL_SetRenderTarget(renderer_, layer_tex);
                 SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
                 SDL_RenderClear(renderer_);
-                for (const GeometryBatcher::DrawItem& draw : layers[static_cast<std::size_t>(i)].draws) {
-                    SDL_SetTextureBlendMode(draw.texture, draw.blend_mode);
-                    SDL_RenderGeometry(renderer_, draw.texture, draw.vertices, 4, kQuadIndices, 6);
+                for (const GeometryBatcher::DrawItem* draw : layers[static_cast<std::size_t>(i)].draws) {
+                    if (!draw) {
+                        continue;
+                    }
+                    SDL_SetTextureBlendMode(draw->texture, draw->blend_mode);
+                    SDL_RenderGeometry(renderer_, draw->texture, draw->vertices, 4, kQuadIndices, 6);
                 }
             }
 
@@ -2429,8 +2379,11 @@ void SceneRenderer::render() {
                 std::clamp(static_cast<float>(screen_center_i.y), 0.0f, static_cast<float>(screen_height_))
             };
 
-            for (int i = layer_count - 1; i >= 0; --i) {
+            constexpr double kMinimumUsefulBlurRadiusPx = 0.35;
+            for (auto it = non_empty_layers.rbegin(); it != non_empty_layers.rend(); ++it) {
+                const int i = *it;
                 const LayerSubmission& layer = layers[static_cast<std::size_t>(i)];
+
                 double representative_depth = layer_midpoint_depth(i);
                 if (layer.submitted_depth_count > 0) {
                     representative_depth = layer.submitted_depth_sum / static_cast<double>(layer.submitted_depth_count);
@@ -2451,15 +2404,20 @@ void SceneRenderer::render() {
                     effect_quality = 1.0f;
                 }
                 SDL_Texture* composite_texture = dof_layer_textures_[i];
-                if (blur_radius > 0.01 && dof_blur_textures_[i]) {
-                    const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur * 2.0);
-                    if (blur_texture(dof_layer_textures_[i],
-                                     dof_blur_textures_[i],
-                                     static_cast<float>(blur_radius),
-                                     optical_center,
-                                     static_cast<float>(radial_radius),
-                                     effect_quality)) {
-                        composite_texture = dof_blur_textures_[i];
+                if (blur_radius > kMinimumUsefulBlurRadiusPx) {
+                    if (!dof_blur_textures_[i]) {
+                        dof_blur_textures_[i] = create_target_texture(screen_width_, screen_height_);
+                    }
+                    if (dof_blur_textures_[i]) {
+                        const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur * 2.0);
+                        if (blur_texture(dof_layer_textures_[i],
+                                         dof_blur_textures_[i],
+                                         static_cast<float>(blur_radius),
+                                         optical_center,
+                                         static_cast<float>(radial_radius),
+                                         effect_quality)) {
+                            composite_texture = dof_blur_textures_[i];
+                        }
                     }
                 }
                 if (composite_texture) {
@@ -2484,6 +2442,8 @@ void SceneRenderer::render() {
         SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
         SDL_RenderClear(renderer_);
 
+        SDL_SetTextureBlendMode(gameplay_target, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(gameplay_target, 255);
         SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
 
         if (motion_blur_targets_ready) {
@@ -2523,20 +2483,31 @@ void SceneRenderer::render() {
                 return -1;
             };
 
+            std::array<SDL_Texture*, kMotionBlurHistoryFrameCount> history_layers{};
+            int history_layer_count = 0;
+
             int history_index = motion_blur_history_write_index_;
-            for (int i = blur_layers - 1; i >= 0; --i) {
+            for (int age_from_newest = 0; age_from_newest < blur_layers; ++age_from_newest) {
                 history_index = retreat_index(history_index);
                 history_index = find_previous_valid_slot(history_index);
                 if (history_index < 0) {
                     break;
                 }
+
                 SDL_Texture* history_texture = motion_blur_history_textures_[history_index];
                 if (!history_texture) {
                     continue;
                 }
+                history_layers[static_cast<std::size_t>(history_layer_count++)] = history_texture;
+            }
+
+            for (int age_from_newest = history_layer_count - 1; age_from_newest >= 0; --age_from_newest) {
+                SDL_Texture* history_texture = history_layers[static_cast<std::size_t>(age_from_newest)];
+                const std::size_t alpha_index =
+                    static_cast<std::size_t>(std::min(age_from_newest, kMotionBlurHistoryFrameCount - 1));
 
                 SDL_SetTextureBlendMode(history_texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureAlphaMod(history_texture, kMotionBlurHistoryAlpha[static_cast<std::size_t>(i)]);
+                SDL_SetTextureAlphaMod(history_texture, kMotionBlurHistoryAlpha[alpha_index]);
                 SDL_RenderTexture(renderer_, history_texture, nullptr, nullptr);
                 SDL_SetTextureAlphaMod(history_texture, 255);
             }
@@ -2546,9 +2517,13 @@ void SceneRenderer::render() {
                 SDL_Texture* write_target = motion_blur_history_textures_[write_slot];
                 if (write_target) {
                     SDL_SetRenderTarget(renderer_, write_target);
+                    SDL_SetRenderViewport(renderer_, nullptr);
+                    SDL_SetRenderClipRect(renderer_, nullptr);
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
                     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
                     SDL_RenderClear(renderer_);
+                    SDL_SetTextureBlendMode(gameplay_target, SDL_BLENDMODE_BLEND);
+                    SDL_SetTextureAlphaMod(gameplay_target, 255);
                     SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
                     SDL_SetRenderTarget(renderer_, nullptr);
 

@@ -7,6 +7,9 @@
 
 namespace {
 
+constexpr float kPi = 3.14159265358979323846f;
+constexpr float kInvSqrt2 = 0.70710678f;
+
 static void clear_target(SDL_Renderer* renderer, SDL_Texture* target) {
     SDL_SetRenderTarget(renderer, target);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
@@ -123,6 +126,97 @@ static void draw_weighted_scaled_sample(SDL_Renderer* renderer,
     };
 
     SDL_RenderTexture(renderer, texture, &src_rect, &dst_rect);
+}
+
+static bool apply_outline_soften_prefill(SDL_Renderer* renderer,
+                                         SDL_Texture* src,
+                                         SDL_Texture* dst,
+                                         int draw_w,
+                                         int draw_h,
+                                         float soften_radius_px,
+                                         SDL_BlendMode sum_blend) {
+    if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0) {
+        return false;
+    }
+    if (src == dst) {
+        return false;
+    }
+
+    clear_target(renderer, dst);
+
+    if (soften_radius_px <= 0.01f) {
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(src, 255);
+
+        const SDL_FRect rect{
+            0.0f,
+            0.0f,
+            static_cast<float>(draw_w),
+            static_cast<float>(draw_h)
+        };
+        SDL_RenderTexture(renderer, src, &rect, &rect);
+        return true;
+    }
+
+    SDL_SetTextureBlendMode(src, sum_blend);
+
+    const float clamped_radius = std::clamp(soften_radius_px, 0.75f, 4.5f);
+    const int ring_samples = 16;
+
+    const float center_raw_weight = 0.22f;
+    const float inner_raw_weight = 0.95f;
+    const float outer_raw_weight = 1.30f;
+
+    const float inner_radius = clamped_radius * 0.85f;
+    const float outer_radius = clamped_radius * 1.65f;
+
+    const float total_raw_weight =
+        center_raw_weight +
+        static_cast<float>(ring_samples) * inner_raw_weight +
+        static_cast<float>(ring_samples) * outer_raw_weight;
+
+    if (total_raw_weight <= 1e-6f) {
+        return false;
+    }
+
+    draw_weighted_offset_sample(
+        renderer,
+        src,
+        draw_w,
+        draw_h,
+        0.0f,
+        0.0f,
+        center_raw_weight / total_raw_weight
+    );
+
+    for (int i = 0; i < ring_samples; ++i) {
+        const float angle = (2.0f * kPi * static_cast<float>(i)) / static_cast<float>(ring_samples);
+        const float cos_a = std::cos(angle);
+        const float sin_a = std::sin(angle);
+
+        draw_weighted_offset_sample(
+            renderer,
+            src,
+            draw_w,
+            draw_h,
+            cos_a * inner_radius,
+            sin_a * inner_radius,
+            inner_raw_weight / total_raw_weight
+        );
+
+        const float angle_outer = angle + (kPi / static_cast<float>(ring_samples));
+        draw_weighted_offset_sample(
+            renderer,
+            src,
+            draw_w,
+            draw_h,
+            std::cos(angle_outer) * outer_radius,
+            std::sin(angle_outer) * outer_radius,
+            outer_raw_weight / total_raw_weight
+        );
+    }
+
+    return true;
 }
 
 static bool apply_axis_blur(SDL_Renderer* renderer,
@@ -402,6 +496,24 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         return (tex == scratch) ? dst : scratch;
     };
 
+    if (has_blur) {
+        const float outline_soften_radius = std::clamp(
+            1.00f + process_blur_radius * 0.24f + process_radial_radius * 0.12f,
+            1.10f,
+            3.60f
+        );
+
+        SDL_Texture* next = pick_other_temp(current);
+        if (!apply_outline_soften_prefill(renderer_, current, next, process_w, process_h, outline_soften_radius, sum_blend)) {
+            restore_texture_state(src, src_old_blend, src_old_alpha);
+            restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
+            restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+            SDL_SetRenderTarget(renderer_, previous_target);
+            return false;
+        }
+        current = next;
+    }
+
     if (process_blur_radius > 0.01f) {
         SDL_Texture* next = pick_other_temp(current);
         if (!apply_axis_blur(renderer_, current, next, process_w, process_h, process_blur_radius, 1.0f, 0.0f, sum_blend)) {
@@ -426,7 +538,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         const float diagonal_radius = process_blur_radius * 0.55f;
         if (diagonal_radius > 0.75f) {
             next = pick_other_temp(current);
-            if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, 0.70710678f, 0.70710678f, sum_blend)) {
+            if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, kInvSqrt2, kInvSqrt2, sum_blend)) {
                 restore_texture_state(src, src_old_blend, src_old_alpha);
                 restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
                 restore_texture_state(dst, dst_old_blend, dst_old_alpha);
@@ -436,7 +548,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             current = next;
 
             next = pick_other_temp(current);
-            if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, 0.70710678f, -0.70710678f, sum_blend)) {
+            if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, kInvSqrt2, -kInvSqrt2, sum_blend)) {
                 restore_texture_state(src, src_old_blend, src_old_alpha);
                 restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
                 restore_texture_state(dst, dst_old_blend, dst_old_alpha);
@@ -499,15 +611,20 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             0.0f,
             1.0f
         );
-        const float reinforce_alpha_f = 0.18f + (0.12f * blur_strength);
-        const Uint8 reinforce_alpha = static_cast<Uint8>(
-            std::clamp(static_cast<int>(std::lround(reinforce_alpha_f * 255.0f)), 0, 255)
-        );
 
-        SDL_SetRenderTarget(renderer_, dst);
-        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(src, reinforce_alpha);
-        SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+        if (blur_strength < 0.18f) {
+            const float reinforce_alpha_f = 0.03f + (0.05f * (1.0f - blur_strength));
+            const Uint8 reinforce_alpha = static_cast<Uint8>(
+                std::clamp(static_cast<int>(std::lround(reinforce_alpha_f * 255.0f)), 0, 255)
+            );
+
+            if (reinforce_alpha > 0) {
+                SDL_SetRenderTarget(renderer_, dst);
+                SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureAlphaMod(src, reinforce_alpha);
+                SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+            }
+        }
     }
 
     restore_texture_state(src, src_old_blend, src_old_alpha);

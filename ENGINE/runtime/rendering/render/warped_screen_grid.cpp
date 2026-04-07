@@ -31,8 +31,8 @@ namespace {
     constexpr double PI_D       = 3.14159265358979323846;
     constexpr double kHalfFovY  = PI_D / 4.0;
     constexpr double kWorldUnitScale = 0.01;
-    constexpr float  kHorizontalCullOverscanRatio = 0.10f;
-    constexpr float  kBottomCullOverscanRatio = 0.15f;
+    constexpr float  kHorizontalCullOverscanRatio = 0.20f;
+    constexpr float  kBottomCullOverscanRatio = 0.40f;
     constexpr float  kNearHorizonSampleOffsetRatio = 0.02f;
     constexpr float  kMinNearHorizonSampleOffsetPx = 8.0f;
 
@@ -666,7 +666,7 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     if (!std::isfinite(settings_.layer_depth_curve) || settings_.layer_depth_curve < 0.0f) {
         settings_.layer_depth_curve = 0.0f;
     }
-    settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 16.0f);
+    settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
     if (!std::isfinite(settings_.aperture_f_stop) || settings_.aperture_f_stop <= 0.01f) {
         settings_.aperture_f_stop = 0.01f;
     }
@@ -1154,7 +1154,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
-    read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 16.0f);
+    read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
     read_float("aperture_f_stop", updated.aperture_f_stop, 0.01f, 64.0f);
     read_float("focal_length_mm", updated.focal_length_mm, 0.01f, 500.0f);
     read_float("max_blur_px", updated.max_blur_px, 0.0f, 128.0f);

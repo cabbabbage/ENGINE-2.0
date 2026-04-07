@@ -36,4 +36,3 @@ __pycache__/
 *.lib
 *.out
 log.txt
-external/

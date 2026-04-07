@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal EnableExtensions EnableDelayedExpansion
 
 set "SCRIPT_DIR=%~dp0"
 set "SETUP_STATUS=%SCRIPT_DIR%setup.json"
@@ -21,9 +21,9 @@ call :WriteSetupStatus %RC%
 exit /b %RC%
 
 :main
-pushd "%~dp0" >nul
+pushd "%~dp0" >nul || goto :fail
 set "REPO_ROOT=%CD%"
-cd /d "%REPO_ROOT%"
+cd /d "%REPO_ROOT%" || goto :fail
 
 call :EnsureWinget       || goto :fail
 call :EnsureGit          || goto :fail
@@ -40,10 +40,12 @@ if not exist "%LOCAL_VCPKG%\LICENSE.txt" (
     echo [setup.bat] vcpkg\LICENSE.txt missing, creating it for vcpkg-cmake...
     if exist "%LOCAL_VCPKG%\LICENSE" (
         copy /y "%LOCAL_VCPKG%\LICENSE" "%LOCAL_VCPKG%\LICENSE.txt" >nul
-    ) else if exist "%LOCAL_VCPKG%\LICENSE.md" (
-        copy /y "%LOCAL_VCPKG%\LICENSE.md" "%LOCAL_VCPKG%\LICENSE.txt" >nul
     ) else (
-        echo Local vcpkg license placeholder> "%LOCAL_VCPKG%\LICENSE.txt"
+        if exist "%LOCAL_VCPKG%\LICENSE.md" (
+            copy /y "%LOCAL_VCPKG%\LICENSE.md" "%LOCAL_VCPKG%\LICENSE.txt" >nul
+        ) else (
+            >"%LOCAL_VCPKG%\LICENSE.txt" echo Local vcpkg license placeholder
+        )
     )
 )
 
@@ -56,6 +58,8 @@ if exist "%REPO_ROOT%\vcpkg.json" (
         goto :fail
     )
 
+    call :EnsureVcpkgBaselineAvailable || goto :fail
+
     if /I "%VIBBLE_UPDATE_BASELINE%"=="1" (
         echo [setup.bat] Updating vcpkg baseline because VIBBLE_UPDATE_BASELINE=1...
         "%LOCAL_VCPKG%\vcpkg.exe" x-update-baseline
@@ -64,7 +68,7 @@ if exist "%REPO_ROOT%\vcpkg.json" (
             goto :fail
         )
     ) else (
-        echo [setup.bat] Keeping existing vcpkg baseline (set VIBBLE_UPDATE_BASELINE=1 to update).
+        echo [setup.bat] Keeping existing vcpkg baseline. Set VIBBLE_UPDATE_BASELINE=1 to update.
     )
 ) else (
     echo [setup.bat] vcpkg.json not found, skipping baseline update.
@@ -82,7 +86,6 @@ if exist "%REPO_ROOT%\vcpkg.json" (
 )
 
 echo [setup.bat] Setup complete.
-call compile_and_run.bat
 popd >nul
 exit /b 0
 
@@ -92,16 +95,23 @@ echo [ERROR] winget is not available. Install App Installer from Microsoft Store
 exit /b 1
 
 :EnsureGit
-git --version >nul 2>&1 && ( echo [setup.bat] Git is installed. & exit /b 0 )
+git --version >nul 2>&1 && (
+    echo [setup.bat] Git is installed.
+    exit /b 0
+)
 echo [setup.bat] Installing Git via winget...
-winget install --id Git.Git -e --source winget --silent || (echo [ERROR] Git install failed. & exit /b 1)
-git --version >nul 2>&1 && echo [setup.bat] Git installed and on PATH.
-exit /b 0
-
-
+winget install --id Git.Git -e --source winget --silent || (
+    echo [ERROR] Git install failed.
+    exit /b 1
+)
+git --version >nul 2>&1 && (
+    echo [setup.bat] Git installed and on PATH.
+    exit /b 0
+)
+echo [ERROR] Git install succeeded but git is still not on PATH.
+exit /b 1
 
 :EnsureVSBuildTools
-rem Short circuit if cl is already usable
 where cl >nul 2>&1 && (
     echo [setup.bat] MSVC toolchain already available.
     exit /b 0
@@ -110,14 +120,12 @@ where cl >nul 2>&1 && (
 set "VS_INSTALL_PATH="
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
-rem Try to find any VS instance that already has the VC tools installed
 if exist "%VSWHERE%" (
     for /f "usebackq tokens=* delims=" %%I in (`
         "%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     `) do set "VS_INSTALL_PATH=%%I"
 )
 
-rem Fallback to common BuildTools folder or your custom install dir if vswhere did not return anything
 if not defined VS_INSTALL_PATH if exist "C:\Program Files\Microsoft Visual Studio\2022\BuildTools" set "VS_INSTALL_PATH=C:\Program Files\Microsoft Visual Studio\2022\BuildTools"
 if not defined VS_INSTALL_PATH if exist "%VSBT_INSTALL_DIR%" set "VS_INSTALL_PATH=%VSBT_INSTALL_DIR%"
 
@@ -126,7 +134,6 @@ if defined VS_INSTALL_PATH (
     exit /b 0
 )
 
-rem If we get here, there is no usable MSVC. Install Build Tools silently via winget.
 echo [setup.bat] MSVC build tools not found. Installing Visual Studio 2022 Build Tools with winget...
 winget install --id Microsoft.VisualStudio.2022.BuildTools -e --source winget --silent ^
   --override "--installPath \"%VSBT_INSTALL_DIR%\" --quiet --wait --norestart --nocache --includeRecommended --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.VC.CMake.Project --add Microsoft.VisualStudio.Component.Windows11SDK.22621"
@@ -135,7 +142,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-rem Re-run detection so later steps (like EnsureDevShell) know where it ended up
 set "VS_INSTALL_PATH="
 if exist "%VSWHERE%" (
     for /f "usebackq tokens=* delims=" %%I in (`
@@ -152,60 +158,101 @@ if not defined VS_INSTALL_PATH (
 echo [setup.bat] VS Build Tools installed at "%VS_INSTALL_PATH%".
 exit /b 0
 
-
-
 :EnsureDevShell
-where cl >nul 2>&1 && (echo [setup.bat] MSVC already on PATH. & exit /b 0)
+where cl >nul 2>&1 && (
+    echo [setup.bat] MSVC already on PATH.
+    exit /b 0
+)
+
 set "VSROOT="
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if exist "%VSWHERE%" (
     for /f "usebackq tokens=* delims=" %%I in (`
-      "%VSWHERE%" -latest -products Microsoft.VisualStudio.Product.BuildTools -property installationPath
+        "%VSWHERE%" -latest -products Microsoft.VisualStudio.Product.BuildTools -property installationPath
     `) do set "VSROOT=%%I"
 )
 if not defined VSROOT if exist "%VSBT_INSTALL_DIR%" set "VSROOT=%VSBT_INSTALL_DIR%"
+
 if defined VSROOT (
     echo [setup.bat] Loading dev environment from "%VSROOT%"...
     if exist "%VSROOT%\Common7\Tools\VsDevCmd.bat" (
         call "%VSROOT%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
-    ) else if exist "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" (
-        call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
+    ) else (
+        if exist "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" (
+            call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
+        )
     )
 )
-where cl >nul 2>&1 && (echo [setup.bat] MSVC toolchain loaded. & exit /b 0)
+
+where cl >nul 2>&1 && (
+    echo [setup.bat] MSVC toolchain loaded.
+    exit /b 0
+)
 echo [ERROR] Could not load MSVC dev environment.
 exit /b 1
 
 :EnsureCMake
-where cmake >nul 2>&1 && ( echo [setup.bat] CMake is installed. & exit /b 0 )
+where cmake >nul 2>&1 && (
+    echo [setup.bat] CMake is installed.
+    exit /b 0
+)
 echo [setup.bat] Installing CMake via winget...
-winget install -e --id Kitware.CMake --source winget --silent || (echo [ERROR] CMake install failed. & exit /b 1)
+winget install -e --id Kitware.CMake --source winget --silent || (
+    echo [ERROR] CMake install failed.
+    exit /b 1
+)
 echo [setup.bat] CMake installed.
 exit /b 0
 
 :EnsureNinja
-where ninja >nul 2>&1 && ( echo [setup.bat] Ninja is installed. & exit /b 0 )
+where ninja >nul 2>&1 && (
+    echo [setup.bat] Ninja is installed.
+    exit /b 0
+)
 echo [setup.bat] Installing Ninja via winget...
-winget install -e --id Ninja-build.Ninja --source winget --silent || (echo [ERROR] Ninja install failed. & exit /b 1)
+winget install -e --id Ninja-build.Ninja --source winget --silent || (
+    echo [ERROR] Ninja install failed.
+    exit /b 1
+)
 echo [setup.bat] Ninja installed.
 exit /b 0
 
-
 :EnsureLocalVcpkg
-if exist "%LOCAL_VCPKG%\vcpkg.exe" if exist "%LOCAL_VCPKG%\scripts\buildsystems\vcpkg.cmake" (
+if exist "%LOCAL_VCPKG%\.git" (
     echo [setup.bat] Reusing existing local vcpkg at "%LOCAL_VCPKG%".
+    call :RefreshVcpkgRepo || exit /b 1
+    if not exist "%LOCAL_VCPKG%\vcpkg.exe" (
+        echo [setup.bat] Bootstrapping vcpkg...
+        pushd "%LOCAL_VCPKG%" >nul
+        call bootstrap-vcpkg.bat -disableMetrics
+        if errorlevel 1 (
+            popd >nul
+            echo [ERROR] vcpkg bootstrap failed.
+            exit /b 1
+        )
+        popd >nul
+    )
+    if not exist "%LOCAL_VCPKG%\scripts\buildsystems\vcpkg.cmake" (
+        echo [ERROR] vcpkg toolchain file missing after refresh.
+        exit /b 1
+    )
     exit /b 0
 )
 
 if exist "%LOCAL_VCPKG%" (
-    echo [setup.bat] Existing vcpkg directory is incomplete. Repairing in place...
-) else (
-    echo [setup.bat] Cloning local vcpkg...
-    git clone --depth 1 https://github.com/microsoft/vcpkg.git "%LOCAL_VCPKG%"
-    if errorlevel 1 (
-        echo [ERROR] Failed to clone vcpkg repository.
+    echo [setup.bat] Existing vcpkg directory is not a valid git repo. Recreating it...
+    rmdir /s /q "%LOCAL_VCPKG%"
+    if exist "%LOCAL_VCPKG%" (
+        echo [ERROR] Failed to remove invalid vcpkg directory.
         exit /b 1
     )
+)
+
+echo [setup.bat] Cloning local vcpkg...
+git clone https://github.com/microsoft/vcpkg.git "%LOCAL_VCPKG%"
+if errorlevel 1 (
+    echo [ERROR] Failed to clone vcpkg repository.
+    exit /b 1
 )
 
 if not exist "%LOCAL_VCPKG%\bootstrap-vcpkg.bat" (
@@ -222,6 +269,70 @@ if errorlevel 1 (
     exit /b 1
 )
 popd >nul
+exit /b 0
+
+:RefreshVcpkgRepo
+if not exist "%LOCAL_VCPKG%\.git" (
+    echo [ERROR] vcpkg repo missing .git directory.
+    exit /b 1
+)
+
+echo [setup.bat] Refreshing local vcpkg repository...
+git -C "%LOCAL_VCPKG%" fetch origin --tags --prune
+if errorlevel 1 (
+    echo [ERROR] Failed to fetch latest refs for local vcpkg.
+    exit /b 1
+)
+
+set "VCPKG_IS_SHALLOW="
+for /f "usebackq delims=" %%S in (`git -C "%LOCAL_VCPKG%" rev-parse --is-shallow-repository 2^>nul`) do set "VCPKG_IS_SHALLOW=%%S"
+if /I "%VCPKG_IS_SHALLOW%"=="true" (
+    echo [setup.bat] Local vcpkg clone is shallow. Unshallowing...
+    git -C "%LOCAL_VCPKG%" fetch --unshallow --tags
+    if errorlevel 1 (
+        echo [ERROR] Failed to unshallow local vcpkg repo.
+        exit /b 1
+    )
+)
+exit /b 0
+
+:EnsureVcpkgBaselineAvailable
+set "VCPKG_BASELINE="
+for /f "usebackq delims=" %%B in (`
+    powershell -NoProfile -Command "(Get-Content '%REPO_ROOT%\vcpkg.json' -Raw | ConvertFrom-Json).'builtin-baseline'"
+`) do set "VCPKG_BASELINE=%%B"
+
+if not defined VCPKG_BASELINE (
+    echo [ERROR] Could not read builtin-baseline from vcpkg.json.
+    exit /b 1
+)
+
+git -C "%LOCAL_VCPKG%" rev-parse --verify "%VCPKG_BASELINE%" >nul 2>&1
+if errorlevel 1 (
+    echo [setup.bat] Baseline commit %VCPKG_BASELINE% is missing locally. Fetching it...
+    git -C "%LOCAL_VCPKG%" fetch origin %VCPKG_BASELINE%
+    if errorlevel 1 (
+        echo [ERROR] Failed to fetch required vcpkg baseline commit %VCPKG_BASELINE%.
+        exit /b 1
+    )
+)
+
+git -C "%LOCAL_VCPKG%" rev-parse --verify "%VCPKG_BASELINE%" >nul 2>&1
+if errorlevel 1 (
+    echo [setup.bat] Baseline commit still missing after targeted fetch. Refreshing full vcpkg repo...
+    git -C "%LOCAL_VCPKG%" fetch origin --tags --prune
+    if errorlevel 1 (
+        echo [ERROR] Failed to refresh vcpkg repo while resolving baseline commit.
+        exit /b 1
+    )
+)
+
+git -C "%LOCAL_VCPKG%" rev-parse --verify "%VCPKG_BASELINE%" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Required vcpkg baseline commit %VCPKG_BASELINE% is still unavailable.
+    exit /b 1
+)
+
 exit /b 0
 
 :DownloadVSBootstrapper
@@ -260,5 +371,5 @@ goto :eof
 
 :fail
 echo [setup.bat] Setup failed.
-popd >nul
+popd >nul 2>nul
 exit /b 1

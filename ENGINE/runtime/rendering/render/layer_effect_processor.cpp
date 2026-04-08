@@ -798,9 +798,8 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
             SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
 
             bool drew_light_energy = false;
-            if (!lights.empty() && ensure_light_accum_texture(target_w, target_h)) {
-                clear_target(renderer_, light_accum_texture_);
-
+            if (!lights.empty()) {
+                SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
                 SDL_Texture* last_falloff_texture = nullptr;
                 SDL_Color last_color{0, 0, 0, 0};
                 Uint8 last_alpha = 0;
@@ -858,7 +857,6 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                         radius * 2.0f
                     };
 
-                    SDL_SetRenderTarget(renderer_, light_accum_texture_);
                     for (int pass = 0; pass < pass_count; ++pass) {
                         SDL_RenderTexture(renderer_, falloff_texture, nullptr, &light_dst);
                     }
@@ -866,12 +864,6 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                 }
 
                 if (drew_light_energy) {
-                    SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
-                    SDL_SetTextureBlendMode(light_accum_texture_, SDL_BLENDMODE_ADD);
-                    SDL_SetTextureAlphaMod(light_accum_texture_, 255);
-                    SDL_SetTextureColorMod(light_accum_texture_, 255, 255, 255);
-                    SDL_RenderTexture(renderer_, light_accum_texture_, nullptr, nullptr);
-
                     // Re-copy base alpha after additive lighting to guarantee exact alpha preservation.
                     SDL_SetTextureBlendMode(base_layer_texture, alpha_copy);
                     SDL_SetTextureAlphaMod(base_layer_texture, 255);

@@ -2005,6 +2005,13 @@ void SceneRenderer::render() {
         gather_runtime_lights(cam, rendered_assets_for_debug, runtime_lights);
     }
 
+    auto layer_safe_blend_mode = [](SDL_BlendMode blend_mode) -> SDL_BlendMode {
+        if (blend_mode == SDL_BLENDMODE_MOD || blend_mode == SDL_BLENDMODE_MUL) {
+            return SDL_BLENDMODE_BLEND;
+        }
+        return blend_mode;
+    };
+
     auto process_single_scene_layer = [&]() -> bool {
         if (dof_layer_textures_.size() < 1) {
             dof_layer_textures_.resize(1, nullptr);
@@ -2034,7 +2041,13 @@ void SceneRenderer::render() {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
         SDL_RenderClear(renderer_);
-        geometry_batcher_->flush();
+        geometry_batcher_->for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& draw) {
+            if (!draw.texture) {
+                return;
+            }
+            SDL_SetTextureBlendMode(draw.texture, layer_safe_blend_mode(draw.blend_mode));
+            SDL_RenderGeometry(renderer_, draw.texture, draw.vertices, 4, kQuadIndices, 6);
+        });
 
         LayerEffectProcessor::LayerLightingParams lighting_params{};
         lighting_params.enabled = runtime_lighting_enabled;
@@ -2321,7 +2334,7 @@ void SceneRenderer::render() {
                     if (!draw) {
                         continue;
                     }
-                    SDL_SetTextureBlendMode(draw->texture, draw->blend_mode);
+                    SDL_SetTextureBlendMode(draw->texture, layer_safe_blend_mode(draw->blend_mode));
                     SDL_RenderGeometry(renderer_, draw->texture, draw->vertices, 4, kQuadIndices, 6);
                 }
             };

@@ -3754,9 +3754,9 @@
           ],
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -3859,6 +3859,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-72a44007fe85"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -1730,
+              "dz": -476,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 2976,
+              "origional_width": 3656,
+              "position": "Exact",
+              "priority": 3,
+              "quantity": 1,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-3ae869526ecf"
             }
           ]
         }

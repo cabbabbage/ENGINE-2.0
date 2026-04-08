@@ -93,8 +93,6 @@ private:
     SDL_Texture* ensure_light_falloff_texture(float falloff);
 
     SDL_BlendMode alpha_copy_blend_mode();
-    SDL_BlendMode add_rgb_preserve_alpha_blend_mode();
-    SDL_BlendMode alpha_masked_multiply_blend_mode();
 
     float behind_occlusion_weight(double light_world_z,
                                   double layer_depth_min,
@@ -110,12 +108,6 @@ private:
 
     SDL_BlendMode alpha_copy_blend_mode_ = SDL_BLENDMODE_INVALID;
     bool alpha_copy_blend_mode_ready_ = false;
-    SDL_BlendMode add_rgb_preserve_alpha_blend_mode_ = SDL_BLENDMODE_INVALID;
-    bool add_rgb_preserve_alpha_blend_mode_ready_ = false;
-    SDL_BlendMode alpha_masked_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
-    bool alpha_masked_multiply_blend_mode_ready_ = false;
 
     bool warned_missing_alpha_copy_blend_mode_ = false;
-    bool warned_missing_add_rgb_preserve_alpha_blend_mode_ = false;
-    bool warned_missing_alpha_masked_multiply_blend_mode_ = false;
 };

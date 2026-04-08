@@ -3601,8 +3601,8 @@
         "camera_height_min_px": 1,
         "depth_of_field_enabled": true,
         "focal_length_mm": 50.0099983215332,
-        "layer_depth_curve": 23.31999969482422,
-        "layer_depth_interval": 35.0,
+        "layer_depth_curve": 40.57999801635742,
+        "layer_depth_interval": 595.0,
         "max_blur_px": 40.75,
         "max_cull_depth": 5000.0,
         "min_visible_screen_ratio": 0.010000000707805157

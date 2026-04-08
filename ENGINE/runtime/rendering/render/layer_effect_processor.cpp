@@ -776,16 +776,10 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
     // Steps 2-4: dark mask generation, light application, and mask composite.
     if (lighting_params.enabled && dark_mask_ready) {
         const SDL_BlendMode alpha_copy = alpha_copy_blend_mode();
-        const SDL_BlendMode alpha_masked_mul = alpha_masked_multiply_blend_mode();
         if (alpha_copy == SDL_BLENDMODE_INVALID) {
             if (!warned_missing_alpha_copy_blend_mode_) {
                 vibble::log::warn("[LayerEffectProcessor] Alpha copy blend mode unavailable; skipping dark-mask lighting.");
                 warned_missing_alpha_copy_blend_mode_ = true;
-            }
-        } else if (alpha_masked_mul == SDL_BLENDMODE_INVALID) {
-            if (!warned_missing_alpha_masked_multiply_blend_mode_) {
-                vibble::log::warn("[LayerEffectProcessor] Alpha-masked multiply blend mode unavailable; skipping dark-mask lighting.");
-                warned_missing_alpha_masked_multiply_blend_mode_ = true;
             }
         } else {
             SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
@@ -872,27 +866,32 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                 }
 
                 if (drew_light_energy) {
-                    const SDL_BlendMode add_rgb_preserve_alpha = add_rgb_preserve_alpha_blend_mode();
-                    if (add_rgb_preserve_alpha == SDL_BLENDMODE_INVALID) {
-                        if (!warned_missing_add_rgb_preserve_alpha_blend_mode_) {
-                            vibble::log::warn("[LayerEffectProcessor] RGB-add preserve-alpha blend mode unavailable; skipping light contribution.");
-                            warned_missing_add_rgb_preserve_alpha_blend_mode_ = true;
-                        }
-                    } else {
-                        SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
-                        SDL_SetTextureBlendMode(light_accum_texture_, add_rgb_preserve_alpha);
-                        SDL_SetTextureAlphaMod(light_accum_texture_, 255);
-                        SDL_SetTextureColorMod(light_accum_texture_, 255, 255, 255);
-                        SDL_RenderTexture(renderer_, light_accum_texture_, nullptr, nullptr);
-                    }
+                    SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
+                    SDL_SetTextureBlendMode(light_accum_texture_, SDL_BLENDMODE_ADD);
+                    SDL_SetTextureAlphaMod(light_accum_texture_, 255);
+                    SDL_SetTextureColorMod(light_accum_texture_, 255, 255, 255);
+                    SDL_RenderTexture(renderer_, light_accum_texture_, nullptr, nullptr);
+
+                    // Re-copy base alpha after additive lighting to guarantee exact alpha preservation.
+                    SDL_SetTextureBlendMode(base_layer_texture, alpha_copy);
+                    SDL_SetTextureAlphaMod(base_layer_texture, 255);
+                    SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
+                    SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
                 }
             }
 
             SDL_SetRenderTarget(renderer_, composited_output_texture);
-            SDL_SetTextureBlendMode(scratch_textures.dark_mask_texture, alpha_masked_mul);
+            SDL_SetTextureBlendMode(scratch_textures.dark_mask_texture, SDL_BLENDMODE_MOD);
             SDL_SetTextureAlphaMod(scratch_textures.dark_mask_texture, 255);
             SDL_SetTextureColorMod(scratch_textures.dark_mask_texture, 255, 255, 255);
             SDL_RenderTexture(renderer_, scratch_textures.dark_mask_texture, nullptr, nullptr);
+
+            // Always restore output alpha from base after color modulation.
+            SDL_SetTextureBlendMode(base_layer_texture, alpha_copy);
+            SDL_SetTextureAlphaMod(base_layer_texture, 255);
+            SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
+            SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
+
             result.lighting_applied = true;
         }
     }
@@ -1008,14 +1007,8 @@ void LayerEffectProcessor::destroy_lighting_resources() {
 
     alpha_copy_blend_mode_ = SDL_BLENDMODE_INVALID;
     alpha_copy_blend_mode_ready_ = false;
-    add_rgb_preserve_alpha_blend_mode_ = SDL_BLENDMODE_INVALID;
-    add_rgb_preserve_alpha_blend_mode_ready_ = false;
-    alpha_masked_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
-    alpha_masked_multiply_blend_mode_ready_ = false;
 
     warned_missing_alpha_copy_blend_mode_ = false;
-    warned_missing_add_rgb_preserve_alpha_blend_mode_ = false;
-    warned_missing_alpha_masked_multiply_blend_mode_ = false;
 }
 
 SDL_Texture* LayerEffectProcessor::ensure_fog_band_texture() {
@@ -1043,8 +1036,14 @@ SDL_Texture* LayerEffectProcessor::ensure_fog_band_texture() {
     }
 
     auto* base = static_cast<std::uint8_t*>(pixels);
+    const SDL_PixelFormatDetails* pixel_format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_RGBA8888);
+    if (!pixel_format) {
+        SDL_UnlockTexture(texture);
+        SDL_DestroyTexture(texture);
+        return nullptr;
+    }
     for (int y = 0; y < kFogBandTextureHeight; ++y) {
-        auto* row = base + (pitch * y);
+        auto* row = reinterpret_cast<Uint32*>(base + (pitch * y));
         const float v = static_cast<float>(y) / static_cast<float>(kFogBandTextureHeight - 1);
         const float vertical_falloff = std::pow(1.0f - v, 1.22f);
 
@@ -1069,12 +1068,7 @@ SDL_Texture* LayerEffectProcessor::ensure_fog_band_texture() {
                 static_cast<int>(std::lround(alpha_f * 255.0f)),
                 0,
                 255));
-
-            auto* p = row + (x * 4);
-            p[0] = 255;
-            p[1] = 255;
-            p[2] = 255;
-            p[3] = alpha;
+            row[x] = SDL_MapRGBA(pixel_format, nullptr, 255, 255, 255, alpha);
         }
     }
 
@@ -1149,8 +1143,14 @@ SDL_Texture* LayerEffectProcessor::ensure_light_falloff_texture(float falloff) {
     const float max_radius = std::max(1.0f, center);
     const float exponent = std::clamp(static_cast<float>(quantized_falloff) / 100.0f, 0.05f, 8.0f);
     auto* base = static_cast<std::uint8_t*>(pixels);
+    const SDL_PixelFormatDetails* pixel_format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_RGBA8888);
+    if (!pixel_format) {
+        SDL_UnlockTexture(texture);
+        SDL_DestroyTexture(texture);
+        return nullptr;
+    }
     for (int y = 0; y < kTextureSize; ++y) {
-        auto* row = base + (pitch * y);
+        auto* row = reinterpret_cast<Uint32*>(base + (pitch * y));
         for (int x = 0; x < kTextureSize; ++x) {
             const float dx = (static_cast<float>(x) - center) / max_radius;
             const float dy = (static_cast<float>(y) - center) / max_radius;
@@ -1162,12 +1162,7 @@ SDL_Texture* LayerEffectProcessor::ensure_light_falloff_texture(float falloff) {
                 static_cast<int>(std::lround(curved * 255.0f)),
                 0,
                 255));
-
-            auto* p = row + (x * 4);
-            p[0] = value;
-            p[1] = value;
-            p[2] = value;
-            p[3] = value;
+            row[x] = SDL_MapRGBA(pixel_format, nullptr, value, value, value, value);
         }
     }
 
@@ -1190,36 +1185,6 @@ SDL_BlendMode LayerEffectProcessor::alpha_copy_blend_mode() {
         SDL_BLENDFACTOR_ZERO,
         SDL_BLENDOPERATION_ADD);
     return alpha_copy_blend_mode_;
-}
-
-SDL_BlendMode LayerEffectProcessor::add_rgb_preserve_alpha_blend_mode() {
-    if (add_rgb_preserve_alpha_blend_mode_ready_) {
-        return add_rgb_preserve_alpha_blend_mode_;
-    }
-    add_rgb_preserve_alpha_blend_mode_ready_ = true;
-    add_rgb_preserve_alpha_blend_mode_ = SDL_ComposeCustomBlendMode(
-        SDL_BLENDFACTOR_SRC_ALPHA,
-        SDL_BLENDFACTOR_ONE,
-        SDL_BLENDOPERATION_ADD,
-        SDL_BLENDFACTOR_ZERO,
-        SDL_BLENDFACTOR_ONE,
-        SDL_BLENDOPERATION_ADD);
-    return add_rgb_preserve_alpha_blend_mode_;
-}
-
-SDL_BlendMode LayerEffectProcessor::alpha_masked_multiply_blend_mode() {
-    if (alpha_masked_multiply_blend_mode_ready_) {
-        return alpha_masked_multiply_blend_mode_;
-    }
-    alpha_masked_multiply_blend_mode_ready_ = true;
-    alpha_masked_multiply_blend_mode_ = SDL_ComposeCustomBlendMode(
-        SDL_BLENDFACTOR_DST_COLOR,
-        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-        SDL_BLENDOPERATION_ADD,
-        SDL_BLENDFACTOR_ZERO,
-        SDL_BLENDFACTOR_ONE,
-        SDL_BLENDOPERATION_ADD);
-    return alpha_masked_multiply_blend_mode_;
 }
 
 float LayerEffectProcessor::behind_occlusion_weight(double light_world_z,

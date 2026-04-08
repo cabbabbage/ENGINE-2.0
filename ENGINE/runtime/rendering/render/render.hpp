@@ -24,6 +24,20 @@ class Assets;
 class WarpedScreenGrid;
 class AssetLibrary;
 namespace world { class WorldGrid; }
+
+namespace render_internal {
+bool composite_dof_layers_to_gameplay_target(SDL_Renderer* renderer,
+                                             SDL_Texture* gameplay_target,
+                                             const std::vector<SDL_Texture*>& final_layer_textures,
+                                             const std::vector<int>& non_empty_layers);
+bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
+                                    SDL_Texture* gameplay_target,
+                                    SDL_Color clear_color);
+float floor_light_depth_weight(float abs_depth_from_anchor, float floor_light_cull_depth);
+float floor_light_height_weight(float world_height, float base_radius_px);
+float floor_light_footprint_radius(float base_radius_px, float world_height);
+}
+
 // Geometry batching system for reducing draw calls
 class GeometryBatcher {
 public:
@@ -151,6 +165,13 @@ private:
 
     bool ensure_sky_texture();
     void destroy_sky_texture();
+    bool ensure_floor_background_textures();
+    SDL_Texture* ensure_floor_light_falloff_texture();
+    void render_floor_background_layer(const WarpedScreenGrid& cam,
+                                       const world::WorldGrid& grid,
+                                       const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                                       double max_cull_depth,
+                                       SDL_Texture* gameplay_target);
     void render_sky_layer(const WarpedScreenGrid& cam);
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
     void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
@@ -188,6 +209,9 @@ private:
     SDL_Texture* scene_composite_tex_ = nullptr;
     SDL_Texture* postprocess_tex_     = nullptr;
     SDL_Texture* blur_tex_            = nullptr;
+    SDL_Texture* floor_base_texture_ = nullptr;
+    SDL_Texture* floor_light_mask_texture_ = nullptr;
+    SDL_Texture* floor_light_falloff_texture_ = nullptr;
     std::vector<SDL_Texture*> motion_blur_history_textures_;
     int motion_blur_history_write_index_ = 0;
     int motion_blur_valid_history_frames_ = 0;

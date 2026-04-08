@@ -1,0 +1,209 @@
+#include <doctest/doctest.h>
+
+#include <SDL3/SDL.h>
+
+#include <vector>
+
+#include "rendering/render/render.hpp"
+
+namespace {
+
+class ScopedSdlVideo {
+public:
+    ScopedSdlVideo() : initialized_(SDL_InitSubSystem(SDL_INIT_VIDEO)) {}
+    ~ScopedSdlVideo() {
+        if (initialized_) {
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        }
+    }
+
+    bool initialized() const { return initialized_; }
+
+private:
+    bool initialized_ = false;
+};
+
+class ScopedRenderer {
+public:
+    ScopedRenderer() {
+        if (!video_.initialized()) {
+            return;
+        }
+        window_ = SDL_CreateWindow("dof_composite_target_tests", 64, 64, SDL_WINDOW_HIDDEN);
+        if (!window_) {
+            return;
+        }
+        renderer_ = SDL_CreateRenderer(window_, nullptr);
+        if (!renderer_) {
+            renderer_ = SDL_CreateRenderer(window_, SDL_SOFTWARE_RENDERER);
+        }
+        if (!renderer_) {
+            return;
+        }
+
+        SDL_Texture* probe = SDL_CreateTexture(renderer_,
+                                               SDL_PIXELFORMAT_RGBA8888,
+                                               SDL_TEXTUREACCESS_TARGET,
+                                               4,
+                                               4);
+        target_texture_supported_ = (probe != nullptr);
+        if (probe) {
+            SDL_DestroyTexture(probe);
+        }
+    }
+
+    ~ScopedRenderer() {
+        if (renderer_) {
+            SDL_DestroyRenderer(renderer_);
+            renderer_ = nullptr;
+        }
+        if (window_) {
+            SDL_DestroyWindow(window_);
+            window_ = nullptr;
+        }
+    }
+
+    SDL_Renderer* get() const { return renderer_; }
+    bool ready() const { return renderer_ != nullptr && target_texture_supported_; }
+
+private:
+    ScopedSdlVideo video_{};
+    SDL_Window* window_ = nullptr;
+    SDL_Renderer* renderer_ = nullptr;
+    bool target_texture_supported_ = false;
+};
+
+SDL_Texture* create_target_texture(SDL_Renderer* renderer, int width, int height) {
+    if (!renderer || width <= 0 || height <= 0) {
+        return nullptr;
+    }
+    SDL_Texture* texture = SDL_CreateTexture(renderer,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_TARGET,
+                                             width,
+                                             height);
+    if (!texture) {
+        return nullptr;
+    }
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    return texture;
+}
+
+bool clear_texture(SDL_Renderer* renderer, SDL_Texture* texture, SDL_Color color) {
+    if (!renderer || !texture) {
+        return false;
+    }
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, texture)) {
+        return false;
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderTarget(renderer, previous_target);
+    return true;
+}
+
+bool fill_texture(SDL_Renderer* renderer, SDL_Texture* texture, SDL_Color color) {
+    if (!renderer || !texture) {
+        return false;
+    }
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, texture)) {
+        return false;
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderTarget(renderer, previous_target);
+    return true;
+}
+
+bool read_pixel(SDL_Renderer* renderer, SDL_Texture* texture, int x, int y, SDL_Color& out_color) {
+    out_color = SDL_Color{0, 0, 0, 0};
+    if (!renderer || !texture || x < 0 || y < 0) {
+        return false;
+    }
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, texture)) {
+        return false;
+    }
+
+    const SDL_Rect pixel_rect{x, y, 1, 1};
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &pixel_rect);
+    SDL_SetRenderTarget(renderer, previous_target);
+    if (!captured || !captured->pixels) {
+        if (captured) {
+            SDL_DestroySurface(captured);
+        }
+        return false;
+    }
+
+    const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(captured->format);
+    if (!format) {
+        SDL_DestroySurface(captured);
+        return false;
+    }
+
+    const Uint32 pixel = *static_cast<const Uint32*>(captured->pixels);
+    SDL_GetRGBA(pixel,
+                format,
+                SDL_GetSurfacePalette(captured),
+                &out_color.r,
+                &out_color.g,
+                &out_color.b,
+                &out_color.a);
+    SDL_DestroySurface(captured);
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("DoF layer composite helper writes to gameplay target even when current target differs") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 16;
+    constexpr int kH = 16;
+    SDL_Texture* gameplay_target = create_target_texture(renderer, kW, kH);
+    SDL_Texture* wrong_target = create_target_texture(renderer, kW, kH);
+    SDL_Texture* layer0 = create_target_texture(renderer, kW, kH);
+    SDL_Texture* layer1 = create_target_texture(renderer, kW, kH);
+    REQUIRE(gameplay_target != nullptr);
+    REQUIRE(wrong_target != nullptr);
+    REQUIRE(layer0 != nullptr);
+    REQUIRE(layer1 != nullptr);
+
+    REQUIRE(clear_texture(renderer, gameplay_target, SDL_Color{0, 0, 0, 0}));
+    REQUIRE(clear_texture(renderer, wrong_target, SDL_Color{0, 0, 0, 0}));
+    REQUIRE(fill_texture(renderer, layer0, SDL_Color{255, 40, 40, 255}));
+    REQUIRE(fill_texture(renderer, layer1, SDL_Color{40, 255, 40, 255}));
+
+    REQUIRE(SDL_SetRenderTarget(renderer, wrong_target));
+
+    const std::vector<SDL_Texture*> final_layer_textures{layer0, layer1};
+    const std::vector<int> non_empty_layers{0, 1};
+    const bool ok = render_internal::composite_dof_layers_to_gameplay_target(renderer,
+                                                                              gameplay_target,
+                                                                              final_layer_textures,
+                                                                              non_empty_layers);
+    CHECK(ok);
+    CHECK(SDL_GetRenderTarget(renderer) == gameplay_target);
+
+    SDL_Color gameplay_pixel{};
+    SDL_Color wrong_pixel{};
+    REQUIRE(read_pixel(renderer, gameplay_target, 8, 8, gameplay_pixel));
+    REQUIRE(read_pixel(renderer, wrong_target, 8, 8, wrong_pixel));
+
+    CHECK(gameplay_pixel.a > 0);
+    CHECK(wrong_pixel.a == 0);
+
+    SDL_DestroyTexture(layer1);
+    SDL_DestroyTexture(layer0);
+    SDL_DestroyTexture(wrong_target);
+    SDL_DestroyTexture(gameplay_target);
+}

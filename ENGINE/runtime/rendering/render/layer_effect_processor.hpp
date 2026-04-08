@@ -15,6 +15,10 @@ public:
         float radius_px = 220.0f;
         float falloff = 1.8f;
         float world_z = 0.0f;
+        float floor_world_x = 0.0f;
+        float floor_world_z = 0.0f;
+        float world_height = 0.0f;
+        bool has_floor_projection = false;
     };
 
     struct LayerLightingParams {
@@ -93,6 +97,9 @@ private:
     SDL_Texture* ensure_light_falloff_texture(float falloff);
 
     SDL_BlendMode alpha_copy_blend_mode();
+    SDL_BlendMode light_add_rgb_preserve_alpha_blend_mode();
+    SDL_BlendMode alpha_masked_multiply_blend_mode();
+    bool supports_strict_dark_mask_pipeline();
 
     float behind_occlusion_weight(double light_world_z,
                                   double layer_depth_min,
@@ -107,7 +114,12 @@ private:
     std::unordered_map<int, SDL_Texture*> light_falloff_textures_;
 
     SDL_BlendMode alpha_copy_blend_mode_ = SDL_BLENDMODE_INVALID;
+    SDL_BlendMode light_add_rgb_preserve_alpha_blend_mode_ = SDL_BLENDMODE_INVALID;
+    SDL_BlendMode alpha_masked_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
     bool alpha_copy_blend_mode_ready_ = false;
+    bool light_add_rgb_preserve_alpha_blend_mode_ready_ = false;
+    bool alpha_masked_multiply_blend_mode_ready_ = false;
 
     bool warned_missing_alpha_copy_blend_mode_ = false;
+    bool warned_missing_strict_dark_mask_pipeline_blend_modes_ = false;
 };

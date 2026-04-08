@@ -17,6 +17,102 @@ int wrap_index(int index, int count) {
     return wrapped < 0 ? (wrapped + count) : wrapped;
 }
 
+AnchorPointOwner owner_from_light_mode(bool light_mode) {
+    return light_mode ? AnchorPointOwner::Light : AnchorPointOwner::NonLight;
+}
+
+bool anchor_owned_by_mode(const DisplacedAssetAnchorPoint& anchor, AnchorPointOwner owner) {
+    return owner == AnchorPointOwner::Light ? anchor.has_light_data : !anchor.has_light_data;
+}
+
+bool anchor_visible_in_mode(const DisplacedAssetAnchorPoint& anchor,
+                            AnchorPointOwner owner,
+                            const std::function<bool(const std::string&)>& is_reserved_anchor_name) {
+    if (!anchor.is_valid() || !anchor_owned_by_mode(anchor, owner)) {
+        return false;
+    }
+    return !is_reserved_anchor_name || !is_reserved_anchor_name(anchor.name);
+}
+
+bool anchor_mutable_in_mode(const DisplacedAssetAnchorPoint& anchor,
+                            AnchorPointOwner owner,
+                            const std::function<bool(const std::string&)>& is_reserved_anchor_name) {
+    return anchor_visible_in_mode(anchor, owner, is_reserved_anchor_name);
+}
+
+const DisplacedAssetAnchorPoint* find_anchor_in_mode(
+    const std::vector<DisplacedAssetAnchorPoint>& anchors,
+    const std::string& name,
+    AnchorPointOwner owner,
+    const std::function<bool(const std::string&)>& is_reserved_anchor_name) {
+    if (name.empty()) {
+        return nullptr;
+    }
+    auto it = std::find_if(anchors.begin(),
+                           anchors.end(),
+                           [&](const DisplacedAssetAnchorPoint& anchor) {
+                               return anchor.name == name &&
+                                      anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name);
+                           });
+    return it == anchors.end() ? nullptr : &(*it);
+}
+
+DisplacedAssetAnchorPoint* find_anchor_in_mode_mutable(
+    std::vector<DisplacedAssetAnchorPoint>& anchors,
+    const std::string& name,
+    AnchorPointOwner owner,
+    const std::function<bool(const std::string&)>& is_reserved_anchor_name) {
+    if (name.empty()) {
+        return nullptr;
+    }
+    auto it = std::find_if(anchors.begin(),
+                           anchors.end(),
+                           [&](const DisplacedAssetAnchorPoint& anchor) {
+                               return anchor.name == name &&
+                                      anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name);
+                           });
+    return it == anchors.end() ? nullptr : &(*it);
+}
+
+bool rename_anchor_in_mode(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                           const std::string& old_name,
+                           const std::string& new_name,
+                           AnchorPointOwner owner,
+                           const std::function<bool(const std::string&)>& is_reserved_anchor_name) {
+    if (old_name.empty() || new_name.empty() || old_name == new_name) {
+        return false;
+    }
+    bool changed = false;
+    for (auto& anchor : anchors) {
+        if (anchor.name != old_name || !anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
+            continue;
+        }
+        anchor.name = new_name;
+        changed = true;
+    }
+    return changed;
+}
+
+bool delete_anchor_in_mode(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                           const std::string& name,
+                           AnchorPointOwner owner,
+                           const std::function<bool(const std::string&)>& is_reserved_anchor_name) {
+    if (name.empty()) {
+        return false;
+    }
+    const auto erase_it = std::remove_if(
+        anchors.begin(),
+        anchors.end(),
+        [&](const DisplacedAssetAnchorPoint& anchor) {
+            return anchor.name == name && anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name);
+        });
+    if (erase_it == anchors.end()) {
+        return false;
+    }
+    anchors.erase(erase_it, anchors.end());
+    return true;
+}
+
 std::string make_unique_anchor_name(const std::string& desired_name,
                                     const std::vector<std::string>& existing_names,
                                     const std::string& excluded_name) {

@@ -62,6 +62,8 @@ public:
     void set_manifest_store(class devmode::core::ManifestStore* store);
     void set_assets(Assets* assets);
     void set_room_save_callback(std::function<bool(bool immediate)> cb) { room_save_callback_ = std::move(cb); }
+    void set_room_metadata_only_mode(bool enabled);
+    bool room_metadata_only_mode() const { return room_metadata_only_mode_; }
 
     bool refresh_spawn_groups(const nlohmann::json& room_data);
     bool refresh_spawn_groups(nlohmann::json& room_data);
@@ -248,4 +250,5 @@ private:
     std::function<std::string(const std::string&, const std::string&)> on_room_renamed_;
     std::function<void(bool)> header_visibility_controller_{};
     std::function<void(Room*)> on_camera_changed_;
+    bool room_metadata_only_mode_ = false;
 };

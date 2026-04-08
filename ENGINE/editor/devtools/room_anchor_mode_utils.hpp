@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,7 +13,47 @@
 
 namespace devmode::room_anchor_mode {
 
+enum class AnchorPointOwner {
+    NonLight,
+    Light,
+};
+
 int wrap_index(int index, int count);
+
+AnchorPointOwner owner_from_light_mode(bool light_mode);
+
+bool anchor_owned_by_mode(const DisplacedAssetAnchorPoint& anchor, AnchorPointOwner owner);
+
+bool anchor_visible_in_mode(const DisplacedAssetAnchorPoint& anchor,
+                            AnchorPointOwner owner,
+                            const std::function<bool(const std::string&)>& is_reserved_anchor_name);
+
+bool anchor_mutable_in_mode(const DisplacedAssetAnchorPoint& anchor,
+                            AnchorPointOwner owner,
+                            const std::function<bool(const std::string&)>& is_reserved_anchor_name);
+
+const DisplacedAssetAnchorPoint* find_anchor_in_mode(
+    const std::vector<DisplacedAssetAnchorPoint>& anchors,
+    const std::string& name,
+    AnchorPointOwner owner,
+    const std::function<bool(const std::string&)>& is_reserved_anchor_name);
+
+DisplacedAssetAnchorPoint* find_anchor_in_mode_mutable(
+    std::vector<DisplacedAssetAnchorPoint>& anchors,
+    const std::string& name,
+    AnchorPointOwner owner,
+    const std::function<bool(const std::string&)>& is_reserved_anchor_name);
+
+bool rename_anchor_in_mode(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                           const std::string& old_name,
+                           const std::string& new_name,
+                           AnchorPointOwner owner,
+                           const std::function<bool(const std::string&)>& is_reserved_anchor_name);
+
+bool delete_anchor_in_mode(std::vector<DisplacedAssetAnchorPoint>& anchors,
+                           const std::string& name,
+                           AnchorPointOwner owner,
+                           const std::function<bool(const std::string&)>& is_reserved_anchor_name);
 
 std::string trim_copy(std::string_view value);
 

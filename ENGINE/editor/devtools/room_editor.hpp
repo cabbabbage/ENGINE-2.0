@@ -500,6 +500,10 @@ private:
     void sync_hitbox_tools_panel();
     void sync_attack_box_tools_panel();
     void ensure_anchor_selection_valid();
+    bool anchor_visible_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
+    bool anchor_mutable_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
+    bool anchor_name_exists_across_eligible_animations(const std::shared_ptr<AssetInfo>& target_info,
+                                                       const std::string& name) const;
     void rebuild_movement_rel_positions();
     void rebuild_movement_frames_from_positions();
     void normalize_movement_frames_to_current_animation();

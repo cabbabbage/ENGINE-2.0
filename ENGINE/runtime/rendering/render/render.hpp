@@ -191,6 +191,10 @@ private:
     void render_runtime_lighting(SDL_Texture* gameplay_target,
                                  const std::vector<RuntimeLightInstance>& lights,
                                  const std::vector<RuntimeLightOccluder>& occluders);
+    void render_runtime_lighting_to_target(SDL_Texture* target_texture,
+                                           const std::vector<RuntimeLightInstance>& lights,
+                                           SDL_Texture*& accum_texture,
+                                           SDL_Texture*& base_texture);
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -230,6 +234,8 @@ private:
     int motion_blur_valid_history_frames_ = 0;
     int motion_blur_history_capacity_    = 0;
     std::vector<SDL_Texture*> dof_layer_textures_;
+    std::vector<SDL_Texture*> dof_lit_textures_;
+    std::vector<SDL_Texture*> dof_light_accum_textures_;
     std::vector<SDL_Texture*> dof_blur_textures_;
     std::filesystem::path sky_texture_path_;
     double                map_radius_world_ = 0.0;

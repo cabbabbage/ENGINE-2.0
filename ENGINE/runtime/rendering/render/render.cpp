@@ -1383,6 +1383,12 @@ SceneRenderer::~SceneRenderer() {
     for (SDL_Texture* tex : dof_layer_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
+    for (SDL_Texture* tex : dof_lit_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    for (SDL_Texture* tex : dof_light_accum_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
     for (SDL_Texture* tex : dof_blur_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
@@ -1391,6 +1397,8 @@ SceneRenderer::~SceneRenderer() {
     motion_blur_valid_history_frames_ = 0;
     motion_blur_history_capacity_ = 0;
     dof_layer_textures_.clear();
+    dof_lit_textures_.clear();
+    dof_light_accum_textures_.clear();
     dof_blur_textures_.clear();
 }
 
@@ -1529,6 +1537,12 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
     for (SDL_Texture* tex : dof_layer_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
+    for (SDL_Texture* tex : dof_lit_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    for (SDL_Texture* tex : dof_light_accum_textures_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
     for (SDL_Texture* tex : dof_blur_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
@@ -1536,6 +1550,8 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
     motion_blur_history_write_index_ = 0;
     motion_blur_valid_history_frames_ = 0;
     dof_layer_textures_.clear();
+    dof_lit_textures_.clear();
+    dof_light_accum_textures_.clear();
     dof_blur_textures_.clear();
 }
 
@@ -1741,7 +1757,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             instance.shadow_strength = 0.0f;
             instance.cast_shadows = false;
             instance.has_floor_screen_center = false;
-            instance.world_z = 0.0f;
+            instance.world_z = static_cast<float>(
+                render_depth::depth_from_anchor(cam.anchor_world_z(),
+                                                static_cast<double>(resolved->world_exact_z)));
             out_lights.push_back(instance);
         }
     }
@@ -1762,10 +1780,17 @@ void SceneRenderer::append_runtime_shadow_geometry(const std::vector<RuntimeLigh
 void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
                                             const std::vector<RuntimeLightInstance>& lights,
                                             const std::vector<RuntimeLightOccluder>& occluders) {
-    if (!renderer_ || !gameplay_target || screen_width_ <= 0 || screen_height_ <= 0) {
+    (void)occluders; // Casted shadows removed. Occluders intentionally unused.
+    render_runtime_lighting_to_target(gameplay_target, lights, light_accum_tex_, light_base_tex_);
+}
+
+void SceneRenderer::render_runtime_lighting_to_target(SDL_Texture* target_texture,
+                                                      const std::vector<RuntimeLightInstance>& lights,
+                                                      SDL_Texture*& accum_texture,
+                                                      SDL_Texture*& base_texture) {
+    if (!renderer_ || !target_texture || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
-    (void)occluders; // Casted shadows removed. Occluders intentionally unused.
 
     auto create_target_texture = [&](int w, int h) -> SDL_Texture* {
         SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
@@ -1776,14 +1801,14 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
         return texture;
     };
 
-    if (!light_accum_tex_) {
-        light_accum_tex_ = create_target_texture(screen_width_, screen_height_);
+    if (!accum_texture) {
+        accum_texture = create_target_texture(screen_width_, screen_height_);
     }
-    if (!light_accum_tex_) {
+    if (!accum_texture) {
         return;
     }
 
-    SDL_SetRenderTarget(renderer_, light_accum_tex_);
+    SDL_SetRenderTarget(renderer_, accum_texture);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 10, 10, 12, 255);
     SDL_RenderClear(renderer_);
@@ -1828,36 +1853,36 @@ void SceneRenderer::render_runtime_lighting(SDL_Texture* gameplay_target,
     }
 
     const SDL_BlendMode mul_mode = multiply_blend_mode();
-    SDL_SetRenderTarget(renderer_, gameplay_target);
+    SDL_SetRenderTarget(renderer_, target_texture);
     if (mul_mode != SDL_BLENDMODE_INVALID) {
-        SDL_SetTextureBlendMode(light_accum_tex_, mul_mode);
-        SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
+        SDL_SetTextureBlendMode(accum_texture, mul_mode);
+        SDL_RenderTexture(renderer_, accum_texture, nullptr, nullptr);
         return;
     }
 
-    if (!light_base_tex_) {
-        light_base_tex_ = create_target_texture(screen_width_, screen_height_);
+    if (!base_texture) {
+        base_texture = create_target_texture(screen_width_, screen_height_);
     }
-    if (!light_base_tex_) {
+    if (!base_texture) {
         return;
     }
 
-    SDL_SetRenderTarget(renderer_, light_base_tex_);
+    SDL_SetRenderTarget(renderer_, base_texture);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
     SDL_RenderClear(renderer_);
-    SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
+    SDL_RenderTexture(renderer_, target_texture, nullptr, nullptr);
 
-    SDL_SetRenderTarget(renderer_, gameplay_target);
+    SDL_SetRenderTarget(renderer_, target_texture);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
     SDL_RenderClear(renderer_);
-    SDL_SetTextureBlendMode(light_base_tex_, SDL_BLENDMODE_BLEND);
-    SDL_RenderTexture(renderer_, light_base_tex_, nullptr, nullptr);
+    SDL_SetTextureBlendMode(base_texture, SDL_BLENDMODE_BLEND);
+    SDL_RenderTexture(renderer_, base_texture, nullptr, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 190);
     const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
     SDL_RenderFillRect(renderer_, &full_rect);
-    SDL_SetTextureBlendMode(light_accum_tex_, SDL_BLENDMODE_ADD);
-    SDL_RenderTexture(renderer_, light_accum_tex_, nullptr, nullptr);
+    SDL_SetTextureBlendMode(accum_texture, SDL_BLENDMODE_ADD);
+    SDL_RenderTexture(renderer_, accum_texture, nullptr, nullptr);
 }
 
 void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets) {
@@ -2299,6 +2324,7 @@ void SceneRenderer::render() {
         runtime_occluders.clear();
     }
 
+    bool layered_dof_postprocess_applied = false;
     if (depth_of_field_enabled ) {
         const double base_layer_interval = std::max(1.0, static_cast<double>(realism.layer_depth_interval));
         const double depth_curve = std::max(0.0, static_cast<double>(realism.layer_depth_curve));
@@ -2390,7 +2416,9 @@ void SceneRenderer::render() {
             }
             const double clamped = std::clamp(depth, -max_cull_depth, max_cull_depth);
             const double abs_depth = std::fabs(clamped);
-            if (clamped < 0.0) {
+            // Keep exact zero depth on the camera/player side of the split so the
+            // first fogged/background layer starts strictly behind the player.
+            if (clamped <= 0.0) {
                 auto upper = std::upper_bound(foreground_depth_edges.begin(), foreground_depth_edges.end(), abs_depth);
                 std::ptrdiff_t seg = std::distance(foreground_depth_edges.begin(), upper) - 1;
                 seg = std::clamp<std::ptrdiff_t>(seg, 0, static_cast<std::ptrdiff_t>(foreground_layer_count - 1));
@@ -2408,6 +2436,12 @@ void SceneRenderer::render() {
             std::vector<const GeometryBatcher::DrawItem*> draws;
             double submitted_depth_sum = 0.0;
             int submitted_depth_count = 0;
+            double depth_min = std::numeric_limits<double>::infinity();
+            double depth_max = -std::numeric_limits<double>::infinity();
+            float bounds_min_x = std::numeric_limits<float>::infinity();
+            float bounds_min_y = std::numeric_limits<float>::infinity();
+            float bounds_max_x = -std::numeric_limits<float>::infinity();
+            float bounds_max_y = -std::numeric_limits<float>::infinity();
         };
         std::vector<LayerSubmission> layers(static_cast<std::size_t>(layer_count));
         geometry_batcher_->for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
@@ -2420,6 +2454,14 @@ void SceneRenderer::render() {
             if (std::isfinite(item.depth)) {
                 layer.submitted_depth_sum += item.depth;
                 ++layer.submitted_depth_count;
+                layer.depth_min = std::min(layer.depth_min, item.depth);
+                layer.depth_max = std::max(layer.depth_max, item.depth);
+            }
+            for (const SDL_Vertex& vertex : item.vertices) {
+                layer.bounds_min_x = std::min(layer.bounds_min_x, vertex.position.x);
+                layer.bounds_min_y = std::min(layer.bounds_min_y, vertex.position.y);
+                layer.bounds_max_x = std::max(layer.bounds_max_x, vertex.position.x);
+                layer.bounds_max_y = std::max(layer.bounds_max_y, vertex.position.y);
             }
         });
 
@@ -2432,10 +2474,16 @@ void SceneRenderer::render() {
             textures.clear();
         };
         if (static_cast<int>(dof_layer_textures_.size()) != layer_count ||
+            static_cast<int>(dof_lit_textures_.size()) != layer_count ||
+            static_cast<int>(dof_light_accum_textures_.size()) != layer_count ||
             static_cast<int>(dof_blur_textures_.size()) != layer_count) {
             destroy_texture_array(dof_layer_textures_);
+            destroy_texture_array(dof_lit_textures_);
+            destroy_texture_array(dof_light_accum_textures_);
             destroy_texture_array(dof_blur_textures_);
             dof_layer_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
+            dof_lit_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
+            dof_light_accum_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
             dof_blur_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
         }
         std::vector<int> non_empty_layers;
@@ -2450,11 +2498,25 @@ void SceneRenderer::render() {
                     SDL_DestroyTexture(dof_blur_textures_[i]);
                     dof_blur_textures_[i] = nullptr;
                 }
+                if (dof_lit_textures_[i]) {
+                    SDL_DestroyTexture(dof_lit_textures_[i]);
+                    dof_lit_textures_[i] = nullptr;
+                }
+                if (dof_light_accum_textures_[i]) {
+                    SDL_DestroyTexture(dof_light_accum_textures_[i]);
+                    dof_light_accum_textures_[i] = nullptr;
+                }
                 continue;
             }
             non_empty_layers.push_back(i);
             if (!dof_layer_textures_[i]) {
                 dof_layer_textures_[i] = create_target_texture(screen_width_, screen_height_);
+            }
+            if (!dof_lit_textures_[i]) {
+                dof_lit_textures_[i] = create_target_texture(screen_width_, screen_height_);
+            }
+            if (!dof_light_accum_textures_[i]) {
+                dof_light_accum_textures_[i] = create_target_texture(screen_width_, screen_height_);
             }
         }
         const bool need_blur_scratch = depth_of_field_enabled && !non_empty_layers.empty();
@@ -2464,6 +2526,14 @@ void SceneRenderer::render() {
         bool dof_targets_ready = !non_empty_layers.empty();
         for (int i : non_empty_layers) {
             if (!dof_layer_textures_[i]) {
+                dof_targets_ready = false;
+                break;
+            }
+            if (!dof_lit_textures_[i]) {
+                dof_targets_ready = false;
+                break;
+            }
+            if (!dof_light_accum_textures_[i]) {
                 dof_targets_ready = false;
                 break;
             }
@@ -2497,21 +2567,122 @@ void SceneRenderer::render() {
                                                            quality_scale);
         };
         if (dof_targets_ready) {
-            for (int i : non_empty_layers) {
-                SDL_Texture* layer_tex = dof_layer_textures_[i];
+            layered_dof_postprocess_applied = true;
+            auto render_layer_base = [&](int layer_index) {
+                SDL_Texture* layer_tex = dof_layer_textures_[layer_index];
                 if (!layer_tex) {
-                    continue;
+                    return;
                 }
                 SDL_SetRenderTarget(renderer_, layer_tex);
                 SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
                 SDL_RenderClear(renderer_);
-                for (const GeometryBatcher::DrawItem* draw : layers[static_cast<std::size_t>(i)].draws) {
+                for (const GeometryBatcher::DrawItem* draw : layers[static_cast<std::size_t>(layer_index)].draws) {
                     if (!draw) {
                         continue;
                     }
                     SDL_SetTextureBlendMode(draw->texture, draw->blend_mode);
                     SDL_RenderGeometry(renderer_, draw->texture, draw->vertices, 4, kQuadIndices, 6);
                 }
+            };
+            auto light_affects_layer = [&](const RuntimeLightInstance& light, const LayerSubmission& layer) {
+                const float light_min_x = light.screen_center.x - light.radius_px;
+                const float light_min_y = light.screen_center.y - light.radius_px;
+                const float light_max_x = light.screen_center.x + light.radius_px;
+                const float light_max_y = light.screen_center.y + light.radius_px;
+                const bool overlaps_screen =
+                    light_max_x >= layer.bounds_min_x &&
+                    light_min_x <= layer.bounds_max_x &&
+                    light_max_y >= layer.bounds_min_y &&
+                    light_min_y <= layer.bounds_max_y;
+                bool overlaps_depth = false;
+                if (std::isfinite(layer.depth_min) && std::isfinite(layer.depth_max)) {
+                    const double depth_radius = std::max(1.0, static_cast<double>(light.radius_px));
+                    const double light_depth_min = static_cast<double>(light.world_z) - depth_radius;
+                    const double light_depth_max = static_cast<double>(light.world_z) + depth_radius;
+                    overlaps_depth = light_depth_max >= layer.depth_min && light_depth_min <= layer.depth_max;
+                }
+                return overlaps_screen || overlaps_depth;
+            };
+            auto apply_layer_lighting = [&](int layer_index) {
+                SDL_Texture* layer_tex = dof_layer_textures_[layer_index];
+                SDL_Texture* lit_tex = dof_lit_textures_[layer_index];
+                if (!layer_tex || !lit_tex) {
+                    return;
+                }
+                const LayerSubmission& layer = layers[static_cast<std::size_t>(layer_index)];
+                std::vector<RuntimeLightInstance> layer_lights;
+                layer_lights.reserve(runtime_lights.size());
+                for (const RuntimeLightInstance& light : runtime_lights) {
+                    if (light_affects_layer(light, layer)) {
+                        layer_lights.push_back(light);
+                    }
+                }
+
+                SDL_SetRenderTarget(renderer_, lit_tex);
+                SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+                SDL_RenderClear(renderer_);
+                SDL_SetTextureBlendMode(layer_tex, SDL_BLENDMODE_BLEND);
+                SDL_RenderTexture(renderer_, layer_tex, nullptr, nullptr);
+                render_runtime_lighting_to_target(lit_tex,
+                                                  layer_lights,
+                                                  dof_light_accum_textures_[layer_index],
+                                                  light_base_tex_);
+            };
+            auto apply_layer_fog = [&](int layer_index) {
+                if (layer_index < foreground_layer_count) {
+                    return;
+                }
+                SDL_Texture* lit_tex = dof_lit_textures_[layer_index];
+                SDL_Texture* fog_texture = ensure_shared_fog_band_texture(renderer_);
+                if (!lit_tex || !fog_texture || background_layer_count <= 0) {
+                    return;
+                }
+                const int seg = layer_index - foreground_layer_count;
+                if (seg < 0 || seg >= background_layer_count) {
+                    return;
+                }
+
+                SDL_SetRenderTarget(renderer_, lit_tex);
+                SDL_SetTextureBlendMode(fog_texture, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureColorMod(fog_texture, 222, 232, 242);
+
+                const double far_depth = background_depth_edges[static_cast<std::size_t>(seg + 1)];
+                const double depth_t = std::clamp(far_depth / std::max(1.0, max_cull_depth), 0.0, 1.0);
+                const float shaped_depth_t = std::pow(static_cast<float>(depth_t), 0.65f);
+                const double target_cumulative_opacity = std::clamp(
+                    static_cast<double>(smoothstep(0.0f, 0.82f, shaped_depth_t)) * 1.18,
+                    0.0,
+                    1.0);
+                const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                    static_cast<int>(std::lround(target_cumulative_opacity * 255.0)),
+                    0,
+                    255));
+                if (alpha == 0) {
+                    return;
+                }
+
+                float fog_bottom_y = 0.0f;
+                if (!project_depth_to_floor_screen_y(cam, anchor_depth + far_depth, screen_height_, fog_bottom_y) ||
+                    fog_bottom_y <= 1.0f) {
+                    return;
+                }
+
+                SDL_SetTextureAlphaMod(fog_texture, alpha);
+                const SDL_FRect dst_rect{
+                    0.0f,
+                    0.0f,
+                    static_cast<float>(screen_width_),
+                    fog_bottom_y
+                };
+                SDL_RenderTexture(renderer_, fog_texture, nullptr, &dst_rect);
+                SDL_SetTextureAlphaMod(fog_texture, 255);
+                SDL_SetTextureColorMod(fog_texture, 255, 255, 255);
+            };
+
+            for (int i : non_empty_layers) {
+                render_layer_base(i);
+                apply_layer_lighting(i);
+                apply_layer_fog(i);
             }
 
             SDL_SetRenderTarget(renderer_, gameplay_target);
@@ -2552,14 +2723,14 @@ void SceneRenderer::render() {
                 if (blur_radius < 1.5 && depth_norm < 0.1) {
                     effect_quality = 1.0f;
                 }
-                SDL_Texture* composite_texture = dof_layer_textures_[i];
+                SDL_Texture* composite_texture = dof_lit_textures_[i] ? dof_lit_textures_[i] : dof_layer_textures_[i];
                 if (blur_radius > kMinimumUsefulBlurRadiusPx) {
                     if (!dof_blur_textures_[i]) {
                         dof_blur_textures_[i] = create_target_texture(screen_width_, screen_height_);
                     }
                     if (dof_blur_textures_[i]) {
                         const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur * 2.0);
-                        if (blur_texture(dof_layer_textures_[i],
+                        if (blur_texture(composite_texture,
                                          dof_blur_textures_[i],
                                          static_cast<float>(blur_radius),
                                          optical_center,
@@ -2574,69 +2745,12 @@ void SceneRenderer::render() {
                 }
             }
         }
-
-
-            SDL_Texture* fog_texture = ensure_shared_fog_band_texture(renderer_);
-            if (fog_texture && background_layer_count > 0) {
-                SDL_SetRenderTarget(renderer_, gameplay_target);
-                SDL_SetTextureBlendMode(fog_texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureColorMod(fog_texture, 222, 232, 242);
-
-                double cumulative_opacity = 0.0;
-                for (int seg = 0; seg < background_layer_count; ++seg) {
-                    const double far_depth = background_depth_edges[static_cast<std::size_t>(seg + 1)];
-                    const double depth_t = std::clamp(far_depth / std::max(1.0, max_cull_depth), 0.0, 1.0);
-                    const float shaped_depth_t = std::pow(static_cast<float>(depth_t), 0.65f);
-                    const double target_cumulative_opacity = std::clamp(
-                        static_cast<double>(smoothstep(0.0f, 0.82f, shaped_depth_t)) * 1.18,
-                        0.0,
-                        1.0);
-
-                    const double remaining_visibility = std::max(1e-6, 1.0 - cumulative_opacity);
-                    double fog_layer_alpha = (target_cumulative_opacity - cumulative_opacity) / remaining_visibility;
-                    fog_layer_alpha = std::clamp(fog_layer_alpha, 0.0, 1.0);
-                    cumulative_opacity += remaining_visibility * fog_layer_alpha;
-
-                    if (fog_layer_alpha <= 0.001) {
-                        continue;
-                    }
-
-                    float fog_bottom_y = 0.0f;
-                    if (!project_depth_to_floor_screen_y(cam, anchor_depth + far_depth, screen_height_, fog_bottom_y)) {
-                        continue;
-                    }
-                    if (fog_bottom_y <= 1.0f) {
-                        continue;
-                    }
-
-                    const Uint8 alpha = static_cast<Uint8>(std::clamp(
-                        static_cast<int>(std::lround(fog_layer_alpha * 255.0)),
-                        0,
-                        255));
-                    if (alpha == 0) {
-                        continue;
-                    }
-
-                    SDL_SetTextureAlphaMod(fog_texture, alpha);
-                    const SDL_FRect dst_rect{
-                        0.0f,
-                        0.0f,
-                        static_cast<float>(screen_width_),
-                        fog_bottom_y
-                    };
-                    SDL_RenderTexture(renderer_, fog_texture, nullptr, &dst_rect);
-                }
-
-                SDL_SetTextureAlphaMod(fog_texture, 255);
-                SDL_SetTextureColorMod(fog_texture, 255, 255, 255);
-            }
-        
     } else {
         SDL_SetRenderTarget(renderer_, gameplay_target);
         geometry_batcher_->flush();
     }
 
-    if (runtime_lighting_enabled) {
+    if (runtime_lighting_enabled && !layered_dof_postprocess_applied) {
         render_runtime_lighting(gameplay_target, runtime_lights, runtime_occluders);
     }
 

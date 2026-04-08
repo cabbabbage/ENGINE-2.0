@@ -342,7 +342,7 @@ int width_min = 500;
         ensure_valid(allow_height);
     }
 
-    void apply_to_json(nlohmann::json& dest, bool allow_height) const {
+    void apply_to_json(nlohmann::json& dest, bool allow_height, bool include_camera = true) const {
         if (!dest.is_object()) dest = nlohmann::json::object();
         dest["name"] = name;
         dest["geometry"] = geometry;
@@ -356,10 +356,12 @@ int width_min = 500;
             dest.erase("curvyness");
         }
 
-        // Camera settings
-        dest["camera_height_px"] = camera_height_px;
-        dest["camera_tilt_deg"] = camera_tilt_deg;
-        dest["camera_zoom_percent"] = camera_zoom_percent;
+        if (include_camera) {
+            // Camera settings
+            dest["camera_height_px"] = camera_height_px;
+            dest["camera_tilt_deg"] = camera_tilt_deg;
+            dest["camera_zoom_percent"] = camera_zoom_percent;
+        }
  
 
         if (geometry_is_circle()) {
@@ -398,6 +400,14 @@ RoomConfigurator::~RoomConfigurator() {
     if (container_ && container_ != default_container_.get()) {
         clear_container_callbacks(*container_);
     }
+}
+
+void RoomConfigurator::set_room_metadata_only_mode(bool enabled) {
+    if (room_metadata_only_mode_ == enabled) {
+        return;
+    }
+    room_metadata_only_mode_ = enabled;
+    request_rebuild();
 }
 
 void RoomConfigurator::set_manifest_store(devmode::core::ManifestStore* store) {
@@ -700,7 +710,11 @@ void RoomConfigurator::ensure_base_panels() {
     const std::string types_title = is_trail_context_ ? "Trail Types" : "Room Types";
 
     ensure_panel(geometry_panel_, "geometry", geometry_title);
-    ensure_panel(tags_panel_, "tags", tags_title);
+    if (!room_metadata_only_mode_) {
+        ensure_panel(tags_panel_, "tags", tags_title);
+    } else if (tags_panel_) {
+        tags_panel_->set_visible(false);
+    }
     ensure_panel(types_panel_, "types", types_title);
 }
 
@@ -732,7 +746,7 @@ void RoomConfigurator::refresh_base_panel_rows() {
         }
     }
 
-    if (tags_panel_ && tag_editor_) {
+    if (!room_metadata_only_mode_ && tags_panel_ && tag_editor_) {
         DockableCollapsible::Rows rows;
         rows.push_back({tag_editor_.get()});
         tags_panel_->set_rows(rows);
@@ -740,6 +754,9 @@ void RoomConfigurator::refresh_base_panel_rows() {
         if (!rows.empty()) {
             ordered_base_panels_.push_back(tags_panel_.get());
         }
+    } else if (tags_panel_) {
+        tags_panel_->set_rows({});
+        tags_panel_->set_visible(false);
     }
 
     if (types_panel_) {
@@ -836,6 +853,9 @@ void RoomConfigurator::set_base_panel_expanded(const std::string& key, bool expa
 }
 
 void RoomConfigurator::persist_spawn_group_changes() {
+    if (room_metadata_only_mode_) {
+        return;
+    }
     if (room_) {
         if (room_save_callback_) { room_save_callback_(false); } else { room_->mark_dirty(); }
     } else if (on_external_spawn_change_) {
@@ -844,6 +864,9 @@ void RoomConfigurator::persist_spawn_group_changes() {
 }
 
 void RoomConfigurator::handle_spawn_groups_mutated() {
+    if (room_metadata_only_mode_) {
+        return;
+    }
     SpawnCallbackGuard guard(spawn_callbacks_active_);
     request_rebuild();
     persist_spawn_group_changes();
@@ -851,6 +874,9 @@ void RoomConfigurator::handle_spawn_groups_mutated() {
 
 void RoomConfigurator::handle_spawn_group_entry_changed(const nlohmann::json& entry,
                                                         const SpawnGroupConfig::ChangeSummary& summary) {
+    if (room_metadata_only_mode_) {
+        return;
+    }
     SpawnCallbackGuard guard(spawn_callbacks_active_);
     if (on_external_spawn_entry_change_) {
         on_external_spawn_entry_change_(entry, summary);
@@ -1056,15 +1082,18 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     const nlohmann::json& normalized = data.is_object() ? data : empty_object();
 
     nlohmann::json normalized_copy = normalized;
-    if (!normalized_copy.contains("spawn_groups") || !normalized_copy["spawn_groups"].is_array()) {
-        normalized_copy["spawn_groups"] = nlohmann::json::array();
+    bool spawn_changed = false;
+    if (!room_metadata_only_mode_) {
+        if (!normalized_copy.contains("spawn_groups") || !normalized_copy["spawn_groups"].is_array()) {
+            normalized_copy["spawn_groups"] = nlohmann::json::array();
+        }
+
+        const nlohmann::json new_spawn_array = normalized_copy["spawn_groups"];
+        const nlohmann::json current_spawn_array =
+            (loaded_json_.contains("spawn_groups") && loaded_json_["spawn_groups"].is_array()) ? loaded_json_["spawn_groups"] : nlohmann::json::array();
+
+        spawn_changed = (new_spawn_array != current_spawn_array);
     }
-
-    const nlohmann::json new_spawn_array = normalized_copy["spawn_groups"];
-    const nlohmann::json current_spawn_array =
-        (loaded_json_.contains("spawn_groups") && loaded_json_["spawn_groups"].is_array()) ? loaded_json_["spawn_groups"] : nlohmann::json::array();
-
-    bool spawn_changed = (new_spawn_array != current_spawn_array);
 
     const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
 
@@ -1093,22 +1122,25 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
             new_state.inherits_assets != state_->inherits_assets;
     }
 
-    std::vector<std::string> include;
-    std::vector<std::string> exclude;
-    auto capture_tags = [&](const std::vector<std::string>& src, std::vector<std::string>& dst) {
-        dst = src;
-        std::sort(dst.begin(), dst.end());
-};
+    bool tags_changed = false;
+    if (!room_metadata_only_mode_) {
+        std::vector<std::string> include;
+        std::vector<std::string> exclude;
+        auto capture_tags = [&](const std::vector<std::string>& src, std::vector<std::string>& dst) {
+            dst = src;
+            std::sort(dst.begin(), dst.end());
+        };
 
-    std::vector<std::string> prev_include = room_tags_;
-    std::vector<std::string> prev_exclude = room_anti_tags_;
-    capture_tags(prev_include, prev_include);
-    capture_tags(prev_exclude, prev_exclude);
+        std::vector<std::string> prev_include = room_tags_;
+        std::vector<std::string> prev_exclude = room_anti_tags_;
+        capture_tags(prev_include, prev_include);
+        capture_tags(prev_exclude, prev_exclude);
 
-    load_tags_from_json(normalized_copy);
-    capture_tags(room_tags_, include);
-    capture_tags(room_anti_tags_, exclude);
-    bool tags_changed = (include != prev_include) || (exclude != prev_exclude);
+        load_tags_from_json(normalized_copy);
+        capture_tags(room_tags_, include);
+        capture_tags(room_anti_tags_, exclude);
+        tags_changed = (include != prev_include) || (exclude != prev_exclude);
+    }
 
     if (!spawn_changed && !dims_changed && !geometry_added && !tags_changed) {
         return false;
@@ -1209,6 +1241,9 @@ void RoomConfigurator::open(Room* room) {
 }
 
 bool RoomConfigurator::refresh_spawn_groups(const nlohmann::json& room_data) {
+    if (room_metadata_only_mode_) {
+        return false;
+    }
     bool changed = apply_room_data(room_data);
     if (changed) {
         if (spawn_callbacks_active_) {
@@ -1221,6 +1256,10 @@ bool RoomConfigurator::refresh_spawn_groups(const nlohmann::json& room_data) {
 }
 
 bool RoomConfigurator::refresh_spawn_groups(nlohmann::json& room_data) {
+    if (room_metadata_only_mode_) {
+        external_room_json_ = &room_data;
+        return false;
+    }
     external_room_json_ = &room_data;
     bool changed = apply_room_data(room_data);
     if (changed) {
@@ -1239,6 +1278,9 @@ bool RoomConfigurator::refresh_spawn_groups(Room* room) {
 }
 
 void RoomConfigurator::notify_spawn_groups_mutated() {
+    if (room_metadata_only_mode_) {
+        return;
+    }
     handle_spawn_groups_mutated();
 }
 
@@ -1674,17 +1716,24 @@ void RoomConfigurator::rebuild_rows_internal() {
     inherit_checkbox_ = std::make_unique<DMCheckbox>("Inherit Map Assets", state_->inherits_assets);
     inherit_widget_ = std::make_unique<CheckboxWidget>(inherit_checkbox_.get());
 
-    tag_editor_ = std::make_unique<TagEditorWidget>();
-    tag_editor_->set_tags(room_tags_, room_anti_tags_);
-    tag_editor_->set_on_changed([this](const std::vector<std::string>& include,
-                                       const std::vector<std::string>& exclude) {
-        if (include != room_tags_ || exclude != room_anti_tags_) {
-            room_tags_ = include;
-            room_anti_tags_ = exclude;
-            tags_dirty_ = true;
-            this->request_container_layout();
-        }
-    });
+    if (!room_metadata_only_mode_) {
+        tag_editor_ = std::make_unique<TagEditorWidget>();
+        tag_editor_->set_tags(room_tags_, room_anti_tags_);
+        tag_editor_->set_on_changed([this](const std::vector<std::string>& include,
+                                           const std::vector<std::string>& exclude) {
+            if (include != room_tags_ || exclude != room_anti_tags_) {
+                room_tags_ = include;
+                room_anti_tags_ = exclude;
+                tags_dirty_ = true;
+                this->request_container_layout();
+            }
+        });
+    } else {
+        tag_editor_.reset();
+        room_tags_.clear();
+        room_anti_tags_.clear();
+        tags_dirty_ = false;
+    }
 
     refresh_base_panel_rows();
 
@@ -1696,16 +1745,23 @@ void RoomConfigurator::rebuild_rows_internal() {
         }
     }
 
-    rebuild_spawn_rows(force_collapse_sections);
+    if (!room_metadata_only_mode_) {
+        rebuild_spawn_rows(force_collapse_sections);
 
-    add_spawn_button_ = std::make_unique<DMButton>("Add Spawn Group", &DMStyles::CreateButton(), 0, DMButton::height());
-    add_spawn_widget_ = std::make_unique<ButtonWidget>(add_spawn_button_.get(), [this]() {
-        if (on_spawn_add_) {
-            on_spawn_add_();
-        } else {
-            this->add_spawn_group_direct();
-        }
-    });
+        add_spawn_button_ = std::make_unique<DMButton>("Add Spawn Group", &DMStyles::CreateButton(), 0, DMButton::height());
+        add_spawn_widget_ = std::make_unique<ButtonWidget>(add_spawn_button_.get(), [this]() {
+            if (on_spawn_add_) {
+                on_spawn_add_();
+            } else {
+                this->add_spawn_group_direct();
+            }
+        });
+    } else {
+        spawn_group_configs_.clear();
+        spawn_group_config_ids_.clear();
+        add_spawn_button_.reset();
+        add_spawn_widget_.reset();
+    }
 
     prune_collapsible_caches();
     request_container_layout();
@@ -1908,10 +1964,12 @@ bool RoomConfigurator::sync_state_from_widgets() {
     bool tags_changed = false;
     const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
 
-    if (tags_dirty_) {
+    if (!room_metadata_only_mode_ && tags_dirty_) {
         changed = true;
         tags_dirty_ = false;
         tags_changed = true;
+    } else if (room_metadata_only_mode_) {
+        tags_dirty_ = false;
     }
 
     if (name_box_ && !name_box_->is_editing()) {
@@ -2073,20 +2131,27 @@ bool RoomConfigurator::sync_state_from_widgets() {
     }
 
     if (changed) {
-        state_->apply_to_json(loaded_json_, allow_height);
-        write_tags_to_json(loaded_json_);
+        const bool include_camera = !room_metadata_only_mode_;
+        state_->apply_to_json(loaded_json_, allow_height, include_camera);
+        if (!room_metadata_only_mode_) {
+            write_tags_to_json(loaded_json_);
+        }
         if (room_) {
             auto& root = live_room_json();
-            state_->apply_to_json(root, allow_height);
-            write_tags_to_json(root);
+            state_->apply_to_json(root, allow_height, include_camera);
+            if (!room_metadata_only_mode_) {
+                write_tags_to_json(root);
+            }
             if (room_save_callback_) { room_save_callback_(false); } else { room_->mark_dirty(); }
             if (tags_changed) {
                 tag_utils::notify_tags_changed();
             }
         } else if (external_room_json_) {
             auto& root = live_room_json();
-            state_->apply_to_json(root, allow_height);
-            write_tags_to_json(root);
+            state_->apply_to_json(root, allow_height, include_camera);
+            if (!room_metadata_only_mode_) {
+                write_tags_to_json(root);
+            }
         }
         if (on_external_spawn_change_) {
             on_external_spawn_change_();
@@ -2155,9 +2220,9 @@ nlohmann::json RoomConfigurator::build_json() const {
     nlohmann::json result = loaded_json_.is_object() ? loaded_json_ : nlohmann::json::object();
     if (state_) {
         State copy = *state_;
-    const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
+        const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
         copy.ensure_valid(allow_height);
-        copy.apply_to_json(result, allow_height);
+        copy.apply_to_json(result, allow_height, !room_metadata_only_mode_);
     }
     return result;
 }
@@ -2227,6 +2292,15 @@ void RoomConfigurator::set_spawn_group_callbacks(std::function<void(const std::s
                                                  std::function<void()> on_add,
                                                  std::function<void(const std::string&)> on_regenerate,
                                                  std::function<void(const std::string&, SDL_Point)> on_open_floating) {
+    if (room_metadata_only_mode_) {
+        on_spawn_edit_ = {};
+        on_spawn_delete_ = {};
+        on_spawn_reorder_ = {};
+        on_spawn_add_ = {};
+        on_spawn_regenerate_ = {};
+        on_spawn_open_panel_ = {};
+        return;
+    }
     on_spawn_edit_ = std::move(on_edit);
     on_spawn_delete_ = std::move(on_delete);
     on_spawn_reorder_ = std::move(on_reorder);
@@ -2236,6 +2310,9 @@ void RoomConfigurator::set_spawn_group_callbacks(std::function<void(const std::s
 }
 
 bool RoomConfigurator::focus_spawn_group(const std::string& spawn_id) {
+    if (room_metadata_only_mode_) {
+        return false;
+    }
     if (spawn_id.empty()) {
         return false;
     }
@@ -2302,6 +2379,11 @@ bool RoomConfigurator::focus_name_field() {
 void RoomConfigurator::set_spawn_area_open_callback(
     std::function<void(const std::string&, const std::string&)> cb,
     std::string stack_key) {
+    if (room_metadata_only_mode_) {
+        on_spawn_area_open_ = {};
+        spawn_area_stack_key_.clear();
+        return;
+    }
     on_spawn_area_open_ = std::move(cb);
     spawn_area_stack_key_ = std::move(stack_key);
     for (auto& config : spawn_group_configs_) {
@@ -2324,6 +2406,9 @@ void RoomConfigurator::refresh_camera_panel_widgets() {
 }
 
 bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustment) {
+    if (room_metadata_only_mode_) {
+        return false;
+    }
     if (!state_) {
         return false;
     }
@@ -2361,6 +2446,9 @@ bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustmen
 }
 
 void RoomConfigurator::reload_camera_state_from_room() {
+    if (room_metadata_only_mode_) {
+        return;
+    }
     if (!state_) {
         return;
     }
@@ -2379,18 +2467,18 @@ void RoomConfigurator::reload_camera_state_from_room() {
 }
 
 void RoomConfigurator::request_camera_live_update() {
-    if (!state_) return;
+    if (room_metadata_only_mode_ || !state_) return;
     // Save to room/external json and trigger camera update in dev mode
     if (room_) {
         room_->camera_height_px = state_->camera_height_px;
         room_->camera_tilt_deg = state_->camera_tilt_deg;
         room_->camera_zoom_percent = state_->camera_zoom_percent;
 
-        state_->apply_to_json(room_->assets_data(), true);
+        state_->apply_to_json(room_->assets_data(), true, true);
         if (room_save_callback_) { room_save_callback_(false); } else { room_->mark_dirty(); }
         if (on_camera_changed_) on_camera_changed_(room_);
     } else if (external_room_json_) {
-        state_->apply_to_json(*external_room_json_, true);
+        state_->apply_to_json(*external_room_json_, true, true);
         if (on_external_spawn_change_) on_external_spawn_change_();
         if (on_camera_changed_) on_camera_changed_(nullptr);
     }

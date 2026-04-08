@@ -47,6 +47,14 @@ static bool query_texture_size(SDL_Texture* texture, int& out_w, int& out_h) {
     return true;
 }
 
+static float smoothstep(float edge0, float edge1, float value) {
+    if (edge1 <= edge0) {
+        return value >= edge1 ? 1.0f : 0.0f;
+    }
+    const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * (3.0f - (2.0f * t));
+}
+
 static TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
     TextureStateSnapshot state{};
     if (!texture) {

@@ -304,6 +304,7 @@ add_executable(engine_tests
     ENGINE/tests/test_geometry_batcher_ordering.cpp
     ENGINE/tests/test_screen_space_math.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
+    ENGINE/tests/test_layer_effect_processor.cpp
   )
 
 target_include_directories(engine_tests

@@ -3599,7 +3599,7 @@
         "boundary_min_visible_screen_ratio": 0.014999999664723873,
         "camera_height_max_px": 100000,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "focal_length_mm": 50.0099983215332,
         "layer_depth_curve": 23.31999969482422,
         "layer_depth_interval": 35.0,
@@ -3754,9 +3754,9 @@
           ],
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 2,

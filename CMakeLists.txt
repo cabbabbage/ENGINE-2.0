@@ -282,6 +282,7 @@ add_executable(engine_tests
     ENGINE/tests/test_movement_payload_geometry.cpp
     ENGINE/tests/test_player_direction_intent.cpp
     ENGINE/tests/test_room_anchor_mode_utils.cpp
+    ENGINE/tests/test_room_editor_point_mode_isolation.cpp
     ENGINE/tests/test_room_selection_filter_utils.cpp
     ENGINE/tests/test_spawn_group_codec.cpp
     ENGINE/tests/test_runtime_candidates.cpp

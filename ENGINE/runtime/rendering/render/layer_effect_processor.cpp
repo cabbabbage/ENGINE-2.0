@@ -5,10 +5,58 @@
 #include <cstdint>
 #include <vector>
 
+#include "utils/log.hpp"
+
 namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kInvSqrt2 = 0.70710678f;
+constexpr float kMinimumUsefulBlurRadiusPx = 0.35f;
+constexpr int kFogBandTextureWidth = 384;
+constexpr int kFogBandTextureHeight = 192;
+
+struct TextureStateSnapshot {
+    SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+    Uint8 alpha_mod = 255;
+    Uint8 color_mod_r = 255;
+    Uint8 color_mod_g = 255;
+    Uint8 color_mod_b = 255;
+};
+
+static bool query_texture_size(SDL_Texture* texture, int& out_w, int& out_h) {
+    out_w = 0;
+    out_h = 0;
+    if (!texture) {
+        return false;
+    }
+
+    float wf = 0.0f;
+    float hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &wf, &hf)) {
+        return false;
+    }
+
+    const int rounded_w = static_cast<int>(std::lround(wf));
+    const int rounded_h = static_cast<int>(std::lround(hf));
+    if (rounded_w <= 0 || rounded_h <= 0) {
+        return false;
+    }
+
+    out_w = rounded_w;
+    out_h = rounded_h;
+    return true;
+}
+
+static TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
+    TextureStateSnapshot state{};
+    if (!texture) {
+        return state;
+    }
+    SDL_GetTextureBlendMode(texture, &state.blend_mode);
+    SDL_GetTextureAlphaMod(texture, &state.alpha_mod);
+    SDL_GetTextureColorMod(texture, &state.color_mod_r, &state.color_mod_g, &state.color_mod_b);
+    return state;
+}
 
 static void clear_target(SDL_Renderer* renderer, SDL_Texture* target) {
     SDL_SetRenderTarget(renderer, target);
@@ -16,14 +64,13 @@ static void clear_target(SDL_Renderer* renderer, SDL_Texture* target) {
     SDL_RenderClear(renderer);
 }
 
-static void restore_texture_state(SDL_Texture* texture,
-                                  SDL_BlendMode blend_mode,
-                                  Uint8 alpha_mod) {
+static void restore_texture_state(SDL_Texture* texture, const TextureStateSnapshot& state) {
     if (!texture) {
         return;
     }
-    SDL_SetTextureBlendMode(texture, blend_mode);
-    SDL_SetTextureAlphaMod(texture, alpha_mod);
+    SDL_SetTextureBlendMode(texture, state.blend_mode);
+    SDL_SetTextureAlphaMod(texture, state.alpha_mod);
+    SDL_SetTextureColorMod(texture, state.color_mod_r, state.color_mod_g, state.color_mod_b);
 }
 
 static SDL_BlendMode make_sum_blend_mode() {
@@ -370,7 +417,15 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
 } // namespace
 
 LayerEffectProcessor::~LayerEffectProcessor() {
-    destroy_fog_resources();
+    destroy_owned_resources();
+}
+
+void LayerEffectProcessor::set_renderer(SDL_Renderer* renderer) {
+    if (renderer_ == renderer) {
+        return;
+    }
+    destroy_owned_resources();
+    renderer_ = renderer;
 }
 
 double LayerEffectProcessor::radial_lens_factor_from_optics(double focal_length_mm, double f_stop) {
@@ -401,10 +456,6 @@ double LayerEffectProcessor::coc_blur_radius_from_depth_delta(double depth_delta
     return std::clamp(safe_max_blur * optical_scale * depth_scale, 0.0, safe_max_blur);
 }
 
-void LayerEffectProcessor::destroy_fog_resources() {
-    // Fog system fully removed; nothing to clean up.
-}
-
 bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
                                            SDL_Texture* dst,
                                            SDL_Texture* scratch,
@@ -423,19 +474,9 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
 
     SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
 
-    SDL_BlendMode src_old_blend = SDL_BLENDMODE_BLEND;
-    SDL_BlendMode scratch_old_blend = SDL_BLENDMODE_BLEND;
-    SDL_BlendMode dst_old_blend = SDL_BLENDMODE_BLEND;
-    SDL_GetTextureBlendMode(src, &src_old_blend);
-    SDL_GetTextureBlendMode(scratch, &scratch_old_blend);
-    SDL_GetTextureBlendMode(dst, &dst_old_blend);
-
-    Uint8 src_old_alpha = 255;
-    Uint8 scratch_old_alpha = 255;
-    Uint8 dst_old_alpha = 255;
-    SDL_GetTextureAlphaMod(src, &src_old_alpha);
-    SDL_GetTextureAlphaMod(scratch, &scratch_old_alpha);
-    SDL_GetTextureAlphaMod(dst, &dst_old_alpha);
+    const TextureStateSnapshot src_state = capture_texture_state(src);
+    const TextureStateSnapshot scratch_state = capture_texture_state(scratch);
+    const TextureStateSnapshot dst_state = capture_texture_state(dst);
 
     const SDL_BlendMode sum_blend = make_sum_blend_mode();
     if (sum_blend == SDL_BLENDMODE_INVALID) {
@@ -444,11 +485,12 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         SDL_RenderClear(renderer_);
         SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
         SDL_SetTextureAlphaMod(src, 255);
+        SDL_SetTextureColorMod(src, 255, 255, 255);
         SDL_RenderTexture(renderer_, src, nullptr, nullptr);
 
-        restore_texture_state(src, src_old_blend, src_old_alpha);
-        restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-        restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+        restore_texture_state(src, src_state);
+        restore_texture_state(scratch, scratch_state);
+        restore_texture_state(dst, dst_state);
         SDL_SetRenderTarget(renderer_, previous_target);
         return true;
     }
@@ -481,6 +523,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         clear_target(renderer_, scratch);
         SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
         SDL_SetTextureAlphaMod(src, 255);
+        SDL_SetTextureColorMod(src, 255, 255, 255);
 
         const SDL_FRect lowres_rect{
             0.0f,
@@ -505,9 +548,9 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
 
         SDL_Texture* next = pick_other_temp(current);
         if (!apply_outline_soften_prefill(renderer_, current, next, process_w, process_h, outline_soften_radius, sum_blend)) {
-            restore_texture_state(src, src_old_blend, src_old_alpha);
-            restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-            restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+            restore_texture_state(src, src_state);
+            restore_texture_state(scratch, scratch_state);
+            restore_texture_state(dst, dst_state);
             SDL_SetRenderTarget(renderer_, previous_target);
             return false;
         }
@@ -517,9 +560,9 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
     if (process_blur_radius > 0.01f) {
         SDL_Texture* next = pick_other_temp(current);
         if (!apply_axis_blur(renderer_, current, next, process_w, process_h, process_blur_radius, 1.0f, 0.0f, sum_blend)) {
-            restore_texture_state(src, src_old_blend, src_old_alpha);
-            restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-            restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+            restore_texture_state(src, src_state);
+            restore_texture_state(scratch, scratch_state);
+            restore_texture_state(dst, dst_state);
             SDL_SetRenderTarget(renderer_, previous_target);
             return false;
         }
@@ -527,9 +570,9 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
 
         next = pick_other_temp(current);
         if (!apply_axis_blur(renderer_, current, next, process_w, process_h, process_blur_radius, 0.0f, 1.0f, sum_blend)) {
-            restore_texture_state(src, src_old_blend, src_old_alpha);
-            restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-            restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+            restore_texture_state(src, src_state);
+            restore_texture_state(scratch, scratch_state);
+            restore_texture_state(dst, dst_state);
             SDL_SetRenderTarget(renderer_, previous_target);
             return false;
         }
@@ -539,9 +582,9 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         if (diagonal_radius > 0.75f) {
             next = pick_other_temp(current);
             if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, kInvSqrt2, kInvSqrt2, sum_blend)) {
-                restore_texture_state(src, src_old_blend, src_old_alpha);
-                restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-                restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+                restore_texture_state(src, src_state);
+                restore_texture_state(scratch, scratch_state);
+                restore_texture_state(dst, dst_state);
                 SDL_SetRenderTarget(renderer_, previous_target);
                 return false;
             }
@@ -549,9 +592,9 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
 
             next = pick_other_temp(current);
             if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, kInvSqrt2, -kInvSqrt2, sum_blend)) {
-                restore_texture_state(src, src_old_blend, src_old_alpha);
-                restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-                restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+                restore_texture_state(src, src_state);
+                restore_texture_state(scratch, scratch_state);
+                restore_texture_state(dst, dst_state);
                 SDL_SetRenderTarget(renderer_, previous_target);
                 return false;
             }
@@ -562,9 +605,9 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
     if (process_radial_radius > 0.01f) {
         SDL_Texture* next = pick_other_temp(current);
         if (!apply_radial_zoom_blur(renderer_, current, next, process_w, process_h, process_radial_radius, scaled_optical_center, sum_blend)) {
-            restore_texture_state(src, src_old_blend, src_old_alpha);
-            restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-            restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+            restore_texture_state(src, src_state);
+            restore_texture_state(scratch, scratch_state);
+            restore_texture_state(dst, dst_state);
             SDL_SetRenderTarget(renderer_, previous_target);
             return false;
         }
@@ -576,6 +619,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             clear_target(renderer_, scratch);
             SDL_SetTextureBlendMode(dst, SDL_BLENDMODE_BLEND);
             SDL_SetTextureAlphaMod(dst, 255);
+            SDL_SetTextureColorMod(dst, 255, 255, 255);
 
             const SDL_FRect lowres_rect{
                 0.0f,
@@ -590,6 +634,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         clear_target(renderer_, dst);
         SDL_SetTextureBlendMode(current, SDL_BLENDMODE_BLEND);
         SDL_SetTextureAlphaMod(current, 255);
+        SDL_SetTextureColorMod(current, 255, 255, 255);
 
         const SDL_FRect lowres_rect{
             0.0f,
@@ -602,6 +647,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         clear_target(renderer_, dst);
         SDL_SetTextureBlendMode(current, SDL_BLENDMODE_BLEND);
         SDL_SetTextureAlphaMod(current, 255);
+        SDL_SetTextureColorMod(current, 255, 255, 255);
         SDL_RenderTexture(renderer_, current, nullptr, nullptr);
     }
 
@@ -622,14 +668,564 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
                 SDL_SetRenderTarget(renderer_, dst);
                 SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
                 SDL_SetTextureAlphaMod(src, reinforce_alpha);
+                SDL_SetTextureColorMod(src, 255, 255, 255);
                 SDL_RenderTexture(renderer_, src, nullptr, nullptr);
             }
         }
     }
 
-    restore_texture_state(src, src_old_blend, src_old_alpha);
-    restore_texture_state(scratch, scratch_old_blend, scratch_old_alpha);
-    restore_texture_state(dst, dst_old_blend, dst_old_alpha);
+    restore_texture_state(src, src_state);
+    restore_texture_state(scratch, scratch_state);
+    restore_texture_state(dst, dst_state);
     SDL_SetRenderTarget(renderer_, previous_target);
     return true;
+}
+
+LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
+    SDL_Texture* base_layer_texture,
+    SDL_Texture* composited_output_texture,
+    double layer_depth_min,
+    double layer_depth_max,
+    const LayerLightingParams& lighting_params,
+    const std::vector<RuntimeLight>& lights,
+    const LayerFogParams& fog_params,
+    const LayerBlurParams& blur_params,
+    const LayerScratchTextures& scratch_textures) {
+    LayerProcessResult result{};
+    result.final_texture = composited_output_texture;
+
+    if (!renderer_ || !base_layer_texture || !composited_output_texture) {
+        return result;
+    }
+
+    int target_w = 0;
+    int target_h = 0;
+    if (!query_texture_size(composited_output_texture, target_w, target_h) || target_w <= 0 || target_h <= 0) {
+        return result;
+    }
+
+    int dark_mask_w = 0;
+    int dark_mask_h = 0;
+    const bool dark_mask_ready = scratch_textures.dark_mask_texture &&
+                                 query_texture_size(scratch_textures.dark_mask_texture, dark_mask_w, dark_mask_h) &&
+                                 dark_mask_w == target_w &&
+                                 dark_mask_h == target_h;
+
+    int blur_w = 0;
+    int blur_h = 0;
+    int blur_scratch_w = 0;
+    int blur_scratch_h = 0;
+    const bool blur_targets_ready =
+        scratch_textures.blur_texture &&
+        scratch_textures.blur_scratch_texture &&
+        scratch_textures.blur_texture != scratch_textures.blur_scratch_texture &&
+        query_texture_size(scratch_textures.blur_texture, blur_w, blur_h) &&
+        query_texture_size(scratch_textures.blur_scratch_texture, blur_scratch_w, blur_scratch_h) &&
+        blur_w == target_w &&
+        blur_h == target_h &&
+        blur_scratch_w == target_w &&
+        blur_scratch_h == target_h;
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
+
+    const TextureStateSnapshot base_state = capture_texture_state(base_layer_texture);
+    const TextureStateSnapshot output_state = capture_texture_state(composited_output_texture);
+    TextureStateSnapshot dark_mask_state{};
+    TextureStateSnapshot blur_state{};
+    TextureStateSnapshot blur_scratch_state{};
+    if (scratch_textures.dark_mask_texture) {
+        dark_mask_state = capture_texture_state(scratch_textures.dark_mask_texture);
+    }
+    if (scratch_textures.blur_texture) {
+        blur_state = capture_texture_state(scratch_textures.blur_texture);
+    }
+    if (scratch_textures.blur_scratch_texture) {
+        blur_scratch_state = capture_texture_state(scratch_textures.blur_scratch_texture);
+    }
+
+    auto restore_state_and_target = [&]() {
+        restore_texture_state(base_layer_texture, base_state);
+        restore_texture_state(composited_output_texture, output_state);
+        if (scratch_textures.dark_mask_texture) {
+            restore_texture_state(scratch_textures.dark_mask_texture, dark_mask_state);
+        }
+        if (scratch_textures.blur_texture) {
+            restore_texture_state(scratch_textures.blur_texture, blur_state);
+        }
+        if (scratch_textures.blur_scratch_texture) {
+            restore_texture_state(scratch_textures.blur_scratch_texture, blur_scratch_state);
+        }
+        SDL_SetRenderTarget(renderer_, previous_target);
+    };
+
+    // Step 1: base layer render.
+    clear_target(renderer_, composited_output_texture);
+    SDL_SetTextureBlendMode(base_layer_texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(base_layer_texture, 255);
+    SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
+    SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
+
+    // Steps 2-4: dark mask generation, light application, and mask composite.
+    if (lighting_params.enabled && dark_mask_ready) {
+        const SDL_BlendMode alpha_copy = alpha_copy_blend_mode();
+        const SDL_BlendMode alpha_masked_mul = alpha_masked_multiply_blend_mode();
+        if (alpha_copy == SDL_BLENDMODE_INVALID) {
+            if (!warned_missing_alpha_copy_blend_mode_) {
+                vibble::log::warn("[LayerEffectProcessor] Alpha copy blend mode unavailable; skipping dark-mask lighting.");
+                warned_missing_alpha_copy_blend_mode_ = true;
+            }
+        } else if (alpha_masked_mul == SDL_BLENDMODE_INVALID) {
+            if (!warned_missing_alpha_masked_multiply_blend_mode_) {
+                vibble::log::warn("[LayerEffectProcessor] Alpha-masked multiply blend mode unavailable; skipping dark-mask lighting.");
+                warned_missing_alpha_masked_multiply_blend_mode_ = true;
+            }
+        } else {
+            SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer_,
+                                   lighting_params.ambient_color.r,
+                                   lighting_params.ambient_color.g,
+                                   lighting_params.ambient_color.b,
+                                   0);
+            SDL_RenderClear(renderer_);
+
+            // Keep ambient color, copy only source alpha from base layer.
+            SDL_SetTextureBlendMode(base_layer_texture, alpha_copy);
+            SDL_SetTextureAlphaMod(base_layer_texture, 255);
+            SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
+            SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
+
+            bool drew_light_energy = false;
+            if (!lights.empty() && ensure_light_accum_texture(target_w, target_h)) {
+                clear_target(renderer_, light_accum_texture_);
+
+                SDL_Texture* last_falloff_texture = nullptr;
+                SDL_Color last_color{0, 0, 0, 0};
+                Uint8 last_alpha = 0;
+                for (const RuntimeLight& light : lights) {
+                    const float behind_weight = behind_occlusion_weight(light.world_z,
+                                                                        layer_depth_min,
+                                                                        layer_depth_max,
+                                                                        light.radius_px);
+                    if (behind_weight < 0.02f) {
+                        continue;
+                    }
+
+                    const float effective_intensity = std::max(0.0f, light.intensity) * behind_weight;
+                    if (effective_intensity <= 0.0005f) {
+                        continue;
+                    }
+
+                    SDL_Texture* falloff_texture = ensure_light_falloff_texture(light.falloff);
+                    if (!falloff_texture) {
+                        continue;
+                    }
+
+                    const int pass_count = std::clamp(static_cast<int>(std::ceil(effective_intensity)), 1, 4);
+                    const float per_pass = effective_intensity / static_cast<float>(pass_count);
+                    const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                        static_cast<int>(std::lround(per_pass * 255.0f)),
+                        0,
+                        255));
+                    if (alpha == 0) {
+                        continue;
+                    }
+
+                    if (falloff_texture != last_falloff_texture) {
+                        SDL_SetTextureBlendMode(falloff_texture, SDL_BLENDMODE_ADD);
+                        last_falloff_texture = falloff_texture;
+                        last_color = SDL_Color{0, 0, 0, 0};
+                        last_alpha = 0;
+                    }
+                    if (last_color.r != light.color.r ||
+                        last_color.g != light.color.g ||
+                        last_color.b != light.color.b) {
+                        SDL_SetTextureColorMod(falloff_texture, light.color.r, light.color.g, light.color.b);
+                        last_color = SDL_Color{light.color.r, light.color.g, light.color.b, 255};
+                    }
+                    if (last_alpha != alpha) {
+                        SDL_SetTextureAlphaMod(falloff_texture, alpha);
+                        last_alpha = alpha;
+                    }
+
+                    const float radius = std::max(4.0f, light.radius_px);
+                    const SDL_FRect light_dst{
+                        light.screen_center.x - radius,
+                        light.screen_center.y - radius,
+                        radius * 2.0f,
+                        radius * 2.0f
+                    };
+
+                    SDL_SetRenderTarget(renderer_, light_accum_texture_);
+                    for (int pass = 0; pass < pass_count; ++pass) {
+                        SDL_RenderTexture(renderer_, falloff_texture, nullptr, &light_dst);
+                    }
+                    drew_light_energy = true;
+                }
+
+                if (drew_light_energy) {
+                    const SDL_BlendMode add_rgb_preserve_alpha = add_rgb_preserve_alpha_blend_mode();
+                    if (add_rgb_preserve_alpha == SDL_BLENDMODE_INVALID) {
+                        if (!warned_missing_add_rgb_preserve_alpha_blend_mode_) {
+                            vibble::log::warn("[LayerEffectProcessor] RGB-add preserve-alpha blend mode unavailable; skipping light contribution.");
+                            warned_missing_add_rgb_preserve_alpha_blend_mode_ = true;
+                        }
+                    } else {
+                        SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
+                        SDL_SetTextureBlendMode(light_accum_texture_, add_rgb_preserve_alpha);
+                        SDL_SetTextureAlphaMod(light_accum_texture_, 255);
+                        SDL_SetTextureColorMod(light_accum_texture_, 255, 255, 255);
+                        SDL_RenderTexture(renderer_, light_accum_texture_, nullptr, nullptr);
+                    }
+                }
+            }
+
+            SDL_SetRenderTarget(renderer_, composited_output_texture);
+            SDL_SetTextureBlendMode(scratch_textures.dark_mask_texture, alpha_masked_mul);
+            SDL_SetTextureAlphaMod(scratch_textures.dark_mask_texture, 255);
+            SDL_SetTextureColorMod(scratch_textures.dark_mask_texture, 255, 255, 255);
+            SDL_RenderTexture(renderer_, scratch_textures.dark_mask_texture, nullptr, nullptr);
+            result.lighting_applied = true;
+        }
+    }
+
+    // Step 5: fog over composited layer only.
+    if (fog_params.enabled) {
+        SDL_Texture* fog_texture = ensure_fog_band_texture();
+        const float fog_bottom = std::clamp(fog_params.bottom_y_px, 0.0f, static_cast<float>(target_h));
+        if (fog_texture && fog_bottom > 1.0f) {
+            const float depth_t = std::clamp(fog_params.normalized_depth, 0.0f, 1.0f);
+            const float shaped = std::pow(depth_t, 0.64f);
+            const float density = smoothstep(0.03f, 0.93f, shaped);
+            const float fog_strength = std::clamp(
+                density * (0.52f + (0.48f * shaped)),
+                0.0f,
+                1.0f);
+            const Uint8 fog_alpha = static_cast<Uint8>(std::clamp(
+                static_cast<int>(std::lround(fog_strength * 255.0f)),
+                0,
+                255));
+            if (fog_alpha > 0) {
+                SDL_SetRenderTarget(renderer_, composited_output_texture);
+                SDL_SetTextureBlendMode(fog_texture, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureColorMod(fog_texture, fog_params.tint.r, fog_params.tint.g, fog_params.tint.b);
+                SDL_SetTextureAlphaMod(fog_texture, fog_alpha);
+
+                const SDL_FRect dst_rect{
+                    0.0f,
+                    0.0f,
+                    static_cast<float>(target_w),
+                    fog_bottom
+                };
+                SDL_RenderTexture(renderer_, fog_texture, nullptr, &dst_rect);
+
+                int fog_w = 0;
+                int fog_h = 0;
+                if (query_texture_size(fog_texture, fog_w, fog_h)) {
+                    const Uint8 detail_alpha = static_cast<Uint8>(std::clamp(
+                        static_cast<int>(std::lround(static_cast<float>(fog_alpha) * 0.42f)),
+                        0,
+                        255));
+                    if (detail_alpha > 0) {
+                        const float drift = std::fmod((depth_t * 7.0f) + 0.31f, 1.0f);
+                        const SDL_FRect src_rect{
+                            static_cast<float>(fog_w) * (0.05f + (0.15f * drift)),
+                            0.0f,
+                            static_cast<float>(fog_w) * 0.85f,
+                            static_cast<float>(fog_h)
+                        };
+                        SDL_SetTextureAlphaMod(fog_texture, detail_alpha);
+                        SDL_RenderTexture(renderer_, fog_texture, &src_rect, &dst_rect);
+                    }
+                }
+
+                SDL_SetTextureAlphaMod(fog_texture, 255);
+                SDL_SetTextureColorMod(fog_texture, 255, 255, 255);
+                result.fog_applied = true;
+            }
+        }
+    }
+
+    // Step 6: blur composited layer only.
+    const bool blur_requested =
+        blur_params.enabled &&
+        ((blur_params.radius_px > kMinimumUsefulBlurRadiusPx) ||
+         (blur_params.radial_radius_px > kMinimumUsefulBlurRadiusPx));
+    if (blur_requested && blur_targets_ready) {
+        if (apply_lens_blur(composited_output_texture,
+                            scratch_textures.blur_texture,
+                            scratch_textures.blur_scratch_texture,
+                            target_w,
+                            target_h,
+                            blur_params.radius_px,
+                            blur_params.optical_center,
+                            blur_params.radial_radius_px,
+                            blur_params.quality_scale)) {
+            result.final_texture = scratch_textures.blur_texture;
+            result.blur_applied = true;
+        }
+    }
+
+    restore_state_and_target();
+    return result;
+}
+
+void LayerEffectProcessor::destroy_owned_resources() {
+    destroy_fog_resources();
+    destroy_lighting_resources();
+}
+
+void LayerEffectProcessor::destroy_fog_resources() {
+    if (fog_band_texture_) {
+        SDL_DestroyTexture(fog_band_texture_);
+        fog_band_texture_ = nullptr;
+    }
+}
+
+void LayerEffectProcessor::destroy_lighting_resources() {
+    if (light_accum_texture_) {
+        SDL_DestroyTexture(light_accum_texture_);
+        light_accum_texture_ = nullptr;
+    }
+    light_accum_width_ = 0;
+    light_accum_height_ = 0;
+
+    for (auto& [key, texture] : light_falloff_textures_) {
+        (void)key;
+        if (texture) {
+            SDL_DestroyTexture(texture);
+        }
+    }
+    light_falloff_textures_.clear();
+
+    alpha_copy_blend_mode_ = SDL_BLENDMODE_INVALID;
+    alpha_copy_blend_mode_ready_ = false;
+    add_rgb_preserve_alpha_blend_mode_ = SDL_BLENDMODE_INVALID;
+    add_rgb_preserve_alpha_blend_mode_ready_ = false;
+    alpha_masked_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
+    alpha_masked_multiply_blend_mode_ready_ = false;
+
+    warned_missing_alpha_copy_blend_mode_ = false;
+    warned_missing_add_rgb_preserve_alpha_blend_mode_ = false;
+    warned_missing_alpha_masked_multiply_blend_mode_ = false;
+}
+
+SDL_Texture* LayerEffectProcessor::ensure_fog_band_texture() {
+    if (!renderer_) {
+        return nullptr;
+    }
+    if (fog_band_texture_) {
+        return fog_band_texture_;
+    }
+
+    SDL_Texture* texture = SDL_CreateTexture(renderer_,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_STREAMING,
+                                             kFogBandTextureWidth,
+                                             kFogBandTextureHeight);
+    if (!texture) {
+        return nullptr;
+    }
+
+    void* pixels = nullptr;
+    int pitch = 0;
+    if (!SDL_LockTexture(texture, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
+        SDL_DestroyTexture(texture);
+        return nullptr;
+    }
+
+    auto* base = static_cast<std::uint8_t*>(pixels);
+    for (int y = 0; y < kFogBandTextureHeight; ++y) {
+        auto* row = base + (pitch * y);
+        const float v = static_cast<float>(y) / static_cast<float>(kFogBandTextureHeight - 1);
+        const float vertical_falloff = std::pow(1.0f - v, 1.22f);
+
+        for (int x = 0; x < kFogBandTextureWidth; ++x) {
+            const float fx = static_cast<float>(x) / static_cast<float>(kFogBandTextureWidth - 1);
+            const float n0 = 0.5f + 0.5f * std::sin((fx * 19.7f) + (v * 4.3f));
+            const float n1 = 0.5f + 0.5f * std::sin((fx * 44.2f) - (v * 9.6f) + 1.6f);
+            const float n2 = 0.5f + 0.5f * std::sin(((fx + (v * 0.8f)) * 79.5f) + 3.9f);
+            const float n3 = 0.5f + 0.5f * std::sin(((fx * 8.1f) - (v * 13.2f)) + 0.2f);
+            const float base_noise = std::clamp(
+                (n0 * 0.40f) + (n1 * 0.28f) + (n2 * 0.20f) + (n3 * 0.12f),
+                0.0f,
+                1.0f);
+
+            const float ridged = 1.0f - std::fabs((base_noise * 2.0f) - 1.0f);
+            const float wisps = std::pow(std::clamp(ridged, 0.0f, 1.0f), 1.5f);
+            const float alpha_f = std::clamp(
+                vertical_falloff * (0.46f + (0.39f * base_noise) + (0.15f * wisps)),
+                0.0f,
+                1.0f);
+            const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                static_cast<int>(std::lround(alpha_f * 255.0f)),
+                0,
+                255));
+
+            auto* p = row + (x * 4);
+            p[0] = 255;
+            p[1] = 255;
+            p[2] = 255;
+            p[3] = alpha;
+        }
+    }
+
+    SDL_UnlockTexture(texture);
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    fog_band_texture_ = texture;
+    return fog_band_texture_;
+}
+
+bool LayerEffectProcessor::ensure_light_accum_texture(int target_w, int target_h) {
+    if (!renderer_ || target_w <= 0 || target_h <= 0) {
+        return false;
+    }
+
+    if (light_accum_texture_ &&
+        light_accum_width_ == target_w &&
+        light_accum_height_ == target_h) {
+        return true;
+    }
+
+    if (light_accum_texture_) {
+        SDL_DestroyTexture(light_accum_texture_);
+        light_accum_texture_ = nullptr;
+    }
+
+    light_accum_texture_ = SDL_CreateTexture(renderer_,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_TARGET,
+                                             target_w,
+                                             target_h);
+    if (!light_accum_texture_) {
+        light_accum_width_ = 0;
+        light_accum_height_ = 0;
+        return false;
+    }
+
+    SDL_SetTextureBlendMode(light_accum_texture_, SDL_BLENDMODE_BLEND);
+    light_accum_width_ = target_w;
+    light_accum_height_ = target_h;
+    return true;
+}
+
+SDL_Texture* LayerEffectProcessor::ensure_light_falloff_texture(float falloff) {
+    if (!renderer_) {
+        return nullptr;
+    }
+
+    const int quantized_falloff = std::clamp(static_cast<int>(std::lround(falloff * 100.0f)), 5, 800);
+    const auto existing = light_falloff_textures_.find(quantized_falloff);
+    if (existing != light_falloff_textures_.end()) {
+        return existing->second;
+    }
+
+    constexpr int kTextureSize = 256;
+    SDL_Texture* texture = SDL_CreateTexture(renderer_,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_STREAMING,
+                                             kTextureSize,
+                                             kTextureSize);
+    if (!texture) {
+        return nullptr;
+    }
+
+    void* pixels = nullptr;
+    int pitch = 0;
+    if (!SDL_LockTexture(texture, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
+        SDL_DestroyTexture(texture);
+        return nullptr;
+    }
+
+    const float center = (static_cast<float>(kTextureSize) - 1.0f) * 0.5f;
+    const float max_radius = std::max(1.0f, center);
+    const float exponent = std::clamp(static_cast<float>(quantized_falloff) / 100.0f, 0.05f, 8.0f);
+    auto* base = static_cast<std::uint8_t*>(pixels);
+    for (int y = 0; y < kTextureSize; ++y) {
+        auto* row = base + (pitch * y);
+        for (int x = 0; x < kTextureSize; ++x) {
+            const float dx = (static_cast<float>(x) - center) / max_radius;
+            const float dy = (static_cast<float>(y) - center) / max_radius;
+            const float distance = std::sqrt((dx * dx) + (dy * dy));
+            const float radial = std::clamp(1.0f - distance, 0.0f, 1.0f);
+            const float smoothed = radial * radial * (3.0f - (2.0f * radial));
+            const float curved = std::pow(smoothed, exponent);
+            const Uint8 value = static_cast<Uint8>(std::clamp(
+                static_cast<int>(std::lround(curved * 255.0f)),
+                0,
+                255));
+
+            auto* p = row + (x * 4);
+            p[0] = value;
+            p[1] = value;
+            p[2] = value;
+            p[3] = value;
+        }
+    }
+
+    SDL_UnlockTexture(texture);
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_ADD);
+    light_falloff_textures_.emplace(quantized_falloff, texture);
+    return texture;
+}
+
+SDL_BlendMode LayerEffectProcessor::alpha_copy_blend_mode() {
+    if (alpha_copy_blend_mode_ready_) {
+        return alpha_copy_blend_mode_;
+    }
+    alpha_copy_blend_mode_ready_ = true;
+    alpha_copy_blend_mode_ = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDOPERATION_ADD);
+    return alpha_copy_blend_mode_;
+}
+
+SDL_BlendMode LayerEffectProcessor::add_rgb_preserve_alpha_blend_mode() {
+    if (add_rgb_preserve_alpha_blend_mode_ready_) {
+        return add_rgb_preserve_alpha_blend_mode_;
+    }
+    add_rgb_preserve_alpha_blend_mode_ready_ = true;
+    add_rgb_preserve_alpha_blend_mode_ = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_SRC_ALPHA,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+    return add_rgb_preserve_alpha_blend_mode_;
+}
+
+SDL_BlendMode LayerEffectProcessor::alpha_masked_multiply_blend_mode() {
+    if (alpha_masked_multiply_blend_mode_ready_) {
+        return alpha_masked_multiply_blend_mode_;
+    }
+    alpha_masked_multiply_blend_mode_ready_ = true;
+    alpha_masked_multiply_blend_mode_ = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_DST_COLOR,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+    return alpha_masked_multiply_blend_mode_;
+}
+
+float LayerEffectProcessor::behind_occlusion_weight(double light_world_z,
+                                                    double layer_depth_min,
+                                                    double layer_depth_max,
+                                                    float light_radius_px) const {
+    const double z_near = std::min(layer_depth_min, layer_depth_max);
+    const double z_far = std::max(layer_depth_min, layer_depth_max);
+    const double d_behind = std::max(0.0, light_world_z - z_far);
+    const double layer_thickness = std::max(1.0, z_far - z_near);
+    const double attenuation_span = std::max(
+        24.0,
+        (0.55 * std::max(1.0f, light_radius_px)) + (0.65 * layer_thickness));
+
+    const double weight = std::exp(-(d_behind / attenuation_span));
+    return static_cast<float>(std::clamp(weight, 0.0, 1.0));
 }

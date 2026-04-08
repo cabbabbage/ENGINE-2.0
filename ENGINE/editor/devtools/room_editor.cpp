@@ -421,16 +421,17 @@ struct OnionAnchorOverlayHandle {
 std::vector<OnionAnchorOverlayHandle> collect_anchor_overlay_handles_for_frame(
     Asset* target,
     AnimationFrame* frame,
-    devmode::room_anchor_mode::AnchorPointOwner owner,
-    const std::function<bool(const std::string&)>& is_reserved_anchor_name) {
+    bool light_mode_active) {
     std::vector<OnionAnchorOverlayHandle> handles;
     if (!target || !frame) {
         return handles;
     }
     ScopedAssetFrameOverride frame_scope(target, frame);
     handles.reserve(frame->anchor_points.size());
+    const auto owner = devmode::room_anchor_mode::owner_from_light_mode(light_mode_active);
     for (const auto& anchor : frame->anchor_points) {
-        if (!devmode::room_anchor_mode::anchor_visible_in_mode(anchor, owner, is_reserved_anchor_name)) {
+        if (!anchor.is_valid() || !devmode::room_anchor_mode::anchor_owned_by_mode(anchor, owner) ||
+            is_oval_center_anchor_name(anchor.name)) {
             continue;
         }
         const anchor_points::FrameAnchorSample sample =
@@ -3831,10 +3832,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                          collect_anchor_overlay_handles_for_frame(
                              anchor_edit_.target_asset,
                              frame,
-                             devmode::room_anchor_mode::owner_from_light_mode(light_mode_active()),
-                             [this](const std::string& anchor_name) {
-                                 return is_valid_oval_center_anchor_name(anchor_name);
-                             })) {
+                             light_mode_active())) {
                         if (!handle.has_final_screen_px) {
                             continue;
                         }
@@ -9404,7 +9402,6 @@ void RoomEditor::sync_oval_tools_panel() {
 
 std::vector<std::string> RoomEditor::canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const {
     std::set<std::string> canonical_names;
-    std::unordered_map<std::string, bool> canonical_has_light_data;
     for (const auto& mapping : info.oval_anchor_mappings) {
         const std::string mapping_name = vibble::strings::trim_copy(mapping.name);
         if (!mapping_name.empty()) {
@@ -10773,12 +10770,17 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
         return false;
     }
 
+    const auto owner = devmode::room_anchor_mode::owner_from_light_mode(light_mode_active());
+    const auto is_reserved_anchor_name = [this](const std::string& anchor_name) {
+        return is_valid_oval_center_anchor_name(anchor_name);
+    };
     const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
     if (eligible_ids.empty()) {
         return true;
     }
 
     std::set<std::string> canonical_names;
+    std::unordered_map<std::string, bool> canonical_has_light_data;
     for (const std::string& animation_id : eligible_ids) {
         auto anim_it = target_info->animations.find(animation_id);
         if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
@@ -10797,7 +10799,11 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
             deduped.reserve(frame->anchor_points.size());
             bool frame_changed = false;
             for (const auto& anchor : frame->anchor_points) {
-                if (!anchor.is_valid()) {
+                if (!devmode::room_anchor_mode::anchor_owned_by_mode(anchor, owner)) {
+                    deduped.push_back(anchor);
+                    continue;
+                }
+                if (!devmode::room_anchor_mode::anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
                     frame_changed = true;
                     continue;
                 }
@@ -10831,9 +10837,6 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
     }
 
     if (canonical_names.empty()) {
-        if (target_info->reconcile_anchor_point_child_candidates({})) {
-            updated_any = true;
-        }
         return true;
     }
 
@@ -10852,7 +10855,7 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
             }
             std::unordered_set<std::string> present_names;
             for (const auto& anchor : frame->anchor_points) {
-                if (anchor.is_valid()) {
+                if (devmode::room_anchor_mode::anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
                     present_names.insert(anchor.name);
                 }
             }
@@ -10891,11 +10894,6 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
         if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
             return false;
         }
-    }
-
-    const std::vector<std::string> canonical_name_list(canonical_names.begin(), canonical_names.end());
-    if (target_info->reconcile_anchor_point_child_candidates(canonical_name_list)) {
-        updated_any = true;
     }
 
     return true;

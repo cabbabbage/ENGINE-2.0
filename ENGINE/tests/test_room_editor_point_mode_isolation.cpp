@@ -1,0 +1,173 @@
+#include <doctest/doctest.h>
+
+#include <nlohmann/json.hpp>
+
+#include "assets/asset/animation.hpp"
+#include "assets/asset/asset_info.hpp"
+#include "devtools/room_anchor_mode_utils.hpp"
+#include "devtools/room_box_payload_utils.hpp"
+#include "devtools/room_movement_payload.hpp"
+
+namespace {
+
+Animation make_single_frame_animation() {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    AnimationFrame frame{};
+    frame.rebuild_anchor_lookup();
+    path.push_back(frame);
+    return animation;
+}
+
+AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_name) {
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "oval_1";
+    mapping.asset_name = asset_name;
+    mapping.width_radius_x = 32.0f;
+    mapping.height_radius_z = 16.0f;
+    AssetInfo::OvalAnchorPoint point{};
+    point.angle_degrees = 0.0f;
+    point.texture_x = 8;
+    point.texture_y = 6;
+    point.depth_offset = 0.0f;
+    point.rotation_degrees = 0.0f;
+    point.hidden = false;
+    point.resolve_x = true;
+    point.flip_horizontal = true;
+    point.flip_vertical = true;
+    point.scaling_method = AnchorScalingMethod::Parent;
+    mapping.points.push_back(point);
+    return mapping;
+}
+
+}  // namespace
+
+TEST_CASE("Anchor and light mode mutations stay isolated by point ownership") {
+    std::vector<DisplacedAssetAnchorPoint> points{
+        DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
+        DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
+        DisplacedAssetAnchorPoint{"anchor_only", 5, 6, 0.0f},
+        DisplacedAssetAnchorPoint{"light_only", 7, 8, 0.0f},
+    };
+    points[1].has_light_data = true;
+    points[3].has_light_data = true;
+
+    const auto is_reserved = [](const std::string&) {
+        return false;
+    };
+
+    REQUIRE(devmode::room_anchor_mode::rename_anchor_in_mode(
+        points,
+        "shared",
+        "light_shared",
+        devmode::room_anchor_mode::AnchorPointOwner::Light,
+        is_reserved));
+
+    CHECK(points[0].name == "shared");
+    CHECK(points[1].name == "light_shared");
+
+    REQUIRE(devmode::room_anchor_mode::delete_anchor_in_mode(
+        points,
+        "shared",
+        devmode::room_anchor_mode::AnchorPointOwner::NonLight,
+        is_reserved));
+
+    CHECK(devmode::room_anchor_mode::find_anchor_in_mode(
+              points,
+              "shared",
+              devmode::room_anchor_mode::AnchorPointOwner::NonLight,
+              is_reserved) == nullptr);
+    CHECK(devmode::room_anchor_mode::find_anchor_in_mode(
+              points,
+              "light_shared",
+              devmode::room_anchor_mode::AnchorPointOwner::Light,
+              is_reserved) != nullptr);
+}
+
+TEST_CASE("Hitbox and attack box payload writers keep unrelated editor keys untouched") {
+    nlohmann::json payload = nlohmann::json::object({
+        {"anchor_points", nlohmann::json::array({nlohmann::json::array()})},
+        {"movement", nlohmann::json::array({nlohmann::json::array({0, 0, 0})})},
+        {"movement_total", nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0.0}})},
+        {"oval_anchor_mappings", nlohmann::json::array()},
+        {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
+        {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
+    });
+
+    const nlohmann::json anchor_points_before = payload["anchor_points"];
+    const nlohmann::json movement_before = payload["movement"];
+    const nlohmann::json movement_total_before = payload["movement_total"];
+    const nlohmann::json oval_before = payload["oval_anchor_mappings"];
+
+    const std::vector<std::string> names;
+    const std::vector<animation_update::FrameHitBox> hit_boxes{
+        devmode::room_box_payload::make_default_hit_box(names, 64, 64)};
+    REQUIRE(devmode::room_box_payload::write_hit_box_frame_to_payload(payload, 1, 0, hit_boxes));
+
+    CHECK(payload["anchor_points"] == anchor_points_before);
+    CHECK(payload["movement"] == movement_before);
+    CHECK(payload["movement_total"] == movement_total_before);
+    CHECK(payload["oval_anchor_mappings"] == oval_before);
+
+    const std::vector<animation_update::FrameAttackBox> attack_boxes{
+        devmode::room_box_payload::make_default_attack_box(names, 64, 64)};
+    REQUIRE(devmode::room_box_payload::write_attack_box_frame_to_payload(payload, 1, 0, attack_boxes));
+
+    CHECK(payload["anchor_points"] == anchor_points_before);
+    CHECK(payload["movement"] == movement_before);
+    CHECK(payload["movement_total"] == movement_total_before);
+    CHECK(payload["oval_anchor_mappings"] == oval_before);
+}
+
+TEST_CASE("Movement payload updates keep anchor and box editor keys unchanged") {
+    nlohmann::json payload = nlohmann::json::object({
+        {"anchor_points", nlohmann::json::array({nlohmann::json::array()})},
+        {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
+        {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
+        {"oval_anchor_mappings", nlohmann::json::array()},
+        {"movement", nlohmann::json::array({nlohmann::json::array({0, 0, 0})})},
+        {"movement_total", nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0.0}})},
+    });
+
+    const nlohmann::json anchor_before = payload["anchor_points"];
+    const nlohmann::json hit_before = payload["hit_boxes"];
+    const nlohmann::json attack_before = payload["attack_boxes"];
+    const nlohmann::json oval_before = payload["oval_anchor_mappings"];
+
+    std::vector<devmode::room_movement_payload::MovementFrame> frames(2);
+    frames[1].dx = 3.0f;
+    frames[1].dy = 4.0f;
+    frames[1].dz = 5.0f;
+
+    const nlohmann::json updated = devmode::room_movement_payload::build_payload_from_frames(frames, payload);
+
+    CHECK(updated["anchor_points"] == anchor_before);
+    CHECK(updated["hit_boxes"] == hit_before);
+    CHECK(updated["attack_boxes"] == attack_before);
+    CHECK(updated["oval_anchor_mappings"] == oval_before);
+    CHECK(updated["movement"].is_array());
+    CHECK(updated["movement_total"].is_object());
+}
+
+TEST_CASE("Oval mapping updates do not rewrite animation payload keys from other editors") {
+    AssetInfo info("isolation_asset");
+    info.animations.clear();
+    info.animations["default"] = make_single_frame_animation();
+    info.start_animation = "default";
+
+    nlohmann::json animation_payload = nlohmann::json::object({
+        {"source", nlohmann::json::object({{"kind", "folder"}, {"path", "default"}})},
+        {"anchor_points", nlohmann::json::array({nlohmann::json::array()})},
+        {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
+        {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
+        {"movement", nlohmann::json::array({nlohmann::json::array({0, 0, 0})})},
+        {"movement_total", nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0.0}})},
+    });
+    REQUIRE(info.update_animation_properties("default", animation_payload));
+    const nlohmann::json before_animation_payload = info.animation_payload("default");
+
+    REQUIRE(info.upsert_oval_anchor_mapping(make_basic_oval_mapping(info.name)));
+
+    CHECK(info.animation_payload("default") == before_animation_payload);
+}

@@ -891,12 +891,13 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
         const float fog_bottom = std::clamp(fog_params.bottom_y_px, 0.0f, static_cast<float>(target_h));
         if (fog_texture && fog_bottom > 1.0f) {
             const float depth_t = std::clamp(fog_params.normalized_depth, 0.0f, 1.0f);
-            const float shaped = std::pow(depth_t, 0.78f);
-            const float density = smoothstep(0.08f, 0.96f, shaped);
-            const float fog_strength = std::clamp(
-                (0.18f + (0.62f * shaped)) * density,
-                0.0f,
-                0.74f);
+            const float thickness = std::clamp(fog_params.thickness, 0.0f, 4.0f);
+            const float shaped = std::pow(depth_t, 0.68f);
+            const float depth_coverage = smoothstep(0.02f, 0.98f, shaped);
+            float fog_strength = std::clamp(depth_coverage * (0.46f + (0.62f * thickness)), 0.0f, 1.0f);
+            if (depth_t >= 0.985f) {
+                fog_strength = 1.0f;
+            }
             const Uint8 fog_alpha = static_cast<Uint8>(std::clamp(
                 static_cast<int>(std::lround(fog_strength * 255.0f)),
                 0,
@@ -907,11 +908,19 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                 SDL_SetTextureColorMod(fog_texture, fog_params.tint.r, fog_params.tint.g, fog_params.tint.b);
                 SDL_SetTextureAlphaMod(fog_texture, fog_alpha);
 
+                const float vertical_extension = std::clamp(
+                    (0.025f + (0.07f * thickness) + (0.04f * depth_t)) * static_cast<float>(target_h),
+                    6.0f,
+                    static_cast<float>(target_h) * 0.28f);
+                const float fog_cover_bottom = std::clamp(
+                    fog_bottom + vertical_extension,
+                    0.0f,
+                    static_cast<float>(target_h));
                 const SDL_FRect dst_rect{
                     0.0f,
                     0.0f,
                     static_cast<float>(target_w),
-                    fog_bottom
+                    fog_cover_bottom
                 };
                 SDL_RenderTexture(renderer_, fog_texture, nullptr, &dst_rect);
 
@@ -919,15 +928,15 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                 int fog_h = 0;
                 if (query_texture_size(fog_texture, fog_w, fog_h)) {
                     const Uint8 detail_alpha = static_cast<Uint8>(std::clamp(
-                        static_cast<int>(std::lround(static_cast<float>(fog_alpha) * 0.28f)),
+                        static_cast<int>(std::lround(static_cast<float>(fog_alpha) * (0.32f + (0.22f * depth_t)))),
                         0,
                         255));
                     if (detail_alpha > 0) {
-                        const float drift = std::fmod((depth_t * 4.7f) + 0.19f, 1.0f);
+                        const float drift = std::fmod((depth_t * 5.6f) + 0.19f, 1.0f);
                         const SDL_FRect src_rect{
-                            static_cast<float>(fog_w) * (0.05f + (0.15f * drift)),
+                            static_cast<float>(fog_w) * (0.03f + (0.19f * drift)),
                             0.0f,
-                            static_cast<float>(fog_w) * 0.85f,
+                            static_cast<float>(fog_w) * 0.88f,
                             static_cast<float>(fog_h)
                         };
                         SDL_SetTextureAlphaMod(fog_texture, detail_alpha);
@@ -1039,7 +1048,7 @@ SDL_Texture* LayerEffectProcessor::ensure_fog_band_texture() {
     for (int y = 0; y < kFogBandTextureHeight; ++y) {
         auto* row = reinterpret_cast<Uint32*>(base + (pitch * y));
         const float v = static_cast<float>(y) / static_cast<float>(kFogBandTextureHeight - 1);
-        const float vertical_falloff = std::pow(1.0f - v, 1.22f);
+        const float vertical_falloff = std::pow(v, 0.86f);
 
         for (int x = 0; x < kFogBandTextureWidth; ++x) {
             const float fx = static_cast<float>(x) / static_cast<float>(kFogBandTextureWidth - 1);

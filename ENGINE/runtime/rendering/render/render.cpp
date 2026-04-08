@@ -2398,6 +2398,7 @@ void SceneRenderer::render() {
                 fog_params.enabled = true;
                 fog_params.normalized_depth = 1.0f;
                 fog_params.bottom_y_px = fog_bottom_y;
+                fog_params.thickness = std::max(0.0f, realism.fog_thickness);
                 fog_params.tint = SDL_Color{222, 232, 242, 255};
             }
         }
@@ -2758,6 +2759,7 @@ void SceneRenderer::render() {
                             fog_params.normalized_depth = static_cast<float>(
                                 std::clamp(far_depth / std::max(1.0, max_cull_depth), 0.0, 1.0));
                             fog_params.bottom_y_px = fog_bottom_y;
+                            fog_params.thickness = std::max(0.0f, realism.fog_thickness);
                             fog_params.tint = SDL_Color{222, 232, 242, 255};
                         }
                     }

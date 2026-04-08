@@ -71,6 +71,7 @@ public:
         float max_cull_depth               = 5000.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
+        float fog_thickness               = 1.35f;
         float aperture_f_stop              = 2.8f;
         float focal_length_mm              = 50.0f;
         float max_blur_px                  = 12.0f;

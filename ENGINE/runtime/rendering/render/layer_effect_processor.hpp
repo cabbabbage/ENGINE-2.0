@@ -30,6 +30,7 @@ public:
         bool enabled = false;
         float normalized_depth = 0.0f;
         float bottom_y_px = 0.0f;
+        float thickness = 1.35f;
         SDL_Color tint{222, 232, 242, 255};
     };
 

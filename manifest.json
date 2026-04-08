@@ -3717,6 +3717,7 @@
         "camera_height_min_px": 1,
         "depth_of_field_enabled": true,
         "focal_length_mm": 50.0099983215332,
+        "fog_thickness": 1.350000023841858,
         "layer_depth_curve": 30.719999313354492,
         "layer_depth_interval": 98.0,
         "max_blur_px": 23.0,

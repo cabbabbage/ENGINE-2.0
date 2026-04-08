@@ -1145,7 +1145,9 @@ void AssetInfoUI::open_animation_editor_panel() {
 void AssetInfoUI::close_animation_editor_panel() {
     pending_animation_editor_open_ = false;
     if (animation_editor_window_) {
-        animation_editor_window_->set_visible(false);
+        // Programmatic panel transitions should not invoke the "window closed" callback,
+        // which is reserved for explicit user-driven close actions.
+        animation_editor_window_->set_visible(false, false);
     }
 }
 

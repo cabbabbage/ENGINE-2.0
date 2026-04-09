@@ -62,6 +62,13 @@ static std::mutex& asset_rng_mutex()
         return mutex;
 }
 
+static float sample_size_variation_identity()
+{
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        std::lock_guard<std::mutex> lock(asset_rng_mutex());
+        return dist(asset_rng());
+}
+
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
 
@@ -367,6 +374,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         alpha_smoothing_.set_params(transform_smoothing::asset_alpha_params());
 
         alpha_smoothing_.reset(hidden ? 0.0f : 1.0f);
+        size_variation_sample_ = sample_size_variation_identity();
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
 }
@@ -487,6 +495,7 @@ Asset::Asset(const Asset& o)
         clear_render_caches();
         last_scale_usage_ = o.last_scale_usage_;
         scale_variant_state_ = o.scale_variant_state_;
+        size_variation_sample_ = o.size_variation_sample_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
@@ -534,6 +543,7 @@ Asset& Asset::operator=(const Asset& o) {
         assets_              = o.assets_;
         spawn_id             = o.spawn_id;
         spawn_method         = o.spawn_method;
+        size_variation_sample_ = o.size_variation_sample_;
         owning_room_name_    = o.owning_room_name_;
         controller_.reset();
         children_.clear();
@@ -791,8 +801,7 @@ void Asset::update_scale_values(bool force) {
     last_scale_update_camera_state_version_ = camera_state_version;
 
     const PerspectiveSample perspective_sample = runtime_perspective_sample();
-    const float base_scale =
-        (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
+    const float base_scale = runtime_effective_base_scale();
     const float perspective_scale = perspective_sample.scale;
     const char* perspective_source = perspective_source_label(perspective_sample.source);
 
@@ -880,6 +889,32 @@ void Asset::update_scale_values(bool force) {
     mark_composite_dirty();
     mark_anchors_dirty();
     mark_mesh_dirty();
+}
+
+float Asset::runtime_effective_base_scale() const {
+    const float authored_base =
+        (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
+    if (!info) {
+        return authored_base;
+    }
+    if (info->tillable) {
+        return authored_base;
+    }
+
+    float variation = info->size_variation_percent;
+    if (!std::isfinite(variation)) {
+        variation = 0.0f;
+    }
+    variation = std::clamp(variation, 0.0f, 20.0f);
+    if (variation <= 0.0f) {
+        return authored_base;
+    }
+
+    const float multiplier = 1.0f + (size_variation_sample_ * (variation / 100.0f));
+    if (!std::isfinite(multiplier) || multiplier <= 0.0f) {
+        return authored_base;
+    }
+    return authored_base * multiplier;
 }
 
 const char* Asset::perspective_source_label(PerspectiveSource source) {

@@ -1775,7 +1775,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 200.0
+        "scale_percentage": 200.0,
+        "size_variation": 10.0
       },
       "start": "default",
       "tags": [],
@@ -1817,6 +1818,10 @@
       "can_invert": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 155.0,
+        "size_variation": 10.0
+      },
       "start": "default",
       "tags": [],
       "tillable": false,
@@ -4431,11 +4436,11 @@
       "camera_settings": {
         "aperture_f_stop": 0.009999999776482582,
         "base_height_px": 720.0,
-        "blur_px": 0.6899999976158142,
+        "blur_px": 0.0,
         "boundary_min_visible_screen_ratio": 0.014999999664723873,
         "camera_height_max_px": 100000,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "focal_length_mm": 0.009999999776482582,
         "fog_bottom_curve": 1.5499999523162842,
         "fog_thickness": 2.3499999046325684,
@@ -4443,7 +4448,7 @@
         "layer_depth_interval": 35.0,
         "max_cull_depth": 5718.0,
         "min_visible_screen_ratio": 0.010000000707805157,
-        "radial_blur_px": 1.0099999904632568
+        "radial_blur_px": 0.0
       },
       "content_root": "content/forrest",
       "map_assets_data": {
@@ -4487,20 +4492,8 @@
           {
             "candidates": [
               {
-                "chance": 5,
-                "name": "tree_dark"
-              },
-              {
                 "chance": 0,
                 "name": "null"
-              },
-              {
-                "chance": 5.25,
-                "name": "tree_darker"
-              },
-              {
-                "chance": 5.25,
-                "name": "tree_fps_2"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -4598,16 +4591,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1697,
-          "camera_center_dz": -28,
-          "camera_height_px": 238,
-          "camera_tilt_deg": 18.400001525878906,
+          "camera_center_dx": -881,
+          "camera_center_dz": -1200,
+          "camera_height_px": 822,
+          "camera_tilt_deg": 30.400001525878906,
           "camera_zoom_percent": 35,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -4800,6 +4793,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-4122ed63818c"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_darker"
+                }
+              ],
+              "display_name": "tree_darker",
+              "dx": -989,
+              "dz": -236,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3616,
+              "origional_width": 3312,
+              "position": "Exact",
+              "priority": 6,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-2bef2c6380ac"
             }
           ]
         }

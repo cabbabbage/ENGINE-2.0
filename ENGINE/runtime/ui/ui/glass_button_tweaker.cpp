@@ -99,8 +99,6 @@ Range range_for_field_label(const std::string& label, FieldKind kind) {
     if (label == "Ray Intensity") return {0.0f, 10.0f};
     if (label == "Ray Length") return {0.0f, 2.0f};
     if (label == "Ray Steps") return {0.0f, 32.0f};
-    if (label == "Motion Blur Radius") return {0.0f, 64.0f};
-    if (label == "Motion Blur Mix") return {0.0f, 0.95f};
 
     // Fallback ranges.
     if (kind == FieldKind::Integer) return {0.0f, 200.0f};
@@ -179,8 +177,6 @@ GlassButtonTweaker::GlassButtonTweaker() {
     fields_.push_back({"Ray Intensity", FieldKind::Float, &GlassButtonStyle::ray_intensity, 0.05f, 0.2f});
     fields_.push_back({"Ray Length", FieldKind::Float, &GlassButtonStyle::ray_length, 0.05f, 0.2f});
     fields_.push_back({"Ray Steps", FieldKind::Integer, &GlassButtonStyle::ray_steps, 1.0f, 2.0f});
-    fields_.push_back({"Motion Blur Radius", FieldKind::Integer, &GlassButtonStyle::motion_blur_radius, 1.0f, 2.0f});
-    fields_.push_back({"Motion Blur Mix", FieldKind::Float, &GlassButtonStyle::motion_blur_mix, 0.02f, 0.1f});
     fields_.push_back({"Text Color", FieldKind::Color, &GlassButtonStyle::text_color, 1.0f, 5.0f});
     fields_.push_back({"Text Stroke", FieldKind::Color, &GlassButtonStyle::text_stroke, 1.0f, 5.0f});
 

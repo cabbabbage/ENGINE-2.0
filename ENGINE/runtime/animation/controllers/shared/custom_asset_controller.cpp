@@ -39,10 +39,6 @@ std::uint64_t hash_signed_int(int value) {
 
 CustomAssetController::CustomAssetController(Asset* self)
     : self_(self) {
-    if (self_ && !surface_child_.has_value()) {
-        surface_child_.emplace(*self_, "#surface");
-        surface_child_->bind("surface");
-    }
     initialize_anchor_candidate_children();
 }
 

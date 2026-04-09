@@ -30,12 +30,29 @@ bool composite_dof_layers_to_gameplay_target(SDL_Renderer* renderer,
                                              SDL_Texture* gameplay_target,
                                              const std::vector<SDL_Texture*>& final_layer_textures,
                                              const std::vector<int>& non_empty_layers);
+bool composite_scene_mid_layers(SDL_Renderer* renderer,
+                                SDL_Texture* gameplay_target,
+                                SDL_Texture* background_mid,
+                                SDL_Texture* foreground_mid);
 bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
                                     SDL_Texture* gameplay_target,
                                     SDL_Color clear_color);
+bool should_apply_background_layer_fog(int layer_index,
+                                       int foreground_layer_count,
+                                       int background_layer_count,
+                                       int player_layer_index,
+                                       bool single_layer_fallback_active);
+int fog_cycle_index_for_background_segment(int background_segment_index);
+float clamp_fog_bottom_to_player_floor(float fog_bottom_y,
+                                       float player_floor_y,
+                                       int screen_height);
 float floor_light_depth_weight(float abs_depth_from_anchor, float floor_light_cull_depth);
 float floor_light_height_weight(float world_height, float base_radius_px);
 float floor_light_footprint_radius(float base_radius_px, float world_height);
+std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_count,
+                                                std::size_t layer_count);
+std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
+std::vector<int> foreground_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
 }
 
 // Geometry batching system for reducing draw calls
@@ -165,14 +182,21 @@ private:
 
     bool ensure_sky_texture();
     void destroy_sky_texture();
+    bool ensure_mountain_texture();
+    void destroy_mountain_texture();
     bool ensure_floor_background_textures();
     SDL_Texture* ensure_floor_light_falloff_texture();
     void render_floor_background_layer(const WarpedScreenGrid& cam,
                                        const world::WorldGrid& grid,
                                        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                                       bool runtime_lighting_enabled,
                                        double max_cull_depth,
-                                       SDL_Texture* gameplay_target);
+                                       SDL_Texture* gameplay_target,
+                                       bool render_floor_tiles);
     void render_sky_layer(const WarpedScreenGrid& cam);
+    void render_mountain_layer(const WarpedScreenGrid& cam,
+                               double anchor_depth,
+                               double max_cull_depth);
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
     void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
                                          int screen_width,
@@ -209,21 +233,26 @@ private:
     SDL_Texture* scene_composite_tex_ = nullptr;
     SDL_Texture* postprocess_tex_     = nullptr;
     SDL_Texture* blur_tex_            = nullptr;
+    SDL_Texture* background_seed_tex_ = nullptr;
+    SDL_Texture* background_mid_tex_ = nullptr;
+    SDL_Texture* foreground_mid_tex_ = nullptr;
+    SDL_Texture* chain_temp_tex_ = nullptr;
     SDL_Texture* floor_base_texture_ = nullptr;
     SDL_Texture* floor_light_mask_texture_ = nullptr;
     SDL_Texture* floor_light_falloff_texture_ = nullptr;
-    std::vector<SDL_Texture*> motion_blur_history_textures_;
-    int motion_blur_history_write_index_ = 0;
-    int motion_blur_valid_history_frames_ = 0;
-    int motion_blur_history_capacity_    = 0;
     std::vector<SDL_Texture*> dof_layer_textures_;
     std::vector<SDL_Texture*> dof_dark_mask_textures_;
     std::vector<SDL_Texture*> dof_lit_textures_;
     std::vector<SDL_Texture*> dof_blur_textures_;
     std::filesystem::path sky_texture_path_;
+    std::filesystem::path mountain_texture_path_;
     double                map_radius_world_ = 0.0;
     SDL_Texture*          sky_texture_       = nullptr;
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
+    SDL_Texture*          mountain_texture_ = nullptr;
+    int                   mountain_texture_width_ = 0;
+    int                   mountain_texture_height_ = 0;
+    bool                  mountain_texture_failed_ = false;
 };

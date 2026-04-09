@@ -671,16 +671,24 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.fog_thickness = 0.0f;
     }
     settings_.fog_thickness = std::min(settings_.fog_thickness, 4.0f);
+    if (!std::isfinite(settings_.fog_bottom_curve) || settings_.fog_bottom_curve < 0.25f) {
+        settings_.fog_bottom_curve = 0.25f;
+    }
+    settings_.fog_bottom_curve = std::min(settings_.fog_bottom_curve, 3.0f);
     if (!std::isfinite(settings_.aperture_f_stop) || settings_.aperture_f_stop <= 0.01f) {
         settings_.aperture_f_stop = 0.01f;
     }
     if (!std::isfinite(settings_.focal_length_mm) || settings_.focal_length_mm <= 0.01f) {
         settings_.focal_length_mm = 0.01f;
     }
-    if (!std::isfinite(settings_.max_blur_px) || settings_.max_blur_px < 0.0f) {
-        settings_.max_blur_px = 0.0f;
+    if (!std::isfinite(settings_.blur_px) || settings_.blur_px < 0.0f) {
+        settings_.blur_px = 0.0f;
     }
-    settings_.max_blur_px = std::min(settings_.max_blur_px, 128.0f);
+    settings_.blur_px = std::min(settings_.blur_px, 128.0f);
+    if (!std::isfinite(settings_.radial_blur_px) || settings_.radial_blur_px < 0.0f) {
+        settings_.radial_blur_px = 0.0f;
+    }
+    settings_.radial_blur_px = std::min(settings_.radial_blur_px, 256.0f);
     camera_.set_fallback_height(settings_.base_height_px);
     invalidate_camera_cache();
 
@@ -1146,6 +1154,18 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         }
         target = std::clamp(value, min_value, max_value);
     };
+    auto read_float_present = [&](const char* key, float& target, float min_value, float max_value) -> bool {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_number()) {
+            return false;
+        }
+        const float value = it->get<float>();
+        if (!std::isfinite(value)) {
+            return false;
+        }
+        target = std::clamp(value, min_value, max_value);
+        return true;
+    };
     auto read_bool = [&](const char* key, bool& target) {
         auto it = data.find(key);
         if (it == data.end() || !it->is_boolean()) {
@@ -1160,9 +1180,17 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
     read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
     read_float("fog_thickness", updated.fog_thickness, 0.0f, 4.0f);
+    read_float("fog_bottom_curve", updated.fog_bottom_curve, 0.25f, 3.0f);
     read_float("aperture_f_stop", updated.aperture_f_stop, 0.01f, 64.0f);
     read_float("focal_length_mm", updated.focal_length_mm, 0.01f, 500.0f);
-    read_float("max_blur_px", updated.max_blur_px, 0.0f, 128.0f);
+    const bool has_blur_px = read_float_present("blur_px", updated.blur_px, 0.0f, 128.0f);
+    if (!has_blur_px) {
+        read_float("max_blur_px", updated.blur_px, 0.0f, 128.0f);
+    }
+    const bool has_radial_blur_px = read_float_present("radial_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
+    if (!has_radial_blur_px) {
+        read_float("radial_max_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
+    }
     read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
     set_realism_settings(updated);
 }
@@ -1175,9 +1203,11 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["layer_depth_interval"] = settings_.layer_depth_interval;
     result["layer_depth_curve"] = settings_.layer_depth_curve;
     result["fog_thickness"] = settings_.fog_thickness;
+    result["fog_bottom_curve"] = settings_.fog_bottom_curve;
     result["aperture_f_stop"] = settings_.aperture_f_stop;
     result["focal_length_mm"] = settings_.focal_length_mm;
-    result["max_blur_px"] = settings_.max_blur_px;
+    result["blur_px"] = settings_.blur_px;
+    result["radial_blur_px"] = settings_.radial_blur_px;
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
     return result;
 }

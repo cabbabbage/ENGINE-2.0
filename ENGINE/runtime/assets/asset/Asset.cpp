@@ -609,8 +609,27 @@ bool Asset::has_child(const Asset* child) const {
 }
 
 void Asset::initialize_anchor_registry_from_animations() {
+        const bool have_info = static_cast<bool>(info);
+        const bool have_loaded_animations = have_info && !info->animations.empty();
+        const bool have_oval_mappings = have_info && !info->oval_anchor_mappings.empty();
+        const bool current_frame_has_anchors =
+            current_frame &&
+            std::any_of(current_frame->anchor_points.begin(),
+                        current_frame->anchor_points.end(),
+                        [](const DisplacedAssetAnchorPoint& anchor) { return anchor.is_valid(); });
+
         if (anchors_initialized_) {
-                return;
+                const bool registry_populated =
+                    !anchor_handles_.empty() || !anchor_points_.empty() || !anchor_name_to_index_.empty();
+                if (registry_populated) {
+                        return;
+                }
+                if (!have_info) {
+                        return;
+                }
+                if (!have_loaded_animations && !have_oval_mappings && !current_frame_has_anchors) {
+                        return;
+                }
         }
 
         anchor_handles_.clear();
@@ -619,6 +638,12 @@ void Asset::initialize_anchor_registry_from_animations() {
 
         if (!info) {
                 anchors_initialized_ = true;
+                return;
+        }
+
+        if (!have_loaded_animations && !have_oval_mappings && !current_frame_has_anchors) {
+                // Animation data may still be loading; leave initialization pending.
+                anchors_initialized_ = false;
                 return;
         }
 
@@ -633,6 +658,8 @@ void Asset::initialize_anchor_registry_from_animations() {
                         }
                 }
         };
+
+        collect_from_frame(current_frame);
 
         for (const auto& [anim_id, anim] : info->animations) {
                 (void)anim_id;
@@ -1889,15 +1916,35 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
         if (!anchors_initialized_) {
                 initialize_anchor_registry_from_animations();
         }
+        auto resolve_index = [&](const AssetInfo::OvalAnchorMapping* mapping) {
+                std::size_t index = std::numeric_limits<std::size_t>::max();
+                auto it = anchor_name_to_index_.find(name);
+                if (it != anchor_name_to_index_.end()) {
+                        index = it->second;
+                } else if (mapping && !mapping->name.empty()) {
+                        auto canonical_it = anchor_name_to_index_.find(mapping->name);
+                        if (canonical_it != anchor_name_to_index_.end()) {
+                                index = canonical_it->second;
+                        }
+                }
+                return index;
+        };
+
         const AssetInfo::OvalAnchorMapping* oval_mapping = find_oval_mapping_for_anchor_name(info.get(), name);
-        std::size_t resolved_index = std::numeric_limits<std::size_t>::max();
-        auto it = anchor_name_to_index_.find(name);
-        if (it != anchor_name_to_index_.end()) {
-                resolved_index = it->second;
-        } else if (oval_mapping && !oval_mapping->name.empty()) {
-                auto canonical_it = anchor_name_to_index_.find(oval_mapping->name);
-                if (canonical_it != anchor_name_to_index_.end()) {
-                        resolved_index = canonical_it->second;
+        std::size_t resolved_index = resolve_index(oval_mapping);
+        if (resolved_index >= anchor_handles_.size() || resolved_index >= anchor_points_.size()) {
+                const bool frame_has_requested_anchor =
+                    current_frame && current_frame->find_anchor(name) != nullptr;
+                const bool can_retry_registry_build =
+                    frame_has_requested_anchor || (oval_mapping && !oval_mapping->name.empty());
+                if (can_retry_registry_build) {
+                        anchors_initialized_ = false;
+                        anchor_handles_.clear();
+                        anchor_points_.clear();
+                        anchor_name_to_index_.clear();
+                        initialize_anchor_registry_from_animations();
+                        oval_mapping = find_oval_mapping_for_anchor_name(info.get(), name);
+                        resolved_index = resolve_index(oval_mapping);
                 }
         }
         if (resolved_index >= anchor_handles_.size() || resolved_index >= anchor_points_.size()) {

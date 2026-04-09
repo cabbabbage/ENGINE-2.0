@@ -512,7 +512,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
         {"fog_thickness", 2.2},
         {"aperture_f_stop", 4.0},
         {"focal_length_mm", 35.0},
-        {"max_blur_px", 20.0},
+        {"blur_px", 20.0},
+        {"radial_blur_px", 64.0},
         {"depth_of_field_enabled", true}
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
@@ -522,7 +523,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
     CHECK(settings.fog_thickness == doctest::Approx(2.2f));
     CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
     CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
-    CHECK(settings.max_blur_px == doctest::Approx(20.0f));
+    CHECK(settings.blur_px == doctest::Approx(20.0f));
+    CHECK(settings.radial_blur_px == doctest::Approx(64.0f));
     CHECK(settings.depth_of_field_enabled);
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
@@ -530,6 +532,40 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
     CHECK(serialized["fog_thickness"] == doctest::Approx(2.2));
+    CHECK(serialized["blur_px"] == doctest::Approx(20.0));
+    CHECK(serialized["radial_blur_px"] == doctest::Approx(64.0));
     CHECK(serialized["depth_of_field_enabled"] == true);
+    CHECK_FALSE(serialized.contains("max_blur_px"));
+    CHECK_FALSE(serialized.contains("radial_max_blur_px"));
     CHECK_FALSE(serialized.contains("focus_depth"));
+}
+
+TEST_CASE("WarpedScreenGrid camera settings accepts legacy blur keys") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"max_blur_px", 7.25},
+        {"radial_max_blur_px", 12.5}
+    });
+
+    const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    CHECK(settings.blur_px == doctest::Approx(7.25f));
+    CHECK(settings.radial_blur_px == doctest::Approx(12.5f));
+}
+
+TEST_CASE("WarpedScreenGrid blur settings preserve tiny decimal values") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"blur_px", 0.013},
+        {"radial_blur_px", 0.027}
+    });
+
+    const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    CHECK(settings.blur_px == doctest::Approx(0.013f).epsilon(1e-4f));
+    CHECK(settings.radial_blur_px == doctest::Approx(0.027f).epsilon(1e-4f));
+
+    const nlohmann::json serialized = camera_grid.camera_settings_to_json();
+    REQUIRE(serialized.contains("blur_px"));
+    REQUIRE(serialized.contains("radial_blur_px"));
+    CHECK(serialized["blur_px"].get<double>() == doctest::Approx(0.013).epsilon(1e-6));
+    CHECK(serialized["radial_blur_px"].get<double>() == doctest::Approx(0.027).epsilon(1e-6));
 }

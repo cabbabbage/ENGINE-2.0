@@ -419,6 +419,48 @@ TEST_CASE("Anchor perspective override rejects non-finite input and falls back t
     CHECK(sample.source != Asset::PerspectiveSource::AnchorBindingOverride);
 }
 
+TEST_CASE("Anchor registry recovers when initialized before runtime animation data is available") {
+    Asset asset = make_test_asset(0, 0);
+    REQUIRE(asset.info != nullptr);
+
+    const auto early_lookup = asset.anchor_state(
+        "late_anchor",
+        anchor_points::GridMaterialization::None,
+        Asset::AnchorResolveMode::ForceRecompute);
+    CHECK_FALSE(early_lookup.has_value());
+
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.emplace_back();
+    AnimationFrame& frame = path.front();
+    frame.frame_index = 0;
+    frame.is_first = true;
+    frame.is_last = true;
+    frame.prev = nullptr;
+    frame.next = nullptr;
+
+    DisplacedAssetAnchorPoint anchor{};
+    anchor.name = "late_anchor";
+    anchor.texture_x = 3;
+    anchor.texture_y = 5;
+    anchor.depth_offset = 0.0f;
+    frame.set_anchor_points({anchor});
+
+    asset.info->animations.clear();
+    asset.info->animations["default"] = std::move(animation);
+    asset.current_animation = "default";
+    auto& stored_path = asset.info->animations["default"].movement_path(0);
+    REQUIRE(!stored_path.empty());
+    asset.current_frame = &stored_path.front();
+
+    const auto recovered_lookup = asset.anchor_state(
+        "late_anchor",
+        anchor_points::GridMaterialization::None,
+        Asset::AnchorResolveMode::ForceRecompute);
+    REQUIRE(recovered_lookup.has_value());
+    CHECK(recovered_lookup->name == "late_anchor");
+}
+
 #if !defined(ENGINE_WORLD_TESTS)
 TEST_CASE("Resolved anchor does not propagate flat perspective scale when runtime sample falls back to default source") {
     Asset asset = make_test_asset(12, 18);

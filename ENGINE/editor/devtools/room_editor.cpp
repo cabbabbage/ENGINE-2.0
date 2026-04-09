@@ -2274,6 +2274,8 @@ void RoomEditor::update(const Input& input) {
         return;
     }
 
+    process_pending_animation_editor_close();
+
     validate_focus_state();
 
     validate_anchor_edit_target();
@@ -5061,6 +5063,26 @@ bool RoomEditor::select_asset_or_group(Asset* asset) {
     return !selected_assets_.empty();
 }
 
+bool RoomEditor::should_open_spawn_group_panel_for_click(const void* asset_identity,
+                                                         bool has_spawn_group,
+                                                         Uint32 click_time_ms) {
+    if (!asset_identity || !has_spawn_group) {
+        last_click_asset_ = nullptr;
+        last_click_time_ms_ = 0;
+        return false;
+    }
+
+    constexpr Uint32 kDoubleClickWindowMs = 300;
+    const bool is_double_click = last_click_asset_ == asset_identity &&
+                                 last_click_time_ms_ != 0 &&
+                                 click_time_ms >= last_click_time_ms_ &&
+                                 (click_time_ms - last_click_time_ms_) <= kDoubleClickWindowMs;
+
+    last_click_asset_ = asset_identity;
+    last_click_time_ms_ = click_time_ms;
+    return is_double_click;
+}
+
 Asset* RoomEditor::selected_asset_within_interaction_radius(SDL_Point screen_point) const {
     if (selected_assets_.empty() || !assets_) {
         return nullptr;
@@ -5672,6 +5694,10 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         pressed_asset = selection_hit;
         was_dragged   = false;
         press_screen  = screen_pt;
+        if (!pressed_asset) {
+            last_click_asset_ = nullptr;
+            last_click_time_ms_ = 0;
+        }
 
         if (pressed_asset) {
             select_asset_or_group(pressed_asset);
@@ -5733,10 +5759,19 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
                 suppress_next_left_click_ = true;
                 click_buffer_frames_      = 3;
+                last_click_asset_         = nullptr;
+                last_click_time_ms_       = 0;
 
                 sync_spawn_group_panel_with_selection();
                 rebuild_highlight();
             } else {
+                const bool open_spawn_group_panel =
+                    should_open_spawn_group_panel_for_click(pressed_asset,
+                                                            !pressed_asset->spawn_id.empty(),
+                                                            SDL_GetTicks());
+                if (open_spawn_group_panel) {
+                    open_spawn_group_editor_by_id(pressed_asset->spawn_id);
+                }
 
                 if (hovered_asset_ == pressed_asset) {
                     hovered_asset_ = pressed_asset;
@@ -8045,10 +8080,44 @@ void RoomEditor::begin_asset_editor_transition(AssetEditorSubview from, AssetEdi
 }
 
 void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool animate) {
+    if (asset_editor_subview_change_in_progress_) {
+        pending_asset_editor_subview_request_ = PendingAssetEditorSubviewRequest{subview, animate};
+        return;
+    }
     if (!info_ui_) {
         return;
     }
 
+    asset_editor_subview_change_in_progress_ = true;
+    struct ScopedSubviewBusyGuard {
+        RoomEditor* editor = nullptr;
+        ~ScopedSubviewBusyGuard() {
+            if (!editor) {
+                return;
+            }
+            editor->asset_editor_subview_change_in_progress_ = false;
+        }
+    } scoped_guard{this};
+
+    PendingAssetEditorSubviewRequest request{subview, animate};
+    int processed_requests = 0;
+    constexpr int kMaxSubviewChangeRequestsPerPass = 32;
+    while (true) {
+        pending_asset_editor_subview_request_.reset();
+        apply_asset_editor_subview_change(request.subview, request.animate);
+        if (!pending_asset_editor_subview_request_.has_value()) {
+            break;
+        }
+        request = *pending_asset_editor_subview_request_;
+        if (++processed_requests >= kMaxSubviewChangeRequestsPerPass) {
+            SDL_Log("RoomEditor: dropping excessive queued asset subview requests to prevent re-entrant loop.");
+            pending_asset_editor_subview_request_.reset();
+            break;
+        }
+    }
+}
+
+void RoomEditor::apply_asset_editor_subview_change(AssetEditorSubview subview, bool animate) {
     const AssetEditorSubview previous = asset_editor_subview_;
     if (previous == subview && !asset_editor_transition_.active) {
         return;
@@ -8183,7 +8252,28 @@ void RoomEditor::set_asset_editor_subview(AssetEditorSubview subview, bool anima
     update_asset_editor_layout();
 }
 
+void RoomEditor::drain_pending_asset_editor_subview_request() {
+    if (asset_editor_subview_change_in_progress_ || !pending_asset_editor_subview_request_.has_value()) {
+        return;
+    }
+    const PendingAssetEditorSubviewRequest request = *pending_asset_editor_subview_request_;
+    pending_asset_editor_subview_request_.reset();
+    set_asset_editor_subview(request.subview, request.animate);
+}
+
+void RoomEditor::process_pending_animation_editor_close() {
+    if (asset_editor_subview_change_in_progress_ || !pending_animation_editor_close_subview_.has_value()) {
+        return;
+    }
+    const AssetEditorSubview fallback = *pending_animation_editor_close_subview_;
+    pending_animation_editor_close_subview_.reset();
+    set_asset_editor_subview(fallback, true);
+}
+
 void RoomEditor::on_animation_editor_closed() {
+    if (asset_editor_subview_change_in_progress_) {
+        return;
+    }
     if (asset_editor_subview_ != AssetEditorSubview::AnimationEditor) {
         return;
     }
@@ -8191,7 +8281,7 @@ void RoomEditor::on_animation_editor_closed() {
     if (!can_enter_asset_editor_subview(fallback) || fallback == AssetEditorSubview::AnimationEditor) {
         fallback = AssetEditorSubview::AssetInfo;
     }
-    set_asset_editor_subview(fallback, true);
+    pending_animation_editor_close_subview_ = fallback;
 }
 
 void RoomEditor::update_asset_editor_transition() {
@@ -12462,7 +12552,7 @@ bool RoomEditor::enter_anchor_edit_mode(bool light_editor_mode) {
         if (editor_mode_ != target_mode) {
             editor_mode_ = target_mode;
             anchor_edit_.light_editor_mode = light_editor_mode;
-            sync_anchor_tools_panel();
+            refresh_anchor_mode_handles();
             update_asset_editor_layout();
         }
         return true;
@@ -16619,6 +16709,17 @@ void RoomEditor::clear_active_spawn_group_target() {
 }
 
 void RoomEditor::sync_spawn_group_panel_with_selection() {
+    if (spawn_group_panel_sync_in_progress_) {
+        return;
+    }
+    struct SyncGuard {
+        bool& active;
+        explicit SyncGuard(bool& state) : active(state) { active = true; }
+        ~SyncGuard() { active = false; }
+    };
+    SyncGuard sync_guard(spawn_group_panel_sync_in_progress_);
+    (void)sync_guard;
+
     Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
     std::string spawn_id;
     if (primary) {
@@ -16701,7 +16802,19 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         return;
     }
 
+    const bool same_spawn_group_panel_active =
+        spawn_group_panel_ &&
+        spawn_group_panel_->is_visible() &&
+        active_spawn_group_id_.has_value() &&
+        *active_spawn_group_id_ == spawn_id;
     active_spawn_group_id_ = spawn_id;
+    if (same_spawn_group_panel_active) {
+        refresh_spawn_group_config_ui();
+        update_spawn_group_config_anchor();
+        spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        spawn_group_panel_->set_work_area(DockManager::instance().usableRect());
+        return;
+    }
 
     open_spawn_group_editor_by_id(spawn_id);
 }
@@ -16713,13 +16826,6 @@ void RoomEditor::update_grid_resolution_for_selection(Asset* primary) {
 
     if (snap_to_grid_enabled_) {
         clear_selection_grid_resolution_override();
-        if (!primary || primary->spawn_id.empty()) {
-            return;
-        }
-        const int resolution = current_grid_resolution();
-        if (resolution > 0) {
-            snap_spawn_group_to_resolution(primary, resolution);
-        }
         return;
     }
 
@@ -17030,6 +17136,16 @@ void RoomEditor::open_spawn_group_editor_by_id(const std::string& spawn_id) {
     if (!current_room_) {
         return;
     }
+    if (spawn_group_panel_open_in_progress_) {
+        return;
+    }
+    struct OpenGuard {
+        bool& active;
+        explicit OpenGuard(bool& state) : active(state) { active = true; }
+        ~OpenGuard() { active = false; }
+    };
+    OpenGuard open_guard(spawn_group_panel_open_in_progress_);
+    (void)open_guard;
 
     open_spawn_group_floating_panel(spawn_id, std::nullopt);
 }
@@ -17054,22 +17170,6 @@ void RoomEditor::open_spawn_group_floating_panel(const std::string& spawn_id, st
     }
 
     active_spawn_group_id_ = spawn_id;
-    const bool locked = spawn_group_locked(spawn_id);
-
-    bool has_matching_asset = false;
-    if (assets_) {
-        for (Asset* asset : assets_->all) {
-            if (!asset || asset->dead) continue;
-            if (!asset_belongs_to_room(asset)) continue;
-            if (asset->spawn_id == spawn_id) {
-                has_matching_asset = true;
-                break;
-            }
-        }
-    }
-    if (has_matching_asset && !locked) {
-        select_spawn_group_assets(spawn_id);
-    }
 
     refresh_spawn_group_config_ui();
     update_spawn_group_config_anchor();
@@ -17224,6 +17324,9 @@ std::unique_ptr<vibble::grid::Occupancy> RoomEditor::build_room_grid(const std::
 }
 
 bool RoomEditor::snap_spawn_group_to_resolution(Asset* anchor, int resolution) {
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    ++test_snap_spawn_group_to_resolution_call_count_;
+#endif
     if (!anchor || !active_assets_ || resolution <= 0) return false;
     if (anchor->spawn_id.empty()) return false;
     if (spawn_group_locked(anchor->spawn_id)) return false;
@@ -18172,3 +18275,104 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         }
     }
 }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+int RoomEditorTestAccess::subview_asset_info() {
+    return static_cast<int>(RoomEditor::AssetEditorSubview::AssetInfo);
+}
+
+int RoomEditorTestAccess::subview_animation_editor() {
+    return static_cast<int>(RoomEditor::AssetEditorSubview::AnimationEditor);
+}
+
+int RoomEditorTestAccess::subview_anchor() {
+    return static_cast<int>(RoomEditor::AssetEditorSubview::Anchor);
+}
+
+int RoomEditorTestAccess::active_subview(const RoomEditor& editor) {
+    return static_cast<int>(editor.asset_editor_subview_);
+}
+
+void RoomEditorTestAccess::set_active_subview(RoomEditor& editor, int subview) {
+    editor.asset_editor_subview_ = static_cast<RoomEditor::AssetEditorSubview>(subview);
+}
+
+void RoomEditorTestAccess::set_subview_change_in_progress(RoomEditor& editor, bool in_progress) {
+    editor.asset_editor_subview_change_in_progress_ = in_progress;
+}
+
+bool RoomEditorTestAccess::has_pending_subview_request(const RoomEditor& editor) {
+    return editor.pending_asset_editor_subview_request_.has_value();
+}
+
+int RoomEditorTestAccess::pending_subview(const RoomEditor& editor) {
+    if (!editor.pending_asset_editor_subview_request_.has_value()) {
+        return static_cast<int>(RoomEditor::AssetEditorSubview::AssetInfo);
+    }
+    return static_cast<int>(editor.pending_asset_editor_subview_request_->subview);
+}
+
+bool RoomEditorTestAccess::pending_subview_animate(const RoomEditor& editor) {
+    return editor.pending_asset_editor_subview_request_.has_value() &&
+           editor.pending_asset_editor_subview_request_->animate;
+}
+
+bool RoomEditorTestAccess::has_pending_animation_editor_close_subview(const RoomEditor& editor) {
+    return editor.pending_animation_editor_close_subview_.has_value();
+}
+
+int RoomEditorTestAccess::pending_animation_editor_close_subview(const RoomEditor& editor) {
+    if (!editor.pending_animation_editor_close_subview_.has_value()) {
+        return static_cast<int>(RoomEditor::AssetEditorSubview::AssetInfo);
+    }
+    return static_cast<int>(*editor.pending_animation_editor_close_subview_);
+}
+
+void RoomEditorTestAccess::request_subview(RoomEditor& editor, int subview, bool animate) {
+    editor.set_asset_editor_subview(static_cast<RoomEditor::AssetEditorSubview>(subview), animate);
+}
+
+void RoomEditorTestAccess::drain_pending_subview_request(RoomEditor& editor) {
+    editor.drain_pending_asset_editor_subview_request();
+}
+
+void RoomEditorTestAccess::process_pending_animation_editor_close(RoomEditor& editor) {
+    editor.process_pending_animation_editor_close();
+}
+
+void RoomEditorTestAccess::invoke_on_animation_editor_closed(RoomEditor& editor) {
+    editor.on_animation_editor_closed();
+}
+
+void RoomEditorTestAccess::set_snap_to_grid_enabled(RoomEditor& editor, bool enabled) {
+    editor.snap_to_grid_enabled_ = enabled;
+}
+
+void RoomEditorTestAccess::set_shared_footer_present(RoomEditor& editor, bool present) {
+    editor.shared_footer_bar_ = present ? reinterpret_cast<DevFooterBar*>(static_cast<std::uintptr_t>(1)) : nullptr;
+}
+
+void RoomEditorTestAccess::update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity) {
+    editor.update_grid_resolution_for_selection(reinterpret_cast<Asset*>(const_cast<void*>(primary_asset_identity)));
+}
+
+std::uint32_t RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(const RoomEditor& editor) {
+    return editor.test_snap_spawn_group_to_resolution_call_count_;
+}
+
+void RoomEditorTestAccess::reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor) {
+    editor.test_snap_spawn_group_to_resolution_call_count_ = 0;
+}
+
+bool RoomEditorTestAccess::should_open_spawn_group_panel_for_click(RoomEditor& editor,
+                                                                    const void* asset_identity,
+                                                                    bool has_spawn_group,
+                                                                    std::uint32_t click_time_ms) {
+    return editor.should_open_spawn_group_panel_for_click(asset_identity, has_spawn_group, click_time_ms);
+}
+
+void RoomEditorTestAccess::reset_click_tracking(RoomEditor& editor) {
+    editor.last_click_asset_ = nullptr;
+    editor.last_click_time_ms_ = 0;
+}
+#endif

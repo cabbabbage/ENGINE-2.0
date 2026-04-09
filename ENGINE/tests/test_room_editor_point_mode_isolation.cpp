@@ -1,11 +1,13 @@
 #include <doctest/doctest.h>
 
+#include <cstdint>
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/animation.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
 #include "devtools/room_box_payload_utils.hpp"
+#include "devtools/room_editor.hpp"
 #include "devtools/room_movement_payload.hpp"
 
 namespace {
@@ -171,3 +173,107 @@ TEST_CASE("Oval mapping updates do not rewrite animation payload keys from other
 
     CHECK(info.animation_payload("default") == before_animation_payload);
 }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+TEST_CASE("RoomEditor queues re-entrant subview requests while transition is in progress") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_subview_change_in_progress(editor, true);
+
+    RoomEditorTestAccess::request_subview(editor, RoomEditorTestAccess::subview_anchor(), true);
+
+    CHECK(RoomEditorTestAccess::has_pending_subview_request(editor));
+    CHECK(RoomEditorTestAccess::pending_subview(editor) == RoomEditorTestAccess::subview_anchor());
+    CHECK(RoomEditorTestAccess::pending_subview_animate(editor));
+}
+
+TEST_CASE("RoomEditor drains queued subview request after transition completes") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_subview_change_in_progress(editor, true);
+    RoomEditorTestAccess::request_subview(editor, RoomEditorTestAccess::subview_asset_info(), false);
+    REQUIRE(RoomEditorTestAccess::has_pending_subview_request(editor));
+
+    RoomEditorTestAccess::set_subview_change_in_progress(editor, false);
+    RoomEditorTestAccess::drain_pending_subview_request(editor);
+
+    CHECK_FALSE(RoomEditorTestAccess::has_pending_subview_request(editor));
+    CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_asset_info());
+}
+
+TEST_CASE("RoomEditor ignores animation-editor closed callback during subview transition") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_active_subview(editor, RoomEditorTestAccess::subview_animation_editor());
+    RoomEditorTestAccess::set_subview_change_in_progress(editor, true);
+
+    RoomEditorTestAccess::invoke_on_animation_editor_closed(editor);
+
+    CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_animation_editor());
+    CHECK_FALSE(RoomEditorTestAccess::has_pending_subview_request(editor));
+}
+
+TEST_CASE("RoomEditor defers animation-editor closed fallback transition to update pass") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_active_subview(editor, RoomEditorTestAccess::subview_animation_editor());
+
+    RoomEditorTestAccess::invoke_on_animation_editor_closed(editor);
+
+    CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_animation_editor());
+    CHECK(RoomEditorTestAccess::has_pending_animation_editor_close_subview(editor));
+    CHECK(RoomEditorTestAccess::pending_animation_editor_close_subview(editor) ==
+          RoomEditorTestAccess::subview_asset_info());
+
+    RoomEditorTestAccess::process_pending_animation_editor_close(editor);
+
+    CHECK_FALSE(RoomEditorTestAccess::has_pending_animation_editor_close_subview(editor));
+    CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_animation_editor());
+}
+
+TEST_CASE("RoomEditor opens spawn-group panel only on double left-click for same asset") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_click_tracking(editor);
+
+    int asset_a = 1;
+    int asset_b = 2;
+
+    CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_a, true, 1000));
+    CHECK(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_a, true, 1200));
+
+    CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_a, true, 1605));
+    CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_b, true, 1700));
+}
+
+TEST_CASE("RoomEditor click tracking ignores non-spawn assets and resets on null identity") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_click_tracking(editor);
+
+    int asset_a = 1;
+
+    CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_a, false, 1000));
+    CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_a, true, 1100));
+    CHECK(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_a, true, 1250));
+
+    CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, nullptr, true, 1300));
+    CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
+        editor, &asset_a, true, 1350));
+}
+
+TEST_CASE("RoomEditor selection sync with snap enabled does not trigger spawn-group snapping") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_snap_spawn_group_to_resolution_call_count(editor);
+    RoomEditorTestAccess::set_shared_footer_present(editor, true);
+    RoomEditorTestAccess::set_snap_to_grid_enabled(editor, true);
+
+    RoomEditorTestAccess::update_grid_resolution_for_selection(
+        editor,
+        reinterpret_cast<const void*>(static_cast<std::uintptr_t>(0x1234)));
+
+    CHECK(RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(editor) == 0);
+}
+#endif

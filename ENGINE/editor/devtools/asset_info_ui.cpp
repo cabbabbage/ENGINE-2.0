@@ -1032,11 +1032,11 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
         } catch (const std::exception& ex) {
             SDL_Log("AssetInfoUI: failed to configure animation editor for %s: %s", info_ ? info_->name.c_str() : "<null>", ex.what());
             animation_editor_window_->clear_info();
-            animation_editor_window_->set_visible(false);
+            animation_editor_window_->set_visible(false, false);
         } catch (...) {
             SDL_Log("AssetInfoUI: failed to configure animation editor for %s due to unknown error.", info_ ? info_->name.c_str() : "<null>");
             animation_editor_window_->clear_info();
-            animation_editor_window_->set_visible(false);
+            animation_editor_window_->set_visible(false, false);
         }
     }
     for (auto& s : sections_) {
@@ -1068,7 +1068,7 @@ void AssetInfoUI::clear_info() {
     if (animation_editor_window_) {
         try {
             animation_editor_window_->clear_info();
-            animation_editor_window_->set_visible(false);
+            animation_editor_window_->set_visible(false, false);
         } catch (const std::exception& ex) {
             SDL_Log("AssetInfoUI: failed to reset animation editor: %s", ex.what());
         } catch (...) {
@@ -1106,7 +1106,7 @@ void AssetInfoUI::close() {
     if (assets_) {
 
     }
-    if (animation_editor_window_) animation_editor_window_->set_visible(false);
+    if (animation_editor_window_) animation_editor_window_->set_visible(false, false);
     if (asset_selector_) asset_selector_->close();
     if (assets_ && forcing_high_quality_rendering_) {
 

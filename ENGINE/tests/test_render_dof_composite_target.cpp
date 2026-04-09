@@ -207,3 +207,40 @@ TEST_CASE("DoF layer composite helper writes to gameplay target even when curren
     SDL_DestroyTexture(wrong_target);
     SDL_DestroyTexture(gameplay_target);
 }
+
+TEST_CASE("Scene mid-layer composite draws foreground over background") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 16;
+    constexpr int kH = 16;
+    SDL_Texture* gameplay_target = create_target_texture(renderer, kW, kH);
+    SDL_Texture* background_mid = create_target_texture(renderer, kW, kH);
+    SDL_Texture* foreground_mid = create_target_texture(renderer, kW, kH);
+    REQUIRE(gameplay_target != nullptr);
+    REQUIRE(background_mid != nullptr);
+    REQUIRE(foreground_mid != nullptr);
+
+    REQUIRE(fill_texture(renderer, background_mid, SDL_Color{25, 80, 210, 255}));
+    REQUIRE(fill_texture(renderer, foreground_mid, SDL_Color{220, 35, 35, 255}));
+
+    const bool ok = render_internal::composite_scene_mid_layers(renderer,
+                                                                gameplay_target,
+                                                                background_mid,
+                                                                foreground_mid);
+    CHECK(ok);
+
+    SDL_Color gameplay_pixel{};
+    REQUIRE(read_pixel(renderer, gameplay_target, 8, 8, gameplay_pixel));
+    CHECK(gameplay_pixel.r == 220);
+    CHECK(gameplay_pixel.g == 35);
+    CHECK(gameplay_pixel.b == 35);
+    CHECK(gameplay_pixel.a == 255);
+
+    SDL_DestroyTexture(foreground_mid);
+    SDL_DestroyTexture(background_mid);
+    SDL_DestroyTexture(gameplay_target);
+}

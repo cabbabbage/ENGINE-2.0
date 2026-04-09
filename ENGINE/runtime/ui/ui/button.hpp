@@ -35,9 +35,6 @@ struct GlassButtonStyle {
     float ray_length      = 0.45f;
     int   ray_steps       = 8;
 
-    int   motion_blur_radius = 8;
-    float motion_blur_mix    = 0.68f;
-
     int   blur_px         = 0;
     int   blur_px_hover   = 0;
     int   blur_px_pressed = 0;

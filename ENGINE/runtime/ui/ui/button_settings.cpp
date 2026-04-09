@@ -38,8 +38,6 @@ const std::vector<FieldEntry> kFieldEntries = {
     {"ray_intensity", [](const GlassButtonStyle& style) { return ButtonSettings::format_float(style.ray_intensity); }},
     {"ray_length", [](const GlassButtonStyle& style) { return ButtonSettings::format_float(style.ray_length); }},
     {"ray_steps", [](const GlassButtonStyle& style) { return ButtonSettings::format_int(style.ray_steps); }},
-    {"motion_blur_radius", [](const GlassButtonStyle& style) { return ButtonSettings::format_int(style.motion_blur_radius); }},
-    {"motion_blur_mix", [](const GlassButtonStyle& style) { return ButtonSettings::format_float(style.motion_blur_mix); }},
     {"text_color", [](const GlassButtonStyle& style) { return ButtonSettings::format_color(style.text_color); }},
     {"text_stroke", [](const GlassButtonStyle& style) { return ButtonSettings::format_color(style.text_stroke); }}
 };
@@ -65,8 +63,6 @@ GlassButtonStyle build_default_glass_button_style() {
     style.ray_intensity = 2.428571f;
     style.ray_length = 0.514286f;
     style.ray_steps = 10;
-    style.motion_blur_radius = 48;
-    style.motion_blur_mix = 0.76f;
     style.blur_px = 0;
     style.blur_px_hover = 0;
     style.blur_px_pressed = 0;

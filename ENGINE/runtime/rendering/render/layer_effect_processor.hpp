@@ -31,28 +31,19 @@ public:
         float normalized_depth = 0.0f;
         float bottom_y_px = 0.0f;
         float thickness = 1.35f;
+        int layer_cycle_index = 0;
+        float bottom_opacity_curve = 1.0f;
         SDL_Color tint{222, 232, 242, 255};
-    };
-
-    struct LayerBlurParams {
-        bool enabled = false;
-        float radius_px = 0.0f;
-        SDL_FPoint optical_center{0.0f, 0.0f};
-        float radial_radius_px = 0.0f;
-        float quality_scale = 1.0f;
     };
 
     struct LayerScratchTextures {
         SDL_Texture* dark_mask_texture = nullptr;
-        SDL_Texture* blur_texture = nullptr;
-        SDL_Texture* blur_scratch_texture = nullptr;
     };
 
     struct LayerProcessResult {
         SDL_Texture* final_texture = nullptr;
         bool lighting_applied = false;
         bool fog_applied = false;
-        bool blur_applied = false;
     };
 
     explicit LayerEffectProcessor(SDL_Renderer* renderer = nullptr) : renderer_(renderer) {}
@@ -76,7 +67,6 @@ public:
                                      const LayerLightingParams& lighting_params,
                                      const std::vector<RuntimeLight>& lights,
                                      const LayerFogParams& fog_params,
-                                     const LayerBlurParams& blur_params,
                                      const LayerScratchTextures& scratch_textures);
 
     bool apply_lens_blur(SDL_Texture* src,
@@ -90,10 +80,13 @@ public:
                          float quality_scale = 1.0f) const;
 
 private:
+    static constexpr int kFogVariantCount = 6;
+
     void destroy_owned_resources();
     void destroy_fog_resources();
     void destroy_lighting_resources();
-    SDL_Texture* ensure_fog_band_texture();
+    bool ensure_fog_band_textures(int target_w, float bottom_opacity_curve);
+    SDL_Texture* fog_band_texture_for_cycle(int layer_cycle_index) const;
     bool ensure_light_accum_texture(int target_w, int target_h);
     SDL_Texture* ensure_light_falloff_texture(float falloff);
 
@@ -108,7 +101,10 @@ private:
                                   float light_radius_px) const;
 
     SDL_Renderer* renderer_ = nullptr;
-    SDL_Texture* fog_band_texture_ = nullptr;
+    std::array<SDL_Texture*, kFogVariantCount> fog_band_textures_{};
+    int fog_band_baked_width_ = 0;
+    int fog_band_baked_height_ = 0;
+    float fog_band_baked_curve_ = 1.0f;
     SDL_Texture* light_accum_texture_ = nullptr;
     int light_accum_width_ = 0;
     int light_accum_height_ = 0;

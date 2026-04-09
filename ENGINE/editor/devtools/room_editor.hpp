@@ -226,6 +226,9 @@ private:
     void apply_asset_scale_live_update(Asset* asset, int scale_percent);
     bool select_asset_or_group(Asset* asset);
     Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
+    bool should_open_spawn_group_panel_for_click(const void* asset_identity,
+                                                 bool has_spawn_group,
+                                                 Uint32 click_time_ms);
     bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     bool asset_anchor_screen_position(const WarpedScreenGrid& cam, const Asset* asset, SDL_Point& out_screen) const;
@@ -410,6 +413,9 @@ private:
     bool can_enter_asset_editor_subview(AssetEditorSubview subview) const;
     void cycle_asset_editor_subview();
     void set_asset_editor_subview(AssetEditorSubview subview, bool animate);
+    void apply_asset_editor_subview_change(AssetEditorSubview subview, bool animate);
+    void drain_pending_asset_editor_subview_request();
+    void process_pending_animation_editor_close();
     void on_animation_editor_closed();
     void begin_asset_editor_transition(AssetEditorSubview from, AssetEditorSubview to);
     void update_asset_editor_transition();
@@ -840,9 +846,16 @@ private:
         int frame = 0;
         int duration_frames = 12;
     };
+    struct PendingAssetEditorSubviewRequest {
+        AssetEditorSubview subview = AssetEditorSubview::AssetInfo;
+        bool animate = true;
+    };
     AssetEditorSubview asset_editor_subview_ = AssetEditorSubview::AssetInfo;
     AssetEditorSubview previous_non_animation_subview_ = AssetEditorSubview::AssetInfo;
     AssetEditorTransitionState asset_editor_transition_{};
+    bool asset_editor_subview_change_in_progress_ = false;
+    std::optional<PendingAssetEditorSubviewRequest> pending_asset_editor_subview_request_{};
+    std::optional<AssetEditorSubview> pending_animation_editor_close_subview_{};
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
     SDL_Rect room_config_bounds_{0, 0, 0, 0};
@@ -911,8 +924,10 @@ private:
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;
     int hover_miss_frames_ = 0;
-    Asset* last_click_asset_ = nullptr;
+    const void* last_click_asset_ = nullptr;
     Uint32 last_click_time_ms_ = 0;
+    bool spawn_group_panel_sync_in_progress_ = false;
+    bool spawn_group_panel_open_in_progress_ = false;
     std::optional<SDL_Point> pending_spawn_world_pos_{};
     std::optional<std::string> active_spawn_group_id_{};
     std::uint64_t room_assets_edit_version_ = 0;
@@ -990,6 +1005,10 @@ private:
     std::shared_ptr<AssetInfo> last_selected_from_library_;
 
     friend class DevControls;
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    std::uint32_t test_snap_spawn_group_to_resolution_call_count_ = 0;
+    friend struct RoomEditorTestAccess;
+#endif
 
     static constexpr int kSpatialCellSize = 256;
 
@@ -1003,3 +1022,36 @@ private:
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+struct RoomEditorTestAccess {
+    static int subview_asset_info();
+    static int subview_animation_editor();
+    static int subview_anchor();
+
+    static int active_subview(const RoomEditor& editor);
+    static void set_active_subview(RoomEditor& editor, int subview);
+    static void set_subview_change_in_progress(RoomEditor& editor, bool in_progress);
+
+    static bool has_pending_subview_request(const RoomEditor& editor);
+    static int pending_subview(const RoomEditor& editor);
+    static bool pending_subview_animate(const RoomEditor& editor);
+    static bool has_pending_animation_editor_close_subview(const RoomEditor& editor);
+    static int pending_animation_editor_close_subview(const RoomEditor& editor);
+
+    static void request_subview(RoomEditor& editor, int subview, bool animate);
+    static void drain_pending_subview_request(RoomEditor& editor);
+    static void process_pending_animation_editor_close(RoomEditor& editor);
+    static void invoke_on_animation_editor_closed(RoomEditor& editor);
+    static void set_snap_to_grid_enabled(RoomEditor& editor, bool enabled);
+    static void set_shared_footer_present(RoomEditor& editor, bool present);
+    static void update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity);
+    static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
+    static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);
+    static bool should_open_spawn_group_panel_for_click(RoomEditor& editor,
+                                                        const void* asset_identity,
+                                                        bool has_spawn_group,
+                                                        std::uint32_t click_time_ms);
+    static void reset_click_tracking(RoomEditor& editor);
+};
+#endif

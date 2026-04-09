@@ -48,9 +48,6 @@
 namespace {
 constexpr double kDepthBucketSize = 0.0625;
 constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
-constexpr int kMotionBlurHistoryFrameCount = 2;
-constexpr std::array<Uint8, kMotionBlurHistoryFrameCount> kMotionBlurHistoryAlpha = {120, 60};
-constexpr bool kSceneMotionBlurEnabled = false;
 // Runtime casted shadows removed. Lights are additive only.
 constexpr bool kRuntimeCastedShadowsEnabled = false;
 
@@ -297,6 +294,42 @@ float compute_horizon_screen_y(const WarpedScreenGrid& cam, int screen_height) {
 
 namespace render_internal {
 
+bool should_apply_background_layer_fog(int layer_index,
+                                       int foreground_layer_count,
+                                       int background_layer_count,
+                                       int player_layer_index,
+                                       bool single_layer_fallback_active) {
+    if (single_layer_fallback_active) {
+        return false;
+    }
+    if (foreground_layer_count < 0 || background_layer_count <= 0 || layer_index < 0) {
+        return false;
+    }
+
+    const int first_background_layer = foreground_layer_count;
+    const int one_past_last_layer = foreground_layer_count + background_layer_count;
+    if (layer_index < first_background_layer || layer_index >= one_past_last_layer) {
+        return false;
+    }
+    return layer_index > player_layer_index;
+}
+
+int fog_cycle_index_for_background_segment(int background_segment_index) {
+    return std::max(0, background_segment_index);
+}
+
+float clamp_fog_bottom_to_player_floor(float fog_bottom_y,
+                                       float player_floor_y,
+                                       int screen_height) {
+    if (screen_height <= 0) {
+        return 0.0f;
+    }
+    const float screen_max = static_cast<float>(screen_height);
+    const float clamped_fog_bottom = std::clamp(fog_bottom_y, 0.0f, screen_max);
+    const float clamped_player_floor = std::clamp(player_floor_y, 0.0f, screen_max);
+    return std::min(clamped_fog_bottom, clamped_player_floor);
+}
+
 bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
                                     SDL_Texture* gameplay_target,
                                     SDL_Color clear_color) {
@@ -331,6 +364,56 @@ float floor_light_footprint_radius(float base_radius_px, float world_height) {
     return radius * (1.0f + (0.012f * height));
 }
 
+std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_count,
+                                                std::size_t layer_count) {
+    std::vector<int> repeat_counts;
+    if (layer_count == 0) {
+        return repeat_counts;
+    }
+
+    repeat_counts.assign(layer_count, 0);
+    if (target_blur_pass_count == 0) {
+        return repeat_counts;
+    }
+
+    const std::size_t base_repeats = target_blur_pass_count / layer_count;
+    const std::size_t remainder = target_blur_pass_count % layer_count;
+    std::size_t error_accumulator = 0;
+    for (std::size_t i = 0; i < layer_count; ++i) {
+        std::size_t repeats = base_repeats;
+        error_accumulator += remainder;
+        if (error_accumulator >= layer_count) {
+            ++repeats;
+            error_accumulator -= layer_count;
+        }
+        repeat_counts[i] = static_cast<int>(repeats);
+    }
+
+    return repeat_counts;
+}
+
+std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index) {
+    std::vector<int> result;
+    result.reserve(non_empty_layers.size());
+    for (auto it = non_empty_layers.rbegin(); it != non_empty_layers.rend(); ++it) {
+        if (*it >= player_layer_index) {
+            result.push_back(*it);
+        }
+    }
+    return result;
+}
+
+std::vector<int> foreground_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index) {
+    std::vector<int> result;
+    result.reserve(non_empty_layers.size());
+    for (int layer_index : non_empty_layers) {
+        if (layer_index < player_layer_index) {
+            result.push_back(layer_index);
+        }
+    }
+    return result;
+}
+
 bool composite_dof_layers_to_gameplay_target(SDL_Renderer* renderer,
                                              SDL_Texture* gameplay_target,
                                              const std::vector<SDL_Texture*>& final_layer_textures,
@@ -358,6 +441,34 @@ bool composite_dof_layers_to_gameplay_target(SDL_Renderer* renderer,
         if (layer_texture) {
             SDL_RenderTexture(renderer, layer_texture, nullptr, nullptr);
         }
+    }
+    return true;
+}
+
+bool composite_scene_mid_layers(SDL_Renderer* renderer,
+                                SDL_Texture* gameplay_target,
+                                SDL_Texture* background_mid,
+                                SDL_Texture* foreground_mid) {
+    if (!renderer || !gameplay_target) {
+        return false;
+    }
+
+    SDL_SetRenderTarget(renderer, gameplay_target);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+
+    if (background_mid) {
+        SDL_SetTextureBlendMode(background_mid, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(background_mid, 255);
+        SDL_SetTextureColorMod(background_mid, 255, 255, 255);
+        SDL_RenderTexture(renderer, background_mid, nullptr, nullptr);
+    }
+    if (foreground_mid) {
+        SDL_SetTextureBlendMode(foreground_mid, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(foreground_mid, 255);
+        SDL_SetTextureColorMod(foreground_mid, 255, 255, 255);
+        SDL_RenderTexture(renderer, foreground_mid, nullptr, nullptr);
     }
     return true;
 }
@@ -1297,6 +1408,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   tile_renderer_(std::make_unique<GridTileRenderer>(assets)),
   geometry_batcher_(std::make_unique<GeometryBatcher>(renderer)),
   sky_texture_path_(std::filesystem::path("resources") / "misc_content" / "sky.png"),
+  mountain_texture_path_(std::filesystem::path("resources") / "misc_content" / "mountains.png"),
   composite_renderer_(renderer, assets),
   layer_effect_processor_(renderer),
   dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>())
@@ -1366,16 +1478,17 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 
 SceneRenderer::~SceneRenderer() {
     destroy_sky_texture();
+    destroy_mountain_texture();
     if (floor_base_texture_) { SDL_DestroyTexture(floor_base_texture_); floor_base_texture_ = nullptr; }
     if (floor_light_mask_texture_) { SDL_DestroyTexture(floor_light_mask_texture_); floor_light_mask_texture_ = nullptr; }
     if (floor_light_falloff_texture_) { SDL_DestroyTexture(floor_light_falloff_texture_); floor_light_falloff_texture_ = nullptr; }
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
-    for (SDL_Texture* tex : motion_blur_history_textures_) {
-        if (tex) SDL_DestroyTexture(tex);
-    }
-    motion_blur_history_capacity_ = 0;
+    if (background_seed_tex_) { SDL_DestroyTexture(background_seed_tex_); background_seed_tex_ = nullptr; }
+    if (background_mid_tex_)  { SDL_DestroyTexture(background_mid_tex_);  background_mid_tex_  = nullptr; }
+    if (foreground_mid_tex_)  { SDL_DestroyTexture(foreground_mid_tex_);  foreground_mid_tex_  = nullptr; }
+    if (chain_temp_tex_)      { SDL_DestroyTexture(chain_temp_tex_);      chain_temp_tex_      = nullptr; }
     for (SDL_Texture* tex : dof_layer_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
@@ -1388,10 +1501,6 @@ SceneRenderer::~SceneRenderer() {
     for (SDL_Texture* tex : dof_blur_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
-    motion_blur_history_textures_.clear();
-    motion_blur_history_write_index_ = 0;
-    motion_blur_valid_history_frames_ = 0;
-    motion_blur_history_capacity_ = 0;
     dof_layer_textures_.clear();
     dof_dark_mask_textures_.clear();
     dof_lit_textures_.clear();
@@ -1429,59 +1538,6 @@ bool SceneRenderer::ensure_sky_texture() {
         return false;
     }
 
-    WarpedScreenGrid::RealismSettings realism{};
-    if (assets_) {
-        realism = assets_->getView().get_settings();
-    }
-    const double f_stop = std::max(0.01, static_cast<double>(realism.aperture_f_stop));
-    const double focal_length = std::max(0.01, static_cast<double>(realism.focal_length_mm));
-    const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
-    const double max_blur = std::max(0.0, static_cast<double>(realism.max_blur_px));
-    const bool depth_of_field_enabled = realism.depth_of_field_enabled;
-    const bool background_layer_fog_enabled = kBackgroundLayerFogEnabled;
-    const double sky_blur_radius = LayerEffectProcessor::coc_blur_radius_from_depth_delta(max_cull_depth,
-                                                                                            max_cull_depth,
-                                                                                            focal_length,
-                                                                                            f_stop,
-                                                                                            max_blur);
-    if (sky_blur_radius > 0.01 && depth_of_field_enabled) {
-        SDL_Texture* blurred_sky = SDL_CreateTexture(
-            renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
-            static_cast<int>(std::lround(tex_w)), static_cast<int>(std::lround(tex_h)));
-        if (blurred_sky) {
-            SDL_Texture* sky_scratch = SDL_CreateTexture(
-                renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
-                static_cast<int>(std::lround(tex_w)), static_cast<int>(std::lround(tex_h)));
-            SDL_SetTextureBlendMode(blurred_sky, SDL_BLENDMODE_BLEND);
-            if (sky_scratch) {
-                SDL_SetTextureBlendMode(sky_scratch, SDL_BLENDMODE_BLEND);
-                const double radial_factor = LayerEffectProcessor::radial_lens_factor_from_optics(focal_length, f_stop);
-                const double radial_radius = std::clamp(sky_blur_radius * radial_factor, 0.0, max_blur * 2.0);
-                const SDL_FPoint sky_optical_center{tex_w * 0.5f, tex_h * 0.5f};
-                if (layer_effect_processor_.apply_lens_blur(tex,
-                                                            blurred_sky,
-                                                            sky_scratch,
-                                                            static_cast<int>(std::lround(tex_w)),
-                                                            static_cast<int>(std::lround(tex_h)),
-                                                            static_cast<float>(sky_blur_radius),
-                                                            sky_optical_center,
-                                                            static_cast<float>(radial_radius),
-                                                            0.55f)) {
-                    SDL_DestroyTexture(tex);
-                    tex = blurred_sky;
-                } else {
-                    SDL_DestroyTexture(blurred_sky);
-                }
-                SDL_DestroyTexture(sky_scratch);
-            } else {
-                vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate sky blur scratch texture: "} + SDL_GetError());
-                SDL_DestroyTexture(blurred_sky);
-            }
-        } else {
-            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate blurred sky target: "} + SDL_GetError());
-        }
-    }
-
     sky_texture_ = tex;
     sky_texture_width_ = static_cast<int>(std::lround(tex_w));
     sky_texture_height_ = static_cast<int>(std::lround(tex_h));
@@ -1497,6 +1553,103 @@ void SceneRenderer::destroy_sky_texture() {
     sky_texture_width_ = 0;
     sky_texture_height_ = 0;
     sky_texture_failed_ = false;
+}
+
+bool SceneRenderer::ensure_mountain_texture() {
+    if (mountain_texture_) {
+        return true;
+    }
+    if (mountain_texture_failed_ || !renderer_) {
+        return false;
+    }
+
+    const std::filesystem::path path = mountain_texture_path_;
+    if (path.empty() || !std::filesystem::exists(path)) {
+        vibble::log::warn(std::string{"[SceneRenderer] Mountain texture missing at "} + path.string());
+        mountain_texture_failed_ = true;
+        return false;
+    }
+
+    SDL_Texture* source_texture = IMG_LoadTexture(renderer_, path.string().c_str());
+    if (!source_texture) {
+        vibble::log::warn(std::string{"[SceneRenderer] Failed to load mountain texture: "} + SDL_GetError());
+        mountain_texture_failed_ = true;
+        return false;
+    }
+
+    float tex_w_f = 0.0f;
+    float tex_h_f = 0.0f;
+    if (!SDL_GetTextureSize(source_texture, &tex_w_f, &tex_h_f) || tex_w_f <= 0.0f || tex_h_f <= 0.0f) {
+        vibble::log::warn("[SceneRenderer] Mountain texture has invalid dimensions.");
+        SDL_DestroyTexture(source_texture);
+        mountain_texture_failed_ = true;
+        return false;
+    }
+
+    const int tex_w = static_cast<int>(std::lround(tex_w_f));
+    const int tex_h = static_cast<int>(std::lround(tex_h_f));
+    if (tex_w <= 0 || tex_h <= 0) {
+        SDL_DestroyTexture(source_texture);
+        mountain_texture_failed_ = true;
+        return false;
+    }
+
+    auto create_target = [&](int w, int h) -> SDL_Texture* {
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+        if (texture) {
+            SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        }
+        return texture;
+    };
+
+    const int scaled_w = std::max(1, screen_width_);
+    const float width_scale = static_cast<float>(scaled_w) / std::max(1.0f, tex_w_f);
+    const int scaled_h = std::max(1, static_cast<int>(std::lround(tex_h_f * width_scale)));
+    SDL_Texture* scaled_source_texture = create_target(scaled_w, scaled_h);
+    if (!scaled_source_texture) {
+        vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate scaled mountain source target: "} + SDL_GetError());
+        SDL_DestroyTexture(source_texture);
+        mountain_texture_failed_ = true;
+        return false;
+    }
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
+    SDL_SetRenderTarget(renderer_, scaled_source_texture);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+    SDL_RenderClear(renderer_);
+    SDL_SetTextureBlendMode(source_texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureColorMod(source_texture, 255, 255, 255);
+    SDL_SetTextureAlphaMod(source_texture, 255);
+    const SDL_FRect scale_dst_rect{
+        0.0f,
+        0.0f,
+        static_cast<float>(scaled_w),
+        static_cast<float>(scaled_h)
+    };
+    SDL_RenderTexture(renderer_, source_texture, nullptr, &scale_dst_rect);
+    SDL_SetRenderTarget(renderer_, previous_target);
+    mountain_texture_ = scaled_source_texture;
+    SDL_DestroyTexture(source_texture);
+
+    if (!mountain_texture_) {
+        mountain_texture_failed_ = true;
+        return false;
+    }
+
+    mountain_texture_width_ = scaled_w;
+    mountain_texture_height_ = scaled_h;
+    mountain_texture_failed_ = false;
+    return true;
+}
+
+void SceneRenderer::destroy_mountain_texture() {
+    if (mountain_texture_) {
+        SDL_DestroyTexture(mountain_texture_);
+        mountain_texture_ = nullptr;
+    }
+    mountain_texture_width_ = 0;
+    mountain_texture_height_ = 0;
+    mountain_texture_failed_ = false;
 }
 
 bool SceneRenderer::ensure_floor_background_textures() {
@@ -1598,8 +1751,10 @@ SDL_Texture* SceneRenderer::ensure_floor_light_falloff_texture() {
 void SceneRenderer::render_floor_background_layer(const WarpedScreenGrid& cam,
                                                   const world::WorldGrid& grid,
                                                   const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                                                  bool runtime_lighting_enabled,
                                                   double max_cull_depth,
-                                                  SDL_Texture* gameplay_target) {
+                                                  SDL_Texture* gameplay_target,
+                                                  bool render_floor_tiles) {
     if (!renderer_ || !gameplay_target || !ensure_floor_background_textures()) {
         return;
     }
@@ -1620,101 +1775,105 @@ void SceneRenderer::render_floor_background_layer(const WarpedScreenGrid& cam,
         SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, 255);
         const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
         SDL_RenderFillRect(renderer_, &full_rect);
-        tile_renderer_->render(renderer_, cam, grid, nullptr);
-        SDL_SetRenderClipRect(renderer_, nullptr);
-    }
-
-    SDL_SetRenderTarget(renderer_, floor_light_mask_texture_);
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-    SDL_RenderClear(renderer_);
-
-    if (floor_height > 0) {
-        SDL_SetRenderClipRect(renderer_, &floor_clip);
-        SDL_SetRenderDrawColor(renderer_, 36, 38, 42, 255);
-        const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
-        SDL_RenderFillRect(renderer_, &full_rect);
-
-        const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth * 0.5));
-        SDL_Texture* falloff_texture = ensure_floor_light_falloff_texture();
-        if (falloff_texture) {
-            SDL_SetTextureBlendMode(falloff_texture, SDL_BLENDMODE_ADD);
-            SDL_Color last_color{0, 0, 0, 0};
-            Uint8 last_alpha = 0;
-
-            for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
-                const float abs_depth = std::fabs(light.world_z);
-                if (abs_depth > floor_light_cull_depth) {
-                    continue;
-                }
-
-                const float depth_weight = render_internal::floor_light_depth_weight(abs_depth, floor_light_cull_depth);
-                const float height_weight = render_internal::floor_light_height_weight(light.world_height, light.radius_px);
-                const float effective_intensity = std::max(0.0f, light.intensity) * depth_weight * height_weight;
-                if (effective_intensity < 0.02f) {
-                    continue;
-                }
-
-                SDL_FPoint floor_screen = light.screen_center;
-                if (light.has_floor_projection) {
-                    if (!cam.project_world_point(SDL_FPoint{light.floor_world_x, 0.0f}, light.floor_world_z, floor_screen) ||
-                        !std::isfinite(floor_screen.x) ||
-                        !std::isfinite(floor_screen.y)) {
-                        continue;
-                    }
-                    floor_screen.y = cam.warp_floor_screen_y(0.0f, floor_screen.y);
-                    if (!std::isfinite(floor_screen.y)) {
-                        continue;
-                    }
-                }
-
-                const float radius = render_internal::floor_light_footprint_radius(light.radius_px, light.world_height);
-                if (radius < 1.0f) {
-                    continue;
-                }
-
-                if (last_color.r != light.color.r ||
-                    last_color.g != light.color.g ||
-                    last_color.b != light.color.b) {
-                    SDL_SetTextureColorMod(falloff_texture, light.color.r, light.color.g, light.color.b);
-                    last_color = SDL_Color{light.color.r, light.color.g, light.color.b, 255};
-                }
-
-                const int pass_count = std::clamp(static_cast<int>(std::ceil(effective_intensity)), 1, 4);
-                const float per_pass = effective_intensity / static_cast<float>(pass_count);
-                const Uint8 alpha = static_cast<Uint8>(std::clamp(
-                    static_cast<int>(std::lround(per_pass * 192.0f)),
-                    0,
-                    255));
-                if (alpha == 0) {
-                    continue;
-                }
-                if (last_alpha != alpha) {
-                    SDL_SetTextureAlphaMod(falloff_texture, alpha);
-                    last_alpha = alpha;
-                }
-
-                const SDL_FRect dst_rect{
-                    floor_screen.x - radius,
-                    floor_screen.y - radius,
-                    radius * 2.0f,
-                    radius * 2.0f
-                };
-                for (int pass = 0; pass < pass_count; ++pass) {
-                    SDL_RenderTexture(renderer_, falloff_texture, nullptr, &dst_rect);
-                }
-            }
-            SDL_SetTextureAlphaMod(falloff_texture, 255);
-            SDL_SetTextureColorMod(falloff_texture, 255, 255, 255);
+        if (render_floor_tiles) {
+            tile_renderer_->render(renderer_, cam, grid, nullptr);
         }
         SDL_SetRenderClipRect(renderer_, nullptr);
     }
 
-    SDL_SetRenderTarget(renderer_, floor_base_texture_);
-    SDL_SetTextureBlendMode(floor_light_mask_texture_, SDL_BLENDMODE_MOD);
-    SDL_SetTextureAlphaMod(floor_light_mask_texture_, 255);
-    SDL_SetTextureColorMod(floor_light_mask_texture_, 255, 255, 255);
-    SDL_RenderTexture(renderer_, floor_light_mask_texture_, nullptr, nullptr);
+    if (runtime_lighting_enabled) {
+        SDL_SetRenderTarget(renderer_, floor_light_mask_texture_);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+
+        if (floor_height > 0) {
+            SDL_SetRenderClipRect(renderer_, &floor_clip);
+            SDL_SetRenderDrawColor(renderer_, 36, 38, 42, 255);
+            const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
+            SDL_RenderFillRect(renderer_, &full_rect);
+
+            const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth * 0.5));
+            SDL_Texture* falloff_texture = ensure_floor_light_falloff_texture();
+            if (falloff_texture) {
+                SDL_SetTextureBlendMode(falloff_texture, SDL_BLENDMODE_ADD);
+                SDL_Color last_color{0, 0, 0, 0};
+                Uint8 last_alpha = 0;
+
+                for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
+                    const float abs_depth = std::fabs(light.world_z);
+                    if (abs_depth > floor_light_cull_depth) {
+                        continue;
+                    }
+
+                    const float depth_weight = render_internal::floor_light_depth_weight(abs_depth, floor_light_cull_depth);
+                    const float height_weight = render_internal::floor_light_height_weight(light.world_height, light.radius_px);
+                    const float effective_intensity = std::max(0.0f, light.intensity) * depth_weight * height_weight;
+                    if (effective_intensity < 0.02f) {
+                        continue;
+                    }
+
+                    SDL_FPoint floor_screen = light.screen_center;
+                    if (light.has_floor_projection) {
+                        if (!cam.project_world_point(SDL_FPoint{light.floor_world_x, 0.0f}, light.floor_world_z, floor_screen) ||
+                            !std::isfinite(floor_screen.x) ||
+                            !std::isfinite(floor_screen.y)) {
+                            continue;
+                        }
+                        floor_screen.y = cam.warp_floor_screen_y(0.0f, floor_screen.y);
+                        if (!std::isfinite(floor_screen.y)) {
+                            continue;
+                        }
+                    }
+
+                    const float radius = render_internal::floor_light_footprint_radius(light.radius_px, light.world_height);
+                    if (radius < 1.0f) {
+                        continue;
+                    }
+
+                    if (last_color.r != light.color.r ||
+                        last_color.g != light.color.g ||
+                        last_color.b != light.color.b) {
+                        SDL_SetTextureColorMod(falloff_texture, light.color.r, light.color.g, light.color.b);
+                        last_color = SDL_Color{light.color.r, light.color.g, light.color.b, 255};
+                    }
+
+                    const int pass_count = std::clamp(static_cast<int>(std::ceil(effective_intensity)), 1, 4);
+                    const float per_pass = effective_intensity / static_cast<float>(pass_count);
+                    const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                        static_cast<int>(std::lround(per_pass * 192.0f)),
+                        0,
+                        255));
+                    if (alpha == 0) {
+                        continue;
+                    }
+                    if (last_alpha != alpha) {
+                        SDL_SetTextureAlphaMod(falloff_texture, alpha);
+                        last_alpha = alpha;
+                    }
+
+                    const SDL_FRect dst_rect{
+                        floor_screen.x - radius,
+                        floor_screen.y - radius,
+                        radius * 2.0f,
+                        radius * 2.0f
+                    };
+                    for (int pass = 0; pass < pass_count; ++pass) {
+                        SDL_RenderTexture(renderer_, falloff_texture, nullptr, &dst_rect);
+                    }
+                }
+                SDL_SetTextureAlphaMod(falloff_texture, 255);
+                SDL_SetTextureColorMod(falloff_texture, 255, 255, 255);
+            }
+            SDL_SetRenderClipRect(renderer_, nullptr);
+        }
+
+        SDL_SetRenderTarget(renderer_, floor_base_texture_);
+        SDL_SetTextureBlendMode(floor_light_mask_texture_, SDL_BLENDMODE_MOD);
+        SDL_SetTextureAlphaMod(floor_light_mask_texture_, 255);
+        SDL_SetTextureColorMod(floor_light_mask_texture_, 255, 255, 255);
+        SDL_RenderTexture(renderer_, floor_light_mask_texture_, nullptr, nullptr);
+    }
 
     SDL_SetRenderTarget(renderer_, gameplay_target);
     SDL_SetTextureBlendMode(floor_base_texture_, SDL_BLENDMODE_BLEND);
@@ -1737,6 +1896,7 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
     screen_width_ = safe_w;
     screen_height_ = safe_h;
     map_radius_world_ = static_cast<double>(std::max(screen_width_, screen_height_));
+    destroy_mountain_texture();
 
     if (scene_composite_tex_) {
         SDL_DestroyTexture(scene_composite_tex_);
@@ -1762,8 +1922,21 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
         SDL_DestroyTexture(blur_tex_);
         blur_tex_ = nullptr;
     }
-    for (SDL_Texture* tex : motion_blur_history_textures_) {
-        if (tex) SDL_DestroyTexture(tex);
+    if (background_seed_tex_) {
+        SDL_DestroyTexture(background_seed_tex_);
+        background_seed_tex_ = nullptr;
+    }
+    if (background_mid_tex_) {
+        SDL_DestroyTexture(background_mid_tex_);
+        background_mid_tex_ = nullptr;
+    }
+    if (foreground_mid_tex_) {
+        SDL_DestroyTexture(foreground_mid_tex_);
+        foreground_mid_tex_ = nullptr;
+    }
+    if (chain_temp_tex_) {
+        SDL_DestroyTexture(chain_temp_tex_);
+        chain_temp_tex_ = nullptr;
     }
     for (SDL_Texture* tex : dof_layer_textures_) {
         if (tex) SDL_DestroyTexture(tex);
@@ -1777,9 +1950,6 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
     for (SDL_Texture* tex : dof_blur_textures_) {
         if (tex) SDL_DestroyTexture(tex);
     }
-    motion_blur_history_textures_.clear();
-    motion_blur_history_write_index_ = 0;
-    motion_blur_valid_history_frames_ = 0;
     dof_layer_textures_.clear();
     dof_dark_mask_textures_.clear();
     dof_lit_textures_.clear();
@@ -2096,49 +2266,20 @@ void SceneRenderer::render() {
     }
 
     const bool scene_targets_ready = scene_composite_tex_ != nullptr;
-    int available_history_textures = 0;
-    if (scene_targets_ready && kSceneMotionBlurEnabled) {
-        if (static_cast<int>(motion_blur_history_textures_.size()) != kMotionBlurHistoryFrameCount) {
-            for (SDL_Texture* tex : motion_blur_history_textures_) {
-                if (tex) {
-                    SDL_DestroyTexture(tex);
-                }
-            }
-            motion_blur_history_textures_.assign(kMotionBlurHistoryFrameCount, nullptr);
-            motion_blur_history_write_index_ = 0;
-            motion_blur_valid_history_frames_ = 0;
-        }
-        for (int i = 0; i < kMotionBlurHistoryFrameCount; ++i) {
-            if (!motion_blur_history_textures_[i]) {
-                motion_blur_history_textures_[i] = create_target_texture(screen_width_, screen_height_);
-            }
-            if (motion_blur_history_textures_[i]) {
-                ++available_history_textures;
-            }
-        }
-    }
-    motion_blur_history_capacity_ = available_history_textures;
-
-    const bool motion_blur_targets_ready =
-        kSceneMotionBlurEnabled && scene_targets_ready && motion_blur_history_capacity_ > 0;
-    if (!motion_blur_targets_ready) {
-        motion_blur_history_write_index_ = 0;
-        motion_blur_valid_history_frames_ = 0;
-    }
-    motion_blur_valid_history_frames_ =
-        std::min(motion_blur_valid_history_frames_, motion_blur_history_capacity_);
 
     SDL_Texture* const gameplay_target = scene_composite_tex_;
     render_internal::clear_gameplay_target_to_color(renderer_, gameplay_target, map_clear_color_);
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
+    const double anchor_depth = cam.anchor_world_z();
 
     if (!geometry_batcher_) {
         const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
         const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
         const std::vector<LayerEffectProcessor::RuntimeLight> no_lights{};
-        render_floor_background_layer(cam, grid, no_lights, max_cull_depth, gameplay_target);
+        render_floor_background_layer(cam, grid, no_lights, false, max_cull_depth, gameplay_target, false);
         render_sky_layer(cam);
+        render_mountain_layer(cam, anchor_depth, max_cull_depth);
         return;
     }
 
@@ -2161,10 +2302,8 @@ void SceneRenderer::render() {
         : kEmptyBoundarySprites;
     // 2) Assets + boundaries (depth-sorted painter's algorithm)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
-    const double anchor_depth = cam.anchor_world_z();
     const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
     const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
-    const bool depth_of_field_enabled = realism.depth_of_field_enabled;
     const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
     const float boundary_cull_margin = 64.0f;
     const float boundary_min_visible_px =
@@ -2338,9 +2477,73 @@ void SceneRenderer::render() {
         gather_runtime_lights(cam, rendered_assets_for_debug, runtime_lights);
     }
 
-    // Background pipeline: solid clear already happened, now floor base + floor light mask + sky.
-    render_floor_background_layer(cam, grid, runtime_lights, max_cull_depth, gameplay_target);
-    render_sky_layer(cam);
+    auto ensure_sized_target = [&](SDL_Texture*& texture) -> bool {
+        int tex_w = 0;
+        int tex_h = 0;
+        if (texture) {
+            float w = 0.0f;
+            float h = 0.0f;
+            if (SDL_GetTextureSize(texture, &w, &h)) {
+                tex_w = static_cast<int>(std::lround(w));
+                tex_h = static_cast<int>(std::lround(h));
+            }
+            if (tex_w != screen_width_ || tex_h != screen_height_) {
+                SDL_DestroyTexture(texture);
+                texture = nullptr;
+            }
+        }
+        if (!texture) {
+            texture = create_target_texture(screen_width_, screen_height_);
+        }
+        return texture != nullptr;
+    };
+    auto clear_texture_target = [&](SDL_Texture* texture) {
+        if (!texture) {
+            return;
+        }
+        SDL_SetRenderTarget(renderer_, texture);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+    };
+    auto copy_texture = [&](SDL_Texture* src, SDL_Texture* dst) -> bool {
+        if (!src || !dst) {
+            return false;
+        }
+        clear_texture_target(dst);
+        SDL_SetRenderTarget(renderer_, dst);
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(src, 255);
+        SDL_SetTextureColorMod(src, 255, 255, 255);
+        SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+        return true;
+    };
+    auto composite_texture_over = [&](SDL_Texture* src, SDL_Texture* dst) -> bool {
+        if (!src || !dst) {
+            return false;
+        }
+        SDL_SetRenderTarget(renderer_, dst);
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(src, 255);
+        SDL_SetTextureColorMod(src, 255, 255, 255);
+        SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+        return true;
+    };
+
+    const bool scene_pipeline_targets_ready =
+        ensure_sized_target(background_seed_tex_) &&
+        ensure_sized_target(background_mid_tex_) &&
+        ensure_sized_target(foreground_mid_tex_) &&
+        ensure_sized_target(chain_temp_tex_) &&
+        ensure_sized_target(blur_tex_);
+
+    if (scene_pipeline_targets_ready) {
+        clear_texture_target(background_seed_tex_);
+        SDL_SetRenderTarget(renderer_, background_seed_tex_);
+        render_sky_layer(cam);
+        render_mountain_layer(cam, anchor_depth, max_cull_depth);
+        render_floor_background_layer(cam, grid, runtime_lights, runtime_lighting_enabled, max_cull_depth, background_seed_tex_, false);
+    }
 
     auto layer_safe_blend_mode = [](SDL_BlendMode blend_mode) -> SDL_BlendMode {
         if (blend_mode == SDL_BLENDMODE_MOD || blend_mode == SDL_BLENDMODE_MUL) {
@@ -2391,22 +2594,8 @@ void SceneRenderer::render() {
         lighting_params.ambient_color = SDL_Color{18, 20, 24, 255};
 
         LayerEffectProcessor::LayerFogParams fog_params{};
-        if (kBackgroundLayerFogEnabled) {
-            float fog_bottom_y = 0.0f;
-            if (project_depth_to_floor_screen_y(cam, anchor_depth + max_cull_depth, screen_height_, fog_bottom_y) &&
-                fog_bottom_y > 1.0f) {
-                fog_params.enabled = true;
-                fog_params.normalized_depth = 1.0f;
-                fog_params.bottom_y_px = fog_bottom_y;
-                fog_params.thickness = std::max(0.0f, realism.fog_thickness);
-                fog_params.tint = SDL_Color{222, 232, 242, 255};
-            }
-        }
-
-        LayerEffectProcessor::LayerBlurParams blur_params{};
-        blur_params.enabled = false;
-        blur_params.radius_px = 0.0f;
-        blur_params.radial_radius_px = 0.0f;
+        // Single-layer fallback intentionally disables fog to guarantee
+        // no overdraw across the player/focus plane.
 
         LayerEffectProcessor::LayerScratchTextures scratch_textures{};
         scratch_textures.dark_mask_texture = dof_dark_mask_textures_[0];
@@ -2419,7 +2608,6 @@ void SceneRenderer::render() {
             lighting_params,
             runtime_lights,
             fog_params,
-            blur_params,
             scratch_textures);
 
         SDL_Texture* final_texture = layer_result.final_texture ? layer_result.final_texture : dof_lit_textures_[0];
@@ -2432,7 +2620,7 @@ void SceneRenderer::render() {
         return true;
     };
 
-    if (depth_of_field_enabled ) {
+    if (scene_pipeline_targets_ready) {
         const double base_layer_interval = std::max(1.0, static_cast<double>(realism.layer_depth_interval));
         const double depth_curve = std::max(0.0, static_cast<double>(realism.layer_depth_curve));
         constexpr int kMaxDofLayers = 512;
@@ -2502,21 +2690,6 @@ void SceneRenderer::render() {
             const double high_abs = background_depth_edges[static_cast<std::size_t>(seg + 1)];
             return 0.5 * (low_abs + high_abs);
         };
-        auto layer_contains_focus_depth = [&](int layer_idx, double focus_depth) -> bool {
-            const int clamped_idx = std::clamp(layer_idx, 0, layer_count - 1);
-            double low = 0.0;
-            double high = 0.0;
-            if (clamped_idx < foreground_layer_count) {
-                const int seg = foreground_layer_count - 1 - clamped_idx;
-                low = -foreground_depth_edges[static_cast<std::size_t>(seg + 1)];
-                high = -foreground_depth_edges[static_cast<std::size_t>(seg)];
-            } else {
-                const int seg = clamped_idx - foreground_layer_count;
-                low = background_depth_edges[static_cast<std::size_t>(seg)];
-                high = background_depth_edges[static_cast<std::size_t>(seg + 1)];
-            }
-            return focus_depth >= low && focus_depth <= high;
-        };
         auto depth_to_layer_index = [&](double depth) -> int {
             if (!std::isfinite(depth)) {
                 return -1;
@@ -2582,16 +2755,13 @@ void SceneRenderer::render() {
         };
         if (static_cast<int>(dof_layer_textures_.size()) != layer_count ||
             static_cast<int>(dof_dark_mask_textures_.size()) != layer_count ||
-            static_cast<int>(dof_lit_textures_.size()) != layer_count ||
-            static_cast<int>(dof_blur_textures_.size()) != layer_count) {
+            static_cast<int>(dof_lit_textures_.size()) != layer_count) {
             destroy_texture_array(dof_layer_textures_);
             destroy_texture_array(dof_dark_mask_textures_);
             destroy_texture_array(dof_lit_textures_);
-            destroy_texture_array(dof_blur_textures_);
             dof_layer_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
             dof_dark_mask_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
             dof_lit_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
-            dof_blur_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
         }
         std::vector<int> non_empty_layers;
         non_empty_layers.reserve(static_cast<std::size_t>(layer_count));
@@ -2600,10 +2770,6 @@ void SceneRenderer::render() {
                 if (dof_layer_textures_[i]) {
                     SDL_DestroyTexture(dof_layer_textures_[i]);
                     dof_layer_textures_[i] = nullptr;
-                }
-                if (dof_blur_textures_[i]) {
-                    SDL_DestroyTexture(dof_blur_textures_[i]);
-                    dof_blur_textures_[i] = nullptr;
                 }
                 if (dof_lit_textures_[i]) {
                     SDL_DestroyTexture(dof_lit_textures_[i]);
@@ -2626,11 +2792,7 @@ void SceneRenderer::render() {
                 dof_dark_mask_textures_[i] = create_target_texture(screen_width_, screen_height_);
             }
         }
-        const bool need_blur_scratch = depth_of_field_enabled && !non_empty_layers.empty();
-        if (need_blur_scratch && !blur_tex_) {
-            blur_tex_ = create_target_texture(screen_width_, screen_height_);
-        }
-        bool dof_targets_ready = !non_empty_layers.empty();
+        bool dof_targets_ready = scene_pipeline_targets_ready;
         for (int i : non_empty_layers) {
             if (!dof_layer_textures_[i]) {
                 dof_targets_ready = false;
@@ -2645,9 +2807,6 @@ void SceneRenderer::render() {
                 break;
             }
         }
-        if (need_blur_scratch && !blur_tex_) {
-            dof_targets_ready = false;
-        }
         if (!dof_targets_ready) {
             if (!non_empty_layers.empty()) {
                 vibble::log::warn(std::string{"[SceneRenderer] Layer targets unavailable; falling back to single-layer postprocess. SDL error: "} +
@@ -2655,6 +2814,12 @@ void SceneRenderer::render() {
             }
             if (!process_single_scene_layer()) {
                 SDL_SetRenderTarget(renderer_, gameplay_target);
+                if (background_seed_tex_) {
+                    SDL_SetTextureBlendMode(background_seed_tex_, SDL_BLENDMODE_BLEND);
+                    SDL_SetTextureAlphaMod(background_seed_tex_, 255);
+                    SDL_SetTextureColorMod(background_seed_tex_, 255, 255, 255);
+                    SDL_RenderTexture(renderer_, background_seed_tex_, nullptr, nullptr);
+                }
                 geometry_batcher_->flush();
             }
         }
@@ -2696,18 +2861,35 @@ void SceneRenderer::render() {
                 return overlaps_screen || overlaps_depth;
             };
 
-            SDL_SetRenderTarget(renderer_, gameplay_target);
-            // The camera focus point is the depth anchor in this pipeline, so it is always depth 0.
-            const double focus_depth = 0.0;
-            const int focus_layer = std::clamp(depth_to_layer_index(focus_depth), 0, layer_count - 1);
-            const double f_stop = std::max(0.01, static_cast<double>(realism.aperture_f_stop));
-            const double focal_length = std::max(0.01, static_cast<double>(realism.focal_length_mm));
-            const double max_blur = std::max(0.0, static_cast<double>(realism.max_blur_px));
-            const double radial_lens_factor = LayerEffectProcessor::radial_lens_factor_from_optics(focal_length, f_stop);
+            const int player_layer_index = std::clamp(depth_to_layer_index(0.0), 0, layer_count - 1);
+            constexpr float kBlurEpsilonPx = 1.0e-4f;
+            const float per_layer_blur_px = std::max(0.0f, realism.blur_px);
+            const float per_layer_radial_blur_px = std::max(0.0f, realism.radial_blur_px);
+            const bool repeated_blur_enabled = (per_layer_blur_px > kBlurEpsilonPx) ||
+                                               (per_layer_radial_blur_px > kBlurEpsilonPx);
             const SDL_Point screen_center_i = cam.get_screen_center();
             const SDL_FPoint optical_center{
                 std::clamp(static_cast<float>(screen_center_i.x), 0.0f, static_cast<float>(screen_width_)),
                 std::clamp(static_cast<float>(screen_center_i.y), 0.0f, static_cast<float>(screen_height_))
+            };
+            auto blur_accumulation_step = [&](SDL_Texture* src, SDL_Texture* dst, float blur_scale) -> bool {
+                if (!src || !dst) {
+                    return false;
+                }
+                if (!repeated_blur_enabled) {
+                    return copy_texture(src, dst);
+                }
+                const float scaled_blur_px = std::max(0.0f, per_layer_blur_px * blur_scale);
+                const float scaled_radial_blur_px = std::max(0.0f, per_layer_radial_blur_px * blur_scale);
+                return layer_effect_processor_.apply_lens_blur(src,
+                                                               dst,
+                                                               blur_tex_,
+                                                               screen_width_,
+                                                               screen_height_,
+                                                               scaled_blur_px,
+                                                               optical_center,
+                                                               scaled_radial_blur_px,
+                                                               1.0f);
             };
             std::vector<SDL_Texture*> final_layer_textures(static_cast<std::size_t>(layer_count), nullptr);
             LayerEffectProcessor::LayerLightingParams lighting_params{};
@@ -2730,25 +2912,14 @@ void SceneRenderer::render() {
                 if (layer.submitted_depth_count > 0) {
                     representative_depth = layer.submitted_depth_sum / static_cast<double>(layer.submitted_depth_count);
                 }
-                double blur_radius = 0.0;
-                if (depth_of_field_enabled && i != focus_layer && !layer_contains_focus_depth(i, focus_depth)) {
-                    const double delta = std::fabs(representative_depth - focus_depth);
-                    blur_radius = LayerEffectProcessor::coc_blur_radius_from_depth_delta(delta,
-                                                                                          max_cull_depth,
-                                                                                          focal_length,
-                                                                                          f_stop,
-                                                                                          max_blur);
-                }
-
-                const double depth_norm = std::clamp(std::fabs(representative_depth) / std::max(1.0, max_cull_depth), 0.0, 1.0);
-                float effect_quality = static_cast<float>(std::clamp(
-                    1.0 - 0.55 * std::pow(depth_norm, 1.35), 0.45, 1.0));
-                if (blur_radius < 1.5 && depth_norm < 0.1) {
-                    effect_quality = 1.0f;
-                }
 
                 LayerEffectProcessor::LayerFogParams fog_params{};
-                if (kBackgroundLayerFogEnabled && i >= foreground_layer_count && background_layer_count > 0) {
+                if (kBackgroundLayerFogEnabled &&
+                    render_internal::should_apply_background_layer_fog(i,
+                                                                       foreground_layer_count,
+                                                                       background_layer_count,
+                                                                       player_layer_index,
+                                                                       false)) {
                     const int seg = i - foreground_layer_count;
                     if (seg >= 0 && seg < background_layer_count) {
                         const double far_depth = background_depth_edges[static_cast<std::size_t>(seg + 1)];
@@ -2760,23 +2931,11 @@ void SceneRenderer::render() {
                                 std::clamp(far_depth / std::max(1.0, max_cull_depth), 0.0, 1.0));
                             fog_params.bottom_y_px = fog_bottom_y;
                             fog_params.thickness = std::max(0.0f, realism.fog_thickness);
+                            fog_params.layer_cycle_index =
+                                render_internal::fog_cycle_index_for_background_segment(seg);
+                            fog_params.bottom_opacity_curve = realism.fog_bottom_curve;
                             fog_params.tint = SDL_Color{222, 232, 242, 255};
                         }
-                    }
-                }
-
-                LayerEffectProcessor::LayerBlurParams blur_params{};
-                if (blur_radius > 0.35) {
-                    if (!dof_blur_textures_[i]) {
-                        dof_blur_textures_[i] = create_target_texture(screen_width_, screen_height_);
-                    }
-                    if (dof_blur_textures_[i] && blur_tex_) {
-                        const double radial_radius = std::clamp(blur_radius * radial_lens_factor, 0.0, max_blur * 2.0);
-                        blur_params.enabled = true;
-                        blur_params.radius_px = static_cast<float>(blur_radius);
-                        blur_params.optical_center = optical_center;
-                        blur_params.radial_radius_px = static_cast<float>(radial_radius);
-                        blur_params.quality_scale = effect_quality;
                     }
                 }
 
@@ -2785,8 +2944,6 @@ void SceneRenderer::render() {
 
                 LayerEffectProcessor::LayerScratchTextures scratch_textures{};
                 scratch_textures.dark_mask_texture = dof_dark_mask_textures_[i];
-                scratch_textures.blur_texture = blur_params.enabled ? dof_blur_textures_[i] : nullptr;
-                scratch_textures.blur_scratch_texture = blur_params.enabled ? blur_tex_ : nullptr;
 
                 LayerEffectProcessor::LayerProcessResult layer_result = layer_effect_processor_.process_layer(
                     dof_layer_textures_[i],
@@ -2796,23 +2953,155 @@ void SceneRenderer::render() {
                     lighting_params,
                     layer_lights,
                     fog_params,
-                    blur_params,
                     scratch_textures);
 
                 final_layer_textures[static_cast<std::size_t>(i)] =
                     layer_result.final_texture ? layer_result.final_texture : dof_lit_textures_[i];
             }
 
-            render_internal::composite_dof_layers_to_gameplay_target(renderer_,
-                                                                     gameplay_target,
-                                                                     final_layer_textures,
-                                                                     non_empty_layers);
+            const std::vector<int> background_chain =
+                render_internal::background_chain_layers(non_empty_layers, player_layer_index);
+            const std::vector<int> foreground_chain =
+                render_internal::foreground_chain_layers(non_empty_layers, player_layer_index);
+            const std::size_t background_blur_eligible_count = static_cast<std::size_t>(std::count_if(
+                background_chain.begin(),
+                background_chain.end(),
+                [player_layer_index](int layer_index) {
+                    return layer_index != player_layer_index;
+                }));
+            const std::size_t foreground_blur_eligible_count = foreground_chain.size();
+            const std::size_t target_chain_blur_passes = std::max(background_blur_eligible_count,
+                                                                  foreground_blur_eligible_count);
+            const std::vector<int> background_repeat_schedule =
+                render_internal::distributed_blur_repeat_counts(target_chain_blur_passes,
+                                                                background_blur_eligible_count);
+            const std::vector<int> foreground_repeat_schedule =
+                render_internal::distributed_blur_repeat_counts(target_chain_blur_passes,
+                                                                foreground_blur_eligible_count);
+
+            clear_texture_target(background_mid_tex_);
+            SDL_Texture* background_accum = background_mid_tex_;
+            SDL_Texture* background_temp = chain_temp_tex_;
+            bool background_has_content = false;
+            bool background_initialized = false;
+            std::size_t background_blur_step_index = 0;
+            for (int layer_index : background_chain) {
+                int repeat_count = 0;
+                if (layer_index != player_layer_index &&
+                    background_blur_step_index < background_repeat_schedule.size()) {
+                    repeat_count = std::max(0, background_repeat_schedule[background_blur_step_index]);
+                    ++background_blur_step_index;
+                }
+                SDL_Texture* layer_texture = final_layer_textures[static_cast<std::size_t>(layer_index)];
+                if (!layer_texture || !background_accum) {
+                    continue;
+                }
+                if (!background_initialized) {
+                    if (copy_texture(layer_texture, background_accum)) {
+                        background_initialized = true;
+                        background_has_content = true;
+                    }
+                } else {
+                    composite_texture_over(layer_texture, background_accum);
+                    background_has_content = true;
+                }
+
+                if (background_initialized &&
+                    repeated_blur_enabled &&
+                    layer_index != player_layer_index &&
+                    repeat_count > 0 &&
+                    background_temp) {
+                    for (int pass = 0; pass < repeat_count; ++pass) {
+                        if (blur_accumulation_step(background_accum, background_temp, 1.0f)) {
+                            std::swap(background_accum, background_temp);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            if (background_has_content && background_accum && background_accum != background_mid_tex_) {
+                copy_texture(background_accum, background_mid_tex_);
+            }
+
+            clear_texture_target(foreground_mid_tex_);
+            SDL_Texture* foreground_accum = foreground_mid_tex_;
+            SDL_Texture* foreground_temp = chain_temp_tex_;
+            bool foreground_has_content = false;
+            bool foreground_initialized = false;
+            std::size_t foreground_blur_step_index = 0;
+            for (int layer_index : foreground_chain) {
+                int repeat_count = 0;
+                if (foreground_blur_step_index < foreground_repeat_schedule.size()) {
+                    repeat_count = std::max(0, foreground_repeat_schedule[foreground_blur_step_index]);
+                    ++foreground_blur_step_index;
+                }
+                SDL_Texture* layer_texture = final_layer_textures[static_cast<std::size_t>(layer_index)];
+                if (!layer_texture || !foreground_accum) {
+                    continue;
+                }
+
+                // Foreground chain uses a different layering rule than background:
+                // keep the already-accumulated (and previously blurred) foreground on top
+                // of each newly introduced farther layer.
+                if (!foreground_initialized) {
+                    if (copy_texture(layer_texture, foreground_accum)) {
+                        foreground_initialized = true;
+                        foreground_has_content = true;
+                    }
+                } else {
+                    if (foreground_temp &&
+                        copy_texture(layer_texture, foreground_temp) &&
+                        composite_texture_over(foreground_accum, foreground_temp)) {
+                        std::swap(foreground_accum, foreground_temp);
+                        foreground_has_content = true;
+                    }
+                }
+
+                if (foreground_initialized && repeated_blur_enabled && foreground_temp && repeat_count > 0) {
+                    for (int pass = 0; pass < repeat_count; ++pass) {
+                        if (blur_accumulation_step(foreground_accum, foreground_temp, 1.0f)) {
+                            std::swap(foreground_accum, foreground_temp);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            if (foreground_has_content && foreground_accum != foreground_mid_tex_) {
+                copy_texture(foreground_accum, foreground_mid_tex_);
+            }
+
+            SDL_SetRenderTarget(renderer_, gameplay_target);
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+            SDL_RenderClear(renderer_);
+
+            if (background_seed_tex_) {
+                SDL_SetTextureBlendMode(background_seed_tex_, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureAlphaMod(background_seed_tex_, 255);
+                SDL_SetTextureColorMod(background_seed_tex_, 255, 255, 255);
+                SDL_RenderTexture(renderer_, background_seed_tex_, nullptr, nullptr);
+            }
+            if (background_mid_tex_) {
+                SDL_SetTextureBlendMode(background_mid_tex_, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureAlphaMod(background_mid_tex_, 255);
+                SDL_SetTextureColorMod(background_mid_tex_, 255, 255, 255);
+                SDL_RenderTexture(renderer_, background_mid_tex_, nullptr, nullptr);
+            }
+            if (foreground_mid_tex_) {
+                SDL_SetTextureBlendMode(foreground_mid_tex_, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureAlphaMod(foreground_mid_tex_, 255);
+                SDL_SetTextureColorMod(foreground_mid_tex_, 255, 255, 255);
+                SDL_RenderTexture(renderer_, foreground_mid_tex_, nullptr, nullptr);
+            }
         }
     } else {
-        if (!process_single_scene_layer()) {
-            SDL_SetRenderTarget(renderer_, gameplay_target);
-            geometry_batcher_->flush();
-        }
+        SDL_SetRenderTarget(renderer_, gameplay_target);
+        render_sky_layer(cam);
+        render_mountain_layer(cam, anchor_depth, max_cull_depth);
+        render_floor_background_layer(cam, grid, runtime_lights, runtime_lighting_enabled, max_cull_depth, gameplay_target, false);
+        geometry_batcher_->flush();
     }
 
     if (gameplay_target) {
@@ -2826,94 +3115,6 @@ void SceneRenderer::render() {
         SDL_SetTextureBlendMode(gameplay_target, SDL_BLENDMODE_BLEND);
         SDL_SetTextureAlphaMod(gameplay_target, 255);
         SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
-
-        if (motion_blur_targets_ready) {
-            const int blur_layers = std::min(motion_blur_valid_history_frames_, motion_blur_history_capacity_);
-            auto advance_index = [&](int idx) {
-                idx += 1;
-                if (idx >= kMotionBlurHistoryFrameCount) {
-                    idx -= kMotionBlurHistoryFrameCount;
-                }
-                return idx;
-            };
-            auto retreat_index = [&](int idx) {
-                idx -= 1;
-                if (idx < 0) {
-                    idx += kMotionBlurHistoryFrameCount;
-                }
-                return idx;
-            };
-            auto find_previous_valid_slot = [&](int start_idx) -> int {
-                int candidate = start_idx;
-                for (int attempt = 0; attempt < kMotionBlurHistoryFrameCount; ++attempt) {
-                    if (motion_blur_history_textures_[candidate]) {
-                        return candidate;
-                    }
-                    candidate = retreat_index(candidate);
-                }
-                return -1;
-            };
-            auto find_next_valid_slot = [&](int start_idx) -> int {
-                int candidate = start_idx;
-                for (int attempt = 0; attempt < kMotionBlurHistoryFrameCount; ++attempt) {
-                    if (motion_blur_history_textures_[candidate]) {
-                        return candidate;
-                    }
-                    candidate = advance_index(candidate);
-                }
-                return -1;
-            };
-
-            std::array<SDL_Texture*, kMotionBlurHistoryFrameCount> history_layers{};
-            int history_layer_count = 0;
-
-            int history_index = motion_blur_history_write_index_;
-            for (int age_from_newest = 0; age_from_newest < blur_layers; ++age_from_newest) {
-                history_index = retreat_index(history_index);
-                history_index = find_previous_valid_slot(history_index);
-                if (history_index < 0) {
-                    break;
-                }
-
-                SDL_Texture* history_texture = motion_blur_history_textures_[history_index];
-                if (!history_texture) {
-                    continue;
-                }
-                history_layers[static_cast<std::size_t>(history_layer_count++)] = history_texture;
-            }
-
-            for (int age_from_newest = history_layer_count - 1; age_from_newest >= 0; --age_from_newest) {
-                SDL_Texture* history_texture = history_layers[static_cast<std::size_t>(age_from_newest)];
-                const std::size_t alpha_index =
-                    static_cast<std::size_t>(std::min(age_from_newest, kMotionBlurHistoryFrameCount - 1));
-
-                SDL_SetTextureBlendMode(history_texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureAlphaMod(history_texture, kMotionBlurHistoryAlpha[alpha_index]);
-                SDL_RenderTexture(renderer_, history_texture, nullptr, nullptr);
-                SDL_SetTextureAlphaMod(history_texture, 255);
-            }
-
-            int write_slot = find_next_valid_slot(motion_blur_history_write_index_);
-            if (write_slot >= 0) {
-                SDL_Texture* write_target = motion_blur_history_textures_[write_slot];
-                if (write_target) {
-                    SDL_SetRenderTarget(renderer_, write_target);
-                    SDL_SetRenderViewport(renderer_, nullptr);
-                    SDL_SetRenderClipRect(renderer_, nullptr);
-                    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-                    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-                    SDL_RenderClear(renderer_);
-                    SDL_SetTextureBlendMode(gameplay_target, SDL_BLENDMODE_BLEND);
-                    SDL_SetTextureAlphaMod(gameplay_target, 255);
-                    SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
-                    SDL_SetRenderTarget(renderer_, nullptr);
-
-                    motion_blur_history_write_index_ = advance_index(write_slot);
-                    motion_blur_valid_history_frames_ =
-                        std::min(motion_blur_valid_history_frames_ + 1, motion_blur_history_capacity_);
-                }
-            }
-        }
     } else {
         SDL_SetRenderTarget(renderer_, nullptr);
     }
@@ -2975,4 +3176,57 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam) {
     SDL_SetTextureColorMod(sky_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     sdl_render::Texture(renderer_, sky_texture_, nullptr, &dst);
+}
+
+void SceneRenderer::render_mountain_layer(const WarpedScreenGrid& cam,
+                                          double anchor_depth,
+                                          double max_cull_depth) {
+    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
+        return;
+    }
+    if (!ensure_mountain_texture() || !mountain_texture_) {
+        return;
+    }
+    if (mountain_texture_width_ <= 0 || mountain_texture_height_ <= 0) {
+        return;
+    }
+
+    SDL_FPoint projected{};
+    const double far_background_world_depth = anchor_depth - max_cull_depth;
+    if (!cam.project_world_point(SDL_FPoint{0.0f, 0.0f},
+                                 static_cast<float>(far_background_world_depth),
+                                 projected)) {
+        return;
+    }
+    if (!std::isfinite(projected.y)) {
+        return;
+    }
+
+    const float max_depth_screen_y = cam.warp_floor_screen_y(0.0f, projected.y);
+    if (!std::isfinite(max_depth_screen_y) ||
+        max_depth_screen_y < 0.0f ||
+        max_depth_screen_y > static_cast<float>(screen_height_)) {
+        return;
+    }
+
+    const float target_w = static_cast<float>(screen_width_);
+    const float target_h = static_cast<float>(mountain_texture_height_);
+    if (!std::isfinite(target_h) || target_h <= 0.0f) {
+        return;
+    }
+
+    SDL_FRect dst{
+        0.0f,
+        max_depth_screen_y - target_h,
+        target_w,
+        target_h
+    };
+    if (dst.y >= static_cast<float>(screen_height_) || (dst.y + dst.h) <= 0.0f) {
+        return;
+    }
+
+    SDL_SetTextureBlendMode(mountain_texture_, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureColorMod(mountain_texture_, 255, 255, 255);
+    SDL_SetTextureAlphaMod(mountain_texture_, 255);
+    sdl_render::Texture(renderer_, mountain_texture_, nullptr, &dst);
 }

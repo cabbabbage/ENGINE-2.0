@@ -284,3 +284,26 @@ TEST_CASE("AnimationEditorWindow manifest save fires single document-saved callb
     std::filesystem::remove(manifest_path, ec);
     std::filesystem::remove_all(asset_dir, ec);
 }
+
+TEST_CASE("AnimationEditorWindow programmatic close does not fire closed callback") {
+    animation_editor::AnimationEditorWindow window;
+    int closed_callbacks = 0;
+    window.set_on_closed([&closed_callbacks]() { ++closed_callbacks; });
+
+    window.set_visible(true, false);
+    window.set_visible(false, false);
+
+    CHECK(closed_callbacks == 0);
+}
+
+TEST_CASE("AnimationEditorWindow user close fires closed callback once") {
+    animation_editor::AnimationEditorWindow window;
+    int closed_callbacks = 0;
+    window.set_on_closed([&closed_callbacks]() { ++closed_callbacks; });
+
+    window.set_visible(true, false);
+    window.set_visible(false, true);
+    window.set_visible(false, true);
+
+    CHECK(closed_callbacks == 1);
+}

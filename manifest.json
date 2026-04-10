@@ -950,19 +950,46 @@
       "weight_kg": 0.0
     },
     "fog_1": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "flip_vertical_source": false,
+          "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/fog_1",
       "asset_name": "fog_1",
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 18.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "fog_2": {
       "animations": {
@@ -995,19 +1022,44 @@
       "start": "default"
     },
     "fog_4": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "flip_vertical_source": false,
+          "flipped_source": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/fog_4",
       "asset_name": "fog_4",
-      "start": "default"
+      "asset_type": "boundary",
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "fog_5": {
       "animations": {
@@ -1832,7 +1884,7 @@
       "oval_anchor_mappings": [],
       "size_settings": {
         "scale_percentage": 155.0,
-        "size_variation": 10.0
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [],
@@ -1875,7 +1927,7 @@
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
-          "rnd_start": false,
+          "rnd_start": true,
           "source": {
             "kind": "folder",
             "name": "",
@@ -1886,11 +1938,13 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/tree_fps_2",
       "asset_name": "tree_fps_2",
+      "asset_type": "boundary",
       "can_invert": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 207.0
+        "scale_percentage": 207.0,
+        "size_variation": 17.0
       },
       "start": "default",
       "tags": [],
@@ -4832,7 +4886,7 @@
       "camera_settings": {
         "aperture_f_stop": 0.009999999776482582,
         "base_height_px": 720.0,
-        "blur_px": 0.4899999797344208,
+        "blur_px": 1.71999990940094,
         "boundary_min_visible_screen_ratio": 0.014999999664723873,
         "camera_height_max_px": 100000,
         "camera_height_min_px": 1,
@@ -4840,11 +4894,11 @@
         "focal_length_mm": 0.009999999776482582,
         "fog_bottom_curve": 1.5799999237060547,
         "fog_thickness": 3.069999933242798,
-        "layer_depth_curve": 55.37999725341797,
-        "layer_depth_interval": 13.0,
-        "max_cull_depth": 5718.0,
+        "layer_depth_curve": 83.86000061035156,
+        "layer_depth_interval": 1671.0,
+        "max_cull_depth": 7176.0,
         "min_visible_screen_ratio": 0.010000000707805157,
-        "radial_blur_px": 0.08999999612569809
+        "radial_blur_px": 3.43999981880188
       },
       "content_root": "content/forrest",
       "map_boundary_data": {
@@ -4870,6 +4924,18 @@
               {
                 "chance": 0.2625,
                 "name": "grass_1_fps_2"
+              },
+              {
+                "chance": 5.2625,
+                "name": "fog_1"
+              },
+              {
+                "chance": 0.263125,
+                "name": "fog_4"
+              },
+              {
+                "chance": 4.263125,
+                "name": "tree_fps_2"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -4877,8 +4943,8 @@
             "execution_mode": "batch_grid",
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 5,
-            "jitter": 87,
+            "grid_resolution": 3,
+            "jitter": 82,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -4968,11 +5034,11 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -836,
-          "camera_center_dz": -563,
-          "camera_height_px": 383,
-          "camera_tilt_deg": 31.400001525878906,
-          "camera_zoom_percent": 35,
+          "camera_center_dx": -298,
+          "camera_center_dz": -810,
+          "camera_height_px": 565,
+          "camera_tilt_deg": 36.400001525878906,
+          "camera_zoom_percent": 5,
           "curvyness": 2,
           "display_color": [
             36,

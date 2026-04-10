@@ -145,10 +145,6 @@ void CameraUIPanel::sync_from_camera() {
     if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
     if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
     if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
-    if (fog_thickness_slider_) fog_thickness_slider_->set_value(settings.fog_thickness);
-    if (fog_bottom_curve_slider_) fog_bottom_curve_slider_->set_value(settings.fog_bottom_curve);
-    if (aperture_f_stop_slider_) aperture_f_stop_slider_->set_value(settings.aperture_f_stop);
-    if (focal_length_mm_slider_) focal_length_mm_slider_->set_value(settings.focal_length_mm);
     if (blur_px_slider_) blur_px_slider_->set_value(settings.blur_px);
     if (radial_blur_px_slider_) radial_blur_px_slider_->set_value(settings.radial_blur_px);
     if (depth_of_field_checkbox_) {
@@ -222,28 +218,6 @@ void CameraUIPanel::build_ui() {
         2);
     layer_depth_curve_slider_->set_tooltip("Non-linear bin growth with distance. Higher values create fewer far-depth layers.");
     layer_depth_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    fog_thickness_slider_ = std::make_unique<FloatSliderWidget>(
-        "Fog Thickness",
-        0.0f,
-        4.0f,
-        0.01f,
-        defaults.fog_thickness,
-        2);
-    fog_thickness_slider_->set_tooltip("Controls fog density buildup with depth. Higher values thicken far-layer fog.");
-    fog_thickness_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    fog_bottom_curve_slider_ = std::make_unique<FloatSliderWidget>(
-        "Fog Bottom Curve",
-        0.25f,
-        3.0f,
-        0.01f,
-        defaults.fog_bottom_curve,
-        2);
-    fog_bottom_curve_slider_->set_tooltip("Controls how quickly fog opacity rises from the depth cutoff toward the horizon.");
-    fog_bottom_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    aperture_f_stop_slider_ = std::make_unique<FloatSliderWidget>("Aperture (f-stop)", 0.01f, 64.0f, 0.01f, defaults.aperture_f_stop, 2);
-    aperture_f_stop_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    focal_length_mm_slider_ = std::make_unique<FloatSliderWidget>("Focal Length (mm)", 0.01f, 500.0f, 0.1f, defaults.focal_length_mm, 1);
-    focal_length_mm_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     blur_px_slider_ = std::make_unique<FloatSliderWidget>("Blur (px)", 0.0f, 128.0f, 0.01f, defaults.blur_px, 3);
     blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     radial_blur_px_slider_ = std::make_unique<FloatSliderWidget>(
@@ -329,10 +303,6 @@ void CameraUIPanel::rebuild_rows() {
     if (max_cull_depth_slider_) rows.push_back({ max_cull_depth_slider_.get() });
     if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
     if (layer_depth_curve_slider_) rows.push_back({ layer_depth_curve_slider_.get() });
-    if (fog_thickness_slider_) rows.push_back({ fog_thickness_slider_.get() });
-    if (fog_bottom_curve_slider_) rows.push_back({ fog_bottom_curve_slider_.get() });
-    if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
-    if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
     if (blur_px_slider_) rows.push_back({ blur_px_slider_.get() });
     if (radial_blur_px_slider_) rows.push_back({ radial_blur_px_slider_.get() });
     if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
@@ -363,10 +333,6 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (max_cull_depth_slider_) updated.max_cull_depth = max_cull_depth_slider_->value();
     if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
     if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
-    if (fog_thickness_slider_) updated.fog_thickness = fog_thickness_slider_->value();
-    if (fog_bottom_curve_slider_) updated.fog_bottom_curve = fog_bottom_curve_slider_->value();
-    if (aperture_f_stop_slider_) updated.aperture_f_stop = aperture_f_stop_slider_->value();
-    if (focal_length_mm_slider_) updated.focal_length_mm = focal_length_mm_slider_->value();
     if (blur_px_slider_) updated.blur_px = blur_px_slider_->value();
     if (radial_blur_px_slider_) updated.radial_blur_px = radial_blur_px_slider_->value();
     if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
@@ -379,10 +345,6 @@ void CameraUIPanel::apply_settings_if_needed() {
         float_changed(updated.max_cull_depth, current.max_cull_depth) ||
         float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
-        float_changed(updated.fog_thickness, current.fog_thickness) ||
-        float_changed(updated.fog_bottom_curve, current.fog_bottom_curve) ||
-        float_changed(updated.aperture_f_stop, current.aperture_f_stop) ||
-        float_changed(updated.focal_length_mm, current.focal_length_mm) ||
         float_changed(updated.blur_px, current.blur_px) ||
         float_changed(updated.radial_blur_px, current.radial_blur_px) ||
         (updated.depth_of_field_enabled != current.depth_of_field_enabled);

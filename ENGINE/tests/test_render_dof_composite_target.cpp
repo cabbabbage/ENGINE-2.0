@@ -244,3 +244,15 @@ TEST_CASE("Scene mid-layer composite draws foreground over background") {
     SDL_DestroyTexture(background_mid);
     SDL_DestroyTexture(gameplay_target);
 }
+
+TEST_CASE("DoF blur-chain gate requires DoF enabled and non-zero blur") {
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(false, 32.0f, 0.0f));
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(false, 0.0f, 16.0f));
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(false, 16.0f, 16.0f));
+
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(true, 0.0f, 0.0f));
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(true, 1.0e-6f, 1.0e-6f));
+
+    CHECK(render_internal::dof_blur_chain_enabled(true, 0.25f, 0.0f));
+    CHECK(render_internal::dof_blur_chain_enabled(true, 0.0f, 0.25f));
+}

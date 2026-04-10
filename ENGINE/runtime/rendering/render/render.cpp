@@ -307,6 +307,17 @@ float floor_light_footprint_radius(float base_radius_px, float world_height) {
     return radius * (1.0f + (0.012f * height));
 }
 
+bool dof_blur_chain_enabled(bool depth_of_field_enabled,
+                            float blur_px,
+                            float radial_blur_px) {
+    if (!depth_of_field_enabled) {
+        return false;
+    }
+    constexpr float kBlurEpsilonPx = 1.0e-4f;
+    return std::max(0.0f, blur_px) > kBlurEpsilonPx ||
+           std::max(0.0f, radial_blur_px) > kBlurEpsilonPx;
+}
+
 std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_count,
                                                 std::size_t layer_count) {
     std::vector<int> repeat_counts;
@@ -2221,7 +2232,7 @@ void SceneRenderer::render() {
         const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
         const std::vector<LayerEffectProcessor::RuntimeLight> no_lights{};
         render_floor_background_layer(cam, grid, no_lights, false, max_cull_depth, gameplay_target, false);
-        render_sky_layer(cam);
+        render_sky_layer(cam, anchor_depth, max_cull_depth);
         render_mountain_layer(cam, anchor_depth, max_cull_depth);
         return;
     }
@@ -2473,12 +2484,17 @@ void SceneRenderer::render() {
         return true;
     };
 
+    const bool repeated_blur_enabled =
+        render_internal::dof_blur_chain_enabled(realism.depth_of_field_enabled,
+                                                realism.blur_px,
+                                                realism.radial_blur_px);
+    const bool blur_pipeline_ready = !repeated_blur_enabled || ensure_sized_target(blur_tex_);
     const bool scene_pipeline_targets_ready =
         ensure_sized_target(background_seed_tex_) &&
         ensure_sized_target(background_mid_tex_) &&
         ensure_sized_target(foreground_mid_tex_) &&
         ensure_sized_target(chain_temp_tex_) &&
-        ensure_sized_target(blur_tex_);
+        blur_pipeline_ready;
 
     if (scene_pipeline_targets_ready) {
         clear_texture_target(background_seed_tex_);
@@ -2752,7 +2768,7 @@ void SceneRenderer::render() {
             }
             if (!process_single_scene_layer()) {
                 SDL_SetRenderTarget(renderer_, gameplay_target);
-                render_sky_layer(cam);
+                render_sky_layer(cam, anchor_depth, max_cull_depth);
                 render_mountain_layer(cam, anchor_depth, max_cull_depth);
                 if (background_seed_tex_) {
                     SDL_SetTextureBlendMode(background_seed_tex_, SDL_BLENDMODE_BLEND);
@@ -2802,11 +2818,8 @@ void SceneRenderer::render() {
             };
 
             const int player_layer_index = std::clamp(depth_to_layer_index(0.0), 0, layer_count - 1);
-            constexpr float kBlurEpsilonPx = 1.0e-4f;
             const float per_layer_blur_px = std::max(0.0f, realism.blur_px);
             const float per_layer_radial_blur_px = std::max(0.0f, realism.radial_blur_px);
-            const bool repeated_blur_enabled = (per_layer_blur_px > kBlurEpsilonPx) ||
-                                               (per_layer_radial_blur_px > kBlurEpsilonPx);
             const SDL_Point screen_center_i = cam.get_screen_center();
             const SDL_FPoint optical_center{
                 std::clamp(static_cast<float>(screen_center_i.x), 0.0f, static_cast<float>(screen_width_)),
@@ -2902,7 +2915,7 @@ void SceneRenderer::render() {
             bool background_initialized = false;
             if (background_accum) {
                 SDL_SetRenderTarget(renderer_, background_accum);
-                render_sky_layer(cam);
+                render_sky_layer(cam, anchor_depth, max_cull_depth);
                 render_mountain_layer(cam, anchor_depth, max_cull_depth);
                 background_initialized = true;
                 background_has_content = true;
@@ -3021,7 +3034,7 @@ void SceneRenderer::render() {
         }
     } else {
         SDL_SetRenderTarget(renderer_, gameplay_target);
-        render_sky_layer(cam);
+        render_sky_layer(cam, anchor_depth, max_cull_depth);
         render_mountain_layer(cam, anchor_depth, max_cull_depth);
         render_floor_background_layer(cam, grid, runtime_lights, runtime_lighting_enabled, max_cull_depth, gameplay_target, false);
         geometry_batcher_->flush();
@@ -3062,13 +3075,32 @@ void SceneRenderer::render() {
     }
 }
 
-void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam) {
+void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam,
+                                     double anchor_depth,
+                                     double max_cull_depth) {
     if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
 
-    const float horizon_y = compute_horizon_screen_y(cam, screen_height_);
-    const float sky_visible_height = std::clamp(horizon_y, 0.0f, static_cast<float>(screen_height_));
+    SDL_FPoint projected{};
+    const double far_background_world_depth = anchor_depth - max_cull_depth;
+    if (!cam.project_world_point(SDL_FPoint{0.0f, 0.0f},
+                                 static_cast<float>(far_background_world_depth),
+                                 projected)) {
+        return;
+    }
+    if (!std::isfinite(projected.y)) {
+        return;
+    }
+
+    const float max_depth_screen_y = cam.warp_floor_screen_y(0.0f, projected.y);
+    if (!std::isfinite(max_depth_screen_y) ||
+        max_depth_screen_y < 0.0f ||
+        max_depth_screen_y > static_cast<float>(screen_height_)) {
+        return;
+    }
+
+    const float sky_visible_height = std::clamp(max_depth_screen_y, 0.0f, static_cast<float>(screen_height_));
     if (sky_visible_height <= 0.0f) {
         return;
     }
@@ -3094,7 +3126,7 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam) {
 
     SDL_FRect dst{
         (static_cast<float>(screen_width_) - target_w) * 0.5f,
-        horizon_y - target_h, target_w, target_h };
+        max_depth_screen_y - target_h, target_w, target_h };
 
     SDL_SetTextureColorMod(sky_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(sky_texture_, 255);

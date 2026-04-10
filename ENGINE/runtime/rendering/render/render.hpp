@@ -40,6 +40,9 @@ bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
 float floor_light_depth_weight(float abs_depth_from_anchor, float floor_light_cull_depth);
 float floor_light_height_weight(float world_height, float base_radius_px);
 float floor_light_footprint_radius(float base_radius_px, float world_height);
+bool dof_blur_chain_enabled(bool depth_of_field_enabled,
+                            float blur_px,
+                            float radial_blur_px);
 std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_count,
                                                 std::size_t layer_count);
 std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
@@ -184,7 +187,9 @@ private:
                                        double max_cull_depth,
                                        SDL_Texture* gameplay_target,
                                        bool render_floor_tiles);
-    void render_sky_layer(const WarpedScreenGrid& cam);
+    void render_sky_layer(const WarpedScreenGrid& cam,
+                          double anchor_depth,
+                          double max_cull_depth);
     void render_mountain_layer(const WarpedScreenGrid& cam,
                                double anchor_depth,
                                double max_cull_depth);

@@ -334,34 +334,6 @@ void LayerEffectProcessor::set_renderer(SDL_Renderer* renderer) {
     renderer_ = renderer;
 }
 
-double LayerEffectProcessor::radial_lens_factor_from_optics(double focal_length_mm, double f_stop) {
-    const double safe_f_stop = std::max(0.01, f_stop);
-    const double ratio = std::max(0.0, focal_length_mm / safe_f_stop);
-    return std::clamp(ratio / 24.0, 0.25, 2.0);
-}
-
-double LayerEffectProcessor::coc_blur_radius_from_depth_delta(double depth_delta,
-                                                              double max_cull_depth,
-                                                              double focal_length_mm,
-                                                              double f_stop,
-                                                              double max_blur_px) {
-    const double safe_max_blur = std::max(0.0, max_blur_px);
-    if (safe_max_blur <= 0.0) {
-        return 0.0;
-    }
-
-    const double safe_max_depth = std::max(1.0, max_cull_depth);
-    const double safe_f_stop = std::max(0.01, f_stop);
-    const double safe_focal = std::max(0.01, focal_length_mm);
-
-    const double aperture_diameter_mm = safe_focal / safe_f_stop;
-    const double optical_scale = std::clamp(aperture_diameter_mm / 18.0, 0.08, 2.5);
-    const double normalized_delta = std::clamp(std::fabs(depth_delta) / safe_max_depth, 0.0, 1.0);
-    const double depth_scale = std::pow(normalized_delta, 1.1);
-
-    return std::clamp(safe_max_blur * optical_scale * depth_scale, 0.0, safe_max_blur);
-}
-
 bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
                                            SDL_Texture* dst,
                                            SDL_Texture* scratch,

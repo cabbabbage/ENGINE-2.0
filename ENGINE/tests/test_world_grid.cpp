@@ -503,15 +503,12 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys 
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
 }
 
-TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and layer controls") {
+TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer and DoF controls") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{
         {"max_cull_depth", 2500.0},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
-        {"fog_thickness", 2.2},
-        {"aperture_f_stop", 4.0},
-        {"focal_length_mm", 35.0},
         {"blur_px", 20.0},
         {"radial_blur_px", 64.0},
         {"depth_of_field_enabled", true}
@@ -520,9 +517,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
-    CHECK(settings.fog_thickness == doctest::Approx(2.2f));
-    CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
-    CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
     CHECK(settings.blur_px == doctest::Approx(20.0f));
     CHECK(settings.radial_blur_px == doctest::Approx(64.0f));
     CHECK(settings.depth_of_field_enabled);
@@ -531,7 +525,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and laye
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
-    CHECK(serialized["fog_thickness"] == doctest::Approx(2.2));
     CHECK(serialized["blur_px"] == doctest::Approx(20.0));
     CHECK(serialized["radial_blur_px"] == doctest::Approx(64.0));
     CHECK(serialized["depth_of_field_enabled"] == true);

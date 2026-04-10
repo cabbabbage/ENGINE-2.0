@@ -52,13 +52,6 @@ public:
 
     void set_renderer(SDL_Renderer* renderer);
 
-    static double radial_lens_factor_from_optics(double focal_length_mm, double f_stop);
-    static double coc_blur_radius_from_depth_delta(double depth_delta,
-                                                   double max_cull_depth,
-                                                   double focal_length_mm,
-                                                   double f_stop,
-                                                   double max_blur_px);
-
     LayerProcessResult process_layer(SDL_Texture* base_layer_texture,
                                      SDL_Texture* composited_output_texture,
                                      double layer_depth_min,

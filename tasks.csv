@@ -1,4 +1,3 @@
 type,last_updated,severity,description,created_by,attachment_path
-issue,2026-04-09 13:01:22,low,make sure the dynamic renderer applies the random size variation to an asset spawned at a grid point. each asset of the same type should have a different size if size variation percent value for that asset is not 0.,,
 issue,2026-04-09 12:59:40,low,the layer in front behind light application difference is too strong. the difference between in front and behind lighting to mask should have an adjustable value in camera settings.,,
 issue,2026-04-09 13:00:01,high,changing a method of spawning for a spawn group in room editor causes the game to crash. make sure all the mouse controlls for all the spawn methods work as intended and dont cause a crash,,

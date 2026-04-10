@@ -550,11 +550,30 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
             return true;
         }
         if (focused_panel_ && focused_panel_->is_visible()) {
-            if (focused_panel_->handle_event(e)) {
+            DockableCollapsible* focused_before_event = focused_panel_;
+            if (focused_before_event->handle_event(e)) {
                 request_container_layout();
-                auto it = base_panel_keys_.find(focused_panel_);
-                if (it != base_panel_keys_.end()) {
-                    set_base_panel_expanded(it->second, focused_panel_->is_expanded());
+                const auto panel_still_active = [this](DockableCollapsible* candidate) {
+                    if (!candidate) {
+                        return false;
+                    }
+                    for (auto* panel : ordered_base_panels_) {
+                        if (panel == candidate) {
+                            return true;
+                        }
+                    }
+                    for (const auto& cfg : spawn_group_configs_) {
+                        if (cfg && cfg.get() == candidate) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                if (panel_still_active(focused_before_event)) {
+                    auto it = base_panel_keys_.find(focused_before_event);
+                    if (it != base_panel_keys_.end()) {
+                        set_base_panel_expanded(it->second, focused_before_event->is_expanded());
+                    }
                 }
                 return true;
             }

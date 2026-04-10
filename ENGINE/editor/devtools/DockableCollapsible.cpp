@@ -231,6 +231,7 @@ void DockableCollapsible::set_rows(const Rows& rows) {
         return;
     }
     rows_ = rows;
+    ++rows_epoch_;
     for (auto& row : rows_) {
         for (auto* w : row) {
             if (!w) {
@@ -801,9 +802,17 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
     }
 
     if (forward_to_children) {
-        for (auto& row : rows_) {
-            for (auto* w : row) {
+        const std::uint64_t dispatch_epoch = rows_epoch_;
+        for (size_t row_index = 0; row_index < rows_.size(); ++row_index) {
+            const Row row_snapshot = rows_[row_index];
+            for (auto* w : row_snapshot) {
+                if (rows_epoch_ != dispatch_epoch) {
+                    return true;
+                }
                 if (w && w->handle_event(e)) {
+                    return true;
+                }
+                if (rows_epoch_ != dispatch_epoch) {
                     return true;
                 }
             }

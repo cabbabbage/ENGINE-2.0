@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
 #include <cstdint>
+#include <string>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/animation.hpp"
@@ -275,5 +277,70 @@ TEST_CASE("RoomEditor selection sync with snap enabled does not trigger spawn-gr
         reinterpret_cast<const void*>(static_cast<std::uintptr_t>(0x1234)));
 
     CHECK(RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(editor) == 0);
+}
+
+TEST_CASE("RoomEditor suppresses release action when pressed selection becomes invalid") {
+    RoomEditor editor(nullptr, 1280, 720);
+    int asset_a = 1;
+    std::string spawn_id;
+
+    RoomEditorTestAccess::set_active_asset_identities(editor, {&asset_a});
+    RoomEditorTestAccess::set_mouse_press_state(editor, &asset_a, "spawn_a", true, false);
+
+    RoomEditorTestAccess::set_active_asset_identities(editor, {});
+    CHECK_FALSE(RoomEditorTestAccess::consume_pressed_asset_release(editor, 1000, spawn_id));
+    CHECK(spawn_id.empty());
+}
+
+TEST_CASE("RoomEditor release behavior keeps double-click spawn open semantics for valid pressed asset") {
+    RoomEditor editor(nullptr, 1280, 720);
+    int asset_a = 1;
+    std::string spawn_id;
+
+    RoomEditorTestAccess::reset_click_tracking(editor);
+    RoomEditorTestAccess::set_active_asset_identities(editor, {&asset_a});
+    RoomEditorTestAccess::set_mouse_press_state(editor, &asset_a, "spawn_a", true, false);
+
+    CHECK_FALSE(RoomEditorTestAccess::consume_pressed_asset_release(editor, 1000, spawn_id));
+    CHECK(spawn_id.empty());
+
+    CHECK(RoomEditorTestAccess::consume_pressed_asset_release(editor, 1200, spawn_id));
+    CHECK(spawn_id == "spawn_a");
+}
+
+TEST_CASE("RoomEditor drag mode mapping normalizes spawn methods consistently") {
+    const int exact_mode = RoomEditorTestAccess::drag_mode_for_spawn_method("Exact", false);
+    const int free_mode = RoomEditorTestAccess::drag_mode_for_spawn_method("Random", false);
+
+    CHECK(RoomEditorTestAccess::drag_mode_for_spawn_method("Exact Position", false) == exact_mode);
+    CHECK(RoomEditorTestAccess::drag_mode_for_spawn_method("Percent", false) != free_mode);
+    CHECK(RoomEditorTestAccess::drag_mode_for_spawn_method("Perimeter", false) !=
+          RoomEditorTestAccess::drag_mode_for_spawn_method("Perimeter", true));
+    CHECK(RoomEditorTestAccess::drag_mode_for_spawn_method("Edge", false) != free_mode);
+    CHECK(RoomEditorTestAccess::drag_mode_for_spawn_method("Unknown Method", false) == free_mode);
+}
+
+TEST_CASE("RoomEditor spawn-group edits queue deferred work while callback scope is active") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_respawn_spawn_group_call_count(editor);
+    RoomEditorTestAccess::set_spawn_group_callback_in_progress(editor, true);
+    REQUIRE(RoomEditorTestAccess::spawn_group_callback_in_progress(editor));
+
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", true, true, true, true);
+
+    CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 1);
+    CHECK(RoomEditorTestAccess::respawn_spawn_group_call_count(editor) == 0);
+}
+
+TEST_CASE("RoomEditor processes and clears deferred spawn-group queue work") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", false, true, false, false);
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_b", false, true, false, false);
+    REQUIRE(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 2);
+
+    RoomEditorTestAccess::set_spawn_group_callback_in_progress(editor, false);
+    RoomEditorTestAccess::process_pending_spawn_group_work(editor);
+
+    CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 0);
 }
 #endif

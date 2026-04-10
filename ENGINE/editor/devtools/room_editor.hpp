@@ -217,7 +217,32 @@ private:
         Input::Button button = Input::LEFT;
         bool active = false;
 };
+    struct MousePressState {
+        bool prev_left_down = false;
+        SDL_Point press_screen{0, 0};
+        Asset* pressed_asset = nullptr;
+        const void* pressed_identity = nullptr;
+        std::string pressed_spawn_id{};
+        bool pressed_has_spawn_group = false;
+        bool was_dragged = false;
+        bool valid = false;
+    };
+    struct PendingSpawnGroupWork {
+        std::string spawn_id{};
+        nlohmann::json entry_snapshot = nlohmann::json::object();
+        bool has_entry_snapshot = false;
+        bool needs_respawn = false;
+        bool needs_map_notify = false;
+        bool needs_panel_refresh = false;
+        bool needs_room_config_reopen = false;
+        bool needs_selection_resync = false;
+    };
     void handle_mouse_input(const Input& input);
+    static DragMode drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
+    bool is_asset_active_for_input(const Asset* asset) const;
+    bool is_mouse_press_asset_valid() const;
+    void clear_mouse_press_state(bool reset_click_tracking = false);
+    bool consume_pressed_asset_release(Uint32 click_time_ms, std::string& out_spawn_id);
     bool apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam);
     static float edge_pan_intensity(int value, int max_value, float threshold_fraction);
     bool handle_camera_settings_mouse_controls(const Input& input);
@@ -288,6 +313,15 @@ private:
     const Area* find_edge_area_for_entry(const nlohmann::json& entry) const;
     double edge_length_along_direction(const Area& area, SDL_Point center, SDL_FPoint direction) const;
     void respawn_spawn_group(const nlohmann::json& entry);
+    void prune_spawn_group_transient_references(const std::string& spawn_id);
+    void enqueue_spawn_group_work(const nlohmann::json& entry,
+                                  bool needs_respawn,
+                                  bool needs_map_notify,
+                                  bool needs_panel_refresh,
+                                  bool needs_room_config_reopen,
+                                  bool needs_selection_resync);
+    void enqueue_spawn_group_ui_refresh(bool reopen_room_config, bool sync_selection);
+    void process_pending_spawn_group_work();
     std::unique_ptr<vibble::grid::Occupancy> build_room_grid(const std::string& ignore_spawn_id) const;
     bool snap_spawn_group_to_resolution(Asset* anchor, int resolution);
     void render_room_trail_nav_buttons(SDL_Renderer* renderer);
@@ -923,8 +957,16 @@ private:
     int hover_miss_frames_ = 0;
     const void* last_click_asset_ = nullptr;
     Uint32 last_click_time_ms_ = 0;
+    MousePressState mouse_press_state_{};
+    int suppress_world_left_click_frames_ = 0;
     bool spawn_group_panel_sync_in_progress_ = false;
     bool spawn_group_panel_open_in_progress_ = false;
+    bool spawn_group_callback_in_progress_ = false;
+    bool processing_pending_spawn_group_work_ = false;
+    std::unordered_map<std::string, PendingSpawnGroupWork> pending_spawn_group_work_{};
+    bool pending_spawn_group_panel_refresh_ = false;
+    bool pending_spawn_group_room_config_reopen_ = false;
+    bool pending_spawn_group_selection_resync_ = false;
     std::optional<SDL_Point> pending_spawn_world_pos_{};
     std::optional<std::string> active_spawn_group_id_{};
     std::uint64_t room_assets_edit_version_ = 0;
@@ -1002,6 +1044,7 @@ private:
     friend class DevControls;
 #if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
     std::uint32_t test_snap_spawn_group_to_resolution_call_count_ = 0;
+    std::uint32_t test_respawn_spawn_group_call_count_ = 0;
     friend struct RoomEditorTestAccess;
 #endif
 
@@ -1048,5 +1091,28 @@ struct RoomEditorTestAccess {
                                                         bool has_spawn_group,
                                                         std::uint32_t click_time_ms);
     static void reset_click_tracking(RoomEditor& editor);
+    static bool consume_pressed_asset_release(RoomEditor& editor,
+                                              std::uint32_t click_time_ms,
+                                              std::string& out_spawn_id);
+    static void set_active_asset_identities(RoomEditor& editor, const std::vector<const void*>& identities);
+    static void set_mouse_press_state(RoomEditor& editor,
+                                      const void* asset_identity,
+                                      const std::string& spawn_id,
+                                      bool has_spawn_group,
+                                      bool was_dragged);
+    static void clear_mouse_press_state(RoomEditor& editor, bool reset_click_tracking);
+    static int drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
+    static void set_spawn_group_callback_in_progress(RoomEditor& editor, bool in_progress);
+    static bool spawn_group_callback_in_progress(const RoomEditor& editor);
+    static void enqueue_spawn_group_work(RoomEditor& editor,
+                                         const std::string& spawn_id,
+                                         bool needs_respawn,
+                                         bool needs_panel_refresh,
+                                         bool needs_room_config_reopen,
+                                         bool needs_selection_resync);
+    static std::size_t pending_spawn_group_work_size(const RoomEditor& editor);
+    static void process_pending_spawn_group_work(RoomEditor& editor);
+    static std::uint32_t respawn_spawn_group_call_count(const RoomEditor& editor);
+    static void reset_respawn_spawn_group_call_count(RoomEditor& editor);
 };
 #endif

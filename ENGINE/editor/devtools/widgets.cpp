@@ -2750,11 +2750,14 @@ bool DMDropdown::commit_pending_selection() {
 
 void DMDropdown::begin_focus() {
     focused_ = true;
-    if (active_ && active_ != this) {
-        active_->commit_pending_selection();
-        active_->focused_ = false;
-        active_->has_pending_index_ = false;
-        active_->hovered_option_index_ = -1;
+    DMDropdown* previous_active = active_;
+    if (previous_active && previous_active != this) {
+        previous_active->commit_pending_selection();
+        if (active_ == previous_active) {
+            previous_active->focused_ = false;
+            previous_active->has_pending_index_ = false;
+            previous_active->hovered_option_index_ = -1;
+        }
     }
     active_ = this;
     pending_index_ = index_;

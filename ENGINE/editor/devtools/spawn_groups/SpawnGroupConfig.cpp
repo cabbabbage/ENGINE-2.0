@@ -295,15 +295,24 @@ public:
         std::string before = box_->value();
         bool used = box_->handle_event(e);
         bool now_editing = box_->is_editing();
-        const std::string& after = box_->value();
-        if (used && on_change_ && after != before) {
-            on_change_(after);
+        const std::string after = box_->value();
+
+        if (!was_editing && now_editing) {
+            edit_session_start_value_ = before;
         }
+
         if (on_change_ && was_editing && !now_editing) {
-            if (!used || after == before) {
+            const std::string start_value =
+                edit_session_start_value_.has_value() ? *edit_session_start_value_ : before;
+            if (after != start_value) {
                 on_change_(after);
             }
             used = true;
+            edit_session_start_value_.reset();
+        } else if (!now_editing && used && on_change_ && after != before) {
+            on_change_(after);
+        } else if (!now_editing) {
+            edit_session_start_value_.reset();
         }
         return used || was_editing != now_editing;
     }
@@ -334,6 +343,7 @@ private:
     bool full_row_ = false;
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
+    std::optional<std::string> edit_session_start_value_{};
 };
 
 class SpawnGroupCallbackSliderWidget : public Widget {
@@ -344,6 +354,7 @@ public:
         : slider_(std::move(slider)), on_change_(std::move(on_change)), editable_(editable) {
         if (slider_) {
             last_value_ = slider_->value();
+            committed_value_ = last_value_;
         }
     }
 
@@ -363,18 +374,35 @@ public:
 
     bool handle_event(const SDL_Event& e) override {
         if (!slider_) return false;
+        const bool was_dragging = slider_->is_dragging();
         int before = slider_->value();
         bool used = editable_ ? slider_->handle_event(e) : false;
         if (!editable_) {
             return used;
         }
+        const bool now_dragging = slider_->is_dragging();
         int after = slider_->value();
-        if (after != before) {
+        const bool value_changed = (after != before);
+        if (value_changed) {
             last_value_ = after;
-            if (on_change_) on_change_(after);
+        }
+
+        bool commit = false;
+        if (was_dragging && !now_dragging) {
+            commit = (after != committed_value_);
+        } else if (!now_dragging && value_changed) {
+            commit = true;
+        }
+
+        if (commit && on_change_) {
+            committed_value_ = after;
+            on_change_(after);
             return true;
         }
-        return used;
+        if (!now_dragging && value_changed) {
+            committed_value_ = after;
+        }
+        return used || value_changed;
     }
 
     void render(SDL_Renderer* renderer) const override {
@@ -393,6 +421,7 @@ public:
         if (!slider_) return;
         slider_->set_value(value);
         last_value_ = slider_->value();
+        committed_value_ = last_value_;
     }
 
     int value() const { return slider_ ? slider_->value() : last_value_; }
@@ -405,6 +434,7 @@ private:
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
     int last_value_ = 0;
+    int committed_value_ = 0;
 };
 
 
@@ -1162,16 +1192,18 @@ private:
         summary.resolution = current_resolution_;
 
         nlohmann::json entry_copy = entry_view();
+        std::string source_spawn_id = spawn_id();
 
-        owner_->enqueue_notification([owner = owner_, entry = std::move(entry_copy), summary, self = this]() mutable {
+        owner_->enqueue_notification([owner = owner_,
+                                      entry = std::move(entry_copy),
+                                      summary,
+                                      source_spawn_id = std::move(source_spawn_id)]() mutable {
             if (!owner) return;
-            owner->current_entry_ = self;
+            owner->current_entry_ = source_spawn_id.empty() ? nullptr : owner->find_entry_by_id(source_spawn_id);
             if (owner->on_change_) owner->on_change_();
             if (owner->on_entry_change_) owner->on_entry_change_(entry, summary);
             owner->fire_entry_callbacks(entry, summary);
-            if (owner->current_entry_ == self) {
-                owner->current_entry_ = nullptr;
-            }
+            owner->current_entry_ = nullptr;
         });
     }
 
@@ -1466,7 +1498,6 @@ private:
             current_method_ = method;
             use_exact_quantity_ = (method == "Exact" || method == "Exact Position");
             notify_change(method != previous, true, false);
-            owner_->mark_layout_dirty();
             sync_from_json();
         }
     }

@@ -99,6 +99,7 @@ public:
         int candidate_entry_index = -1;
         std::string resolved_asset_name;
         bool is_null = true;
+        float size_variation_sample = 0.0f;
     };
 
     struct FrameState {
@@ -127,6 +128,8 @@ public:
     static float vertical_offset();
     static void  set_max_random_jitter(float jitter);
     static float max_random_jitter();
+    static float sample_size_variation_from_hash(std::uint64_t key_hash);
+    static float compute_effective_base_scale(const AssetInfo& info, float size_variation_sample);
 
     bool is_initialized() const { return initialized_; }
     void invalidate_config();

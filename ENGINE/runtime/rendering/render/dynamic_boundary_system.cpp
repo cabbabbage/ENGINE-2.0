@@ -122,7 +122,8 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
                                                  const WarpedScreenGrid& cam,
                                                  const Assets* assets,
                                                  const SDL_FPoint& world_pos,
-                                                 int world_z) {
+                                                 int world_z,
+                                                 float size_variation_sample) {
     (void)assets;
     if (!candidate.info) {
         return BoundaryScaleResult{};
@@ -133,9 +134,9 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
         cam.compute_render_effects(world_pt, 0.0f, 0.0f, WarpedScreenGrid::RenderSmoothingKey{}, world_z);
 
     const float perspective_scale = make_positive_scale(effects.distance_scale);
-    const float base_scale = (std::isfinite(candidate.info->scale_factor) && candidate.info->scale_factor > 0.0f)
-        ? candidate.info->scale_factor
-        : 1.0f;
+    const float base_scale = DynamicBoundarySystem::compute_effective_base_scale(
+        *candidate.info,
+        size_variation_sample);
     const float current_scale = base_scale * perspective_scale;
 
     // Match runtime assets: pick the nearest larger variant for this draw scale
@@ -430,7 +431,12 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         frame_state.frame_index = current_index;
         const BoundaryFrame& active_frame = candidate->frames[current_index];
         const BoundaryScaleResult scale_result =
-            compute_boundary_asset_scale(*candidate, cam, assets, assignment.world_pos, assignment.world_z);
+            compute_boundary_asset_scale(*candidate,
+                                         cam,
+                                         assets,
+                                         assignment.world_pos,
+                                         assignment.world_z,
+                                         assignment.assignment.size_variation_sample);
         const int variant_index = scale_result.variant_index;
         const auto& variants = active_frame.variants;
         const BoundaryFrameVariant* frame_variant = nullptr;
@@ -572,6 +578,7 @@ const DynamicBoundarySystem::BoundaryAssignment& DynamicBoundarySystem::select_c
         assignment.candidate_entry_index = resolved->entry_index;
         assignment.resolved_asset_name = resolved->resolved_asset_name;
         assignment.is_null = false;
+        assignment.size_variation_sample = sample_size_variation_from_hash(key_hash);
     }
 
     auto [inserted_it, inserted] = boundary_assignments_.emplace(key, std::move(assignment));
@@ -873,6 +880,49 @@ void DynamicBoundarySystem::set_max_random_jitter(float jitter) {
 
 float DynamicBoundarySystem::max_random_jitter() {
     return config().max_random_jitter;
+}
+
+float DynamicBoundarySystem::sample_size_variation_from_hash(std::uint64_t key_hash) {
+    const std::uint32_t seed_lo = static_cast<std::uint32_t>(key_hash & 0xFFFFFFFFULL);
+    const std::uint32_t seed_hi = static_cast<std::uint32_t>((key_hash >> 32) & 0xFFFFFFFFULL);
+    std::seed_seq seq{
+        seed_lo,
+        seed_hi,
+        0x53495A45u, // "SIZE"
+        0x56415259u  // "VARY"
+    };
+    std::mt19937 rng(seq);
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+    return dist(rng);
+}
+
+float DynamicBoundarySystem::compute_effective_base_scale(const AssetInfo& info, float size_variation_sample) {
+    const float authored_base =
+        (std::isfinite(info.scale_factor) && info.scale_factor > 0.0f) ? info.scale_factor : 1.0f;
+    if (info.tillable) {
+        return authored_base;
+    }
+
+    float variation = info.size_variation_percent;
+    if (!std::isfinite(variation)) {
+        variation = 0.0f;
+    }
+    variation = std::clamp(variation, 0.0f, 20.0f);
+    if (variation <= 0.0f) {
+        return authored_base;
+    }
+
+    float sample = size_variation_sample;
+    if (!std::isfinite(sample)) {
+        sample = 0.0f;
+    }
+    sample = std::clamp(sample, -1.0f, 1.0f);
+
+    const float multiplier = 1.0f + (sample * (variation / 100.0f));
+    if (!std::isfinite(multiplier) || multiplier <= 0.0f) {
+        return authored_base;
+    }
+    return authored_base * multiplier;
 }
 
 void DynamicBoundarySystem::ensure_region_cache_valid(const world::WorldGrid& grid,

@@ -1,6 +1,5 @@
 #include "generate_rooms.hpp"
 #include "generate_trails.hpp"
-#include "gameplay/spawn/asset_spawner.hpp"
 #include "utils/display_color.hpp"
 #include <cmath>
 #include <algorithm>
@@ -81,7 +80,6 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                                                         const nlohmann::json& boundary_data,
                                                         nlohmann::json& rooms_data,
                                                         nlohmann::json& trails_data,
-                                                        nlohmann::json& map_assets_data,
                                                         const MapGridSettings& grid_settings) {
         std::cout << "[GenerateRooms] Starting build for " << map_layers_.size() << " layers\n";
         std::vector<std::unique_ptr<Room>> all_rooms;
@@ -150,10 +148,6 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                 double extent = map_layers::room_extent_from_rooms_data(rooms_data_lookup, room_name);
                 return (extent > 0.0) ? extent : 1.0;
 };
-        if (!map_assets_data.is_object()) {
-                map_assets_data = nlohmann::json::object();
-        }
-        const nlohmann::json* map_assets_ptr = &map_assets_data;
         auto root = std::make_unique<Room>(
                                         Room::Point{ map_center_x_, map_center_z_ },
                                         "room",
@@ -163,7 +157,6 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                                         asset_lib,
                                         nullptr,
                                         get_room_data(root_spec.name),
-                                        map_assets_ptr,
                                         grid_settings,
                                         map_radius,
                                         "rooms_data",
@@ -248,7 +241,6 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                                                 asset_lib,
                                                 nullptr,
                                                 get_room_data(children_specs[i].name),
-                                                map_assets_ptr,
                                                 grid_settings,
                                                 map_radius,
                                                 "rooms_data",
@@ -344,7 +336,6 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                                                         asset_lib,
                                                         nullptr,
                                                         get_room_data(ordered_specs[idx].name),
-                                                        map_assets_ptr,
                                                         grid_settings,
                                                         map_radius,
                                                         "rooms_data",
@@ -392,19 +383,12 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                         room_refs.push_back(room_ptr.get());
                 }
                 trailgen.set_all_rooms_reference(room_refs);
-                auto trail_objects = trailgen.generate_trails( connections, existing_areas, map_id_, asset_lib, map_assets_ptr, map_radius, map_manifest_, manifest_store_, manifest_writer_);
+                auto trail_objects = trailgen.generate_trails( connections, existing_areas, map_id_, asset_lib, map_radius, map_manifest_, manifest_store_, manifest_writer_);
                 for (auto& t : trail_objects) {
                         all_rooms.push_back(std::move(t));
                 }
         }
         std::cout << "[GenerateRooms] Trail generation complete. Total rooms now: " << all_rooms.size() << "\n";
-        std::cout << "[GenerateRooms] Spawning map-wide assets...\n";
-        {
-                AssetSpawner map_wide_spawner(asset_lib, {});
-                map_wide_spawner.set_map_grid_settings(grid_settings);
-                map_wide_spawner.spawn_map_wide(all_rooms, map_assets_data, map_id_);
-        }
-        std::cout << "[GenerateRooms] Map-wide assets spawned\n";
         // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem
         // instead of being spawned as static assets during map generation.
 	std::cout << "[GenerateRooms] Build completed successfully\n";

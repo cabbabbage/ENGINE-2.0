@@ -163,8 +163,7 @@ bool attempt_trail_connection(Room* a,
                               int allowed_intersections,
                               nlohmann::json* trail_config,
                               const std::string& trail_name,
-                              const nlohmann::json* map_assets_data,
-                              double map_radius,
+                                                        double map_radius,
                               bool testing,
                               std::mt19937& rng,
                               nlohmann::json* map_manifest,
@@ -271,7 +270,7 @@ bool attempt_trail_connection(Room* a,
         return false;
     }
 
-    auto trail_room = std::make_unique<Room>( a->map_origin, "trail", name, nullptr, manifest_context, asset_lib, &candidate, trail_config, map_assets_data, MapGridSettings::defaults(), map_radius, "trails_data", map_manifest, manifest_store, manifest_context, manifest_writer );
+auto trail_room = std::make_unique<Room>( a->map_origin, "trail", name, nullptr, manifest_context, asset_lib, &candidate, trail_config, MapGridSettings::defaults(), map_radius, "trails_data", map_manifest, manifest_store, manifest_context, manifest_writer );
     a->add_connecting_room(trail_room.get());
     b->add_connecting_room(trail_room.get());
     trail_room->add_connecting_room(a);
@@ -317,12 +316,11 @@ void GenerateTrails::set_all_rooms_reference(const std::vector<Room*>& rooms) {
 }
 
 std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(
-                                                                       const std::vector<std::pair<Room*, Room*>>& room_pairs,
-                                                                       const std::vector<Area>& existing_areas,
-                                                                       const std::string& manifest_context,
-                                                                       AssetLibrary* asset_lib,
-                                                                       const nlohmann::json* map_assets_data,
-                                                                       double map_radius,
+    const std::vector<std::pair<Room*, Room*>>& room_pairs,
+    const std::vector<Area>& existing_areas,
+    const std::string& manifest_context,
+    AssetLibrary* asset_lib,
+    double map_radius,
                                                                        nlohmann::json* map_manifest,
                                                                        devmode::core::ManifestStore* manifest_store,
                                                                        Room::ManifestWriter manifest_writer)
@@ -358,8 +356,7 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(
                                         1,
                                         asset_ref->data,
                                         asset_ref->name,
-                                        map_assets_data,
-                                        map_radius,
+                            map_radius,
                                         testing,
                                         rng_,
                                         map_manifest,
@@ -387,7 +384,7 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(
         }
         }
         std::cout << "[GenerateTrails] Starting isolated room connections\n";
-        find_and_connect_isolated(manifest_context, asset_lib, all_areas, trail_rooms, map_assets_data, map_radius, map_manifest, manifest_store, manifest_writer);
+        find_and_connect_isolated(manifest_context, asset_lib, all_areas, trail_rooms, map_radius, map_manifest, manifest_store, manifest_writer);
         std::cout << "[GenerateTrails] Isolated connections completed\n";
         std::cout << "[GenerateTrails] Total trail rooms created: " << trail_rooms.size() << "\n";
         if (testing) {
@@ -585,12 +582,11 @@ std::vector<std::pair<Room*, Room*>> GenerateTrails::plan_maze_connections(
 }
 
 void GenerateTrails::find_and_connect_isolated(
-                                                   const std::string& manifest_context,
-                                                   AssetLibrary* asset_lib,
-                                                   std::vector<Area>& existing_areas,
-                                                   std::vector<std::unique_ptr<Room>>& trail_rooms,
-                                                   const nlohmann::json* map_assets_data,
-                                                   double map_radius,
+    const std::string& manifest_context,
+    AssetLibrary* asset_lib,
+    std::vector<Area>& existing_areas,
+    std::vector<std::unique_ptr<Room>>& trail_rooms,
+    double map_radius,
                                                    nlohmann::json* map_manifest,
                                                    devmode::core::ManifestStore* manifest_store,
                                                    Room::ManifestWriter manifest_writer)
@@ -689,8 +685,7 @@ void GenerateTrails::find_and_connect_isolated(
                                                                                 allowed_intersections,
                                                                                 asset_ref->data,
                                                                                 asset_ref->name,
-                                                                                map_assets_data,
-                                                                                map_radius,
+                           map_radius,
                                                                                 testing,
                                                                                 rng_,
                                                                                 map_manifest,
@@ -799,7 +794,6 @@ void GenerateTrails::remove_and_connect(std::vector<std::unique_ptr<Room>>& trai
                                         const std::string& manifest_context,
                                         AssetLibrary* asset_lib,
                                         std::vector<Area>& existing_areas,
-                                        const nlohmann::json* map_assets_data,
                                         double map_radius,
                                         nlohmann::json* map_manifest,
                                         devmode::core::ManifestStore* manifest_store,
@@ -836,7 +830,7 @@ void GenerateTrails::remove_and_connect(std::vector<std::unique_ptr<Room>>& trai
 	illegal_connections.emplace_back(target, most_connected);
 	std::cout << "[Debug][remove_and_connect] Marked connection illegal: ('"
 	<< target->room_name << "', '" << most_connected->room_name << "')\n";
-        find_and_connect_isolated(manifest_context, asset_lib, existing_areas, trail_rooms, map_assets_data, map_radius, map_manifest, manifest_store, manifest_writer);
+        find_and_connect_isolated(manifest_context, asset_lib, existing_areas, trail_rooms, map_radius, map_manifest, manifest_store, manifest_writer);
 	std::cout << "[Debug][remove_and_connect] Completed reconnect attempt for isolated groups.\n";
 }
 
@@ -844,7 +838,6 @@ void GenerateTrails::circular_connection(std::vector<std::unique_ptr<Room>>& tra
                                          const std::string& manifest_context,
                                          AssetLibrary* asset_lib,
                                          std::vector<Area>& existing_areas,
-                                         const nlohmann::json* map_assets_data,
                                          double map_radius,
                                          nlohmann::json* map_manifest,
                                          devmode::core::ManifestStore* manifest_store,
@@ -919,8 +912,7 @@ void GenerateTrails::circular_connection(std::vector<std::unique_ptr<Room>>& tra
                                                              1,
                                                              asset_ref->data,
                                                              asset_ref->name,
-                                                             map_assets_data,
-                                                             map_radius,
+                           map_radius,
                                                              testing,
                                                              rng_,
                                                              map_manifest,

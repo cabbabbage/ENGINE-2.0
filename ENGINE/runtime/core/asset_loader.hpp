@@ -65,10 +65,9 @@ class AssetLoader {
     double map_radius_   = 0.0;
     MapGridSettings map_grid_settings_{};
     nlohmann::json map_manifest_json_;
-    nlohmann::json* map_assets_data_   = nullptr;
-    nlohmann::json* map_boundary_data_ = nullptr;
-    nlohmann::json* rooms_data_        = nullptr;
-    nlohmann::json* trails_data_       = nullptr;
+        nlohmann::json* map_boundary_data_ = nullptr;
+        nlohmann::json* rooms_data_        = nullptr;
+        nlohmann::json* trails_data_       = nullptr;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     void load_from_manifest(const nlohmann::json& map_manifest);
     void loadRooms();

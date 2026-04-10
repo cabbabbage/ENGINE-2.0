@@ -205,10 +205,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     layer["rooms"] = nlohmann::json::array({spawn_spec});
     map_info["map_layers"] = nlohmann::json::array({layer});
 
-    map_info["map_assets_data"] = nlohmann::json::object({
-        {"spawn_groups",
-         nlohmann::json::array({make_batch_spawn_group(map_name, "map_assets", "batch_map_assets")})}
-    });
     map_info["map_boundary_data"] = nlohmann::json::object({
         {"inherits_map_assets", false},
         {"candidate_selectors",
@@ -298,8 +294,7 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         changed = true;
     }
 
-    const std::array<const char*, 4> object_sections{
-        "map_assets_data",
+    const std::array<const char*, 3> object_sections{
         "map_boundary_data",
         "rooms_data",
         "trails_data"
@@ -308,6 +303,9 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         if (ensure_object_section(map_manifest, key)) {
             changed = true;
         }
+    }
+    if (map_manifest.erase("map_assets_data") > 0) {
+        changed = true;
     }
 
     if (ensure_map_layers_settings_defaults(map_manifest)) {

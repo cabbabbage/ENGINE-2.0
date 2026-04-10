@@ -248,27 +248,6 @@ void for_each_spatial_candidate(const SpatialIndex& index,
     }
 }
 
-constexpr bool kBackgroundLayerFogEnabled = true;
-
-bool project_depth_to_floor_screen_y(const WarpedScreenGrid& cam,
-                                     double world_depth,
-                                     int screen_height,
-                                     float& out_y) {
-    SDL_FPoint projected{};
-    if (!cam.project_world_point(SDL_FPoint{0.0f, 0.0f}, static_cast<float>(world_depth), projected)) {
-        return false;
-    }
-    if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
-        return false;
-    }
-    projected.y = cam.warp_floor_screen_y(0.0f, projected.y);
-    if (!std::isfinite(projected.y)) {
-        return false;
-    }
-    out_y = std::clamp(projected.y, 0.0f, static_cast<float>(screen_height));
-    return true;
-}
-
 float compute_horizon_screen_y(const WarpedScreenGrid& cam, int screen_height) {
     const auto floor_params = cam.compute_floor_depth_params();
     if (floor_params.enabled && std::isfinite(floor_params.horizon_screen_y)) {
@@ -293,42 +272,6 @@ float compute_horizon_screen_y(const WarpedScreenGrid& cam, int screen_height) {
 }
 
 namespace render_internal {
-
-bool should_apply_background_layer_fog(int layer_index,
-                                       int foreground_layer_count,
-                                       int background_layer_count,
-                                       int player_layer_index,
-                                       bool single_layer_fallback_active) {
-    if (single_layer_fallback_active) {
-        return false;
-    }
-    if (foreground_layer_count < 0 || background_layer_count <= 0 || layer_index < 0) {
-        return false;
-    }
-
-    const int first_background_layer = foreground_layer_count;
-    const int one_past_last_layer = foreground_layer_count + background_layer_count;
-    if (layer_index < first_background_layer || layer_index >= one_past_last_layer) {
-        return false;
-    }
-    return layer_index > player_layer_index;
-}
-
-int fog_cycle_index_for_background_segment(int background_segment_index) {
-    return std::max(0, background_segment_index);
-}
-
-float clamp_fog_bottom_to_player_floor(float fog_bottom_y,
-                                       float player_floor_y,
-                                       int screen_height) {
-    if (screen_height <= 0) {
-        return 0.0f;
-    }
-    const float screen_max = static_cast<float>(screen_height);
-    const float clamped_fog_bottom = std::clamp(fog_bottom_y, 0.0f, screen_max);
-    const float clamped_player_floor = std::clamp(player_floor_y, 0.0f, screen_max);
-    return std::min(clamped_fog_bottom, clamped_player_floor);
-}
 
 bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
                                     SDL_Texture* gameplay_target,
@@ -2540,8 +2483,6 @@ void SceneRenderer::render() {
     if (scene_pipeline_targets_ready) {
         clear_texture_target(background_seed_tex_);
         SDL_SetRenderTarget(renderer_, background_seed_tex_);
-        render_sky_layer(cam);
-        render_mountain_layer(cam, anchor_depth, max_cull_depth);
         render_floor_background_layer(cam, grid, runtime_lights, runtime_lighting_enabled, max_cull_depth, background_seed_tex_, false);
     }
 
@@ -2594,8 +2535,6 @@ void SceneRenderer::render() {
         lighting_params.ambient_color = SDL_Color{18, 20, 24, 255};
 
         LayerEffectProcessor::LayerFogParams fog_params{};
-        // Single-layer fallback intentionally disables fog to guarantee
-        // no overdraw across the player/focus plane.
 
         LayerEffectProcessor::LayerScratchTextures scratch_textures{};
         scratch_textures.dark_mask_texture = dof_dark_mask_textures_[0];
@@ -2696,8 +2635,7 @@ void SceneRenderer::render() {
             }
             const double clamped = std::clamp(depth, -max_cull_depth, max_cull_depth);
             const double abs_depth = std::fabs(clamped);
-            // Keep exact zero depth on the camera/player side of the split so the
-            // first fogged/background layer starts strictly behind the player.
+            // Keep exact zero depth on the camera/player side of the split.
             if (clamped <= 0.0) {
                 auto upper = std::upper_bound(foreground_depth_edges.begin(), foreground_depth_edges.end(), abs_depth);
                 std::ptrdiff_t seg = std::distance(foreground_depth_edges.begin(), upper) - 1;
@@ -2814,6 +2752,8 @@ void SceneRenderer::render() {
             }
             if (!process_single_scene_layer()) {
                 SDL_SetRenderTarget(renderer_, gameplay_target);
+                render_sky_layer(cam);
+                render_mountain_layer(cam, anchor_depth, max_cull_depth);
                 if (background_seed_tex_) {
                     SDL_SetTextureBlendMode(background_seed_tex_, SDL_BLENDMODE_BLEND);
                     SDL_SetTextureAlphaMod(background_seed_tex_, 255);
@@ -2914,30 +2854,6 @@ void SceneRenderer::render() {
                 }
 
                 LayerEffectProcessor::LayerFogParams fog_params{};
-                if (kBackgroundLayerFogEnabled &&
-                    render_internal::should_apply_background_layer_fog(i,
-                                                                       foreground_layer_count,
-                                                                       background_layer_count,
-                                                                       player_layer_index,
-                                                                       false)) {
-                    const int seg = i - foreground_layer_count;
-                    if (seg >= 0 && seg < background_layer_count) {
-                        const double far_depth = background_depth_edges[static_cast<std::size_t>(seg + 1)];
-                        float fog_bottom_y = 0.0f;
-                        if (project_depth_to_floor_screen_y(cam, anchor_depth + far_depth, screen_height_, fog_bottom_y) &&
-                            fog_bottom_y > 1.0f) {
-                            fog_params.enabled = true;
-                            fog_params.normalized_depth = static_cast<float>(
-                                std::clamp(far_depth / std::max(1.0, max_cull_depth), 0.0, 1.0));
-                            fog_params.bottom_y_px = fog_bottom_y;
-                            fog_params.thickness = std::max(0.0f, realism.fog_thickness);
-                            fog_params.layer_cycle_index =
-                                render_internal::fog_cycle_index_for_background_segment(seg);
-                            fog_params.bottom_opacity_curve = realism.fog_bottom_curve;
-                            fog_params.tint = SDL_Color{222, 232, 242, 255};
-                        }
-                    }
-                }
 
                 const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : representative_depth;
                 const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : representative_depth;
@@ -2984,6 +2900,13 @@ void SceneRenderer::render() {
             SDL_Texture* background_temp = chain_temp_tex_;
             bool background_has_content = false;
             bool background_initialized = false;
+            if (background_accum) {
+                SDL_SetRenderTarget(renderer_, background_accum);
+                render_sky_layer(cam);
+                render_mountain_layer(cam, anchor_depth, max_cull_depth);
+                background_initialized = true;
+                background_has_content = true;
+            }
             std::size_t background_blur_step_index = 0;
             for (int layer_index : background_chain) {
                 int repeat_count = 0;

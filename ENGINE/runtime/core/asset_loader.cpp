@@ -238,11 +238,9 @@ void AssetLoader::loadRooms() {
         nlohmann::json empty_boundary = nlohmann::json::object();
         nlohmann::json empty_rooms    = nlohmann::json::object();
         nlohmann::json empty_trails   = nlohmann::json::object();
-        nlohmann::json empty_assets   = nlohmann::json::object();
         map_grid_settings_ = MapGridSettings::from_json(map_manifest_json_.contains("map_grid_settings") ? &map_manifest_json_["map_grid_settings"] : nullptr);
         MapGridSettings grid_settings = map_grid_settings_;
-        nlohmann::json& map_assets_json = map_assets_data_ ? *map_assets_data_ : empty_assets;
-        auto room_ptrs = generator.build( asset_library_, map_radius_, layer_radii_, map_boundary_data_ ? *map_boundary_data_ : empty_boundary, rooms_data_        ? *rooms_data_        : empty_rooms, trails_data_       ? *trails_data_       : empty_trails, map_assets_json, grid_settings);
+        auto room_ptrs = generator.build( asset_library_, map_radius_, layer_radii_, map_boundary_data_ ? *map_boundary_data_ : empty_boundary, rooms_data_        ? *rooms_data_        : empty_rooms, trails_data_       ? *trails_data_       : empty_trails, grid_settings);
         world_context_->adopt_rooms(std::move(room_ptrs));
         if (getRooms().empty()) {
                 throw std::runtime_error("[AssetLoader] Room generation produced zero rooms after manifest normalization.");
@@ -428,7 +426,6 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                 return nullptr;
         };
 
-        map_assets_data_   = bind_object_section("map_assets_data");
         map_boundary_data_ = bind_object_section("map_boundary_data");
         rooms_data_        = bind_object_section("rooms_data");
         trails_data_       = bind_object_section("trails_data");

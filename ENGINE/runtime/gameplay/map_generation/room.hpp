@@ -56,7 +56,6 @@ class Room {
          AssetLibrary* asset_lib,
          Area* precomputed_area,
          nlohmann::json* room_data,
-         const nlohmann::json* map_assets_data,
          const MapGridSettings& grid_settings,
          double map_radius,
          const std::string& data_section,

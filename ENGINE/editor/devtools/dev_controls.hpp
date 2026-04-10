@@ -229,9 +229,7 @@ public:
     void handle_map_selection();
     void toggle_camera_panel();
     void close_camera_panel();
-    void toggle_map_assets_modal();
     void toggle_boundary_assets_modal();
-    void open_map_assets_modal();
     void open_boundary_assets_modal();
     void configure_header_button_sets();
     void sync_header_button_states();
@@ -337,8 +335,6 @@ private:
     void regenerate_map_spawn_group(const nlohmann::json& entry);
     void regenerate_boundary_spawn_group(const nlohmann::json& boundary_data);
     
-    void regenerate_map_grid_assets();
-    void ensure_map_assets_modal_open();
     void ensure_boundary_assets_modal_open();
 
 
@@ -390,7 +386,6 @@ private:
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
 
-    std::unique_ptr<SingleSpawnGroupModal> map_assets_modal_;
     std::unique_ptr<BoundarySpawnGroupModal> boundary_assets_modal_;
 
     bool grid_overlay_enabled_ = false;

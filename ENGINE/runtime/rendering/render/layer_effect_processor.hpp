@@ -1,7 +1,6 @@
 #pragma once
 
 #include <SDL3/SDL.h>
-#include <array>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -80,13 +79,8 @@ public:
                          float quality_scale = 1.0f) const;
 
 private:
-    static constexpr int kFogVariantCount = 6;
-
     void destroy_owned_resources();
-    void destroy_fog_resources();
     void destroy_lighting_resources();
-    bool ensure_fog_band_textures(int target_w, float bottom_opacity_curve);
-    SDL_Texture* fog_band_texture_for_cycle(int layer_cycle_index) const;
     bool ensure_light_accum_texture(int target_w, int target_h);
     SDL_Texture* ensure_light_falloff_texture(float falloff);
 
@@ -101,10 +95,6 @@ private:
                                   float light_radius_px) const;
 
     SDL_Renderer* renderer_ = nullptr;
-    std::array<SDL_Texture*, kFogVariantCount> fog_band_textures_{};
-    int fog_band_baked_width_ = 0;
-    int fog_band_baked_height_ = 0;
-    float fog_band_baked_curve_ = 1.0f;
     SDL_Texture* light_accum_texture_ = nullptr;
     int light_accum_width_ = 0;
     int light_accum_height_ = 0;

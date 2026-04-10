@@ -9,14 +9,7 @@
 
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
-constexpr float kInvSqrt2 = 0.70710678f;
 constexpr float kMinimumBlurRadiusEpsilonPx = 1.0e-4f;
-constexpr int kFogBandTextureMinWidth = 1024;
-constexpr int kFogBandTextureHeight = 192;
-constexpr int kFogBandWidthBucket = 256;
-constexpr float kFogCycleOffsetA = 0.318309886f;
-constexpr float kFogCycleOffsetB = 0.141421356f;
 
 struct TextureStateSnapshot {
     SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
@@ -48,37 +41,6 @@ static bool query_texture_size(SDL_Texture* texture, int& out_w, int& out_h) {
     out_w = rounded_w;
     out_h = rounded_h;
     return true;
-}
-
-static float smoothstep(float edge0, float edge1, float value) {
-    if (edge1 <= edge0) {
-        return value >= edge1 ? 1.0f : 0.0f;
-    }
-    const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-    return t * t * (3.0f - (2.0f * t));
-}
-
-static int ceil_to_bucket(int value, int bucket) {
-    if (value <= 0 || bucket <= 1) {
-        return std::max(1, value);
-    }
-    return ((value + bucket - 1) / bucket) * bucket;
-}
-
-static float fract(float value) {
-    const float floor_value = std::floor(value);
-    return value - floor_value;
-}
-
-static int positive_mod(int value, int modulus) {
-    if (modulus <= 0) {
-        return 0;
-    }
-    int result = value % modulus;
-    if (result < 0) {
-        result += modulus;
-    }
-    return result;
 }
 
 static TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
@@ -209,97 +171,6 @@ static void draw_weighted_scaled_sample(SDL_Renderer* renderer,
     SDL_RenderTexture(renderer, texture, &src_rect, &dst_rect);
 }
 
-static bool apply_outline_soften_prefill(SDL_Renderer* renderer,
-                                         SDL_Texture* src,
-                                         SDL_Texture* dst,
-                                         int draw_w,
-                                         int draw_h,
-                                         float soften_radius_px,
-                                         SDL_BlendMode sum_blend) {
-    if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0) {
-        return false;
-    }
-    if (src == dst) {
-        return false;
-    }
-
-    clear_target(renderer, dst);
-
-    if (soften_radius_px <= kMinimumBlurRadiusEpsilonPx) {
-        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(src, 255);
-
-        const SDL_FRect rect{
-            0.0f,
-            0.0f,
-            static_cast<float>(draw_w),
-            static_cast<float>(draw_h)
-        };
-        SDL_RenderTexture(renderer, src, &rect, &rect);
-        return true;
-    }
-
-    SDL_SetTextureBlendMode(src, sum_blend);
-
-    const float clamped_radius = std::clamp(soften_radius_px, kMinimumBlurRadiusEpsilonPx, 4.5f);
-    const int ring_samples = 16;
-
-    const float center_raw_weight = 0.22f;
-    const float inner_raw_weight = 0.95f;
-    const float outer_raw_weight = 1.30f;
-
-    const float inner_radius = clamped_radius * 0.85f;
-    const float outer_radius = clamped_radius * 1.65f;
-
-    const float total_raw_weight =
-        center_raw_weight +
-        static_cast<float>(ring_samples) * inner_raw_weight +
-        static_cast<float>(ring_samples) * outer_raw_weight;
-
-    if (total_raw_weight <= 1e-6f) {
-        return false;
-    }
-
-    draw_weighted_offset_sample(
-        renderer,
-        src,
-        draw_w,
-        draw_h,
-        0.0f,
-        0.0f,
-        center_raw_weight / total_raw_weight
-    );
-
-    for (int i = 0; i < ring_samples; ++i) {
-        const float angle = (2.0f * kPi * static_cast<float>(i)) / static_cast<float>(ring_samples);
-        const float cos_a = std::cos(angle);
-        const float sin_a = std::sin(angle);
-
-        draw_weighted_offset_sample(
-            renderer,
-            src,
-            draw_w,
-            draw_h,
-            cos_a * inner_radius,
-            sin_a * inner_radius,
-            inner_raw_weight / total_raw_weight
-        );
-
-        const float angle_outer = angle + (kPi / static_cast<float>(ring_samples));
-        draw_weighted_offset_sample(
-            renderer,
-            src,
-            draw_w,
-            draw_h,
-            std::cos(angle_outer) * outer_radius,
-            std::sin(angle_outer) * outer_radius,
-            outer_raw_weight / total_raw_weight
-        );
-    }
-
-    return true;
-}
-
 static bool apply_axis_blur(SDL_Renderer* renderer,
                             SDL_Texture* src,
                             SDL_Texture* dst,
@@ -391,20 +262,18 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
 
     const float max_dim = static_cast<float>(std::max(draw_w, draw_h));
     const float normalized_radius = std::clamp(radial_radius_px / std::max(1.0f, max_dim), 0.0f, 1.0f);
-    const int sample_count = std::clamp(static_cast<int>(std::ceil(radial_radius_px * 2.8f)), 2, 72);
-    const float max_scale_delta = std::min(0.72f, normalized_radius * 4.2f);
+    const int sample_count = std::clamp(static_cast<int>(std::ceil(radial_radius_px * 2.0f)), 2, 64);
+    const float max_scale_delta = std::min(0.65f, normalized_radius * 3.0f);
 
-    const float base_raw_weight = 0.92f;
-    constexpr float kOutwardWeightScale = 1.55f;
-    constexpr float kInwardWeightScale = 0.45f;
+    const float base_raw_weight = 1.0f;
     float total_raw_weight = base_raw_weight;
 
     std::vector<float> side_weights(static_cast<std::size_t>(sample_count), 0.0f);
     for (int i = 0; i < sample_count; ++i) {
         const float t = static_cast<float>(i + 1) / static_cast<float>(sample_count);
-        const float w = std::pow(1.0f - t, 1.1f);
+        const float w = 1.0f - t;
         side_weights[static_cast<std::size_t>(i)] = w;
-        total_raw_weight += (kOutwardWeightScale + kInwardWeightScale) * w;
+        total_raw_weight += (2.0f * w);
     }
 
     if (total_raw_weight <= 1e-6f) {
@@ -423,11 +292,9 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
 
     for (int i = 0; i < sample_count; ++i) {
         const float t = static_cast<float>(i + 1) / static_cast<float>(sample_count);
-        const float edge_bias = 0.25f + (0.75f * t);
-        const float scale_delta = max_scale_delta * edge_bias;
+        const float scale_delta = max_scale_delta * t;
         const float raw_weight = side_weights[static_cast<std::size_t>(i)];
-        const float inward_weight = (raw_weight * kInwardWeightScale) / total_raw_weight;
-        const float outward_weight = (raw_weight * kOutwardWeightScale) / total_raw_weight;
+        const float symmetric_weight = raw_weight / total_raw_weight;
 
         draw_weighted_scaled_sample(
             renderer,
@@ -435,8 +302,8 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
             draw_w,
             draw_h,
             optical_center,
-            std::max(0.05f, 1.0f - (scale_delta * 0.45f)),
-            inward_weight
+            std::max(0.05f, 1.0f - scale_delta),
+            symmetric_weight
         );
 
         draw_weighted_scaled_sample(
@@ -446,7 +313,7 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
             draw_h,
             optical_center,
             1.0f + scale_delta,
-            outward_weight
+            symmetric_weight
         );
     }
 
@@ -549,9 +416,6 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
 
     const float process_blur_radius = std::max(0.0f, radius_px) * clamped_quality;
     const float process_radial_radius = std::max(0.0f, radial_radius_px) * clamped_quality;
-    const bool has_blur = (process_blur_radius > kMinimumBlurRadiusEpsilonPx) ||
-                          (process_radial_radius > kMinimumBlurRadiusEpsilonPx);
-
     const SDL_FPoint scaled_optical_center{
         optical_center.x * clamped_quality,
         optical_center.y * clamped_quality
@@ -579,25 +443,6 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         return (tex == scratch) ? dst : scratch;
     };
 
-    if (has_blur) {
-        const float blur_mix = process_blur_radius + process_radial_radius;
-        const float outline_soften_radius = std::clamp(
-            blur_mix * 0.42f,
-            kMinimumBlurRadiusEpsilonPx,
-            3.60f
-        );
-
-        SDL_Texture* next = pick_other_temp(current);
-        if (!apply_outline_soften_prefill(renderer_, current, next, process_w, process_h, outline_soften_radius, sum_blend)) {
-            restore_texture_state(src, src_state);
-            restore_texture_state(scratch, scratch_state);
-            restore_texture_state(dst, dst_state);
-            SDL_SetRenderTarget(renderer_, previous_target);
-            return false;
-        }
-        current = next;
-    }
-
     if (process_blur_radius > kMinimumBlurRadiusEpsilonPx) {
         SDL_Texture* next = pick_other_temp(current);
         if (!apply_axis_blur(renderer_, current, next, process_w, process_h, process_blur_radius, 1.0f, 0.0f, sum_blend)) {
@@ -618,29 +463,6 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             return false;
         }
         current = next;
-
-        const float diagonal_radius = process_blur_radius * 0.55f;
-        if (diagonal_radius > 0.75f) {
-            next = pick_other_temp(current);
-            if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, kInvSqrt2, kInvSqrt2, sum_blend)) {
-                restore_texture_state(src, src_state);
-                restore_texture_state(scratch, scratch_state);
-                restore_texture_state(dst, dst_state);
-                SDL_SetRenderTarget(renderer_, previous_target);
-                return false;
-            }
-            current = next;
-
-            next = pick_other_temp(current);
-            if (!apply_axis_blur(renderer_, current, next, process_w, process_h, diagonal_radius, kInvSqrt2, -kInvSqrt2, sum_blend)) {
-                restore_texture_state(src, src_state);
-                restore_texture_state(scratch, scratch_state);
-                restore_texture_state(dst, dst_state);
-                SDL_SetRenderTarget(renderer_, previous_target);
-                return false;
-            }
-            current = next;
-        }
     }
 
     if (process_radial_radius > kMinimumBlurRadiusEpsilonPx) {
@@ -690,29 +512,6 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
         SDL_SetTextureAlphaMod(current, 255);
         SDL_SetTextureColorMod(current, 255, 255, 255);
         SDL_RenderTexture(renderer_, current, nullptr, nullptr);
-    }
-
-    if (has_blur) {
-        const float blur_strength = std::clamp(
-            (process_blur_radius + process_radial_radius) / 24.0f,
-            0.0f,
-            1.0f
-        );
-
-        if (blur_strength < 0.18f) {
-            const float reinforce_alpha_f = 0.03f + (0.05f * (1.0f - blur_strength));
-            const Uint8 reinforce_alpha = static_cast<Uint8>(
-                std::clamp(static_cast<int>(std::lround(reinforce_alpha_f * 255.0f)), 0, 255)
-            );
-
-            if (reinforce_alpha > 0) {
-                SDL_SetRenderTarget(renderer_, dst);
-                SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureAlphaMod(src, reinforce_alpha);
-                SDL_SetTextureColorMod(src, 255, 255, 255);
-                SDL_RenderTexture(renderer_, src, nullptr, nullptr);
-            }
-        }
     }
 
     restore_texture_state(src, src_state);
@@ -888,101 +687,14 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
         }
     }
 
-    // Step 5: fog over composited layer only.
-    if (fog_params.enabled) {
-        const float fog_bottom = std::clamp(fog_params.bottom_y_px, 0.0f, static_cast<float>(target_h));
-        if (fog_bottom > 1.0f &&
-            ensure_fog_band_textures(target_w, fog_params.bottom_opacity_curve)) {
-            const int cycle_index = fog_params.layer_cycle_index;
-            const int variant_index = positive_mod(cycle_index, LayerEffectProcessor::kFogVariantCount);
-            SDL_Texture* fog_texture = fog_band_texture_for_cycle(variant_index);
-            int fog_w = 0;
-            int fog_h = 0;
-            if (fog_texture && query_texture_size(fog_texture, fog_w, fog_h) && fog_w > 0 && fog_h > 0) {
-                const float depth_t = std::clamp(fog_params.normalized_depth, 0.0f, 1.0f);
-                const float thickness = std::clamp(fog_params.thickness, 0.0f, 4.0f);
-                const float shaped = std::pow(depth_t, 0.68f);
-                const float depth_coverage = smoothstep(0.02f, 0.98f, shaped);
-                float fog_strength = std::clamp(depth_coverage * (0.46f + (0.62f * thickness)), 0.0f, 1.0f);
-                if (depth_t >= 0.985f) {
-                    fog_strength = 1.0f;
-                }
-                const Uint8 fog_alpha = static_cast<Uint8>(std::clamp(
-                    static_cast<int>(std::lround(fog_strength * 255.0f)),
-                    0,
-                    255));
-                if (fog_alpha > 0) {
-                    SDL_SetRenderTarget(renderer_, composited_output_texture);
-                    SDL_SetTextureBlendMode(fog_texture, SDL_BLENDMODE_BLEND);
-                    SDL_SetTextureColorMod(fog_texture, fog_params.tint.r, fog_params.tint.g, fog_params.tint.b);
-                    SDL_SetTextureAlphaMod(fog_texture, fog_alpha);
-
-                    const float sample_w = std::max(1.0f, std::min(static_cast<float>(target_w), static_cast<float>(fog_w)));
-                    const float sample_h = static_cast<float>(fog_h);
-                    const float max_src_x = std::max(0.0f, static_cast<float>(fog_w) - sample_w);
-                    const float offset_t = fract((static_cast<float>(cycle_index) * kFogCycleOffsetA) +
-                                                 (static_cast<float>(variant_index) * kFogCycleOffsetB));
-                    const float base_src_x = max_src_x * offset_t;
-                    const SDL_FRect base_src_rect{
-                        base_src_x,
-                        0.0f,
-                        sample_w,
-                        sample_h
-                    };
-                    const SDL_FRect dst_rect{
-                        0.0f,
-                        0.0f,
-                        static_cast<float>(target_w),
-                        fog_bottom
-                    };
-                    SDL_RenderTexture(renderer_, fog_texture, &base_src_rect, &dst_rect);
-
-                    const Uint8 detail_alpha = static_cast<Uint8>(std::clamp(
-                        static_cast<int>(std::lround(static_cast<float>(fog_alpha) * (0.32f + (0.22f * depth_t)))),
-                        0,
-                        255));
-                    if (detail_alpha > 0) {
-                        const float detail_min_w = std::min(16.0f, sample_w);
-                        const float detail_sample_w = std::clamp(sample_w * 0.88f, detail_min_w, sample_w);
-                        const float detail_max_src_x = std::max(0.0f, static_cast<float>(fog_w) - detail_sample_w);
-                        const float detail_offset_t = fract(offset_t + 0.17320508f + (depth_t * 0.11f));
-                        const SDL_FRect detail_src_rect{
-                            detail_max_src_x * detail_offset_t,
-                            0.0f,
-                            detail_sample_w,
-                            sample_h
-                        };
-                        SDL_SetTextureAlphaMod(fog_texture, detail_alpha);
-                        SDL_RenderTexture(renderer_, fog_texture, &detail_src_rect, &dst_rect);
-                    }
-
-                    SDL_SetTextureAlphaMod(fog_texture, 255);
-                    SDL_SetTextureColorMod(fog_texture, 255, 255, 255);
-                    result.fog_applied = true;
-                }
-            }
-        }
-    }
+    (void)fog_params;
 
     restore_state_and_target();
     return result;
 }
 
 void LayerEffectProcessor::destroy_owned_resources() {
-    destroy_fog_resources();
     destroy_lighting_resources();
-}
-
-void LayerEffectProcessor::destroy_fog_resources() {
-    for (SDL_Texture*& texture : fog_band_textures_) {
-        if (texture) {
-            SDL_DestroyTexture(texture);
-            texture = nullptr;
-        }
-    }
-    fog_band_baked_width_ = 0;
-    fog_band_baked_height_ = 0;
-    fog_band_baked_curve_ = 1.0f;
 }
 
 void LayerEffectProcessor::destroy_lighting_resources() {
@@ -1012,103 +724,6 @@ void LayerEffectProcessor::destroy_lighting_resources() {
     warned_missing_strict_dark_mask_pipeline_blend_modes_ = false;
 }
 
-bool LayerEffectProcessor::ensure_fog_band_textures(int target_w, float bottom_opacity_curve) {
-    if (!renderer_ || target_w <= 0) {
-        return false;
-    }
-
-    const float clamped_curve = std::clamp(bottom_opacity_curve, 0.25f, 3.0f);
-    const int requested_width = ceil_to_bucket(std::max(kFogBandTextureMinWidth, target_w * 2), kFogBandWidthBucket);
-    const bool all_textures_ready = std::all_of(fog_band_textures_.begin(),
-                                                fog_band_textures_.end(),
-                                                [](SDL_Texture* tex) { return tex != nullptr; });
-    const bool size_ok = fog_band_baked_width_ >= requested_width && fog_band_baked_height_ == kFogBandTextureHeight;
-    const bool curve_ok = std::fabs(fog_band_baked_curve_ - clamped_curve) <= 1e-4f;
-    if (all_textures_ready && size_ok && curve_ok) {
-        return true;
-    }
-
-    const int bake_width = std::max(requested_width, fog_band_baked_width_);
-    destroy_fog_resources();
-
-    const SDL_PixelFormatDetails* pixel_format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_RGBA8888);
-    if (!pixel_format) {
-        return false;
-    }
-
-    for (int variant = 0; variant < kFogVariantCount; ++variant) {
-        SDL_Texture* texture = SDL_CreateTexture(renderer_,
-                                                 SDL_PIXELFORMAT_RGBA8888,
-                                                 SDL_TEXTUREACCESS_STREAMING,
-                                                 bake_width,
-                                                 kFogBandTextureHeight);
-        if (!texture) {
-            destroy_fog_resources();
-            return false;
-        }
-
-        void* pixels = nullptr;
-        int pitch = 0;
-        if (!SDL_LockTexture(texture, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
-            SDL_DestroyTexture(texture);
-            destroy_fog_resources();
-            return false;
-        }
-
-        auto* base = static_cast<std::uint8_t*>(pixels);
-        const float variant_phase = static_cast<float>(variant) * 1.61803399f;
-        for (int y = 0; y < kFogBandTextureHeight; ++y) {
-            auto* row = reinterpret_cast<Uint32*>(base + (pitch * y));
-            const float v = static_cast<float>(y) / static_cast<float>(kFogBandTextureHeight - 1);
-            const float d = 1.0f - v; // 0 at cutoff, 1 toward horizon.
-            const float ramp = std::pow(std::clamp(d, 0.0f, 1.0f), clamped_curve);
-            const float bottom_feather = smoothstep(0.0f, 0.06f, d);
-            const float vertical_profile = std::clamp(ramp * bottom_feather, 0.0f, 1.0f);
-
-            for (int x = 0; x < bake_width; ++x) {
-                const float fx = static_cast<float>(x) / static_cast<float>(std::max(1, bake_width - 1));
-                const float domain_x = fx + (0.06f * std::sin((v * 5.4f) + (variant_phase * 0.63f)));
-                const float n0 = 0.5f + 0.5f * std::sin((domain_x * 21.3f) + (v * 3.8f) + (variant_phase * 0.73f));
-                const float n1 = 0.5f + 0.5f * std::sin((domain_x * 47.1f) - (v * 11.7f) + (variant_phase * 1.21f));
-                const float n2 = 0.5f + 0.5f * std::sin(((domain_x + (v * 0.9f)) * 83.5f) + (variant_phase * 1.57f));
-                const float n3 = 0.5f + 0.5f * std::sin(((domain_x * 7.7f) - (v * 14.1f)) + (variant_phase * 0.29f));
-                const float base_noise = std::clamp(
-                    (n0 * 0.40f) + (n1 * 0.28f) + (n2 * 0.20f) + (n3 * 0.12f),
-                    0.0f,
-                    1.0f);
-
-                const float ridged = 1.0f - std::fabs((base_noise * 2.0f) - 1.0f);
-                const float wisps = std::pow(std::clamp(ridged, 0.0f, 1.0f), 1.5f);
-                const float alpha_f = std::clamp(
-                    vertical_profile * (0.46f + (0.39f * base_noise) + (0.15f * wisps)),
-                    0.0f,
-                    1.0f);
-                const Uint8 alpha = static_cast<Uint8>(std::clamp(
-                    static_cast<int>(std::lround(alpha_f * 255.0f)),
-                    0,
-                    255));
-                row[x] = SDL_MapRGBA(pixel_format, nullptr, 255, 255, 255, alpha);
-            }
-        }
-
-        SDL_UnlockTexture(texture);
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-        fog_band_textures_[static_cast<std::size_t>(variant)] = texture;
-    }
-
-    fog_band_baked_width_ = bake_width;
-    fog_band_baked_height_ = kFogBandTextureHeight;
-    fog_band_baked_curve_ = clamped_curve;
-    return true;
-}
-
-SDL_Texture* LayerEffectProcessor::fog_band_texture_for_cycle(int layer_cycle_index) const {
-    const int slot = positive_mod(layer_cycle_index, kFogVariantCount);
-    if (slot < 0 || slot >= kFogVariantCount) {
-        return nullptr;
-    }
-    return fog_band_textures_[static_cast<std::size_t>(slot)];
-}
 
 bool LayerEffectProcessor::ensure_light_accum_texture(int target_w, int target_h) {
     if (!renderer_ || target_w <= 0 || target_h <= 0) {

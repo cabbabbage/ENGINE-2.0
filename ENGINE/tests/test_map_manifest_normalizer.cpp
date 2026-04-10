@@ -37,6 +37,17 @@ TEST_CASE("map data manifest roundtrip preserves canonical sections") {
     CHECK(roundtrip.contains("map_layers"));
     CHECK(roundtrip.contains("map_layers_settings"));
     CHECK(roundtrip.contains("map_boundary_data"));
-    CHECK(roundtrip.contains("map_assets_data"));
     CHECK(roundtrip.contains("dev_map_settings"));
+}
+
+TEST_CASE("normalize_map_manifest hard-removes deprecated map_assets_data section") {
+    nlohmann::json map_manifest = manifest::build_default_map_manifest("remove_map_assets_case");
+    map_manifest["schema_version"] = manifest::kMapSchemaVersion;
+    map_manifest["map_assets_data"] = nlohmann::json::object({{"spawn_groups", nlohmann::json::array()}});
+
+    const std::filesystem::path root = std::filesystem::path("C:/tmp/manifest_normalizer_test");
+    const manifest::MapManifestNormalizationResult normalized =
+        manifest::normalize_map_manifest(map_manifest, "remove_map_assets_case", root);
+
+    CHECK_FALSE(normalized.map_manifest.contains("map_assets_data"));
 }

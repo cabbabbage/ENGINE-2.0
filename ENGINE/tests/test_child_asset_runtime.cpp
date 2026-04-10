@@ -777,6 +777,52 @@ TEST_CASE("CustomAssetController resolves anchor child candidates in constructor
     CHECK(candidate_child->world_z() == owner->world_z() + 3);
 }
 
+TEST_CASE("CustomAssetController anchor-candidate child sync is deferred until anchor flush") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 32, 48, 64, 0));
+    REQUIRE(owner != nullptr);
+    REQUIRE(owner->info != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 5, 7, 3, 0, 0, 0.0f, true});
+    assets_scope.assets->library().add_asset("vibble_hat", nlohmann::json::object());
+    owner->info->anchor_point_child_candidates = {
+        make_anchor_child_candidate_entry(
+            "hat",
+            nlohmann::json::array({nlohmann::json{
+                {"name", "vibble_hat"},
+                {"chance", 100}
+            }}))
+    };
+
+    CustomAssetController controller(owner);
+    Input input;
+    controller.update(input);
+
+    Asset* candidate_child = find_owner_child_named(owner, "vibble_hat");
+    REQUIRE(candidate_child != nullptr);
+    const int initial_x = candidate_child->world_x();
+    const int initial_y = candidate_child->world_y();
+    const int initial_z = candidate_child->world_z();
+
+    owner->move_to_world_position(50, 60, 70, 0);
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 8, 9, 10, 0, 0, 0.0f, true});
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "hat");
+
+    // Controller updates should not eagerly move already-live anchor-candidate children.
+    controller.update(input);
+    CHECK(candidate_child->world_x() == initial_x);
+    CHECK(candidate_child->world_y() == initial_y);
+    CHECK(candidate_child->world_z() == initial_z);
+
+    CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+    CHECK_FALSE(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+    CHECK(candidate_child->world_x() == owner->world_x() + 8);
+    CHECK(candidate_child->world_y() == owner->world_y() + 9);
+    CHECK(candidate_child->world_z() == owner->world_z() + 10);
+}
+
 TEST_CASE("CustomAssetController falls back to oval mapping asset_name when explicit candidates are absent") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(
@@ -1138,6 +1184,25 @@ TEST_CASE("CustomAssetController anchor candidate recovers when failures stay be
 
     Asset* candidate_child = find_owner_child_named(owner, "vibble_hat");
     REQUIRE(candidate_child != nullptr);
+    CHECK(candidate_child->world_x() == owner->world_x() + 3);
+    CHECK(candidate_child->world_y() == owner->world_y() + 4);
+    CHECK(candidate_child->world_z() == owner->world_z() + 5);
+
+    const int initial_x = candidate_child->world_x();
+    const int initial_y = candidate_child->world_y();
+    const int initial_z = candidate_child->world_z();
+
+    owner->move_to_world_position(100, 101, 102, 0);
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"hat", 3, 4, 5, 0, 0, 0.0f, true});
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "hat");
+
+    // Retry behavior recovers spawn failures, and already-live child updates remain flush-driven.
+    controller.update(input);
+    CHECK(candidate_child->world_x() == initial_x);
+    CHECK(candidate_child->world_y() == initial_y);
+    CHECK(candidate_child->world_z() == initial_z);
+
+    CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
     CHECK(candidate_child->world_x() == owner->world_x() + 3);
     CHECK(candidate_child->world_y() == owner->world_y() + 4);
     CHECK(candidate_child->world_z() == owner->world_z() + 5);

@@ -73,7 +73,6 @@ public:
     void set_shared_footer_bar(DevFooterBar* footer);
     void set_snap_to_grid_enabled(bool enabled);
     void set_header_visibility_callback(std::function<void(bool)> cb);
-    void set_map_assets_panel_callback(std::function<void()> cb);
     void set_boundary_assets_panel_callback(std::function<void()> cb);
     void set_manifest_store(devmode::core::ManifestStore* store);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
@@ -658,9 +657,8 @@ private:
 
     enum class SelectionFilter {
         All,             // All selectable assets
-        Normal,          // Primary room assets (excluding map-wide, boundary-domain, tiled, and anchored)
+        Normal,          // Primary room assets (excluding boundary-domain, tiled, and anchored)
         Tiled,           // Tiled assets only
-        MapWide,         // map_assets_data spawn-group assets only
         Boundary,        // map_boundary_data spawn-group assets/sprites only
         Anchored,        // Assets following another asset's anchor point
     };
@@ -865,7 +863,6 @@ private:
     bool suppress_room_config_selection_clear_ = false;
     ActiveModal active_modal_ = ActiveModal::None;
     std::function<void(bool)> header_visibility_callback_{};
-    std::function<void()> open_map_assets_panel_callback_{};
     std::function<void()> open_boundary_assets_panel_callback_{};
     bool room_config_panel_visible_ = false;
     bool asset_info_panel_visible_ = false;
@@ -977,7 +974,6 @@ private:
     bool camera_pan_active_notified_ = false;
     bool camera_pan_just_finished_ = false;
     int suppress_left_click_frames_ = 0;
-    bool map_assets_panel_requested_by_shift_click_ = false;
     bool camera_settings_drag_active_notified_ = false;
     struct CameraLockState {
         bool valid = false;
@@ -992,7 +988,6 @@ private:
     bool camera_settings_lock_active_ = false;
     CameraSettingsDragState camera_settings_drag_{};
     std::unordered_set<std::string> room_spawn_ids_;
-    std::unordered_set<std::string> map_assets_spawn_ids_;
     std::unordered_set<std::string> map_boundary_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;

@@ -5,6 +5,7 @@
 #include "gameplay/world/world_grid.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "assets/asset/animation.hpp"
 #include "core/AssetsManager.hpp"
@@ -18,7 +19,9 @@
 #include <cmath>
 #include <functional>
 #include <cstdint>
+#include <random>
 #include <tuple>
+#include <unordered_set>
 
 namespace {
 constexpr float kDefaultAnimationFrameMs = 1000.0f / 24.0f;
@@ -45,6 +48,69 @@ inline SDL_Point rounded_world_point(const SDL_FPoint& point) {
         static_cast<int>(std::lround(point.x)),
         static_cast<int>(std::lround(point.y))
     };
+}
+
+std::unordered_map<std::string, std::shared_ptr<AssetInfo>> build_non_boundary_asset_catalog(
+    const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& source_catalog) {
+    std::unordered_map<std::string, std::shared_ptr<AssetInfo>> filtered;
+    filtered.reserve(source_catalog.size());
+    for (const auto& [name, info] : source_catalog) {
+        if (!info) {
+            continue;
+        }
+        if (info->type == asset_types::boundary) {
+            continue;
+        }
+        filtered.emplace(name, info);
+    }
+    return filtered;
+}
+
+bool room_trail_tag_has_match(
+    const std::string& tag,
+    const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& room_trail_catalog) {
+    if (tag.empty()) {
+        return false;
+    }
+    for (const auto& [name, info] : room_trail_catalog) {
+        (void)name;
+        if (!info) {
+            continue;
+        }
+        const auto& tags = info->tag_lookup();
+        if (tags.find(tag) != tags.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::unordered_set<int> collect_room_trail_excluded_candidate_indices(
+    const DynamicBoundarySystem::BoundaryType& boundary_type,
+    const vibble::spawn::RuntimeCandidates::AssetCatalogView& full_catalog,
+    const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& room_trail_catalog) {
+    std::unordered_set<int> excluded;
+    const auto& entries = boundary_type.candidates.entries();
+    for (std::size_t idx = 0; idx < entries.size(); ++idx) {
+        const auto& entry = entries[idx];
+        if (entry.is_null || entry.key.empty()) {
+            continue;
+        }
+        if (entry.kind == vibble::spawn::CandidateKind::Asset) {
+            std::string resolved_name;
+            std::shared_ptr<AssetInfo> info = full_catalog.find_info(entry.key, &resolved_name);
+            (void)resolved_name;
+            if (!info || info->type == asset_types::boundary) {
+                excluded.insert(static_cast<int>(idx));
+            }
+            continue;
+        }
+        if (entry.kind == vibble::spawn::CandidateKind::Tag &&
+            !room_trail_tag_has_match(entry.key, room_trail_catalog)) {
+            excluded.insert(static_cast<int>(idx));
+        }
+    }
+    return excluded;
 }
 
 struct BoundaryScaleResult {
@@ -175,6 +241,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const std::vector<Room*>& rooms = assets->rooms();
     const auto& asset_catalog = asset_library_->all();
     const vibble::spawn::RuntimeCandidates::AssetCatalogView boundary_catalog{&asset_catalog, true};
+    const auto room_trail_catalog_storage = build_non_boundary_asset_catalog(asset_catalog);
+    const vibble::spawn::RuntimeCandidates::AssetCatalogView room_trail_catalog{&room_trail_catalog_storage, true};
     const std::size_t rooms_hash = compute_rooms_topology_hash(assets);
     ensure_region_cache_valid(grid, rooms, rooms_hash, spacing_multiplier);
 
@@ -196,6 +264,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         static_assignments_.clear();
         for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
             BoundaryType& btype = boundary_types_[type_idx];
+            const std::unordered_set<int> room_trail_excluded_candidate_indices =
+                collect_room_trail_excluded_candidate_indices(btype, boundary_catalog, room_trail_catalog_storage);
             const int resolution_layer = vibble::grid::clamp_resolution(btype.grid_resolution);
             const int base_spacing = render_overlay::spacing_for_resolution(resolution_layer);
             if (base_spacing <= 0) {
@@ -254,27 +324,41 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 const int world_x = grid_origin.world_x() + ix * grid_spacing;
                 for (int iy = start_idx_y; iy <= end_idx_y; ++iy) {
                     const int world_z = grid_origin.world_z() + iy * grid_spacing;
-                    const BoundaryKey key = make_key(static_cast<int>(type_idx), resolution_layer, ix, iy, world_z);
-                    const BoundaryAssignment& assignment =
-                        select_candidate_for_key(key, btype, boundary_catalog);
-                    if (assignment.is_null || assignment.resolved_asset_name.empty()) {
-                        continue;
-                    }
-                    BoundaryAssetRuntime* candidate_runtime =
-                        ensure_candidate_runtime(btype, assignment.resolved_asset_name);
-                    if (!candidate_runtime || candidate_runtime->is_null || candidate_runtime->frames.empty()) {
+                    const SDL_Point world_pt{world_x, world_z};
+                    const auto& region_entry = resolve_region_cache(world_pt, rooms);
+                    if (region_entry.blocked && region_entry.region_kind == RegionKind::Boundary) {
                         continue;
                     }
 
+                    const bool boundary_region = (region_entry.region_kind == RegionKind::Boundary);
+                    const bool room_or_trail_region =
+                        (region_entry.region_kind == RegionKind::Room || region_entry.region_kind == RegionKind::Trail);
+                    if (!boundary_region && !room_or_trail_region) {
+                        continue;
+                    }
+
+                    const int region_domain = boundary_region ? 0 : 1;
+                    const BoundaryKey key =
+                        make_key(static_cast<int>(type_idx), region_domain, resolution_layer, ix, iy, world_z);
                     const SDL_FPoint jitter = sample_jitter_offset(key, max_random_jitter);
                     const float jittered_z = static_cast<float>(world_z) + jitter.y;
                     SDL_FPoint world_pos{
                         static_cast<float>(world_x) + jitter.x,
                         0.0f
                     };
-                    const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(jittered_z))};
-                    const auto& region_entry = resolve_region_cache(world_pt, rooms);
-                    if (region_entry.region_kind != RegionKind::Boundary || region_entry.blocked) {
+
+                    const auto& active_catalog = boundary_region ? boundary_catalog : room_trail_catalog;
+                    const std::unordered_set<int>* exclusions_ptr =
+                        boundary_region ? nullptr : &room_trail_excluded_candidate_indices;
+
+                    const BoundaryAssignment& assignment =
+                        select_candidate_for_key(key, btype, active_catalog, exclusions_ptr);
+                    if (assignment.is_null || assignment.resolved_asset_name.empty()) {
+                        continue;
+                    }
+                    BoundaryAssetRuntime* candidate_runtime =
+                        ensure_candidate_runtime(btype, assignment.resolved_asset_name);
+                    if (!candidate_runtime || candidate_runtime->is_null || candidate_runtime->frames.empty()) {
                         continue;
                     }
 
@@ -423,12 +507,19 @@ std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const DynamicBoun
                                        key.grid_y,
                                        key.world_z,
                                        key.resolution_layer,
-                                       key.group));
+                                       key.group,
+                                       static_cast<std::uint64_t>(key.region_domain)));
 }
 
-DynamicBoundarySystem::BoundaryKey DynamicBoundarySystem::make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const {
+DynamicBoundarySystem::BoundaryKey DynamicBoundarySystem::make_key(int group_idx,
+                                                                   int region_domain,
+                                                                   int resolution_layer,
+                                                                   int grid_x,
+                                                                   int grid_y,
+                                                                   int world_z) const {
     return DynamicBoundarySystem::BoundaryKey{
         group_idx,
+        region_domain,
         resolution_layer,
         grid_x,
         grid_y,
@@ -437,18 +528,20 @@ DynamicBoundarySystem::BoundaryKey DynamicBoundarySystem::make_key(int group_idx
 }
 
 std::uint64_t DynamicBoundarySystem::hash_key(const BoundaryKey& key) const {
-    return render_overlay::hash_grid_cell(key.grid_x,
-                                          key.grid_y,
-                                          key.world_z,
-                                          key.resolution_layer,
-                                          key.group,
-                                          boundary_regen_seed_);
+    const std::uint64_t base_hash = render_overlay::hash_grid_cell(key.grid_x,
+                                                                    key.grid_y,
+                                                                    key.world_z,
+                                                                    key.resolution_layer,
+                                                                    key.group,
+                                                                    boundary_regen_seed_);
+    return render_overlay::mix_uint64(base_hash, static_cast<std::uint64_t>(key.region_domain));
 }
 
 const DynamicBoundarySystem::BoundaryAssignment& DynamicBoundarySystem::select_candidate_for_key(
     const BoundaryKey& key,
     BoundaryType& btype,
-    const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog) {
+    const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog,
+    const std::unordered_set<int>* excluded_entry_indices) {
     static const BoundaryAssignment kNullAssignment{};
     auto it = boundary_assignments_.find(key);
     if (it != boundary_assignments_.end()) {
@@ -456,8 +549,25 @@ const DynamicBoundarySystem::BoundaryAssignment& DynamicBoundarySystem::select_c
     }
 
     BoundaryAssignment assignment{};
-    const auto resolved = btype.candidates.pick_hashed(
-        hash_key(key), catalog, vibble::spawn::ZeroWeightPolicy::NoSelection);
+    const std::uint64_t key_hash = hash_key(key);
+    const std::uint32_t seed_lo = static_cast<std::uint32_t>(key_hash & 0xFFFFFFFFULL);
+    const std::uint32_t seed_hi = static_cast<std::uint32_t>((key_hash >> 32) & 0xFFFFFFFFULL);
+    std::seed_seq seq{
+        seed_lo,
+        seed_hi,
+        static_cast<std::uint32_t>(key.group),
+        static_cast<std::uint32_t>(key.region_domain),
+        static_cast<std::uint32_t>(key.resolution_layer),
+        static_cast<std::uint32_t>(key.grid_x),
+        static_cast<std::uint32_t>(key.grid_y),
+        static_cast<std::uint32_t>(key.world_z)
+    };
+    std::mt19937 key_rng(seq);
+    const auto resolved = (excluded_entry_indices && !excluded_entry_indices->empty())
+        ? btype.candidates.pick_random_excluding(
+              key_rng, catalog, *excluded_entry_indices, vibble::spawn::ZeroWeightPolicy::NoSelection)
+        : btype.candidates.pick_random(
+              key_rng, catalog, vibble::spawn::ZeroWeightPolicy::NoSelection);
     if (resolved && !resolved->is_null && !resolved->resolved_asset_name.empty() && resolved->info) {
         assignment.candidate_entry_index = resolved->entry_index;
         assignment.resolved_asset_name = resolved->resolved_asset_name;

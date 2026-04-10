@@ -172,7 +172,8 @@ void CustomAssetController::tick_anchor_candidate_attachments() {
         }
 
         if (attachment.child->get_asset()) {
-            (void)attachment.child->update();
+            // Live anchor-bound children are synchronized via queued anchor flush.
+            // Avoid eager per-controller updates here so parent movement is committed first.
             continue;
         }
 

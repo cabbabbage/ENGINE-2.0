@@ -36,10 +36,6 @@ TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
             {"inherits_map_assets", false},
             {"unknown_boundary", 7}
         }},
-        {"map_assets_data", {
-            {"spawn_groups", nlohmann::json::array()},
-            {"custom_assets_key", {"mode", "dense"}}
-        }},
         {"dev_map_settings", {
             {"show_grid", true},
             {"custom_dev_key", "value"}
@@ -52,11 +48,14 @@ TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
 
     manifest::MapData data = manifest::MapData::from_manifest_entry("map_alpha", entry);
     nlohmann::json round_trip = data.to_manifest_entry();
+    nlohmann::json expected = entry;
+    expected.erase("map_assets_data");
 
     CHECK(data.map_id == "map_alpha");
-    CHECK(round_trip == entry);
+    CHECK(round_trip == expected);
     CHECK(data.extras.contains("future_new_section"));
     CHECK(data.extras.contains("another_unknown"));
+    CHECK_FALSE(data.extras.contains("map_assets_data"));
 }
 
 TEST_CASE("MapData writes known section schema keys when entry is missing") {
@@ -69,7 +68,6 @@ TEST_CASE("MapData writes known section schema keys when entry is missing") {
     CHECK(out.contains("map_layers"));
     CHECK(out.contains("map_layers_settings"));
     CHECK(out.contains("map_boundary_data"));
-    CHECK(out.contains("map_assets_data"));
     CHECK(out.contains("dev_map_settings"));
 
     CHECK(out["rooms_data"].is_object());

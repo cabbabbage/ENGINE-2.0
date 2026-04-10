@@ -1682,7 +1682,7 @@ void RoomEditor::copy_selected_spawn_group() {
     const std::string& spawn_id = *spawn_id_opt;
     SpawnEntryResolution resolved = locate_spawn_entry(spawn_id);
     if (!resolved.valid() || resolved.source != SpawnEntryResolution::Source::Room || !resolved.entry) {
-        show_notice("Map-wide spawn groups cannot be copied.");
+        show_notice("Only room spawn groups can be copied.");
         return;
     }
 
@@ -2165,10 +2165,6 @@ void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
             }
         });
     }
-}
-
-void RoomEditor::set_map_assets_panel_callback(std::function<void()> cb) {
-    open_map_assets_panel_callback_ = std::move(cb);
 }
 
 void RoomEditor::set_boundary_assets_panel_callback(std::function<void()> cb) {
@@ -6934,7 +6930,6 @@ void RoomEditor::handle_click(const Input& input) {
     }
 
     if (clicked_asset) {
-        map_assets_panel_requested_by_shift_click_ = shift_modifier;
         select_asset_or_group(clicked_asset);
     } else {
         if (auto boundary_hit = hit_test_dynamic_boundary_sprite(screen_mouse)) {
@@ -16764,10 +16759,7 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         return &(*groups_it) == resolved.owner_array;
 };
 
-    const bool map_assets_entry = owner_matches_section("map_assets_data");
     const bool boundary_entry   = owner_matches_section("map_boundary_data");
-    const bool should_open_map_assets_panel = map_assets_entry && map_assets_panel_requested_by_shift_click_;
-    map_assets_panel_requested_by_shift_click_ = false;
 
     auto close_spawn_group_panel = [&]() {
         if (spawn_group_panel_) {
@@ -16789,16 +16781,6 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         close_spawn_group_panel();
         clear_active_spawn_group_target();
         close_room_config_preserving_selection();
-        return;
-    }
-
-    if (map_assets_entry) {
-        close_spawn_group_panel();
-        clear_active_spawn_group_target();
-        close_room_config_preserving_selection();
-        if (should_open_map_assets_panel && open_map_assets_panel_callback_) {
-            open_map_assets_panel_callback_();
-        }
         return;
     }
 
@@ -17223,7 +17205,6 @@ void RoomEditor::reopen_room_configurator() {
 void RoomEditor::rebuild_room_spawn_id_cache() {
     clear_room_trail_nav_entries();
     room_spawn_ids_.clear();
-    map_assets_spawn_ids_.clear();
     map_boundary_spawn_ids_.clear();
     if (current_room_) {
         auto& root = current_room_->assets_data();
@@ -17266,7 +17247,6 @@ void RoomEditor::rebuild_room_spawn_id_cache() {
     };
 
     const nlohmann::json& map_info = assets_->map_info_json();
-    gather_spawn_ids(map_info, "map_assets_data", map_assets_spawn_ids_);
     gather_spawn_ids(map_info, "map_boundary_data", map_boundary_spawn_ids_);
 }
 
@@ -17277,13 +17257,12 @@ bool RoomEditor::is_room_spawn_id(const std::string& spawn_id) const {
 
 bool RoomEditor::asset_belongs_to_room(const Asset* asset) const {
     if (!asset) return false;
-    // Boundary and map-wide assets are always accessible in selection modes
+    // Boundary assets are always accessible in selection modes
     const auto ownership = classify_asset_ownership(asset);
-    if (ownership == devmode::room_selection_filter::SpawnOwnership::MapBoundary ||
-        ownership == devmode::room_selection_filter::SpawnOwnership::MapAssets) {
+    if (ownership == devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
         return true;
     }
-    // If no current room, only boundary/map-wide assets are eligible
+    // If no current room, only boundary assets are eligible
     if (!current_room_) {
         return false;
     }
@@ -17776,9 +17755,6 @@ devmode::room_selection_filter::SelectionFilter RoomEditor::effective_selection_
         case SelectionFilter::Tiled:
             filter = Filter::Tiled;
             break;
-        case SelectionFilter::MapWide:
-            filter = Filter::MapWide;
-            break;
         case SelectionFilter::Boundary:
             filter = Filter::Boundary;
             break;
@@ -17819,9 +17795,6 @@ devmode::room_selection_filter::SpawnOwnership RoomEditor::classify_spawn_group_
     if (room_spawn_ids_.find(spawn_id) != room_spawn_ids_.end()) {
         return Ownership::Room;
     }
-    if (map_assets_spawn_ids_.find(spawn_id) != map_assets_spawn_ids_.end()) {
-        return Ownership::MapAssets;
-    }
     if (map_boundary_spawn_ids_.find(spawn_id) != map_boundary_spawn_ids_.end()) {
         return Ownership::MapBoundary;
     }
@@ -17832,9 +17805,6 @@ devmode::room_selection_filter::SpawnOwnership RoomEditor::classify_spawn_group_
         return Ownership::Room;
     }
     if (resolved.source == SpawnEntryResolution::Source::Map) {
-        if (owner_array_matches_map_section(resolved.owner_array, "map_assets_data")) {
-            return Ownership::MapAssets;
-        }
         if (owner_array_matches_map_section(resolved.owner_array, "map_boundary_data")) {
             return Ownership::MapBoundary;
         }
@@ -17872,9 +17842,6 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
             break;
         case RoomEditor::SelectionFilter::Tiled:
             filter = UtilFilter::Tiled;
-            break;
-        case RoomEditor::SelectionFilter::MapWide:
-            filter = UtilFilter::MapWide;
             break;
         case RoomEditor::SelectionFilter::Boundary:
             filter = UtilFilter::Boundary;
@@ -18049,10 +18016,6 @@ void RoomEditor::cycle_selection_filter() {
             show_notice("Selecting tiled assets");
             break;
         case SelectionFilter::Tiled:
-            selection_filter_ = SelectionFilter::MapWide;
-            show_notice("Selecting map-wide assets");
-            break;
-        case SelectionFilter::MapWide:
             selection_filter_ = SelectionFilter::Boundary;
             show_notice("Selecting boundary assets");
             break;

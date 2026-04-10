@@ -75,6 +75,7 @@ public:
 
     struct BoundaryKey {
         int group = 0;
+        int region_domain = 0;  // 0 = boundary, 1 = room/trail
         int resolution_layer = 0;
         int grid_x = 0;
         int grid_y = 0;
@@ -82,6 +83,7 @@ public:
 
         bool operator==(const BoundaryKey& other) const noexcept {
             return group == other.group &&
+                   region_domain == other.region_domain &&
                    resolution_layer == other.resolution_layer &&
                    grid_x == other.grid_x &&
                    grid_y == other.grid_y &&
@@ -256,12 +258,18 @@ private:
     bool refresh_boundary_config_revision(const nlohmann::json& map_info);
     void clear_runtime_caches();
 
-    BoundaryKey  make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const;
+    BoundaryKey  make_key(int group_idx,
+                          int region_domain,
+                          int resolution_layer,
+                          int grid_x,
+                          int grid_y,
+                          int world_z) const;
     std::uint64_t hash_key(const BoundaryKey& key) const;
     const BoundaryAssignment& select_candidate_for_key(
         const BoundaryKey& key,
         BoundaryType& btype,
-        const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog);
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView& catalog,
+        const std::unordered_set<int>* excluded_entry_indices = nullptr);
     SDL_FPoint sample_jitter_offset(const BoundaryKey& key, float max_jitter) const;
     void ensure_region_cache_valid(const world::WorldGrid& grid,
                                    const std::vector<Room*>& rooms,

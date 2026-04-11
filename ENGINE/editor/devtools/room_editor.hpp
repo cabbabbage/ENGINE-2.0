@@ -441,6 +441,7 @@ private:
     bool movement_mode_active() const;
     bool hitbox_mode_active() const;
     bool attack_box_mode_active() const;
+    bool is_asset_pointer_live(const Asset* asset) const;
     Asset* selected_anchor_mode_asset() const;
     AssetEditorSubview next_asset_editor_subview(AssetEditorSubview subview) const;
     bool can_enter_asset_editor_subview(AssetEditorSubview subview) const;

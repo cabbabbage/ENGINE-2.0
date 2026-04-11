@@ -84,6 +84,7 @@ bool ManifestStore::AssetEditSession::commit() {
     }
     ManifestStore* owner = owner_;
     owner_ = nullptr;
+    auto guard = owner->scoped_guard(std::string("ManifestStore::AssetEditSession::commit(") + name_ + ")");
     return owner->apply_edit(name_, draft_, generation_);
 }
 
@@ -106,6 +107,7 @@ bool ManifestStore::AssetTransaction::save() {
     if (!owner_) {
         return false;
     }
+    auto guard = owner_->scoped_guard(std::string("ManifestStore::AssetTransaction::save(") + name_ + ")");
     if (!owner_->apply_edit(name_, draft_, generation_)) {
         return false;
     }

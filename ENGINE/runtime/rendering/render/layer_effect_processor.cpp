@@ -547,6 +547,84 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
     SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
     SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
 
+    auto draw_light_body_pass = [&]() -> bool {
+        if (!lighting_params.enabled || lights.empty()) {
+            return false;
+        }
+
+        SDL_SetRenderTarget(renderer_, composited_output_texture);
+        SDL_Texture* last_falloff_texture = nullptr;
+        SDL_Color last_color{0, 0, 0, 0};
+        Uint8 last_alpha = 0;
+        constexpr float kLightBodyStrength = 0.24f;
+        const SDL_BlendMode light_body_add_with_alpha = light_body_add_rgb_with_alpha_blend_mode();
+        bool drew_body = false;
+        for (const RuntimeLight& light : lights) {
+            if (!light.draw_body) {
+                continue;
+            }
+            const float effective_intensity = std::max(0.0f, light.intensity);
+            if (effective_intensity <= 0.0005f) {
+                continue;
+            }
+
+            SDL_Texture* falloff_texture = ensure_light_falloff_texture(light.falloff);
+            if (!falloff_texture) {
+                continue;
+            }
+
+            const float body_intensity = std::max(0.0f, effective_intensity * kLightBodyStrength);
+            if (body_intensity <= 0.0005f) {
+                continue;
+            }
+
+            const int pass_count = std::clamp(static_cast<int>(std::ceil(body_intensity)), 1, 3);
+            const float per_pass = body_intensity / static_cast<float>(pass_count);
+            const Uint8 alpha = static_cast<Uint8>(std::clamp(
+                static_cast<int>(std::lround(per_pass * 255.0f)),
+                0,
+                128));
+            if (alpha == 0) {
+                continue;
+            }
+
+            if (falloff_texture != last_falloff_texture) {
+                SDL_SetTextureBlendMode(
+                    falloff_texture,
+                    light_body_add_with_alpha != SDL_BLENDMODE_INVALID
+                        ? light_body_add_with_alpha
+                        : SDL_BLENDMODE_BLEND);
+                last_falloff_texture = falloff_texture;
+                last_color = SDL_Color{0, 0, 0, 0};
+                last_alpha = 0;
+            }
+            if (last_color.r != light.color.r ||
+                last_color.g != light.color.g ||
+                last_color.b != light.color.b) {
+                SDL_SetTextureColorMod(falloff_texture, light.color.r, light.color.g, light.color.b);
+                last_color = SDL_Color{light.color.r, light.color.g, light.color.b, 255};
+            }
+            if (last_alpha != alpha) {
+                SDL_SetTextureAlphaMod(falloff_texture, alpha);
+                last_alpha = alpha;
+            }
+
+            const float radius = std::max(4.0f, light.radius_px);
+            const SDL_FRect light_dst{
+                light.screen_center.x - radius,
+                light.screen_center.y - radius,
+                radius * 2.0f,
+                radius * 2.0f
+            };
+            for (int pass = 0; pass < pass_count; ++pass) {
+                SDL_RenderTexture(renderer_, falloff_texture, nullptr, &light_dst);
+            }
+            drew_body = true;
+        }
+
+        return drew_body;
+    };
+
     // Steps 2-4: dark mask generation, light application, and mask composite.
     if (lighting_params.enabled && dark_mask_ready) {
         if (!supports_strict_dark_mask_pipeline()) {
@@ -651,6 +729,10 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
         }
     }
 
+    if (draw_light_body_pass()) {
+        result.lighting_applied = true;
+    }
+
     (void)layer_depth_min;
     (void)layer_depth_max;
     (void)fog_params;
@@ -682,9 +764,11 @@ void LayerEffectProcessor::destroy_lighting_resources() {
     alpha_copy_blend_mode_ = SDL_BLENDMODE_INVALID;
     light_add_rgb_preserve_alpha_blend_mode_ = SDL_BLENDMODE_INVALID;
     alpha_masked_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
+    light_body_add_rgb_with_alpha_blend_mode_ = SDL_BLENDMODE_INVALID;
     alpha_copy_blend_mode_ready_ = false;
     light_add_rgb_preserve_alpha_blend_mode_ready_ = false;
     alpha_masked_multiply_blend_mode_ready_ = false;
+    light_body_add_rgb_with_alpha_blend_mode_ready_ = false;
 
     warned_missing_alpha_copy_blend_mode_ = false;
     warned_missing_strict_dark_mask_pipeline_blend_modes_ = false;
@@ -828,6 +912,21 @@ SDL_BlendMode LayerEffectProcessor::alpha_masked_multiply_blend_mode() {
         SDL_BLENDFACTOR_ONE,
         SDL_BLENDOPERATION_ADD);
     return alpha_masked_multiply_blend_mode_;
+}
+
+SDL_BlendMode LayerEffectProcessor::light_body_add_rgb_with_alpha_blend_mode() {
+    if (light_body_add_rgb_with_alpha_blend_mode_ready_) {
+        return light_body_add_rgb_with_alpha_blend_mode_;
+    }
+    light_body_add_rgb_with_alpha_blend_mode_ready_ = true;
+    light_body_add_rgb_with_alpha_blend_mode_ = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_SRC_ALPHA,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD);
+    return light_body_add_rgb_with_alpha_blend_mode_;
 }
 
 bool LayerEffectProcessor::supports_strict_dark_mask_pipeline() {

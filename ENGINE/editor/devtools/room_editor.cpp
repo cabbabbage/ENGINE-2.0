@@ -7155,17 +7155,24 @@ bool RoomEditor::is_asset_stack_editor_active() const {
            movement_mode_active() || hitbox_mode_active() || attack_box_mode_active();
 }
 
+bool RoomEditor::is_asset_pointer_live(const Asset* asset) const {
+    if (!asset || !assets_) {
+        return false;
+    }
+    return std::find(assets_->all.begin(), assets_->all.end(), asset) != assets_->all.end();
+}
+
 Asset* RoomEditor::selected_anchor_mode_asset() const {
     if (selected_assets_.size() == 1) {
         Asset* candidate = selected_assets_.front();
-        if (candidate && asset_belongs_to_room(candidate)) {
+        if (is_asset_pointer_live(candidate) && asset_belongs_to_room(candidate)) {
             return candidate;
         }
     }
 
     if (info_ui_ && info_ui_->is_visible()) {
         Asset* target = info_ui_->get_target_asset();
-        if (target && asset_belongs_to_room(target)) {
+        if (is_asset_pointer_live(target) && asset_belongs_to_room(target)) {
             return target;
         }
     }
@@ -7996,14 +8003,14 @@ bool RoomEditor::should_show_asset_editor_navigation() const {
 
 RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditorSubview subview) const {
     switch (subview) {
-        case AssetEditorSubview::AssetInfo: return AssetEditorSubview::AnimationEditor;
-        case AssetEditorSubview::AnimationEditor: return AssetEditorSubview::Anchor;
+        case AssetEditorSubview::AssetInfo: return AssetEditorSubview::Anchor;
         case AssetEditorSubview::Anchor: return AssetEditorSubview::Light;
         case AssetEditorSubview::Light: return AssetEditorSubview::OvalAnchor;
         case AssetEditorSubview::OvalAnchor: return AssetEditorSubview::Movement;
         case AssetEditorSubview::Movement: return AssetEditorSubview::Hitbox;
         case AssetEditorSubview::Hitbox: return AssetEditorSubview::AttackBox;
-        case AssetEditorSubview::AttackBox: return AssetEditorSubview::AssetInfo;
+        case AssetEditorSubview::AttackBox: return AssetEditorSubview::AnimationEditor;
+        case AssetEditorSubview::AnimationEditor: return AssetEditorSubview::AssetInfo;
     }
     return AssetEditorSubview::AssetInfo;
 }
@@ -8504,10 +8511,10 @@ void RoomEditor::update_asset_editor_layout() {
             on_right = [this]() { navigate_attack_box_frame(1); };
         } else if (asset_editor_subview_ == AssetEditorSubview::AssetInfo) {
             Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
-            if (!target && selected_assets_.size() == 1) {
+            if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
                 target = selected_assets_.front();
             }
-            if (target && target->info) {
+            if (is_asset_pointer_live(target) && target->info) {
                 const auto selection =
                     resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
                 std::string animation_label = selection.resolved_animation_id.empty()
@@ -13442,10 +13449,10 @@ void RoomEditor::navigate_asset_info_preview_animation(int delta) {
         return;
     }
     Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
-    if (!target && selected_assets_.size() == 1) {
+    if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
         target = selected_assets_.front();
     }
-    if (!target || !target->info) {
+    if (!is_asset_pointer_live(target) || !target->info) {
         return;
     }
 
@@ -13493,10 +13500,10 @@ void RoomEditor::navigate_asset_info_preview_frame(int delta) {
         return;
     }
     Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
-    if (!target && selected_assets_.size() == 1) {
+    if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
         target = selected_assets_.front();
     }
-    if (!target || !target->info) {
+    if (!is_asset_pointer_live(target) || !target->info) {
         return;
     }
 
@@ -15350,10 +15357,10 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         bool from_asset_info = false;
         if (info_ui_ && info_ui_->is_visible()) {
             focus_asset = info_ui_->get_target_asset();
-            from_asset_info = (focus_asset != nullptr);
+            from_asset_info = is_asset_pointer_live(focus_asset);
         }
 
-        if (focus_asset && !asset_belongs_to_room(focus_asset)) {
+        if (!is_asset_pointer_live(focus_asset) || (focus_asset && !asset_belongs_to_room(focus_asset))) {
             focus_asset = nullptr;
             from_asset_info = false;
         }
@@ -15370,7 +15377,9 @@ void RoomEditor::handle_shortcuts(const Input& input) {
             return;
         }
 
-        if (!selected_assets_.empty() && selected_assets_.front() && asset_belongs_to_room(selected_assets_.front())) {
+        if (!selected_assets_.empty() &&
+            is_asset_pointer_live(selected_assets_.front()) &&
+            asset_belongs_to_room(selected_assets_.front())) {
             set_focus_asset(selected_assets_.front(), false);
             show_notice("Focused selected asset");
             return;

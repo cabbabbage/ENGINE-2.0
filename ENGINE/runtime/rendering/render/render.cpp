@@ -3039,7 +3039,10 @@ void SceneRenderer::render() {
                 layer_lights.reserve(runtime_lights.size());
                 for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
                     if (light_affects_layer(light, layer)) {
-                        layer_lights.push_back(light);
+                        LayerEffectProcessor::RuntimeLight layer_light = light;
+                        const int owner_layer_index = depth_to_layer_index(static_cast<double>(light.world_z));
+                        layer_light.draw_body = (owner_layer_index == i);
+                        layer_lights.push_back(layer_light);
                     }
                 }
 

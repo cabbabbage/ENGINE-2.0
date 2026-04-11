@@ -14,13 +14,13 @@ namespace animation_update::custom_controllers {
 
 namespace {
 
-constexpr std::uint32_t kOrbitRefreshMinFrames = 300;
+constexpr std::uint32_t kOrbitRefreshMinFrames = 1000;
 constexpr std::uint32_t kOrbitRefreshMaxFrames = 3000;
-constexpr int kOrbitHeightMinOffset = 50;
+constexpr int kOrbitHeightMinOffset = 200;
 constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
-constexpr int kOrbitRadiusMin = 120;
-constexpr int kOrbitRadiusMax = 480;
+constexpr int kOrbitRadiusMin = 20;
+constexpr int kOrbitRadiusMax = 80;
 constexpr double kTwoPi = 6.28318530717958647692;
 constexpr std::uint64_t kGoldenRatio64 = 0x9e3779b97f4a7c15ULL;
 

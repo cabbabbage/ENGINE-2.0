@@ -483,6 +483,8 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
+    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
+    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys handled by Assets") {
@@ -501,6 +503,8 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
+    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
+    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
 }
 
 TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer and DoF controls") {
@@ -509,6 +513,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"max_cull_depth", 2500.0},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
+        {"front_layer_light_strength_multiplier", 1.4},
+        {"behind_layer_light_strength_multiplier", 0.65},
         {"blur_px", 20.0},
         {"radial_blur_px", 64.0},
         {"depth_of_field_enabled", true}
@@ -517,6 +523,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
+    CHECK(settings.front_layer_light_strength_multiplier == doctest::Approx(1.4f));
+    CHECK(settings.behind_layer_light_strength_multiplier == doctest::Approx(0.65f));
     CHECK(settings.blur_px == doctest::Approx(20.0f));
     CHECK(settings.radial_blur_px == doctest::Approx(64.0f));
     CHECK(settings.depth_of_field_enabled);
@@ -525,6 +533,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
+    CHECK(serialized["front_layer_light_strength_multiplier"] == doctest::Approx(1.4));
+    CHECK(serialized["behind_layer_light_strength_multiplier"] == doctest::Approx(0.65));
     CHECK(serialized["blur_px"] == doctest::Approx(20.0));
     CHECK(serialized["radial_blur_px"] == doctest::Approx(64.0));
     CHECK(serialized["depth_of_field_enabled"] == true);

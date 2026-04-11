@@ -1022,7 +1022,8 @@
                 "texture_x": 145,
                 "texture_y": 85
               }
-            ]
+            ],
+            []
           ],
           "flip_vertical_source": false,
           "flipped_source": false,
@@ -2461,8 +2462,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -2552,7 +2553,7 @@
           "hit_boxes": [
             []
           ],
-          "inherit_data": true,
+          "inherit_data": false,
           "invert_frames_horizontal": false,
           "invert_frames_vertical": false,
           "movement": [
@@ -3523,9 +3524,9 @@
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
-                "rotation_degrees": -0.0,
+                "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 215,
+                "texture_x": 204,
                 "texture_y": 166
               },
               {
@@ -3535,10 +3536,10 @@
                 "hidden": false,
                 "name": "eyes_oval_center",
                 "resolve_x": true,
-                "rotation_degrees": -0.0,
+                "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 224,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3547,9 +3548,9 @@
                 "hidden": false,
                 "name": "hat_oval_center",
                 "resolve_x": true,
-                "rotation_degrees": -0.0,
+                "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 419,
+                "texture_x": 0,
                 "texture_y": 0
               },
               {
@@ -3559,9 +3560,9 @@
                 "hidden": false,
                 "name": "mouth_oval_center",
                 "resolve_x": true,
-                "rotation_degrees": -0.0,
+                "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 419,
+                "texture_x": 0,
                 "texture_y": 0
               },
               {
@@ -3571,9 +3572,9 @@
                 "hidden": false,
                 "name": "neck_oval_center",
                 "resolve_x": true,
-                "rotation_degrees": -0.0,
+                "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 419,
+                "texture_x": 0,
                 "texture_y": 0
               },
               {
@@ -3583,9 +3584,9 @@
                 "hidden": false,
                 "name": "weapon_oval_center",
                 "resolve_x": true,
-                "rotation_degrees": -0.0,
+                "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 419,
+                "texture_x": 0,
                 "texture_y": 0
               },
               {
@@ -3608,9 +3609,9 @@
                 },
                 "name": "anchor_2",
                 "resolve_x": true,
-                "rotation_degrees": -0.0,
+                "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 209,
+                "texture_x": 210,
                 "texture_y": 235
               }
             ]
@@ -3628,7 +3629,7 @@
           "hit_boxes": [
             []
           ],
-          "inherit_data": true,
+          "inherit_data": false,
           "invert_frames_horizontal": true,
           "invert_frames_vertical": false,
           "movement": [
@@ -5228,11 +5229,13 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
+        "behind_layer_light_strength_multiplier": 1.0,
         "blur_px": 1.1299999952316284,
         "boundary_min_visible_screen_ratio": 0.014999999664723873,
         "camera_height_max_px": 100000,
         "camera_height_min_px": 1,
         "depth_of_field_enabled": false,
+        "front_layer_light_strength_multiplier": 1.0,
         "layer_depth_curve": 82.95999908447266,
         "layer_depth_interval": 124.0,
         "max_cull_depth": 7960.0,
@@ -5701,46 +5704,6 @@
       },
       "schema_version": 1,
       "trails_data": {
-        "NewTrail": {
-          "curvyness": 4,
-          "display_color": [
-            242,
-            166,
-            61,
-            255
-          ],
-          "edge_smoothness": 8,
-          "geometry": "Square",
-          "inherits_map_assets": true,
-          "is_boss": false,
-          "is_spawn": false,
-          "max_height": 200,
-          "max_width": 400,
-          "min_height": 200,
-          "min_width": 400,
-          "name": "NewTrail",
-          "spawn_groups": []
-        },
-        "NewTrail1": {
-          "curvyness": 4,
-          "display_color": [
-            31,
-            146,
-            204,
-            255
-          ],
-          "edge_smoothness": 8,
-          "geometry": "Square",
-          "inherits_map_assets": true,
-          "is_boss": false,
-          "is_spawn": false,
-          "max_height": 200,
-          "max_width": 400,
-          "min_height": 200,
-          "min_width": 400,
-          "name": "NewTrail1",
-          "spawn_groups": []
-        },
         "basic": {
           "display_color": [
             85,
@@ -5748,15 +5711,15 @@
             143,
             255
           ],
-          "edge_smoothness": 2,
+          "edge_smoothness": 6,
           "geometry": "Line",
           "inherits_map_assets": false,
           "is_boss": false,
           "is_spawn": false,
           "max_height": 800,
-          "max_width": 800,
+          "max_width": 1200,
           "min_height": 400,
-          "min_width": 400,
+          "min_width": 600,
           "name": "basic",
           "spawn_groups": []
         }

@@ -667,6 +667,18 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.layer_depth_curve = 0.0f;
     }
     settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
+    if (!std::isfinite(settings_.front_layer_light_strength_multiplier) ||
+        settings_.front_layer_light_strength_multiplier < 0.0f) {
+        settings_.front_layer_light_strength_multiplier = 1.0f;
+    }
+    settings_.front_layer_light_strength_multiplier =
+        std::min(settings_.front_layer_light_strength_multiplier, 4.0f);
+    if (!std::isfinite(settings_.behind_layer_light_strength_multiplier) ||
+        settings_.behind_layer_light_strength_multiplier < 0.0f) {
+        settings_.behind_layer_light_strength_multiplier = 1.0f;
+    }
+    settings_.behind_layer_light_strength_multiplier =
+        std::min(settings_.behind_layer_light_strength_multiplier, 4.0f);
     if (!std::isfinite(settings_.blur_px) || settings_.blur_px < 0.0f) {
         settings_.blur_px = 0.0f;
     }
@@ -1165,6 +1177,14 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
     read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
+    read_float("front_layer_light_strength_multiplier",
+               updated.front_layer_light_strength_multiplier,
+               0.0f,
+               4.0f);
+    read_float("behind_layer_light_strength_multiplier",
+               updated.behind_layer_light_strength_multiplier,
+               0.0f,
+               4.0f);
     const bool has_blur_px = read_float_present("blur_px", updated.blur_px, 0.0f, 128.0f);
     if (!has_blur_px) {
         read_float("max_blur_px", updated.blur_px, 0.0f, 128.0f);
@@ -1184,6 +1204,8 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["max_cull_depth"] = settings_.max_cull_depth;
     result["layer_depth_interval"] = settings_.layer_depth_interval;
     result["layer_depth_curve"] = settings_.layer_depth_curve;
+    result["front_layer_light_strength_multiplier"] = settings_.front_layer_light_strength_multiplier;
+    result["behind_layer_light_strength_multiplier"] = settings_.behind_layer_light_strength_multiplier;
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;

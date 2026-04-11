@@ -278,7 +278,18 @@ SDL_Point compute_edge_point(const SDL_Point& center, const SDL_Point& toward, c
     return edge;
 }
 
-std::vector<double> build_section_distances(double trail_length) {
+bool point_inside_any_room(const Vec2& point, const Area* room_a, const Area* room_b) {
+    const SDL_Point p = to_point(point);
+    if (room_a && room_a->contains_point(p)) {
+        return true;
+    }
+    if (room_b && room_b->contains_point(p)) {
+        return true;
+    }
+    return false;
+}
+
+std::vector<double> build_section_distances(double trail_length, const std::vector<double>& required_distances) {
     std::vector<double> distances;
     if (trail_length <= 0.0) {
         distances.push_back(0.0);
@@ -291,6 +302,11 @@ std::vector<double> build_section_distances(double trail_length) {
         distances.push_back(d);
     }
     distances.push_back(trail_length);
+    for (double required : required_distances) {
+        if (required > 0.0 && required < trail_length) {
+            distances.push_back(required);
+        }
+    }
 
     std::sort(distances.begin(), distances.end());
     distances.erase(std::unique(distances.begin(), distances.end(), [](double lhs, double rhs) {
@@ -317,6 +333,8 @@ bool place_sections(const Vec2& start,
                     int max_width,
                     int curvyness,
                     const std::vector<std::vector<SDL_Point>>& existing_trails,
+                    const Area* room_a,
+                    const Area* room_b,
                     std::mt19937& rng,
                     std::vector<TrailSection>* out_sections) {
     if (!out_sections) {
@@ -353,17 +371,20 @@ bool place_sections(const Vec2& start,
             const Vec2 right = subtract(section_center, scale(normal, half_width));
 
             bool overlap = false;
-            for (const auto& trail_polygon : existing_trails) {
-                if (trail_polygon.size() < 3) {
-                    continue;
-                }
-                if (point_in_polygon(left, trail_polygon) || point_in_polygon(right, trail_polygon)) {
-                    overlap = true;
-                    break;
-                }
-                if (segment_intersects_polygon(left, right, trail_polygon)) {
-                    overlap = true;
-                    break;
+            // Allow trail overlap while this section still lies inside either endpoint room.
+            if (!(point_inside_any_room(left, room_a, room_b) && point_inside_any_room(right, room_a, room_b))) {
+                for (const auto& trail_polygon : existing_trails) {
+                    if (trail_polygon.size() < 3) {
+                        continue;
+                    }
+                    if (point_in_polygon(left, trail_polygon) || point_in_polygon(right, trail_polygon)) {
+                        overlap = true;
+                        break;
+                    }
+                    if (segment_intersects_polygon(left, right, trail_polygon)) {
+                        overlap = true;
+                        break;
+                    }
                 }
             }
             if (overlap) {
@@ -409,12 +430,69 @@ std::vector<SDL_Point> build_polygon(const Vec2& start_tip,
     return polygon;
 }
 
+bool polygons_overlap_outside_rooms(const std::vector<SDL_Point>& candidate,
+                                    const std::vector<SDL_Point>& existing,
+                                    const Area* room_a,
+                                    const Area* room_b) {
+    if (candidate.size() < 3 || existing.size() < 3) {
+        return false;
+    }
+
+    auto outside_endpoint_rooms = [&](const SDL_Point& p) {
+        if (room_a && room_a->contains_point(p)) {
+            return false;
+        }
+        if (room_b && room_b->contains_point(p)) {
+            return false;
+        }
+        return true;
+    };
+
+    for (std::size_t i = 0; i < candidate.size(); ++i) {
+        const SDL_Point a0 = candidate[i];
+        const SDL_Point a1 = candidate[(i + 1) % candidate.size()];
+        if (!outside_endpoint_rooms(a0) && !outside_endpoint_rooms(a1)) {
+            continue;
+        }
+        const Vec2 av0 = to_vec2(a0);
+        const Vec2 av1 = to_vec2(a1);
+        for (std::size_t j = 0; j < existing.size(); ++j) {
+            const Vec2 bv0 = to_vec2(existing[j]);
+            const Vec2 bv1 = to_vec2(existing[(j + 1) % existing.size()]);
+            if (segments_intersect(av0, av1, bv0, bv1)) {
+                return true;
+            }
+        }
+    }
+
+    for (const SDL_Point& p : candidate) {
+        if (!outside_endpoint_rooms(p)) {
+            continue;
+        }
+        if (point_in_polygon(to_vec2(p), existing)) {
+            return true;
+        }
+    }
+    for (const SDL_Point& p : existing) {
+        if (!outside_endpoint_rooms(p)) {
+            continue;
+        }
+        if (point_in_polygon(to_vec2(p), candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool build_trail_layout(const SDL_Point& start_tip,
                         const SDL_Point& end_tip,
                         int min_width,
                         int max_width,
                         int curvyness,
                         const std::vector<std::vector<SDL_Point>>& existing_trails,
+                        const std::vector<double>& required_distances,
+                        const Area* room_a,
+                        const Area* room_b,
                         std::mt19937& rng,
                         TrailBuildResult* out_result) {
     if (!out_result) {
@@ -442,14 +520,14 @@ bool build_trail_layout(const SDL_Point& start_tip,
 
     const Vec2 dir = scale(axis, 1.0 / trail_length);
     const Vec2 normal{-dir.y, dir.x};
-    const std::vector<double> distances = build_section_distances(trail_length);
+    const std::vector<double> distances = build_section_distances(trail_length, required_distances);
     if (distances.empty()) {
         return false;
     }
 
     for (int attempt = 0; attempt < kTrailPairAttempts; ++attempt) {
         std::vector<TrailSection> sections;
-        if (!place_sections(start, dir, normal, distances, min_width, max_width, curvyness, existing_trails, rng, &sections)) {
+        if (!place_sections(start, dir, normal, distances, min_width, max_width, curvyness, existing_trails, room_a, room_b, rng, &sections)) {
             continue;
         }
 
@@ -460,7 +538,7 @@ bool build_trail_layout(const SDL_Point& start_tip,
 
         bool overlap = false;
         for (const auto& trail_polygon : existing_trails) {
-            if (polygons_overlap(polygon, trail_polygon)) {
+            if (polygons_overlap_outside_rooms(polygon, trail_polygon, room_a, room_b)) {
                 overlap = true;
                 break;
             }
@@ -506,8 +584,36 @@ bool attempt_trail_connection(Room* a,
     const SDL_Point a_edge = compute_edge_point(a_center, b_center, a->room_area.get());
     const SDL_Point b_edge = compute_edge_point(b_center, a_center, b->room_area.get());
 
+    const Vec2 center_start = to_vec2(a_center);
+    const Vec2 center_end = to_vec2(b_center);
+    const Vec2 center_axis = subtract(center_end, center_start);
+    const double center_len = length(center_axis);
+    if (center_len <= 1.0) {
+        return false;
+    }
+    const Vec2 center_dir = scale(center_axis, 1.0 / center_len);
+
+    auto project_distance = [&](const SDL_Point& p) {
+        return dot(subtract(to_vec2(p), center_start), center_dir);
+    };
+
+    std::vector<double> required_distances;
+    required_distances.reserve(2);
+    required_distances.push_back(project_distance(a_edge));
+    required_distances.push_back(project_distance(b_edge));
+
     TrailBuildResult build_result;
-    if (!build_trail_layout(a_edge, b_edge, min_width, max_width, curvyness, existing_trails, rng, &build_result)) {
+    if (!build_trail_layout(a_center,
+                            b_center,
+                            min_width,
+                            max_width,
+                            curvyness,
+                            existing_trails,
+                            required_distances,
+                            a->room_area.get(),
+                            b->room_area.get(),
+                            rng,
+                            &build_result)) {
         return false;
     }
 
@@ -871,7 +977,7 @@ bool build_layout_for_tests(const SDL_Point& start_tip,
 
     std::mt19937 rng(seed);
     TrailBuildResult build_result;
-    if (!build_trail_layout(start_tip, end_tip, min_width, max_width, curvyness, existing_polygons, rng, &build_result)) {
+    if (!build_trail_layout(start_tip, end_tip, min_width, max_width, curvyness, existing_polygons, {}, nullptr, nullptr, rng, &build_result)) {
         return false;
     }
 

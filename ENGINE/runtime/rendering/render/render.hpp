@@ -40,6 +40,13 @@ bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
 float floor_light_depth_weight(float abs_depth_from_anchor, float floor_light_cull_depth);
 float floor_light_height_weight(float world_height, float base_radius_px);
 float floor_light_footprint_radius(float base_radius_px, float world_height);
+float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
+                                                float front_multiplier,
+                                                float behind_multiplier);
+float apply_layer_light_strength_bias(float intensity,
+                                      double depth_from_camera_plane,
+                                      float front_multiplier,
+                                      float behind_multiplier);
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px);

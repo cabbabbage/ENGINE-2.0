@@ -109,12 +109,18 @@ class AnimationEditorWindow {
     std::optional<int> parse_defaults_distance_per_frame() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
-    nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id, int frame_count, int dx, int depth_dz) const;
+    nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id,
+                                                       int frame_count,
+                                                       int dx,
+                                                       int dy,
+                                                       int dz) const;
     nlohmann::json build_derived_movement_payload(const std::string& animation_id,
                                                   const std::string& source_animation_id,
                                                   int frame_count,
-                                                  bool flip_x,
-                                                  bool flip_y) const;
+                                                  int dx,
+                                                  int dy,
+                                                  int dz,
+                                                  bool invert_frames_horizontal) const;
     void open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode);
     Asset* resolve_frame_editor_asset();
     void create_animation_via_prompt();
@@ -163,6 +169,8 @@ class AnimationEditorWindow {
     bool defaults_modal_visible_ = false;
     std::unique_ptr<DMCheckbox> defaults_diagonals_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
+    std::unique_ptr<DMCheckbox> defaults_elevation_checkbox_;
+    std::unique_ptr<DMCheckbox> defaults_3d_diagonals_checkbox_;
     std::unique_ptr<DMTextBox> defaults_distance_box_;
     std::unique_ptr<DMButton> defaults_base_frames_button_;
     std::unique_ptr<DMButton> defaults_create_button_;

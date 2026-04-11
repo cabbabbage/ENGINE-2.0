@@ -307,6 +307,26 @@ float floor_light_footprint_radius(float base_radius_px, float world_height) {
     return radius * (1.0f + (0.012f * height));
 }
 
+float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
+                                                float front_multiplier,
+                                                float behind_multiplier) {
+    const float safe_front = std::clamp(std::isfinite(front_multiplier) ? front_multiplier : 1.0f, 0.0f, 4.0f);
+    const float safe_behind = std::clamp(std::isfinite(behind_multiplier) ? behind_multiplier : 1.0f, 0.0f, 4.0f);
+    if (!std::isfinite(depth_from_camera_plane)) {
+        return safe_front;
+    }
+    return (depth_from_camera_plane <= 0.0) ? safe_front : safe_behind;
+}
+
+float apply_layer_light_strength_bias(float intensity,
+                                      double depth_from_camera_plane,
+                                      float front_multiplier,
+                                      float behind_multiplier) {
+    const float safe_intensity = (std::isfinite(intensity) && intensity > 0.0f) ? intensity : 0.0f;
+    return safe_intensity * layer_light_strength_multiplier_for_depth(
+        depth_from_camera_plane, front_multiplier, behind_multiplier);
+}
+
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px) {
@@ -1736,6 +1756,11 @@ void SceneRenderer::render_floor_background_layer(const WarpedScreenGrid& cam,
     }
 
     if (runtime_lighting_enabled) {
+        const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
+        const float front_light_multiplier =
+            std::clamp(realism.front_layer_light_strength_multiplier, 0.0f, 4.0f);
+        const float behind_light_multiplier =
+            std::clamp(realism.behind_layer_light_strength_multiplier, 0.0f, 4.0f);
         SDL_SetRenderTarget(renderer_, floor_light_mask_texture_);
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
@@ -1762,7 +1787,13 @@ void SceneRenderer::render_floor_background_layer(const WarpedScreenGrid& cam,
 
                     const float depth_weight = render_internal::floor_light_depth_weight(abs_depth, floor_light_cull_depth);
                     const float height_weight = render_internal::floor_light_height_weight(light.world_height, light.radius_px);
-                    const float effective_intensity = std::max(0.0f, light.intensity) * depth_weight * height_weight;
+                    const float effective_intensity =
+                        render_internal::apply_layer_light_strength_bias(light.intensity,
+                                                                         static_cast<double>(light.world_z),
+                                                                         front_light_multiplier,
+                                                                         behind_light_multiplier) *
+                        depth_weight *
+                        height_weight;
                     if (effective_intensity < 0.02f) {
                         continue;
                     }
@@ -2430,6 +2461,53 @@ void SceneRenderer::render() {
     if (runtime_lighting_enabled) {
         gather_runtime_lights(cam, rendered_assets_for_debug, runtime_lights);
     }
+    const float front_layer_light_strength_multiplier =
+        std::clamp(realism.front_layer_light_strength_multiplier, 0.0f, 4.0f);
+    const float behind_layer_light_strength_multiplier =
+        std::clamp(realism.behind_layer_light_strength_multiplier, 0.0f, 4.0f);
+    auto apply_layer_light_bias = [&](const std::vector<LayerEffectProcessor::RuntimeLight>& source_lights,
+                                      double layer_depth_min,
+                                      double layer_depth_max) {
+        std::vector<LayerEffectProcessor::RuntimeLight> biased_lights;
+        biased_lights.reserve(source_lights.size());
+
+        const bool finite_min = std::isfinite(layer_depth_min);
+        const bool finite_max = std::isfinite(layer_depth_max);
+        const double depth_min = finite_min ? layer_depth_min : layer_depth_max;
+        const double depth_max = finite_max ? layer_depth_max : layer_depth_min;
+        const bool has_valid_range = std::isfinite(depth_min) && std::isfinite(depth_max);
+        const bool crosses_camera_plane = has_valid_range &&
+                                          std::min(depth_min, depth_max) < 0.0 &&
+                                          std::max(depth_min, depth_max) > 0.0;
+        double representative_depth = 0.0;
+        if (has_valid_range) {
+            representative_depth = 0.5 * (depth_min + depth_max);
+        } else if (finite_min) {
+            representative_depth = layer_depth_min;
+        } else if (finite_max) {
+            representative_depth = layer_depth_max;
+        }
+        const float layer_multiplier = render_internal::layer_light_strength_multiplier_for_depth(
+            representative_depth,
+            front_layer_light_strength_multiplier,
+            behind_layer_light_strength_multiplier);
+
+        for (const LayerEffectProcessor::RuntimeLight& light : source_lights) {
+            LayerEffectProcessor::RuntimeLight adjusted = light;
+            const float multiplier = crosses_camera_plane
+                ? render_internal::layer_light_strength_multiplier_for_depth(
+                    static_cast<double>(light.world_z),
+                    front_layer_light_strength_multiplier,
+                    behind_layer_light_strength_multiplier)
+                : layer_multiplier;
+            adjusted.intensity = std::max(0.0f, adjusted.intensity * multiplier);
+            if (adjusted.intensity <= 0.0005f) {
+                continue;
+            }
+            biased_lights.push_back(adjusted);
+        }
+        return biased_lights;
+    };
 
     auto ensure_sized_target = [&](SDL_Texture*& texture) -> bool {
         int tex_w = 0;
@@ -2554,6 +2632,8 @@ void SceneRenderer::render() {
 
         LayerEffectProcessor::LayerScratchTextures scratch_textures{};
         scratch_textures.dark_mask_texture = dof_dark_mask_textures_[0];
+        const std::vector<LayerEffectProcessor::RuntimeLight> biased_single_layer_lights =
+            apply_layer_light_bias(runtime_lights, -max_cull_depth, max_cull_depth);
 
         LayerEffectProcessor::LayerProcessResult layer_result = layer_effect_processor_.process_layer(
             dof_layer_textures_[0],
@@ -2561,7 +2641,7 @@ void SceneRenderer::render() {
             -max_cull_depth,
             max_cull_depth,
             lighting_params,
-            runtime_lights,
+            biased_single_layer_lights,
             fog_params,
             scratch_textures);
 
@@ -2870,6 +2950,8 @@ void SceneRenderer::render() {
 
                 const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : representative_depth;
                 const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : representative_depth;
+                const std::vector<LayerEffectProcessor::RuntimeLight> biased_layer_lights =
+                    apply_layer_light_bias(layer_lights, depth_min, depth_max);
 
                 LayerEffectProcessor::LayerScratchTextures scratch_textures{};
                 scratch_textures.dark_mask_texture = dof_dark_mask_textures_[i];
@@ -2880,7 +2962,7 @@ void SceneRenderer::render() {
                     depth_min,
                     depth_max,
                     lighting_params,
-                    layer_lights,
+                    biased_layer_lights,
                     fog_params,
                     scratch_textures);
 

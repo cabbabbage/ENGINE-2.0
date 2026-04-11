@@ -63,6 +63,8 @@ private:
     std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
+    std::unique_ptr<FloatSliderWidget> front_layer_light_strength_multiplier_slider_;
+    std::unique_ptr<FloatSliderWidget> behind_layer_light_strength_multiplier_slider_;
     std::unique_ptr<FloatSliderWidget> blur_px_slider_;
     std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
 
@@ -73,6 +75,14 @@ private:
     std::unique_ptr<SliderWidget> camera_height_max_widget_;
     std::unique_ptr<CallbackCheckboxWidget> depth_of_field_widget_;
     DMCheckbox* depth_of_field_checkbox_ = nullptr;
+    std::unique_ptr<Widget> movement_section_widget_;
+    std::unique_ptr<Widget> framing_section_widget_;
+    std::unique_ptr<Widget> lighting_section_widget_;
+    std::unique_ptr<Widget> debug_section_widget_;
+    bool movement_section_expanded_ = true;
+    bool framing_section_expanded_ = true;
+    bool lighting_section_expanded_ = true;
+    bool debug_section_expanded_ = true;
 
     bool applying_settings_ = false;
     int last_screen_w_ = 0;

@@ -71,6 +71,8 @@ public:
         float max_cull_depth               = 5000.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
+        float front_layer_light_strength_multiplier = 1.0f;
+        float behind_layer_light_strength_multiplier = 1.0f;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;
         bool depth_of_field_enabled         = false;

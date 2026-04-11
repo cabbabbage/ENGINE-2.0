@@ -162,3 +162,21 @@ TEST_CASE("Floor light height attenuation and footprint scale realistically") {
     const float raised_footprint = render_internal::floor_light_footprint_radius(kRadius, 40.0f);
     CHECK(raised_footprint > base_footprint);
 }
+
+TEST_CASE("Layer light strength multipliers split front and behind depths independently") {
+    constexpr float kBaseIntensity = 2.0f;
+    constexpr float kFrontMultiplier = 1.6f;
+    constexpr float kBehindMultiplier = 0.45f;
+
+    const float front_side =
+        render_internal::apply_layer_light_strength_bias(kBaseIntensity, -16.0, kFrontMultiplier, kBehindMultiplier);
+    const float boundary_side =
+        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 0.0, kFrontMultiplier, kBehindMultiplier);
+    const float behind_side =
+        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 16.0, kFrontMultiplier, kBehindMultiplier);
+
+    CHECK(front_side == doctest::Approx(kBaseIntensity * kFrontMultiplier));
+    CHECK(boundary_side == doctest::Approx(kBaseIntensity * kFrontMultiplier));
+    CHECK(behind_side == doctest::Approx(kBaseIntensity * kBehindMultiplier));
+    CHECK(front_side > behind_side);
+}

@@ -2066,20 +2066,57 @@ const std::vector<DynamicBoundarySystem::BoundarySprite>& SceneRenderer::dynamic
 
 void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                           const std::vector<Asset*>& rendered_assets,
-                                          std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) const {
+                                          std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) {
     out_lights.clear();
+    runtime_light_debug_overlay_.clear();
+    runtime_light_rendered_count_ = 0;
+    runtime_light_culled_count_ = 0;
     if (!assets_) {
         return;
     }
-    out_lights.reserve(rendered_assets.size());
+
+    const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
+    const bool overlap_culling_enabled = realism.light_radius_overlap_culling_enabled;
+    const bool fade_smoothing_enabled = realism.light_fade_smoothing_enabled;
+    const float min_fade_seconds = std::max(0.0f, realism.light_min_fade_seconds);
+    const float fade_in_seconds = std::max(min_fade_seconds, std::max(0.0f, realism.light_fade_in_seconds));
+    const float fade_out_seconds = std::max(min_fade_seconds, std::max(0.0f, realism.light_fade_out_seconds));
+    const float dt_seconds = std::clamp(assets_->frame_delta_seconds(), 0.0f, 0.25f);
+    const std::uint64_t frame_token = static_cast<std::uint64_t>(assets_->frame_id());
+
+    std::vector<Asset*> candidate_assets;
+    candidate_assets.reserve(rendered_assets.size() + (overlap_culling_enabled ? assets_->all.size() : 0));
+    std::unordered_set<Asset*> seen_assets;
+    seen_assets.reserve(rendered_assets.size() + (overlap_culling_enabled ? assets_->all.size() : 0));
+    for (Asset* asset : rendered_assets) {
+        if (asset && seen_assets.insert(asset).second) {
+            candidate_assets.push_back(asset);
+        }
+    }
+    if (overlap_culling_enabled) {
+        for (Asset* asset : assets_->all) {
+            if (asset && seen_assets.insert(asset).second) {
+                candidate_assets.push_back(asset);
+            }
+        }
+    }
+    out_lights.reserve(candidate_assets.size());
 
     constexpr float kCullingMargin = 128.0f;
-    for (Asset* asset : rendered_assets) {
+    std::unordered_set<std::string> seen_light_keys;
+    seen_light_keys.reserve(candidate_assets.size() * 2);
+    const std::uint64_t gather_start_ticks = SDL_GetTicks();
+
+    for (Asset* asset : candidate_assets) {
         if (!asset || asset->dead || !asset->current_frame) {
             continue;
         }
+        if (!assets_->is_asset_in_focus_filter(asset)) {
+            continue;
+        }
+
         for (const DisplacedAssetAnchorPoint& anchor : asset->current_frame->anchor_points) {
-            if (!anchor.is_valid() || !anchor.has_light_data || !anchor.light.enabled) {
+            if (!anchor.is_valid() || !anchor.has_light_data) {
                 continue;
             }
 
@@ -2125,17 +2162,56 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
 
             const float radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
             const float radius_px = std::max(4.0f, radius_world * sampled_scale);
-            if (screen.x + radius_px < -kCullingMargin ||
-                screen.x - radius_px > static_cast<float>(screen_width_) + kCullingMargin ||
-                screen.y + radius_px < -kCullingMargin ||
-                screen.y - radius_px > static_cast<float>(screen_height_) + kCullingMargin) {
+            const bool overlaps_view =
+                screen.x + radius_px >= -kCullingMargin &&
+                screen.x - radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
+                screen.y + radius_px >= -kCullingMargin &&
+                screen.y - radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
+
+            const bool enabled_and_overlapping = anchor.light.enabled && overlaps_view;
+            if (!enabled_and_overlapping) {
+                ++runtime_light_culled_count_;
+            }
+
+            std::string light_key = std::to_string(reinterpret_cast<std::uintptr_t>(asset));
+            light_key.push_back('|');
+            light_key.append(anchor.name);
+            seen_light_keys.insert(light_key);
+            RuntimeLightFadeState& fade_state = runtime_light_fade_states_[light_key];
+            const bool first_seen = (fade_state.last_seen_frame == 0);
+            fade_state.last_seen_frame = frame_token;
+
+            const float target_intensity = enabled_and_overlapping ? light.intensity : 0.0f;
+            if (!fade_smoothing_enabled) {
+                fade_state.intensity_current = target_intensity;
+            } else {
+                if (first_seen) {
+                    fade_state.intensity_current = (target_intensity > 0.0f) ? 0.0f : 0.0f;
+                }
+                const float duration = target_intensity > fade_state.intensity_current
+                    ? std::max(0.0001f, fade_in_seconds)
+                    : std::max(0.0001f, fade_out_seconds);
+                const float alpha = std::clamp(dt_seconds / duration, 0.0f, 1.0f);
+                fade_state.intensity_current += (target_intensity - fade_state.intensity_current) * alpha;
+            }
+
+            const float effective_intensity = std::max(0.0f, fade_state.intensity_current);
+            const bool renderable = effective_intensity > 0.0005f && overlaps_view;
+            if (realism.light_culling_debug_overlay) {
+                runtime_light_debug_overlay_.push_back(RuntimeLightDebugOverlayEntry{
+                    screen,
+                    radius_px,
+                    renderable
+                });
+            }
+            if (!renderable) {
                 continue;
             }
 
             LayerEffectProcessor::RuntimeLight instance{};
             instance.screen_center = screen;
             instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
-            instance.intensity = light.intensity;
+            instance.intensity = effective_intensity;
             instance.opacity = light.opacity;
             instance.radius_px = radius_px;
             instance.radius_world = radius_world;
@@ -2162,7 +2238,73 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                 }
             }
             out_lights.push_back(instance);
+            ++runtime_light_rendered_count_;
         }
+    }
+
+    for (auto it = runtime_light_fade_states_.begin(); it != runtime_light_fade_states_.end();) {
+        if (seen_light_keys.find(it->first) == seen_light_keys.end() &&
+            frame_token > it->second.last_seen_frame + 120) {
+            it = runtime_light_fade_states_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    const std::uint64_t gather_elapsed_ticks = SDL_GetTicks() - gather_start_ticks;
+    if (realism.light_culling_debug_overlay) {
+        const std::uint64_t now_ticks = SDL_GetTicks();
+        if (runtime_light_profile_last_log_ticks_ == 0 ||
+            now_ticks - runtime_light_profile_last_log_ticks_ >= 1000) {
+            runtime_light_profile_last_log_ticks_ = now_ticks;
+            vibble::log::debug(
+                "[SceneRenderer] light gather profile: mode=" +
+                std::string{overlap_culling_enabled
+                                ? (fade_smoothing_enabled ? "overlap+fade" : "overlap-only")
+                                : (fade_smoothing_enabled ? "fade-only" : "legacy")} +
+                " candidates=" + std::to_string(candidate_assets.size()) +
+                " rendered=" + std::to_string(runtime_light_rendered_count_) +
+                " culled=" + std::to_string(runtime_light_culled_count_) +
+                " ms=" + std::to_string(ticks_to_seconds(gather_elapsed_ticks) * 1000.0f));
+        }
+    }
+}
+
+void SceneRenderer::render_light_culling_debug_overlay() const {
+    if (!renderer_ || runtime_light_debug_overlay_.empty()) {
+        return;
+    }
+
+    SDL_SetRenderTarget(renderer_, nullptr);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+
+    auto draw_circle_outline = [&](const RuntimeLightDebugOverlayEntry& entry, SDL_Color color) {
+        if (!std::isfinite(entry.center.x) || !std::isfinite(entry.center.y) ||
+            !std::isfinite(entry.radius) || entry.radius <= 0.5f) {
+            return;
+        }
+        constexpr int kSegments = 24;
+        constexpr float kTwoPi = 6.2831853071795864769f;
+        const float cx = entry.center.x;
+        const float cy = entry.center.y;
+        float prev_x = cx + entry.radius;
+        float prev_y = cy;
+        SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+        for (int i = 1; i <= kSegments; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(kSegments);
+            const float angle = t * kTwoPi;
+            const float x = cx + std::cos(angle) * entry.radius;
+            const float y = cy + std::sin(angle) * entry.radius;
+            SDL_RenderLine(renderer_, prev_x, prev_y, x, y);
+            prev_x = x;
+            prev_y = y;
+        }
+    };
+
+    const SDL_Color rendered_color{80, 240, 120, 220};
+    const SDL_Color culled_color{245, 90, 90, 170};
+    for (const RuntimeLightDebugOverlayEntry& entry : runtime_light_debug_overlay_) {
+        draw_circle_outline(entry, entry.rendered ? rendered_color : culled_color);
     }
 }
 
@@ -3343,6 +3485,10 @@ void SceneRenderer::render() {
         SDL_RenderTexture(renderer_, gameplay_target, nullptr, nullptr);
     } else {
         SDL_SetRenderTarget(renderer_, nullptr);
+    }
+
+    if (realism.light_culling_debug_overlay) {
+        render_light_culling_debug_overlay();
     }
 
     if (debug_auto_paths_ && movement_debug_visible_) {

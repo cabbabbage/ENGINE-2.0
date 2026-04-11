@@ -176,6 +176,17 @@ private:
         bool frame_is_last = false;
     };
 
+    struct RuntimeLightFadeState {
+        float intensity_current = 0.0f;
+        std::uint64_t last_seen_frame = 0;
+    };
+
+    struct RuntimeLightDebugOverlayEntry {
+        SDL_FPoint center{0.0f, 0.0f};
+        float radius = 0.0f;
+        bool rendered = false;
+    };
+
     struct PrevalidatedTag {};
 
     SceneRenderer(PrevalidatedTag, SDL_Renderer* renderer, Assets* assets, int screen_width, int screen_height, const nlohmann::json& map_manifest, const std::string& map_id);
@@ -207,7 +218,8 @@ private:
                                          const std::vector<Asset*>& visible_assets) const;
     void gather_runtime_lights(const WarpedScreenGrid& cam,
                                const std::vector<Asset*>& rendered_assets,
-                               std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) const;
+                               std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
+    void render_light_culling_debug_overlay() const;
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -228,6 +240,11 @@ private:
     bool         anchor_point_debug_enabled_ = false;
     std::unordered_map<const Asset*, MovementDebugAssetSnapshot> movement_debug_snapshots_;
     std::unordered_map<const Asset*, MovementDebugObservedState> movement_debug_observed_state_;
+    std::unordered_map<std::string, RuntimeLightFadeState> runtime_light_fade_states_;
+    std::vector<RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
+    std::uint32_t runtime_light_rendered_count_ = 0;
+    std::uint32_t runtime_light_culled_count_ = 0;
+    std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
 
     CompositeAssetRenderer composite_renderer_;
     LayerEffectProcessor layer_effect_processor_;

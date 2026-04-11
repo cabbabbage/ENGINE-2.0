@@ -72,12 +72,19 @@ public:
     struct RealismSettings {
 
         float min_visible_screen_ratio     = 0.015f;
+        bool min_visible_uses_light_radius = true;
         float base_height_px               = 1000.0f;
         float max_cull_depth               = 5000.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
         float front_layer_light_strength_multiplier = 1.0f;
         float behind_layer_light_strength_multiplier = 1.0f;
+        bool light_radius_overlap_culling_enabled = true;
+        bool light_fade_smoothing_enabled = true;
+        float light_fade_in_seconds = 0.08f;
+        float light_fade_out_seconds = 0.14f;
+        float light_min_fade_seconds = 0.03f;
+        bool light_culling_debug_overlay = false;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;
         bool depth_of_field_enabled         = false;

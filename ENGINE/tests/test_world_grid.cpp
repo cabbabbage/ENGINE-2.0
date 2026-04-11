@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/find_current_room.hpp"
 #include "core/manifest/map_data.hpp"
@@ -74,6 +75,21 @@ bool traversal_contains_asset(const WarpedScreenGrid& camera_grid, const Asset* 
         }
     }
     return false;
+}
+
+std::unique_ptr<AnimationFrame> make_light_anchor_frame(float radius_world,
+                                                        bool enabled = true,
+                                                        float intensity = 1.0f) {
+    auto frame = std::make_unique<AnimationFrame>();
+    DisplacedAssetAnchorPoint anchor{"light_anchor", 0, 0, 0.0f};
+    anchor.has_light_data = true;
+    anchor.light.enabled = enabled;
+    anchor.light.radius = radius_world;
+    anchor.light.intensity = intensity;
+    anchor.light.sanitize();
+    frame->anchor_points.push_back(anchor);
+    frame->rebuild_anchor_lookup();
+    return frame;
 }
 
 Asset* move_world_grid_asset(world::WorldGrid& grid, Asset* asset, int world_x, int world_z) {
@@ -496,6 +512,29 @@ TEST_CASE("WarpedScreenGrid min on-screen culling exempts tracked player asset")
     CHECK_FALSE(traversal_contains_asset(camera_grid, npc_asset));
 }
 
+TEST_CASE("WarpedScreenGrid min on-screen culling uses light radius when enabled") {
+    world::WorldGrid grid;
+    Asset* tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(tiny_asset != nullptr);
+    tiny_asset->info->original_canvas_width = 1;
+    tiny_asset->info->original_canvas_height = 1;
+    std::unique_ptr<AnimationFrame> light_frame = make_light_anchor_frame(900.0f, true, 1.0f);
+    tiny_asset->current_frame = light_frame.get();
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.05f;
+    settings.min_visible_uses_light_radius = true;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, tiny_asset));
+
+    settings.min_visible_uses_light_radius = false;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 2);
+    CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
+}
+
 TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
@@ -561,6 +600,13 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"layer_depth_curve", 1.75},
         {"front_layer_light_strength_multiplier", 1.4},
         {"behind_layer_light_strength_multiplier", 0.65},
+        {"min_visible_uses_light_radius", true},
+        {"light_radius_overlap_culling_enabled", true},
+        {"light_fade_smoothing_enabled", true},
+        {"light_fade_in_seconds", 0.12},
+        {"light_fade_out_seconds", 0.22},
+        {"light_min_fade_seconds", 0.05},
+        {"light_culling_debug_overlay", true},
         {"blur_px", 20.0},
         {"radial_blur_px", 64.0},
         {"depth_of_field_enabled", true},
@@ -578,6 +624,13 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
     CHECK(settings.front_layer_light_strength_multiplier == doctest::Approx(1.4f));
     CHECK(settings.behind_layer_light_strength_multiplier == doctest::Approx(0.65f));
+    CHECK(settings.min_visible_uses_light_radius);
+    CHECK(settings.light_radius_overlap_culling_enabled);
+    CHECK(settings.light_fade_smoothing_enabled);
+    CHECK(settings.light_fade_in_seconds == doctest::Approx(0.12f));
+    CHECK(settings.light_fade_out_seconds == doctest::Approx(0.22f));
+    CHECK(settings.light_min_fade_seconds == doctest::Approx(0.05f));
+    CHECK(settings.light_culling_debug_overlay);
     CHECK(settings.blur_px == doctest::Approx(20.0f));
     CHECK(settings.radial_blur_px == doctest::Approx(64.0f));
     CHECK(settings.depth_of_field_enabled);
@@ -595,6 +648,13 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
     CHECK(serialized["front_layer_light_strength_multiplier"] == doctest::Approx(1.4));
     CHECK(serialized["behind_layer_light_strength_multiplier"] == doctest::Approx(0.65));
+    CHECK(serialized["min_visible_uses_light_radius"] == true);
+    CHECK(serialized["light_radius_overlap_culling_enabled"] == true);
+    CHECK(serialized["light_fade_smoothing_enabled"] == true);
+    CHECK(serialized["light_fade_in_seconds"] == doctest::Approx(0.12));
+    CHECK(serialized["light_fade_out_seconds"] == doctest::Approx(0.22));
+    CHECK(serialized["light_min_fade_seconds"] == doctest::Approx(0.05));
+    CHECK(serialized["light_culling_debug_overlay"] == true);
     CHECK(serialized["blur_px"] == doctest::Approx(20.0));
     CHECK(serialized["radial_blur_px"] == doctest::Approx(64.0));
     CHECK(serialized["depth_of_field_enabled"] == true);

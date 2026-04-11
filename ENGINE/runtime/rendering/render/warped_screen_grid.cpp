@@ -754,6 +754,20 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     }
     settings_.behind_layer_light_strength_multiplier =
         std::min(settings_.behind_layer_light_strength_multiplier, 4.0f);
+    if (!std::isfinite(settings_.light_fade_in_seconds) || settings_.light_fade_in_seconds < 0.0f) {
+        settings_.light_fade_in_seconds = 0.0f;
+    }
+    settings_.light_fade_in_seconds = std::min(settings_.light_fade_in_seconds, 5.0f);
+    if (!std::isfinite(settings_.light_fade_out_seconds) || settings_.light_fade_out_seconds < 0.0f) {
+        settings_.light_fade_out_seconds = 0.0f;
+    }
+    settings_.light_fade_out_seconds = std::min(settings_.light_fade_out_seconds, 5.0f);
+    if (!std::isfinite(settings_.light_min_fade_seconds) || settings_.light_min_fade_seconds < 0.0f) {
+        settings_.light_min_fade_seconds = 0.0f;
+    }
+    settings_.light_min_fade_seconds = std::min(settings_.light_min_fade_seconds, 2.0f);
+    settings_.light_fade_in_seconds = std::max(settings_.light_fade_in_seconds, settings_.light_min_fade_seconds);
+    settings_.light_fade_out_seconds = std::max(settings_.light_fade_out_seconds, settings_.light_min_fade_seconds);
     if (!std::isfinite(settings_.blur_px) || settings_.blur_px < 0.0f) {
         settings_.blur_px = 0.0f;
     }
@@ -1442,6 +1456,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     };
     RealismSettings updated = settings_;
     read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
+    read_bool("min_visible_uses_light_radius", updated.min_visible_uses_light_radius);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
@@ -1454,6 +1469,12 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
                updated.behind_layer_light_strength_multiplier,
                0.0f,
                4.0f);
+    read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
+    read_bool("light_fade_smoothing_enabled", updated.light_fade_smoothing_enabled);
+    read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
+    read_float("light_fade_out_seconds", updated.light_fade_out_seconds, 0.0f, 5.0f);
+    read_float("light_min_fade_seconds", updated.light_min_fade_seconds, 0.0f, 2.0f);
+    read_bool("light_culling_debug_overlay", updated.light_culling_debug_overlay);
     const bool has_blur_px = read_float_present("blur_px", updated.blur_px, 0.0f, 128.0f);
     if (!has_blur_px) {
         read_float("max_blur_px", updated.blur_px, 0.0f, 128.0f);
@@ -1511,12 +1532,19 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
 nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     nlohmann::json result = nlohmann::json::object();
     result["min_visible_screen_ratio"] = settings_.min_visible_screen_ratio;
+    result["min_visible_uses_light_radius"] = settings_.min_visible_uses_light_radius;
     result["base_height_px"] = settings_.base_height_px;
     result["max_cull_depth"] = settings_.max_cull_depth;
     result["layer_depth_interval"] = settings_.layer_depth_interval;
     result["layer_depth_curve"] = settings_.layer_depth_curve;
     result["front_layer_light_strength_multiplier"] = settings_.front_layer_light_strength_multiplier;
     result["behind_layer_light_strength_multiplier"] = settings_.behind_layer_light_strength_multiplier;
+    result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
+    result["light_fade_smoothing_enabled"] = settings_.light_fade_smoothing_enabled;
+    result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;
+    result["light_fade_out_seconds"] = settings_.light_fade_out_seconds;
+    result["light_min_fade_seconds"] = settings_.light_min_fade_seconds;
+    result["light_culling_debug_overlay"] = settings_.light_culling_debug_overlay;
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
@@ -1879,6 +1907,71 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         return point_inside_screen_bounds(cull_bounds, center_screen);
     };
 
+    auto max_light_projected_diameter_px = [&](Asset* asset) -> float {
+        if (!settings_.min_visible_uses_light_radius || !asset || !asset->current_frame) {
+            return 0.0f;
+        }
+
+        float max_diameter = 0.0f;
+        for (const DisplacedAssetAnchorPoint& frame_anchor : asset->current_frame->anchor_points) {
+            if (!frame_anchor.is_valid() || !frame_anchor.has_light_data || !frame_anchor.light.enabled) {
+                continue;
+            }
+
+            const std::optional<AnchorPoint> resolved = asset->anchor_state(
+                frame_anchor.name,
+                anchor_points::GridMaterialization::None,
+                Asset::AnchorResolveMode::Cached);
+            if (!resolved.has_value() || !resolved->exists) {
+                continue;
+            }
+
+            AnchorLightData light = frame_anchor.light;
+            light.sanitize();
+            const float radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
+
+            SDL_FPoint center_screen = resolved->screen_pos_2d;
+            if (!std::isfinite(center_screen.x) || !std::isfinite(center_screen.y)) {
+                if (!project_screen_point(resolved->world_exact_pos_2d.x,
+                                          resolved->world_exact_pos_2d.y,
+                                          resolved->world_exact_z,
+                                          center_screen)) {
+                    continue;
+                }
+            }
+
+            SDL_FPoint edge_screen{};
+            float radius_px = 0.0f;
+            if (project_screen_point(resolved->world_exact_pos_2d.x + radius_world,
+                                     resolved->world_exact_pos_2d.y,
+                                     resolved->world_exact_z,
+                                     edge_screen)) {
+                const float dx = edge_screen.x - center_screen.x;
+                const float dy = edge_screen.y - center_screen.y;
+                radius_px = std::sqrt(dx * dx + dy * dy);
+            } else if (resolved->has_flat_perspective_scale &&
+                       std::isfinite(resolved->flat_perspective_scale) &&
+                       resolved->flat_perspective_scale > 0.0f) {
+                radius_px = radius_world * resolved->flat_perspective_scale;
+            }
+
+            if (!std::isfinite(radius_px) || radius_px <= 0.0f) {
+                continue;
+            }
+
+            if (!rect_intersects_screen_bounds(cull_bounds,
+                                               center_screen.x - radius_px,
+                                               center_screen.y - radius_px,
+                                               center_screen.x + radius_px,
+                                               center_screen.y + radius_px)) {
+                continue;
+            }
+
+            max_diameter = std::max(max_diameter, radius_px * 2.0f);
+        }
+        return max_diameter;
+    };
+
     std::vector<Asset*> frustum_hits;
     frustum_hits.reserve(8);
 
@@ -1926,8 +2019,13 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             std::optional<ProjectedAssetBounds> projected_bounds;
             if (asset_visible_on_screen(owned.get(), gp, base_world_z, projected_bounds)) {
                 if (owned.get() != tracked_player_asset_ && min_visible_px > 0.0f) {
-                    if (projected_bounds.has_value() &&
-                        projected_bounds->largest_dim_px < min_visible_px) {
+                    float effective_largest_dim = 0.0f;
+                    if (projected_bounds.has_value()) {
+                        effective_largest_dim = projected_bounds->largest_dim_px;
+                    }
+                    effective_largest_dim = std::max(effective_largest_dim, max_light_projected_diameter_px(owned.get()));
+                    if (effective_largest_dim > 0.0f &&
+                        effective_largest_dim < min_visible_px) {
                         continue;
                     }
                 }

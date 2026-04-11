@@ -10,6 +10,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "animation/animation_runtime.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/controllers/custom_controllers/vibble_controller.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
@@ -157,6 +159,72 @@ const AssetInfo::OvalAnchorPoint* find_point_by_angle(const std::vector<AssetInf
         }
     }
     return nullptr;
+}
+
+Animation make_test_animation(int frame_count = 2) {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.reserve(static_cast<std::size_t>(std::max(1, frame_count)));
+    for (int idx = 0; idx < std::max(1, frame_count); ++idx) {
+        AnimationFrame frame{};
+        frame.frame_index = idx;
+        frame.is_first = (idx == 0);
+        frame.is_last = (idx + 1 == std::max(1, frame_count));
+        path.push_back(frame);
+    }
+    for (int idx = 0; idx < std::max(1, frame_count); ++idx) {
+        AnimationFrame& frame = path[static_cast<std::size_t>(idx)];
+        frame.prev = (idx > 0) ? &path[static_cast<std::size_t>(idx - 1)] : nullptr;
+        frame.next = (idx + 1 < std::max(1, frame_count)) ? &path[static_cast<std::size_t>(idx + 1)] : nullptr;
+    }
+    return animation;
+}
+
+std::shared_ptr<AssetInfo> make_vibble_directional_info() {
+    auto info = std::make_shared<AssetInfo>("vibble");
+    info->animations.clear();
+    info->animations["default"] = make_test_animation();
+    info->animations["left"] = make_test_animation();
+    info->animations["right"] = make_test_animation();
+    info->animations["up"] = make_test_animation();
+    info->animations["down"] = make_test_animation();
+    info->start_animation = "default";
+    return info;
+}
+
+void attach_controller_runtime(Asset& player) {
+    player.anim_runtime_ = std::make_unique<AnimationRuntime>(&player, nullptr);
+    player.anim_ = std::make_unique<AnimationUpdate>(&player, nullptr);
+    player.anim_runtime_->set_planner(player.anim_.get());
+}
+
+void set_mouse_position(Input& input, int x, int y) {
+    SDL_Event motion{};
+    motion.type = SDL_EVENT_MOUSE_MOTION;
+    motion.motion.x = static_cast<float>(x);
+    motion.motion.y = static_cast<float>(y);
+    motion.motion.xrel = 0.0f;
+    motion.motion.yrel = 0.0f;
+    input.handleEvent(motion);
+}
+
+void set_key_state(Input& input, SDL_Scancode scancode, bool down) {
+    SDL_Event key{};
+    key.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+    key.key.scancode = scancode;
+    input.handleEvent(key);
+}
+
+void run_vibble_tick(vibble_controller& controller,
+                     Input& input,
+                     Asset& player,
+                     bool update_runtime = true) {
+    input.update();
+    controller.update(input);
+    if (update_runtime && player.anim_runtime_) {
+        player.anim_runtime_->update();
+    }
 }
 
 } // namespace
@@ -795,4 +863,114 @@ TEST_CASE("vibble_controller updates heading from mouse world vector") {
     input.update();
     controller.update(input);
     CHECK(player.directional_heading_radians() == doctest::Approx(degrees_to_radians(90.0f)).epsilon(1e-4));
+}
+
+TEST_CASE("vibble_controller idle picks right facing from mouse screen direction") {
+    auto info = make_vibble_directional_info();
+    Area spawn_area("vibble_directional_idle_right", 0);
+    Asset player(info, spawn_area, SDL_Point{100, 100}, 0);
+    attach_controller_runtime(player);
+
+    vibble_controller controller(&player);
+    Input input{};
+    input.set_screen_to_world_mapper([](SDL_Point screen) { return screen; });
+
+    set_mouse_position(input, 140, 100);
+    run_vibble_tick(controller, input, player, false);
+
+    CHECK(player.current_animation == "right");
+    CHECK(player.anim_runtime_->reverse_playback_mode() == AnimationRuntime::ReversePlaybackMode::None);
+}
+
+TEST_CASE("vibble_controller idle picks down facing when mouse is below player") {
+    auto info = make_vibble_directional_info();
+    Area spawn_area("vibble_directional_idle_down", 0);
+    Asset player(info, spawn_area, SDL_Point{100, 100}, 0);
+    attach_controller_runtime(player);
+
+    vibble_controller controller(&player);
+    Input input{};
+    input.set_screen_to_world_mapper([](SDL_Point screen) { return screen; });
+
+    set_mouse_position(input, 100, 140);
+    run_vibble_tick(controller, input, player, false);
+
+    CHECK(player.current_animation == "down");
+    CHECK(player.anim_runtime_->reverse_playback_mode() == AnimationRuntime::ReversePlaybackMode::None);
+}
+
+TEST_CASE("vibble_controller mouse-left plus move-right plays left animation in reverse") {
+    auto info = make_vibble_directional_info();
+    Area spawn_area("vibble_directional_reverse_left", 0);
+    Asset player(info, spawn_area, SDL_Point{100, 100}, 0);
+    attach_controller_runtime(player);
+
+    vibble_controller controller(&player);
+    Input input{};
+    input.set_screen_to_world_mapper([](SDL_Point screen) { return screen; });
+
+    set_mouse_position(input, 60, 100);
+    set_key_state(input, SDL_SCANCODE_D, true);
+    run_vibble_tick(controller, input, player, true);
+
+    CHECK(player.current_animation == "left");
+    CHECK(player.anim_runtime_->reverse_playback_mode() ==
+          AnimationRuntime::ReversePlaybackMode::ReverseUntilStopCurrentAnimation);
+}
+
+TEST_CASE("vibble_controller mouse-left plus move-left keeps forward left animation") {
+    auto info = make_vibble_directional_info();
+    Area spawn_area("vibble_directional_forward_left", 0);
+    Asset player(info, spawn_area, SDL_Point{100, 100}, 0);
+    attach_controller_runtime(player);
+
+    vibble_controller controller(&player);
+    Input input{};
+    input.set_screen_to_world_mapper([](SDL_Point screen) { return screen; });
+
+    set_mouse_position(input, 60, 100);
+    set_key_state(input, SDL_SCANCODE_A, true);
+    run_vibble_tick(controller, input, player, true);
+
+    CHECK(player.current_animation == "left");
+    CHECK(player.anim_runtime_->reverse_playback_mode() == AnimationRuntime::ReversePlaybackMode::None);
+}
+
+TEST_CASE("vibble_controller perpendicular movement uses movement animation without reverse") {
+    auto info = make_vibble_directional_info();
+    Area spawn_area("vibble_directional_perpendicular", 0);
+    Asset player(info, spawn_area, SDL_Point{100, 100}, 0);
+    attach_controller_runtime(player);
+
+    vibble_controller controller(&player);
+    Input input{};
+    input.set_screen_to_world_mapper([](SDL_Point screen) { return screen; });
+
+    set_mouse_position(input, 140, 100);
+    set_key_state(input, SDL_SCANCODE_S, true);
+    run_vibble_tick(controller, input, player, true);
+
+    CHECK(player.current_animation == "up");
+    CHECK(player.anim_runtime_->reverse_playback_mode() == AnimationRuntime::ReversePlaybackMode::None);
+}
+
+TEST_CASE("vibble_controller zero mouse delta keeps previous facing") {
+    auto info = make_vibble_directional_info();
+    Area spawn_area("vibble_directional_zero_delta", 0);
+    Asset player(info, spawn_area, SDL_Point{100, 100}, 0);
+    attach_controller_runtime(player);
+
+    vibble_controller controller(&player);
+    Input input{};
+    input.set_screen_to_world_mapper([](SDL_Point screen) { return screen; });
+
+    set_mouse_position(input, 60, 100);
+    run_vibble_tick(controller, input, player, false);
+    REQUIRE(player.current_animation == "left");
+
+    set_mouse_position(input, 100, 100);
+    run_vibble_tick(controller, input, player, false);
+
+    CHECK(player.current_animation == "left");
+    CHECK(player.anim_runtime_->reverse_playback_mode() == AnimationRuntime::ReversePlaybackMode::None);
 }

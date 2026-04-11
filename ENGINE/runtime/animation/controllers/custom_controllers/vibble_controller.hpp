@@ -44,7 +44,9 @@ private:
 
     void movement(const Input& input);
     std::string animation_for_direction(int screen_x, int screen_y) const;
-    FacingSelection facing_from_mouse(const Asset& player, const Input& input) const;
+    FacingSelection facing_from_mouse(const Asset& player,
+                                      const Input& input,
+                                      const std::string& fallback_animation) const;
     CardinalVector movement_cardinal_vector(int world_x, int world_y) const;
     static CardinalVector cardinal_vector_for_animation(const std::string& animation_id);
     void apply_idle_facing(const std::string& animation_id);
@@ -71,6 +73,7 @@ private:
 
     float subpixel_x_ = 0.0f;
     float subpixel_y_ = 0.0f;
+    std::string last_facing_animation_ = "default";
 };
 
 #endif

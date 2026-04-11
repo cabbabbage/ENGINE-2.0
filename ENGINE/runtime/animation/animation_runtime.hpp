@@ -43,7 +43,7 @@ public:
 
     void update();
 
-    void set_planner(AnimationUpdate* planner) { planner_iface_ = planner; }
+    void set_planner(AnimationUpdate* planner);
 
     std::size_t path_index_for(const std::string& anim_id) const;
 

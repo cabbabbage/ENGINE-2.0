@@ -106,6 +106,16 @@ int resolve_effective_grid_resolution(const Asset* self,
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
     : self_(self), assets_owner_(assets), grid_service_(&vibble::grid::global_grid()) {}
 
+void AnimationRuntime::set_planner(AnimationUpdate* planner) {
+    if (planner_iface_ && planner_iface_ != planner) {
+        planner_iface_->set_runtime(nullptr);
+    }
+    planner_iface_ = planner;
+    if (planner_iface_) {
+        planner_iface_->set_runtime(this);
+    }
+}
+
 float AnimationRuntime::parent_world_z() const {
     if (!self_ || !assets_owner_) {
         return 0.0f;

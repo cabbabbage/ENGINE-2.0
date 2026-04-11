@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <unordered_map>
@@ -196,11 +197,19 @@ void AnimationRuntime::update() {
         assets_owner_ && assets_owner_->is_frame_editor_target_active(self_);
 
     if (freeze_for_frame_editor) {
-        const bool has_plan = !planner_iface_->plan_.strides.empty();
-        if (has_plan || planner_iface_->has_pending_move()) {
+        const bool has_plan_2d =
+            planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D &&
+            !planner_iface_->plan_.strides.empty();
+        const bool has_plan_3d =
+            planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D &&
+            !planner_iface_->plan3d_.strides.empty();
+        const bool has_plan = has_plan_2d || has_plan_3d;
+        if (has_plan || planner_iface_->has_pending_move() || planner_iface_->has_pending_move_3d()) {
             planner_iface_->clear_movement_plan();
             planner_iface_->move_pending_ = false;
             planner_iface_->pending_move_ = {};
+            planner_iface_->move_pending_3d_ = false;
+            planner_iface_->pending_move_3d_ = {};
         }
     }
 
@@ -209,19 +218,46 @@ void AnimationRuntime::update() {
     }
 
     if (!freeze_for_frame_editor) {
-        const bool has_plan = !planner_iface_->plan_.strides.empty();
-        const bool plan_deferred = has_plan &&
-                                   should_defer_for_non_locked(planner_iface_->plan_.override_non_locked);
+        if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D &&
+            planner_iface_->plan_.strides.empty()) {
+            planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::None;
+        }
+        if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D &&
+            planner_iface_->plan3d_.strides.empty()) {
+            planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::None;
+        }
 
-        if (has_plan && !plan_deferred &&
-            executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_)) {
-            return;
+        const bool has_plan_2d =
+            planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D &&
+            !planner_iface_->plan_.strides.empty();
+        const bool has_plan_3d =
+            planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D &&
+            !planner_iface_->plan3d_.strides.empty();
+        const bool has_plan = has_plan_2d || has_plan_3d;
+        const bool plan_override_non_locked =
+            has_plan_3d ? planner_iface_->plan3d_.override_non_locked : planner_iface_->plan_.override_non_locked;
+        const bool plan_deferred = has_plan && should_defer_for_non_locked(plan_override_non_locked);
+
+        if (has_plan && !plan_deferred) {
+            const bool consumed = has_plan_3d
+                ? executor_.tick_3d(*this, planner_iface_->plan3d_, stride_index_, stride_frame_counter_)
+                : executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_);
+            if (consumed) {
+                return;
+            }
         }
 
         if (planner_iface_->has_pending_move()) {
             const auto& req = planner_iface_->pending_move_;
             if (!should_defer_for_non_locked(req.override_non_locked)) {
                 apply_pending_move();
+                return;
+            }
+        }
+        if (planner_iface_->has_pending_move_3d()) {
+            const auto& req3d = planner_iface_->pending_move_3d_;
+            if (!should_defer_for_non_locked(req3d.override_non_locked)) {
+                apply_pending_move_3d();
                 return;
             }
         }
@@ -272,7 +308,9 @@ void AnimationRuntime::apply_pending_move() {
         }
     }
 
+    planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::None;
     planner_iface_->final_dest = self_->world_xz_point();
+    planner_iface_->final_dest_3d = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
 
     const std::string resolved = resolve_animation(*self_, req.animation_id);
     if (self_->current_animation != resolved) {
@@ -299,6 +337,91 @@ void AnimationRuntime::apply_pending_move() {
     case AnimationUpdate::ReversePlaybackCommand::None:
     default:
         break;
+    }
+}
+
+void AnimationRuntime::apply_pending_move_3d() {
+    if (!planner_iface_ || !self_) {
+        return;
+    }
+
+    const auto req = planner_iface_->consume_move_request_3d();
+    const int resolution = effective_grid_resolution(std::nullopt);
+    (void)resolution;
+    const axis::WorldPos from{ self_->world_x(), self_->world_y(), self_->world_z() };
+    const axis::WorldPos world_delta = req.delta;
+    const axis::WorldPos to{
+        from.x + world_delta.x,
+        from.y + world_delta.y,
+        from.z + world_delta.z
+    };
+
+    axis::WorldPos final_position = from;
+    if (world_delta.x != 0 || world_delta.y != 0 || world_delta.z != 0) {
+        const world::GridPoint gp_from = world::GridPoint::make_virtual(from.x, from.y, from.z, self_->grid_resolution);
+        const world::GridPoint gp_to = world::GridPoint::make_virtual(to.x, to.y, to.z, self_->grid_resolution);
+        if (!path_blocked(gp_from, gp_to, self_, nullptr)) {
+            final_position = to;
+        } else {
+            const int steps = std::max({ std::abs(world_delta.x), std::abs(world_delta.y), std::abs(world_delta.z) });
+            if (steps > 0) {
+                const double step_x = static_cast<double>(world_delta.x) / static_cast<double>(steps);
+                const double step_y = static_cast<double>(world_delta.y) / static_cast<double>(steps);
+                const double step_z = static_cast<double>(world_delta.z) / static_cast<double>(steps);
+                double accum_x = static_cast<double>(from.x);
+                double accum_y = static_cast<double>(from.y);
+                double accum_z = static_cast<double>(from.z);
+                axis::WorldPos current = from;
+                for (int i = 0; i < steps; ++i) {
+                    accum_x += step_x;
+                    accum_y += step_y;
+                    accum_z += step_z;
+                    const axis::WorldPos candidate{
+                        static_cast<int>(std::round(accum_x)),
+                        static_cast<int>(std::round(accum_y)),
+                        static_cast<int>(std::round(accum_z))
+                    };
+                    if (candidate.x == current.x && candidate.y == current.y && candidate.z == current.z) {
+                        continue;
+                    }
+                    const world::GridPoint current_gp =
+                        world::GridPoint::make_virtual(current.x, current.y, current.z, self_->grid_resolution);
+                    const world::GridPoint candidate_gp =
+                        world::GridPoint::make_virtual(candidate.x, candidate.y, candidate.z, self_->grid_resolution);
+                    if (path_blocked(current_gp, candidate_gp, self_, nullptr)) {
+                        break;
+                    }
+                    final_position = candidate;
+                    current = candidate;
+                }
+            }
+        }
+    }
+
+    if (final_position.x != self_->world_x() ||
+        final_position.y != self_->world_y() ||
+        final_position.z != self_->world_z()) {
+        self_->move_to_world_position(final_position.x, final_position.y, final_position.z);
+        suppress_root_motion_frames_ = std::max(2, suppress_root_motion_frames_);
+        if (planner_iface_) {
+            planner_iface_->clear_movement_plan();
+        }
+    }
+
+    planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::None;
+    planner_iface_->final_dest = self_->world_xz_point();
+    planner_iface_->final_dest_3d = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
+
+    const std::string resolved = resolve_animation(*self_, req.animation_id);
+    if (self_->current_animation != resolved) {
+        switch_to(resolved, path_index_for(resolved));
+    } else {
+        if (!advance(self_->current_frame)) {
+            if (self_->dead) {
+                return;
+            }
+            switch_to(resolved, path_index_for(resolved));
+        }
     }
 }
 
@@ -329,7 +452,16 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     const bool static_blocked = self_->static_frame && !reverse_command_active;
     const bool locked_blocked = anim->locked && !reverse_command_active;
     bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || lock_on_end_active_);
-    bool has_overriding_plan = planner_iface_ && !planner_iface_->plan_.strides.empty() && planner_iface_->plan_.override_non_locked;
+    bool has_overriding_plan = false;
+    if (planner_iface_) {
+        if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D) {
+            has_overriding_plan =
+                !planner_iface_->plan_.strides.empty() && planner_iface_->plan_.override_non_locked;
+        } else if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D) {
+            has_overriding_plan =
+                !planner_iface_->plan3d_.strides.empty() && planner_iface_->plan3d_.override_non_locked;
+        }
+    }
     if (should_skip && !has_overriding_plan) {
         self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || lock_on_end_active_;
         return true;
@@ -770,6 +902,9 @@ void AnimationRuntime::mark_progress_toward_checkpoints() {
     if (!self_ || !self_->info || !planner_iface_) {
         return;
     }
+    if (planner_iface_->active_plan_mode_ != AnimationUpdate::ActivePlanMode::Plan2D) {
+        return;
+    }
     const int visited_thresh = planner_iface_->visited_thresh_;
     const int visited_sq     = visited_thresh * visited_thresh;
     while (next_checkpoint_index_ < planner_iface_->plan_.sanitized_checkpoints.size()) {
@@ -792,8 +927,40 @@ void AnimationRuntime::mark_progress_toward_checkpoints() {
     }
 }
 
+void AnimationRuntime::mark_progress_toward_checkpoints_3d() {
+    if (!self_ || !self_->info || !planner_iface_) {
+        return;
+    }
+    if (planner_iface_->active_plan_mode_ != AnimationUpdate::ActivePlanMode::Plan3D) {
+        return;
+    }
+
+    const int visited_thresh = planner_iface_->visited_thresh_;
+    const long long visited_sq = static_cast<long long>(visited_thresh) * visited_thresh;
+    while (next_checkpoint_index_ < planner_iface_->plan3d_.sanitized_checkpoints.size()) {
+        const axis::WorldPos target = planner_iface_->plan3d_.sanitized_checkpoints[next_checkpoint_index_];
+        const axis::WorldPos current{ self_->world_x(), self_->world_y(), self_->world_z() };
+        const long long dist_sq = animation_update::detail::distance_sq_3d(current, target);
+
+        bool reached = false;
+        if (visited_thresh == 0) {
+            reached = current.x == target.x && current.y == target.y && current.z == target.z;
+        } else {
+            reached = dist_sq <= visited_sq;
+        }
+
+        if (!reached) {
+            break;
+        }
+        ++next_checkpoint_index_;
+    }
+}
+
 bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& blockers) {
     if (!self_ || !self_->info || !planner_iface_) {
+        return false;
+    }
+    if (planner_iface_->active_plan_mode_ != AnimationUpdate::ActivePlanMode::Plan2D) {
         return false;
     }
     mark_progress_toward_checkpoints();
@@ -901,10 +1068,181 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     return false;
 }
 
+bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>& blockers) {
+    if (!self_ || !self_->info || !planner_iface_) {
+        return false;
+    }
+    if (planner_iface_->active_plan_mode_ != AnimationUpdate::ActivePlanMode::Plan3D) {
+        return false;
+    }
+
+    auto same_world_pos = [](const axis::WorldPos& lhs, const axis::WorldPos& rhs) {
+        return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+    };
+
+    mark_progress_toward_checkpoints_3d();
+    const axis::WorldPos target_pos =
+        (next_checkpoint_index_ < planner_iface_->plan3d_.sanitized_checkpoints.size())
+            ? planner_iface_->plan3d_.sanitized_checkpoints[next_checkpoint_index_]
+            : planner_iface_->final_dest_3d;
+    world::GridPoint target =
+        world::GridPoint::make_virtual(target_pos.x, target_pos.y, target_pos.z, self_->grid_resolution);
+    world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
+    const world::GridPoint start_point =
+        world::GridPoint::make_virtual(self_->world_x(), self_->world_y(), self_->world_z(), self_->grid_resolution);
+
+    SDL_Point push{ 0, 0 };
+    std::vector<const Asset*> influencing_neighbors;
+    auto consider_neighbor = [&](const Asset* neighbor,
+                                 const Area& area,
+                                 const world::GridPoint& neighbor_bottom) {
+        if (!neighbor || neighbor == self_ || !neighbor->info) {
+            return;
+        }
+
+        bool relevant = area.contains_point(bottom_target.to_sdl_point()) ||
+                        animation_update::detail::segment_hits_area(start_point, target, area);
+        if (!relevant) {
+            const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
+            if (overlap_check) {
+                relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) <
+                           animation_update::detail::kOverlapDistanceSq;
+            }
+        }
+        if (!relevant) {
+            return;
+        }
+        const SDL_Point center = area.get_center();
+        push.x += bottom_target.world_x() - center.x;
+        push.y += bottom_target.world_z() - center.y;
+        influencing_neighbors.push_back(neighbor);
+    };
+
+    if (!blockers.empty()) {
+        std::unordered_set<const Asset*> blocker_lookup(blockers.begin(), blockers.end());
+        visit_impassable_neighbors(*self_, [&](const Assets::FrameCollisionEntry*,
+                                               const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
+            if (!neighbor || blocker_lookup.find(neighbor) == blocker_lookup.end()) {
+                return false;
+            }
+            consider_neighbor(neighbor, area, neighbor_bottom);
+            return false;
+        });
+    }
+    if (influencing_neighbors.empty()) {
+        visit_impassable_neighbors(*self_, [&](const Assets::FrameCollisionEntry*,
+                                               const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
+            consider_neighbor(neighbor, area, neighbor_bottom);
+            return false;
+        });
+    }
+
+    if (push.x == 0 && push.y == 0) {
+        push.x = target.world_x() - self_->world_x();
+        push.y = target.world_z() - self_->world_z();
+    }
+    if (push.x == 0 && push.y == 0) {
+        push.y = -1;
+    }
+
+    SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
+                       (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
+    std::vector<SDL_Point> directions = build_escape_directions(primary);
+
+    std::vector<axis::WorldPos> tail;
+    for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan3d_.sanitized_checkpoints.size(); ++i) {
+        tail.push_back(planner_iface_->plan3d_.sanitized_checkpoints[i]);
+    }
+    if (tail.empty() || !same_world_pos(tail.back(), planner_iface_->final_dest_3d)) {
+        tail.push_back(planner_iface_->final_dest_3d);
+    }
+
+    auto try_plan_with_targets = [&](const std::vector<axis::WorldPos>& targets) {
+        if (targets.empty()) {
+            return false;
+        }
+        auto sanitized = sanitizer_3d_.sanitize(*self_, targets, planner_iface_->visited_thresh_);
+        if (sanitized.empty()) {
+            return false;
+        }
+
+        Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+        new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
+        if (new_plan.strides.empty()) {
+            return false;
+        }
+
+        planner_iface_->plan3d_ = std::move(new_plan);
+        planner_iface_->final_dest_3d = planner_iface_->plan3d_.final_dest;
+        planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::Plan3D;
+        stride_index_ = 0;
+        stride_frame_counter_ = 0;
+        next_checkpoint_index_ = 0;
+        mark_progress_toward_checkpoints_3d();
+        return true;
+    };
+
+    const int max_steps = 24;
+    for (const SDL_Point dir : directions) {
+        world::GridPoint candidate = target;
+        for (int step = 0; step < max_steps; ++step) {
+            world::GridPoint next = world::grid_math::offset(candidate, dir);
+            if (next.world_x() == candidate.world_x() && next.world_z() == candidate.world_z()) {
+                continue;
+            }
+            world::GridPoint bottom_next = animation_update::detail::bottom_middle_for(*self_, next);
+            if (point_in_impassable(bottom_next, self_)) {
+                break;
+            }
+            candidate = std::move(next);
+
+            std::vector<axis::WorldPos> attempt_targets;
+            const axis::WorldPos candidate_pos{
+                candidate.world_x(),
+                candidate.world_y(),
+                candidate.world_z()
+            };
+            attempt_targets.push_back(candidate_pos);
+
+            auto it_begin = tail.begin();
+            if (!tail.empty() && same_world_pos(tail.front(), candidate_pos)) {
+                ++it_begin;
+            }
+            attempt_targets.insert(attempt_targets.end(), it_begin, tail.end());
+            if (try_plan_with_targets(attempt_targets)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 bool AnimationRuntime::handle_blocked_path(const world::GridPoint& from,
                                            const world::GridPoint& to,
                                            const std::vector<const Asset*>& blockers) {
+    if (!planner_iface_) {
+        return false;
+    }
+
     bool moved = attempt_unstick(from, to, blockers);
+    if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D) {
+        if (moved) {
+            mark_progress_toward_checkpoints_3d();
+        }
+        if (adjust_next_checkpoint_3d(blockers)) {
+            return true;
+        }
+        if (replan_to_destination_3d()) {
+            return true;
+        }
+        return moved;
+    }
+
     if (moved) {
         mark_progress_toward_checkpoints();
     }
@@ -914,6 +1252,7 @@ bool AnimationRuntime::handle_blocked_path(const world::GridPoint& from,
     if (replan_to_destination()) {
         return true;
     }
+
     return moved;
 }
 
@@ -929,6 +1268,9 @@ bool AnimationRuntime::handle_blocked_path(SDL_Point from,
 
 bool AnimationRuntime::replan_to_destination() {
     if (!self_ || !self_->info || !planner_iface_) {
+        return false;
+    }
+    if (planner_iface_->active_plan_mode_ != AnimationUpdate::ActivePlanMode::Plan2D) {
         return false;
     }
     const int visited_sq = planner_iface_->visited_thresh_ * planner_iface_->visited_thresh_;
@@ -961,6 +1303,56 @@ bool AnimationRuntime::replan_to_destination() {
     return true;
 }
 
+bool AnimationRuntime::replan_to_destination_3d() {
+    if (!self_ || !self_->info || !planner_iface_) {
+        return false;
+    }
+    if (planner_iface_->active_plan_mode_ != AnimationUpdate::ActivePlanMode::Plan3D) {
+        return false;
+    }
+
+    auto same_world_pos = [](const axis::WorldPos& lhs, const axis::WorldPos& rhs) {
+        return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+    };
+
+    const long long visited_sq =
+        static_cast<long long>(planner_iface_->visited_thresh_) * planner_iface_->visited_thresh_;
+    const axis::WorldPos current{ self_->world_x(), self_->world_y(), self_->world_z() };
+    if (visited_sq > 0 &&
+        animation_update::detail::distance_sq_3d(current, planner_iface_->final_dest_3d) <= visited_sq) {
+        return false;
+    }
+
+    mark_progress_toward_checkpoints_3d();
+    std::vector<axis::WorldPos> checkpoints;
+    for (std::size_t i = next_checkpoint_index_; i < planner_iface_->plan3d_.sanitized_checkpoints.size(); ++i) {
+        checkpoints.push_back(planner_iface_->plan3d_.sanitized_checkpoints[i]);
+    }
+    if (checkpoints.empty() || !same_world_pos(checkpoints.back(), planner_iface_->final_dest_3d)) {
+        checkpoints.push_back(planner_iface_->final_dest_3d);
+    }
+
+    auto sanitized = sanitizer_3d_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
+    if (sanitized.empty()) {
+        return false;
+    }
+
+    Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+    new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
+    if (new_plan.strides.empty()) {
+        return false;
+    }
+
+    planner_iface_->plan3d_ = std::move(new_plan);
+    planner_iface_->final_dest_3d = planner_iface_->plan3d_.final_dest;
+    planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::Plan3D;
+    stride_index_ = 0;
+    stride_frame_counter_ = 0;
+    next_checkpoint_index_ = 0;
+    mark_progress_toward_checkpoints_3d();
+    return true;
+}
+
 vibble::grid::Grid& AnimationRuntime::grid() const {
     if (grid_service_) return *grid_service_;
     return vibble::grid::global_grid();
@@ -979,5 +1371,14 @@ SDL_Point AnimationRuntime::convert_delta_to_world(SDL_Point delta, int resoluti
 }
 
 bool AnimationRuntime::has_active_plan() const {
-    return planner_iface_ && !planner_iface_->current_plan()->strides.empty();
+    if (!planner_iface_) {
+        return false;
+    }
+    if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D) {
+        return !planner_iface_->plan_.strides.empty();
+    }
+    if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D) {
+        return !planner_iface_->plan3d_.strides.empty();
+    }
+    return false;
 }

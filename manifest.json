@@ -2322,8 +2322,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -2614,8 +2614,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -2726,8 +2726,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -2838,8 +2838,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -2950,8 +2950,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3062,8 +3062,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3174,8 +3174,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3286,8 +3286,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3398,8 +3398,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3690,8 +3690,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3802,8 +3802,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -3914,8 +3914,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -4026,8 +4026,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -4138,8 +4138,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -4250,8 +4250,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -4362,8 +4362,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -4474,8 +4474,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 173
+                "texture_x": 193,
+                "texture_y": 103
               },
               {
                 "depth_offset": 0.0,
@@ -5364,11 +5364,16 @@
       "map_name": "forrest",
       "rooms_data": {
         "NewRoom": {
+          "camera_center_dx": -186,
+          "camera_center_dz": 34,
+          "camera_height_px": 1000,
+          "camera_tilt_deg": 21.399999618530273,
+          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
             204,
+            124,
             31,
-            122,
             255
           ],
           "edge_smoothness": 2,
@@ -5439,8 +5444,8 @@
           "curvyness": 2,
           "display_color": [
             37,
-            36,
             242,
+            36,
             255
           ],
           "edge_smoothness": 101,

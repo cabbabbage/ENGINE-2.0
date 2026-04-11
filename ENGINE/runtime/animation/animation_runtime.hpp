@@ -11,7 +11,9 @@
 #include "assets/asset/Asset.hpp"
 #include "stride_types.hpp"
 #include "path_sanitizer.hpp"
+#include "path_sanitizer_3d.hpp"
 #include "get_best_path.hpp"
+#include "get_best_path_3d.hpp"
 #include "movement_plan_executor.hpp"
 #include "gameplay/world/grid_point.hpp"
 
@@ -51,6 +53,7 @@ public:
     bool handle_blocked_path(const world::GridPoint& from, const world::GridPoint& to, const std::vector<const Asset*>& blockers);
     bool handle_blocked_path(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     void mark_progress_toward_checkpoints();
+    void mark_progress_toward_checkpoints_3d();
     bool advance(AnimationFrame*& frame);
     void switch_to(const std::string& anim_id, std::size_t path_index = 0);
     bool should_defer_for_non_locked(bool override_non_locked) const;
@@ -74,10 +77,13 @@ private:
     bool       attempt_unstick(const world::GridPoint& from, const world::GridPoint& to, const std::vector<const Asset*>& blockers);
     bool       attempt_unstick(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     bool       adjust_next_checkpoint(const std::vector<const Asset*>& blockers);
+    bool       adjust_next_checkpoint_3d(const std::vector<const Asset*>& blockers);
     bool       replan_to_destination();
+    bool       replan_to_destination_3d();
     float      parent_world_z() const;
 
     void       apply_pending_move();
+    void       apply_pending_move_3d();
     void       clear_reverse_playback_state();
     void       activate_reverse_playback(ReversePlaybackMode mode);
     AnimationFrame* last_frame_for(const Animation& anim, std::size_t path_index) const;
@@ -97,6 +103,8 @@ private:
 
     PathSanitizer  sanitizer_{};
     GetBestPath    planner_{};
+    PathSanitizer3D sanitizer_3d_{};
+    GetBestPath3D   planner_3d_{};
     MovementPlanExecutor   executor_{};
 
     std::unordered_map<std::string, std::size_t> active_paths_{};

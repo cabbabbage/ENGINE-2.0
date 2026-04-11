@@ -137,6 +137,20 @@ int distance_sq(SDL_Point a, SDL_Point b) {
     return distance_sq(world::grid_math::from_sdl(a), world::grid_math::from_sdl(b));
 }
 
+long long distance_sq_3d(const world::GridPoint& a, const world::GridPoint& b) {
+    const long long dx = static_cast<long long>(a.world_x()) - static_cast<long long>(b.world_x());
+    const long long dy = static_cast<long long>(a.world_y()) - static_cast<long long>(b.world_y());
+    const long long dz = static_cast<long long>(a.world_z()) - static_cast<long long>(b.world_z());
+    return dx * dx + dy * dy + dz * dz;
+}
+
+long long distance_sq_3d(const axis::WorldPos& a, const axis::WorldPos& b) {
+    const long long dx = static_cast<long long>(a.x) - static_cast<long long>(b.x);
+    const long long dy = static_cast<long long>(a.y) - static_cast<long long>(b.y);
+    const long long dz = static_cast<long long>(a.z) - static_cast<long long>(b.z);
+    return dx * dx + dy * dy + dz * dz;
+}
+
 bool segment_hits_area(const world::GridPoint& from_gp,
                        const world::GridPoint& to_gp,
                        const Area& area) {
@@ -198,6 +212,14 @@ SDL_Point frame_world_delta(const AnimationFrame& frame,
     (void)grid;
 
     return SDL_Point{ frame.dx, frame.dz };
+}
+
+axis::WorldPos frame_world_delta_3d(const AnimationFrame& frame,
+                                    const Asset&          asset,
+                                    const vibble::grid::Grid& grid) {
+    (void)asset;
+    (void)grid;
+    return axis::WorldPos{ frame.dx, frame.dy, frame.dz };
 }
 
 bool bottom_point_inside_playable_area(const Assets* assets, const world::GridPoint& bottom_point) {
@@ -333,6 +355,187 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked);
 }
 
+void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
+                                   int            visited_thresh_px,
+                                   std::optional<int> checkpoint_resolution,
+                                   bool           override_non_locked) {
+    if (!self_) {
+        return;
+    }
+
+    const axis::WorldPos delta =
+        animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, world_checkpoint);
+    if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
+        self_->target_reached = true;
+        self_->needs_target = true;
+        return;
+    }
+
+    auto_move_3d(std::vector<axis::WorldPos>{ delta },
+                 true,
+                 visited_thresh_px,
+                 checkpoint_resolution,
+                 override_non_locked);
+}
+
+void AnimationUpdate::auto_move_3d_relative(axis::WorldPos rel_delta,
+                                            int            visited_thresh_px,
+                                            std::optional<int> checkpoint_resolution,
+                                            bool           override_non_locked) {
+    auto_move_3d(std::vector<axis::WorldPos>{ rel_delta },
+                 true,
+                 visited_thresh_px,
+                 checkpoint_resolution,
+                 override_non_locked);
+}
+
+void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoints,
+                                   bool                               relative_checkpoints,
+                                   int                                visited_thresh_px,
+                                   std::optional<int>                 checkpoint_resolution,
+                                   bool                               override_non_locked) {
+    if (!self_) {
+        return;
+    }
+
+    if (self_) {
+        self_->target_reached = false;
+    }
+
+    const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
+    const int resolution = effective_grid_resolution(checkpoint_resolution);
+    visited_thresh_      = std::max(0, visited_thresh_px);
+    if (resolution > 0) {
+        const int step = vibble::grid::delta(resolution);
+        if (step > 1 && visited_thresh_ > 0) {
+            visited_thresh_ = ((visited_thresh_ + step - 1) / step) * step;
+        }
+    }
+
+    const bool debug_logging = debug_enabled_;
+    if (debug_logging) {
+        std::ostringstream oss;
+        oss << "[AnimationUpdate] auto_move_3d asset=" << asset_name
+            << " checkpoints=" << checkpoints.size()
+            << " relative=" << std::boolalpha << relative_checkpoints
+            << " visited_thresh=" << visited_thresh_
+            << " override_non_locked=" << override_non_locked;
+        vibble::log::info(oss.str());
+    }
+
+    std::vector<axis::WorldPos> absolute;
+    absolute.reserve(checkpoints.size());
+    if (relative_checkpoints) {
+        vibble::grid::Grid& grid_service = grid();
+        SDL_Point           cursor_index = grid_service.world_to_index(self_->world_xz_point(), resolution);
+        int                 cursor_y     = self_->world_y();
+        for (const axis::WorldPos& delta : checkpoints) {
+            const SDL_Point delta_xz{ delta.x, delta.z };
+            const SDL_Point delta_indices = grid_service.convert_resolution(delta_xz, 0, resolution);
+            cursor_index.x += delta_indices.x;
+            cursor_index.y += delta_indices.y;
+            cursor_y += delta.y;
+            const SDL_Point next_world = grid_service.index_to_world(cursor_index, resolution);
+            absolute.push_back(axis::WorldPos{ next_world.x, cursor_y, next_world.y });
+        }
+    } else {
+        absolute = checkpoints;
+    }
+
+    const std::vector<axis::WorldPos> requested_absolute = absolute;
+    const std::vector<axis::WorldPos> sanitized_checkpoints =
+        sanitizer_3d_.sanitize(*self_, requested_absolute, visited_thresh_);
+    plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid());
+    plan3d_.world_start = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
+    plan3d_.override_non_locked = override_non_locked;
+    final_dest_3d = plan3d_.final_dest;
+
+    // 3D plan runs in its own mode and must not reuse stale 2D plan state.
+    plan_.strides.clear();
+    plan_.sanitized_checkpoints.clear();
+    plan_.final_dest = self_->world_xz_point();
+    plan_.world_start = self_->world_xz_point();
+    final_dest = plan_.final_dest;
+
+    if (debug_logging) {
+        std::ostringstream oss;
+        oss << "[AnimationUpdate] auto_move_3d plan asset=" << asset_name
+            << " final_dest=(" << final_dest_3d.x << "," << final_dest_3d.y << "," << final_dest_3d.z << ")"
+            << " sanitized_points=" << plan3d_.sanitized_checkpoints.size()
+            << " strides=" << plan3d_.strides.size();
+        vibble::log::info(oss.str());
+    }
+
+    if (plan3d_.strides.empty()) {
+        bool queued_fallback = false;
+        axis::WorldPos fallback_target{0, 0, 0};
+        if (!plan3d_.sanitized_checkpoints.empty()) {
+            fallback_target = plan3d_.sanitized_checkpoints.front();
+            queued_fallback = true;
+        } else if (!requested_absolute.empty()) {
+            fallback_target = requested_absolute.front();
+            queued_fallback = true;
+        }
+
+        if (queued_fallback) {
+            const axis::WorldPos fallback_delta =
+                animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, fallback_target);
+            int fallback_step = vibble::grid::delta(resolution);
+            if (fallback_step <= 0) {
+                fallback_step = vibble::grid::delta(grid().default_resolution());
+            }
+            if (fallback_step <= 0) {
+                fallback_step = 1;
+            }
+
+            const axis::WorldPos bounded_delta{
+                bounded_step_toward(fallback_delta.x, fallback_step),
+                bounded_step_toward(fallback_delta.y, fallback_step),
+                bounded_step_toward(fallback_delta.z, fallback_step)
+            };
+
+            if (bounded_delta.x != 0 || bounded_delta.y != 0 || bounded_delta.z != 0) {
+                move_3d(bounded_delta,
+                        animation_update::detail::kDefaultAnimation,
+                        true,
+                        override_non_locked);
+                active_plan_mode_ = ActivePlanMode::None;
+                if (self_) {
+                    self_->needs_target = false;
+                }
+                if (debug_logging) {
+                    std::ostringstream oss;
+                    oss << "[AnimationUpdate] auto_move_3d fallback asset=" << asset_name
+                        << " target=(" << fallback_target.x << "," << fallback_target.y << "," << fallback_target.z << ")"
+                        << " delta=(" << bounded_delta.x << "," << bounded_delta.y << "," << bounded_delta.z << ")"
+                        << " step=" << fallback_step;
+                    vibble::log::info(oss.str());
+                }
+                return;
+            }
+        }
+
+        if (debug_logging) {
+            vibble::log::info("[AnimationUpdate] auto_move_3d plan produced no strides for asset=" + asset_name);
+        }
+        active_plan_mode_ = ActivePlanMode::None;
+        if (self_) {
+            self_->needs_target = true;
+        }
+        return;
+    }
+
+    if (runtime_) {
+        runtime_->reset_plan_progress();
+    }
+
+    active_plan_mode_ = ActivePlanMode::Plan3D;
+    input_event_ = true;
+    if (self_) {
+        self_->needs_target = false;
+    }
+}
+
 void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                                 int visited_thresh_px,
                                 std::optional<int> checkpoint_resolution,
@@ -375,6 +578,14 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     final_dest = plan_.final_dest;
     plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
+
+    // 2D plan runs in its own mode and must not reuse stale 3D plan state.
+    plan3d_.strides.clear();
+    plan3d_.sanitized_checkpoints.clear();
+    plan3d_.final_dest = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
+    plan3d_.world_start = plan3d_.final_dest;
+    final_dest_3d = plan3d_.final_dest;
+
     if (debug_logging) {
         std::ostringstream oss;
         oss << "[AnimationUpdate] auto_move plan asset=" << asset_name
@@ -414,6 +625,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                      animation_update::detail::kDefaultAnimation,
                      true,
                      override_non_locked);
+                active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
                 }
@@ -432,6 +644,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move plan produced no strides for asset=" + asset_name);
         }
+        active_plan_mode_ = ActivePlanMode::None;
         if (self_) {
             self_->needs_target = true;
         }
@@ -442,6 +655,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
         runtime_->reset_plan_progress();
     }
 
+    active_plan_mode_ = ActivePlanMode::Plan2D;
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
@@ -464,10 +678,26 @@ void AnimationUpdate::move(SDL_Point delta,
     input_event_               = true;
 }
 
+void AnimationUpdate::move_3d(const axis::WorldPos& delta,
+                              const std::string&    animation,
+                              bool                  resort_z,
+                              bool                  override_non_locked) {
+    if (!self_ || !self_->info) {
+        return;
+    }
+
+    pending_move_3d_.delta = delta;
+    pending_move_3d_.animation_id = animation;
+    pending_move_3d_.resort_z = resort_z;
+    pending_move_3d_.override_non_locked = override_non_locked;
+    move_pending_3d_ = true;
+    input_event_ = true;
+}
+
 void AnimationUpdate::begin_reverse_current_animation_until_stop() {
     pending_reverse_command_ = ReversePlaybackCommand::ReverseUntilStopCurrentAnimation;
     input_event_ = true;
-    if (!move_pending_ && runtime_) {
+    if (!move_pending_ && !move_pending_3d_ && runtime_) {
         runtime_->begin_reverse_current_animation_until_stop();
         pending_reverse_command_ = ReversePlaybackCommand::None;
     }
@@ -476,7 +706,7 @@ void AnimationUpdate::begin_reverse_current_animation_until_stop() {
 void AnimationUpdate::begin_reverse_current_animation_to_default() {
     pending_reverse_command_ = ReversePlaybackCommand::ReverseToDefaultAtStart;
     input_event_ = true;
-    if (!move_pending_ && runtime_) {
+    if (!move_pending_ && !move_pending_3d_ && runtime_) {
         runtime_->begin_reverse_current_animation_to_default();
         pending_reverse_command_ = ReversePlaybackCommand::None;
     }
@@ -485,7 +715,7 @@ void AnimationUpdate::begin_reverse_current_animation_to_default() {
 void AnimationUpdate::stop_reverse_current_animation() {
     pending_reverse_command_ = ReversePlaybackCommand::Stop;
     input_event_ = true;
-    if (!move_pending_ && runtime_) {
+    if (!move_pending_ && !move_pending_3d_ && runtime_) {
         runtime_->stop_reverse_current_animation();
         pending_reverse_command_ = ReversePlaybackCommand::None;
     }
@@ -494,17 +724,31 @@ void AnimationUpdate::stop_reverse_current_animation() {
 void AnimationUpdate::clear_movement_plan() {
     const std::string asset_name = self_ && self_->info ? self_->info->name : std::string{"<unknown>"};
     const bool debug_logging = debug_enabled_;
+
     plan_.strides.clear();
     plan_.sanitized_checkpoints.clear();
     plan_.final_dest = self_ ? self_->world_xz_point() : SDL_Point{ 0, 0 };
+    plan_.world_start = plan_.final_dest;
     plan_.override_non_locked = true;
-    final_dest       = plan_.final_dest;
-    input_event_     = true;
+    final_dest = plan_.final_dest;
+
+    plan3d_.strides.clear();
+    plan3d_.sanitized_checkpoints.clear();
+    plan3d_.final_dest = self_
+        ? axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() }
+        : axis::WorldPos{ 0, 0, 0 };
+    plan3d_.world_start = plan3d_.final_dest;
+    plan3d_.override_non_locked = true;
+    final_dest_3d = plan3d_.final_dest;
+
+    active_plan_mode_ = ActivePlanMode::None;
+    input_event_ = true;
 
     if (debug_logging) {
         std::ostringstream oss;
         oss << "[AnimationUpdate] clear_movement_plan asset=" << asset_name
-            << " final_dest=(" << final_dest.x << "," << final_dest.y << ")";
+            << " final_dest_2d=(" << final_dest.x << "," << final_dest.y << ")"
+            << " final_dest_3d=(" << final_dest_3d.x << "," << final_dest_3d.y << "," << final_dest_3d.z << ")";
         vibble::log::info(oss.str());
     }
 
@@ -517,6 +761,8 @@ void AnimationUpdate::clear_movement_plan() {
 }
 
 void AnimationUpdate::cancel_all_movement() {
+    move_pending_3d_ = false;
+    pending_move_3d_ = MoveRequest3D{};
     clear_movement_plan();
     move(SDL_Point{0, 0}, animation_update::detail::kDefaultAnimation, true, true);
 }
@@ -533,6 +779,11 @@ AnimationUpdate::MoveRequest AnimationUpdate::consume_move_request() {
     pending_move_.reverse_command = pending_reverse_command_;
     pending_reverse_command_ = ReversePlaybackCommand::None;
     return pending_move_;
+}
+
+AnimationUpdate::MoveRequest3D AnimationUpdate::consume_move_request_3d() {
+    move_pending_3d_ = false;
+    return pending_move_3d_;
 }
 
 bool AnimationUpdate::consume_input_event() {

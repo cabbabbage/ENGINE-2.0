@@ -1119,7 +1119,7 @@ void AssetInfoUI::open()  {
     container_.open();
     apply_camera_override(true);
 }
-void AssetInfoUI::close() {
+void AssetInfoUI::close(bool flush_changes) {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
     animation_editor_fullscreen_mode_ = false;
@@ -1136,7 +1136,7 @@ void AssetInfoUI::close() {
 
         forcing_high_quality_rendering_ = false;
     }
-    if (save_coordinator_) {
+    if (flush_changes && save_coordinator_) {
         save_coordinator_->flush_now("AssetInfoUI close");
     }
 }

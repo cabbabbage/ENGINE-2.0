@@ -58,6 +58,11 @@ namespace world {
 
 class WarpedScreenGrid {
 public:
+    enum class CameraTransitionState {
+        Idle = 0,
+        BlendingToNewRoom = 1,
+        Settling = 2
+    };
 
     static constexpr float kMinHeightAnchors = 0.5f;
     static constexpr float kMaxHeightAnchors = 20.0f;
@@ -101,7 +106,26 @@ public:
         float vertical_scale = 1.0f;
         float distance_scale = 1.0f;
         float horizon_fade_alpha = 1.0f;
-};
+    };
+
+    struct CameraTransitionSettings {
+        // First-order dt-stable damping (1/seconds). Larger values settle faster.
+        float transition_damping = 9.0f;
+        // World-pixel velocity cap for camera center movement.
+        float max_camera_velocity = 2200.0f;
+        // Keep settling toward room target briefly after movement stops.
+        float settle_duration_after_stop = 0.20f;
+        // Optional movement look-ahead scale. 0 disables look-ahead.
+        float movement_look_ahead_weight = 0.12f;
+    };
+
+    struct CameraTransitionTelemetry {
+        CameraTransitionState state = CameraTransitionState::Idle;
+        SDL_FPoint target{0.0f, 0.0f};
+        SDL_FPoint velocity{0.0f, 0.0f};
+        float blend_factor = 0.0f;
+        float settle_time_remaining = 0.0f;
+    };
 
     struct GridBounds {
         float left = 0.0f;
@@ -240,6 +264,9 @@ public:
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
     const CameraController::State& camera_state() const { return camera_.state(); }
+    const CameraTransitionSettings& transition_settings() const { return transition_settings_; }
+    const CameraTransitionTelemetry& camera_transition_telemetry() const { return transition_telemetry_; }
+    static const char* transition_state_name(CameraTransitionState state);
     std::uint64_t camera_state_version() const;
     std::uint64_t projection_state_version() const { return camera_state_version(); }
     const std::vector<VisibleTraversalEntry>& visible_traversal_entries() const { return visible_traversal_entries_; }
@@ -331,4 +358,11 @@ private:
     bool depth_debug_logging_ = false;
     std::optional<float> tilt_override_deg_{};
     const Asset* tracked_player_asset_ = nullptr;
+    CameraTransitionSettings transition_settings_{};
+    CameraTransitionTelemetry transition_telemetry_{};
+    Room* previous_transition_room_ = nullptr;
+    SDL_FPoint previous_player_world_{0.0f, 0.0f};
+    bool previous_player_world_valid_ = false;
+    bool previous_player_moving_ = false;
+    float settle_time_remaining_ = 0.0f;
 };

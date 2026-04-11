@@ -44,7 +44,7 @@ class AssetInfoUI {
     void set_info(const std::shared_ptr<AssetInfo>& info);
     void clear_info();
     void open();
-    void close();
+    void close(bool flush_changes = true);
     void toggle();
     bool is_visible() const { return visible_; }
     bool is_locked() const;

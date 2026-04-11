@@ -8221,7 +8221,8 @@ void RoomEditor::apply_asset_editor_subview_change(AssetEditorSubview subview, b
         info_ui_->set_animation_editor_fullscreen_mode(false);
         info_ui_->close_animation_editor_panel();
         if (info_ui_->is_visible()) {
-            info_ui_->close();
+            // Avoid forcing an immediate save flush while switching editor subviews.
+            info_ui_->close(false);
         }
         info_ui_->clear_panel_bounds_override();
         if (active_modal_ == ActiveModal::AssetInfo) {
@@ -8427,7 +8428,8 @@ void RoomEditor::update_asset_editor_layout() {
         std::function<void()> on_left = []() {};
         std::function<void()> on_right = []() {};
 
-        if (anchor_mode_active() && anchor_edit_.target_asset && anchor_edit_.target_asset->info) {
+        if (anchor_mode_active() && is_asset_pointer_live(anchor_edit_.target_asset) &&
+            anchor_edit_.target_asset->info) {
             const std::string animation_label =
                 anchor_edit_.animation_id.empty() ? std::string("No Animation") : anchor_edit_.animation_id;
 
@@ -8444,7 +8446,8 @@ void RoomEditor::update_asset_editor_layout() {
             on_down = [this]() { navigate_anchor_animation(1); };
             on_left = [this]() { navigate_anchor_frame(-1); };
             on_right = [this]() { navigate_anchor_frame(1); };
-        } else if (oval_mode_active() && oval_edit_.target_asset && oval_edit_.target_asset->info) {
+        } else if (oval_mode_active() && is_asset_pointer_live(oval_edit_.target_asset) &&
+                   oval_edit_.target_asset->info) {
             const std::string animation_label =
                 oval_edit_.animation_id.empty() ? std::string("No Animation") : oval_edit_.animation_id;
             std::string frame_label = "Frame";
@@ -8460,7 +8463,8 @@ void RoomEditor::update_asset_editor_layout() {
             on_down = [this]() { navigate_oval_animation(1); };
             on_left = [this]() { navigate_oval_frame(-1); };
             on_right = [this]() { navigate_oval_frame(1); };
-        } else if (movement_mode_active() && movement_edit_.target_asset && movement_edit_.target_asset->info) {
+        } else if (movement_mode_active() && is_asset_pointer_live(movement_edit_.target_asset) &&
+                   movement_edit_.target_asset->info) {
             const std::string animation_label =
                 movement_edit_.animation_id.empty() ? std::string("No Animation") : movement_edit_.animation_id;
 
@@ -8477,7 +8481,8 @@ void RoomEditor::update_asset_editor_layout() {
             on_down = [this]() { navigate_movement_animation(1); };
             on_left = [this]() { navigate_movement_frame(-1); };
             on_right = [this]() { navigate_movement_frame(1); };
-        } else if (hitbox_mode_active() && hitbox_edit_.target_asset && hitbox_edit_.target_asset->info) {
+        } else if (hitbox_mode_active() && is_asset_pointer_live(hitbox_edit_.target_asset) &&
+                   hitbox_edit_.target_asset->info) {
             const std::string animation_label =
                 hitbox_edit_.animation_id.empty() ? std::string("No Animation") : hitbox_edit_.animation_id;
             std::string frame_label = "Frame";
@@ -8493,7 +8498,8 @@ void RoomEditor::update_asset_editor_layout() {
             on_down = [this]() { navigate_hitbox_animation(1); };
             on_left = [this]() { navigate_hitbox_frame(-1); };
             on_right = [this]() { navigate_hitbox_frame(1); };
-        } else if (attack_box_mode_active() && attack_box_edit_.target_asset && attack_box_edit_.target_asset->info) {
+        } else if (attack_box_mode_active() && is_asset_pointer_live(attack_box_edit_.target_asset) &&
+                   attack_box_edit_.target_asset->info) {
             const std::string animation_label =
                 attack_box_edit_.animation_id.empty() ? std::string("No Animation") : attack_box_edit_.animation_id;
             std::string frame_label = "Frame";
@@ -12591,11 +12597,13 @@ void RoomEditor::exit_anchor_edit_mode(bool flush_immediately) {
     }
     close_anchor_candidate_editor();
 
-    if (flush_immediately) {
+    const bool target_live = is_asset_pointer_live(anchor_edit_.target_asset);
+
+    if (flush_immediately && target_live) {
         persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority::Immediate, true);
     }
 
-    if (anchor_edit_.target_asset && anchor_edit_.had_static_frame_before) {
+    if (target_live && anchor_edit_.target_asset && anchor_edit_.had_static_frame_before) {
         anchor_edit_.target_asset->static_frame = anchor_edit_.static_frame_before;
     }
 
@@ -12652,7 +12660,9 @@ void RoomEditor::exit_oval_anchor_edit_mode(bool flush_immediately) {
         return;
     }
 
-    if (flush_immediately && oval_edit_.dirty_since_last_flush) {
+    const bool target_live = is_asset_pointer_live(oval_edit_.target_asset);
+
+    if (flush_immediately && target_live && oval_edit_.dirty_since_last_flush) {
         (void)persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Immediate,
                                     true,
                                     "Oval Anchor Edit",
@@ -12661,7 +12671,7 @@ void RoomEditor::exit_oval_anchor_edit_mode(bool flush_immediately) {
 
     release_oval_attachment_lock();
 
-    if (oval_edit_.target_asset && oval_edit_.had_static_frame_before) {
+    if (target_live && oval_edit_.target_asset && oval_edit_.had_static_frame_before) {
         oval_edit_.target_asset->static_frame = oval_edit_.static_frame_before;
     }
 
@@ -13647,11 +13657,13 @@ void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
         return;
     }
 
-    if (persist_changes && movement_edit_.dirty_since_last_flush) {
+    const bool target_live = is_asset_pointer_live(movement_edit_.target_asset);
+
+    if (persist_changes && target_live && movement_edit_.dirty_since_last_flush) {
         persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Immediate);
     }
 
-    if (movement_edit_.target_asset && movement_edit_.had_static_frame_before) {
+    if (target_live && movement_edit_.target_asset && movement_edit_.had_static_frame_before) {
         movement_edit_.target_asset->static_frame = movement_edit_.static_frame_before;
     }
 
@@ -13668,11 +13680,13 @@ void RoomEditor::exit_hitbox_edit_mode(bool persist_changes) {
         return;
     }
 
-    if (persist_changes && hitbox_edit_.dirty_since_last_flush) {
+    const bool target_live = is_asset_pointer_live(hitbox_edit_.target_asset);
+
+    if (persist_changes && target_live && hitbox_edit_.dirty_since_last_flush) {
         persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority::Immediate, true);
     }
 
-    if (hitbox_edit_.target_asset && hitbox_edit_.had_static_frame_before) {
+    if (target_live && hitbox_edit_.target_asset && hitbox_edit_.had_static_frame_before) {
         hitbox_edit_.target_asset->static_frame = hitbox_edit_.static_frame_before;
     }
 
@@ -13690,11 +13704,13 @@ void RoomEditor::exit_attack_box_edit_mode(bool persist_changes) {
         return;
     }
 
-    if (persist_changes && attack_box_edit_.dirty_since_last_flush) {
+    const bool target_live = is_asset_pointer_live(attack_box_edit_.target_asset);
+
+    if (persist_changes && target_live && attack_box_edit_.dirty_since_last_flush) {
         persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority::Immediate, true);
     }
 
-    if (attack_box_edit_.target_asset && attack_box_edit_.had_static_frame_before) {
+    if (target_live && attack_box_edit_.target_asset && attack_box_edit_.had_static_frame_before) {
         attack_box_edit_.target_asset->static_frame = attack_box_edit_.static_frame_before;
     }
 
@@ -13713,8 +13729,9 @@ void RoomEditor::validate_movement_edit_target() {
     }
 
     Asset* target = movement_edit_.target_asset;
-    if (!enabled_ || !target || !target->info || target->dead) {
-        exit_movement_edit_mode(true);
+    const bool target_live = is_asset_pointer_live(target);
+    if (!enabled_ || !target || !target_live || !target->info || target->dead) {
+        exit_movement_edit_mode(target_live);
         return;
     }
     if (selected_assets_.empty() || selected_assets_.front() != target) {
@@ -15142,8 +15159,9 @@ void RoomEditor::validate_anchor_edit_target() {
     }
 
     Asset* target = anchor_edit_.target_asset;
-    if (!enabled_ || !target || !target->info || target->dead) {
-        exit_anchor_edit_mode(true);
+    const bool target_live = is_asset_pointer_live(target);
+    if (!enabled_ || !target || !target_live || !target->info || target->dead) {
+        exit_anchor_edit_mode(target_live);
         return;
     }
     if (selected_assets_.empty() || selected_assets_.front() != target) {
@@ -15172,8 +15190,9 @@ void RoomEditor::validate_oval_edit_target() {
     }
 
     Asset* target = oval_edit_.target_asset;
-    if (!enabled_ || !target || !target->info || target->dead) {
-        exit_oval_anchor_edit_mode(true);
+    const bool target_live = is_asset_pointer_live(target);
+    if (!enabled_ || !target || !target_live || !target->info || target->dead) {
+        exit_oval_anchor_edit_mode(target_live);
         return;
     }
     if (selected_assets_.empty() || selected_assets_.front() != target) {
@@ -15203,8 +15222,9 @@ void RoomEditor::validate_hitbox_edit_target() {
     }
 
     Asset* target = hitbox_edit_.target_asset;
-    if (!enabled_ || !target || !target->info || target->dead) {
-        exit_hitbox_edit_mode(true);
+    const bool target_live = is_asset_pointer_live(target);
+    if (!enabled_ || !target || !target_live || !target->info || target->dead) {
+        exit_hitbox_edit_mode(target_live);
         return;
     }
     if (selected_assets_.empty() || selected_assets_.front() != target) {
@@ -15231,8 +15251,9 @@ void RoomEditor::validate_attack_box_edit_target() {
     }
 
     Asset* target = attack_box_edit_.target_asset;
-    if (!enabled_ || !target || !target->info || target->dead) {
-        exit_attack_box_edit_mode(true);
+    const bool target_live = is_asset_pointer_live(target);
+    if (!enabled_ || !target || !target_live || !target->info || target->dead) {
+        exit_attack_box_edit_mode(target_live);
         return;
     }
     if (selected_assets_.empty() || selected_assets_.front() != target) {

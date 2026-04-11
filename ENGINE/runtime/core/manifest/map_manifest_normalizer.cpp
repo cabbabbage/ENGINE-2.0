@@ -491,10 +491,19 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
 
     map_info["rooms_data"] = nlohmann::json::object();
     map_info["rooms_data"]["spawn"] = std::move(spawn_room);
+    // Camera runtime defaults:
+    // - transition_damping: dt-stable response speed (1/seconds)
+    // - max_camera_velocity: world-pixel velocity cap to prevent jitter/overshoot
+    // - settle_duration_after_stop: post-stop carry time before returning to Idle
+    // - movement_look_ahead_weight: optional movement look-ahead contribution
     map_info["camera_settings"] = nlohmann::json::object({
         {"smooth_motion_height", true},
         {"base_height_px", 720.0},
-        {"min_visible_screen_ratio", 0.01}
+        {"min_visible_screen_ratio", 0.01},
+        {"transition_damping", 9.0},
+        {"max_camera_velocity", 2200.0},
+        {"settle_duration_after_stop", 0.20},
+        {"movement_look_ahead_weight", 0.12}
     });
     map_info["map_grid_settings"] = nlohmann::json::object({{"grid_resolution", 6}});
     map_info["audio"] = nlohmann::json::object({

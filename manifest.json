@@ -1389,17 +1389,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1416,17 +1416,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1485,17 +1485,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1512,17 +1512,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1549,17 +1549,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1576,17 +1576,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1613,17 +1613,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1669,17 +1669,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1696,17 +1696,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1765,17 +1765,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1792,17 +1792,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1866,17 +1866,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1893,17 +1893,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1967,17 +1967,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -1994,17 +1994,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2063,17 +2063,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2090,17 +2090,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2164,17 +2164,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2191,17 +2191,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2260,17 +2260,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2287,17 +2287,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2324,17 +2324,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2351,17 +2351,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2388,17 +2388,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2415,17 +2415,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2484,17 +2484,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2511,17 +2511,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2580,17 +2580,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2607,17 +2607,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2676,17 +2676,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2703,17 +2703,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2777,17 +2777,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2804,17 +2804,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2878,17 +2878,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2905,17 +2905,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -2974,17 +2974,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -3001,17 +3001,17 @@
                 "flip_vertical": false,
                 "hidden": false,
                 "light": {
-                  "cast_shadows": true,
+                  "cast_shadows": false,
                   "color": [
                     255,
                     236,
                     100
                   ],
                   "enabled": true,
-                  "falloff": 5.409999847412109,
-                  "intensity": 4.730000019073486,
-                  "radius": 18.0,
-                  "shadow_strength": 0.07999999821186066
+                  "falloff": 8.0,
+                  "intensity": 7.519999980926514,
+                  "radius": 33.0,
+                  "shadow_strength": 0.0
                 },
                 "name": "anchor_1",
                 "resolve_x": true,
@@ -3078,7 +3078,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 1.0,
+        "scale_percentage": 6.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -3344,6 +3344,57 @@
       "asset_directory": "resources/assets/fountain",
       "asset_name": "fountain",
       "start": "default"
+    },
+    "frog": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/frog",
+      "asset_name": "frog",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "grass_1_fps_2": {
       "anchor_point_child_candidates": [],
@@ -8143,18 +8194,18 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 0.8899999856948853,
-        "blur_px": 0.17999999225139618,
+        "behind_layer_light_strength_multiplier": 1.090000033378601,
+        "blur_px": 0.0,
         "boundary_min_visible_screen_ratio": 0.014999999664723873,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
         "depth_of_field_enabled": true,
-        "front_layer_light_strength_multiplier": 1.0,
+        "front_layer_light_strength_multiplier": 0.6299999952316284,
         "layer_depth_curve": 75.33999633789063,
         "layer_depth_interval": 68.0,
         "max_cull_depth": 7960.0,
         "min_visible_screen_ratio": 0.0020000000949949026,
-        "radial_blur_px": 1.149999976158142
+        "radial_blur_px": 0.44999998807907104
       },
       "content_root": "content/forrest",
       "dev_map_settings": {},
@@ -8291,8 +8342,8 @@
           "curvyness": 2,
           "display_color": [
             242,
+            138,
             36,
-            192,
             255
           ],
           "edge_smoothness": 2,
@@ -8355,13 +8406,13 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -436,
-          "camera_center_dz": -214,
+          "camera_center_dx": -108,
+          "camera_center_dz": 404,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            36,
+            149,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -8446,8 +8497,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -732,
-              "dz": 188,
+              "dx": -68,
+              "dz": 444,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -8595,35 +8646,6 @@
                 }
               ],
               "display_name": "fly",
-              "dx": -490,
-              "dz": 239,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 12,
-              "min_number": 1,
-              "origional_height": 3000,
-              "origional_width": 3000,
-              "position": "Random",
-              "priority": 7,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-277f0d261e69"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly",
               "dx": -1219,
               "dz": -490,
               "enforce_spacing": false,
@@ -8635,7 +8657,7 @@
               "origional_height": 3000,
               "origional_width": 3000,
               "position": "Random",
-              "priority": 8,
+              "priority": 7,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
@@ -8664,12 +8686,42 @@
               "origional_height": 3000,
               "origional_width": 3000,
               "position": "Exact",
-              "priority": 9,
+              "priority": 8,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-f653b9fedaf4"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "fly"
+                }
+              ],
+              "display_name": "fly",
+              "dx": -1419,
+              "dz": -690,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3000,
+              "origional_width": 3000,
+              "position": "Exact",
+              "priority": 9,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-bda3dbfe3517"
             }
           ]
         }

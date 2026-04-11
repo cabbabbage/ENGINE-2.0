@@ -35,6 +35,8 @@ namespace {
     constexpr float  kBottomCullOverscanRatio = 0.40f;
     constexpr float  kNearHorizonSampleOffsetRatio = 0.02f;
     constexpr float  kMinNearHorizonSampleOffsetPx = 8.0f;
+    constexpr float  kCameraMovementSpeedEpsilon = 1.0f;
+    constexpr float  kLookAheadTimeSeconds = 0.12f;
 
     static inline Area make_rect_area(const std::string& name, SDL_Point center, int w, int h, int resolution) {
         const int left   = center.x - (w / 2);
@@ -318,6 +320,44 @@ struct ProjectionResult {
         }
         float result = static_cast<float>(scale);
         return result;
+    }
+
+    SDL_FPoint lerp_point(const SDL_FPoint& a, const SDL_FPoint& b, float t) {
+        return SDL_FPoint{
+            static_cast<float>(a.x + (b.x - a.x) * t),
+            static_cast<float>(a.y + (b.y - a.y) * t)
+        };
+    }
+
+    SDL_FPoint clamp_vector_magnitude(SDL_FPoint value, float max_magnitude) {
+        if (!std::isfinite(value.x) || !std::isfinite(value.y)) {
+            return SDL_FPoint{0.0f, 0.0f};
+        }
+        if (!std::isfinite(max_magnitude) || max_magnitude <= 0.0f) {
+            return value;
+        }
+        const float len = std::sqrt(value.x * value.x + value.y * value.y);
+        if (len <= max_magnitude || len <= 1.0e-6f) {
+            return value;
+        }
+        const float scale = max_magnitude / len;
+        return SDL_FPoint{value.x * scale, value.y * scale};
+    }
+
+    bool camera_transition_trace_enabled() {
+        static const bool enabled = [] {
+            const char* raw = SDL_getenv("VIBBLE_CAMERA_TRANSITION_TRACE");
+            if (!raw || !*raw) {
+                return false;
+            }
+            const std::string value(raw);
+            return value == "1" ||
+                   value == "true" ||
+                   value == "TRUE" ||
+                   value == "on" ||
+                   value == "ON";
+        }();
+        return enabled;
     }
 
     ProjectionResult project_world_point_internal(const CameraState& cam,
@@ -627,6 +667,17 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
     initial_params.height_px = settings_.base_height_px;
     initial_params.tilt_deg = camera_math::kDefaultCameraTiltDeg;
     camera_.reset(initial_params, start_center, settings_.base_height_px);
+    camera_.set_transition_damping(transition_settings_.transition_damping);
+    camera_.set_max_camera_velocity(transition_settings_.max_camera_velocity);
+    camera_.set_transition_debug_state(static_cast<int>(CameraTransitionState::Idle), 0.0f);
+    transition_telemetry_.state = CameraTransitionState::Idle;
+    transition_telemetry_.target = SDL_FPoint{
+        static_cast<float>(start_center.x),
+        static_cast<float>(start_center.y)
+    };
+    transition_telemetry_.velocity = SDL_FPoint{0.0f, 0.0f};
+    transition_telemetry_.blend_factor = 0.0f;
+    transition_telemetry_.settle_time_remaining = 0.0f;
     runtime_camera_height_ = camera_.current_height();
     runtime_pitch_deg_ = camera_.current_pitch_deg();
     runtime_pitch_rad_ = camera_.current_pitch_rad();
@@ -640,6 +691,19 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
 }
 
 WarpedScreenGrid::~WarpedScreenGrid() = default;
+
+const char* WarpedScreenGrid::transition_state_name(CameraTransitionState state) {
+    switch (state) {
+        case CameraTransitionState::Idle:
+            return "Idle";
+        case CameraTransitionState::BlendingToNewRoom:
+            return "BlendingToNewRoom";
+        case CameraTransitionState::Settling:
+            return "Settling";
+        default:
+            return "Unknown";
+    }
+}
 
 std::uint64_t WarpedScreenGrid::camera_state_version() const {
     (void)camera_state_cached();
@@ -819,10 +883,10 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
                          float dt,
                          bool dev_mode)
 {
-    // Keep the anchor unlocked in both modes so the projection math stays consistent.
-    // Lock to screen center so depth parallax remains visible on ground plane.
+    // Keep the anchor locked to screen center so depth parallax remains stable on the ground plane.
     lock_anchor_to_screen_center_ = true;
     tracked_player_asset_ = player;
+    const float safe_dt = (std::isfinite(dt) && dt > 0.0f) ? std::min(dt, 0.1f) : (1.0f / 60.0f);
 
     CameraParams cur_params;
     CameraParams neigh_params;
@@ -854,8 +918,6 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         cur_params.height_px = cur->camera_height_px;
         cur_params.tilt_deg = cur->camera_tilt_deg;
         cur_params.zoom_percent = cur->camera_zoom_percent;
-
-
     }
     Room* neigh = nullptr;
     if (finder) {
@@ -889,6 +951,8 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         t = std::clamp(t, 0.0, 1.0);
     }
 
+    camera_.set_transition_damping(transition_settings_.transition_damping);
+    camera_.set_max_camera_velocity(transition_settings_.max_camera_velocity);
     camera_.apply_room_targets(cur_params, neigh_params, t, refresh_requested, 20, dev_mode);
 
     const bool focus_override_active = camera_.has_focus_override();
@@ -898,26 +962,140 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         }
     }
 
-    if (dev_mode && focus_override_active) {
-        set_screen_center(camera_.state().focus_override);
-    } else if (!dev_mode && player) {
-        SDL_Point follow_center{
-            player->world_x(),
-            player->world_z()
-        };
-        set_screen_center(follow_center, false);
+    SDL_FPoint fallback_target = camera_.state().center;
+    if (player) {
+        fallback_target.x = static_cast<float>(player->world_x());
+        fallback_target.y = static_cast<float>(player->world_z());
     } else if (cur && cur->room_area) {
-        // Dev/room mode default: center on active room unless an explicit
-        // focus override is active.
-        set_screen_center(room_camera_center(cur));
-    } else if (player) {
-        set_screen_center(SDL_Point{
-            player->world_x(),
-            player->world_z()
-        });
+        const SDL_Point rc = room_camera_center(cur);
+        fallback_target.x = static_cast<float>(rc.x);
+        fallback_target.y = static_cast<float>(rc.y);
+    }
+    const SDL_FPoint cur_room_target = (cur && cur->room_area)
+        ? SDL_FPoint{static_cast<float>(room_camera_center(cur).x), static_cast<float>(room_camera_center(cur).y)}
+        : fallback_target;
+    const SDL_FPoint neigh_room_target = (neigh && neigh->room_area)
+        ? SDL_FPoint{static_cast<float>(room_camera_center(neigh).x), static_cast<float>(room_camera_center(neigh).y)}
+        : cur_room_target;
+    const SDL_FPoint blended_room_target = lerp_point(cur_room_target, neigh_room_target, static_cast<float>(t));
+
+    SDL_FPoint player_velocity{0.0f, 0.0f};
+    bool player_moving = false;
+    if (player) {
+        const SDL_FPoint player_world{
+            static_cast<float>(player->world_x()),
+            static_cast<float>(player->world_z())
+        };
+        if (previous_player_world_valid_ && safe_dt > 0.0f) {
+            player_velocity.x = (player_world.x - previous_player_world_.x) / safe_dt;
+            player_velocity.y = (player_world.y - previous_player_world_.y) / safe_dt;
+            const float speed = std::sqrt(player_velocity.x * player_velocity.x + player_velocity.y * player_velocity.y);
+            player_moving = speed > kCameraMovementSpeedEpsilon;
+        }
+        previous_player_world_ = player_world;
+        previous_player_world_valid_ = true;
+    } else {
+        previous_player_world_valid_ = false;
     }
 
+    const bool room_changed = (previous_transition_room_ != nullptr && cur != previous_transition_room_);
+    CameraTransitionState transition_state = transition_telemetry_.state;
+
+    if (room_changed) {
+        transition_state = CameraTransitionState::BlendingToNewRoom;
+    }
+
+    const float configured_settle = std::clamp(
+        std::isfinite(transition_settings_.settle_duration_after_stop)
+            ? transition_settings_.settle_duration_after_stop
+            : 0.0f,
+        0.0f,
+        10.0f);
+
+    const bool between_rooms = (cur && neigh && cur != neigh && t > 0.0 && t < 1.0);
+    if (player) {
+        if (player_moving) {
+            settle_time_remaining_ = configured_settle;
+            transition_state = between_rooms || room_changed
+                ? CameraTransitionState::BlendingToNewRoom
+                : CameraTransitionState::Idle;
+        } else {
+            if (previous_player_moving_) {
+                settle_time_remaining_ = configured_settle;
+                transition_state = CameraTransitionState::Settling;
+            } else if (transition_state == CameraTransitionState::Settling && settle_time_remaining_ > 0.0f) {
+                transition_state = CameraTransitionState::Settling;
+            } else if (!between_rooms) {
+                transition_state = CameraTransitionState::Idle;
+            }
+            if (transition_state == CameraTransitionState::Settling) {
+                settle_time_remaining_ = std::max(0.0f, settle_time_remaining_ - safe_dt);
+                if (settle_time_remaining_ <= 0.0f) {
+                    transition_state = CameraTransitionState::Idle;
+                }
+            }
+        }
+    } else if (!between_rooms) {
+        transition_state = CameraTransitionState::Idle;
+        settle_time_remaining_ = 0.0f;
+    }
+
+    SDL_FPoint desired_center = blended_room_target;
+    if (!dev_mode && player && player_moving) {
+        const float look_ahead_weight = std::clamp(
+            std::isfinite(transition_settings_.movement_look_ahead_weight)
+                ? transition_settings_.movement_look_ahead_weight
+                : 0.0f,
+            0.0f,
+            2.0f);
+        SDL_FPoint look_ahead{
+            player_velocity.x * kLookAheadTimeSeconds * look_ahead_weight,
+            player_velocity.y * kLookAheadTimeSeconds * look_ahead_weight
+        };
+        const float look_ahead_limit = std::max(0.0f, transition_settings_.max_camera_velocity) * 0.35f;
+        look_ahead = clamp_vector_magnitude(look_ahead, look_ahead_limit);
+        desired_center.x += look_ahead.x;
+        desired_center.y += look_ahead.y;
+    }
+
+    if (dev_mode && focus_override_active) {
+        // Explicit debug path: focus lock should hard-snap.
+        set_screen_center(camera_.state().focus_override, true);
+        transition_state = CameraTransitionState::Idle;
+        settle_time_remaining_ = 0.0f;
+        desired_center = SDL_FPoint{
+            static_cast<float>(camera_.state().focus_override.x),
+            static_cast<float>(camera_.state().focus_override.y)
+        };
+    } else {
+        set_screen_center(SDL_Point{
+            static_cast<int>(std::lround(desired_center.x)),
+            static_cast<int>(std::lround(desired_center.y))
+        }, false);
+    }
+
+    camera_.set_transition_debug_state(static_cast<int>(transition_state), static_cast<float>(t));
     camera_.tick(dt);
+    const CameraController::State& controller_state = camera_.state();
+    transition_telemetry_.state = transition_state;
+    transition_telemetry_.target = desired_center;
+    transition_telemetry_.velocity = controller_state.center_velocity;
+    transition_telemetry_.blend_factor = static_cast<float>(t);
+    transition_telemetry_.settle_time_remaining = settle_time_remaining_;
+
+    if (camera_transition_trace_enabled()) {
+        vibble::log::debug(
+            std::string("[CameraTransition] state=") + transition_state_name(transition_state) +
+            " target=(" + std::to_string(desired_center.x) + "," + std::to_string(desired_center.y) + ")" +
+            " velocity=(" + std::to_string(controller_state.center_velocity.x) + "," +
+            std::to_string(controller_state.center_velocity.y) + ")" +
+            " blend=" + std::to_string(static_cast<float>(t)) +
+            " settle_remaining=" + std::to_string(settle_time_remaining_));
+    }
+
+    previous_transition_room_ = cur;
+    previous_player_moving_ = player_moving;
+
     const CameraState& cam_state = camera_state_cached();
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;
@@ -1171,6 +1349,17 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         }
         target = it->get<bool>();
     };
+    auto read_transition_float = [&](const char* key, float fallback, float min_value, float max_value) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_number()) {
+            return fallback;
+        }
+        const float value = it->get<float>();
+        if (!std::isfinite(value)) {
+            return fallback;
+        }
+        return std::clamp(value, min_value, max_value);
+    };
     RealismSettings updated = settings_;
     read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
@@ -1195,6 +1384,30 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     }
     read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
     set_realism_settings(updated);
+
+    transition_settings_.transition_damping = read_transition_float(
+        "transition_damping",
+        transition_settings_.transition_damping,
+        0.0f,
+        200.0f);
+    transition_settings_.max_camera_velocity = read_transition_float(
+        "max_camera_velocity",
+        transition_settings_.max_camera_velocity,
+        1.0f,
+        100000.0f);
+    transition_settings_.settle_duration_after_stop = read_transition_float(
+        "settle_duration_after_stop",
+        transition_settings_.settle_duration_after_stop,
+        0.0f,
+        10.0f);
+    transition_settings_.movement_look_ahead_weight = read_transition_float(
+        "movement_look_ahead_weight",
+        transition_settings_.movement_look_ahead_weight,
+        0.0f,
+        2.0f);
+
+    camera_.set_transition_damping(transition_settings_.transition_damping);
+    camera_.set_max_camera_velocity(transition_settings_.max_camera_velocity);
 }
 
 nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
@@ -1209,6 +1422,10 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
+    result["transition_damping"] = transition_settings_.transition_damping;
+    result["max_camera_velocity"] = transition_settings_.max_camera_velocity;
+    result["settle_duration_after_stop"] = transition_settings_.settle_duration_after_stop;
+    result["movement_look_ahead_weight"] = transition_settings_.movement_look_ahead_weight;
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {

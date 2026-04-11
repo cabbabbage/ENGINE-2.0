@@ -1,7 +1,6 @@
 #include "bomb_controller.hpp"
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "assets/asset/Asset.hpp"
-#include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
 
 bomb_controller::bomb_controller(Asset* self)
@@ -16,14 +15,13 @@ bomb_controller::bomb_controller(Asset* self)
 void bomb_controller::on_update(const Input&) {
     constexpr int kExplosionRangePx = 700;
 
+    const auto& ctx = game_context();
     Asset* self = self_ptr();
-    Assets* assets = this->assets();
-    if (!self || !self->anim_ || !assets) {
+    if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
-    Asset* player = assets->player;
-
-    if (!player || player == self || player->dead || !player->active) {
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(ctx);
+    if (!player) {
         return;
     }
 
@@ -39,7 +37,7 @@ void bomb_controller::on_update(const Input&) {
         self->anim_->auto_move(player);
     }
 
-    animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(ctx);
 }
 
 void bomb_controller::on_process_pending_attacks(Asset& self) {

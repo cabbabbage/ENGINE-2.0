@@ -4,7 +4,6 @@
 #include "animation/controllers/shared/controller_path_utils.hpp"
 #include "animation/controllers/shared/controller_visit_threshold.hpp"
 #include "assets/asset/Asset.hpp"
-#include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
 
 frog_controller::frog_controller(Asset* self)
@@ -17,13 +16,13 @@ frog_controller::frog_controller(Asset* self)
 }
 
 void frog_controller::on_update(const Input&) {
+    const auto& ctx = game_context();
     Asset* self = self_ptr();
-    Assets* assets = this->assets();
-    if (!self || !self->anim_ || !assets) {
+    if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
 
-    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(self, assets);
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(ctx);
     if (!player) {
         return;
     }
@@ -40,13 +39,13 @@ void frog_controller::on_update(const Input&) {
         }
         const int visit_threshold = controller_utils::controller_visit_threshold(self, path);
         self->anim_->auto_move(path, visit_threshold);
-        animation_update::custom_controllers::dispatch_contact_attack(self, player);
+        animation_update::custom_controllers::dispatch_contact_attack(ctx);
         return;
     }
 
     self->anim_->auto_move(player);
 
-    animation_update::custom_controllers::dispatch_contact_attack(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(ctx);
 }
 
 void frog_controller::on_process_pending_attacks(Asset& self) {

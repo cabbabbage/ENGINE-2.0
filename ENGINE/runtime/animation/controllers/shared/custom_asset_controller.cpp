@@ -45,6 +45,7 @@ CustomAssetController::CustomAssetController(Asset* self)
 CustomAssetController::~CustomAssetController() = default;
 
 void CustomAssetController::update(const Input& in) {
+    game_context_ = custom_controllers::build_controller_game_context(self_, assets());
     tick_anchor_candidate_attachments();
     on_update(in);
 }

@@ -5,7 +5,6 @@
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "animation/controllers/shared/custom_asset_controller.hpp"
 #include "assets/asset/Asset.hpp"
-#include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
 
 namespace animation_update::custom_controllers {
@@ -36,13 +35,13 @@ void WanderControllerBehavior::tick([[maybe_unused]] const Input& in) {
         return;
     }
 
+    const auto& ctx = controller_->game_context();
     Asset* self = controller_->self_ptr();
-    Assets* assets = controller_->assets();
-    if (!self || !self->anim_ || !assets) {
+    if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
 
-    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(self, assets);
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(ctx);
     if (!player) {
         return;
     }
@@ -58,7 +57,7 @@ void WanderControllerBehavior::tick([[maybe_unused]] const Input& in) {
         self->anim_->auto_move(get_random_target());
     }
 
-    animation_update::custom_controllers::dispatch_contact_attack(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(ctx);
 }
 
 SDL_Point WanderControllerBehavior::get_random_target() {

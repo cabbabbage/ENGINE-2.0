@@ -1,38 +1,32 @@
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
 
 #include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/controller_game_context.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace animation_update::custom_controllers {
 
-namespace {
-
-bool is_valid_player_target(Asset* self, Asset* player) {
-    if (!player || !self || player == self) {
-        return false;
-    }
-
-    if (player->dead || !player->active) {
-        return false;
-    }
-
-    return true;
+Asset* resolve_valid_player_target(const ControllerGameContext& context) {
+    return context.player_is_valid() ? context.resolved_player : nullptr;
 }
 
-} // namespace
-
 Asset* resolve_valid_player_target(Asset* self, Assets* assets) {
-    if (!self || !assets) {
-        return nullptr;
-    }
+    const ControllerGameContext context = build_controller_game_context(self, assets);
+    return resolve_valid_player_target(context);
+}
 
-    Asset* player = assets->player;
-    return is_valid_player_target(self, player) ? player : nullptr;
+void dispatch_contact_attack(const ControllerGameContext& context) {
+    Asset* self = context.self;
+    Asset* player = resolve_valid_player_target(context);
+    if (!self || !player) {
+        return;
+    }
+    AttackDetectionHelper::send_attack_if_hit(self, player);
 }
 
 void dispatch_contact_attack(Asset* self, Asset* player) {
-    if (!is_valid_player_target(self, player)) {
+    if (!self || !player || self == player || player->dead || !player->active) {
         return;
     }
 

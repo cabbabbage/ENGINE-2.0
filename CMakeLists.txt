@@ -309,6 +309,7 @@ add_executable(engine_tests
     ENGINE/tests/test_render_dof_composite_target.cpp
     ENGINE/tests/test_floor_light_mask.cpp
     ENGINE/tests/test_dynamic_boundary_size_variation.cpp
+    ENGINE/tests/test_generate_trails_geometry.cpp
   )
 
 target_include_directories(engine_tests

@@ -15,6 +15,7 @@ class Input;
 namespace animation_update::custom_controllers {
 
 class WanderControllerBehavior;
+class RandomOrbit3DControllerBehavior;
 
 } // namespace animation_update::custom_controllers
 
@@ -38,6 +39,7 @@ protected:
 
 private:
     friend class animation_update::custom_controllers::WanderControllerBehavior;
+    friend class animation_update::custom_controllers::RandomOrbit3DControllerBehavior;
 
     struct AnchorCandidateAttachment {
         std::string anchor_name;

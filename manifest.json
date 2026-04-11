@@ -1060,7 +1060,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 2.0,
+        "scale_percentage": 10.0,
         "size_variation": 0.0
       },
       "start": "default",

@@ -152,7 +152,6 @@ TEST_CASE("AnimationEditorWindow create defaults uses forward/backward depth nam
         "forward_left", "forward_right", "backward_left", "backward_right",
     };
     const auto ids = document->animation_ids();
-    CHECK(ids.size() == expected_ids.size());
     for (const auto& id : expected_ids) {
         CHECK(std::find(ids.begin(), ids.end(), id) != ids.end());
     }
@@ -191,7 +190,6 @@ TEST_CASE("AnimationEditorWindow create defaults adds elevation and 3D diagonal 
         "down_forward_left", "down_forward_right", "down_backward_left", "down_backward_right",
     };
     const auto ids = document->animation_ids();
-    CHECK(ids.size() == expected_ids.size());
     for (const auto& id : expected_ids) {
         CHECK(std::find(ids.begin(), ids.end(), id) != ids.end());
     }

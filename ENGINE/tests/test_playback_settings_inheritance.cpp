@@ -7,7 +7,9 @@
 
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "devtools/asset_editor/animation_editor_window/PanelLayoutConstants.hpp"
+#define private public
 #include "devtools/asset_editor/animation_editor_window/PlaybackSettingsPanel.hpp"
+#undef private
 
 #include <nlohmann/json.hpp>
 
@@ -101,8 +103,11 @@ TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is togg
         panel.handle_event(up);
     };
 
-    const int checkbox_stride = DMCheckbox::height() + 8;
-    click_checkbox(animation_editor::kPanelPadding + 6, animation_editor::kPanelPadding + 6);
+    REQUIRE(panel.inherit_geometry_checkbox_);
+    SDL_Rect inherit_rect = panel.inherit_geometry_checkbox_->rect();
+    REQUIRE(inherit_rect.w > 0);
+    REQUIRE(inherit_rect.h > 0);
+    click_checkbox(inherit_rect.x + inherit_rect.w / 2, inherit_rect.y + inherit_rect.h / 2);
 
     auto after_inherit_on = document->animation_payload_json("derived");
     REQUIRE(after_inherit_on.has_value());
@@ -111,8 +116,10 @@ TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is togg
     CHECK((*after_inherit_on)["on_end"] == "reverse");
 
     panel.update();
-    click_checkbox(animation_editor::kPanelPadding + 6,
-                   animation_editor::kPanelPadding + checkbox_stride * 2 + 6);
+    inherit_rect = panel.inherit_geometry_checkbox_->rect();
+    REQUIRE(inherit_rect.w > 0);
+    REQUIRE(inherit_rect.h > 0);
+    click_checkbox(inherit_rect.x + inherit_rect.w / 2, inherit_rect.y + inherit_rect.h / 2);
 
     auto after_inherit_off = document->animation_payload_json("derived");
     REQUIRE(after_inherit_off.has_value());

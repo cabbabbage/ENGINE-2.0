@@ -109,6 +109,12 @@ void check_local_movement_payload(const nlohmann::json& payload,
     CHECK(payload["movement_total"]["dx"] == total_dx);
     CHECK(payload["movement_total"]["dy"] == total_dy);
     CHECK(payload["movement_total"]["dz"] == total_dz);
+    REQUIRE(payload.contains("invert_x"));
+    REQUIRE(payload.contains("invert_y"));
+    REQUIRE(payload.contains("invert_z"));
+    CHECK(payload["invert_x"] == false);
+    CHECK(payload["invert_y"] == false);
+    CHECK(payload["invert_z"] == false);
 
     REQUIRE(payload.contains("anchor_points"));
     REQUIRE(payload.contains("hit_boxes"));
@@ -211,6 +217,10 @@ TEST_CASE("AnimationEditorWindow create defaults adds elevation and 3D diagonal 
     CHECK((*up_forward_right)["inherit_data"] == false);
     CHECK((*up_forward_right)["invert_frames_horizontal"] == true);
     CHECK((*up_forward_right)["invert_frames_vertical"] == false);
+    REQUIRE(up_forward_right->contains("derived_modifiers"));
+    CHECK((*up_forward_right)["derived_modifiers"]["reverse"] == false);
+    CHECK_FALSE((*up_forward_right)["derived_modifiers"].contains("flipX"));
+    CHECK_FALSE((*up_forward_right)["derived_modifiers"].contains("flipY"));
     check_local_movement_payload(*up_forward_right, 2, 4, 4, -4);
 
     const nlohmann::json* down_backward_left = payload_for(document, "down_backward_left", payload_storage);
@@ -222,6 +232,30 @@ TEST_CASE("AnimationEditorWindow create defaults adds elevation and 3D diagonal 
     CHECK((*down_backward_left)["invert_frames_horizontal"] == false);
     CHECK((*down_backward_left)["invert_frames_vertical"] == false);
     check_local_movement_payload(*down_backward_left, 2, -4, -4, 4);
+
+    std::error_code ec;
+    fs::remove_all(root, ec);
+}
+
+TEST_CASE("AnimationEditorWindow create defaults emits one movement node for single-frame defaults") {
+    const fs::path root = make_unique_temp_dir("single_frame");
+    const fs::path frame0 = root / "base_0.png";
+    write_dummy_png(frame0);
+
+    auto document = make_document(root);
+    animation_editor::AnimationEditorWindow window;
+    configure_defaults(window, document, root, {frame0}, 9, true, false, false, false);
+
+    window.handle_create_defaults();
+
+    nlohmann::json payload_storage;
+    const nlohmann::json* left = payload_for(document, "left", payload_storage);
+    REQUIRE(left != nullptr);
+    check_local_movement_payload(*left, 1, -9, 0, 0);
+
+    const nlohmann::json* forward = payload_for(document, "forward", payload_storage);
+    REQUIRE(forward != nullptr);
+    check_local_movement_payload(*forward, 1, 0, 0, -9);
 
     std::error_code ec;
     fs::remove_all(root, ec);

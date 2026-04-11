@@ -31,8 +31,23 @@ protected:
     void on_process_pending_attacks(Asset& self) override;
 
 private:
+    struct CardinalVector {
+        int x = 0;
+        int y = 0;
+    };
+
+    struct FacingSelection {
+        std::string animation_id;
+        CardinalVector vector{};
+        bool valid = false;
+    };
+
     void movement(const Input& input);
     std::string animation_for_direction(int screen_x, int screen_y) const;
+    FacingSelection facing_from_mouse(const Asset& player, const Input& input) const;
+    CardinalVector movement_cardinal_vector(int world_x, int world_y) const;
+    static CardinalVector cardinal_vector_for_animation(const std::string& animation_id);
+    void apply_idle_facing(const std::string& animation_id);
     void start_dash();
 
     static constexpr float kWalkSpeed        = 300.0f;

@@ -31,6 +31,12 @@ class MovementPlanExecutor;
 
 class AnimationRuntime {
 public:
+    enum class ReversePlaybackMode {
+        None,
+        ReverseUntilStopCurrentAnimation,
+        ReverseToDefaultAtStart,
+    };
+
     AnimationRuntime(Asset* self, Assets* assets);
 
     void update();
@@ -48,6 +54,10 @@ public:
     bool advance(AnimationFrame*& frame);
     void switch_to(const std::string& anim_id, std::size_t path_index = 0);
     bool should_defer_for_non_locked(bool override_non_locked) const;
+    void begin_reverse_current_animation_until_stop();
+    void begin_reverse_current_animation_to_default();
+    void stop_reverse_current_animation();
+    ReversePlaybackMode reverse_playback_mode() const { return reverse_playback_mode_; }
 
     void reset_plan_progress();
     void set_debug_enabled(bool enabled);
@@ -68,6 +78,10 @@ private:
     float      parent_world_z() const;
 
     void       apply_pending_move();
+    void       clear_reverse_playback_state();
+    void       activate_reverse_playback(ReversePlaybackMode mode);
+    AnimationFrame* last_frame_for(const Animation& anim, std::size_t path_index) const;
+    bool       reverse_mode_applies_to_current_animation() const;
 
 private:
     friend class MovementPlanExecutor;
@@ -88,7 +102,8 @@ private:
     std::unordered_map<std::string, std::size_t> active_paths_{};
 
     bool debug_enabled_ = false;
-    bool reverse_playback_active_ = false;
+    ReversePlaybackMode reverse_playback_mode_ = ReversePlaybackMode::None;
+    std::string reverse_playback_animation_id_{};
     bool lock_on_end_active_ = false;
     int  suppress_root_motion_frames_ = 0;
 

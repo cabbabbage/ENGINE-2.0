@@ -47,6 +47,13 @@ bool segment_leaves_playable_area(const Assets* assets, SDL_Point from, SDL_Poin
 
 class AnimationUpdate {
 public:
+    enum class ReversePlaybackCommand {
+        None,
+        ReverseUntilStopCurrentAnimation,
+        ReverseToDefaultAtStart,
+        Stop,
+    };
+
     AnimationUpdate(Asset* self, Assets* assets);
     void set_debug_enabled(bool enabled);
     bool debug_enabled() const;
@@ -60,6 +67,9 @@ public:
     void move(SDL_Point delta, const std::string& animation, bool               resort_z            = true, bool               override_non_locked = true);
 
     void set_animation(const std::string& animation_id);
+    void begin_reverse_current_animation_until_stop();
+    void begin_reverse_current_animation_to_default();
+    void stop_reverse_current_animation();
 
     const Plan* current_plan() const { return &plan_; }
 
@@ -73,6 +83,7 @@ private:
         std::string  animation_id;
         bool         resort_z = true;
         bool         override_non_locked = true;
+        ReversePlaybackCommand reverse_command = ReversePlaybackCommand::None;
 };
     MoveRequest consume_move_request();
     bool consume_input_event();
@@ -101,6 +112,7 @@ private:
     bool        input_event_ = false;
     bool        move_pending_ = false;
     MoveRequest pending_move_{};
+    ReversePlaybackCommand pending_reverse_command_ = ReversePlaybackCommand::None;
     bool        debug_enabled_ = false;
 
     vibble::grid::Grid& grid() const;

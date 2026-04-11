@@ -120,6 +120,64 @@ void AnimationRuntime::set_debug_enabled(bool enabled) {
     debug_enabled_ = enabled;
 }
 
+void AnimationRuntime::clear_reverse_playback_state() {
+    reverse_playback_mode_ = ReversePlaybackMode::None;
+    reverse_playback_animation_id_.clear();
+}
+
+bool AnimationRuntime::reverse_mode_applies_to_current_animation() const {
+    return reverse_playback_mode_ != ReversePlaybackMode::None &&
+           !reverse_playback_animation_id_.empty() &&
+           self_ &&
+           self_->current_animation == reverse_playback_animation_id_;
+}
+
+void AnimationRuntime::activate_reverse_playback(ReversePlaybackMode mode) {
+    if (!self_ || !self_->info) {
+        return;
+    }
+
+    auto it = self_->info->animations.find(self_->current_animation);
+    if (it == self_->info->animations.end()) {
+        return;
+    }
+
+    Animation& anim = it->second;
+    if (!self_->current_frame) {
+        self_->current_frame = anim.get_first_frame(path_index_for(self_->current_animation));
+    }
+    if (!self_->current_frame) {
+        return;
+    }
+
+    reverse_playback_mode_ = mode;
+    reverse_playback_animation_id_ = self_->current_animation;
+    lock_on_end_active_ = false;
+    self_->static_frame = false;
+    self_->mark_composite_dirty();
+    self_->mark_anchors_dirty();
+}
+
+void AnimationRuntime::begin_reverse_current_animation_until_stop() {
+    activate_reverse_playback(ReversePlaybackMode::ReverseUntilStopCurrentAnimation);
+}
+
+void AnimationRuntime::begin_reverse_current_animation_to_default() {
+    activate_reverse_playback(ReversePlaybackMode::ReverseToDefaultAtStart);
+}
+
+void AnimationRuntime::stop_reverse_current_animation() {
+    clear_reverse_playback_state();
+}
+
+AnimationFrame* AnimationRuntime::last_frame_for(const Animation& anim, std::size_t path_index) const {
+    const auto& path = anim.movement_path(path_index);
+    if (path.empty()) {
+        return nullptr;
+    }
+    return const_cast<AnimationFrame*>(&path.back());
+}
+
 void AnimationRuntime::update() {
     if (!self_ || !self_->info || !planner_iface_) {
         return;
@@ -227,6 +285,21 @@ void AnimationRuntime::apply_pending_move() {
             switch_to(resolved, path_index_for(resolved));
         }
     }
+
+    switch (req.reverse_command) {
+    case AnimationUpdate::ReversePlaybackCommand::ReverseUntilStopCurrentAnimation:
+        begin_reverse_current_animation_until_stop();
+        break;
+    case AnimationUpdate::ReversePlaybackCommand::ReverseToDefaultAtStart:
+        begin_reverse_current_animation_to_default();
+        break;
+    case AnimationUpdate::ReversePlaybackCommand::Stop:
+        stop_reverse_current_animation();
+        break;
+    case AnimationUpdate::ReversePlaybackCommand::None:
+    default:
+        break;
+    }
 }
 
 bool AnimationRuntime::advance(AnimationFrame*& frame) {
@@ -241,6 +314,9 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
 
     Animation* anim = &it->second;
     std::size_t path_index = path_index_for(self_->current_animation);
+    if (!reverse_mode_applies_to_current_animation()) {
+        clear_reverse_playback_state();
+    }
     if (!frame) {
         frame = anim->get_first_frame(path_index);
         if (!frame) {
@@ -249,7 +325,10 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     }
 
     const bool is_player = self_->info && self_->info->type == asset_types::player;
-    bool should_skip = !is_player && (self_->static_frame || anim->locked || anim->is_frozen() || lock_on_end_active_);
+    const bool reverse_command_active = reverse_mode_applies_to_current_animation();
+    const bool static_blocked = self_->static_frame && !reverse_command_active;
+    const bool locked_blocked = anim->locked && !reverse_command_active;
+    bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || lock_on_end_active_);
     bool has_overriding_plan = planner_iface_ && !planner_iface_->plan_.strides.empty() && planner_iface_->plan_.override_non_locked;
     if (should_skip && !has_overriding_plan) {
         self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || lock_on_end_active_;
@@ -274,21 +353,41 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     while (self_->frame_progress >= frame_interval) {
         self_->frame_progress -= frame_interval;
 
-        if (reverse_playback_active_) {
+        if (reverse_mode_applies_to_current_animation()) {
             if (frame->prev) {
                 frame = frame->prev;
                 advanced_any = true;
                 continue;
             }
 
-            reverse_playback_active_ = false;
-            switch_to(animation_update::detail::kDefaultAnimation,
-                      path_index_for(animation_update::detail::kDefaultAnimation));
-            frame = self_->current_frame;
-            if (!frame) {
-                return false;
+            if (reverse_playback_mode_ == ReversePlaybackMode::ReverseUntilStopCurrentAnimation) {
+                frame = last_frame_for(*anim, path_index);
+                if (!frame) {
+                    return false;
+                }
+                advanced_any = true;
+                continue;
             }
-            advanced_any = true;
+
+            const ReversePlaybackMode mode_at_boundary = reverse_playback_mode_;
+            clear_reverse_playback_state();
+            if (mode_at_boundary == ReversePlaybackMode::ReverseToDefaultAtStart) {
+                switch_to(animation_update::detail::kDefaultAnimation,
+                          path_index_for(animation_update::detail::kDefaultAnimation));
+                frame = self_->current_frame;
+                if (!frame) {
+                    return false;
+                }
+                it = self_->info->animations.find(self_->current_animation);
+                if (it == self_->info->animations.end()) {
+                    return false;
+                }
+                anim = &it->second;
+                path_index = path_index_for(self_->current_animation);
+                advanced_any = true;
+                continue;
+            }
+
             continue;
         }
 
@@ -316,7 +415,7 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
             self_->static_frame = true;
             return true;
         case Animation::OnEndDirective::Reverse:
-            reverse_playback_active_ = true;
+            activate_reverse_playback(ReversePlaybackMode::ReverseToDefaultAtStart);
             lock_on_end_active_ = false;
             self_->static_frame = false;
             break;
@@ -369,7 +468,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         return;
     }
 
-    reverse_playback_active_ = false;
+    clear_reverse_playback_state();
     lock_on_end_active_ = false;
 
     auto it = self_->info->animations.find(anim_id);

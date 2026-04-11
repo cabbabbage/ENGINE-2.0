@@ -33,4 +33,37 @@ void dispatch_contact_attack(Asset* self, Asset* player) {
     AttackDetectionHelper::send_attack_if_hit(self, player);
 }
 
+void begin_reverse_current_animation_until_stop(const ControllerGameContext& context) {
+    begin_reverse_current_animation_until_stop(context.self);
+}
+
+void begin_reverse_current_animation_until_stop(Asset* self) {
+    if (!self || !self->anim_) {
+        return;
+    }
+    self->anim_->begin_reverse_current_animation_until_stop();
+}
+
+void begin_reverse_current_animation_to_default(const ControllerGameContext& context) {
+    begin_reverse_current_animation_to_default(context.self);
+}
+
+void begin_reverse_current_animation_to_default(Asset* self) {
+    if (!self || !self->anim_) {
+        return;
+    }
+    self->anim_->begin_reverse_current_animation_to_default();
+}
+
+void stop_reverse_current_animation(const ControllerGameContext& context) {
+    stop_reverse_current_animation(context.self);
+}
+
+void stop_reverse_current_animation(Asset* self) {
+    if (!self || !self->anim_) {
+        return;
+    }
+    self->anim_->stop_reverse_current_animation();
+}
+
 } // namespace animation_update::custom_controllers

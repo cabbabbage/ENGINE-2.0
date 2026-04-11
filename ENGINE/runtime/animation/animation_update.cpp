@@ -464,6 +464,33 @@ void AnimationUpdate::move(SDL_Point delta,
     input_event_               = true;
 }
 
+void AnimationUpdate::begin_reverse_current_animation_until_stop() {
+    pending_reverse_command_ = ReversePlaybackCommand::ReverseUntilStopCurrentAnimation;
+    input_event_ = true;
+    if (!move_pending_ && runtime_) {
+        runtime_->begin_reverse_current_animation_until_stop();
+        pending_reverse_command_ = ReversePlaybackCommand::None;
+    }
+}
+
+void AnimationUpdate::begin_reverse_current_animation_to_default() {
+    pending_reverse_command_ = ReversePlaybackCommand::ReverseToDefaultAtStart;
+    input_event_ = true;
+    if (!move_pending_ && runtime_) {
+        runtime_->begin_reverse_current_animation_to_default();
+        pending_reverse_command_ = ReversePlaybackCommand::None;
+    }
+}
+
+void AnimationUpdate::stop_reverse_current_animation() {
+    pending_reverse_command_ = ReversePlaybackCommand::Stop;
+    input_event_ = true;
+    if (!move_pending_ && runtime_) {
+        runtime_->stop_reverse_current_animation();
+        pending_reverse_command_ = ReversePlaybackCommand::None;
+    }
+}
+
 void AnimationUpdate::clear_movement_plan() {
     const std::string asset_name = self_ && self_->info ? self_->info->name : std::string{"<unknown>"};
     const bool debug_logging = debug_enabled_;
@@ -503,6 +530,8 @@ std::size_t AnimationUpdate::path_index_for(const std::string& anim_id) const {
 
 AnimationUpdate::MoveRequest AnimationUpdate::consume_move_request() {
     move_pending_ = false;
+    pending_move_.reverse_command = pending_reverse_command_;
+    pending_reverse_command_ = ReversePlaybackCommand::None;
     return pending_move_;
 }
 

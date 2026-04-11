@@ -1,11 +1,70 @@
 #include <doctest/doctest.h>
 
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
+#include "animation/animation_runtime.hpp"
+#include "animation/animation_update.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "core/runtime_world_context.hpp"
 #include "gameplay/map_generation/room.hpp"
+
+namespace {
+
+AnimationFrame make_runtime_frame(int frame_index, int frame_count) {
+    AnimationFrame frame{};
+    frame.frame_index = frame_index;
+    frame.is_first = (frame_index == 0);
+    frame.is_last = (frame_index + 1 == frame_count);
+    return frame;
+}
+
+Animation make_runtime_animation(int frame_count, bool locked = false) {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.reserve(static_cast<std::size_t>(frame_count));
+    for (int idx = 0; idx < frame_count; ++idx) {
+        path.push_back(make_runtime_frame(idx, frame_count));
+    }
+    for (int idx = 0; idx < frame_count; ++idx) {
+        AnimationFrame& frame = path[static_cast<std::size_t>(idx)];
+        frame.prev = (idx > 0) ? &path[static_cast<std::size_t>(idx - 1)] : nullptr;
+        frame.next = (idx + 1 < frame_count) ? &path[static_cast<std::size_t>(idx + 1)] : nullptr;
+    }
+    animation.locked = locked;
+    animation.on_end_animation = "default";
+    animation.on_end_behavior = Animation::OnEndDirective::Default;
+    return animation;
+}
+
+std::unique_ptr<Asset> make_runtime_test_asset() {
+    auto info = std::make_shared<AssetInfo>("animation_runtime_reverse_test_asset");
+    info->animations["default"] = make_runtime_animation(2, false);
+    info->animations["left"] = make_runtime_animation(3, true);
+    info->animations["up"] = make_runtime_animation(3, false);
+    info->start_animation = "left";
+    info->type = "object";
+
+    Area spawn_area("animation_runtime_reverse_area", 0);
+    auto asset = std::make_unique<Asset>(info,
+                                         spawn_area,
+                                         SDL_Point{0, 0},
+                                         0,
+                                         std::string{},
+                                         std::string{},
+                                         0);
+    return asset;
+}
+
+void force_single_advance_tick(Asset& asset) {
+    asset.set_frame_progress(1.0f / static_cast<float>(kBaseAnimationFps));
+}
+
+} // namespace
 
 TEST_CASE("Animation adopt_prebuilt_frames keeps primary path synchronized") {
     Animation animation;
@@ -61,6 +120,93 @@ TEST_CASE("Animation classify_on_end maps loop and reserved directives") {
     CHECK(Animation::classify_on_end("lock") == Animation::OnEndDirective::Lock);
     CHECK(Animation::classify_on_end("reverse") == Animation::OnEndDirective::Reverse);
     CHECK(Animation::classify_on_end("vibble_attack_2") == Animation::OnEndDirective::Animation);
+}
+
+TEST_CASE("AnimationRuntime reverse-until-stop loops backward at frame zero") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    AnimationRuntime runtime(asset.get(), nullptr);
+
+    REQUIRE(asset->info != nullptr);
+    REQUIRE(asset->current_frame != nullptr);
+    CHECK(asset->current_animation == "left");
+    auto& left_path = asset->info->animations["left"].movement_path(0);
+    REQUIRE(left_path.size() == 3);
+
+    asset->current_frame = &left_path[2];
+    runtime.begin_reverse_current_animation_until_stop();
+    CHECK(runtime.reverse_playback_mode() ==
+          AnimationRuntime::ReversePlaybackMode::ReverseUntilStopCurrentAnimation);
+
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    CHECK(asset->current_frame == &left_path[1]);
+
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    CHECK(asset->current_frame == &left_path[0]);
+
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    CHECK(asset->current_frame == &left_path[2]);
+}
+
+TEST_CASE("AnimationRuntime reverse-to-default switches at first frame") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    AnimationRuntime runtime(asset.get(), nullptr);
+
+    REQUIRE(asset->info != nullptr);
+    auto& left_path = asset->info->animations["left"].movement_path(0);
+    REQUIRE(left_path.size() == 3);
+    asset->current_animation = "left";
+    asset->current_frame = &left_path[0];
+
+    runtime.begin_reverse_current_animation_to_default();
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    CHECK(asset->current_animation == "default");
+    CHECK(runtime.reverse_playback_mode() == AnimationRuntime::ReversePlaybackMode::None);
+    REQUIRE(asset->current_frame != nullptr);
+    CHECK(asset->current_frame->is_first);
+}
+
+TEST_CASE("AnimationRuntime clears reverse mode on animation change") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    AnimationRuntime runtime(asset.get(), nullptr);
+
+    runtime.begin_reverse_current_animation_until_stop();
+    CHECK(runtime.reverse_playback_mode() ==
+          AnimationRuntime::ReversePlaybackMode::ReverseUntilStopCurrentAnimation);
+
+    runtime.switch_to("up");
+    CHECK(asset->current_animation == "up");
+    CHECK(runtime.reverse_playback_mode() == AnimationRuntime::ReversePlaybackMode::None);
+}
+
+TEST_CASE("AnimationRuntime applies queued reverse command after move-triggered animation switch") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    AnimationRuntime runtime(asset.get(), nullptr);
+    AnimationUpdate updater(asset.get(), nullptr);
+    runtime.set_planner(&updater);
+
+    REQUIRE(asset->info != nullptr);
+    auto& up_path = asset->info->animations["up"].movement_path(0);
+    REQUIRE(up_path.size() == 3);
+
+    updater.move(SDL_Point{0, 0}, "up", true, true);
+    updater.begin_reverse_current_animation_until_stop();
+    runtime.update();
+
+    CHECK(asset->current_animation == "up");
+    CHECK(runtime.reverse_playback_mode() ==
+          AnimationRuntime::ReversePlaybackMode::ReverseUntilStopCurrentAnimation);
+
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    CHECK(asset->current_frame == &up_path.back());
 }
 
 TEST_CASE("RuntimeWorldContext rebuilds room view and tracks topology generation") {

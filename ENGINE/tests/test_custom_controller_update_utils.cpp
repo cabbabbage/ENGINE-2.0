@@ -144,6 +144,18 @@ TEST_CASE("context-based helpers preserve null safety") {
     CHECK_NOTHROW(custom_controllers::dispatch_contact_attack(context));
 }
 
+TEST_CASE("reverse control helpers preserve null safety") {
+    CHECK_NOTHROW(custom_controllers::begin_reverse_current_animation_until_stop(static_cast<Asset*>(nullptr)));
+    CHECK_NOTHROW(custom_controllers::begin_reverse_current_animation_to_default(static_cast<Asset*>(nullptr)));
+    CHECK_NOTHROW(custom_controllers::stop_reverse_current_animation(static_cast<Asset*>(nullptr)));
+
+    const custom_controllers::ControllerGameContext null_context =
+        custom_controllers::build_controller_game_context(nullptr, nullptr);
+    CHECK_NOTHROW(custom_controllers::begin_reverse_current_animation_until_stop(null_context));
+    CHECK_NOTHROW(custom_controllers::begin_reverse_current_animation_to_default(null_context));
+    CHECK_NOTHROW(custom_controllers::stop_reverse_current_animation(null_context));
+}
+
 TEST_CASE("build_controller_game_context preserves prior orbit lifecycle snapshot when runtime data is unavailable") {
     custom_controllers::FlyOrbitTargetSnapshot previous{};
     previous.valid = true;

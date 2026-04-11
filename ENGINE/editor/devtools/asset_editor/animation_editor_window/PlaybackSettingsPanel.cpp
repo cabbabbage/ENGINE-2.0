@@ -854,7 +854,7 @@ int PlaybackSettingsPanel::preferred_height(int width) const {
 
     if (derived_from_animation_) {
         int count = 1; // Reverse is always available for animation-sourced entries.
-        count += 2; // Frame inversion checkboxes
+        count += 1; // Frame inversion checkbox
         if (inherit_controls_visible()) {
             ++count; // Inherit Source Data
             if (inversion_controls_visible()) {
@@ -904,7 +904,6 @@ void PlaybackSettingsPanel::render(SDL_Renderer* renderer) const {
     const bool show_frame_invert_controls = derived_from_animation_;
     const bool show_flip_controls = inversion_controls_visible();
     render_checkbox(invert_frames_horizontal_checkbox_, show_frame_invert_controls);
-    render_checkbox(invert_frames_vertical_checkbox_, show_frame_invert_controls);
     render_checkbox(flip_checkbox_, show_flip_controls);
     render_checkbox(flip_vertical_checkbox_, show_flip_controls);
     render_checkbox(inherit_geometry_checkbox_, inherit_controls_visible());
@@ -946,7 +945,6 @@ bool PlaybackSettingsPanel::handle_event(const SDL_Event& e) {
 
     const bool show_flip = inversion_controls_visible();
     handle_checkbox_if_visible(invert_frames_horizontal_checkbox_, derived_from_animation_);
-    handle_checkbox_if_visible(invert_frames_vertical_checkbox_, derived_from_animation_);
     handle_checkbox_if_visible(flip_checkbox_, show_flip);
     handle_checkbox_if_visible(flip_vertical_checkbox_, show_flip);
     handle_checkbox_if_visible(inherit_geometry_checkbox_, inherit_controls_visible());
@@ -969,7 +967,6 @@ void PlaybackSettingsPanel::ensure_widgets() {
 };
 
     ensure_checkbox(invert_frames_horizontal_checkbox_, "Invert Frames Horizontally");
-    ensure_checkbox(invert_frames_vertical_checkbox_, "Invert Frames Vertically");
     ensure_checkbox(flip_checkbox_, "Invert Geometry Horizontally");
     ensure_checkbox(flip_vertical_checkbox_, "Invert Geometry Vertically");
     ensure_checkbox(inherit_geometry_checkbox_, "Inherit Source Data");
@@ -1018,7 +1015,6 @@ void PlaybackSettingsPanel::layout_widgets() const {
     const bool show_frame_invert_controls = derived_from_animation_;
     const bool show_flip_controls = inversion_controls_visible();
     place_checkbox(invert_frames_horizontal_checkbox_.get(), show_frame_invert_controls, placed_any_checkbox);
-    place_checkbox(invert_frames_vertical_checkbox_.get(), show_frame_invert_controls, placed_any_checkbox);
     invert_frames_helper_rect_ = SDL_Rect{0, 0, 0, 0};
     if (show_frame_invert_controls) {
         const auto& helper_lines = invert_frames_help_lines();
@@ -1070,9 +1066,6 @@ void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) 
     if (invert_frames_horizontal_checkbox_) {
         invert_frames_horizontal_checkbox_->set_value(state.invert_frames_horizontal);
     }
-    if (invert_frames_vertical_checkbox_) {
-        invert_frames_vertical_checkbox_->set_value(state.invert_frames_vertical);
-    }
     if (flip_checkbox_) {
         flip_checkbox_->set_value(show_inversion_controls ? state.flipped_source : false);
     }
@@ -1099,9 +1092,6 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::read_controls() cons
     if (derived_from_animation_) {
         if (invert_frames_horizontal_checkbox_) {
             state.invert_frames_horizontal = invert_frames_horizontal_checkbox_->value();
-        }
-        if (invert_frames_vertical_checkbox_) {
-            state.invert_frames_vertical = invert_frames_vertical_checkbox_->value();
         }
         if (inherit_controls_visible_for_state(state)) {
             if (inherit_geometry_checkbox_) state.inherit_data = inherit_geometry_checkbox_->value();
@@ -1278,7 +1268,6 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
     state.flip_vertical = read_bool_field_like(payload, "flip_vertical_source", false);
     state.inherit_data = false;
     state.invert_frames_horizontal = false;
-    state.invert_frames_vertical = false;
     state.locked         = read_bool_field_like(payload, "locked", false);
     state.random_start   = read_bool_field_like(payload, "rnd_start", false);
     if (state.locked) {
@@ -1293,7 +1282,6 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
             source_is_animation = true;
             state.inherit_data = payload_inherits_data(payload);
             state.invert_frames_horizontal = read_bool_field_like(payload, "invert_frames_horizontal", false);
-            state.invert_frames_vertical = read_bool_field_like(payload, "invert_frames_vertical", false);
             if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
                 const auto& modifiers = payload["derived_modifiers"];
                 state.reverse_source = read_bool_field_like(modifiers, "reverse", state.reverse_source);
@@ -1308,7 +1296,6 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
         state.flipped_source = false;
         state.flip_vertical = false;
         state.invert_frames_horizontal = false;
-        state.invert_frames_vertical = false;
     }
 
     if (!inherit_controls_visible_for_state(state)) {
@@ -1347,7 +1334,7 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
     payload["flip_vertical_source"] = effective_flip_vertical;
     if (derived_from_animation_) {
         payload["invert_frames_horizontal"] = state.invert_frames_horizontal;
-        payload["invert_frames_vertical"] = state.invert_frames_vertical;
+        payload["invert_frames_vertical"] = false;
     } else {
         payload.erase("invert_frames_horizontal");
         payload.erase("invert_frames_vertical");

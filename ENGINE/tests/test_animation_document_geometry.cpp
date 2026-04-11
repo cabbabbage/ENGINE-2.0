@@ -186,6 +186,51 @@ TEST_CASE("AnimationDocument normalizes missing on_end and strips legacy loop") 
     CHECK_FALSE(payload->contains("loop"));
 }
 
+TEST_CASE("AnimationDocument disables vertical frame inversion during payload coercion") {
+    animation_editor::AnimationDocument document;
+    const nlohmann::json manifest = {
+        {"animations",
+         {
+             {"base",
+              {
+                  {"source", {{"kind", "folder"}, {"path", "base"}, {"name", ""}}},
+                  {"number_of_frames", 2},
+              }},
+             {"derived",
+              {
+                  {"source", {{"kind", "animation"}, {"path", ""}, {"name", "base"}}},
+                  {"number_of_frames", 2},
+                  {"invert_frames_horizontal", true},
+                  {"invert_frames_vertical", true},
+                  {"inherit_data", false},
+                  {"movement",
+                   nlohmann::json::array({nlohmann::json::array({0, 0, 0}),
+                                          nlohmann::json::array({4, 0, -2})})},
+              }},
+             {"folder_anim",
+              {
+                  {"source", {{"kind", "folder"}, {"path", "folder_anim"}, {"name", ""}}},
+                  {"number_of_frames", 1},
+                  {"invert_frames_vertical", true},
+              }},
+         }},
+    };
+
+    document.load_from_manifest(manifest, std::filesystem::path{}, nullptr);
+
+    const auto derived_payload = document.animation_payload_json("derived");
+    REQUIRE(derived_payload.has_value());
+    REQUIRE(derived_payload->is_object());
+    CHECK((*derived_payload)["invert_frames_horizontal"] == true);
+    CHECK((*derived_payload)["invert_frames_vertical"] == false);
+
+    const auto folder_payload = document.animation_payload_json("folder_anim");
+    REQUIRE(folder_payload.has_value());
+    REQUIRE(folder_payload->is_object());
+    CHECK_FALSE(folder_payload->contains("invert_frames_horizontal"));
+    CHECK_FALSE(folder_payload->contains("invert_frames_vertical"));
+}
+
 TEST_CASE("AnimationDocument create_animation emits on_end without loop") {
     animation_editor::AnimationDocument document;
     document.load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, nullptr);

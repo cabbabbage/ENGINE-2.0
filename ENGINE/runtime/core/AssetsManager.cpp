@@ -3357,6 +3357,9 @@ bool Assets::should_run_runtime_updates() const {
 }
 
 bool Assets::should_render_runtime_lighting() const {
+    if (camera_settings_panel_active_) {
+        return true;
+    }
     if (dev_controls_ && dev_controls_->is_runtime_light_editor_active()) {
         return true;
     }
@@ -3364,6 +3367,10 @@ bool Assets::should_render_runtime_lighting() const {
         return false;
     }
     return true;
+}
+
+void Assets::set_camera_settings_panel_active(bool active) {
+    camera_settings_panel_active_ = active;
 }
 
 bool Assets::should_advance_animation_for(const Asset* asset) const {

@@ -114,16 +114,19 @@ void CameraUIPanel::set_dirty_callback(std::function<void()> callback) {
 
 void CameraUIPanel::open() {
     set_visible(true);
+    sync_runtime_lighting_state_with_visibility();
     suppress_apply_once_ = true;
     sync_from_camera();
 }
 
 void CameraUIPanel::close() {
     set_visible(false);
+    sync_runtime_lighting_state_with_visibility();
 }
 
 void CameraUIPanel::toggle() {
     set_visible(!is_visible());
+    sync_runtime_lighting_state_with_visibility();
     if (is_visible()) {
         suppress_apply_once_ = true;
         sync_from_camera();
@@ -144,6 +147,9 @@ void CameraUIPanel::update(const Input& input, int screen_w, int screen_h) {
 
         suppress_apply_once_ = true;
         sync_from_camera();
+    }
+    if (currently_visible != previously_visible) {
+        sync_runtime_lighting_state_with_visibility();
     }
     was_visible_ = currently_visible;
 
@@ -351,6 +357,13 @@ void CameraUIPanel::build_ui() {
         });
 
     rebuild_rows();
+}
+
+void CameraUIPanel::sync_runtime_lighting_state_with_visibility() {
+    if (!assets_) {
+        return;
+    }
+    assets_->set_camera_settings_panel_active(is_visible());
 }
 
 void CameraUIPanel::on_control_value_changed() {

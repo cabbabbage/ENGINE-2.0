@@ -274,6 +274,7 @@ add_executable(engine_tests
     ENGINE/tests/test_anchor_child_candidate_normalization.cpp
     ENGINE/tests/test_oval_anchor_mappings.cpp
     ENGINE/tests/test_animation_document_geometry.cpp
+    ENGINE/tests/test_animation_editor_defaults.cpp
     ENGINE/tests/test_animation_source_navigation.cpp
     ENGINE/tests/test_combat_box_geometry.cpp
     ENGINE/tests/test_combat_attack_pipeline.cpp

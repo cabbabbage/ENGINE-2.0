@@ -42,6 +42,7 @@ private:
     void build_ui();
     void rebuild_rows();
     void apply_settings_if_needed();
+    void sync_runtime_lighting_state_with_visibility();
 
     void on_control_value_changed();
 
@@ -79,10 +80,10 @@ private:
     std::unique_ptr<Widget> framing_section_widget_;
     std::unique_ptr<Widget> lighting_section_widget_;
     std::unique_ptr<Widget> debug_section_widget_;
-    bool movement_section_expanded_ = true;
-    bool framing_section_expanded_ = true;
-    bool lighting_section_expanded_ = true;
-    bool debug_section_expanded_ = true;
+    bool movement_section_expanded_ = false;
+    bool framing_section_expanded_ = false;
+    bool lighting_section_expanded_ = false;
+    bool debug_section_expanded_ = false;
 
     bool applying_settings_ = false;
     int last_screen_w_ = 0;

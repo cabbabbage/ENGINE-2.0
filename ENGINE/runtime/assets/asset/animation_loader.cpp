@@ -1033,7 +1033,7 @@ void AnimationLoader::load(Animation& animation,
         animation.flip_vertical_source = read_bool_field_like(anim_json, "flip_vertical_source", false);
         animation.reverse_source = read_bool_field_like(anim_json, "reverse_source", false);
         animation.invert_frames_horizontal = read_bool_field_like(anim_json, "invert_frames_horizontal", false);
-        animation.invert_frames_vertical = read_bool_field_like(anim_json, "invert_frames_vertical", false);
+        animation.invert_frames_vertical = false;
         if (animation.source.kind == "animation" && anim_json.contains("derived_modifiers") &&
             anim_json["derived_modifiers"].is_object()) {
                 const auto& modifiers = anim_json["derived_modifiers"];
@@ -1235,7 +1235,7 @@ void AnimationLoader::load(Animation& animation,
                         if (src_anim.has_frames()) {
                                 AnimationCloner::Options opts{};
                                 opts.flip_horizontal = animation.invert_frames_horizontal;
-                                opts.flip_vertical   = animation.invert_frames_vertical;
+                                opts.flip_vertical   = false;
                                 opts.reverse_frames  = animation.reverse_source;
                                 opts.inherit_on_end_from_source = animation.inherit_data;
 
@@ -1274,7 +1274,7 @@ void AnimationLoader::load(Animation& animation,
                 if (src_it != info.animations.end() && !src_it->second.frame_cache_.empty()) {
                         AnimationCloner::Options opts{};
                         opts.flip_horizontal = animation.invert_frames_horizontal;
-                        opts.flip_vertical   = animation.invert_frames_vertical;
+                        opts.flip_vertical   = false;
                         opts.reverse_frames  = animation.reverse_source;
                         opts.inherit_on_end_from_source = animation.inherit_data;
                         std::cout << "[AnimationLoader] " << info.name << "::" << trigger

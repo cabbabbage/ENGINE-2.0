@@ -241,6 +241,7 @@ public:
 
     bool should_run_runtime_updates() const;
     bool should_render_runtime_lighting() const;
+    void set_camera_settings_panel_active(bool active);
     bool is_dev_mode() const { return dev_mode; }
     bool is_frame_editor_target_active(const Asset* asset) const;
     bool should_advance_animation_for(const Asset* asset) const;
@@ -313,6 +314,7 @@ private:
     Room* current_room_ = nullptr;
     bool dev_mode = false;
     bool camera_settings_dirty_ = false;
+    bool camera_settings_panel_active_ = false;
     bool suppress_render_ = false;
 
     bool suppress_dev_renderer_ = false;

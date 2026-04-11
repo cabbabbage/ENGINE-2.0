@@ -15,6 +15,10 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#ifndef FRAME_EDITOR_ACCESS
+#define FRAME_EDITOR_ACCESS private
+#endif
+
 class Asset;
 class Assets;
 class AssetInfo;
@@ -74,7 +78,7 @@ class AnimationEditorWindow {
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
     void on_live_frame_editor_closed(const std::string& animation_id);
 
-  private:
+  FRAME_EDITOR_ACCESS:
     struct LiveFrameEditorToken {};
     void handle_document_saved();
     void layout_children();
@@ -106,7 +110,7 @@ class AnimationEditorWindow {
     void handle_create_defaults();
     bool ensure_animation_exists(const std::string& animation_id);
     bool create_or_replace_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
-    std::optional<int> parse_defaults_distance_per_frame() const;
+    std::optional<int> parse_defaults_total_movement() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
     nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id,
@@ -151,7 +155,7 @@ class AnimationEditorWindow {
     void refresh_inspector_animation_callback();
     std::string normalize_animation_name(std::string_view raw) const;
 
-  private:
+  FRAME_EDITOR_ACCESS:
     bool visible_ = false;
     SDL_Rect bounds_{0, 0, 0, 0};
     std::weak_ptr<AssetInfo> info_;

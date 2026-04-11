@@ -240,15 +240,38 @@ std::vector<std::filesystem::path> normalize_sequence_paths(const std::vector<st
     return normalized;
 }
 
-nlohmann::json build_movement_sequence(int frame_count, int dx, int dy, int dz) {
+nlohmann::json build_movement_sequence(int frame_count, int total_dx, int total_dy, int total_dz) {
     nlohmann::json movement = nlohmann::json::array();
     const int safe_frames = std::max(frame_count, 1);
     movement.get_ref<nlohmann::json::array_t&>().reserve(static_cast<std::size_t>(safe_frames));
+
+    auto distribute_component = [safe_frames](int total) {
+        std::vector<int> values(static_cast<std::size_t>(safe_frames), 0);
+        if (safe_frames <= 0) {
+            return values;
+        }
+        const int base = total / safe_frames;
+        int remainder = total % safe_frames;
+        for (int i = 0; i < safe_frames; ++i) {
+            values[static_cast<std::size_t>(i)] = base;
+            if (remainder > 0) {
+                ++values[static_cast<std::size_t>(i)];
+                --remainder;
+            } else if (remainder < 0) {
+                --values[static_cast<std::size_t>(i)];
+                ++remainder;
+            }
+        }
+        return values;
+    };
+
+    const std::vector<int> dx_frames = distribute_component(total_dx);
+    const std::vector<int> dy_frames = distribute_component(total_dy);
+    const std::vector<int> dz_frames = distribute_component(total_dz);
     for (int i = 0; i < safe_frames; ++i) {
-        const bool first = (i == 0);
-        const int frame_dx = first ? 0 : dx;
-        const int frame_dy = first ? 0 : dy;
-        const int frame_dz = first ? 0 : dz;
+        const int frame_dx = dx_frames[static_cast<std::size_t>(i)];
+        const int frame_dy = dy_frames[static_cast<std::size_t>(i)];
+        const int frame_dz = dz_frames[static_cast<std::size_t>(i)];
         movement.push_back(nlohmann::json::array({frame_dx, frame_dy, frame_dz}));
     }
     return movement;
@@ -269,7 +292,7 @@ nlohmann::json build_movement_total(const nlohmann::json& movement) {
     int total_dy = 0;
     int total_dz = 0;
     if (movement.is_array()) {
-        for (std::size_t i = 1; i < movement.size(); ++i) {
+        for (std::size_t i = 0; i < movement.size(); ++i) {
             const auto& entry = movement[i];
             if (!entry.is_array()) {
                 continue;
@@ -1472,7 +1495,7 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
         defaults_3d_diagonals_checkbox_ = std::make_unique<DMCheckbox>("3D Diagonals (8-Way)", false);
     }
     if (!defaults_distance_box_) {
-        defaults_distance_box_ = std::make_unique<DMTextBox>("Distance per frame", "5");
+        defaults_distance_box_ = std::make_unique<DMTextBox>("Total movement per animation", "5");
     }
     if (!defaults_base_frames_button_) {
         defaults_base_frames_button_ = std::make_unique<DMButton>("Add Base Movement Animation", &DMStyles::AccentButton(), 260, DMButton::height());
@@ -1674,7 +1697,7 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
     int title_y = defaults_modal_rect_.y + padding;
     render_label(renderer, "Create Defaults", title_x, title_y);
     title_y += DMStyles::Label().font_size + DMSpacing::small_gap();
-    render_label(renderer, "Generate movement sets using canonical [dx, dy, dz] data.", title_x, title_y);
+    render_label(renderer, "Generate canonical [dx, dy, dz] data (per-frame = total / frames).", title_x, title_y);
 
     if (defaults_basic_movement_checkbox_) defaults_basic_movement_checkbox_->render(renderer);
     if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
@@ -1724,7 +1747,7 @@ void AnimationEditorWindow::handle_pick_defaults_base_frames() {
     set_status_message("Selected " + std::to_string(defaults_base_frame_paths_.size()) + " base frame(s).", 180);
 }
 
-std::optional<int> AnimationEditorWindow::parse_defaults_distance_per_frame() const {
+std::optional<int> AnimationEditorWindow::parse_defaults_total_movement() const {
     if (!defaults_distance_box_) {
         return std::nullopt;
     }
@@ -1925,13 +1948,13 @@ void AnimationEditorWindow::handle_create_defaults() {
     }
     base_frames = normalize_sequence_paths(base_frames);
 
-    std::optional<int> distance_per_frame = parse_defaults_distance_per_frame();
-    if (!distance_per_frame.has_value()) {
-        set_status_message("Distance per frame must be a positive integer.", 180);
+    std::optional<int> total_movement_per_animation = parse_defaults_total_movement();
+    if (!total_movement_per_animation.has_value()) {
+        set_status_message("Total movement per animation must be a positive integer.", 180);
         return;
     }
 
-    const int d = *distance_per_frame;
+    const int d = *total_movement_per_animation;
     const int frame_count = static_cast<int>(base_frames.size());
     bool ok = true;
     std::vector<std::string> created_ids;

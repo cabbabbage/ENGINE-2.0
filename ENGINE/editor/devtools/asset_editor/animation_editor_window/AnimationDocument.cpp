@@ -142,6 +142,13 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload["reverse_source"] = derived_reverse;
     payload["flipped_source"] = derived_flip_x;
     payload["flip_vertical_source"] = derived_flip_y;
+    if (derived_from_animation) {
+        payload["invert_frames_horizontal"] = read_bool_field_like(payload, "invert_frames_horizontal", false);
+        payload["invert_frames_vertical"] = false;
+    } else {
+        payload.erase("invert_frames_horizontal");
+        payload.erase("invert_frames_vertical");
+    }
     payload.erase("inherit_source_movement");
     payload.erase("flip_movement_horizontal");
     payload.erase("flip_movement_vertical");

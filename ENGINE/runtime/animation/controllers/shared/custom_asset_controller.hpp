@@ -54,6 +54,7 @@ private:
 
     std::optional<ChildAsset> surface_child_;
     std::vector<AnchorCandidateAttachment> anchor_candidate_children_;
+    animation_update::custom_controllers::FlyOrbitTargetSnapshot fly_orbit_target_state_{};
     animation_update::custom_controllers::ControllerGameContext game_context_{};
     Asset* self_ = nullptr;
 };

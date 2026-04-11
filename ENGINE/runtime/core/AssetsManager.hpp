@@ -209,6 +209,7 @@ public:
     const std::string& map_id() const { return map_id_; }
     world::WorldGrid& world_grid() { return world_grid_; }
     const world::WorldGrid& world_grid() const { return world_grid_; }
+    world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
 
     // Suspend/reactivate assets outside the grid for shared binding helper.
     std::unique_ptr<Asset> extract_asset(Asset* asset);
@@ -276,8 +277,6 @@ private:
     void schedule_removal(Asset* a);
     std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
     std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
-    world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
-
     bool process_removals();
     bool apply_world_mutation_batch(WorldMutationBatch& batch);
     void addAsset(const std::string& name, SDL_Point g);

@@ -45,7 +45,8 @@ CustomAssetController::CustomAssetController(Asset* self)
 CustomAssetController::~CustomAssetController() = default;
 
 void CustomAssetController::update(const Input& in) {
-    game_context_ = custom_controllers::build_controller_game_context(self_, assets());
+    game_context_ = custom_controllers::build_controller_game_context(self_, assets(), &fly_orbit_target_state_);
+    fly_orbit_target_state_ = game_context_.fly_orbit_target;
     tick_anchor_candidate_attachments();
     on_update(in);
 }

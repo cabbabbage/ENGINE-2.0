@@ -22,6 +22,13 @@ struct FlyOrbitTargetSnapshot {
     std::uint32_t target_version = 0;
 };
 
+struct FlyOrbitPoint3D {
+    bool valid = false;
+    SDL_Point world_xz{0, 0};
+    int world_y = 0;
+    int grid_resolution = 0;
+};
+
 struct ControllerGameContext {
     Asset* self = nullptr;
     Assets* assets = nullptr;
@@ -38,6 +45,7 @@ struct ControllerGameContext {
     SDL_Point self_world_xz{0, 0};
     int self_world_y = 0;
     int self_grid_resolution = 0;
+    FlyOrbitPoint3D fly_orbit_point{};
     FlyOrbitTargetSnapshot fly_orbit_target{};
     bool fly_orbit_target_changed = false;
 

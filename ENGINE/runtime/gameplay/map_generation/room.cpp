@@ -23,33 +23,115 @@ namespace {
 
 using vibble::strings::to_lower_copy;
 
-constexpr double kOvalMinAspectRatio = 14.0 / 9.0;
-constexpr double kOvalMaxAspectRatio = 18.0 / 9.0;
-constexpr double kOvalHardAspectCap = 2.0;
+constexpr int kMinRoomDimension = 1;
+constexpr int kMaxRoomDimension = 4000;
 
-int infer_vertical_radius_from_dimensions(int w_min, int w_max, int h_min, int h_max) {
-        int diameter = std::max(h_min, h_max);
-        if (diameter <= 0) {
-                diameter = std::max(w_min, w_max);
+bool read_json_int(const nlohmann::json& src, const char* key, int& out_value) {
+        if (!src.is_object() || !key) {
+                return false;
         }
-        if (diameter <= 0) {
-                return 0;
+        auto it = src.find(key);
+        if (it == src.end()) {
+                return false;
         }
-        return std::max(1, diameter / 2);
+        if (it->is_number_integer()) {
+                out_value = it->get<int>();
+                return true;
+        }
+        if (it->is_number_float()) {
+                out_value = static_cast<int>(std::lround(it->get<double>()));
+                return true;
+        }
+        return false;
 }
 
-int sample_horizontal_radius_for_oval(int vertical_radius) {
-        const int clamped_vertical = std::max(1, vertical_radius);
-        const double max_ratio = std::min(kOvalMaxAspectRatio, kOvalHardAspectCap);
-        static thread_local std::mt19937 oval_rng{std::random_device{}()};
-        std::uniform_real_distribution<double> aspect_dist(kOvalMinAspectRatio, max_ratio);
+int clamp_room_dimension(int value) {
+        return std::clamp(value, kMinRoomDimension, kMaxRoomDimension);
+}
 
-        const int min_horizontal = std::max(1, static_cast<int>(std::ceil(static_cast<double>(clamped_vertical) * kOvalMinAspectRatio)));
-        const int max_aspect_bound = static_cast<int>(std::floor(static_cast<double>(clamped_vertical) * max_ratio));
-        const int max_hard_cap = clamped_vertical * 2;
-        const int max_horizontal = std::max(min_horizontal, std::min(max_aspect_bound, max_hard_cap));
-        const int sampled = static_cast<int>(std::lround(static_cast<double>(clamped_vertical) * aspect_dist(oval_rng)));
-        return std::clamp(sampled, min_horizontal, max_horizontal);
+void sanitize_dimension_bounds(int& min_value, int& max_value) {
+        if (min_value <= 0 && max_value > 0) {
+                min_value = max_value;
+        } else if (max_value <= 0 && min_value > 0) {
+                max_value = min_value;
+        } else if (min_value <= 0 && max_value <= 0) {
+                min_value = kMinRoomDimension;
+                max_value = kMinRoomDimension;
+        }
+
+        min_value = clamp_room_dimension(min_value);
+        max_value = clamp_room_dimension(max_value);
+        if (max_value < min_value) {
+                std::swap(min_value, max_value);
+        }
+}
+
+void migrate_legacy_radius_bounds_if_needed(const nlohmann::json& src,
+                                            int& min_w,
+                                            int& max_w,
+                                            int& min_h,
+                                            int& max_h) {
+        int legacy_min_radius = 0;
+        int legacy_max_radius = 0;
+        bool has_legacy_min_radius = false;
+        bool has_legacy_max_radius = false;
+
+        if (read_json_int(src, "min_radius", legacy_min_radius)) {
+                legacy_min_radius = std::max(0, legacy_min_radius);
+                has_legacy_min_radius = true;
+        }
+        if (read_json_int(src, "max_radius", legacy_max_radius)) {
+                legacy_max_radius = std::max(0, legacy_max_radius);
+                has_legacy_max_radius = true;
+        }
+
+        int legacy_radius = 0;
+        if (read_json_int(src, "radius", legacy_radius)) {
+                legacy_radius = std::max(0, legacy_radius);
+                if (!has_legacy_min_radius) {
+                        legacy_min_radius = legacy_radius;
+                        has_legacy_min_radius = true;
+                }
+                if (!has_legacy_max_radius) {
+                        legacy_max_radius = legacy_radius;
+                        has_legacy_max_radius = true;
+                }
+        }
+
+        if (!has_legacy_min_radius && !has_legacy_max_radius) {
+                return;
+        }
+
+        if (legacy_min_radius <= 0 && legacy_max_radius > 0) {
+                legacy_min_radius = legacy_max_radius;
+        }
+        if (legacy_max_radius <= 0 && legacy_min_radius > 0) {
+                legacy_max_radius = legacy_min_radius;
+        }
+        if (legacy_max_radius < legacy_min_radius) {
+                std::swap(legacy_min_radius, legacy_max_radius);
+        }
+
+        const int migrated_min_diameter = legacy_min_radius > 0 ? legacy_min_radius * 2 : 0;
+        const int migrated_max_diameter = legacy_max_radius > 0 ? legacy_max_radius * 2 : migrated_min_diameter;
+        if (migrated_min_diameter <= 0 || migrated_max_diameter <= 0) {
+                return;
+        }
+
+        if (min_w <= 0) min_w = migrated_min_diameter;
+        if (max_w <= 0) max_w = migrated_max_diameter;
+        if (min_h <= 0) min_h = migrated_min_diameter;
+        if (max_h <= 0) max_h = migrated_max_diameter;
+}
+
+int sample_dimension_inclusive(int min_value, int max_value) {
+        sanitize_dimension_bounds(min_value, max_value);
+        if (max_value <= min_value) {
+                return min_value;
+        }
+        static thread_local std::mt19937 room_rng{std::random_device{}()};
+        std::uniform_int_distribution<int> dist(min_value, max_value);
+        return dist(room_rng);
 }
 
 RoomAreaSerialization::Kind parse_kind_value(const std::string& value) {
@@ -494,17 +576,14 @@ manifest_writer_(std::move(manifest_writer))
                         return static_cast<char>(std::tolower(ch));
                 });
                 if (lowered_geometry == "circle") {
-                        int vertical_radius = assets_json.value("radius", -1);
-                        if (vertical_radius <= 0) {
-                                vertical_radius = infer_vertical_radius_from_dimensions(min_w, max_w, min_h, max_h);
-                        }
-                        if (vertical_radius <= 0) {
-                                vertical_radius = 1;
-                        }
-                        const int horizontal_radius = sample_horizontal_radius_for_oval(vertical_radius);
-                        min_w = max_w = horizontal_radius * 2;
-                        min_h = max_h = vertical_radius * 2;
-                        assets_json["radius"] = vertical_radius;
+                        migrate_legacy_radius_bounds_if_needed(assets_json, min_w, max_w, min_h, max_h);
+                        sanitize_dimension_bounds(min_w, max_w);
+                        sanitize_dimension_bounds(min_h, max_h);
+                        min_w = max_w = sample_dimension_inclusive(min_w, max_w);
+                        min_h = max_h = sample_dimension_inclusive(min_h, max_h);
+                } else {
+                        sanitize_dimension_bounds(min_w, max_w);
+                        sanitize_dimension_bounds(min_h, max_h);
                 }
                 int width = std::max(min_w, max_w);
                 int height = std::max(min_h, max_h);
@@ -641,17 +720,11 @@ std::pair<int, int> Room::current_room_dimensions() const {
         int max_w = assets_json.value("max_width", min_w);
         int min_h = assets_json.value("min_height", 0);
         int max_h = assets_json.value("max_height", min_h);
-        int width = std::max(min_w, max_w);
-        int height = std::max(min_h, max_h);
-
-        if ((width <= 0 || height <= 0) && assets_json.contains("radius")) {
-                int radius = assets_json.value("radius", 0);
-                if (radius > 0) {
-                        int diameter = radius * 2;
-                        if (width <= 0) width = diameter;
-                        if (height <= 0) height = diameter;
-                }
-        }
+        migrate_legacy_radius_bounds_if_needed(assets_json, min_w, max_w, min_h, max_h);
+        sanitize_dimension_bounds(min_w, max_w);
+        sanitize_dimension_bounds(min_h, max_h);
+        const int width = std::max(min_w, max_w);
+        const int height = std::max(min_h, max_h);
 
         return {width, height};
 }
@@ -1010,15 +1083,9 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out["max_height"] = height;
         out["edge_smoothness"] = edge_smoothness;
         out["geometry"] = geometry;
-        std::string lowered_geom = geometry;
-        std::transform(lowered_geom.begin(), lowered_geom.end(), lowered_geom.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::tolower(ch));
-        });
-        if (lowered_geom == "circle") {
-                out["radius"] = std::max(0, height / 2);
-        } else {
-                out.erase("radius");
-        }
+        out.erase("radius");
+        out.erase("min_radius");
+        out.erase("max_radius");
         bool is_spawn = assets_json.value("is_spawn", false);
         out["is_spawn"] = is_spawn;
 	out["is_boss"] = assets_json.value("is_boss", false);

@@ -378,7 +378,9 @@ nlohmann::json build_folder_payload(const std::filesystem::path& folder) {
         nlohmann::json payload = {
             {"locked", false},
             {"reverse_source", false},
-            {"flipped_source", false},
+            {"invert_x", false},
+            {"invert_y", false},
+            {"invert_z", false},
             {"rnd_start", false},
             {"on_end", "default"},
             {"source",
@@ -1841,8 +1843,9 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
     payload["attack_boxes"] = build_empty_geometry_frames(safe_frames);
     payload["locked"] = false;
     payload["reverse_source"] = false;
-    payload["flipped_source"] = false;
-    payload["flip_vertical_source"] = false;
+    payload["invert_x"] = false;
+    payload["invert_y"] = false;
+    payload["invert_z"] = false;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
     return payload;
@@ -1872,16 +1875,15 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
     payload["attack_boxes"] = build_empty_geometry_frames(safe_frames);
     payload["locked"] = false;
     payload["reverse_source"] = false;
-    payload["flipped_source"] = false;
-    payload["flip_vertical_source"] = false;
+    payload["invert_x"] = false;
+    payload["invert_y"] = false;
+    payload["invert_z"] = false;
     payload["invert_frames_horizontal"] = invert_frames_horizontal;
     payload["invert_frames_vertical"] = false;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
     payload["derived_modifiers"] = nlohmann::json::object({
-        {"reverse", false},
-        {"flipX", false},
-        {"flipY", false}
+        {"reverse", false}
     });
     return payload;
 }

@@ -1595,7 +1595,9 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
             {"on_end", "default"},
             {"locked", false},
             {"reverse_source", false},
-            {"flipped_source", false},
+            {"invert_x", false},
+            {"invert_y", false},
+            {"invert_z", false},
             {"rnd_start", false},
             {"source", nlohmann::json{
                 {"kind", "folder"},

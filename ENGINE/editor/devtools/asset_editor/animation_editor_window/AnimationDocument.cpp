@@ -57,35 +57,23 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         payload[key] = read_bool_like(payload.contains(key) ? payload[key] : nlohmann::json(fallback), fallback);
 };
 
-    ensure_bool("flipped_source", false);
+    ensure_bool("invert_x", false);
+    ensure_bool("invert_y", false);
+    ensure_bool("invert_z", false);
     ensure_bool("reverse_source", false);
-    ensure_bool("flip_vertical_source", false);
     ensure_bool("locked", false);
     ensure_bool("rnd_start", false);
     payload.erase("loop");
 
     bool derived_from_animation = (kind == "animation");
     bool derived_reverse = read_bool_field_like(payload, "reverse_source", false);
-    bool derived_flip_x = read_bool_field_like(payload, "flipped_source", false);
-    bool derived_flip_y = false;
-    bool derived_flip_movement_x = false;
-    bool derived_flip_movement_y = false;
+    bool derived_invert_x = read_bool_field_like(payload, "invert_x", false);
+    bool derived_invert_y = read_bool_field_like(payload, "invert_y", false);
+    bool derived_invert_z = read_bool_field_like(payload, "invert_z", false);
     if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
         const auto& modifiers = payload["derived_modifiers"];
         if (modifiers.contains("reverse")) {
             derived_reverse = read_bool_like(modifiers["reverse"], derived_reverse);
-        }
-        if (modifiers.contains("flipX")) {
-            derived_flip_x = read_bool_like(modifiers["flipX"], derived_flip_x);
-        }
-        if (modifiers.contains("flipY")) {
-            derived_flip_y = read_bool_like(modifiers["flipY"], false);
-        }
-        if (modifiers.contains("flipMovementX")) {
-            derived_flip_movement_x = read_bool_like(modifiers["flipMovementX"], false);
-        }
-        if (modifiers.contains("flipMovementY")) {
-            derived_flip_movement_y = read_bool_like(modifiers["flipMovementY"], false);
         }
     }
 
@@ -100,9 +88,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     const bool default_inherit_data =
         derived_from_animation &&
             legacy_inherit_source_movement &&
-            !has_any_local_frame_data &&
-            !derived_flip_movement_x &&
-            !derived_flip_movement_y;
+            !has_any_local_frame_data;
     bool inherit_data = default_inherit_data;
     if (payload.contains("inherit_data")) {
         inherit_data = read_bool_field_like(payload, "inherit_data", default_inherit_data);
@@ -111,14 +97,13 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     }
     inherit_data = derived_from_animation && inherit_data;
     if (!inherit_data) {
-        derived_flip_x = false;
-        derived_flip_y = false;
+        derived_invert_x = false;
+        derived_invert_y = false;
+        derived_invert_z = false;
     }
 
     if (derived_from_animation) {
-        payload["derived_modifiers"] = nlohmann::json{{"reverse", derived_reverse},
-                                                       {"flipX", derived_flip_x},
-                                                       {"flipY", derived_flip_y}};
+        payload["derived_modifiers"] = nlohmann::json{{"reverse", derived_reverse}};
         payload["inherit_data"] = inherit_data;
 
         if (inherit_data) {
@@ -138,10 +123,14 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     } else {
         payload.erase("derived_modifiers");
         payload.erase("inherit_data");
+        derived_invert_x = false;
+        derived_invert_y = false;
+        derived_invert_z = false;
     }
     payload["reverse_source"] = derived_reverse;
-    payload["flipped_source"] = derived_flip_x;
-    payload["flip_vertical_source"] = derived_flip_y;
+    payload["invert_x"] = derived_invert_x;
+    payload["invert_y"] = derived_invert_y;
+    payload["invert_z"] = derived_invert_z;
     if (derived_from_animation) {
         payload["invert_frames_horizontal"] = read_bool_field_like(payload, "invert_frames_horizontal", false);
         payload["invert_frames_vertical"] = false;
@@ -150,8 +139,16 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         payload.erase("invert_frames_vertical");
     }
     payload.erase("inherit_source_movement");
+    payload.erase("flipped_source");
+    payload.erase("flip_vertical_source");
     payload.erase("flip_movement_horizontal");
     payload.erase("flip_movement_vertical");
+    if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
+        payload["derived_modifiers"].erase("flipX");
+        payload["derived_modifiers"].erase("flipY");
+        payload["derived_modifiers"].erase("flipMovementX");
+        payload["derived_modifiers"].erase("flipMovementY");
+    }
 
     payload.erase("fps");
     payload.erase("speed");
@@ -169,13 +166,13 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         }
         if (movement.size() < static_cast<size_t>(frames)) {
             while (movement.size() < static_cast<size_t>(frames)) {
-                movement.push_back(nlohmann::json::array({0, 0}));
+                movement.push_back(nlohmann::json::array({0, 0, 0}));
             }
         } else if (movement.size() > static_cast<size_t>(frames)) {
             movement.erase(movement.begin() + frames, movement.end());
         }
         if (movement.empty()) {
-            movement.push_back(nlohmann::json::array({0, 0}));
+            movement.push_back(nlohmann::json::array({0, 0, 0}));
         }
         payload["movement"] = movement;
 
@@ -250,7 +247,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         int total_dx = 0;
         int total_dy = 0;
         int total_dz = 0;
-        for (std::size_t i = 1; i < movement.size(); ++i) {
+        for (std::size_t i = 0; i < movement.size(); ++i) {
             const nlohmann::json& entry = movement[i];
             total_dx += read_component(entry, 0);
             total_dy += read_component(entry, 1);
@@ -356,39 +353,6 @@ bool payload_inherits_data(const nlohmann::json& payload) {
         return read_bool_field_like(payload, "inherit_data", default_inherit);
     }
     return read_bool_field_like(payload, "inherit_source_geometry", default_inherit);
-}
-
-bool payload_legacy_inherits_movement(const nlohmann::json& payload) {
-    return payload_uses_animation_source(payload) &&
-           read_bool_field_like(payload, "inherit_source_movement", true);
-}
-
-bool payload_has_legacy_movement_flip_x(const nlohmann::json& payload) {
-    bool flip = read_bool_field_like(payload, "flip_movement_horizontal", false);
-    if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
-        flip = read_bool_field_like(payload["derived_modifiers"], "flipMovementX", flip);
-    }
-    return flip;
-}
-
-bool payload_has_legacy_movement_flip_y(const nlohmann::json& payload) {
-    bool flip = read_bool_field_like(payload, "flip_movement_vertical", false);
-    if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
-        flip = read_bool_field_like(payload["derived_modifiers"], "flipMovementY", flip);
-    }
-    return flip;
-}
-
-bool payload_requires_legacy_geometry_materialization(const nlohmann::json& payload) {
-    if (!payload_uses_animation_source(payload)) {
-        return false;
-    }
-    if (payload_has_legacy_movement_flip_x(payload) || payload_has_legacy_movement_flip_y(payload)) {
-        return true;
-    }
-    return payload_legacy_inherits_movement(payload) &&
-           payload_has_local_non_movement_geometry(payload) &&
-           !payload.contains("inherit_source_geometry");
 }
 
 std::size_t payload_frame_count(const nlohmann::json& payload) {
@@ -564,27 +528,6 @@ void set_movement_components(nlohmann::json& entry, int dx, int dy, int dz) {
     entry = std::move(updated);
 }
 
-void apply_movement_transforms(std::vector<nlohmann::json>& movement,
-                               bool reverse_frames,
-                               bool flip_horizontal,
-                               bool flip_vertical) {
-    if (reverse_frames) {
-        std::reverse(movement.begin(), movement.end());
-    }
-    if (!flip_horizontal && !flip_vertical) {
-        return;
-    }
-    for (auto& entry : movement) {
-        const int dx = read_movement_component(entry, 0);
-        const int dy = read_movement_component(entry, 1);
-        const int dz = read_movement_component(entry, 2);
-        set_movement_components(entry,
-                                flip_horizontal ? -dx : dx,
-                                dy,
-                                flip_vertical ? -dz : dz);
-    }
-}
-
 template <typename T>
 void resize_with_last(std::vector<T>& items, std::size_t frame_count, const T& fallback) {
     if (items.empty()) {
@@ -599,278 +542,6 @@ void resize_with_last(std::vector<T>& items, std::size_t frame_count, const T& f
     items.resize(frame_count, tail);
 }
 
-SDL_Point read_image_size(const fs::path& path) {
-    if (path.empty()) {
-        return SDL_Point{0, 0};
-    }
-    SDL_Surface* surface = IMG_Load(path.string().c_str());
-    if (!surface) {
-        return SDL_Point{0, 0};
-    }
-    SDL_Point size{surface->w, surface->h};
-    SDL_DestroySurface(surface);
-    return size;
-}
-
-std::vector<fs::path> find_frame_sequence(const fs::path& asset_root,
-                                          const nlohmann::json& payload,
-                                          const std::string& animation_id) {
-    std::vector<fs::path> numeric_frames;
-    std::vector<fs::path> fallback_sequence;
-    bool has_fallback_sequence = false;
-    std::error_code ec;
-
-    const int requested_frames = static_cast<int>(payload_frame_count(payload));
-    std::string relative_path = animation_id;
-    if (payload.contains("source") && payload["source"].is_object()) {
-        relative_path = payload["source"].value("path", relative_path);
-    }
-    if (relative_path.empty()) {
-        relative_path = animation_id;
-    }
-
-    fs::path folder = asset_root;
-    fs::path requested = relative_path;
-    const auto should_treat_as_absolute = [&](const fs::path& path) {
-        if (path.is_absolute()) {
-            return true;
-        }
-        const std::string requested_str = lowercase_copy(path.generic_string());
-        if (requested_str.rfind("src/", 0) == 0) {
-            return true;
-        }
-        if (!asset_root.empty()) {
-            const std::string root_str = lowercase_copy(asset_root.generic_string());
-            if (!root_str.empty()) {
-                if (requested_str == root_str) {
-                    return true;
-                }
-                if (requested_str.rfind(root_str + "/", 0) == 0) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
-
-    if (should_treat_as_absolute(requested)) {
-        folder = requested;
-    } else if (!requested.empty()) {
-        folder = asset_root.empty() ? requested : (asset_root / requested);
-    }
-
-    if (requested_frames > 0) {
-        fallback_sequence.reserve(static_cast<std::size_t>(requested_frames));
-        fs::path fallback;
-        for (int i = 0; i < requested_frames; ++i) {
-            fs::path candidate = folder / (std::to_string(i) + ".png");
-            if (fs::exists(candidate, ec)) {
-                fallback_sequence.push_back(candidate);
-                if (fallback.empty()) {
-                    fallback = candidate;
-                }
-            } else {
-                fallback_sequence.emplace_back();
-            }
-            ec.clear();
-        }
-        if (!fallback.empty()) {
-            for (auto& path : fallback_sequence) {
-                if (path.empty()) {
-                    path = fallback;
-                }
-            }
-            has_fallback_sequence = true;
-        } else {
-            fallback_sequence.clear();
-        }
-    }
-
-    if (!fs::exists(folder, ec) || !fs::is_directory(folder, ec)) {
-        return has_fallback_sequence ? fallback_sequence : std::vector<fs::path>{};
-    }
-
-    for (const auto& entry : fs::directory_iterator(folder, ec)) {
-        if (ec) {
-            break;
-        }
-        if (!entry.is_regular_file(ec)) {
-            continue;
-        }
-        const fs::path& path = entry.path();
-        if (lowercase_copy(path.extension().string()) != ".png") {
-            continue;
-        }
-        try {
-            (void)std::stoi(path.stem().string());
-            numeric_frames.push_back(path);
-        } catch (...) {
-        }
-    }
-
-    if (numeric_frames.empty()) {
-        return has_fallback_sequence ? fallback_sequence : std::vector<fs::path>{};
-    }
-
-    std::sort(numeric_frames.begin(),
-              numeric_frames.end(),
-              [](const fs::path& lhs, const fs::path& rhs) {
-                  int left = 0;
-                  int right = 0;
-                  try {
-                      left = std::stoi(lhs.stem().string());
-                  } catch (...) {
-                  }
-                  try {
-                      right = std::stoi(rhs.stem().string());
-                  } catch (...) {
-                  }
-                  return left < right;
-              });
-
-    if (requested_frames > 0) {
-        const int available = static_cast<int>(numeric_frames.size());
-        const int target = std::max(requested_frames, available);
-        std::vector<fs::path> sequence;
-        sequence.reserve(static_cast<std::size_t>(target));
-        for (int i = 0; i < target; ++i) {
-            sequence.push_back(i < available ? numeric_frames[static_cast<std::size_t>(i)]
-                                             : numeric_frames.back());
-        }
-        return sequence;
-    }
-
-    return numeric_frames;
-}
-
-void apply_anchor_frame_flip(nlohmann::json& frame, const SDL_Point& size, bool flip_x, bool flip_y) {
-    if (!frame.is_array()) {
-        frame = nlohmann::json::array();
-        return;
-    }
-    for (auto& anchor : frame) {
-        if (!anchor.is_object()) {
-            continue;
-        }
-        if (flip_x && size.x > 0 && anchor.contains("texture_x") && anchor["texture_x"].is_number()) {
-            const int x = anchor["texture_x"].is_number_integer()
-                              ? anchor["texture_x"].get<int>()
-                              : static_cast<int>(std::lround(anchor["texture_x"].get<double>()));
-            anchor["texture_x"] = size.x - 1 - x;
-            const double rotation = (anchor.contains("rotation_degrees") && anchor["rotation_degrees"].is_number())
-                ? (anchor["rotation_degrees"].is_number_integer()
-                       ? static_cast<double>(anchor["rotation_degrees"].get<int>())
-                       : anchor["rotation_degrees"].get<double>())
-                : 0.0;
-            anchor["rotation_degrees"] = std::isfinite(rotation) ? -rotation : 0.0;
-        }
-        if (flip_y && size.y > 0 && anchor.contains("texture_y") && anchor["texture_y"].is_number()) {
-            const int y = anchor["texture_y"].is_number_integer()
-                              ? anchor["texture_y"].get<int>()
-                              : static_cast<int>(std::lround(anchor["texture_y"].get<double>()));
-            anchor["texture_y"] = size.y - 1 - y;
-        }
-    }
-}
-
-void apply_box_frame_flip(nlohmann::json& frame, const SDL_Point& size, bool flip_x, bool flip_y) {
-    if (!frame.is_array()) {
-        frame = nlohmann::json::array();
-        return;
-    }
-    for (auto& box : frame) {
-        if (!box.is_object()) {
-            continue;
-        }
-
-        auto read_int_like_field = [](const nlohmann::json& node, const char* key, int fallback) {
-            if (!node.is_object() || !node.contains(key) || !node[key].is_number()) {
-                return fallback;
-            }
-            return node[key].is_number_integer()
-                       ? node[key].get<int>()
-                       : static_cast<int>(std::lround(node[key].get<double>()));
-        };
-
-        bool has_rect = false;
-        int left = 0;
-        int top = 0;
-        int right = 0;
-        int bottom = 0;
-
-        const bool has_position = box.contains("position") && box["position"].is_object();
-        const bool has_size_obj = box.contains("size") && box["size"].is_object();
-        if (has_position && has_size_obj) {
-            const int x = read_int_like_field(box["position"], "x", 0);
-            const int y = read_int_like_field(box["position"], "y", 0);
-            const int w = std::max(0, read_int_like_field(box["size"], "w", 0));
-            const int h = std::max(0, read_int_like_field(box["size"], "h", 0));
-            left = x;
-            top = y;
-            right = x + w;
-            bottom = y + h;
-            has_rect = true;
-        } else if (box.contains("corners") && box["corners"].is_array()) {
-            bool first_corner = true;
-            for (const auto& corner : box["corners"]) {
-                if (!corner.is_object()) {
-                    continue;
-                }
-                const int x = read_int_like_field(corner, "texture_x", 0);
-                const int y = read_int_like_field(corner, "texture_y", 0);
-                if (first_corner) {
-                    left = right = x;
-                    top = bottom = y;
-                    first_corner = false;
-                } else {
-                    left = std::min(left, x);
-                    right = std::max(right, x);
-                    top = std::min(top, y);
-                    bottom = std::max(bottom, y);
-                }
-            }
-            has_rect = !first_corner;
-        }
-
-        if (!has_rect) {
-            continue;
-        }
-
-        if (flip_x && size.x > 0) {
-            const int next_left = size.x - 1 - right;
-            const int next_right = size.x - 1 - left;
-            left = next_left;
-            right = next_right;
-        }
-        if (flip_y && size.y > 0) {
-            const int next_top = size.y - 1 - bottom;
-            const int next_bottom = size.y - 1 - top;
-            top = next_top;
-            bottom = next_bottom;
-        }
-        if (right < left) {
-            std::swap(left, right);
-        }
-        if (bottom < top) {
-            std::swap(top, bottom);
-        }
-
-        box["position"] = nlohmann::json::object({
-            {"x", left},
-            {"y", top},
-        });
-        box["size"] = nlohmann::json::object({
-            {"w", std::max(0, right - left)},
-            {"h", std::max(0, bottom - top)},
-        });
-        box["corners"] = nlohmann::json::array({
-            nlohmann::json{{"texture_x", left}, {"texture_y", top}},
-            nlohmann::json{{"texture_x", right}, {"texture_y", top}},
-            nlohmann::json{{"texture_x", right}, {"texture_y", bottom}},
-            nlohmann::json{{"texture_x", left}, {"texture_y", bottom}},
-        });
-    }
-}
 void update_payload_movement_total(nlohmann::json& payload) {
     const auto movement = payload.contains("movement") && payload["movement"].is_array()
                               ? payload["movement"]
@@ -878,7 +549,7 @@ void update_payload_movement_total(nlohmann::json& payload) {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
-    for (std::size_t i = 1; i < movement.size(); ++i) {
+    for (std::size_t i = 0; i < movement.size(); ++i) {
         total_dx += read_movement_component(movement[i], 0);
         total_dy += read_movement_component(movement[i], 1);
         total_dz += read_movement_component(movement[i], 2);
@@ -929,196 +600,7 @@ std::optional<nlohmann::json> AnimationDocument::raw_animation_payload_json(
 
 nlohmann::json AnimationDocument::normalize_payload_for_storage(const std::string& animation_id,
                                                                const nlohmann::json& payload) const {
-    struct GeometryResolution {
-        std::vector<nlohmann::json> movement;
-        std::vector<nlohmann::json> anchors;
-        std::vector<nlohmann::json> hit_boxes;
-        std::vector<nlohmann::json> attack_boxes;
-        std::vector<SDL_Point> frame_sizes;
-        bool valid = false;
-    };
-
     nlohmann::json working = payload.is_object() ? payload : nlohmann::json::object();
-    auto fetch_raw_payload = [&](const std::string& requested_id) -> std::optional<nlohmann::json> {
-        if (requested_id == animation_id) {
-            return working;
-        }
-        return raw_animation_payload_json(requested_id);
-    };
-
-    auto resolve_display_frame_sizes =
-        [&](auto&& self, const std::string& current_id, std::unordered_set<std::string>& visited)
-            -> std::vector<SDL_Point> {
-        if (current_id.empty() || !visited.insert(current_id).second) {
-            return {};
-        }
-
-        const auto payload_opt = fetch_raw_payload(current_id);
-        if (!payload_opt.has_value() || !payload_opt->is_object()) {
-            return {SDL_Point{0, 0}};
-        }
-
-        const nlohmann::json& raw = *payload_opt;
-        const std::size_t frame_count = payload_frame_count(raw);
-
-        std::vector<SDL_Point> sizes;
-        if (payload_uses_animation_source(raw)) {
-            sizes = self(self, payload_source_animation_id(raw), visited);
-            resize_with_last(sizes, frame_count, SDL_Point{0, 0});
-
-            bool reverse = read_bool_field_like(raw, "reverse_source", false);
-            if (raw.contains("derived_modifiers") && raw["derived_modifiers"].is_object()) {
-                reverse = read_bool_field_like(raw["derived_modifiers"], "reverse", reverse);
-            }
-            if (reverse) {
-                std::reverse(sizes.begin(), sizes.end());
-            }
-            return sizes;
-        }
-
-        const std::vector<fs::path> frames = find_frame_sequence(asset_root_, raw, current_id);
-        sizes.reserve(frames.size());
-        for (const auto& frame : frames) {
-            sizes.push_back(read_image_size(frame));
-        }
-        resize_with_last(sizes, frame_count, SDL_Point{0, 0});
-        if (read_bool_field_like(raw, "reverse_source", false)) {
-            std::reverse(sizes.begin(), sizes.end());
-        }
-        return sizes;
-    };
-
-    auto resolve_visible_geometry =
-        [&](auto&& self, const std::string& current_id, std::unordered_set<std::string>& visited)
-            -> GeometryResolution {
-        GeometryResolution result;
-        if (current_id.empty() || !visited.insert(current_id).second) {
-            return result;
-        }
-
-        const auto payload_opt = fetch_raw_payload(current_id);
-        if (!payload_opt.has_value() || !payload_opt->is_object()) {
-            return result;
-        }
-
-        const nlohmann::json& raw = *payload_opt;
-        const std::size_t frame_count = payload_frame_count(raw);
-
-        std::unordered_set<std::string> size_visited;
-        result.frame_sizes = resolve_display_frame_sizes(resolve_display_frame_sizes,
-                                                         current_id,
-                                                         size_visited);
-        resize_with_last(result.frame_sizes, frame_count, SDL_Point{0, 0});
-
-        const bool inherit_data = payload_inherits_data(raw);
-        const bool legacy_inherit_movement = payload_legacy_inherits_movement(raw);
-        const bool legacy_flip_movement_x = payload_has_legacy_movement_flip_x(raw);
-        const bool legacy_flip_movement_y = payload_has_legacy_movement_flip_y(raw);
-
-        const std::string source_id = payload_source_animation_id(raw);
-        GeometryResolution source_resolution;
-        const bool has_source =
-            !source_id.empty() &&
-            (source_resolution = self(self, source_id, visited)).valid;
-
-        bool reverse = read_bool_field_like(raw, "reverse_source", false);
-        bool flip_x = read_bool_field_like(raw, "flipped_source", false);
-        bool flip_y = read_bool_field_like(raw, "flip_vertical_source", false);
-        if (raw.contains("derived_modifiers") && raw["derived_modifiers"].is_object()) {
-            const auto& modifiers = raw["derived_modifiers"];
-            reverse = read_bool_field_like(modifiers, "reverse", reverse);
-            flip_x = read_bool_field_like(modifiers, "flipX", flip_x);
-            flip_y = read_bool_field_like(modifiers, "flipY", flip_y);
-        }
-
-        if (has_source && (inherit_data || legacy_inherit_movement)) {
-            result.movement = source_resolution.movement;
-            resize_with_last(result.movement, frame_count, nlohmann::json::array({0, 0, 0}));
-            apply_movement_transforms(result.movement,
-                                      reverse,
-                                      inherit_data ? flip_x : false,
-                                      inherit_data ? flip_y : false);
-        } else {
-            result.movement = canonical_movement_frames(raw, frame_count);
-        }
-
-        if (legacy_flip_movement_x || legacy_flip_movement_y) {
-            apply_movement_transforms(result.movement,
-                                      false,
-                                      legacy_flip_movement_x,
-                                      legacy_flip_movement_y);
-        }
-
-        if (inherit_data && has_source) {
-            result.anchors = source_resolution.anchors;
-            result.hit_boxes = source_resolution.hit_boxes;
-            result.attack_boxes = source_resolution.attack_boxes;
-            resize_with_last(result.anchors, frame_count, nlohmann::json::array());
-            resize_with_last(result.hit_boxes, frame_count, nlohmann::json::array());
-            resize_with_last(result.attack_boxes, frame_count, nlohmann::json::array());
-
-            if (reverse) {
-                std::reverse(result.anchors.begin(), result.anchors.end());
-                std::reverse(result.hit_boxes.begin(), result.hit_boxes.end());
-                std::reverse(result.attack_boxes.begin(), result.attack_boxes.end());
-            }
-            for (std::size_t i = 0; i < frame_count; ++i) {
-                const SDL_Point size =
-                    i < result.frame_sizes.size() ? result.frame_sizes[i] : SDL_Point{0, 0};
-                apply_anchor_frame_flip(result.anchors[i], size, flip_x, flip_y);
-                apply_box_frame_flip(result.hit_boxes[i], size, flip_x, flip_y);
-                apply_box_frame_flip(result.attack_boxes[i], size, flip_x, flip_y);
-            }
-        } else {
-            const nlohmann::json anchors =
-                normalize_frame_array_key(raw, "anchor_points", frame_count);
-            const nlohmann::json hit_boxes =
-                normalize_frame_array_key(raw, "hit_boxes", frame_count);
-            const nlohmann::json attack_boxes =
-                normalize_frame_array_key(raw, "attack_boxes", frame_count);
-            result.anchors.reserve(frame_count);
-            result.hit_boxes.reserve(frame_count);
-            result.attack_boxes.reserve(frame_count);
-            for (std::size_t i = 0; i < frame_count; ++i) {
-                result.anchors.push_back(anchors[i]);
-                result.hit_boxes.push_back(hit_boxes[i]);
-                result.attack_boxes.push_back(attack_boxes[i]);
-            }
-        }
-
-        result.valid = true;
-        return result;
-    };
-
-    if (payload_requires_legacy_geometry_materialization(working)) {
-        std::unordered_set<std::string> visited;
-        GeometryResolution resolved =
-            resolve_visible_geometry(resolve_visible_geometry, animation_id, visited);
-
-        if (resolved.valid) {
-            working["movement"] = nlohmann::json::array();
-            working["anchor_points"] = nlohmann::json::array();
-            working["hit_boxes"] = nlohmann::json::array();
-            working["attack_boxes"] = nlohmann::json::array();
-            for (const auto& frame : resolved.movement) {
-                working["movement"].push_back(frame);
-            }
-            for (const auto& frame : resolved.anchors) {
-                working["anchor_points"].push_back(frame);
-            }
-            for (const auto& frame : resolved.hit_boxes) {
-                working["hit_boxes"].push_back(frame);
-            }
-            for (const auto& frame : resolved.attack_boxes) {
-                working["attack_boxes"].push_back(frame);
-            }
-            working["inherit_data"] = false;
-            working.erase("hit_geometry");
-            working.erase("attack_geometry");
-            update_payload_movement_total(working);
-        }
-    }
-
     return coerce_payload(animation_id, working);
 }
 

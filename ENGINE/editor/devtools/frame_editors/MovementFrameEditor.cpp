@@ -142,13 +142,14 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             if (!selection_state_) {
                 return;
             }
-            if (frames_.empty() || selected_index_ <= 0 ||
+            if (frames_.empty() || selected_index_ < 0 ||
                 selected_index_ >= static_cast<int>(frames_.size()) ||
                 rel_positions_.empty() || rel_positions_z_.empty()) {
                 return;
             }
-            if (selected_index_ - 1 >= static_cast<int>(rel_positions_.size()) ||
-                selected_index_ - 1 >= static_cast<int>(rel_positions_z_.size())) {
+            const int previous_index = selected_index_ - 1;
+            if (previous_index >= static_cast<int>(rel_positions_.size()) ||
+                previous_index >= static_cast<int>(rel_positions_z_.size())) {
                 return;
             }
 
@@ -163,12 +164,14 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             float rel_x = snapped_world.x - static_cast<float>(anchor.x);
             float rel_y = snapped_world.y - static_cast<float>(anchor.y);
 
-            SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
+            const SDL_FPoint prev_rel_abs =
+                (previous_index >= 0) ? rel_positions_[previous_index] : SDL_FPoint{0.0f, 0.0f};
+            const float prev_rel_z = (previous_index >= 0) ? rel_positions_z_[previous_index] : 0.0f;
 
             frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
             frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
-            // dz is a raw delta value (like dx/dy), not a percentage
-            frames_[selected_index_].dz = std::round(snapped_world_z - base_z);
+            // dz is a per-frame delta.
+            frames_[selected_index_].dz = std::round((snapped_world_z - base_z) - prev_rel_z);
 
             rebuild_rel_positions();
             apply_live_changes();
@@ -198,15 +201,15 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
             // Guard: ensure data structures exist before accessing
-            if (frames_.empty() || selected_index_ <= 0 ||
+            if (frames_.empty() || selected_index_ < 0 ||
                 selected_index_ >= static_cast<int>(frames_.size()) ||
                 rel_positions_.empty() || rel_positions_z_.empty()) {
                 return;
             }
 
-            // Guard: ensure previous position exists
-            if (selected_index_ - 1 >= static_cast<int>(rel_positions_.size()) ||
-                selected_index_ - 1 >= static_cast<int>(rel_positions_z_.size())) {
+            const int previous_index = selected_index_ - 1;
+            if (previous_index >= static_cast<int>(rel_positions_.size()) ||
+                previous_index >= static_cast<int>(rel_positions_z_.size())) {
                 return;
             }
 
@@ -219,13 +222,14 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             float rel_x = snapped_world.x - static_cast<float>(anchor.x);
             float rel_y = snapped_world.y - static_cast<float>(anchor.y);
 
-            // Previous frame absolute relative position
-            SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
+            const SDL_FPoint prev_rel_abs =
+                (previous_index >= 0) ? rel_positions_[previous_index] : SDL_FPoint{0.0f, 0.0f};
+            const float prev_rel_z = (previous_index >= 0) ? rel_positions_z_[previous_index] : 0.0f;
 
-            // New local delta - dz is a raw delta value (like dx/dy), not a percentage
+            // New local per-frame deltas.
             frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
             frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
-            frames_[selected_index_].dz = std::round(snapped_world_z - base_z);
+            frames_[selected_index_].dz = std::round((snapped_world_z - base_z) - prev_rel_z);
 
             rebuild_rel_positions();
             apply_live_changes();
@@ -461,13 +465,13 @@ void MovementFrameEditor::rebuild_rel_positions() {
     rel_positions_.resize(count, SDL_FPoint{0.0f, 0.0f});
     rel_positions_z_.resize(count, 0.0f);
     if (count == 0) return;
-    // dz is a raw delta value (like dx/dy), not a percentage
-    rel_positions_[0] = SDL_FPoint{0.0f, 0.0f};
+    // Each frame stores per-frame deltas. Relative positions are cumulative.
+    rel_positions_[0] = SDL_FPoint{frames_[0].dx, frames_[0].dy};
     rel_positions_z_[0] = frames_[0].dz;
     for (std::size_t i = 1; i < count; ++i) {
         rel_positions_[i].x = rel_positions_[i - 1].x + frames_[i].dx;
         rel_positions_[i].y = rel_positions_[i - 1].y + frames_[i].dy;
-        rel_positions_z_[i] = frames_[i].dz;
+        rel_positions_z_[i] = rel_positions_z_[i - 1] + frames_[i].dz;
     }
 }
 
@@ -478,10 +482,6 @@ void MovementFrameEditor::redistribute_frames_after_adjustment(int adjusted_inde
         return;
     }
     const int last_index = static_cast<int>(count) - 1;
-    if (adjusted_index <= 0) {
-        persist_changes();
-        return;
-    }
     if (rel_positions_.size() != count) {
         rebuild_rel_positions();
     }
@@ -498,14 +498,12 @@ void MovementFrameEditor::redistribute_frames_after_adjustment(int adjusted_inde
         apply_linear_smoothing(adjusted_index, redistributed, last_index);
     }
 
-    frames_[0].dx = 0.0f;
-    frames_[0].dy = 0.0f;
-    frames_[0].dz = 0.0f;
-    for (size_t i = 1; i < count; ++i) {
-        const SDL_FPoint prev = redistributed[i - 1];
+    SDL_FPoint prev{0.0f, 0.0f};
+    for (size_t i = 0; i < count; ++i) {
         const SDL_FPoint curr = redistributed[i];
         frames_[i].dx = static_cast<float>(std::round(curr.x - prev.x));
         frames_[i].dy = static_cast<float>(std::round(curr.y - prev.y));
+        prev = curr;
     }
     rebuild_rel_positions();
     persist_changes();
@@ -515,7 +513,6 @@ void MovementFrameEditor::apply_linear_smoothing(int adjusted_index,
                                                  std::vector<SDL_FPoint>& redistributed,
                                                  int last_index) const {
     if (redistributed.empty()) return;
-    if (adjusted_index <= 0) return;
     const SDL_FPoint start = redistributed.front();
     const SDL_FPoint end = redistributed.back();
     const float steps = static_cast<float>(last_index);
@@ -554,8 +551,6 @@ void MovementFrameEditor::apply_curved_smoothing(int adjusted_index,
                                                  int last_index) const {
     if (redistributed.size() < 2) return;
     if (original.size() != redistributed.size()) return;
-    if (adjusted_index <= 0) return;
-
     auto clamp_control = [](const SDL_FPoint& p0, const SDL_FPoint& p2, SDL_FPoint& control) {
         SDL_FPoint midpoint{(p0.x + p2.x) * 0.5f, (p0.y + p2.y) * 0.5f};
         float dx = control.x - midpoint.x;

@@ -6772,7 +6772,7 @@
         "behind_layer_light_strength_multiplier": 1.0,
         "blur_px": 1.1299999952316284,
         "boundary_min_visible_screen_ratio": 0.014999999664723873,
-        "camera_height_max_px": 100000,
+        "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
         "depth_of_field_enabled": false,
         "front_layer_light_strength_multiplier": 2.2100000381469727,
@@ -6909,9 +6909,6 @@
         "NewRoom": {
           "camera_center_dx": -186,
           "camera_center_dz": 34,
-          "camera_height_px": 1000,
-          "camera_tilt_deg": 21.399999618530273,
-          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
             204,
@@ -6926,7 +6923,7 @@
           "is_spawn": false,
           "max_height": 4000,
           "max_width": 2392,
-          "min_height": 500,
+          "min_height": 1812,
           "min_width": 1472,
           "name": "NewRoom",
           "spawn_groups": []
@@ -6979,11 +6976,8 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -475,
-          "camera_center_dz": 104,
-          "camera_height_px": 319,
-          "camera_tilt_deg": 60.0,
-          "camera_zoom_percent": 0,
+          "camera_center_dx": -354,
+          "camera_center_dz": -167,
           "curvyness": 2,
           "display_color": [
             37,
@@ -7275,6 +7269,7 @@
       "schema_version": 1,
       "trails_data": {
         "basic": {
+          "camera_height_px": 5382,
           "display_color": [
             85,
             242,

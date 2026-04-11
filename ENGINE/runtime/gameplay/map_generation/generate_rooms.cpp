@@ -118,9 +118,6 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                 nlohmann::json entry = nlohmann::json::object();
                 entry["name"]                = root_spec.name;
                 entry["geometry"]            = "Circle";
-                entry["radius"]              = kSpawnRadius;
-                entry["min_radius"]          = kSpawnRadius;
-                entry["max_radius"]          = kSpawnRadius;
                 entry["min_width"]           = diameter;
                 entry["max_width"]           = diameter;
                 entry["min_height"]          = diameter;

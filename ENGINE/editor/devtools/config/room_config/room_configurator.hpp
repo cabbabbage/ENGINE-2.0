@@ -158,9 +158,6 @@ private:
     void apply_panel_focus_states();
     DockableCollapsible* panel_at_point(SDL_Point p) const;
     bool handle_panel_focus_event(const SDL_Event& e);
-    void initialize_radius_slider(bool request_layout);
-    void expand_radius_slider_range_if_needed();
-    int compute_radius_slider_initial_range() const;
     void expand_width_slider_range_if_needed();
     void expand_height_slider_range_if_needed();
 
@@ -201,9 +198,6 @@ private:
     std::unique_ptr<RangeSliderWidget> height_range_widget_;
     int width_slider_max_range_ = 0;
     int height_slider_max_range_ = 0;
-    std::unique_ptr<DMRangeSlider> radius_slider_;
-    std::unique_ptr<RangeSliderWidget> radius_widget_;
-    int radius_slider_max_range_ = 0;
     std::unique_ptr<DMSlider> edge_slider_;
     std::unique_ptr<SliderWidget> edge_widget_;
     std::unique_ptr<DMSlider> curvy_slider_;

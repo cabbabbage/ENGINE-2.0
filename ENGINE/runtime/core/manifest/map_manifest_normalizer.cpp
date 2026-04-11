@@ -1,5 +1,6 @@
 #include "core/manifest/map_manifest_normalizer.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -11,6 +12,227 @@ namespace manifest {
 namespace {
 
 constexpr int kDefaultSpawnRadius = 1500;
+constexpr int kMinRoomDimension = 1;
+constexpr int kMaxRoomDimension = 4000;
+constexpr int kDefaultRoomMinDimension = 500;
+constexpr int kDefaultRoomMaxDimension = 4000;
+
+bool json_to_int(const nlohmann::json& value, int& out) {
+    if (value.is_number_integer()) {
+        out = value.get<int>();
+        return true;
+    }
+    if (value.is_number_float()) {
+        out = static_cast<int>(std::lround(value.get<double>()));
+        return true;
+    }
+    return false;
+}
+
+bool json_to_string(const nlohmann::json& value, std::string& out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    out = value.get<std::string>();
+    return true;
+}
+
+void sanitize_dimension_pair(int& min_value, int& max_value) {
+    if (min_value <= 0 && max_value > 0) {
+        min_value = max_value;
+    } else if (max_value <= 0 && min_value > 0) {
+        max_value = min_value;
+    } else if (min_value <= 0 && max_value <= 0) {
+        min_value = kDefaultRoomMinDimension;
+        max_value = kDefaultRoomMaxDimension;
+    }
+
+    min_value = std::clamp(min_value, kMinRoomDimension, kMaxRoomDimension);
+    max_value = std::clamp(max_value, kMinRoomDimension, kMaxRoomDimension);
+    if (max_value < min_value) {
+        std::swap(min_value, max_value);
+    }
+}
+
+bool geometry_is_circle(const std::string& geometry) {
+    std::string lowered;
+    lowered.reserve(geometry.size());
+    for (char ch : geometry) {
+        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return lowered == "circle";
+}
+
+bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_name) {
+    bool changed = false;
+    if (!entry.is_object()) {
+        entry = nlohmann::json::object();
+        changed = true;
+    }
+
+    if (!entry.contains("name") || !entry["name"].is_string() || entry["name"].get<std::string>().empty()) {
+        entry["name"] = key_name;
+        changed = true;
+    }
+
+    std::string geometry = "Square";
+    const bool has_geometry_string = entry.contains("geometry") && json_to_string(entry["geometry"], geometry);
+    if (!has_geometry_string || geometry.empty()) {
+        geometry = "Square";
+        entry["geometry"] = geometry;
+        changed = true;
+    }
+
+    int width_min = kDefaultRoomMinDimension;
+    int width_max = kDefaultRoomMaxDimension;
+    int height_min = kDefaultRoomMinDimension;
+    int height_max = kDefaultRoomMaxDimension;
+    bool has_width_min = false;
+    bool has_width_max = false;
+    bool has_height_min = false;
+    bool has_height_max = false;
+
+    if (entry.contains("min_width") && json_to_int(entry["min_width"], width_min)) {
+        has_width_min = true;
+    }
+    if (entry.contains("max_width") && json_to_int(entry["max_width"], width_max)) {
+        has_width_max = true;
+    }
+    if (entry.contains("min_height") && json_to_int(entry["min_height"], height_min)) {
+        has_height_min = true;
+    }
+    if (entry.contains("max_height") && json_to_int(entry["max_height"], height_max)) {
+        has_height_max = true;
+    }
+
+    int legacy_min_radius = 0;
+    int legacy_max_radius = 0;
+    bool has_legacy_min_radius = false;
+    bool has_legacy_max_radius = false;
+    if (entry.contains("min_radius") && json_to_int(entry["min_radius"], legacy_min_radius)) {
+        legacy_min_radius = std::max(0, legacy_min_radius);
+        has_legacy_min_radius = true;
+    }
+    if (entry.contains("max_radius") && json_to_int(entry["max_radius"], legacy_max_radius)) {
+        legacy_max_radius = std::max(0, legacy_max_radius);
+        has_legacy_max_radius = true;
+    }
+    int legacy_radius = 0;
+    if (entry.contains("radius") && json_to_int(entry["radius"], legacy_radius)) {
+        legacy_radius = std::max(0, legacy_radius);
+        if (!has_legacy_min_radius) {
+            legacy_min_radius = legacy_radius;
+            has_legacy_min_radius = true;
+        }
+        if (!has_legacy_max_radius) {
+            legacy_max_radius = legacy_radius;
+            has_legacy_max_radius = true;
+        }
+    }
+
+    if (geometry_is_circle(geometry) && (has_legacy_min_radius || has_legacy_max_radius)) {
+        if (legacy_min_radius <= 0 && legacy_max_radius > 0) {
+            legacy_min_radius = legacy_max_radius;
+        }
+        if (legacy_max_radius <= 0 && legacy_min_radius > 0) {
+            legacy_max_radius = legacy_min_radius;
+        }
+        if (legacy_max_radius < legacy_min_radius) {
+            std::swap(legacy_min_radius, legacy_max_radius);
+        }
+
+        const int migrated_min_diameter = legacy_min_radius > 0 ? legacy_min_radius * 2 : 0;
+        const int migrated_max_diameter = legacy_max_radius > 0 ? legacy_max_radius * 2 : migrated_min_diameter;
+        if (!has_width_min && migrated_min_diameter > 0) width_min = migrated_min_diameter;
+        if (!has_width_max && migrated_max_diameter > 0) width_max = migrated_max_diameter;
+        if (!has_height_min && migrated_min_diameter > 0) height_min = migrated_min_diameter;
+        if (!has_height_max && migrated_max_diameter > 0) height_max = migrated_max_diameter;
+    }
+
+    sanitize_dimension_pair(width_min, width_max);
+    sanitize_dimension_pair(height_min, height_max);
+
+    int existing_value = 0;
+    const bool has_numeric_min_width = entry.contains("min_width") && json_to_int(entry["min_width"], existing_value);
+    if (!has_numeric_min_width || existing_value != width_min) {
+        entry["min_width"] = width_min;
+        changed = true;
+    }
+    const bool has_numeric_max_width = entry.contains("max_width") && json_to_int(entry["max_width"], existing_value);
+    if (!has_numeric_max_width || existing_value != width_max) {
+        entry["max_width"] = width_max;
+        changed = true;
+    }
+    const bool has_numeric_min_height = entry.contains("min_height") && json_to_int(entry["min_height"], existing_value);
+    if (!has_numeric_min_height || existing_value != height_min) {
+        entry["min_height"] = height_min;
+        changed = true;
+    }
+    const bool has_numeric_max_height = entry.contains("max_height") && json_to_int(entry["max_height"], existing_value);
+    if (!has_numeric_max_height || existing_value != height_max) {
+        entry["max_height"] = height_max;
+        changed = true;
+    }
+
+    if (entry.erase("radius") > 0) changed = true;
+    if (entry.erase("min_radius") > 0) changed = true;
+    if (entry.erase("max_radius") > 0) changed = true;
+
+    auto normalize_bool = [&](const char* key, bool fallback) {
+        const bool value = entry.contains(key) && entry[key].is_boolean() ? entry[key].get<bool>() : fallback;
+        if (!entry.contains(key) || !entry[key].is_boolean() || entry[key].get<bool>() != value) {
+            entry[key] = value;
+            changed = true;
+        }
+    };
+    normalize_bool("is_spawn", false);
+    normalize_bool("is_boss", false);
+    normalize_bool("inherits_map_assets", false);
+
+    int edge_smoothness = 2;
+    if (entry.contains("edge_smoothness")) {
+        (void)json_to_int(entry["edge_smoothness"], edge_smoothness);
+    }
+    edge_smoothness = std::clamp(edge_smoothness, 0, 101);
+    const bool has_numeric_edge = entry.contains("edge_smoothness") && json_to_int(entry["edge_smoothness"], existing_value);
+    if (!has_numeric_edge || existing_value != edge_smoothness) {
+        entry["edge_smoothness"] = edge_smoothness;
+        changed = true;
+    }
+
+    if (entry.contains("curvyness")) {
+        int curvyness = 0;
+        (void)json_to_int(entry["curvyness"], curvyness);
+        curvyness = std::max(0, curvyness);
+        const bool has_numeric_curvy = json_to_int(entry["curvyness"], existing_value);
+        if (!has_numeric_curvy || existing_value != curvyness) {
+            entry["curvyness"] = curvyness;
+            changed = true;
+        }
+    }
+
+    if (!entry.contains("spawn_groups") || !entry["spawn_groups"].is_array()) {
+        entry["spawn_groups"] = nlohmann::json::array();
+        changed = true;
+    }
+
+    return changed;
+}
+
+bool normalize_room_config_section(nlohmann::json& section) {
+    if (!section.is_object()) {
+        section = nlohmann::json::object();
+        return true;
+    }
+
+    bool changed = false;
+    for (auto it = section.begin(); it != section.end(); ++it) {
+        if (normalize_room_config_entry(it.value(), it.key())) {
+            changed = true;
+        }
+    }
+    return changed;
+}
 
 bool ensure_object_section(nlohmann::json& root, const char* key) {
     auto it = root.find(key);
@@ -50,9 +272,6 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     nlohmann::json entry = nlohmann::json::object();
     entry["name"] = spawn_name;
     entry["geometry"] = "Circle";
-    entry["radius"] = kDefaultSpawnRadius;
-    entry["min_radius"] = kDefaultSpawnRadius;
-    entry["max_radius"] = kDefaultSpawnRadius;
     entry["min_width"] = diameter;
     entry["max_width"] = diameter;
     entry["min_height"] = diameter;
@@ -138,8 +357,18 @@ std::string infer_spawn_room_name(nlohmann::json& rooms_data, bool& changed) {
     }
 
     for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
-        if (it.value().is_object() && it.value().value("is_spawn", false)) {
-            return it.key();
+        if (it.value().is_object()) {
+            bool is_spawn = false;
+            if (it.value().contains("is_spawn")) {
+                if (it.value()["is_spawn"].is_boolean()) {
+                    is_spawn = it.value()["is_spawn"].get<bool>();
+                } else if (it.value()["is_spawn"].is_number_integer()) {
+                    is_spawn = it.value()["is_spawn"].get<int>() != 0;
+                }
+            }
+            if (is_spawn) {
+                return it.key();
+            }
         }
     }
 
@@ -232,9 +461,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     nlohmann::json spawn_room = nlohmann::json::object();
     spawn_room["name"] = "spawn";
     spawn_room["geometry"] = "Circle";
-    spawn_room["radius"] = kDefaultSpawnRadius;
-    spawn_room["min_radius"] = kDefaultSpawnRadius;
-    spawn_room["max_radius"] = kDefaultSpawnRadius;
     spawn_room["min_width"] = diameter;
     spawn_room["max_width"] = diameter;
     spawn_room["min_height"] = diameter;
@@ -324,6 +550,12 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     }
 
     if (ensure_map_layers(map_manifest, map_id)) {
+        changed = true;
+    }
+    if (normalize_room_config_section(map_manifest["rooms_data"])) {
+        changed = true;
+    }
+    if (normalize_room_config_section(map_manifest["trails_data"])) {
         changed = true;
     }
     if (!map_manifest.contains("map_name") ||

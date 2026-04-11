@@ -23,10 +23,11 @@ TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-source
               {"number_of_frames", 1},
               {"inherit_data", true},
               {"invert_frames_vertical", true},
-              {"flipped_source", true},
-              {"flip_vertical_source", true},
+              {"invert_x", true},
+              {"invert_y", true},
+              {"invert_z", true},
               {"reverse_source", false},
-               {"derived_modifiers", {{"flipX", true}, {"flipY", true}, {"reverse", false}}}}},
+              {"derived_modifiers", {{"reverse", false}}}}},
          }},
     };
 
@@ -45,12 +46,17 @@ TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-source
     CHECK((*payload)["reverse_source"] == false);
     CHECK((*payload)["inherit_data"] == true);
     CHECK((*payload)["invert_frames_vertical"] == false);
-    CHECK((*payload)["flipped_source"] == true);
-    CHECK((*payload)["flip_vertical_source"] == true);
+    CHECK((*payload)["invert_x"] == true);
+    CHECK((*payload)["invert_y"] == true);
+    CHECK((*payload)["invert_z"] == true);
+    CHECK_FALSE(payload->contains("flipped_source"));
+    CHECK_FALSE(payload->contains("flip_vertical_source"));
     REQUIRE(payload->contains("derived_modifiers"));
-    CHECK((*payload)["derived_modifiers"]["flipX"] == true);
-    CHECK((*payload)["derived_modifiers"]["flipY"] == true);
     CHECK((*payload)["derived_modifiers"]["reverse"] == false);
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipX"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipY"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipMovementX"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipMovementY"));
 }
 
 TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is toggled") {

@@ -1131,14 +1131,12 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
     constexpr float effective_fps = static_cast<float>(kBaseAnimationFps);
     const float frame_time_ms = 1000.0f / effective_fps;
     bool reverse = payload.value("reverse_source", false);
-    bool flip_x = payload.value("flipped_source", false);
-    bool flip_y = false;
+    bool invert_x = payload.value("invert_x", false);
+    bool invert_y = payload.value("invert_y", false);
 
     if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
         const auto& modifiers = payload["derived_modifiers"];
         reverse = modifiers.value("reverse", reverse);
-        flip_x = modifiers.value("flipX", flip_x);
-        flip_y = modifiers.value("flipY", false);
     }
 
     int num_frames = safe_to_int(payload.value("number_of_frames", nlohmann::json(1)), 1);
@@ -1197,8 +1195,8 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
     SDL_SetRenderClipRect(renderer, &clip_rect);
 
     SDL_FlipMode flip_flags = SDL_FLIP_NONE;
-    if (flip_x) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
-    if (flip_y) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
+    if (invert_x) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
+    if (invert_y) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
 
     sdl_render::TextureRotated(renderer, frame_texture, nullptr, &dst_rect, 0.0, nullptr, flip_flags);
 

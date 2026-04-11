@@ -334,12 +334,13 @@ void set_movement_components(nlohmann::json& entry, int dx, int dy, int dz) {
 
 void apply_movement_transforms(std::vector<nlohmann::json>& movement,
                                bool reverse_frames,
-                               bool flip_horizontal,
-                               bool flip_vertical) {
+                               bool invert_x,
+                               bool invert_y,
+                               bool invert_z) {
     if (reverse_frames) {
         std::reverse(movement.begin(), movement.end());
     }
-    if (!flip_horizontal && !flip_vertical) {
+    if (!invert_x && !invert_y && !invert_z) {
         return;
     }
     for (auto& entry : movement) {
@@ -347,9 +348,9 @@ void apply_movement_transforms(std::vector<nlohmann::json>& movement,
         const int dy = read_movement_component(entry, 1);
         const int dz = read_movement_component(entry, 2);
         set_movement_components(entry,
-                                flip_horizontal ? -dx : dx,
-                                dy,
-                                flip_vertical ? -dz : dz);
+                                invert_x ? -dx : dx,
+                                invert_y ? -dy : dy,
+                                invert_z ? -dz : dz);
     }
 }
 
@@ -549,7 +550,11 @@ std::vector<SDL_Point> resolve_display_frame_sizes(const animation_editor::Anima
     return sizes;
 }
 
-void apply_anchor_frame_flip(nlohmann::json& frame, const SDL_Point& size, bool flip_x, bool flip_y) {
+void apply_anchor_frame_flip(nlohmann::json& frame,
+                             const SDL_Point& size,
+                             bool invert_x,
+                             bool invert_y,
+                             bool invert_z) {
     if (!frame.is_array()) {
         frame = nlohmann::json::array();
         return;
@@ -558,17 +563,23 @@ void apply_anchor_frame_flip(nlohmann::json& frame, const SDL_Point& size, bool 
         if (!anchor.is_object()) {
             continue;
         }
-        if (flip_x && size.x > 0 && anchor.contains("texture_x") && anchor["texture_x"].is_number()) {
+        if (invert_x && size.x > 0 && anchor.contains("texture_x") && anchor["texture_x"].is_number()) {
             const int x = anchor["texture_x"].is_number_integer()
                 ? anchor["texture_x"].get<int>()
                 : static_cast<int>(std::lround(anchor["texture_x"].get<double>()));
             anchor["texture_x"] = size.x - 1 - x;
         }
-        if (flip_y && size.y > 0 && anchor.contains("texture_y") && anchor["texture_y"].is_number()) {
+        if (invert_y && size.y > 0 && anchor.contains("texture_y") && anchor["texture_y"].is_number()) {
             const int y = anchor["texture_y"].is_number_integer()
                 ? anchor["texture_y"].get<int>()
                 : static_cast<int>(std::lround(anchor["texture_y"].get<double>()));
             anchor["texture_y"] = size.y - 1 - y;
+        }
+        if (invert_z && anchor.contains("depth_offset") && anchor["depth_offset"].is_number()) {
+            const double depth = anchor["depth_offset"].is_number_integer()
+                ? static_cast<double>(anchor["depth_offset"].get<int>())
+                : anchor["depth_offset"].get<double>();
+            anchor["depth_offset"] = std::isfinite(depth) ? -depth : 0.0;
         }
     }
 }
@@ -716,13 +727,12 @@ GeometryResolution resolve_geometry(const animation_editor::AnimationDocument* d
         resize_with_last(result.attack_boxes, frame_count, nlohmann::json::array());
 
         bool reverse = read_bool_field_like(payload, "reverse_source", false);
-        bool flip_x = read_bool_field_like(payload, "flipped_source", false);
-        bool flip_y = read_bool_field_like(payload, "flip_vertical_source", false);
+        bool invert_x = read_bool_field_like(payload, "invert_x", false);
+        bool invert_y = read_bool_field_like(payload, "invert_y", false);
+        bool invert_z = read_bool_field_like(payload, "invert_z", false);
         if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
             const auto& modifiers = payload["derived_modifiers"];
             reverse = read_bool_field_like(modifiers, "reverse", reverse);
-            flip_x = read_bool_field_like(modifiers, "flipX", flip_x);
-            flip_y = read_bool_field_like(modifiers, "flipY", flip_y);
         }
 
         if (reverse) {
@@ -732,12 +742,12 @@ GeometryResolution resolve_geometry(const animation_editor::AnimationDocument* d
             std::reverse(result.attack_boxes.begin(), result.attack_boxes.end());
             std::reverse(result.frame_sizes.begin(), result.frame_sizes.end());
         }
-        apply_movement_transforms(result.movement, false, flip_x, flip_y);
+        apply_movement_transforms(result.movement, false, invert_x, invert_y, invert_z);
         for (std::size_t i = 0; i < frame_count; ++i) {
             const SDL_Point size = i < result.frame_sizes.size() ? result.frame_sizes[i] : SDL_Point{0, 0};
-            apply_anchor_frame_flip(result.anchors[i], size, flip_x, flip_y);
-            apply_box_frame_flip(result.hit_boxes[i], size, flip_x, flip_y);
-            apply_box_frame_flip(result.attack_boxes[i], size, flip_x, flip_y);
+            apply_anchor_frame_flip(result.anchors[i], size, invert_x, invert_y, invert_z);
+            apply_box_frame_flip(result.hit_boxes[i], size, invert_x, invert_y);
+            apply_box_frame_flip(result.attack_boxes[i], size, invert_x, invert_y);
         }
 
         result.valid = true;
@@ -769,7 +779,7 @@ void update_payload_movement_total(nlohmann::json& payload) {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
-    for (std::size_t i = 1; i < movement.size(); ++i) {
+    for (std::size_t i = 0; i < movement.size(); ++i) {
         total_dx += read_movement_component(movement[i], 0);
         total_dy += read_movement_component(movement[i], 1);
         total_dz += read_movement_component(movement[i], 2);
@@ -858,7 +868,7 @@ int PlaybackSettingsPanel::preferred_height(int width) const {
         if (inherit_controls_visible()) {
             ++count; // Inherit Source Data
             if (inversion_controls_visible()) {
-                count += 2; // Invert Geometry X/Y
+                count += 3; // Invert Data X/Y/Z
             }
         }
         add_checkbox_group(count);
@@ -904,8 +914,9 @@ void PlaybackSettingsPanel::render(SDL_Renderer* renderer) const {
     const bool show_frame_invert_controls = derived_from_animation_;
     const bool show_flip_controls = inversion_controls_visible();
     render_checkbox(invert_frames_horizontal_checkbox_, show_frame_invert_controls);
-    render_checkbox(flip_checkbox_, show_flip_controls);
-    render_checkbox(flip_vertical_checkbox_, show_flip_controls);
+    render_checkbox(invert_x_checkbox_, show_flip_controls);
+    render_checkbox(invert_y_checkbox_, show_flip_controls);
+    render_checkbox(invert_z_checkbox_, show_flip_controls);
     render_checkbox(inherit_geometry_checkbox_, inherit_controls_visible());
 
     render_checkbox(reverse_checkbox_, derived_from_animation_);
@@ -945,8 +956,9 @@ bool PlaybackSettingsPanel::handle_event(const SDL_Event& e) {
 
     const bool show_flip = inversion_controls_visible();
     handle_checkbox_if_visible(invert_frames_horizontal_checkbox_, derived_from_animation_);
-    handle_checkbox_if_visible(flip_checkbox_, show_flip);
-    handle_checkbox_if_visible(flip_vertical_checkbox_, show_flip);
+    handle_checkbox_if_visible(invert_x_checkbox_, show_flip);
+    handle_checkbox_if_visible(invert_y_checkbox_, show_flip);
+    handle_checkbox_if_visible(invert_z_checkbox_, show_flip);
     handle_checkbox_if_visible(inherit_geometry_checkbox_, inherit_controls_visible());
 
     handle_checkbox_if_visible(reverse_checkbox_, derived_from_animation_);
@@ -967,8 +979,9 @@ void PlaybackSettingsPanel::ensure_widgets() {
 };
 
     ensure_checkbox(invert_frames_horizontal_checkbox_, "Invert Frames Horizontally");
-    ensure_checkbox(flip_checkbox_, "Invert Geometry Horizontally");
-    ensure_checkbox(flip_vertical_checkbox_, "Invert Geometry Vertically");
+    ensure_checkbox(invert_x_checkbox_, "Invert Data X");
+    ensure_checkbox(invert_y_checkbox_, "Invert Data Y");
+    ensure_checkbox(invert_z_checkbox_, "Invert Data Z");
     ensure_checkbox(inherit_geometry_checkbox_, "Inherit Source Data");
     ensure_checkbox(reverse_checkbox_, "Play Frames In Reverse");
     ensure_checkbox(locked_checkbox_, "Locked (animation must finish before another can play)");
@@ -1028,8 +1041,9 @@ void PlaybackSettingsPanel::layout_widgets() const {
             placed_any_checkbox = true;
         }
     }
-    place_checkbox(flip_checkbox_.get(), show_flip_controls, placed_any_checkbox);
-    place_checkbox(flip_vertical_checkbox_.get(), show_flip_controls, placed_any_checkbox);
+    place_checkbox(invert_x_checkbox_.get(), show_flip_controls, placed_any_checkbox);
+    place_checkbox(invert_y_checkbox_.get(), show_flip_controls, placed_any_checkbox);
+    place_checkbox(invert_z_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(inherit_geometry_checkbox_.get(), inherit_controls_visible(), placed_any_checkbox);
 
     place_checkbox(reverse_checkbox_.get(), derived_from_animation_, placed_any_checkbox);
@@ -1066,11 +1080,14 @@ void PlaybackSettingsPanel::apply_state_to_controls(const PlaybackState& state) 
     if (invert_frames_horizontal_checkbox_) {
         invert_frames_horizontal_checkbox_->set_value(state.invert_frames_horizontal);
     }
-    if (flip_checkbox_) {
-        flip_checkbox_->set_value(show_inversion_controls ? state.flipped_source : false);
+    if (invert_x_checkbox_) {
+        invert_x_checkbox_->set_value(show_inversion_controls ? state.invert_x : false);
     }
-    if (flip_vertical_checkbox_) {
-        flip_vertical_checkbox_->set_value(show_inversion_controls ? state.flip_vertical : false);
+    if (invert_y_checkbox_) {
+        invert_y_checkbox_->set_value(show_inversion_controls ? state.invert_y : false);
+    }
+    if (invert_z_checkbox_) {
+        invert_z_checkbox_->set_value(show_inversion_controls ? state.invert_z : false);
     }
     if (inherit_geometry_checkbox_) inherit_geometry_checkbox_->set_value(show_inherit_controls ? state.inherit_data : false);
     if (reverse_checkbox_) reverse_checkbox_->set_value(state.reverse_source);
@@ -1099,15 +1116,18 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::read_controls() cons
             state.inherit_data = false;
         }
         if (inversion_controls_visible_for_state(state)) {
-            if (flip_checkbox_) state.flipped_source = flip_checkbox_->value();
-            if (flip_vertical_checkbox_) state.flip_vertical = flip_vertical_checkbox_->value();
+            if (invert_x_checkbox_) state.invert_x = invert_x_checkbox_->value();
+            if (invert_y_checkbox_) state.invert_y = invert_y_checkbox_->value();
+            if (invert_z_checkbox_) state.invert_z = invert_z_checkbox_->value();
         } else {
-            state.flipped_source = false;
-            state.flip_vertical = false;
+            state.invert_x = false;
+            state.invert_y = false;
+            state.invert_z = false;
         }
     } else {
-        state.flipped_source = false;
-        state.flip_vertical = false;
+        state.invert_x = false;
+        state.invert_y = false;
+        state.invert_z = false;
         state.inherit_data = false;
     }
 
@@ -1263,9 +1283,10 @@ std::optional<std::string> PlaybackSettingsPanel::fetch_payload(const AnimationD
 
 PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(const nlohmann::json& payload) {
     PlaybackState state;
-    state.flipped_source = read_bool_field_like(payload, "flipped_source", false);
+    state.invert_x = read_bool_field_like(payload, "invert_x", false);
+    state.invert_y = read_bool_field_like(payload, "invert_y", false);
+    state.invert_z = read_bool_field_like(payload, "invert_z", false);
     state.reverse_source = read_bool_field_like(payload, "reverse_source", false);
-    state.flip_vertical = read_bool_field_like(payload, "flip_vertical_source", false);
     state.inherit_data = false;
     state.invert_frames_horizontal = false;
     state.locked         = read_bool_field_like(payload, "locked", false);
@@ -1285,16 +1306,15 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
             if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
                 const auto& modifiers = payload["derived_modifiers"];
                 state.reverse_source = read_bool_field_like(modifiers, "reverse", state.reverse_source);
-                state.flipped_source = read_bool_field_like(modifiers, "flipX", state.flipped_source);
-                state.flip_vertical = read_bool_field_like(modifiers, "flipY", state.flip_vertical);
             }
         }
     }
 
     if (!source_is_animation) {
         state.reverse_source = false;
-        state.flipped_source = false;
-        state.flip_vertical = false;
+        state.invert_x = false;
+        state.invert_y = false;
+        state.invert_z = false;
         state.invert_frames_horizontal = false;
     }
 
@@ -1303,8 +1323,9 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
     }
 
     if (!state.inherit_data) {
-        state.flipped_source = false;
-        state.flip_vertical = false;
+        state.invert_x = false;
+        state.invert_y = false;
+        state.invert_z = false;
     }
 
     return state;
@@ -1326,12 +1347,14 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
     }
 
     const bool allow_data_inversion = derived_from_animation_ && effective_inherit_data;
-    const bool effective_flip_horizontal = allow_data_inversion ? state.flipped_source : false;
-    const bool effective_flip_vertical = allow_data_inversion ? state.flip_vertical : false;
+    const bool effective_invert_x = allow_data_inversion ? state.invert_x : false;
+    const bool effective_invert_y = allow_data_inversion ? state.invert_y : false;
+    const bool effective_invert_z = allow_data_inversion ? state.invert_z : false;
 
-    payload["flipped_source"] = effective_flip_horizontal;
+    payload["invert_x"] = effective_invert_x;
+    payload["invert_y"] = effective_invert_y;
+    payload["invert_z"] = effective_invert_z;
     payload["reverse_source"] = state.reverse_source;
-    payload["flip_vertical_source"] = effective_flip_vertical;
     if (derived_from_animation_) {
         payload["invert_frames_horizontal"] = state.invert_frames_horizontal;
         payload["invert_frames_vertical"] = false;
@@ -1358,8 +1381,6 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         }
         nlohmann::json modifiers = nlohmann::json::object();
         modifiers["reverse"] = state.reverse_source;
-        modifiers["flipX"] = effective_flip_horizontal;
-        modifiers["flipY"] = effective_flip_vertical;
         if (effective_inherit_data) {
             payload.erase("movement");
             payload.erase("movement_total");
@@ -1380,8 +1401,16 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         payload.erase("speed_multiplier");
     }
     payload.erase("inherit_source_movement");
+    payload.erase("flipped_source");
+    payload.erase("flip_vertical_source");
     payload.erase("flip_movement_horizontal");
     payload.erase("flip_movement_vertical");
+    if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
+        payload["derived_modifiers"].erase("flipX");
+        payload["derived_modifiers"].erase("flipY");
+        payload["derived_modifiers"].erase("flipMovementX");
+        payload["derived_modifiers"].erase("flipMovementY");
+    }
 }
 
 void PlaybackSettingsPanel::update_inherited_state(const nlohmann::json& payload) {
@@ -1398,17 +1427,17 @@ void PlaybackSettingsPanel::update_inherited_state(const nlohmann::json& payload
     if (derived_from_animation_) {
         const bool inherit_source_data_enabled = !source_chain_resolves_to_frames_ && payload_inherits_data(payload);
         bool reverse = read_bool_field_like(payload, "reverse_source", false);
-        bool flip_x = inherit_source_data_enabled && read_bool_field_like(payload, "flipped_source", false);
-        bool flip_y = inherit_source_data_enabled && read_bool_field_like(payload, "flip_vertical_source", false);
+        const bool invert_x = inherit_source_data_enabled && read_bool_field_like(payload, "invert_x", false);
+        const bool invert_y = inherit_source_data_enabled && read_bool_field_like(payload, "invert_y", false);
+        const bool invert_z = inherit_source_data_enabled && read_bool_field_like(payload, "invert_z", false);
         if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
             const auto& modifiers = payload["derived_modifiers"];
             reverse = read_bool_field_like(modifiers, "reverse", reverse);
-            flip_x = inherit_source_data_enabled && read_bool_field_like(modifiers, "flipX", flip_x);
-            flip_y = inherit_source_data_enabled && read_bool_field_like(modifiers, "flipY", flip_y);
         }
         if (reverse) inherited_modifiers_.push_back("Reverse");
-        if (flip_x) inherited_modifiers_.push_back("Flip X");
-        if (flip_y) inherited_modifiers_.push_back("Flip Y");
+        if (invert_x) inherited_modifiers_.push_back("Invert X");
+        if (invert_y) inherited_modifiers_.push_back("Invert Y");
+        if (invert_z) inherited_modifiers_.push_back("Invert Z");
         if (inherit_source_data_enabled) {
             inherited_modifiers_.push_back("Inherit Source Data");
         } else {

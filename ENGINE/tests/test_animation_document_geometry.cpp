@@ -29,7 +29,7 @@ nlohmann::json make_box(const char* name, int left, int top, int right, int bott
 
 }  // namespace
 
-TEST_CASE("AnimationDocument materializes legacy movement inheritance when non-movement geometry is local") {
+TEST_CASE("AnimationDocument keeps local geometry and local movement when inherit_data resolves false") {
     animation_editor::AnimationDocument document;
     const nlohmann::json manifest = {
         {"animations",
@@ -101,14 +101,17 @@ TEST_CASE("AnimationDocument materializes legacy movement inheritance when non-m
     REQUIRE(payload->contains("movement"));
     REQUIRE((*payload)["movement"].is_array());
     REQUIRE((*payload)["movement"].size() == 2);
-    CHECK((*payload)["movement"][1][0] == 3);
+    CHECK((*payload)["movement"][0][0] == 0);
+    CHECK((*payload)["movement"][0][1] == 0);
+    CHECK((*payload)["movement"][0][2] == 0);
+    CHECK((*payload)["movement"][1][0] == 0);
     CHECK((*payload)["movement"][1][1] == 0);
-    CHECK((*payload)["movement"][1][2] == 4);
+    CHECK((*payload)["movement"][1][2] == 0);
 
     REQUIRE(payload->contains("movement_total"));
-    CHECK((*payload)["movement_total"]["dx"] == 3);
+    CHECK((*payload)["movement_total"]["dx"] == 0);
     CHECK((*payload)["movement_total"]["dy"] == 0);
-    CHECK((*payload)["movement_total"]["dz"] == 4);
+    CHECK((*payload)["movement_total"]["dz"] == 0);
 
     REQUIRE(payload->contains("anchor_points"));
     CHECK((*payload)["anchor_points"][1][0]["name"] == "local_anchor");
@@ -118,7 +121,7 @@ TEST_CASE("AnimationDocument materializes legacy movement inheritance when non-m
     CHECK((*payload)["attack_boxes"][1][0]["name"] == "local_attack");
 }
 
-TEST_CASE("AnimationDocument materializes legacy movement-only flips into local movement") {
+TEST_CASE("AnimationDocument strips legacy inversion keys without mapping to invert_x_y_z") {
     animation_editor::AnimationDocument document;
     const nlohmann::json manifest = {
         {"animations",
@@ -135,7 +138,16 @@ TEST_CASE("AnimationDocument materializes legacy movement-only flips into local 
                   {"source", {{"kind", "animation"}, {"path", ""}, {"name", "base"}}},
                   {"number_of_frames", 2},
                   {"inherit_source_movement", true},
-                  {"derived_modifiers", {{"flipMovementX", true}}},
+                  {"flipped_source", true},
+                  {"flip_vertical_source", true},
+                  {"flip_movement_horizontal", true},
+                  {"flip_movement_vertical", true},
+                  {"derived_modifiers",
+                   {{"flipX", true},
+                    {"flipY", true},
+                    {"flipMovementX", true},
+                    {"flipMovementY", true},
+                    {"reverse", false}}},
               }},
          }},
     };
@@ -147,23 +159,57 @@ TEST_CASE("AnimationDocument materializes legacy movement-only flips into local 
     REQUIRE(payload->is_object());
 
     CHECK(payload->contains("inherit_data"));
-    CHECK_FALSE((*payload)["inherit_data"].get<bool>());
+    CHECK((*payload)["inherit_data"].get<bool>());
     CHECK_FALSE(payload->contains("inherit_source_movement"));
 
     REQUIRE(payload->contains("derived_modifiers"));
     CHECK_FALSE((*payload)["derived_modifiers"].contains("flipMovementX"));
     CHECK_FALSE((*payload)["derived_modifiers"].contains("flipMovementY"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipX"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipY"));
+    CHECK((*payload)["derived_modifiers"]["reverse"] == false);
 
-    REQUIRE(payload->contains("movement"));
-    REQUIRE((*payload)["movement"].is_array());
-    REQUIRE((*payload)["movement"].size() == 2);
-    CHECK((*payload)["movement"][1][0] == -2);
-    CHECK((*payload)["movement"][1][1] == 0);
-    CHECK((*payload)["movement"][1][2] == 1);
+    CHECK_FALSE(payload->contains("flipped_source"));
+    CHECK_FALSE(payload->contains("flip_vertical_source"));
+    CHECK_FALSE(payload->contains("flip_movement_horizontal"));
+    CHECK_FALSE(payload->contains("flip_movement_vertical"));
 
-    REQUIRE(payload->contains("anchor_points"));
-    CHECK((*payload)["anchor_points"][0].empty());
-    CHECK((*payload)["anchor_points"][1].empty());
+    CHECK((*payload)["invert_x"] == false);
+    CHECK((*payload)["invert_y"] == false);
+    CHECK((*payload)["invert_z"] == false);
+
+    CHECK_FALSE(payload->contains("movement"));
+    CHECK_FALSE(payload->contains("movement_total"));
+    CHECK_FALSE(payload->contains("anchor_points"));
+    CHECK_FALSE(payload->contains("hit_boxes"));
+    CHECK_FALSE(payload->contains("attack_boxes"));
+}
+
+TEST_CASE("AnimationDocument movement_total includes frame zero deltas") {
+    animation_editor::AnimationDocument document;
+    const nlohmann::json manifest = {
+        {"animations",
+         {
+             {"default",
+              {
+                  {"source", {{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
+                  {"number_of_frames", 2},
+                  {"movement",
+                   nlohmann::json::array({nlohmann::json::array({2, -1, 3}),
+                                          nlohmann::json::array({4, 5, -2})})},
+              }},
+         }},
+    };
+
+    document.load_from_manifest(manifest, std::filesystem::path{}, nullptr);
+
+    const auto payload = document.animation_payload_json("default");
+    REQUIRE(payload.has_value());
+    REQUIRE(payload->is_object());
+    REQUIRE(payload->contains("movement_total"));
+    CHECK((*payload)["movement_total"]["dx"] == 6);
+    CHECK((*payload)["movement_total"]["dy"] == 4);
+    CHECK((*payload)["movement_total"]["dz"] == 1);
 }
 
 TEST_CASE("AnimationDocument normalizes missing on_end and strips legacy loop") {

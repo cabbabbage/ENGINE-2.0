@@ -16,7 +16,7 @@ namespace {
 
 constexpr std::uint32_t kOrbitRefreshMinFrames = 1000;
 constexpr std::uint32_t kOrbitRefreshMaxFrames = 3000;
-constexpr int kOrbitHeightMinOffset = 200;
+constexpr int kOrbitHeightMinOffset = 100;
 constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
 constexpr int kOrbitRadiusMin = 20;

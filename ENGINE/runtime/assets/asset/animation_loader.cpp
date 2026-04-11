@@ -251,6 +251,7 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node,
                 const nlohmann::json& light = *light_it;
                 anchor.has_light_data = true;
                 anchor.light.enabled = read_bool_field_like(light, "enabled", false);
+                anchor.light.opacity = read_float_field_like(light, "opacity", anchor.light.opacity);
                 anchor.light.intensity = read_float_field_like(light, "intensity", anchor.light.intensity);
                 anchor.light.radius = read_float_field_like(light, "radius", anchor.light.radius);
                 anchor.light.falloff = read_float_field_like(light, "falloff", anchor.light.falloff);

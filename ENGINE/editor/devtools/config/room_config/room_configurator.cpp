@@ -354,10 +354,9 @@ struct RoomConfigurator::State {
             dest.erase("curvyness");
         }
 
+        // Camera fields are authored by RoomEditor shortcuts (Ctrl+A/Ctrl+R).
+        // RoomConfigurator no longer owns camera state, so preserve any existing keys.
         (void)include_camera;
-        dest.erase("camera_height_px");
-        dest.erase("camera_tilt_deg");
-        dest.erase("camera_zoom_percent");
 
         dest.erase("radius");
         dest.erase("min_radius");

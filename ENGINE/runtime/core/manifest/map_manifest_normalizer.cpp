@@ -496,6 +496,8 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     // - max_camera_velocity: world-pixel velocity cap to prevent jitter/overshoot
     // - settle_duration_after_stop: post-stop carry time before returning to Idle
     // - movement_look_ahead_weight: optional movement look-ahead contribution
+    // - player_follow_weight: blend room target toward player to keep follow tighter
+    // - player_soft_leash_px/player_hard_leash_px: keep player from drifting to screen edge
     map_info["camera_settings"] = nlohmann::json::object({
         {"smooth_motion_height", true},
         {"base_height_px", 720.0},
@@ -503,7 +505,10 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"transition_damping", 9.0},
         {"max_camera_velocity", 2200.0},
         {"settle_duration_after_stop", 0.20},
-        {"movement_look_ahead_weight", 0.12}
+        {"movement_look_ahead_weight", 0.12},
+        {"player_follow_weight", 0.35},
+        {"player_soft_leash_px", 220.0},
+        {"player_hard_leash_px", 360.0}
     });
     map_info["map_grid_settings"] = nlohmann::json::object({{"grid_resolution", 6}});
     map_info["audio"] = nlohmann::json::object({

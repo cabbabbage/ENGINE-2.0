@@ -18,7 +18,10 @@ nlohmann::json square_room_fixture() {
         {"curvyness", 3},
         {"is_spawn", true},
         {"is_boss", false},
-        {"inherits_map_assets", true}
+        {"inherits_map_assets", true},
+        {"camera_height_px", 1450},
+        {"camera_tilt_deg", 27.5f},
+        {"camera_zoom_percent", 125}
     });
 }
 
@@ -39,7 +42,7 @@ nlohmann::json circle_room_fixture() {
 
 }  // namespace
 
-TEST_CASE("RoomConfigurator compact mode preserves room metadata and omits tags and camera keys") {
+TEST_CASE("RoomConfigurator compact mode preserves room metadata and existing camera keys") {
     RoomConfigurator configurator;
     configurator.set_room_metadata_only_mode(true);
 
@@ -60,9 +63,9 @@ TEST_CASE("RoomConfigurator compact mode preserves room metadata and omits tags 
     CHECK(saved.value("inherits_map_assets", false));
     CHECK_FALSE(saved.contains("tags"));
     CHECK_FALSE(saved.contains("anti_tags"));
-    CHECK_FALSE(saved.contains("camera_height_px"));
-    CHECK_FALSE(saved.contains("camera_tilt_deg"));
-    CHECK_FALSE(saved.contains("camera_zoom_percent"));
+    CHECK(saved.value("camera_height_px", 0) == 1450);
+    CHECK(saved.value("camera_tilt_deg", 0.0f) == doctest::Approx(27.5f));
+    CHECK(saved.value("camera_zoom_percent", 0) == 125);
 }
 
 TEST_CASE("RoomConfigurator compact mode migrates legacy radius to width and height bounds") {

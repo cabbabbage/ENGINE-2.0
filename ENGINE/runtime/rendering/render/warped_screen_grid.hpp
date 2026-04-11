@@ -117,6 +117,12 @@ public:
         float settle_duration_after_stop = 0.20f;
         // Optional movement look-ahead scale. 0 disables look-ahead.
         float movement_look_ahead_weight = 0.12f;
+        // Blend room target toward player focus (0 keeps room framing, 1 locks to player).
+        float player_follow_weight = 0.75f;
+        // Soft leash radius from camera center to player focus in world pixels.
+        float player_soft_leash_px = 220.0f;
+        // Hard leash radius that player focus should never exceed.
+        float player_hard_leash_px = 360.0f;
     };
 
     struct CameraTransitionTelemetry {

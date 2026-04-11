@@ -344,6 +344,17 @@ struct ProjectionResult {
         return SDL_FPoint{value.x * scale, value.y * scale};
     }
 
+    SDL_FPoint safe_normalized(SDL_FPoint value) {
+        if (!std::isfinite(value.x) || !std::isfinite(value.y)) {
+            return SDL_FPoint{0.0f, 0.0f};
+        }
+        const float len = std::sqrt(value.x * value.x + value.y * value.y);
+        if (len <= 1.0e-6f) {
+            return SDL_FPoint{0.0f, 0.0f};
+        }
+        return SDL_FPoint{value.x / len, value.y / len};
+    }
+
     bool camera_transition_trace_enabled() {
         static const bool enabled = [] {
             const char* raw = SDL_getenv("VIBBLE_CAMERA_TRANSITION_TRACE");
@@ -1041,6 +1052,14 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     }
 
     SDL_FPoint desired_center = blended_room_target;
+    SDL_FPoint player_focus = blended_room_target;
+    if (player) {
+        player_focus = SDL_FPoint{
+            static_cast<float>(player->world_x()),
+            static_cast<float>(player->world_z())
+        };
+    }
+
     if (!dev_mode && player && player_moving) {
         const float look_ahead_weight = std::clamp(
             std::isfinite(transition_settings_.movement_look_ahead_weight)
@@ -1054,8 +1073,69 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         };
         const float look_ahead_limit = std::max(0.0f, transition_settings_.max_camera_velocity) * 0.35f;
         look_ahead = clamp_vector_magnitude(look_ahead, look_ahead_limit);
-        desired_center.x += look_ahead.x;
-        desired_center.y += look_ahead.y;
+        player_focus.x += look_ahead.x;
+        player_focus.y += look_ahead.y;
+    }
+
+    if (!dev_mode && player) {
+        const float follow_weight = std::clamp(
+            std::isfinite(transition_settings_.player_follow_weight)
+                ? transition_settings_.player_follow_weight
+                : 0.35f,
+            0.0f,
+            1.0f);
+        desired_center = lerp_point(desired_center, player_focus, follow_weight);
+
+        const float configured_soft_leash = std::clamp(
+            std::isfinite(transition_settings_.player_soft_leash_px)
+                ? transition_settings_.player_soft_leash_px
+                : 220.0f,
+            32.0f,
+            5000.0f);
+        const float configured_hard_leash = std::clamp(
+            std::isfinite(transition_settings_.player_hard_leash_px)
+                ? transition_settings_.player_hard_leash_px
+                : 360.0f,
+            configured_soft_leash + 1.0f,
+            6000.0f);
+
+        SDL_FPoint to_focus{
+            player_focus.x - desired_center.x,
+            player_focus.y - desired_center.y
+        };
+        float distance_to_focus = std::sqrt(to_focus.x * to_focus.x + to_focus.y * to_focus.y);
+        if (distance_to_focus > configured_soft_leash) {
+            const SDL_FPoint dir = safe_normalized(to_focus);
+            const float excess = distance_to_focus - configured_soft_leash;
+            const float catch_up = excess * 0.65f;
+            desired_center.x += dir.x * catch_up;
+            desired_center.y += dir.y * catch_up;
+            to_focus.x = player_focus.x - desired_center.x;
+            to_focus.y = player_focus.y - desired_center.y;
+            distance_to_focus = std::sqrt(to_focus.x * to_focus.x + to_focus.y * to_focus.y);
+        }
+
+        if (distance_to_focus > configured_hard_leash) {
+            const SDL_FPoint dir = safe_normalized(to_focus);
+            desired_center.x = player_focus.x - dir.x * configured_hard_leash;
+            desired_center.y = player_focus.y - dir.y * configured_hard_leash;
+        }
+
+        const float safe_x = std::min(
+            configured_hard_leash,
+            std::clamp(static_cast<float>(screen_width_) * 0.33f, 80.0f, 650.0f));
+        const float safe_y = std::min(
+            configured_hard_leash,
+            std::clamp(static_cast<float>(screen_height_) * 0.27f, 60.0f, 500.0f));
+
+        const float delta_x = player_focus.x - desired_center.x;
+        const float delta_y = player_focus.y - desired_center.y;
+        if (std::fabs(delta_x) > safe_x) {
+            desired_center.x = player_focus.x - std::copysign(safe_x, delta_x);
+        }
+        if (std::fabs(delta_y) > safe_y) {
+            desired_center.y = player_focus.y - std::copysign(safe_y, delta_y);
+        }
     }
 
     if (dev_mode && focus_override_active) {
@@ -1405,6 +1485,24 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         transition_settings_.movement_look_ahead_weight,
         0.0f,
         2.0f);
+    transition_settings_.player_follow_weight = read_transition_float(
+        "player_follow_weight",
+        transition_settings_.player_follow_weight,
+        0.0f,
+        1.0f);
+    transition_settings_.player_soft_leash_px = read_transition_float(
+        "player_soft_leash_px",
+        transition_settings_.player_soft_leash_px,
+        32.0f,
+        5000.0f);
+    transition_settings_.player_hard_leash_px = read_transition_float(
+        "player_hard_leash_px",
+        transition_settings_.player_hard_leash_px,
+        transition_settings_.player_soft_leash_px + 1.0f,
+        6000.0f);
+    transition_settings_.player_hard_leash_px = std::max(
+        transition_settings_.player_hard_leash_px,
+        transition_settings_.player_soft_leash_px + 1.0f);
 
     camera_.set_transition_damping(transition_settings_.transition_damping);
     camera_.set_max_camera_velocity(transition_settings_.max_camera_velocity);
@@ -1426,6 +1524,9 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["max_camera_velocity"] = transition_settings_.max_camera_velocity;
     result["settle_duration_after_stop"] = transition_settings_.settle_duration_after_stop;
     result["movement_look_ahead_weight"] = transition_settings_.movement_look_ahead_weight;
+    result["player_follow_weight"] = transition_settings_.player_follow_weight;
+    result["player_soft_leash_px"] = transition_settings_.player_soft_leash_px;
+    result["player_hard_leash_px"] = transition_settings_.player_hard_leash_px;
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {

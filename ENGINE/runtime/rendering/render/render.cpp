@@ -2136,6 +2136,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             instance.screen_center = screen;
             instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
             instance.intensity = light.intensity;
+            instance.opacity = light.opacity;
             instance.radius_px = radius_px;
             instance.radius_world = radius_world;
             instance.falloff = light.falloff;
@@ -2889,13 +2890,16 @@ void SceneRenderer::render() {
         };
         if (static_cast<int>(dof_layer_textures_.size()) != layer_count ||
             static_cast<int>(dof_dark_mask_textures_.size()) != layer_count ||
-            static_cast<int>(dof_lit_textures_.size()) != layer_count) {
+            static_cast<int>(dof_lit_textures_.size()) != layer_count ||
+            static_cast<int>(dof_blur_textures_.size()) != layer_count) {
             destroy_texture_array(dof_layer_textures_);
             destroy_texture_array(dof_dark_mask_textures_);
             destroy_texture_array(dof_lit_textures_);
+            destroy_texture_array(dof_blur_textures_);
             dof_layer_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
             dof_dark_mask_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
             dof_lit_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
+            dof_blur_textures_.resize(static_cast<std::size_t>(layer_count), nullptr);
         }
         std::vector<int> non_empty_layers;
         non_empty_layers.reserve(static_cast<std::size_t>(layer_count));
@@ -2913,6 +2917,10 @@ void SceneRenderer::render() {
                     SDL_DestroyTexture(dof_dark_mask_textures_[i]);
                     dof_dark_mask_textures_[i] = nullptr;
                 }
+                if (dof_blur_textures_[i]) {
+                    SDL_DestroyTexture(dof_blur_textures_[i]);
+                    dof_blur_textures_[i] = nullptr;
+                }
                 continue;
             }
             non_empty_layers.push_back(i);
@@ -2924,6 +2932,9 @@ void SceneRenderer::render() {
             }
             if (!dof_dark_mask_textures_[i]) {
                 dof_dark_mask_textures_[i] = create_target_texture(screen_width_, screen_height_);
+            }
+            if (!dof_blur_textures_[i]) {
+                dof_blur_textures_[i] = create_target_texture(screen_width_, screen_height_);
             }
         }
         bool dof_targets_ready = scene_pipeline_targets_ready;
@@ -2937,6 +2948,10 @@ void SceneRenderer::render() {
                 break;
             }
             if (!dof_dark_mask_textures_[i]) {
+                dof_targets_ready = false;
+                break;
+            }
+            if (!dof_blur_textures_[i]) {
                 dof_targets_ready = false;
                 break;
             }
@@ -3023,10 +3038,12 @@ void SceneRenderer::render() {
                                                                screen_height_,
                                                                scaled_blur_px,
                                                                optical_center,
-                                                               scaled_radial_blur_px,
-                                                               1.0f);
+                                                                scaled_radial_blur_px,
+                                                                1.0f);
             };
             std::vector<SDL_Texture*> final_layer_textures(static_cast<std::size_t>(layer_count), nullptr);
+            std::vector<std::vector<LayerEffectProcessor::RuntimeLight>> owning_body_lights(
+                static_cast<std::size_t>(layer_count));
             LayerEffectProcessor::LayerLightingParams lighting_params{};
             lighting_params.enabled = runtime_lighting_enabled;
             lighting_params.ambient_color = SDL_Color{18, 20, 24, 255};
@@ -3039,10 +3056,7 @@ void SceneRenderer::render() {
                 layer_lights.reserve(runtime_lights.size());
                 for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
                     if (light_affects_layer(light, layer)) {
-                        LayerEffectProcessor::RuntimeLight layer_light = light;
-                        const int owner_layer_index = depth_to_layer_index(static_cast<double>(light.world_z));
-                        layer_light.draw_body = (owner_layer_index == i);
-                        layer_lights.push_back(layer_light);
+                        layer_lights.push_back(light);
                     }
                 }
 
@@ -3057,6 +3071,15 @@ void SceneRenderer::render() {
                 const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : representative_depth;
                 const std::vector<LayerEffectProcessor::RuntimeLight> biased_layer_lights =
                     apply_layer_light_bias(layer_lights, depth_min, depth_max);
+                auto& owner_bucket = owning_body_lights[static_cast<std::size_t>(i)];
+                owner_bucket.clear();
+                owner_bucket.reserve(biased_layer_lights.size());
+                for (const LayerEffectProcessor::RuntimeLight& light : biased_layer_lights) {
+                    const int owner_layer_index = depth_to_layer_index(static_cast<double>(light.world_z));
+                    if (owner_layer_index == i) {
+                        owner_bucket.push_back(light);
+                    }
+                }
 
                 LayerEffectProcessor::LayerScratchTextures scratch_textures{};
                 scratch_textures.dark_mask_texture = dof_dark_mask_textures_[i];
@@ -3074,6 +3097,87 @@ void SceneRenderer::render() {
                 final_layer_textures[static_cast<std::size_t>(i)] =
                     layer_result.final_texture ? layer_result.final_texture : dof_lit_textures_[i];
             }
+
+            auto composite_owning_light_body = [&](SDL_Texture* accumulation_target,
+                                                   int layer_index,
+                                                   int chain_blur_passes) {
+                (void)chain_blur_passes;
+                if (!runtime_lighting_enabled || !accumulation_target) {
+                    return;
+                }
+                if (layer_index < 0 ||
+                    static_cast<std::size_t>(layer_index) >= owning_body_lights.size() ||
+                    static_cast<std::size_t>(layer_index) >= layers.size() ||
+                    static_cast<std::size_t>(layer_index) >= dof_blur_textures_.size()) {
+                    return;
+                }
+                SDL_Texture* light_body_texture = dof_blur_textures_[static_cast<std::size_t>(layer_index)];
+                if (!light_body_texture) {
+                    return;
+                }
+                const auto& lights_for_layer = owning_body_lights[static_cast<std::size_t>(layer_index)];
+                if (lights_for_layer.empty()) {
+                    return;
+                }
+
+                SDL_Texture* falloff_texture = ensure_floor_light_falloff_texture();
+                if (!falloff_texture) {
+                    return;
+                }
+
+                clear_texture_target(light_body_texture);
+                SDL_SetRenderTarget(renderer_, light_body_texture);
+                SDL_SetTextureBlendMode(falloff_texture, SDL_BLENDMODE_BLEND);
+
+                SDL_Color last_color{0, 0, 0, 0};
+                Uint8 last_alpha = 0;
+                for (const LayerEffectProcessor::RuntimeLight& light : lights_for_layer) {
+                    const float intensity = std::max(0.0f, light.intensity);
+                    if (intensity <= 0.0005f) {
+                        continue;
+                    }
+                    const float opacity_factor =
+                        std::clamp(light.opacity, AnchorLightData::kMinOpacity, AnchorLightData::kMaxOpacity) / 100.0f;
+                    if (opacity_factor <= 0.0005f) {
+                        continue;
+                    }
+
+                    const float radius = std::max(6.0f, light.radius_px * 1.15f);
+                    const float base_intensity = intensity * 1.35f;
+                    const Uint8 core_alpha = static_cast<Uint8>(std::clamp(
+                        static_cast<int>(std::lround(base_intensity * opacity_factor * 255.0f)),
+                        0,
+                        255));
+                    if (core_alpha == 0) {
+                        continue;
+                    }
+
+                    if (last_color.r != light.color.r ||
+                        last_color.g != light.color.g ||
+                        last_color.b != light.color.b) {
+                        SDL_SetTextureColorMod(falloff_texture, light.color.r, light.color.g, light.color.b);
+                        last_color = SDL_Color{light.color.r, light.color.g, light.color.b, 255};
+                    }
+                    if (last_alpha != core_alpha) {
+                        SDL_SetTextureAlphaMod(falloff_texture, core_alpha);
+                        last_alpha = core_alpha;
+                    }
+
+                    const SDL_FRect core_dst{
+                        light.screen_center.x - radius,
+                        light.screen_center.y - radius,
+                        radius * 2.0f,
+                        radius * 2.0f
+                    };
+                    SDL_RenderTexture(renderer_, falloff_texture, nullptr, &core_dst);
+                }
+
+                SDL_SetRenderTarget(renderer_, accumulation_target);
+                SDL_SetTextureBlendMode(light_body_texture, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureAlphaMod(light_body_texture, 255);
+                SDL_SetTextureColorMod(light_body_texture, 255, 255, 255);
+                SDL_RenderTexture(renderer_, light_body_texture, nullptr, nullptr);
+            };
 
             const std::vector<int> background_chain =
                 render_internal::background_chain_layers(non_empty_layers, player_layer_index);
@@ -3135,6 +3239,9 @@ void SceneRenderer::render() {
                         }
                     }
                 }
+                if (background_initialized) {
+                    composite_owning_light_body(background_accum, layer_index, repeat_count);
+                }
             }
             if (background_has_content && background_accum && background_accum != background_mid_tex_) {
                 copy_texture(background_accum, background_mid_tex_);
@@ -3182,6 +3289,9 @@ void SceneRenderer::render() {
                             break;
                         }
                     }
+                }
+                if (foreground_initialized) {
+                    composite_owning_light_body(foreground_accum, layer_index, repeat_count);
                 }
             }
             if (foreground_has_content && foreground_accum != foreground_mid_tex_) {

@@ -119,6 +119,7 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     light_color_r_textbox_ = std::make_unique<DMTextBox>("Color R", "255");
     light_color_g_textbox_ = std::make_unique<DMTextBox>("Color G", "236");
     light_color_b_textbox_ = std::make_unique<DMTextBox>("Color B", "196");
+    light_opacity_slider_ = std::make_unique<DMSlider>("Opacity", 0, 100, 50);
     light_intensity_slider_ = std::make_unique<DMSlider>("Intensity", 0, 800, 100);
     light_radius_slider_ = std::make_unique<DMSlider>("Radius", 4, 4096, 220);
     light_falloff_slider_ = std::make_unique<DMSlider>("Falloff", 5, 800, 180);
@@ -257,6 +258,9 @@ void RoomAnchorToolsPanel::set_light_values(const LightValues& values) {
     if (light_color_b_textbox_ && !light_color_b_textbox_->is_editing()) {
         light_color_b_textbox_->set_value(format_color_channel(values.color_b));
     }
+    if (light_opacity_slider_) {
+        light_opacity_slider_->set_value(static_cast<int>(std::lround(values.opacity)));
+    }
     if (light_intensity_slider_) {
         light_intensity_slider_->set_value(static_cast<int>(std::lround(values.intensity * 100.0f)));
     }
@@ -346,6 +350,7 @@ RoomAnchorToolsPanel::LightValues RoomAnchorToolsPanel::collect_light_values() c
     values.color_r = std::clamp(parse_int_or(light_color_r_textbox_ ? light_color_r_textbox_->value() : "255", 255), 0, 255);
     values.color_g = std::clamp(parse_int_or(light_color_g_textbox_ ? light_color_g_textbox_->value() : "236", 236), 0, 255);
     values.color_b = std::clamp(parse_int_or(light_color_b_textbox_ ? light_color_b_textbox_->value() : "196", 196), 0, 255);
+    values.opacity = light_opacity_slider_ ? static_cast<float>(light_opacity_slider_->value()) : 50.0f;
     values.intensity = light_intensity_slider_ ? static_cast<float>(light_intensity_slider_->value()) / 100.0f : 1.0f;
     values.radius = light_radius_slider_ ? static_cast<float>(light_radius_slider_->value()) : 220.0f;
     values.falloff = light_falloff_slider_ ? static_cast<float>(light_falloff_slider_->value()) / 100.0f : 1.8f;
@@ -545,6 +550,10 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         light_changed = true;
     }
     if (light_controls_visible && light_falloff_slider_ && light_falloff_slider_->handle_event(event)) {
+        handled = true;
+        light_changed = true;
+    }
+    if (light_controls_visible && light_opacity_slider_ && light_opacity_slider_->handle_event(event)) {
         handled = true;
         light_changed = true;
     }
@@ -771,6 +780,9 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
             if (light_falloff_slider_) {
                 light_falloff_slider_->render(renderer);
             }
+            if (light_opacity_slider_) {
+                light_opacity_slider_->render(renderer);
+            }
             if (light_shadow_strength_slider_) {
                 light_shadow_strength_slider_->render(renderer);
             }
@@ -870,6 +882,9 @@ void RoomAnchorToolsPanel::update_layout() const {
         : DMSlider::height();
     const int light_falloff_h = light_falloff_slider_
         ? light_falloff_slider_->preferred_height(light_panel_controls_width)
+        : DMSlider::height();
+    const int light_opacity_h = light_opacity_slider_
+        ? light_opacity_slider_->preferred_height(light_panel_controls_width)
         : DMSlider::height();
     const int light_shadow_h = light_shadow_strength_slider_
         ? light_shadow_strength_slider_->preferred_height(light_panel_controls_width)
@@ -1094,6 +1109,10 @@ void RoomAnchorToolsPanel::update_layout() const {
             light_falloff_slider_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_falloff_h});
             light_row_y += light_falloff_h + row_gap;
         }
+        if (light_opacity_slider_) {
+            light_opacity_slider_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_opacity_h});
+            light_row_y += light_opacity_h + row_gap;
+        }
         if (light_shadow_strength_slider_) {
             light_shadow_strength_slider_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_shadow_h});
             light_row_y += light_shadow_h + row_gap;
@@ -1134,6 +1153,9 @@ void RoomAnchorToolsPanel::update_layout() const {
         }
         if (light_falloff_slider_) {
             light_falloff_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (light_opacity_slider_) {
+            light_opacity_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (light_shadow_strength_slider_) {
             light_shadow_strength_slider_->set_rect(SDL_Rect{0, 0, 0, 0});

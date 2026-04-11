@@ -39,6 +39,7 @@ public:
         int color_r = 255;
         int color_g = 236;
         int color_b = 196;
+        float opacity = 50.0f;
         float intensity = 1.0f;
         float radius = 220.0f;
         float falloff = 1.8f;
@@ -138,6 +139,7 @@ private:
     std::unique_ptr<DMTextBox> light_color_r_textbox_;
     std::unique_ptr<DMTextBox> light_color_g_textbox_;
     std::unique_ptr<DMTextBox> light_color_b_textbox_;
+    std::unique_ptr<DMSlider> light_opacity_slider_;
     std::unique_ptr<DMSlider> light_intensity_slider_;
     std::unique_ptr<DMSlider> light_radius_slider_;
     std::unique_ptr<DMSlider> light_falloff_slider_;

@@ -12,6 +12,7 @@ public:
         SDL_FPoint floor_screen_center{0.0f, 0.0f};
         SDL_Color color{255, 255, 255, 255};
         float intensity = 1.0f;
+        float opacity = 50.0f;
         float radius_px = 220.0f;
         float radius_world = 0.0f;
         float falloff = 1.8f;

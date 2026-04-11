@@ -1343,6 +1343,7 @@ bool copy_anchor_authoring_fields(DisplacedAssetAnchorPoint& target, const Displ
         target.light.color_r != source.light.color_r ||
         target.light.color_g != source.light.color_g ||
         target.light.color_b != source.light.color_b ||
+        std::fabs(target.light.opacity - source.light.opacity) > 1e-4f ||
         std::fabs(target.light.intensity - source.light.intensity) > 1e-4f ||
         std::fabs(target.light.radius - source.light.radius) > 1e-4f ||
         std::fabs(target.light.falloff - source.light.falloff) > 1e-4f ||
@@ -8911,6 +8912,7 @@ void RoomEditor::sync_anchor_tools_panel() {
         light_values.color_r = static_cast<int>(selected_it->light.color_r);
         light_values.color_g = static_cast<int>(selected_it->light.color_g);
         light_values.color_b = static_cast<int>(selected_it->light.color_b);
+        light_values.opacity = selected_it->light.opacity;
         light_values.intensity = selected_it->light.intensity;
         light_values.radius = selected_it->light.radius;
         light_values.falloff = selected_it->light.falloff;
@@ -10694,6 +10696,7 @@ bool RoomEditor::apply_anchor_panel_light_update(const RoomAnchorToolsPanel::Lig
             next_light.color_r = static_cast<std::uint8_t>(std::clamp(values.color_r, 0, 255));
             next_light.color_g = static_cast<std::uint8_t>(std::clamp(values.color_g, 0, 255));
             next_light.color_b = static_cast<std::uint8_t>(std::clamp(values.color_b, 0, 255));
+            next_light.opacity = values.opacity;
             next_light.intensity = values.intensity;
             next_light.radius = values.radius;
             next_light.falloff = values.falloff;
@@ -10706,6 +10709,7 @@ bool RoomEditor::apply_anchor_panel_light_update(const RoomAnchorToolsPanel::Lig
                 it->light.color_r != next_light.color_r ||
                 it->light.color_g != next_light.color_g ||
                 it->light.color_b != next_light.color_b ||
+                std::fabs(it->light.opacity - next_light.opacity) > 1e-4f ||
                 std::fabs(it->light.intensity - next_light.intensity) > 1e-4f ||
                 std::fabs(it->light.radius - next_light.radius) > 1e-4f ||
                 std::fabs(it->light.falloff - next_light.falloff) > 1e-4f ||

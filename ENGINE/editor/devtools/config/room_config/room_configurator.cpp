@@ -992,11 +992,15 @@ bool RoomConfigurator::handle_panel_focus_event(const SDL_Event& e) {
     }
     SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
     DockableCollapsible* target = panel_at_point(pointer);
-    if (!target || target == focused_panel_) {
+    if (!target) {
         return false;
     }
-    focus_panel(target);
-    return true;
+    if (target != focused_panel_) {
+        focus_panel(target);
+    }
+    // Do not consume the focus click; forward it to the panel so controls respond
+    // on first click instead of requiring a second click.
+    return false;
 }
 
 int RoomConfigurator::layout_content(const SlidingWindowContainer::LayoutContext& ctx) const {
@@ -1418,61 +1422,36 @@ void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
 };
         callbacks.on_delete = [this](const std::string& value) {
             SpawnCallbackGuard guard(this->spawn_callbacks_active_);
-            if (on_spawn_delete_) on_spawn_delete_(value);
-            if (room_) {
-                this->refresh_spawn_groups(room_);
-            } else if (external_room_json_) {
-                this->refresh_spawn_groups(*external_room_json_);
+            const bool handled_externally = static_cast<bool>(on_spawn_delete_);
+            if (handled_externally) {
+                on_spawn_delete_(value);
             } else {
-                this->request_rebuild();
+                if (room_) {
+                    this->refresh_spawn_groups(room_);
+                } else if (external_room_json_) {
+                    this->refresh_spawn_groups(*external_room_json_);
+                } else {
+                    this->request_rebuild();
+                }
             }
+            this->request_rebuild();
             this->persist_spawn_group_changes();
 };
         callbacks.on_reorder = [this, groups = &group_array](const std::string& value, size_t index) {
             SpawnCallbackGuard guard(this->spawn_callbacks_active_);
-            if (on_spawn_reorder_) on_spawn_reorder_(value, index);
-            if (!groups || !groups->is_array() || groups->empty()) {
+            if (on_spawn_reorder_) {
+                on_spawn_reorder_(value, index);
+                this->request_rebuild();
                 return;
             }
 
-            auto& arr = *groups;
-            size_t current_index = arr.size();
-            for (size_t i = 0; i < arr.size(); ++i) {
-                const auto& element = arr[i];
-                if (!element.is_object()) continue;
-                if (element.contains("spawn_id") && element["spawn_id"].is_string() &&
-                    element["spawn_id"].get<std::string>() == value) {
-                    current_index = i;
-                    break;
-                }
-            }
-            if (current_index >= arr.size()) {
+            if (!groups || !groups->is_array()) {
                 return;
             }
-
-            size_t target_index = index;
-            if (!arr.empty()) {
-                const size_t max_index = arr.size() - 1;
-                if (target_index > max_index) {
-                    target_index = max_index;
-                }
-            } else {
-                target_index = 0;
-            }
-
-            if (current_index != target_index) {
-                nlohmann::json moved = std::move(arr[current_index]);
-                const auto erase_pos = arr.begin() + static_cast<nlohmann::json::difference_type>(current_index);
-                arr.erase(erase_pos);
-                size_t insert_index = target_index;
-                if (insert_index > arr.size()) {
-                    insert_index = arr.size();
-                }
-                const auto insert_pos = arr.begin() + static_cast<nlohmann::json::difference_type>(insert_index);
-                arr.insert(insert_pos, std::move(moved));
-            }
-
-            renumber_spawn_group_priorities(arr);
+            (void)value;
+            (void)index;
+            renumber_spawn_group_priorities(*groups);
+            this->request_rebuild();
 };
         callbacks.on_open_floating = [this, id](const std::string&, SDL_Point point) {
             SpawnCallbackGuard guard(this->spawn_callbacks_active_);
@@ -1924,8 +1903,11 @@ bool RoomConfigurator::sync_state_from_widgets() {
     }
 
     if (geometry_dropdown_) {
+        if (geometry_options_.empty()) {
+            geometry_options_.push_back("Square");
+        }
         int idx = std::clamp(geometry_dropdown_->selected(), 0, static_cast<int>(geometry_options_.size()) - 1);
-        std::string selected = geometry_options_.empty() ? std::string{} : geometry_options_[idx];
+        std::string selected = geometry_options_[idx];
         if (selected != state_->geometry) {
             state_->geometry = selected;
             rebuild_required = true;

@@ -15,6 +15,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
+#include "core/dev_mode_animation_policy.hpp"
 #include "movement_plan_executor.hpp"
 #include "path_sanitizer.hpp"
 #include "get_best_path.hpp"
@@ -205,8 +206,10 @@ void AnimationRuntime::update() {
 
     const bool freeze_for_frame_editor =
         assets_owner_ && assets_owner_->is_frame_editor_target_active(self_);
+    const bool movement_blocked_for_dev_mode =
+        assets_owner_ && !runtime::dev_mode_policy::should_allow_movement_for_asset(assets_owner_->is_dev_mode());
 
-    if (freeze_for_frame_editor) {
+    if (freeze_for_frame_editor || movement_blocked_for_dev_mode) {
         const bool has_plan_2d =
             planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D &&
             !planner_iface_->plan_.strides.empty();
@@ -223,11 +226,11 @@ void AnimationRuntime::update() {
         }
     }
 
-    if (!freeze_for_frame_editor) {
+    if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode) {
         (void)planner_iface_->consume_input_event();
     }
 
-    if (!freeze_for_frame_editor) {
+    if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode) {
         if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D &&
             planner_iface_->plan_.strides.empty()) {
             planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::None;

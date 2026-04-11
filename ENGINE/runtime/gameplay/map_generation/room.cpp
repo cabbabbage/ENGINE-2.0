@@ -1283,7 +1283,12 @@ nlohmann::json Room::build_room_payload_for_save() const {
 }
 
 void Room::snapshot_assets_to_map_info() {
-        // Keep the in-memory manifest representation aligned with the live room state.
+        // Keep the in-memory manifest representation aligned with the live room state
+        // without letting stale runtime copies overwrite map-mode edits.
+        if (!assets_json.is_object()) {
+                assets_json = nlohmann::json::object();
+        }
+
         if (map_info_root_) {
                 if (!map_info_root_->is_object()) {
                         *map_info_root_ = nlohmann::json::object();
@@ -1292,13 +1297,34 @@ void Room::snapshot_assets_to_map_info() {
                 if (!section.is_object()) {
                         section = nlohmann::json::object();
                 }
-                section[room_name] = assets_json;
-                room_data_ptr_ = &section[room_name];
+
+                auto existing = section.find(room_name);
+                const bool has_existing_entry =
+                        existing != section.end() && existing->is_object();
+                const bool should_write_runtime_state =
+                        assets_save_dirty_ || !has_existing_entry;
+
+                if (should_write_runtime_state) {
+                        section[room_name] = assets_json;
+                        room_data_ptr_ = &section[room_name];
+                        assets_save_dirty_ = false;
+                        return;
+                }
+
+                // Preserve externally edited room JSON (for example, map-mode panel edits)
+                // when runtime room data is not marked dirty.
+                assets_json = *existing;
+                room_data_ptr_ = &(*existing);
                 return;
         }
 
         if (room_data_ptr_) {
-                *room_data_ptr_ = assets_json;
+                if (assets_save_dirty_ || !room_data_ptr_->is_object()) {
+                        *room_data_ptr_ = assets_json;
+                } else {
+                        assets_json = *room_data_ptr_;
+                }
+                assets_save_dirty_ = false;
         }
 }
 

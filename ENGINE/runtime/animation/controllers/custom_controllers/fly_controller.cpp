@@ -9,7 +9,6 @@
 
 
 #include "fly_controller.hpp"
-
 #include "assets/asset/Asset.hpp"
 #include "utils/input.hpp"
 
@@ -34,7 +33,13 @@ fly_controller::fly_controller(Asset* self)
               cfg.debug_enabled = false;
               cfg.override_non_locked = true;
               return cfg;
-          }()) {}
+          }()) {
+    Asset* owner = self_ptr();
+    if (owner) {
+        // Ensure the orbit behavior can issue its first movement plan immediately.
+        owner->needs_target = true;
+    }
+}
 
 void fly_controller::on_update(const Input& in) {
     orbit_behavior_.tick(in);

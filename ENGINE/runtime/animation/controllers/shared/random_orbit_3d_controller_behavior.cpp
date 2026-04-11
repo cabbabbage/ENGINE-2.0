@@ -86,6 +86,9 @@ RandomOrbit3DControllerBehavior::RandomOrbit3DControllerBehavior(
         return;
     }
     Asset* self = controller_->self_ptr();
+    if (self) {
+        self->needs_target = true;
+    }
     if (self && self->anim_) {
         self->anim_->set_debug_enabled(config_.debug_enabled);
     }

@@ -7,6 +7,7 @@
 #include "core/dev_mode_animation_policy.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/controller_factory.hpp"
+#include "animation/controllers/custom_controllers/fly_controller.hpp"
 #include "animation/controllers/custom_controllers/spider_controller.hpp"
 #include "animation/controllers/shared/custom_asset_controller.hpp"
 
@@ -50,6 +51,11 @@ TEST_CASE("Dev mode animation policy keeps frame editor target-only") {
         true, false, true, false));
 }
 
+TEST_CASE("Dev mode movement policy blocks all movement") {
+    CHECK(runtime::dev_mode_policy::should_allow_movement_for_asset(false));
+    CHECK_FALSE(runtime::dev_mode_policy::should_allow_movement_for_asset(true));
+}
+
 TEST_CASE("ControllerFactory resolves spider controller from asset name") {
     auto asset = make_test_asset("spider");
     ControllerFactory factory(fake_assets_handle());
@@ -69,4 +75,15 @@ TEST_CASE("ControllerFactory keeps unmatched names on base custom controller") {
     REQUIRE(controller != nullptr);
     CHECK(dynamic_cast<spider_controller*>(controller.get()) == nullptr);
     CHECK(dynamic_cast<CustomAssetController*>(controller.get()) != nullptr);
+}
+
+TEST_CASE("ControllerFactory resolves fly controller and arms movement targeting") {
+    auto asset = make_test_asset("fly");
+    ControllerFactory factory(fake_assets_handle());
+
+    std::unique_ptr<AssetController> controller = factory.create_for_asset(asset.get());
+
+    REQUIRE(controller != nullptr);
+    CHECK(dynamic_cast<fly_controller*>(controller.get()) != nullptr);
+    CHECK(asset->needs_target);
 }

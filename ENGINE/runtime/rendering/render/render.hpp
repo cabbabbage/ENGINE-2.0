@@ -38,7 +38,7 @@ bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
                                     SDL_Texture* gameplay_target,
                                     SDL_Color clear_color);
 float floor_light_depth_weight(float abs_depth_from_anchor, float floor_light_cull_depth);
-float floor_light_height_weight(float world_height, float base_radius_px);
+float floor_light_height_weight(float world_height, float base_radius_world);
 float floor_light_footprint_radius(float base_radius_px, float world_height);
 float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
                                                 float front_multiplier,

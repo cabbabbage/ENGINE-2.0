@@ -581,15 +581,7 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                 SDL_Color last_color{0, 0, 0, 0};
                 Uint8 last_alpha = 0;
                 for (const RuntimeLight& light : lights) {
-                    const float behind_weight = behind_occlusion_weight(light.world_z,
-                                                                        layer_depth_min,
-                                                                        layer_depth_max,
-                                                                        light.radius_px);
-                    if (behind_weight < 0.02f) {
-                        continue;
-                    }
-
-                    const float effective_intensity = std::max(0.0f, light.intensity) * behind_weight;
+                    const float effective_intensity = std::max(0.0f, light.intensity);
                     if (effective_intensity <= 0.0005f) {
                         continue;
                     }
@@ -659,6 +651,8 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
         }
     }
 
+    (void)layer_depth_min;
+    (void)layer_depth_max;
     (void)fog_params;
 
     restore_state_and_target();
@@ -840,20 +834,4 @@ bool LayerEffectProcessor::supports_strict_dark_mask_pipeline() {
     return alpha_copy_blend_mode() != SDL_BLENDMODE_INVALID &&
            light_add_rgb_preserve_alpha_blend_mode() != SDL_BLENDMODE_INVALID &&
            alpha_masked_multiply_blend_mode() != SDL_BLENDMODE_INVALID;
-}
-
-float LayerEffectProcessor::behind_occlusion_weight(double light_world_z,
-                                                    double layer_depth_min,
-                                                    double layer_depth_max,
-                                                    float light_radius_px) const {
-    const double z_near = std::min(layer_depth_min, layer_depth_max);
-    const double z_far = std::max(layer_depth_min, layer_depth_max);
-    const double d_behind = std::max(0.0, light_world_z - z_far);
-    const double layer_thickness = std::max(1.0, z_far - z_near);
-    const double attenuation_span = std::max(
-        24.0,
-        (0.55 * std::max(1.0f, light_radius_px)) + (0.65 * layer_thickness));
-
-    const double weight = std::exp(-(d_behind / attenuation_span));
-    return static_cast<float>(std::clamp(weight, 0.0, 1.0));
 }

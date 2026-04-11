@@ -9,9 +9,11 @@ class LayerEffectProcessor {
 public:
     struct RuntimeLight {
         SDL_FPoint screen_center{0.0f, 0.0f};
+        SDL_FPoint floor_screen_center{0.0f, 0.0f};
         SDL_Color color{255, 255, 255, 255};
         float intensity = 1.0f;
         float radius_px = 220.0f;
+        float radius_world = 0.0f;
         float falloff = 1.8f;
         float world_z = 0.0f;
         float floor_world_x = 0.0f;
@@ -81,11 +83,6 @@ private:
     SDL_BlendMode light_add_rgb_preserve_alpha_blend_mode();
     SDL_BlendMode alpha_masked_multiply_blend_mode();
     bool supports_strict_dark_mask_pipeline();
-
-    float behind_occlusion_weight(double light_world_z,
-                                  double layer_depth_min,
-                                  double layer_depth_max,
-                                  float light_radius_px) const;
 
     SDL_Renderer* renderer_ = nullptr;
     SDL_Texture* light_accum_texture_ = nullptr;

@@ -17,6 +17,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
+#include "core/dev_mode_animation_policy.hpp"
 #include "movement_target_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -26,6 +27,10 @@
 #include "utils/log.hpp"
 
 namespace {
+
+bool movement_blocked_by_dev_mode(const Assets* assets) {
+    return assets && !runtime::dev_mode_policy::should_allow_movement_for_asset(assets->is_dev_mode());
+}
 
 struct PlayableRoomsCacheEntry {
     const Room* last_containing_room = nullptr;
@@ -324,6 +329,10 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
+        return;
+    }
     SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
@@ -338,6 +347,10 @@ void AnimationUpdate::auto_move(Asset* target_asset,
                                 int visited_thresh_px,
                                 bool override_non_locked) {
     if (!self_ || !target_asset) {
+        return;
+    }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
         return;
     }
     if (self_) {
@@ -360,6 +373,10 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
                                    std::optional<int> checkpoint_resolution,
                                    bool           override_non_locked) {
     if (!self_) {
+        return;
+    }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
         return;
     }
 
@@ -395,6 +412,10 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
                                    std::optional<int>                 checkpoint_resolution,
                                    bool                               override_non_locked) {
     if (!self_) {
+        return;
+    }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
         return;
     }
 
@@ -543,6 +564,10 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     if (!self_) {
         return;
     }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
+        return;
+    }
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const int resolution = effective_grid_resolution(checkpoint_resolution);
     visited_thresh_      = std::max(0, visited_thresh_px);
@@ -669,6 +694,10 @@ void AnimationUpdate::move(SDL_Point delta,
     if (!self_ || !self_->info) {
         return;
     }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
+        return;
+    }
 
     pending_move_.delta        = delta;
     pending_move_.animation_id = animation;
@@ -683,6 +712,10 @@ void AnimationUpdate::move_3d(const axis::WorldPos& delta,
                               bool                  resort_z,
                               bool                  override_non_locked) {
     if (!self_ || !self_->info) {
+        return;
+    }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
         return;
     }
 

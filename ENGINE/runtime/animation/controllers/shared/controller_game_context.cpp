@@ -17,7 +17,7 @@ namespace {
 constexpr std::uint32_t kOrbitRefreshMinFrames = 300;
 constexpr std::uint32_t kOrbitRefreshMaxFrames = 3000;
 constexpr int kOrbitHeightMinOffset = 50;
-constexpr int kOrbitHeightMaxOffset = 500;
+constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
 constexpr int kOrbitRadiusMin = 120;
 constexpr int kOrbitRadiusMax = 480;
@@ -131,22 +131,50 @@ SDL_Point room_fallback_point(const Room& room) {
 }
 
 #if !defined(ENGINE_WORLD_TESTS)
+const Room* resolve_orbit_room(const ControllerGameContext& context) {
+    if (!context.assets) {
+        return nullptr;
+    }
+
+    if (context.self && !context.self->owning_room_name().empty()) {
+        const std::string& self_room_name = context.self->owning_room_name();
+        for (const Room* room : context.assets->rooms()) {
+            if (!room || !room->room_area) {
+                continue;
+            }
+            if (room->room_name == self_room_name) {
+                return room;
+            }
+        }
+    }
+
+    if (context.current_room && context.current_room->room_area) {
+        return context.current_room;
+    }
+    return nullptr;
+}
+
 FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& context,
                                                 const FlyOrbitTargetSnapshot& previous) {
     FlyOrbitTargetSnapshot snapshot = previous;
-    if (!context.self || !context.assets || !context.current_room || !context.current_room->room_area) {
+    const Room* orbit_room = resolve_orbit_room(context);
+    if (!context.self || !context.assets || !orbit_room || !orbit_room->room_area) {
         snapshot.valid = false;
         snapshot.next_refresh_frame = schedule_next_refresh_frame(context.frame_id, kOrbitRefreshMinFrames);
         return snapshot;
     }
 
     const bool needs_refresh = refresh_due(context.frame_id, previous) ||
-                               !context.current_room->room_area->contains_point(previous.world_xz);
+                               !orbit_room->room_area->contains_point(previous.world_xz);
     if (!needs_refresh) {
         return snapshot;
     }
 
-    const SDL_Point anchor = context.player_is_valid()
+    const bool use_player_anchor = context.player_is_valid() &&
+                                   context.resolved_player &&
+                                   !context.resolved_player->owning_room_name().empty() &&
+                                   context.resolved_player->owning_room_name() == orbit_room->room_name;
+    const SDL_Point anchor = use_player_anchor
         ? SDL_Point{context.resolved_player->world_x(), context.resolved_player->world_z()}
         : context.self_world_xz;
 
@@ -164,16 +192,16 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
         anchor.y + static_cast<int>(std::lround(std::sin(angle) * static_cast<double>(radius)))
     };
 
-    if (!context.current_room->room_area->contains_point(candidate)) {
+    if (!orbit_room->room_area->contains_point(candidate)) {
         candidate = context.self_world_xz;
     }
-    if (!context.current_room->room_area->contains_point(candidate)) {
-        candidate = context.current_room->room_area->get_center();
+    if (!orbit_room->room_area->contains_point(candidate)) {
+        candidate = orbit_room->room_area->get_center();
     }
-    if (!context.current_room->room_area->contains_point(candidate)) {
-        candidate = room_fallback_point(*context.current_room);
+    if (!orbit_room->room_area->contains_point(candidate)) {
+        candidate = room_fallback_point(*orbit_room);
     }
-    if (!context.current_room->room_area->contains_point(candidate)) {
+    if (!orbit_room->room_area->contains_point(candidate)) {
         snapshot.valid = false;
         snapshot.next_refresh_frame = schedule_next_refresh_frame(context.frame_id, kOrbitRefreshMinFrames);
         return snapshot;
@@ -190,7 +218,7 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
     snapshot.world_y = std::clamp(desired_world_y, min_world_y, max_world_y);
     snapshot.grid_resolution = floor_point.resolution_layer();
     snapshot.last_update_frame = context.frame_id;
-    snapshot.target_id = orbit_target_id(context.current_room, snapshot);
+    snapshot.target_id = orbit_target_id(orbit_room, snapshot);
 
     const bool changed = fly_orbit_point_changed(previous, snapshot);
     snapshot.target_version = changed ? (previous.target_version + 1u) : previous.target_version;

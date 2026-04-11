@@ -2,7 +2,7 @@ from pathlib import Path
 from PIL import Image
 
 # Maximum size for the larger dimension
-MAX_DIMENSION = 420
+MAX_DIMENSION = 200
 
 # Image file types to process
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}

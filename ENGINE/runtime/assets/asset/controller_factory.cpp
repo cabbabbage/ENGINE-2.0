@@ -21,6 +21,7 @@
 #include "utils/utils/log.hpp"
 #include "utils/utils/string_utils.hpp"
 
+#include "animation/controllers/custom_controllers/fly_controller.hpp"
 // <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>
 
 namespace {
@@ -77,6 +78,9 @@ const std::unordered_map<std::string, ControllerFactoryFn>& controller_registry(
                 {"vibble_controller", [](Asset* asset) { return std::make_unique<vibble_controller>(asset); }},
                 // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
                 // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
+        { "fly_controller", [](Asset* asset) {
+                return std::make_unique<fly_controller>(asset);
+        } },
         };
         return registry;
 }

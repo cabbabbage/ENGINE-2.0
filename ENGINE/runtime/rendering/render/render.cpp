@@ -514,6 +514,69 @@ float apply_layer_light_strength_bias(float intensity,
         depth_from_camera_plane, front_multiplier, behind_multiplier);
 }
 
+bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
+                                double layer_depth_min,
+                                double layer_depth_max,
+                                float layer_bounds_min_x,
+                                float layer_bounds_min_y,
+                                float layer_bounds_max_x,
+                                float layer_bounds_max_y) {
+    if (!std::isfinite(layer_depth_min) ||
+        !std::isfinite(layer_depth_max) ||
+        layer_depth_min > layer_depth_max ||
+        !std::isfinite(layer_bounds_min_x) ||
+        !std::isfinite(layer_bounds_min_y) ||
+        !std::isfinite(layer_bounds_max_x) ||
+        !std::isfinite(layer_bounds_max_y) ||
+        layer_bounds_min_x > layer_bounds_max_x ||
+        layer_bounds_min_y > layer_bounds_max_y ||
+        !std::isfinite(light.world_z)) {
+        return false;
+    }
+
+    const bool has_world_radius = std::isfinite(light.radius_world) && light.radius_world > 0.0f;
+    const bool has_screen_radius = std::isfinite(light.radius_px) && light.radius_px > 0.0f;
+    if (!has_world_radius && !has_screen_radius) {
+        return false;
+    }
+
+    const double depth_radius = static_cast<double>(has_world_radius ? light.radius_world : light.radius_px);
+    const double light_depth_min = static_cast<double>(light.world_z) - depth_radius;
+    const double light_depth_max = static_cast<double>(light.world_z) + depth_radius;
+    const bool overlaps_depth = light_depth_max >= layer_depth_min && light_depth_min <= layer_depth_max;
+    if (!overlaps_depth) {
+        return false;
+    }
+
+    if (!std::isfinite(light.screen_center.x) || !std::isfinite(light.screen_center.y)) {
+        return false;
+    }
+
+    const bool center_inside_layer =
+        light.screen_center.x >= layer_bounds_min_x &&
+        light.screen_center.x <= layer_bounds_max_x &&
+        light.screen_center.y >= layer_bounds_min_y &&
+        light.screen_center.y <= layer_bounds_max_y;
+    if (center_inside_layer) {
+        return true;
+    }
+
+    if (!has_screen_radius) {
+        return false;
+    }
+
+    const float light_min_x = light.screen_center.x - light.radius_px;
+    const float light_min_y = light.screen_center.y - light.radius_px;
+    const float light_max_x = light.screen_center.x + light.radius_px;
+    const float light_max_y = light.screen_center.y + light.radius_px;
+    const bool overlaps_coverage =
+        light_max_x >= layer_bounds_min_x &&
+        light_min_x <= layer_bounds_max_x &&
+        light_max_y >= layer_bounds_min_y &&
+        light_min_y <= layer_bounds_max_y;
+    return overlaps_coverage;
+}
+
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px) {
@@ -3267,28 +3330,6 @@ void SceneRenderer::render() {
                     SDL_RenderGeometry(renderer_, draw->texture, draw->vertices, 4, kQuadIndices, 6);
                 }
             };
-            auto light_affects_layer = [&](const LayerEffectProcessor::RuntimeLight& light, const LayerSubmission& layer) {
-                const float light_min_x = light.screen_center.x - light.radius_px;
-                const float light_min_y = light.screen_center.y - light.radius_px;
-                const float light_max_x = light.screen_center.x + light.radius_px;
-                const float light_max_y = light.screen_center.y + light.radius_px;
-                const bool overlaps_screen =
-                    light_max_x >= layer.bounds_min_x &&
-                    light_min_x <= layer.bounds_max_x &&
-                    light_max_y >= layer.bounds_min_y &&
-                    light_min_y <= layer.bounds_max_y;
-                bool overlaps_depth = false;
-                if (std::isfinite(layer.depth_min) && std::isfinite(layer.depth_max)) {
-                    const float light_radius_world =
-                        std::max(1.0f, light.radius_world > 0.0f ? light.radius_world : light.radius_px);
-                    const double depth_radius = static_cast<double>(light_radius_world);
-                    const double light_depth_min = static_cast<double>(light.world_z) - depth_radius;
-                    const double light_depth_max = static_cast<double>(light.world_z) + depth_radius;
-                    overlaps_depth = light_depth_max >= layer.depth_min && light_depth_min <= layer.depth_max;
-                }
-                return overlaps_screen || overlaps_depth;
-            };
-
             const int player_layer_index = std::clamp(depth_to_layer_index(0.0), 0, layer_count - 1);
             const float per_layer_blur_px = std::max(0.0f, realism.blur_px);
             const float per_layer_radial_blur_px = std::max(0.0f, realism.radial_blur_px);
@@ -3327,23 +3368,29 @@ void SceneRenderer::render() {
                 render_layer_base(i);
 
                 const LayerSubmission& layer = layers[static_cast<std::size_t>(i)];
-                std::vector<LayerEffectProcessor::RuntimeLight> layer_lights;
-                layer_lights.reserve(runtime_lights.size());
-                for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
-                    if (light_affects_layer(light, layer)) {
-                        layer_lights.push_back(light);
-                    }
-                }
-
                 double representative_depth = layer_midpoint_depth(i);
                 if (layer.submitted_depth_count > 0) {
                     representative_depth = layer.submitted_depth_sum / static_cast<double>(layer.submitted_depth_count);
                 }
 
-                LayerEffectProcessor::LayerFogParams fog_params{};
-
                 const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : representative_depth;
                 const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : representative_depth;
+
+                std::vector<LayerEffectProcessor::RuntimeLight> layer_lights;
+                layer_lights.reserve(runtime_lights.size());
+                for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
+                    if (render_internal::light_overlaps_layer_slice(light,
+                                                                    depth_min,
+                                                                    depth_max,
+                                                                    layer.bounds_min_x,
+                                                                    layer.bounds_min_y,
+                                                                    layer.bounds_max_x,
+                                                                    layer.bounds_max_y)) {
+                        layer_lights.push_back(light);
+                    }
+                }
+
+                LayerEffectProcessor::LayerFogParams fog_params{};
                 const std::vector<LayerEffectProcessor::RuntimeLight> biased_layer_lights =
                     apply_layer_light_bias(layer_lights, depth_min, depth_max);
                 auto& owner_bucket = owning_body_lights[static_cast<std::size_t>(i)];

@@ -976,8 +976,6 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         t = std::clamp(t, 0.0, 1.0);
     }
 
-    camera_.set_transition_damping(transition_settings_.transition_damping);
-    camera_.set_max_camera_velocity(transition_settings_.max_camera_velocity);
     camera_.apply_room_targets(cur_params, neigh_params, t, refresh_requested, 20, dev_mode);
 
     const bool focus_override_active = camera_.has_focus_override();
@@ -1064,6 +1062,26 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         transition_state = CameraTransitionState::Idle;
         settle_time_remaining_ = 0.0f;
     }
+
+    const float blend_damping_scale = std::clamp(
+        std::isfinite(transition_settings_.room_blend_damping_scale)
+            ? transition_settings_.room_blend_damping_scale
+            : 0.42f,
+        0.05f,
+        1.0f);
+    const float blend_velocity_scale = std::clamp(
+        std::isfinite(transition_settings_.room_blend_velocity_scale)
+            ? transition_settings_.room_blend_velocity_scale
+            : 0.60f,
+        0.10f,
+        1.0f);
+    const bool blending_state = (transition_state == CameraTransitionState::BlendingToNewRoom);
+    const float effective_damping = transition_settings_.transition_damping *
+        (blending_state ? blend_damping_scale : 1.0f);
+    const float effective_max_velocity = transition_settings_.max_camera_velocity *
+        (blending_state ? blend_velocity_scale : 1.0f);
+    camera_.set_transition_damping(effective_damping);
+    camera_.set_max_camera_velocity(effective_max_velocity);
 
     SDL_FPoint desired_center = blended_room_target;
     SDL_FPoint player_focus = blended_room_target;
@@ -1496,6 +1514,16 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         transition_settings_.max_camera_velocity,
         1.0f,
         100000.0f);
+    transition_settings_.room_blend_damping_scale = read_transition_float(
+        "room_blend_damping_scale",
+        transition_settings_.room_blend_damping_scale,
+        0.05f,
+        1.0f);
+    transition_settings_.room_blend_velocity_scale = read_transition_float(
+        "room_blend_velocity_scale",
+        transition_settings_.room_blend_velocity_scale,
+        0.10f,
+        1.0f);
     transition_settings_.settle_duration_after_stop = read_transition_float(
         "settle_duration_after_stop",
         transition_settings_.settle_duration_after_stop,
@@ -1550,6 +1578,8 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
     result["transition_damping"] = transition_settings_.transition_damping;
     result["max_camera_velocity"] = transition_settings_.max_camera_velocity;
+    result["room_blend_damping_scale"] = transition_settings_.room_blend_damping_scale;
+    result["room_blend_velocity_scale"] = transition_settings_.room_blend_velocity_scale;
     result["settle_duration_after_stop"] = transition_settings_.settle_duration_after_stop;
     result["movement_look_ahead_weight"] = transition_settings_.movement_look_ahead_weight;
     result["player_follow_weight"] = transition_settings_.player_follow_weight;

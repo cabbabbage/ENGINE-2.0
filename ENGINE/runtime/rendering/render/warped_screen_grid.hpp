@@ -120,6 +120,10 @@ public:
         float transition_damping = 9.0f;
         // World-pixel velocity cap for camera center movement.
         float max_camera_velocity = 2200.0f;
+        // Scale applied to damping while blending between rooms (<1 slows transitions).
+        float room_blend_damping_scale = 0.42f;
+        // Scale applied to camera max velocity while blending between rooms.
+        float room_blend_velocity_scale = 0.60f;
         // Keep settling toward room target briefly after movement stops.
         float settle_duration_after_stop = 0.20f;
         // Optional movement look-ahead scale. 0 disables look-ahead.

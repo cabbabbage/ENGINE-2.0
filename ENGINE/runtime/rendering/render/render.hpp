@@ -71,6 +71,13 @@ float apply_layer_light_strength_bias(float intensity,
                                       double depth_from_camera_plane,
                                       float front_multiplier,
                                       float behind_multiplier);
+bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
+                                double layer_depth_min,
+                                double layer_depth_max,
+                                float layer_bounds_min_x,
+                                float layer_bounds_min_y,
+                                float layer_bounds_max_x,
+                                float layer_bounds_max_y);
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px);

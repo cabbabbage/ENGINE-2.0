@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "rendering/render/render.hpp"
@@ -322,4 +323,112 @@ TEST_CASE("Near-camera floor footprint sampling remains finite and stable") {
     CHECK(std::isfinite(ry_high));
     CHECK(rx_high > rx_low);
     CHECK(ry_high > ry_low);
+}
+
+TEST_CASE("Layer light overlap requires depth overlap even when screen footprint overlaps") {
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{50.0f, 50.0f};
+    light.radius_px = 32.0f;
+    light.radius_world = 16.0f;
+    light.world_z = 200.0f;
+
+    const bool overlaps = render_internal::light_overlaps_layer_slice(
+        light,
+        -10.0,
+        10.0,
+        0.0f,
+        0.0f,
+        100.0f,
+        100.0f);
+    CHECK_FALSE(overlaps);
+}
+
+TEST_CASE("Layer light overlap requires coverage overlap even when depth slice overlaps") {
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{400.0f, 400.0f};
+    light.radius_px = 8.0f;
+    light.radius_world = 30.0f;
+    light.world_z = 4.0f;
+
+    const bool overlaps = render_internal::light_overlaps_layer_slice(
+        light,
+        -10.0,
+        10.0,
+        0.0f,
+        0.0f,
+        100.0f,
+        100.0f);
+    CHECK_FALSE(overlaps);
+}
+
+TEST_CASE("Layer light overlap accepts depth and coverage intersection") {
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{70.0f, 60.0f};
+    light.radius_px = 24.0f;
+    light.radius_world = 20.0f;
+    light.world_z = 5.0f;
+
+    const bool overlaps = render_internal::light_overlaps_layer_slice(
+        light,
+        -10.0,
+        10.0,
+        40.0f,
+        40.0f,
+        120.0f,
+        120.0f);
+    CHECK(overlaps);
+}
+
+TEST_CASE("Layer light overlap accepts inside-layer center when depth overlaps") {
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{64.0f, 64.0f};
+    light.radius_px = 12.0f;
+    light.radius_world = 18.0f;
+    light.world_z = -3.0f;
+
+    const bool overlaps = render_internal::light_overlaps_layer_slice(
+        light,
+        -20.0,
+        10.0,
+        32.0f,
+        32.0f,
+        96.0f,
+        96.0f);
+    CHECK(overlaps);
+}
+
+TEST_CASE("Layer light overlap rejects invalid geometry inputs") {
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{50.0f, 50.0f};
+    light.radius_px = 20.0f;
+    light.radius_world = 20.0f;
+    light.world_z = 0.0f;
+
+    CHECK_FALSE(render_internal::light_overlaps_layer_slice(
+        light,
+        std::numeric_limits<double>::quiet_NaN(),
+        10.0,
+        0.0f,
+        0.0f,
+        100.0f,
+        100.0f));
+
+    CHECK_FALSE(render_internal::light_overlaps_layer_slice(
+        light,
+        -10.0,
+        10.0,
+        100.0f,
+        0.0f,
+        0.0f,
+        100.0f));
+
+    light.screen_center.x = std::numeric_limits<float>::quiet_NaN();
+    CHECK_FALSE(render_internal::light_overlaps_layer_slice(
+        light,
+        -10.0,
+        10.0,
+        0.0f,
+        0.0f,
+        100.0f,
+        100.0f));
 }

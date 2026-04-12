@@ -21,7 +21,7 @@ bomb_controller::bomb_controller(Asset* self)
 }
 
 void bomb_controller::on_update(const Input&) {
-    constexpr int kbombStopRadiusPx = 96;
+    constexpr int kbombStopRadiusPx = 60;
 
     const auto& ctx = game_context();
     Asset* self = self_ptr();
@@ -40,7 +40,7 @@ void bomb_controller::on_update(const Input&) {
             self->anim_->cancel_all_movement();
         }
     } else if (self->needs_target) {
-        self->anim_->auto_move(player);
+        self->anim_->auto_move_3d({player->world_x(), player->world_y(), player->world_z()}, 0, std::nullopt, false);
     }
 
     animation_update::custom_controllers::dispatch_contact_attack(ctx);

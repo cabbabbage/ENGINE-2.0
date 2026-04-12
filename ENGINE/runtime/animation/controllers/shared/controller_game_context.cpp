@@ -17,13 +17,13 @@ namespace {
 constexpr std::uint32_t kOrbitRefreshMinFrames = 1000;
 constexpr std::uint32_t kOrbitRefreshMaxFrames = 3000;
 constexpr std::uint32_t kOrbitRefreshMinFramesMad = 10;
-constexpr std::uint32_t kOrbitRefreshMaxFramesMad = 30;
+constexpr std::uint32_t kOrbitRefreshMaxFramesMad = 20;
 
 constexpr int kOrbitHeightMinOffset = 100;
 constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
 constexpr int kOrbitRadiusMin = 20;
-constexpr int kOrbitRadiusMax = 80;
+constexpr int kOrbitRadiusMax = 40;
 constexpr double kTwoPi = 6.28318530717958647692;
 constexpr std::uint64_t kGoldenRatio64 = 0x9e3779b97f4a7c15ULL;
 

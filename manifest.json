@@ -384,6 +384,68 @@
     "bomb": {
       "anchor_point_child_candidates": [],
       "animations": {
+        "attack": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 8,
+          "on_end": "kill",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "attack"
+          }
+        },
         "default": {
           "anchor_points": [
             [],
@@ -1065,7 +1127,7 @@
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
-          "locked": false,
+          "locked": true,
           "movement": [
             [
               0,
@@ -1154,7 +1216,7 @@
             "dz": 4
           },
           "number_of_frames": 16,
-          "on_end": "default",
+          "on_end": "loop",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -1163,23 +1225,798 @@
             "path": "default"
           }
         },
-        "left": {
+        "down": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": -5,
+            "dz": 0
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "down"
+          }
+        },
+        "down_backward_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "derived_modifiers": {
             "reverse": false
           },
-          "inherit_data": true,
-          "invert_frames_horizontal": true,
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
           "invert_frames_vertical": false,
-          "invert_x": true,
+          "invert_x": false,
           "invert_y": false,
           "invert_z": false,
+          "movement": [
+            [
+              -1,
+              -1,
+              1
+            ],
+            [
+              -1,
+              -1,
+              1
+            ],
+            [
+              -1,
+              -1,
+              1
+            ],
+            [
+              -1,
+              -1,
+              1
+            ],
+            [
+              -1,
+              -1,
+              1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": -5,
+            "dy": -5,
+            "dz": 5
+          },
           "number_of_frames": 16,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
             "kind": "animation",
-            "name": "right",
+            "name": "down_forward_left",
+            "path": ""
+          }
+        },
+        "down_backward_right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              1,
+              -1,
+              1
+            ],
+            [
+              1,
+              -1,
+              1
+            ],
+            [
+              1,
+              -1,
+              1
+            ],
+            [
+              1,
+              -1,
+              1
+            ],
+            [
+              1,
+              -1,
+              1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 5,
+            "dy": -5,
+            "dz": 5
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "down_forward_left",
+            "path": ""
+          }
+        },
+        "down_forward_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              -1,
+              -1,
+              -1
+            ],
+            [
+              -1,
+              -1,
+              -1
+            ],
+            [
+              -1,
+              -1,
+              -1
+            ],
+            [
+              -1,
+              -1,
+              -1
+            ],
+            [
+              -1,
+              -1,
+              -1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": -5,
+            "dy": -5,
+            "dz": -5
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "down_forward_left"
+          }
+        },
+        "down_forward_right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              1,
+              -1,
+              -1
+            ],
+            [
+              1,
+              -1,
+              -1
+            ],
+            [
+              1,
+              -1,
+              -1
+            ],
+            [
+              1,
+              -1,
+              -1
+            ],
+            [
+              1,
+              -1,
+              -1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 5,
+            "dy": -5,
+            "dz": -5
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "down_forward_left",
             "path": ""
           }
         },
@@ -1982,6 +2819,801 @@
           "source": {
             "kind": "animation",
             "name": "default",
+            "path": ""
+          }
+        },
+        "up": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 5,
+            "dz": 0
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "up"
+          }
+        },
+        "up_backward_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              -1,
+              1,
+              1
+            ],
+            [
+              -1,
+              1,
+              1
+            ],
+            [
+              -1,
+              1,
+              1
+            ],
+            [
+              -1,
+              1,
+              1
+            ],
+            [
+              -1,
+              1,
+              1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": -5,
+            "dy": 5,
+            "dz": 5
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up_forward_left",
+            "path": ""
+          }
+        },
+        "up_backward_right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 5,
+            "dy": 5,
+            "dz": 5
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up_forward_left",
+            "path": ""
+          }
+        },
+        "up_forward_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              -1,
+              1,
+              -1
+            ],
+            [
+              -1,
+              1,
+              -1
+            ],
+            [
+              -1,
+              1,
+              -1
+            ],
+            [
+              -1,
+              1,
+              -1
+            ],
+            [
+              -1,
+              1,
+              -1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": -5,
+            "dy": 5,
+            "dz": -5
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "up_forward_left"
+          }
+        },
+        "up_forward_right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              1,
+              1,
+              -1
+            ],
+            [
+              1,
+              1,
+              -1
+            ],
+            [
+              1,
+              1,
+              -1
+            ],
+            [
+              1,
+              1,
+              -1
+            ],
+            [
+              1,
+              1,
+              -1
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 5,
+            "dy": 5,
+            "dz": -5
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up_forward_left",
             "path": ""
           }
         }
@@ -7119,7 +8751,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 60.0,
+        "scale_percentage": 118.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -7271,7 +8903,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/fog_4",
       "asset_name": "fog_4",
-      "asset_type": "Object",
+      "asset_type": "boundary",
       "can_invert": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -7279,7 +8911,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 27.0,
+        "scale_percentage": 40.0,
         "size_variation": 18.0
       },
       "start": "default",
@@ -12646,7 +14278,7 @@
               "texture_y": -27
             }
           ],
-          "radius_offset_degrees": 53.0,
+          "radius_offset_degrees": 345.0,
           "width_radius_x": 30.0
         }
       ],
@@ -13078,7 +14710,7 @@
                     "damage_type": "physical",
                     "element_type": "none",
                     "hitback_distance": 0.0,
-                    "hitback_enabled": true,
+                    "hitback_enabled": false,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
                     "status_effects": [],
@@ -13244,10 +14876,10 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "front_layer_light_strength_multiplier": 1.0,
-        "layer_depth_curve": 84.75,
-        "layer_depth_interval": 68.0,
+        "layer_depth_curve": 37.66999816894531,
+        "layer_depth_interval": 461.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -13297,6 +14929,10 @@
               {
                 "chance": 0.5506562500000001,
                 "name": "fog_1"
+              },
+              {
+                "chance": 2.5506562500000003,
+                "name": "fog_4"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -13404,8 +15040,8 @@
           "camera_center_dz": -455,
           "curvyness": 2,
           "display_color": [
-            98,
             242,
+            138,
             36,
             255
           ],
@@ -13500,15 +15136,15 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": 102,
-          "camera_center_dz": 248,
-          "camera_height_px": 372,
-          "camera_tilt_deg": 54.64631652832031,
-          "camera_zoom_percent": 0,
+          "camera_center_dx": -1018,
+          "camera_center_dz": -80,
+          "camera_height_px": 169,
+          "camera_tilt_deg": 30.751903533935547,
+          "camera_zoom_percent": 33,
           "curvyness": 2,
           "display_color": [
-            242,
-            61,
+            36,
+            149,
             242,
             255
           ],
@@ -13738,66 +15374,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "barrel"
-                }
-              ],
-              "display_name": "barrel",
-              "dx": -373,
-              "dz": -373,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 3856,
-              "origional_width": 3360,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-00fe803d10d5"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "barrel"
-                }
-              ],
-              "display_name": "barrel",
-              "dx": -373,
-              "dz": 356,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 3856,
-              "origional_width": 3360,
-              "position": "Exact",
-              "priority": 8,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-1d97651f7e39"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "attack_speed"
                 }
               ],
@@ -13813,7 +15389,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 9,
+              "priority": 7,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -13843,7 +15419,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 10,
+              "priority": 8,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -13873,7 +15449,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 11,
+              "priority": 9,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -13903,7 +15479,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 12,
+              "priority": 10,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -13933,7 +15509,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 13,
+              "priority": 11,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -13963,12 +15539,42 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 14,
+              "priority": 12,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-c19bd7fc8ca9"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "bomb"
+                }
+              ],
+              "display_name": "bomb",
+              "dx": -1102,
+              "dz": -373,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 13,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-fd893bae9855"
             }
           ]
         }

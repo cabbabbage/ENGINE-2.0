@@ -67,7 +67,7 @@ bool MenuUI::wants_return_to_main_menu() const {
 
 void MenuUI::game_loop() {
 
-        constexpr double TARGET_FPS = 60.0;
+        constexpr double TARGET_FPS = 24.0;
         constexpr double TARGET_FRAME_SECONDS = 1.0 / TARGET_FPS;
         const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
         const double target_counts  = TARGET_FRAME_SECONDS * perf_frequency;

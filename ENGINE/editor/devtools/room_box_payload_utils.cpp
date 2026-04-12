@@ -176,13 +176,17 @@ nlohmann::json serialize_attack_boxes(const std::vector<animation_update::FrameA
     for (std::size_t i = 0; i < boxes.size(); ++i) {
         const auto& box = boxes[i];
         nlohmann::json node = serialize_box_base(box, i, frame_index, "attack_box");
-        const std::string payload_id = box.payload_id.empty() ? box.id : box.payload_id;
-        node["payload_id"] = payload_id;
-        node["damage_amount"] = box.damage_amount;
-        animation_update::AttackPayload payload =
-            animation_update::attack_payload_from_box(box.damage_amount, payload_id, box.meta_json);
-        payload.damage_amount = box.damage_amount;
+        animation_update::AttackPayload payload = box.payload.payload_id.empty()
+            ? animation_update::attack_payload_from_box(
+                  box.damage_amount,
+                  box.payload_id.empty() ? box.id : box.payload_id,
+                  box.meta_json)
+            : animation_update::sanitize_attack_payload(box.payload);
+        const std::string payload_id = payload.payload_id.empty() ? box.id : payload.payload_id;
         payload.payload_id = payload_id;
+        payload.damage_amount = std::max(0, payload.damage_amount);
+        node["payload_id"] = payload_id;
+        node["damage_amount"] = payload.damage_amount;
         node["meta"] = parse_meta_json(animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload));
         serialized.push_back(std::move(node));
     }
@@ -294,6 +298,7 @@ animation_update::FrameAttackBox make_default_attack_box(const std::vector<std::
     animation_update::AttackPayload payload = animation_update::make_default_attack_payload();
     payload.damage_amount = box.damage_amount;
     payload.payload_id = box.payload_id;
+    box.payload = payload;
     box.meta_json = animation_update::merge_attack_payload_into_meta_json("{}", payload);
     return box;
 }

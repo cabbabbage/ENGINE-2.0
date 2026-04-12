@@ -638,6 +638,7 @@ private:
                                          devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool persist_specific_attack_box_frame(int frame_index, devmode::core::DevSaveCoordinator::Priority priority);
     bool drag_hitbox_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);

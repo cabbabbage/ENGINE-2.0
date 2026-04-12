@@ -372,6 +372,7 @@ class Asset {
         int damage_amount = 0;
         std::string payload_id;
         std::string meta_json;
+        animation_update::AttackPayload payload{};
         std::array<RuntimeBoxPoint3, 8> world_points{};
         RuntimeBoxPoint3 centroid{};
         bool valid = false;

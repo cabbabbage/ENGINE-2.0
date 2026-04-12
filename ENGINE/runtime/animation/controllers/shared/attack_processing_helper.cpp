@@ -13,6 +13,7 @@ namespace animation_update::custom_controllers {
 namespace {
 
 constexpr float kZeroTolerance = 1e-4f;
+constexpr char kHitAnimationId[] = "hit";
 constexpr char kDieAnimationId[] = "die";
 constexpr char kBreakAnimationId[] = "break";
 
@@ -51,7 +52,7 @@ bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
         if (max_distance <= 0.0f || max_damage <= 0) {
             return false;
         }
-        const float clamped_damage = std::clamp(static_cast<float>(attack.damage_amount),
+        const float clamped_damage = std::clamp(static_cast<float>(attack.payload.damage_amount),
                                                 0.0f,
                                                 static_cast<float>(max_damage));
         if (clamped_damage <= 0.0f) {
@@ -100,9 +101,12 @@ void AttackProcessingHelper::apply_knockback(Asset& self, SDL_Point delta) {
 
 void AttackProcessingHelper::process_pending_attacks(Asset& self) {
     const auto pending_attacks = self.process_pending_attacks();
+    bool took_damage = false;
     std::optional<SDL_Point> strongest_knockback{};
     for (const auto& attack : pending_attacks) {
-        self.runtime_health -= attack.damage_amount;
+        const int applied_damage = std::max(0, attack.payload.damage_amount);
+        self.runtime_health -= applied_damage;
+        took_damage = took_damage || applied_damage > 0;
         SDL_Point candidate_knockback{};
         if (!compute_knockback_delta(self, attack, candidate_knockback)) {
             continue;
@@ -131,6 +135,11 @@ void AttackProcessingHelper::process_pending_attacks(Asset& self) {
 
     if (strongest_knockback.has_value()) {
         apply_knockback(self, *strongest_knockback);
+        return;
+    }
+
+    if (took_damage && self.info && self.info->animations.find(kHitAnimationId) != self.info->animations.end()) {
+        self.set_current_animation(kHitAnimationId);
     }
 }
 

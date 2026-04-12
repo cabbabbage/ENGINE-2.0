@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "assets/asset/Asset.hpp"
-#include "animation/controllers/shared/attack_payload.hpp"
 
 namespace animation_update {
 
@@ -237,10 +236,12 @@ std::optional<Attack> AttackValidation::compute_attack_if_hit(const Asset& attac
             attack.target_asset_id = stable_asset_id(target);
             attack.target_asset_name = stable_asset_name(target);
             attack.attack_type = attack_volume.type.empty() ? std::string{"attack_box"} : attack_volume.type;
-            attack.payload = attack_payload_from_box(
-                attack_volume.damage_amount,
-                attack_volume.payload_id.empty() ? attack_volume.id : attack_volume.payload_id,
-                attack_volume.meta_json);
+            attack.payload = attack_volume.payload;
+            if (attack.payload.payload_id.empty()) {
+                attack.payload.payload_id =
+                    attack_volume.payload_id.empty() ? attack_volume.id : attack_volume.payload_id;
+            }
+            attack.payload.damage_amount = std::max(0, attack.payload.damage_amount);
             attack.attack_payload_id = attack.payload.payload_id;
             attack.damage_amount = attack.payload.damage_amount;
             attack.hit_x = (attack_volume.centroid.x + hit_volume.centroid.x) * 0.5f;

@@ -7820,7 +7820,7 @@
                     "texture_y": 235
                   }
                 ],
-                "damage_amount": 0,
+                "damage_amount": 100,
                 "enabled": true,
                 "extrusion_amount": 44,
                 "frame_range": {
@@ -7832,10 +7832,10 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 0,
+                    "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 0.0,
+                    "hitback_distance": 10.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -7878,7 +7878,7 @@
                     "texture_y": 220
                   }
                 ],
-                "damage_amount": 0,
+                "damage_amount": 100,
                 "enabled": true,
                 "extrusion_amount": 44,
                 "frame_range": {
@@ -7890,10 +7890,10 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 0,
+                    "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 0.0,
+                    "hitback_distance": 10.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -7936,7 +7936,7 @@
                     "texture_y": 199
                   }
                 ],
-                "damage_amount": 0,
+                "damage_amount": 100,
                 "enabled": true,
                 "extrusion_amount": 44,
                 "frame_range": {
@@ -7948,10 +7948,10 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 0,
+                    "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 0.0,
+                    "hitback_distance": 10.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -7994,7 +7994,7 @@
                     "texture_y": 235
                   }
                 ],
-                "damage_amount": 0,
+                "damage_amount": 100,
                 "enabled": true,
                 "extrusion_amount": 44,
                 "frame_range": {
@@ -8006,10 +8006,10 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 0,
+                    "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 0.0,
+                    "hitback_distance": 10.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -8052,7 +8052,7 @@
                     "texture_y": 240
                   }
                 ],
-                "damage_amount": 20,
+                "damage_amount": 100,
                 "enabled": true,
                 "extrusion_amount": 44,
                 "frame_range": {
@@ -8064,15 +8064,15 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 20,
+                    "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 30.0,
+                    "hitback_distance": 10.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
                     "status_effects": [],
-                    "stun_frames": 10
+                    "stun_frames": 0
                   }
                 },
                 "name": "attack_box",
@@ -8110,7 +8110,7 @@
                     "texture_y": 253
                   }
                 ],
-                "damage_amount": 0,
+                "damage_amount": 100,
                 "enabled": true,
                 "extrusion_amount": 44,
                 "frame_range": {
@@ -8122,10 +8122,10 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 0,
+                    "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 0.0,
+                    "hitback_distance": 10.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -8526,8 +8526,8 @@
           "curvyness": 2,
           "display_color": [
             242,
+            138,
             36,
-            192,
             255
           ],
           "edge_smoothness": 2,
@@ -8628,9 +8628,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            36,
+            149,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -8859,36 +8859,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "spider",
-              "dx": -1048,
-              "dz": 144,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 3856,
-              "origional_width": 3360,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 3,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-470f3fb903f8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "vibble_attack_1"
                 }
               ],
@@ -8904,7 +8874,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 8,
+              "priority": 7,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -8934,7 +8904,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 9,
+              "priority": 8,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,

@@ -205,6 +205,44 @@ AnimationFrame* adjacent_frame_for_editor(Asset* target,
     return anim_it->second.primary_frame_at(static_cast<std::size_t>(candidate));
 }
 
+animation_update::AttackPayload payload_from_attack_box(const animation_update::FrameAttackBox& box) {
+    if (!box.payload.payload_id.empty()) {
+        return animation_update::sanitize_attack_payload(box.payload);
+    }
+    return animation_update::attack_payload_from_box(
+        box.damage_amount,
+        box.payload_id.empty() ? box.id : box.payload_id,
+        box.meta_json);
+}
+
+void write_payload_to_attack_box(animation_update::FrameAttackBox& box,
+                                 const animation_update::AttackPayload& payload_values) {
+    animation_update::AttackPayload payload = animation_update::sanitize_attack_payload(payload_values);
+    if (payload.payload_id.empty()) {
+        payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+    }
+    box.payload = payload;
+    box.payload_id = payload.payload_id;
+    box.damage_amount = payload.damage_amount;
+    box.meta_json = animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload);
+}
+
+animation_update::AttackPayload resolve_payload_for_box_id(const Animation& animation,
+                                                           const animation_update::FrameAttackBox& selected_box) {
+    const std::string target_id = selected_box.id;
+    if (target_id.empty()) {
+        return payload_from_attack_box(selected_box);
+    }
+    for (const auto& frame : animation.primary_frames()) {
+        for (const auto& candidate : frame.attack_boxes.boxes) {
+            if (candidate.id == target_id) {
+                return payload_from_attack_box(candidate);
+            }
+        }
+    }
+    return payload_from_attack_box(selected_box);
+}
+
 bool project_runtime_box_point_to_screen(const Asset::RuntimeBoxPoint3& world_point,
                                          const WarpedScreenGrid& cam,
                                          SDL_FPoint& out_screen);
@@ -7591,11 +7629,13 @@ void RoomEditor::sync_attack_payload_editor() {
         return;
     }
     const auto& box = frame->attack_boxes.boxes[static_cast<std::size_t>(selected_box)];
-    const std::string payload_id = box.payload_id.empty() ? box.id : box.payload_id;
-    animation_update::AttackPayload payload =
-        animation_update::attack_payload_from_box(box.damage_amount, payload_id, box.meta_json);
-    payload.damage_amount = box.damage_amount;
-    payload.payload_id = payload_id;
+    animation_update::AttackPayload payload = payload_from_attack_box(box);
+    if (attack_box_edit_.target_asset && attack_box_edit_.target_asset->info) {
+        auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
+        if (anim_it != attack_box_edit_.target_asset->info->animations.end()) {
+            payload = resolve_payload_for_box_id(anim_it->second, box);
+        }
+    }
     attack_payload_editor_->set_payload(payload);
 }
 
@@ -7796,23 +7836,18 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
                 box.extrusion_amount = next_extrusion;
                 changed = true;
             }
-            if (box.damage_amount != values.damage) {
-                box.damage_amount = values.damage;
-                changed = true;
+            animation_update::AttackPayload payload = payload_from_attack_box(box);
+            payload.damage_amount = std::max(0, values.damage);
+            if (payload.payload_id.empty()) {
+                payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
             }
-            const std::string payload_id = box.payload_id.empty() ? box.id : box.payload_id;
-            if (box.payload_id != payload_id) {
-                box.payload_id = payload_id;
-                changed = true;
-            }
-            animation_update::AttackPayload payload =
-                animation_update::attack_payload_from_box(box.damage_amount, payload_id, box.meta_json);
-            payload.damage_amount = box.damage_amount;
-            payload.payload_id = payload_id;
-            const std::string merged_meta =
-                animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload);
-            if (box.meta_json != merged_meta) {
-                box.meta_json = merged_meta;
+            const int old_damage = box.damage_amount;
+            const std::string old_payload_id = box.payload_id;
+            const std::string old_meta = box.meta_json;
+            write_payload_to_attack_box(box, payload);
+            if (old_damage != box.damage_amount ||
+                old_payload_id != box.payload_id ||
+                old_meta != box.meta_json) {
                 changed = true;
             }
             return changed;
@@ -7829,37 +7864,62 @@ bool RoomEditor::apply_attack_payload_editor_update(const animation_update::Atta
     if (selected < 0) {
         return false;
     }
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+    auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
+    if (anim_it == attack_box_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
+        return false;
+    }
+    const int frame_index = devmode::room_anchor_mode::wrap_index(
+        attack_box_edit_.frame_index,
+        static_cast<int>(anim_it->second.frame_count()));
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
+    if (!frame || selected >= static_cast<int>(frame->attack_boxes.boxes.size())) {
+        return false;
+    }
+    const std::string target_box_id = frame->attack_boxes.boxes[static_cast<std::size_t>(selected)].id;
     const animation_update::AttackPayload sanitized = animation_update::sanitize_attack_payload(payload_values);
-    return mutate_attack_box_current_frame(
-        [selected, sanitized](std::vector<animation_update::FrameAttackBox>& boxes) {
-            if (selected >= static_cast<int>(boxes.size())) {
-                return false;
+
+    bool changed_any = false;
+    for (std::size_t idx = 0; idx < anim_it->second.frame_count(); ++idx) {
+        AnimationFrame* candidate_frame = anim_it->second.primary_frame_at(idx);
+        if (!candidate_frame) {
+            continue;
+        }
+        std::vector<animation_update::FrameAttackBox> updated = candidate_frame->attack_boxes.boxes;
+        bool frame_changed = false;
+        for (auto& box : updated) {
+            if (box.id != target_box_id) {
+                continue;
             }
-            auto& box = boxes[static_cast<std::size_t>(selected)];
+            const int old_damage = box.damage_amount;
+            const std::string old_payload_id = box.payload_id;
+            const std::string old_meta = box.meta_json;
             animation_update::AttackPayload payload = sanitized;
             if (payload.payload_id.empty()) {
                 payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
             }
-            payload.damage_amount = std::max(0, payload.damage_amount);
-            const std::string next_meta =
-                animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload);
-
-            bool changed = false;
-            if (box.payload_id != payload.payload_id) {
-                box.payload_id = payload.payload_id;
-                changed = true;
-            }
-            if (box.damage_amount != payload.damage_amount) {
-                box.damage_amount = payload.damage_amount;
-                changed = true;
-            }
-            if (box.meta_json != next_meta) {
-                box.meta_json = next_meta;
-                changed = true;
-            }
-            return changed;
-        },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
+            write_payload_to_attack_box(box, payload);
+            frame_changed |= old_damage != box.damage_amount ||
+                             old_payload_id != box.payload_id ||
+                             old_meta != box.meta_json;
+        }
+        if (frame_changed) {
+            candidate_frame->set_attack_boxes(std::move(updated));
+            changed_any = true;
+            persist_specific_attack_box_frame(static_cast<int>(idx),
+                                              devmode::core::DevSaveCoordinator::Priority::Debounced);
+        }
+    }
+    if (changed_any) {
+        attack_box_edit_.target_asset->refresh_runtime_box_cache_from_frame();
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
+        sync_attack_box_tools_panel();
+    }
+    return changed_any;
 }
 
 bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope scope) {
@@ -10575,6 +10635,28 @@ bool RoomEditor::persist_attack_box_current_frame(devmode::core::DevSaveCoordina
     return false;
 }
 
+bool RoomEditor::persist_specific_attack_box_frame(int frame_index,
+                                                   devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = attack_box_edit_.target_asset;
+    auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
+        return false;
+    }
+
+    const int wrapped_frame_index = devmode::room_anchor_mode::wrap_index(
+        frame_index,
+        static_cast<int>(anim_it->second.frame_count()));
+    const int previous_frame_index = attack_box_edit_.frame_index;
+    attack_box_edit_.frame_index = wrapped_frame_index;
+    const bool persisted = persist_attack_box_current_frame(priority, false);
+    attack_box_edit_.frame_index = previous_frame_index;
+    return persisted;
+}
+
 bool RoomEditor::mutate_attack_box_current_frame(
     const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
     devmode::core::DevSaveCoordinator::Priority priority) {
@@ -10626,11 +10708,11 @@ bool RoomEditor::mutate_attack_box_current_frame(
         if (box.meta_json.empty()) {
             box.meta_json = "{}";
         }
-        animation_update::AttackPayload payload =
-            animation_update::attack_payload_from_box(box.damage_amount, box.payload_id, box.meta_json);
-        payload.damage_amount = box.damage_amount;
-        payload.payload_id = box.payload_id;
-        box.meta_json = animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload);
+        animation_update::AttackPayload payload = payload_from_attack_box(box);
+        if (payload.payload_id.empty()) {
+            payload.payload_id = box.payload_id;
+        }
+        write_payload_to_attack_box(box, payload);
     }
     assert_unique_box_ids(updated, "attack_box");
 

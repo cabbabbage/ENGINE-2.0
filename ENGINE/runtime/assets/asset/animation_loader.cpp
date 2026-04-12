@@ -4,6 +4,7 @@
 #include "anchor_point.hpp"
 #include "asset_info.hpp"
 #include "asset_types.hpp"
+#include "animation/controllers/shared/attack_payload.hpp"
 #include "json_coercion.hpp"
 #include "surface_utils.hpp"
 #include "utils/cache_manager.hpp"
@@ -555,13 +556,18 @@ animation_update::FrameAttackBox parse_attack_box(const nlohmann::json& node,
                 return box;
         }
         parse_box_common_fields(box, node, "attack_box", "attack_box", frame_index, ordinal);
-        box.damage_amount = read_int_field_like(node, "damage_amount", 0);
-        box.payload_id = read_string_field_like(node, "payload_id", box.id);
+        const int fallback_damage = read_int_field_like(node, "damage_amount", 0);
+        const std::string fallback_payload_id = read_string_field_like(node, "payload_id", box.id);
         if (node.contains("meta") && node["meta"].is_object()) {
                 box.meta_json = node["meta"].dump();
         } else {
                 box.meta_json = "{}";
         }
+        box.payload = animation_update::attack_payload_from_box(fallback_damage, fallback_payload_id, box.meta_json);
+        box.damage_amount = box.payload.damage_amount;
+        box.payload_id = box.payload.payload_id.empty() ? box.id : box.payload.payload_id;
+        box.payload.payload_id = box.payload_id;
+        box.meta_json = animation_update::merge_attack_payload_into_meta_json(box.meta_json, box.payload);
         return box;
 }
 
@@ -609,6 +615,10 @@ std::vector<animation_update::FrameAttackBox> parse_attack_box_frame(const nlohm
                 if (box.payload_id.empty()) {
                         box.payload_id = box.id;
                 }
+                box.payload.payload_id = box.payload_id;
+                box.payload.damage_amount = std::max(0, box.payload.damage_amount);
+                box.damage_amount = box.payload.damage_amount;
+                box.meta_json = animation_update::merge_attack_payload_into_meta_json(box.meta_json, box.payload);
                 if (box.is_valid()) {
                         boxes.push_back(std::move(box));
                 }

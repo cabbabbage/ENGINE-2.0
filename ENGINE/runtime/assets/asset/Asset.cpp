@@ -6,6 +6,7 @@
 #include "rendering/render/render.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/shared/attack_payload.hpp"
 #include "utils/area_helpers.hpp"
 #include "assets/asset_filter_tags.hpp"
 #include "asset_types.hpp"
@@ -1213,6 +1214,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                             int damage_amount,
                             const std::string& payload_id,
                             const std::string& meta_json,
+                            const animation_update::AttackPayload& payload,
                             const std::array<animation_update::FrameBoxCorner, 4>& corners,
                             RuntimeBoxVolume& out_volume) -> bool {
         out_volume = RuntimeBoxVolume{};
@@ -1228,6 +1230,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         out_volume.damage_amount = damage_amount;
         out_volume.payload_id = payload_id;
         out_volume.meta_json = meta_json;
+        out_volume.payload = payload;
 
         float sum_x = 0.0f;
         float sum_y = 0.0f;
@@ -1314,6 +1317,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                           0,
                           std::string{},
                           "{}",
+                          animation_update::make_default_attack_payload(),
                           runtime_corners,
                           volume)) {
             continue;
@@ -1327,6 +1331,17 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         if (!box.is_valid() || !box.enabled) {
             continue;
         }
+        animation_update::AttackPayload payload = box.payload;
+        if (payload.payload_id.empty()) {
+            payload = animation_update::attack_payload_from_box(
+                box.damage_amount,
+                box.payload_id.empty() ? box.id : box.payload_id,
+                box.meta_json);
+        }
+        if (payload.payload_id.empty()) {
+            payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+        }
+        payload.damage_amount = std::max(0, payload.damage_amount);
         RuntimeBoxVolume volume{};
         const auto runtime_corners = box.to_runtime_clockwise_points();
         if (!build_volume(box.name,
@@ -1337,9 +1352,10 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                           box.frame_end,
                           box.anchor_link,
                           box.extrusion_amount,
-                          box.damage_amount,
-                          box.payload_id,
+                          payload.damage_amount,
+                          payload.payload_id,
                           box.meta_json,
+                          payload,
                           runtime_corners,
                           volume)) {
             continue;

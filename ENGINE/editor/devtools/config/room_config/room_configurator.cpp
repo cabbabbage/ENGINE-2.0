@@ -319,13 +319,14 @@ struct RoomConfigurator::State {
         if (auto value = read_json_int(src, "edge_smoothness")) {
             edge_smoothness = *value;
         } else {
-            edge_smoothness = 2;
+            edge_smoothness = 4;
         }
-        curvyness = 2;
         if (src.contains("curvyness")) {
             if (auto cv = read_json_int(src, "curvyness")) {
                 curvyness = std::max(0, *cv);
             }
+        } else {
+            curvyness = edge_smoothness;  // Only set default when no value exists
         }
 
         ensure_valid(allow_height);

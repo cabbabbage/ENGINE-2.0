@@ -7996,6 +7996,7 @@
         "player_soft_leash_px": 220.0,
         "radial_blur_px": 3.3999998569488525,
         "room_blend_damping_scale": 0.41999998688697815,
+        "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
         "transition_damping": 9.0
@@ -8096,7 +8097,7 @@
           "max_rooms": 3,
           "min_rooms": 2,
           "name": "layer_1",
-          "ring_radius": 4459.0,
+          "ring_radius": 6259.0,
           "rooms": [
             {
               "max_instances": 3,
@@ -8107,17 +8108,24 @@
           ]
         },
         {
-          "bounding_extent": 0.0,
+          "bounding_extent": 2330.3252991803524,
           "level": 2,
-          "max_rooms": 0,
-          "min_rooms": 0,
+          "max_rooms": 3,
+          "min_rooms": 1,
           "name": "layer_2",
-          "ring_radius": 6990.0,
-          "rooms": []
+          "ring_radius": 12920.0,
+          "rooms": [
+            {
+              "max_instances": 3,
+              "min_instances": 1,
+              "name": "NewRoom",
+              "required_children": []
+            }
+          ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 800
+        "min_edge_distance": 2000
       },
       "map_name": "forrest",
       "rooms_data": {
@@ -8126,9 +8134,9 @@
           "camera_center_dz": -455,
           "curvyness": 2,
           "display_color": [
-            242,
-            138,
             36,
+            153,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -8229,9 +8237,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            149,
             242,
+            85,
+            238,
             255
           ],
           "edge_smoothness": 101,

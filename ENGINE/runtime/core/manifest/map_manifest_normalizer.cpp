@@ -495,6 +495,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     // - transition_damping: dt-stable response speed (1/seconds)
     // - max_camera_velocity: world-pixel velocity cap to prevent jitter/overshoot
     // - room_blend_damping_scale/room_blend_velocity_scale: slow room-to-room transitions
+    // - room_blend_follow_weight_scale: reduce player-follow pull during room blending
     // - settle_duration_after_stop: post-stop carry time before returning to Idle
     // - movement_look_ahead_weight: optional movement look-ahead contribution
     // - player_follow_weight: blend room target toward player to keep follow tighter
@@ -505,8 +506,9 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"min_visible_screen_ratio", 0.01},
         {"transition_damping", 9.0},
         {"max_camera_velocity", 2200.0},
-        {"room_blend_damping_scale", 0.42},
-        {"room_blend_velocity_scale", 0.60},
+        {"room_blend_damping_scale", 0.14},
+        {"room_blend_velocity_scale", 0.18},
+        {"room_blend_follow_weight_scale", 0.28},
         {"settle_duration_after_stop", 0.20},
         {"movement_look_ahead_weight", 0.12},
         {"player_follow_weight", 0.35},

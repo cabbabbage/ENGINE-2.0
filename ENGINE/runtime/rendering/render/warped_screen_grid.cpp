@@ -1066,14 +1066,20 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     const float blend_damping_scale = std::clamp(
         std::isfinite(transition_settings_.room_blend_damping_scale)
             ? transition_settings_.room_blend_damping_scale
-            : 0.42f,
+            : 0.14f,
         0.05f,
         1.0f);
     const float blend_velocity_scale = std::clamp(
         std::isfinite(transition_settings_.room_blend_velocity_scale)
             ? transition_settings_.room_blend_velocity_scale
-            : 0.60f,
+            : 0.18f,
         0.10f,
+        1.0f);
+    const float blend_follow_scale = std::clamp(
+        std::isfinite(transition_settings_.room_blend_follow_weight_scale)
+            ? transition_settings_.room_blend_follow_weight_scale
+            : 0.28f,
+        0.05f,
         1.0f);
     const bool blending_state = (transition_state == CameraTransitionState::BlendingToNewRoom);
     const float effective_damping = transition_settings_.transition_damping *
@@ -1110,12 +1116,15 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     }
 
     if (!dev_mode && player) {
-        const float follow_weight = std::clamp(
+        float follow_weight = std::clamp(
             std::isfinite(transition_settings_.player_follow_weight)
                 ? transition_settings_.player_follow_weight
                 : 0.35f,
             0.0f,
             1.0f);
+        if (blending_state) {
+            follow_weight *= blend_follow_scale;
+        }
         desired_center = lerp_point(desired_center, player_focus, follow_weight);
 
         const float configured_soft_leash = std::clamp(
@@ -1524,6 +1533,11 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         transition_settings_.room_blend_velocity_scale,
         0.10f,
         1.0f);
+    transition_settings_.room_blend_follow_weight_scale = read_transition_float(
+        "room_blend_follow_weight_scale",
+        transition_settings_.room_blend_follow_weight_scale,
+        0.05f,
+        1.0f);
     transition_settings_.settle_duration_after_stop = read_transition_float(
         "settle_duration_after_stop",
         transition_settings_.settle_duration_after_stop,
@@ -1580,6 +1594,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["max_camera_velocity"] = transition_settings_.max_camera_velocity;
     result["room_blend_damping_scale"] = transition_settings_.room_blend_damping_scale;
     result["room_blend_velocity_scale"] = transition_settings_.room_blend_velocity_scale;
+    result["room_blend_follow_weight_scale"] = transition_settings_.room_blend_follow_weight_scale;
     result["settle_duration_after_stop"] = transition_settings_.settle_duration_after_stop;
     result["movement_look_ahead_weight"] = transition_settings_.movement_look_ahead_weight;
     result["player_follow_weight"] = transition_settings_.player_follow_weight;

@@ -614,6 +614,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"max_camera_velocity", 1800.0},
         {"room_blend_damping_scale", 0.30},
         {"room_blend_velocity_scale", 0.55},
+        {"room_blend_follow_weight_scale", 0.40},
         {"settle_duration_after_stop", 0.35},
         {"movement_look_ahead_weight", 0.4},
         {"player_follow_weight", 0.45},
@@ -640,6 +641,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(camera_grid.transition_settings().max_camera_velocity == doctest::Approx(1800.0f));
     CHECK(camera_grid.transition_settings().room_blend_damping_scale == doctest::Approx(0.30f));
     CHECK(camera_grid.transition_settings().room_blend_velocity_scale == doctest::Approx(0.55f));
+    CHECK(camera_grid.transition_settings().room_blend_follow_weight_scale == doctest::Approx(0.40f));
     CHECK(camera_grid.transition_settings().settle_duration_after_stop == doctest::Approx(0.35f));
     CHECK(camera_grid.transition_settings().movement_look_ahead_weight == doctest::Approx(0.4f));
     CHECK(camera_grid.transition_settings().player_follow_weight == doctest::Approx(0.45f));
@@ -666,6 +668,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(serialized["max_camera_velocity"] == doctest::Approx(1800.0));
     CHECK(serialized["room_blend_damping_scale"] == doctest::Approx(0.30));
     CHECK(serialized["room_blend_velocity_scale"] == doctest::Approx(0.55));
+    CHECK(serialized["room_blend_follow_weight_scale"] == doctest::Approx(0.40));
     CHECK(serialized["settle_duration_after_stop"] == doctest::Approx(0.35));
     CHECK(serialized["movement_look_ahead_weight"] == doctest::Approx(0.4));
     CHECK(serialized["player_follow_weight"] == doctest::Approx(0.45));

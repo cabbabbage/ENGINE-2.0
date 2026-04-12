@@ -13240,11 +13240,11 @@
       "camera_settings": {
         "base_height_px": 720.0,
         "behind_layer_light_strength_multiplier": 0.5199999809265137,
-        "blur_px": 0.03999999910593033,
+        "blur_px": 0.07000000029802322,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "front_layer_light_strength_multiplier": 1.0,
         "layer_depth_curve": 84.75,
         "layer_depth_interval": 68.0,
@@ -13262,7 +13262,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 0.7299999594688416,
+        "radial_blur_px": 0.85999995470047,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -13276,7 +13276,7 @@
           {
             "candidates": [
               {
-                "chance": 0,
+                "chance": 7,
                 "name": "null"
               },
               {
@@ -13295,12 +13295,8 @@
                 "tag_name": "tree"
               },
               {
-                "chance": 3.5506562500000003,
-                "name": "fog_3"
-              },
-              {
-                "chance": 1.55065625,
-                "name": "fog_4"
+                "chance": 0.5506562500000001,
+                "name": "fog_1"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -13408,8 +13404,8 @@
           "camera_center_dz": -455,
           "curvyness": 2,
           "display_color": [
+            98,
             242,
-            138,
             36,
             255
           ],
@@ -13504,15 +13500,15 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -350,
-          "camera_center_dz": 31,
-          "camera_height_px": 170,
-          "camera_tilt_deg": 36.24213409423828,
+          "camera_center_dx": 102,
+          "camera_center_dz": 248,
+          "camera_height_px": 372,
+          "camera_tilt_deg": 54.64631652832031,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            149,
+            242,
+            61,
             242,
             255
           ],
@@ -13999,7 +13995,6 @@
           "min_width": 1080,
           "name": "basic",
           "spawn_groups": [
-
             {
               "candidates": [
                 {
@@ -14023,7 +14018,7 @@
               "origional_height": 4048,
               "origional_width": 5136,
               "position": "Random",
-              "quantity": 1,
+              "priority": 0,
               "resolution": 0,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,

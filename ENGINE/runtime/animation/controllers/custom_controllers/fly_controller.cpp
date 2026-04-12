@@ -18,8 +18,8 @@ fly_controller::fly_controller(Asset* self)
           this,
           [] {
               animation_update::custom_controllers::RandomOrbit3DControllerBehaviorConfig cfg{};
-              cfg.visit_threshold_px = 48;
-              cfg.orbit_radius_px = 50;
+              cfg.visit_threshold_px = 18;
+              cfg.orbit_radius_px = 10;
               cfg.orbit_vertical_amplitude_px = 36;
               cfg.orbit_segment_checkpoints = 4;
               cfg.orbit_enter_distance_px = 280;

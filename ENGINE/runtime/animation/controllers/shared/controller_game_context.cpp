@@ -16,6 +16,9 @@ namespace {
 
 constexpr std::uint32_t kOrbitRefreshMinFrames = 1000;
 constexpr std::uint32_t kOrbitRefreshMaxFrames = 3000;
+constexpr std::uint32_t kOrbitRefreshMinFramesMad = 10;
+constexpr std::uint32_t kOrbitRefreshMaxFramesMad = 30;
+
 constexpr int kOrbitHeightMinOffset = 100;
 constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
@@ -63,6 +66,7 @@ std::uint64_t asset_runtime_seed(const Asset* self) {
     } else {
         seed = mix_hash(seed, reinterpret_cast<std::uint64_t>(self));
     }
+
     seed = mix_hash(seed, static_cast<std::uint64_t>(static_cast<std::int64_t>(self->world_x())));
     seed = mix_hash(seed, static_cast<std::uint64_t>(static_cast<std::int64_t>(self->world_z())));
     seed = mix_hash(seed, static_cast<std::uint64_t>(static_cast<std::int64_t>(self->grid_resolution)));
@@ -71,13 +75,20 @@ std::uint64_t asset_runtime_seed(const Asset* self) {
 
 std::uint32_t orbit_refresh_interval_frames(const Asset* self,
                                             std::uint64_t target_id,
-                                            std::uint32_t target_version) {
+                                            std::uint32_t target_version,
+                                            bool mad) {
     std::uint64_t seed = asset_runtime_seed(self);
     seed = mix_hash(seed, target_id);
     seed = mix_hash(seed, static_cast<std::uint64_t>(target_version));
+    seed = mix_hash(seed, mad ? 1ULL : 0ULL);
+
     const std::uint64_t random_value = splitmix64(seed);
-    const std::uint32_t span = kOrbitRefreshMaxFrames - kOrbitRefreshMinFrames + 1;
-    return kOrbitRefreshMinFrames + static_cast<std::uint32_t>(random_value % span);
+
+    const std::uint32_t min_frames = mad ? kOrbitRefreshMinFramesMad : kOrbitRefreshMinFrames;
+    const std::uint32_t max_frames = mad ? kOrbitRefreshMaxFramesMad : kOrbitRefreshMaxFrames;
+    const std::uint32_t span = (max_frames - min_frames) + 1u;
+
+    return min_frames + static_cast<std::uint32_t>(random_value % span);
 }
 
 std::uint32_t schedule_next_refresh_frame(std::uint32_t frame, std::uint32_t interval) {
@@ -106,10 +117,12 @@ bool fly_orbit_point_changed(const FlyOrbitTargetSnapshot& previous,
     if (previous.grid_resolution != current.grid_resolution) {
         return true;
     }
+
     const float dx = static_cast<float>(current.world_xz.x - previous.world_xz.x);
     const float dz = static_cast<float>(current.world_xz.y - previous.world_xz.y);
     const float dy = static_cast<float>(current.world_y - previous.world_y);
     const float dist_sq = dx * dx + dy * dy + dz * dz;
+
     return dist_sq > (kOrbitPointChangeEpsilon * kOrbitPointChangeEpsilon);
 }
 
@@ -151,6 +164,7 @@ const Room* resolve_orbit_room(const ControllerGameContext& context) {
     if (context.current_room && context.current_room->room_area) {
         return context.current_room;
     }
+
     return nullptr;
 }
 
@@ -158,39 +172,59 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
                                                 const FlyOrbitTargetSnapshot& previous) {
     FlyOrbitTargetSnapshot snapshot = previous;
     const Room* orbit_room = resolve_orbit_room(context);
+
     if (!context.self || !context.assets || !orbit_room || !orbit_room->room_area) {
         snapshot.valid = false;
-        snapshot.next_refresh_frame = schedule_next_refresh_frame(context.frame_id, kOrbitRefreshMinFrames);
+        snapshot.next_refresh_frame = schedule_next_refresh_frame(
+            context.frame_id,
+            orbit_refresh_interval_frames(context.self, 0, previous.target_version, context.Flies_mad));
         return snapshot;
     }
 
-    const bool needs_refresh = refresh_due(context.frame_id, previous) ||
-                               !orbit_room->room_area->contains_point(previous.world_xz);
+    const bool needs_refresh =
+        refresh_due(context.frame_id, previous) ||
+        !orbit_room->room_area->contains_point(previous.world_xz);
+
     if (!needs_refresh) {
         return snapshot;
     }
 
-    const bool use_player_anchor = context.player_is_valid() &&
-                                   context.resolved_player &&
-                                   !context.resolved_player->owning_room_name().empty() &&
-                                   context.resolved_player->owning_room_name() == orbit_room->room_name;
+    const bool use_player_anchor =
+        context.player_is_valid() &&
+        context.resolved_player &&
+        !context.resolved_player->owning_room_name().empty() &&
+        context.resolved_player->owning_room_name() == orbit_room->room_name;
+
     const SDL_Point anchor = use_player_anchor
         ? SDL_Point{context.resolved_player->world_x(), context.resolved_player->world_z()}
         : context.self_world_xz;
 
-    std::uint64_t seed = asset_runtime_seed(context.self);
-    seed = mix_hash(seed, static_cast<std::uint64_t>(context.frame_id));
-    seed = mix_hash(seed, static_cast<std::uint64_t>(previous.target_version));
-    const std::uint64_t radius_rand = splitmix64(seed);
-    const std::uint64_t angle_rand = splitmix64(radius_rand);
+    SDL_Point candidate{};
 
-    const int radius_span = (kOrbitRadiusMax - kOrbitRadiusMin) + 1;
-    const int radius = kOrbitRadiusMin + static_cast<int>(radius_rand % static_cast<std::uint64_t>(radius_span));
-    const double angle = (static_cast<double>(angle_rand & 0xFFFFFFFFULL) / 4294967295.0) * kTwoPi;
-    SDL_Point candidate{
-        anchor.x + static_cast<int>(std::lround(std::cos(angle) * static_cast<double>(radius))),
-        anchor.y + static_cast<int>(std::lround(std::sin(angle) * static_cast<double>(radius)))
-    };
+    if (!context.Flies_mad) {
+        std::uint64_t seed = asset_runtime_seed(context.self);
+        seed = mix_hash(seed, static_cast<std::uint64_t>(context.frame_id));
+        seed = mix_hash(seed, static_cast<std::uint64_t>(previous.target_version));
+
+        const std::uint64_t radius_rand = splitmix64(seed);
+        const std::uint64_t angle_rand = splitmix64(radius_rand);
+
+        const int radius_span = (kOrbitRadiusMax - kOrbitRadiusMin) + 1;
+        const int radius = kOrbitRadiusMin +
+            static_cast<int>(radius_rand % static_cast<std::uint64_t>(radius_span));
+        const double angle =
+            (static_cast<double>(angle_rand & 0xFFFFFFFFULL) / 4294967295.0) * kTwoPi;
+
+        candidate = SDL_Point{
+            anchor.x + static_cast<int>(std::lround(std::cos(angle) * static_cast<double>(radius))),
+            anchor.y + static_cast<int>(std::lround(std::sin(angle) * static_cast<double>(radius)))
+        };
+    } else {
+        candidate = SDL_Point{
+            context.player->world_x() + static_cast<int>(std::lround(std::cos(context.frame_id * 0.1) * 50.0)),
+            context.player->world_z() + static_cast<int>(std::lround(std::sin(context.frame_id * 0.1) * 50.0))
+        };
+    }
 
     if (!orbit_room->room_area->contains_point(candidate)) {
         candidate = context.self_world_xz;
@@ -203,7 +237,9 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
     }
     if (!orbit_room->room_area->contains_point(candidate)) {
         snapshot.valid = false;
-        snapshot.next_refresh_frame = schedule_next_refresh_frame(context.frame_id, kOrbitRefreshMinFrames);
+        snapshot.next_refresh_frame = schedule_next_refresh_frame(
+            context.frame_id,
+            orbit_refresh_interval_frames(context.self, 0, previous.target_version, context.Flies_mad));
         return snapshot;
     }
 
@@ -224,7 +260,12 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
     snapshot.target_version = changed ? (previous.target_version + 1u) : previous.target_version;
     snapshot.next_refresh_frame = schedule_next_refresh_frame(
         context.frame_id,
-        orbit_refresh_interval_frames(context.self, snapshot.target_id, snapshot.target_version));
+        orbit_refresh_interval_frames(
+            context.self,
+            snapshot.target_id,
+            snapshot.target_version,
+            context.Flies_mad));
+
     return snapshot;
 }
 #endif
@@ -284,12 +325,20 @@ bool ControllerGameContext::self_and_player_share_room() const {
     return self->owning_room_name() == player->owning_room_name();
 }
 
+void ControllerGameContext::set_flies_mad() const {
+    const_cast<ControllerGameContext*>(this)->Flies_mad = true;
+}
+
 ControllerGameContext build_controller_game_context(Asset* self,
                                                     Assets* assets,
                                                     const FlyOrbitTargetSnapshot* previous_orbit_target) {
     ControllerGameContext context{};
     context.self = self;
     context.assets = assets;
+    context.player = assets ? assets->player : nullptr;
+    context.resolved_player = is_valid_player_target(self, context.player) ? context.player : nullptr;
+    context.player_valid = context.resolved_player != nullptr;
+
     if (previous_orbit_target) {
         context.fly_orbit_target = *previous_orbit_target;
         context.fly_orbit_point.valid = previous_orbit_target->valid;
@@ -308,18 +357,16 @@ ControllerGameContext build_controller_game_context(Asset* self,
         return context;
     }
 
-    context.player = assets->player;
-    context.resolved_player = is_valid_player_target(self, context.player) ? context.player : nullptr;
-    context.player_valid = context.resolved_player != nullptr;
-
 #if !defined(ENGINE_WORLD_TESTS)
     context.frame_id = assets->frame_id();
     context.delta_seconds = assets->frame_delta_seconds_clamped();
     context.camera_view = &assets->getView();
     context.current_room = assets->current_room();
 
-    const FlyOrbitTargetSnapshot previous = previous_orbit_target ? *previous_orbit_target : FlyOrbitTargetSnapshot{};
+    const FlyOrbitTargetSnapshot previous =
+        previous_orbit_target ? *previous_orbit_target : FlyOrbitTargetSnapshot{};
     const FlyOrbitTargetSnapshot resolved = resolve_fly_orbit_target(context, previous);
+
     context.fly_orbit_target_changed = fly_orbit_point_changed(previous, resolved);
     context.fly_orbit_target = resolved;
     context.fly_orbit_point.valid = resolved.valid;

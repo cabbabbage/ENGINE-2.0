@@ -7,7 +7,7 @@
 // CONTROLLER_META_END
 
 
-
+#include <iostream>
 #include "fly_controller.hpp"
 #include "assets/asset/Asset.hpp"
 #include "utils/input.hpp"
@@ -42,10 +42,31 @@ fly_controller::fly_controller(Asset* self)
 }
 
 void fly_controller::on_update(const Input& in) {
-    orbit_behavior_.tick(in);
+    if(orbiting) {
+        
+        orbit_behavior_.tick(in, !orbiting);
+    }
+    else{
+        if (self_ptr()->needs_target) {
+            self_ptr()->anim_->set_animation("die");
+
+        }
+    }
 }
 
 void fly_controller::on_process_pending_attacks(Asset& self_ref) {
     (void)self_ref;
-    // TODO: implement attack handling if this asset uses attack queues.
+
+    const auto pending_attacks = self_ref.process_pending_attacks();
+    if(pending_attacks.empty()) {
+        return;
+    }
+    std::cout<<"fly_controller::on_process_pending_attacks called, transitioning to non-orbiting state."<<std::endl;
+    orbiting = false;
+
+    self_ref.anim_->cancel_all_movement();
+    self_ref.anim_->auto_move_3d({self_ref.world_x(), -10, self_ref.world_z()}, 0, std::nullopt, true);
+
+
+
 }

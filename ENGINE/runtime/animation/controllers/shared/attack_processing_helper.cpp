@@ -59,7 +59,7 @@ bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
             return false;
         }
         const float damage_ratio = clamped_damage / static_cast<float>(max_damage);
-        travel_distance = damage_ratio * max_distance;
+        travel_distance = (damage_ratio * max_distance)/self.info->weight_kg; // Knockback is inversely proportional to weight.
     } else if (max_distance > 0.0f) {
         travel_distance = std::min(travel_distance, max_distance);
     }

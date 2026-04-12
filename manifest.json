@@ -85,6 +85,7 @@
           "movement": [
             [
               0,
+              0,
               0
             ]
           ],
@@ -114,7 +115,10 @@
         "scale_percentage": 30.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "light",
+        "small_surface_top"
+      ],
       "tillable": false,
       "weight_kg": 0.0
     },
@@ -128,6 +132,7 @@
           "locked": false,
           "movement": [
             [
+              0,
               0,
               0
             ]
@@ -158,7 +163,12 @@
         "scale_percentage": 24.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "bottle",
+        "drink",
+        "interactable",
+        "small_surface_top"
+      ],
       "tillable": false,
       "weight_kg": 0.0
     },
@@ -188,11 +198,7 @@
             "candidates": [
               {
                 "chance": 5,
-                "name": "book_pile"
-              },
-              {
-                "chance": 0.25,
-                "name": "3_candles"
+                "name": "#small_surface_top"
               }
             ]
           }
@@ -203,7 +209,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.10000000149011612,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -211,8 +217,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 217,
-                "texture_y": 39
+                "texture_x": 227,
+                "texture_y": 49
               }
             ]
           ],
@@ -240,7 +246,7 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 10,
+                "extrusion_amount": 40,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -267,6 +273,7 @@
           "movement": [
             [
               0,
+              0,
               0
             ]
           ],
@@ -289,6 +296,8 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/barrel",
       "asset_name": "barrel",
+      "asset_type": "object",
+      "can_invert": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -298,7 +307,7 @@
       "starting_health": 1000,
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "weight_kg": 400.0
     },
     "bench": {
       "animations": {
@@ -372,6 +381,1632 @@
       "asset_name": "blue_flower",
       "start": "default"
     },
+    "bomb": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              9,
+              0
+            ],
+            [
+              0,
+              20,
+              0
+            ],
+            [
+              0,
+              35,
+              0
+            ],
+            [
+              0,
+              51,
+              0
+            ],
+            [
+              0,
+              70,
+              0
+            ],
+            [
+              0,
+              92,
+              0
+            ],
+            [
+              0,
+              116,
+              0
+            ],
+            [
+              0,
+              97,
+              0
+            ],
+            [
+              0,
+              80,
+              0
+            ],
+            [
+              0,
+              63,
+              0
+            ],
+            [
+              0,
+              48,
+              0
+            ],
+            [
+              0,
+              34,
+              1
+            ],
+            [
+              0,
+              22,
+              1
+            ],
+            [
+              0,
+              10,
+              1
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 747,
+            "dz": 4
+          },
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        },
+        "left": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 16,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "right",
+            "path": ""
+          }
+        },
+        "right": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "box_schema_version": 1,
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 478,
+                    "texture_y": 488
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 488
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 30,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 488,
+                  "w": 478
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              5,
+              8,
+              0
+            ],
+            [
+              6,
+              18,
+              0
+            ],
+            [
+              7,
+              29,
+              0
+            ],
+            [
+              7,
+              41,
+              0
+            ],
+            [
+              8,
+              54,
+              0
+            ],
+            [
+              8,
+              68,
+              0
+            ],
+            [
+              9,
+              84,
+              0
+            ],
+            [
+              8,
+              73,
+              0
+            ],
+            [
+              8,
+              62,
+              0
+            ],
+            [
+              8,
+              51,
+              0
+            ],
+            [
+              8,
+              40,
+              0
+            ],
+            [
+              8,
+              30,
+              0
+            ],
+            [
+              8,
+              20,
+              0
+            ],
+            [
+              8,
+              10,
+              0
+            ],
+            [
+              8,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 114,
+            "dy": 588,
+            "dz": 0
+          },
+          "number_of_frames": 16,
+          "on_end": "loop",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "default",
+            "path": ""
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bomb",
+      "asset_name": "bomb",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 17.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "starting_health": 1000,
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0,
+      "weight_kg": 38.0
+    },
     "bone": {
       "animations": {
         "default": {
@@ -427,94 +2062,189 @@
       "start": "default"
     },
     "book": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/book",
       "asset_name": "book",
-      "start": "default"
+      "can_invert": true,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [
+        "book",
+        "red",
+        "small_surface_top"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "book_1": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/book_1",
       "asset_name": "book_1",
-      "start": "default"
+      "can_invert": true,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 12.0,
+        "size_variation": 5.0
+      },
+      "start": "default",
+      "tags": [
+        "book",
+        "small_surface_top"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "book_pile": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/book_pile",
       "asset_name": "book_pile",
-      "start": "default"
-    },
-    "book_pile_1": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 30.0
       },
-      "asset_directory": "resources/assets/book_pile_1",
-      "asset_name": "book_pile_1",
-      "start": "default"
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "booze_1": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/booze_1",
       "asset_name": "booze_1",
-      "start": "default"
+      "can_invert": true,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [
+        "bottle",
+        "drink",
+        "small_surface_top"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "booze_2": {
       "animations": {
@@ -625,22 +2355,715 @@
       "start": "default"
     },
     "candle_fps_12": {
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "anchor_1",
+          "candidates": {
+            "candidates": []
+          }
+        },
+        {
+          "anchor_point_name": "anchor_2",
+          "candidates": {
+            "candidates": []
+          }
+        }
+      ],
       "animations": {
         "default": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ],
+            [
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.8600000143051147,
+                  "intensity": 3.240000009536743,
+                  "opacity": 64.0,
+                  "radius": 12.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 92
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    200,
+                    130
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.1200000047683716,
+                  "opacity": 4.0,
+                  "radius": 562.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 210,
+                "texture_y": 235
+              }
+            ]
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/candle_fps_12",
       "asset_name": "candle_fps_12",
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 33.0
+      },
+      "start": "default",
+      "tags": [
+        "candle",
+        "light",
+        "small_surface_top"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "car": {
       "animations": {
@@ -1455,10 +3878,29 @@
               }
             ]
           ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "backward_left"
           }
         },
@@ -1606,10 +4048,29 @@
               }
             ]
           ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "backward_right"
           }
         },
@@ -1712,6 +4173,189 @@
             "kind": "folder",
             "name": "",
             "path": "default"
+          }
+        },
+        "die": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -1.1999999284744263,
+                "flip_horizontal": false,
+                "flip_vertical": false,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": false,
+                  "color": [
+                    235,
+                    23,
+                    20
+                  ],
+                  "enabled": true,
+                  "falloff": 1.3600000143051147,
+                  "intensity": 3.2200000286102295,
+                  "opacity": 19.0,
+                  "radius": 10.0,
+                  "shadow_strength": 0.0
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "real_3d_point",
+                "texture_x": 173,
+                "texture_y": 195
+              }
+            ],
+            [
+              {
+                "depth_offset": -1.1999999284744263,
+                "flip_horizontal": false,
+                "flip_vertical": false,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": false,
+                  "color": [
+                    235,
+                    23,
+                    20
+                  ],
+                  "enabled": true,
+                  "falloff": 1.3600000143051147,
+                  "intensity": 3.2200000286102295,
+                  "opacity": 19.0,
+                  "radius": 10.0,
+                  "shadow_strength": 0.0
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "real_3d_point",
+                "texture_x": 173,
+                "texture_y": 195
+              }
+            ]
+          ],
+          "attack_boxes": [
+            [],
+            []
+          ],
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 68,
+                    "texture_y": 70
+                  },
+                  {
+                    "texture_x": 285,
+                    "texture_y": 70
+                  },
+                  {
+                    "texture_x": 285,
+                    "texture_y": 273
+                  },
+                  {
+                    "texture_x": 68,
+                    "texture_y": 273
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 0,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 68,
+                  "y": 70
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 203,
+                  "w": 217
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 68,
+                    "texture_y": 70
+                  },
+                  {
+                    "texture_x": 285,
+                    "texture_y": 70
+                  },
+                  {
+                    "texture_x": 285,
+                    "texture_y": 273
+                  },
+                  {
+                    "texture_x": 68,
+                    "texture_y": 273
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 0,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 68,
+                  "y": 70
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 203,
+                  "w": 217
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              0,
+              0,
+              2
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 3
+          },
+          "number_of_frames": 2,
+          "on_end": "kill",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "backward",
+            "path": ""
           }
         },
         "down": {
@@ -2947,10 +5591,29 @@
               }
             ]
           ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "forward_left"
           }
         },
@@ -3098,10 +5761,29 @@
               }
             ]
           ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "forward_right"
           }
         },
@@ -4385,7 +7067,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 3.0,
+        "scale_percentage": 1.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -4405,6 +7087,7 @@
           "locked": false,
           "movement": [
             [
+              0,
               0,
               0
             ]
@@ -4430,34 +7113,75 @@
       "asset_name": "fog_1",
       "asset_type": "boundary",
       "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
+      "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 50.0,
+        "scale_percentage": 60.0,
         "size_variation": 20.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "big",
+        "fog",
+        "large"
+      ],
       "tillable": false,
+      "update_radius": 0,
       "weight_kg": 0.0
     },
     "fog_2": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/fog_2",
       "asset_name": "fog_2",
-      "start": "default"
+      "asset_type": "boundary",
+      "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 65.0,
+        "size_variation": 20.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0,
+      "weight_kg": 0.0
     },
     "fog_3": {
       "anchor_point_child_candidates": [],
@@ -4469,6 +7193,7 @@
           "locked": false,
           "movement": [
             [
+              0,
               0,
               0
             ]
@@ -4492,16 +7217,24 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/fog_3",
       "asset_name": "fog_3",
+      "asset_type": "Object",
       "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
+      "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 26.0,
-        "size_variation": 18.0
+        "scale_percentage": 25.0,
+        "size_variation": 20.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "fog",
+        "small"
+      ],
       "tillable": false,
+      "update_radius": 0,
       "weight_kg": 0.0
     },
     "fog_4": {
@@ -4514,6 +7247,7 @@
           "locked": false,
           "movement": [
             [
+              0,
               0,
               0
             ]
@@ -4537,103 +7271,25 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/fog_4",
       "asset_name": "fog_4",
-      "asset_type": "boundary",
+      "asset_type": "Object",
+      "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 27.0,
+        "size_variation": 18.0
+      },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "fog",
+        "small"
+      ],
       "tillable": false,
+      "update_radius": 0,
       "weight_kg": 0.0
-    },
-    "fog_5": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/fog_5",
-      "asset_name": "fog_5",
-      "start": "default"
-    },
-    "fog_6": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/fog_6",
-      "asset_name": "fog_6",
-      "start": "default"
-    },
-    "fog_7": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/fog_7",
-      "asset_name": "fog_7",
-      "start": "default"
-    },
-    "fog_8": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/fog_8",
-      "asset_name": "fog_8",
-      "start": "default"
-    },
-    "fog_9": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/fog_9",
-      "asset_name": "fog_9",
-      "start": "default"
     },
     "fountain": {
       "animations": {
@@ -4927,22 +7583,50 @@
       "start": "default"
     },
     "mana": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/mana",
       "asset_name": "mana",
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [
+        "bottle",
+        "drink",
+        "interactable",
+        "small_surface_top"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "mana_beer": {
       "animations": {
@@ -5196,24 +7880,6 @@
       "asset_name": "skull",
       "start": "default"
     },
-    "skull_1": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/skull_1",
-      "asset_name": "skull_1",
-      "start": "default"
-    },
     "skull_pile": {
       "animations": {
         "default": {
@@ -5289,9 +7955,391 @@
     "spider": {
       "anchor_point_child_candidates": [],
       "animations": {
+        "backward_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              -2,
+              0,
+              2
+            ],
+            [
+              -2,
+              0,
+              2
+            ],
+            [
+              -2,
+              0,
+              2
+            ],
+            [
+              -2,
+              0,
+              2
+            ],
+            [
+              -1,
+              0,
+              1
+            ],
+            [
+              -1,
+              0,
+              1
+            ]
+          ],
+          "movement_total": {
+            "dx": -10,
+            "dy": 0,
+            "dz": 10
+          },
+          "number_of_frames": 6,
+          "on_end": "loop",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "backward_left"
+          }
+        },
+        "backward_right": {
+          "box_schema_version": 1,
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "backward_left",
+            "path": ""
+          }
+        },
         "default": {
           "anchor_points": [
             []
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -5318,21 +8366,362 @@
             "name": "",
             "path": "default"
           }
+        },
+        "forward_left": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 481,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 367
+                  },
+                  {
+                    "texture_x": 1397,
+                    "texture_y": 1021
+                  },
+                  {
+                    "texture_x": 481,
+                    "texture_y": 1021
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 60,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 481,
+                  "y": 367
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 654,
+                  "w": 916
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              -2,
+              0,
+              -2
+            ],
+            [
+              -2,
+              0,
+              -2
+            ],
+            [
+              -2,
+              0,
+              -2
+            ],
+            [
+              -2,
+              0,
+              -2
+            ],
+            [
+              -1,
+              0,
+              -1
+            ],
+            [
+              -1,
+              0,
+              -1
+            ]
+          ],
+          "movement_total": {
+            "dx": -10,
+            "dy": 0,
+            "dz": -10
+          },
+          "number_of_frames": 6,
+          "on_end": "loop",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "forward_left"
+          }
+        },
+        "forward_right": {
+          "box_schema_version": 1,
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 6,
+          "on_end": "loop",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "forward_left",
+            "path": ""
+          }
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/spider",
       "asset_name": "spider",
       "asset_type": "object",
+      "can_invert": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 80.0
+        "scale_percentage": 38.0,
+        "size_variation": 11.0
       },
-      "start": "default",
+      "start": "forward_left",
+      "starting_health": 2000,
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "weight_kg": 156.0
     },
     "stagecoach": {
       "animations": {
@@ -5762,8 +9151,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5879,8 +9268,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5967,8 +9356,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6055,8 +9444,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6143,8 +9532,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6231,8 +9620,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6319,8 +9708,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6407,8 +9796,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6495,8 +9884,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6623,8 +10012,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6711,8 +10100,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6799,8 +10188,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6887,8 +10276,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6975,8 +10364,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7063,8 +10452,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7151,8 +10540,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7239,8 +10628,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7355,8 +10744,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7443,8 +10832,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7531,8 +10920,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7619,8 +11008,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7707,8 +11096,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7795,8 +11184,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7883,8 +11272,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7971,8 +11360,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 202,
+                "texture_y": 194
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8099,8 +11488,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8187,8 +11576,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8275,8 +11664,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8363,8 +11752,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8451,8 +11840,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8539,8 +11928,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8627,8 +12016,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8715,8 +12104,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 194,
-                "texture_y": 184
+                "texture_x": 164,
+                "texture_y": 201
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -8780,7 +12169,7 @@
       "oval_anchor_mappings": [
         {
           "asset_name": "vibble",
-          "height_radius_z": 12.0,
+          "height_radius_z": 30.0,
           "legacy_names": [],
           "name": "eyes",
           "points": [
@@ -8806,7 +12195,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 4,
-              "texture_y": 8
+              "texture_y": 21
             },
             {
               "angle_degrees": 90.0,
@@ -8818,7 +12207,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": 12
+              "texture_y": 30
             },
             {
               "angle_degrees": 135.0,
@@ -8830,7 +12219,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": -4,
-              "texture_y": 8
+              "texture_y": 21
             },
             {
               "angle_degrees": 180.0,
@@ -8854,7 +12243,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": -4,
-              "texture_y": -8
+              "texture_y": -21
             },
             {
               "angle_degrees": 270.0,
@@ -8866,7 +12255,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": -12
+              "texture_y": -30
             },
             {
               "angle_degrees": 315.0,
@@ -8878,7 +12267,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 4,
-              "texture_y": -8
+              "texture_y": -21
             }
           ],
           "radius_offset_degrees": 0.0,
@@ -9204,7 +12593,7 @@
         },
         {
           "asset_name": "vibble",
-          "height_radius_z": 7.0,
+          "height_radius_z": 27.0,
           "legacy_names": [],
           "name": "melee",
           "points": [
@@ -9217,20 +12606,8 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": 28,
+              "texture_x": 30,
               "texture_y": 0
-            },
-            {
-              "angle_degrees": 45.0,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 20,
-              "texture_y": 5
             },
             {
               "angle_degrees": 90.0,
@@ -9242,19 +12619,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": 7
-            },
-            {
-              "angle_degrees": 135.0,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": -20,
-              "texture_y": 5
+              "texture_y": 27
             },
             {
               "angle_degrees": 180.0,
@@ -9265,20 +12630,8 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": -28,
+              "texture_x": -30,
               "texture_y": 0
-            },
-            {
-              "angle_degrees": 225.0,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": -20,
-              "texture_y": -5
             },
             {
               "angle_degrees": 270.0,
@@ -9290,23 +12643,11 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": -7
-            },
-            {
-              "angle_degrees": 315.0,
-              "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "texture_x": 20,
-              "texture_y": -5
+              "texture_y": -27
             }
           ],
-          "radius_offset_degrees": 0.0,
-          "width_radius_x": 28.0
+          "radius_offset_degrees": 53.0,
+          "width_radius_x": 30.0
         }
       ],
       "start": "default",
@@ -9342,7 +12683,7 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 44,
+                "extrusion_amount": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -9355,7 +12696,7 @@
                     "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 100.0,
+                    "hitback_distance": 1000.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -9400,7 +12741,7 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 44,
+                "extrusion_amount": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -9413,7 +12754,7 @@
                     "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 100.0,
+                    "hitback_distance": 1000.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -9458,7 +12799,7 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 44,
+                "extrusion_amount": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -9471,7 +12812,7 @@
                     "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 100.0,
+                    "hitback_distance": 1000.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -9516,7 +12857,7 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 44,
+                "extrusion_amount": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -9529,7 +12870,7 @@
                     "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 100.0,
+                    "hitback_distance": 1000.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -9574,7 +12915,7 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 44,
+                "extrusion_amount": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -9587,7 +12928,7 @@
                     "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 100.0,
+                    "hitback_distance": 1000.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -9632,7 +12973,7 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 44,
+                "extrusion_amount": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -9645,7 +12986,7 @@
                     "damage_amount": 100,
                     "damage_type": "physical",
                     "element_type": "none",
-                    "hitback_distance": 100.0,
+                    "hitback_distance": 1000.0,
                     "hitback_enabled": true,
                     "payload_id": "attack_box_id",
                     "sound_effect": "",
@@ -9899,11 +13240,11 @@
       "camera_settings": {
         "base_height_px": 720.0,
         "behind_layer_light_strength_multiplier": 0.5199999809265137,
-        "blur_px": 0.07000000029802322,
+        "blur_px": 0.03999999910593033,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "front_layer_light_strength_multiplier": 1.0,
         "layer_depth_curve": 84.75,
         "layer_depth_interval": 68.0,
@@ -9914,14 +13255,14 @@
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 4037.0,
+        "max_cull_depth": 7848.0,
         "min_visible_screen_ratio": 0.0010000000474974513,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 3.3999998569488525,
+        "radial_blur_px": 0.7299999594688416,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -9943,7 +13284,7 @@
                 "name": "grass_fps_2"
               },
               {
-                "chance": 2.2625,
+                "chance": 1.2625000000000002,
                 "name": "grass_1_fps_2"
               },
               {
@@ -9952,6 +13293,14 @@
                 "name": "#tree",
                 "tag": true,
                 "tag_name": "tree"
+              },
+              {
+                "chance": 3.5506562500000003,
+                "name": "fog_3"
+              },
+              {
+                "chance": 1.55065625,
+                "name": "fog_4"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -9976,6 +13325,20 @@
               {
                 "chance": 0,
                 "name": "null"
+              },
+              {
+                "chance": 0.25,
+                "display_name": "#fog",
+                "name": "#fog",
+                "tag": true,
+                "tag_name": "fog"
+              },
+              {
+                "chance": 0,
+                "display_name": "#small",
+                "name": "#small",
+                "tag": true,
+                "tag_name": "small"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -10045,8 +13408,8 @@
           "camera_center_dz": -455,
           "curvyness": 2,
           "display_color": [
-            98,
             242,
+            138,
             36,
             255
           ],
@@ -10141,15 +13504,15 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -86,
-          "camera_center_dz": 440,
-          "camera_height_px": 289,
-          "camera_tilt_deg": 23.45248031616211,
+          "camera_center_dx": -350,
+          "camera_center_dz": 31,
+          "camera_height_px": 170,
+          "camera_tilt_deg": 36.24213409423828,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            61,
+            36,
+            149,
             242,
             255
           ],
@@ -10330,8 +13693,8 @@
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
-              "max_number": 200,
-              "min_number": 150,
+              "max_number": 100,
+              "min_number": 50,
               "origional_height": 3000,
               "origional_width": 3000,
               "position": "Random",
@@ -10379,36 +13742,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "vibble_attack_1"
-                }
-              ],
-              "display_name": "vibble_attack_1",
-              "dx": -1468,
-              "dz": -10,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 3856,
-              "origional_width": 3360,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-150b42e4c89d"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "barrel"
                 }
               ],
@@ -10424,7 +13757,7 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 8,
+              "priority": 7,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -10454,12 +13787,192 @@
               "origional_height": 3856,
               "origional_width": 3360,
               "position": "Exact",
-              "priority": 9,
+              "priority": 8,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-1d97651f7e39"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "attack_speed"
+                }
+              ],
+              "display_name": "attack_speed",
+              "dx": -1102,
+              "dz": -373,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 9,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-7f9e9403f41b"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": 356,
+              "dz": 356,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 10,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-27b3635086b3"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -373,
+              "dz": -373,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 11,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-8dc9b094c21d"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble_attack_1"
+                }
+              ],
+              "display_name": "vibble_attack_1",
+              "dx": -1831,
+              "dz": 356,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 12,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f9093e86a33d"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "bomb"
+                }
+              ],
+              "display_name": "bomb",
+              "dx": -373,
+              "dz": 356,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 13,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-2a77e7386c17"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "candle_fps_12"
+                }
+              ],
+              "display_name": "candle_fps_12",
+              "dx": -1102,
+              "dz": -1102,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 14,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-c19bd7fc8ca9"
             }
           ]
         }
@@ -10486,6 +13999,7 @@
           "min_width": 1080,
           "name": "basic",
           "spawn_groups": [
+
             {
               "candidates": [
                 {
@@ -10494,26 +14008,26 @@
                 },
                 {
                   "chance": 100,
-                  "name": "attack_speed"
+                  "name": "fly"
                 }
               ],
-              "display_name": "attack_speed",
-              "dx": -744,
-              "dz": 92,
+              "display_name": "fly",
+              "dx": -360,
+              "dz": -343,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4680,
-              "origional_width": 3456,
+              "max_number": 10,
+              "min_number": 3,
+              "origional_height": 4048,
+              "origional_width": 5136,
               "position": "Random",
-              "priority": 0,
-              "resolution": 3,
+              "quantity": 1,
+              "resolution": 0,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-b7527ca19d11"
+              "spawn_id": "spn-d6c73730db2e"
             }
           ]
         }

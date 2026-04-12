@@ -19,11 +19,12 @@ class fly_controller : public CustomAssetController {
 public:
     explicit fly_controller(Asset* self);
     ~fly_controller() override = default;
-
+    bool orbiting = true;
 protected:
     void on_update(const Input& in) override;
     void on_process_pending_attacks(Asset& self) override;
 
 private:
     animation_update::custom_controllers::RandomOrbit3DControllerBehavior orbit_behavior_;
+
 };

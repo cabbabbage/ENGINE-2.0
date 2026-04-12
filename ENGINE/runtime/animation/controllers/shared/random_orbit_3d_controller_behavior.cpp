@@ -94,10 +94,11 @@ RandomOrbit3DControllerBehavior::RandomOrbit3DControllerBehavior(
     }
 }
 
-void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in) {
+void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in, bool mad) {
     if (!controller_) {
         return;
     }
+
 
     Asset* self = controller_->self_ptr();
     if (!self || !self->anim_) {
@@ -105,7 +106,11 @@ void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in) {
     }
 
     const auto& ctx = controller_->game_context();
+    if (mad && !ctx.Flies_mad) {
+        ctx.set_flies_mad();
+    }
     const axis::WorldPos self_pos{ self->world_x(), self->world_y(), self->world_z() };
+
 
     if (!ctx.fly_orbit_point.valid) {
         reset_for_missing_target(*self);
@@ -367,6 +372,8 @@ std::vector<axis::WorldPos> RandomOrbit3DControllerBehavior::build_approach_chec
     return checkpoints;
 }
 
+
+
 std::vector<axis::WorldPos> RandomOrbit3DControllerBehavior::build_orbit_checkpoints(
     const axis::WorldPos& self_pos) const {
     std::vector<axis::WorldPos> checkpoints;
@@ -401,5 +408,5 @@ std::vector<axis::WorldPos> RandomOrbit3DControllerBehavior::build_orbit_checkpo
 
     return checkpoints;
 }
-
-} // namespace animation_update::custom_controllers
+}
+// namespace animation_update::custom_controllers

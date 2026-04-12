@@ -1,5 +1,5 @@
-#ifndef BOMB_CONTROLLER_HPP
-#define BOMB_CONTROLLER_HPP
+#ifndef bomb_CONTROLLER_HPP
+#define bomb_CONTROLLER_HPP
 
 #include "animation/controllers/shared/custom_asset_controller.hpp"
 

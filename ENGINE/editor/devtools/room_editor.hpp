@@ -51,6 +51,8 @@ class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
 class DevFooterBar;
 class DevControls;
+namespace animation_update { struct AttackPayload; }
+namespace devmode::room_config { class AttackPayloadEditor; }
 
 namespace devmode::core {
 class ManifestStore;
@@ -433,6 +435,7 @@ private:
     void ensure_movement_editor_widgets();
     void ensure_hitbox_editor_widgets();
     void ensure_attack_box_editor_widgets();
+    void ensure_attack_payload_editor_widget();
     void update_asset_editor_layout();
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
@@ -539,6 +542,7 @@ private:
                                                                bool& changed);
     void sync_hitbox_tools_panel();
     void sync_attack_box_tools_panel();
+    void sync_attack_payload_editor();
     void ensure_anchor_selection_valid();
     bool anchor_visible_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
     bool anchor_mutable_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
@@ -652,6 +656,7 @@ private:
     bool apply_attack_box_current_frame_to_scope(EditorFramePropagationScope scope);
     bool apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
     bool apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
+    bool apply_attack_payload_editor_update(const animation_update::AttackPayload& payload);
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
@@ -731,6 +736,7 @@ private:
     std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;
+    std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
 
     struct AnchorHandleSample {

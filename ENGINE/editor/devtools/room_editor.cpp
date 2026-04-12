@@ -35,11 +35,13 @@
 #include "spawn_groups/widgets/CandidateEditorPieGraphWidget.hpp"
 #include "devtools/dev_footer_bar.hpp"
 #include "config/room_config/room_configurator.hpp"
+#include "config/room_config/attack_payload_editor.hpp"
 #include "DockManager.hpp"
 #include "devtools/widgets.hpp"
 #include "dm_styles.hpp"
 #include "room_overlay_renderer.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/shared/attack_payload.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
@@ -2511,6 +2513,10 @@ if (auto selected = library_ui_->consume_selection()) {
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
         attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
+    if (attack_payload_editor_) {
+        attack_payload_editor_->set_screen_dimensions(screen_w_, screen_h_);
+        attack_payload_editor_->set_visible(attack_box_mode_active());
+    }
     update_asset_editor_layout();
 
     if (info_ui_ && info_ui_->is_visible()) {
@@ -2789,11 +2795,20 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             return result;
         }
         ensure_attack_box_editor_widgets();
+        ensure_attack_payload_editor_widget();
         if (attack_box_tools_panel_ && attack_box_tools_panel_->is_visible()) {
             if (attack_box_tools_panel_->handle_event(event)) {
                 result.handled = true;
                 result.pointer_blocked = true;
             } else if (pointer_based && attack_box_tools_panel_->is_point_inside(mx, my)) {
+                result.pointer_blocked = true;
+            }
+        }
+        if (attack_payload_editor_ && attack_payload_editor_->is_visible()) {
+            if (attack_payload_editor_->handle_event(event)) {
+                result.handled = true;
+                result.pointer_blocked = true;
+            } else if (pointer_based && attack_payload_editor_->is_point_inside(mx, my)) {
                 result.pointer_blocked = true;
             }
         }
@@ -4408,6 +4423,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (attack_box_mode_active() && attack_box_tools_panel_ && attack_box_tools_panel_->is_visible()) {
             attack_box_tools_panel_->render(renderer);
         }
+        if (attack_box_mode_active() && attack_payload_editor_ && attack_payload_editor_->is_visible()) {
+            attack_payload_editor_->render(renderer);
+        }
     }
     DMDropdown::render_active_options(renderer);
 }
@@ -4474,6 +4492,10 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
         exit_attack_box_edit_mode(true);
     }
     if (library_ui_) library_ui_->close();
+    if (spawn_group_panel_) {
+        spawn_group_panel_->close();
+        spawn_group_panel_->set_visible(false);
+    }
     clear_active_spawn_group_target();
     if (room_config_dock_open_) {
         set_room_config_visible(false);
@@ -4521,11 +4543,23 @@ void RoomEditor::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo
 void RoomEditor::open_asset_info_editor_for_asset(Asset* asset, bool focus_camera) {
     if (!asset || !asset->info) return;
     std::cout << "Opening AssetInfoUI for asset: " << asset->info->name << std::endl;
+    if (asset_belongs_to_room(asset)) {
+        clear_geometry_selection();
+        clear_dynamic_boundary_proxy_selection();
+        selected_assets_.clear();
+        selected_assets_.push_back(asset);
+        hovered_asset_ = asset;
+        sync_spawn_group_panel_with_selection();
+        mark_highlight_dirty();
+    }
     if (focus_camera) {
         focus_camera_on_asset(asset, 0.8);
     }
     open_asset_info_editor(asset->info);
-    if (info_ui_) info_ui_->set_target_asset(asset);
+    if (info_ui_) {
+        info_ui_->set_target_asset(asset);
+    }
+    set_focus_asset(asset, true);
 }
 
 void RoomEditor::set_manifest_store(devmode::core::ManifestStore* store) {
@@ -6864,6 +6898,11 @@ void RoomEditor::handle_click(const Input& input) {
             }
         }
         if (target) {
+            if (spawn_group_panel_) {
+                spawn_group_panel_->close();
+                spawn_group_panel_->set_visible(false);
+            }
+            clear_active_spawn_group_target();
             open_asset_info_editor_for_asset(target, false);
             return;
         }
@@ -7425,6 +7464,20 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
         attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
+    ensure_attack_payload_editor_widget();
+}
+
+void RoomEditor::ensure_attack_payload_editor_widget() {
+    if (!attack_payload_editor_) {
+        attack_payload_editor_ = std::make_unique<devmode::room_config::AttackPayloadEditor>();
+        attack_payload_editor_->set_payload_changed_callback([this](const animation_update::AttackPayload& payload) {
+            apply_attack_payload_editor_update(payload);
+        });
+    }
+    if (attack_payload_editor_) {
+        attack_payload_editor_->set_screen_dimensions(screen_w_, screen_h_);
+        attack_payload_editor_->set_visible(attack_box_mode_active());
+    }
 }
 
 void RoomEditor::sync_hitbox_tools_panel() {
@@ -7524,6 +7577,26 @@ void RoomEditor::sync_attack_box_tools_panel() {
         values.damage = box.damage_amount;
     }
     attack_box_tools_panel_->set_detail_values(values);
+    sync_attack_payload_editor();
+}
+
+void RoomEditor::sync_attack_payload_editor() {
+    if (!attack_payload_editor_) {
+        return;
+    }
+    AnimationFrame* frame = attack_box_edit_.target_asset ? attack_box_edit_.target_asset->current_frame : nullptr;
+    const int selected_box = attack_box_edit_.selected_box_index;
+    if (!frame || selected_box < 0 || selected_box >= static_cast<int>(frame->attack_boxes.boxes.size())) {
+        attack_payload_editor_->clear_payload();
+        return;
+    }
+    const auto& box = frame->attack_boxes.boxes[static_cast<std::size_t>(selected_box)];
+    const std::string payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+    animation_update::AttackPayload payload =
+        animation_update::attack_payload_from_box(box.damage_amount, payload_id, box.meta_json);
+    payload.damage_amount = box.damage_amount;
+    payload.payload_id = payload_id;
+    attack_payload_editor_->set_payload(payload);
 }
 
 bool RoomEditor::add_hitbox_in_current_frame() {
@@ -7727,6 +7800,21 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
                 box.damage_amount = values.damage;
                 changed = true;
             }
+            const std::string payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+            if (box.payload_id != payload_id) {
+                box.payload_id = payload_id;
+                changed = true;
+            }
+            animation_update::AttackPayload payload =
+                animation_update::attack_payload_from_box(box.damage_amount, payload_id, box.meta_json);
+            payload.damage_amount = box.damage_amount;
+            payload.payload_id = payload_id;
+            const std::string merged_meta =
+                animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload);
+            if (box.meta_json != merged_meta) {
+                box.meta_json = merged_meta;
+                changed = true;
+            }
             return changed;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -7734,6 +7822,44 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
         attack_box_tools_panel_->set_name_text(normalized_name);
     }
     return changed;
+}
+
+bool RoomEditor::apply_attack_payload_editor_update(const animation_update::AttackPayload& payload_values) {
+    const int selected = attack_box_edit_.selected_box_index;
+    if (selected < 0) {
+        return false;
+    }
+    const animation_update::AttackPayload sanitized = animation_update::sanitize_attack_payload(payload_values);
+    return mutate_attack_box_current_frame(
+        [selected, sanitized](std::vector<animation_update::FrameAttackBox>& boxes) {
+            if (selected >= static_cast<int>(boxes.size())) {
+                return false;
+            }
+            auto& box = boxes[static_cast<std::size_t>(selected)];
+            animation_update::AttackPayload payload = sanitized;
+            if (payload.payload_id.empty()) {
+                payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+            }
+            payload.damage_amount = std::max(0, payload.damage_amount);
+            const std::string next_meta =
+                animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload);
+
+            bool changed = false;
+            if (box.payload_id != payload.payload_id) {
+                box.payload_id = payload.payload_id;
+                changed = true;
+            }
+            if (box.damage_amount != payload.damage_amount) {
+                box.damage_amount = payload.damage_amount;
+                changed = true;
+            }
+            if (box.meta_json != next_meta) {
+                box.meta_json = next_meta;
+                changed = true;
+            }
+            return changed;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
 }
 
 bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope scope) {
@@ -8316,6 +8442,11 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
 
     const int left_panel_h = std::max(0, usable.h - 56);
     SDL_Rect left_panel_rect{12, 56, 320, left_panel_h};
+    const int payload_panel_gap = 12;
+    const int payload_panel_x = left_panel_rect.x + left_panel_rect.w + payload_panel_gap;
+    const int payload_panel_right_limit = asset_info_rect.x - payload_panel_gap;
+    const int payload_panel_w = std::max(0, std::min(332, payload_panel_right_limit - payload_panel_x));
+    SDL_Rect attack_payload_rect{payload_panel_x, 56, payload_panel_w, left_panel_h};
 
     auto progress_for = [this]() -> float {
         if (!asset_editor_transition_.active || asset_editor_transition_.duration_frames <= 0) {
@@ -8373,6 +8504,7 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     ensure_movement_editor_widgets();
     ensure_hitbox_editor_widgets();
     ensure_attack_box_editor_widgets();
+    ensure_attack_payload_editor_widget();
     if (anchor_tools_panel_) {
         if (anchor_mode_active() || light_mode_active() || asset_editor_transition_.active) {
             const AssetEditorSubview anchor_subject = light_mode_active()
@@ -8409,6 +8541,13 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
             attack_box_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::AttackBox, left_panel_rect));
         } else {
             attack_box_tools_panel_->clear_panel_bounds_override();
+        }
+    }
+    if (attack_payload_editor_) {
+        if ((attack_box_mode_active() || asset_editor_transition_.active) && attack_payload_rect.w >= 220) {
+            attack_payload_editor_->set_panel_bounds_override(place_rect(AssetEditorSubview::AttackBox, attack_payload_rect));
+        } else {
+            attack_payload_editor_->clear_panel_bounds_override();
         }
     }
 }
@@ -8588,6 +8727,10 @@ void RoomEditor::update_asset_editor_layout() {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
         attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
+    }
+    if (attack_payload_editor_) {
+        attack_payload_editor_->set_screen_dimensions(screen_w_, screen_h_);
+        attack_payload_editor_->set_visible(attack_box_mode_active());
     }
 }
 
@@ -10477,9 +10620,17 @@ bool RoomEditor::mutate_attack_box_current_frame(
         if (box.frame_end < box.frame_start) {
             box.frame_end = box.frame_start;
         }
+        if (box.payload_id.empty()) {
+            box.payload_id = box.id;
+        }
         if (box.meta_json.empty()) {
             box.meta_json = "{}";
         }
+        animation_update::AttackPayload payload =
+            animation_update::attack_payload_from_box(box.damage_amount, box.payload_id, box.meta_json);
+        payload.damage_amount = box.damage_amount;
+        payload.payload_id = box.payload_id;
+        box.meta_json = animation_update::merge_attack_payload_into_meta_json(box.meta_json, payload);
     }
     assert_unique_box_ids(updated, "attack_box");
 
@@ -12618,9 +12769,6 @@ void RoomEditor::exit_anchor_edit_mode(bool flush_immediately) {
 
     editor_mode_ = EditorMode::Normal;
     anchor_edit_ = AnchorEditState{};
-    if (focus_from_asset_info_) {
-        clear_focus();
-    }
     sync_anchor_tools_panel();
     update_asset_editor_layout();
 }
@@ -13678,9 +13826,6 @@ void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
 
     editor_mode_ = EditorMode::Normal;
     movement_edit_ = MovementEditState{};
-    if (focus_from_asset_info_) {
-        clear_focus();
-    }
     update_asset_editor_layout();
 }
 
@@ -13701,9 +13846,6 @@ void RoomEditor::exit_hitbox_edit_mode(bool persist_changes) {
 
     editor_mode_ = EditorMode::Normal;
     hitbox_edit_ = BoxEditState{};
-    if (focus_from_asset_info_) {
-        clear_focus();
-    }
     sync_hitbox_tools_panel();
     update_asset_editor_layout();
 }
@@ -13725,9 +13867,6 @@ void RoomEditor::exit_attack_box_edit_mode(bool persist_changes) {
 
     editor_mode_ = EditorMode::Normal;
     attack_box_edit_ = BoxEditState{};
-    if (focus_from_asset_info_) {
-        clear_focus();
-    }
     sync_attack_box_tools_panel();
     update_asset_editor_layout();
 }
@@ -13840,6 +13979,10 @@ bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
     }
     if (attack_box_mode_active() && attack_box_tools_panel_ && attack_box_tools_panel_->is_visible() &&
         attack_box_tools_panel_->is_point_inside(x, y)) {
+        return true;
+    }
+    if (attack_box_mode_active() && attack_payload_editor_ && attack_payload_editor_->is_visible() &&
+        attack_payload_editor_->is_point_inside(x, y)) {
         return true;
     }
     return false;
@@ -15535,15 +15678,32 @@ void RoomEditor::validate_focus_state() {
         clear_focus();
         return;
     }
-    if (!focus_selection_matches_snapshot()) {
-        clear_focus();
-        return;
-    }
     if (focus_from_asset_info_) {
-        if (!info_ui_ || !info_ui_->is_visible() || info_ui_->get_target_asset() != focused_asset_) {
+        Asset* stack_target = nullptr;
+        if (anchor_mode_active()) {
+            stack_target = anchor_edit_.target_asset;
+        } else if (oval_mode_active()) {
+            stack_target = oval_edit_.target_asset;
+        } else if (movement_mode_active()) {
+            stack_target = movement_edit_.target_asset;
+        } else if (hitbox_mode_active()) {
+            stack_target = hitbox_edit_.target_asset;
+        } else if (attack_box_mode_active()) {
+            stack_target = attack_box_edit_.target_asset;
+        }
+
+        const bool info_panel_session_active =
+            info_ui_ && info_ui_->is_visible() && info_ui_->get_target_asset() == focused_asset_;
+        const bool stack_session_active =
+            is_asset_stack_editor_active() && stack_target && stack_target == focused_asset_;
+
+        if (!info_panel_session_active && !stack_session_active) {
             clear_focus();
             return;
         }
+    } else if (!focus_selection_matches_snapshot()) {
+        clear_focus();
+        return;
     }
     if (focused_asset_ && focused_asset_->dead) {
         clear_focus();
@@ -16968,6 +17128,14 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         active_spawn_group_id_.has_value() &&
         *active_spawn_group_id_ == spawn_id;
     active_spawn_group_id_ = spawn_id;
+    if (!spawn_group_panel_ || !spawn_group_panel_->is_visible()) {
+        return;
+    }
+    if (!same_spawn_group_panel_active) {
+        spawn_group_panel_->close();
+        spawn_group_panel_->set_visible(false);
+        return;
+    }
     if (same_spawn_group_panel_active) {
         refresh_spawn_group_config_ui();
         update_spawn_group_config_anchor();
@@ -16975,8 +17143,6 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         spawn_group_panel_->set_work_area(DockManager::instance().usableRect());
         return;
     }
-
-    open_spawn_group_editor_by_id(spawn_id);
 }
 
 void RoomEditor::update_grid_resolution_for_selection(Asset* primary) {

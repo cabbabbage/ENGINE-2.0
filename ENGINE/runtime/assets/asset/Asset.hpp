@@ -370,6 +370,7 @@ class Asset {
         int frame_index = -1;
         int extrusion_amount = 0;
         int damage_amount = 0;
+        std::string payload_id;
         std::string meta_json;
         std::array<RuntimeBoxPoint3, 8> world_points{};
         RuntimeBoxPoint3 centroid{};

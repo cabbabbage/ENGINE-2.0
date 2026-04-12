@@ -7,7 +7,6 @@
 // CONTROLLER_META_END
 
 #include "vibble_controller.hpp"
-#include <iostream>
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
@@ -19,8 +18,13 @@
 #include "utils/input.hpp"
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 
 namespace {
+
+constexpr std::string_view kMeleeChildAssetName = "vibble_attack_1";
+constexpr std::string_view kLegacyMeleeChildAssetName = "vibble_attack";
+constexpr std::string_view kMeleeAttackAnimation = "attack";
 
 int consume_axis(float& accumulator) {
     const int whole = static_cast<int>(accumulator);
@@ -51,6 +55,40 @@ vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
         has_camera_basis);
 }
 
+Asset* find_child_asset_by_name(Asset& owner, std::string_view child_asset_name) {
+    for (Asset* child : owner.children()) {
+        if (!child || !child->info) {
+            continue;
+        }
+        if (child->info->name == child_asset_name) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+Asset* resolve_melee_child_asset(Asset& owner) {
+    if (Asset* child = find_child_asset_by_name(owner, kMeleeChildAssetName)) {
+        return child;
+    }
+    return find_child_asset_by_name(owner, kLegacyMeleeChildAssetName);
+}
+
+void trigger_melee_child_attack_animation(Asset& owner) {
+    Asset* melee_child = resolve_melee_child_asset(owner);
+    if (!melee_child || !melee_child->anim_) {
+        return;
+    }
+
+    if (melee_child->info &&
+        melee_child->info->animations.find(std::string{kMeleeAttackAnimation}) ==
+            melee_child->info->animations.end()) {
+        return;
+    }
+
+    melee_child->anim_->set_animation(std::string{kMeleeAttackAnimation});
+}
+
 }
 
 vibble_controller::vibble_controller(Asset* player)
@@ -78,23 +116,20 @@ void vibble_controller::movement(const Input& input) {
     const bool sprint =
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool dash_pressed = input.isScancodeDown(SDL_SCANCODE_SPACE);
-    const bool melee_pressed = input.wasScancodePressed(SDL_SCANCODE_E);
+    const bool melee_pressed = input.wasPressed(Input::LEFT);
 
     const vibble::player_direction::DirectionIntent direction_intent =
         resolve_direction_intent_for_player(player, input_x, input_y);
     const int world_x = direction_intent.world_x;
     const int world_y = direction_intent.world_y;
 
-    if (melee_pressed) {
-        std::cout << "Melee attack initiated!" << std::endl;
+    if (melee_pressed && canMelee) {
         canMelee = false;
         isMeleeing = true;
         meleeCooldownEndTime = std::chrono::steady_clock::now()
                                + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                                    std::chrono::duration<float>(meleeCooldown));
-       // if (melee_child_.has_value()) {
-        //    melee_child_->set_animation("attack");
-       // }
+        trigger_melee_child_attack_animation(*player);
     }
 
 

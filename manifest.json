@@ -216,6 +216,50 @@
               }
             ]
           ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 144,
+                    "texture_y": 30
+                  },
+                  {
+                    "texture_x": 298,
+                    "texture_y": 30
+                  },
+                  {
+                    "texture_x": 298,
+                    "texture_y": 232
+                  },
+                  {
+                    "texture_x": 144,
+                    "texture_y": 232
+                  }
+                ],
+                "enabled": true,
+                "extrusion_amount": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 144,
+                  "y": 30
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 202,
+                  "w": 154
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -2822,7 +2866,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 2.0,
+        "scale_percentage": 3.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -3736,6 +3780,7 @@
           "movement": [
             [
               0,
+              0,
               0
             ]
           ],
@@ -3753,109 +3798,12 @@
             "name": "",
             "path": "default"
           }
-        },
-        "left": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "left"
-          }
-        },
-        "right": {
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "inherit_data": true,
-          "invert_frames_horizontal": true,
-          "invert_frames_vertical": false,
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "left",
-            "path": ""
-          }
-        },
-        "up": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "up"
-          }
-        },
-        "up_left": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "up_left"
-          }
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/spider",
       "asset_name": "spider",
+      "asset_type": "object",
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -4157,6 +4105,12 @@
     "vibble": {
       "anchor_point_child_candidates": [
         {
+          "anchor_point_name": "anchor_1",
+          "candidates": {
+            "candidates": []
+          }
+        },
+        {
           "anchor_point_name": "eyes",
           "candidates": {
             "candidates": [
@@ -4186,6 +4140,23 @@
           }
         },
         {
+          "anchor_point_name": "melee",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "vibble_attack_1"
+              }
+            ]
+          }
+        },
+        {
+          "anchor_point_name": "melee_oval_center",
+          "candidates": {
+            "candidates": []
+          }
+        },
+        {
           "anchor_point_name": "mouth",
           "candidates": {
             "candidates": []
@@ -4205,24 +4176,6 @@
         },
         {
           "anchor_point_name": "neck_oval_center",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "melee",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "melee_oval_center",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "anchor_1",
           "candidates": {
             "candidates": []
           }
@@ -4289,8 +4242,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -4406,8 +4359,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -4494,8 +4447,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -4582,8 +4535,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -4670,8 +4623,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -4758,8 +4711,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -4846,8 +4799,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -4934,8 +4887,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5022,8 +4975,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5150,8 +5103,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5238,8 +5191,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5326,8 +5279,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5414,8 +5367,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5502,8 +5455,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5590,8 +5543,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5678,8 +5631,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5766,8 +5719,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5882,8 +5835,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -5970,8 +5923,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6058,8 +6011,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6146,8 +6099,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6234,8 +6187,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6322,8 +6275,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6410,8 +6363,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6498,8 +6451,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6626,8 +6579,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6714,8 +6667,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6802,8 +6755,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6890,8 +6843,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -6978,8 +6931,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7066,8 +7019,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7154,8 +7107,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7242,8 +7195,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 194,
+                "texture_y": 184
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -7731,7 +7684,7 @@
         },
         {
           "asset_name": "vibble",
-          "height_radius_z": 24.0,
+          "height_radius_z": 7.0,
           "legacy_names": [],
           "name": "melee",
           "points": [
@@ -7744,7 +7697,7 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": 48,
+              "texture_x": 28,
               "texture_y": 0
             },
             {
@@ -7756,8 +7709,8 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": 34,
-              "texture_y": 17
+              "texture_x": 20,
+              "texture_y": 5
             },
             {
               "angle_degrees": 90.0,
@@ -7769,7 +7722,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": 24
+              "texture_y": 7
             },
             {
               "angle_degrees": 135.0,
@@ -7780,8 +7733,8 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": -34,
-              "texture_y": 17
+              "texture_x": -20,
+              "texture_y": 5
             },
             {
               "angle_degrees": 180.0,
@@ -7792,7 +7745,7 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": -48,
+              "texture_x": -28,
               "texture_y": 0
             },
             {
@@ -7804,8 +7757,8 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": -34,
-              "texture_y": -17
+              "texture_x": -20,
+              "texture_y": -5
             },
             {
               "angle_degrees": 270.0,
@@ -7817,7 +7770,7 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "texture_x": 0,
-              "texture_y": -24
+              "texture_y": -7
             },
             {
               "angle_degrees": 315.0,
@@ -7828,12 +7781,12 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "texture_x": 34,
-              "texture_y": -17
+              "texture_x": 20,
+              "texture_y": -5
             }
           ],
           "radius_offset_degrees": 0.0,
-          "width_radius_x": 48.0
+          "width_radius_x": 28.0
         }
       ],
       "start": "default",
@@ -7842,33 +7795,487 @@
       "weight_kg": 0.0
     },
     "vibble_attack_1": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "attack": {
+          "attack_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 217,
+                    "texture_y": 118
+                  },
+                  {
+                    "texture_x": 258,
+                    "texture_y": 118
+                  },
+                  {
+                    "texture_x": 258,
+                    "texture_y": 235
+                  },
+                  {
+                    "texture_x": 217,
+                    "texture_y": 235
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_amount": 44,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 217,
+                  "y": 118
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 117,
+                  "w": 41
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 289,
+                    "texture_y": 135
+                  },
+                  {
+                    "texture_x": 318,
+                    "texture_y": 163
+                  },
+                  {
+                    "texture_x": 238,
+                    "texture_y": 248
+                  },
+                  {
+                    "texture_x": 209,
+                    "texture_y": 220
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_amount": 44,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 243,
+                  "y": 133
+                },
+                "rotation_degrees": 43.12862014770508,
+                "size": {
+                  "h": 117,
+                  "w": 41
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 335,
+                    "texture_y": 193
+                  },
+                  {
+                    "texture_x": 337,
+                    "texture_y": 234
+                  },
+                  {
+                    "texture_x": 220,
+                    "texture_y": 240
+                  },
+                  {
+                    "texture_x": 218,
+                    "texture_y": 199
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_amount": 44,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 257,
+                  "y": 158
+                },
+                "rotation_degrees": 87.30280303955078,
+                "size": {
+                  "h": 117,
+                  "w": 41
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 103,
+                    "texture_y": 206
+                  },
+                  {
+                    "texture_x": 112,
+                    "texture_y": 157
+                  },
+                  {
+                    "texture_x": 275,
+                    "texture_y": 186
+                  },
+                  {
+                    "texture_x": 266,
+                    "texture_y": 235
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_amount": 44,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 164,
+                  "y": 113
+                },
+                "rotation_degrees": -80.05773162841797,
+                "size": {
+                  "h": 166,
+                  "w": 50
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 60,
+                    "texture_y": 205
+                  },
+                  {
+                    "texture_x": 69,
+                    "texture_y": 177
+                  },
+                  {
+                    "texture_x": 172,
+                    "texture_y": 212
+                  },
+                  {
+                    "texture_x": 163,
+                    "texture_y": 240
+                  }
+                ],
+                "damage_amount": 20,
+                "enabled": true,
+                "extrusion_amount": 44,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 20,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 30.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 10
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 101,
+                  "y": 154
+                },
+                "rotation_degrees": -71.5121078491211,
+                "size": {
+                  "h": 109,
+                  "w": 30
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 71,
+                    "texture_y": 171
+                  },
+                  {
+                    "texture_x": 100,
+                    "texture_y": 142
+                  },
+                  {
+                    "texture_x": 182,
+                    "texture_y": 224
+                  },
+                  {
+                    "texture_x": 153,
+                    "texture_y": 253
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_amount": 44,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 106,
+                  "y": 139
+                },
+                "rotation_degrees": -44.988800048828125,
+                "size": {
+                  "h": 117,
+                  "w": 41
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "attack"
           }
         },
         "default": {
+          "anchor_points": [
+            []
+          ],
+          "attack_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 217,
+                    "texture_y": 118
+                  },
+                  {
+                    "texture_x": 258,
+                    "texture_y": 118
+                  },
+                  {
+                    "texture_x": 258,
+                    "texture_y": 235
+                  },
+                  {
+                    "texture_x": 217,
+                    "texture_y": 235
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_amount": 44,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 217,
+                  "y": 118
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 117,
+                  "w": 41
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/vibble_attack_1",
       "asset_name": "vibble_attack_1",
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "vibble_eyes": {
       "animations": {
@@ -8097,7 +8504,7 @@
           "max_rooms": 3,
           "min_rooms": 2,
           "name": "layer_1",
-          "ring_radius": 6259.0,
+          "ring_radius": 5259.0,
           "rooms": [
             {
               "max_instances": 3,
@@ -8106,26 +8513,10 @@
               "required_children": []
             }
           ]
-        },
-        {
-          "bounding_extent": 2330.3252991803524,
-          "level": 2,
-          "max_rooms": 3,
-          "min_rooms": 1,
-          "name": "layer_2",
-          "ring_radius": 12920.0,
-          "rooms": [
-            {
-              "max_instances": 3,
-              "min_instances": 1,
-              "name": "NewRoom",
-              "required_children": []
-            }
-          ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 2000
+        "min_edge_distance": 1000
       },
       "map_name": "forrest",
       "rooms_data": {
@@ -8134,9 +8525,9 @@
           "camera_center_dz": -455,
           "curvyness": 2,
           "display_color": [
-            36,
-            153,
             242,
+            36,
+            192,
             255
           ],
           "edge_smoothness": 2,
@@ -8237,9 +8628,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            238,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -8324,16 +8715,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -68,
-              "dz": 444,
+              "dx": -1200,
+              "dz": 96,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3000,
-              "origional_width": 3000,
+              "origional_height": 3856,
+              "origional_width": 3360,
               "position": "Exact",
               "priority": 2,
               "quantity": 1,
@@ -8366,7 +8757,7 @@
               "origional_width": 3000,
               "position": "Random",
               "priority": 3,
-              "resolution": 6,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-09dc4c4370e0"
@@ -8459,6 +8850,96 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-bda3dbfe3517"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -1048,
+              "dz": 144,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 7,
+              "quantity": 1,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-470f3fb903f8"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble_attack_1"
+                }
+              ],
+              "display_name": "vibble_attack_1",
+              "dx": -1468,
+              "dz": -10,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 8,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-150b42e4c89d"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -373,
+              "dz": -373,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3856,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 9,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-00fe803d10d5"
             }
           ]
         }

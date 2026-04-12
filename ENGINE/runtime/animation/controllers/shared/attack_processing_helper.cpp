@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace animation_update::custom_controllers {
 
@@ -41,17 +42,27 @@ bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
                                                       SDL_Point& out_delta,
                                                       float max_distance,
                                                       int max_damage) {
-    if (max_distance <= 0.0f || max_damage <= 0) {
+    if (!attack.payload.hitback_enabled) {
         return false;
     }
 
-    const float clamped_damage = std::clamp(static_cast<float>(attack.damage_amount), 0.0f, static_cast<float>(max_damage));
-    if (clamped_damage <= 0.0f) {
-        return false;
+    float travel_distance = std::max(0.0f, attack.payload.hitback_distance);
+    if (travel_distance <= kZeroTolerance) {
+        if (max_distance <= 0.0f || max_damage <= 0) {
+            return false;
+        }
+        const float clamped_damage = std::clamp(static_cast<float>(attack.damage_amount),
+                                                0.0f,
+                                                static_cast<float>(max_damage));
+        if (clamped_damage <= 0.0f) {
+            return false;
+        }
+        const float damage_ratio = clamped_damage / static_cast<float>(max_damage);
+        travel_distance = damage_ratio * max_distance;
+    } else if (max_distance > 0.0f) {
+        travel_distance = std::min(travel_distance, max_distance);
     }
 
-    const float damage_ratio = clamped_damage / static_cast<float>(max_damage);
-    const float travel_distance = damage_ratio * max_distance;
     if (travel_distance <= kZeroTolerance) {
         return false;
     }
@@ -89,14 +100,37 @@ void AttackProcessingHelper::apply_knockback(Asset& self, SDL_Point delta) {
 
 void AttackProcessingHelper::process_pending_attacks(Asset& self) {
     const auto pending_attacks = self.process_pending_attacks();
+    std::optional<SDL_Point> strongest_knockback{};
     for (const auto& attack : pending_attacks) {
         self.runtime_health -= attack.damage_amount;
+        SDL_Point candidate_knockback{};
+        if (!compute_knockback_delta(self, attack, candidate_knockback)) {
+            continue;
+        }
+        if (!strongest_knockback.has_value()) {
+            strongest_knockback = candidate_knockback;
+            continue;
+        }
+        const int current_sq =
+            strongest_knockback->x * strongest_knockback->x +
+            strongest_knockback->y * strongest_knockback->y;
+        const int candidate_sq =
+            candidate_knockback.x * candidate_knockback.x +
+            candidate_knockback.y * candidate_knockback.y;
+        if (candidate_sq > current_sq) {
+            strongest_knockback = candidate_knockback;
+        }
     }
 
     if (self.runtime_health < 0) {
         if (!try_play_death_animation(self)) {
             self.Delete();
         }
+        return;
+    }
+
+    if (strongest_knockback.has_value()) {
+        apply_knockback(self, *strongest_knockback);
     }
 }
 

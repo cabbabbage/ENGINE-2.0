@@ -318,6 +318,7 @@ struct FrameHitBox : FrameBoxBase {
 
 struct FrameAttackBox : FrameBoxBase {
     int damage_amount = 0;
+    std::string payload_id;
     std::string meta_json;
 };
 

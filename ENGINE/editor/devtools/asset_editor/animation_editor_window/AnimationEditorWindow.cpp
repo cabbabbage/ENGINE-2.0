@@ -666,18 +666,20 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         std::cerr << "[AnimationEditor] Manifest store unavailable; animations will not persist for '" << info->name << "'\n";
     }
 
-    if (has_animation_entries(info_snapshot)) {
-        snapshot = std::move(info_snapshot);
-        recovery_source = SnapshotRecoverySource::AssetMetadata;
-        seed_transaction_with_recovery = true;
-        std::cerr << "[AnimationEditor] Using animations from AssetInfo for '" << info->name << "'\n";
-    } else if (manifest_transaction_) {
+    if (manifest_transaction_) {
         nlohmann::json manifest_data = manifest_transaction_.data();
         if (has_animation_entries(manifest_data)) {
             snapshot = std::move(manifest_data);
             recovery_source = SnapshotRecoverySource::Manifest;
             std::cerr << "[AnimationEditor] Loaded animations from manifest for '" << info->name << "'\n";
         }
+    }
+
+    if (!has_animation_entries(snapshot) && has_animation_entries(info_snapshot)) {
+        snapshot = std::move(info_snapshot);
+        recovery_source = SnapshotRecoverySource::AssetMetadata;
+        seed_transaction_with_recovery = true;
+        std::cerr << "[AnimationEditor] Using animations from AssetInfo for '" << info->name << "'\n";
     }
 
     if (!has_animation_entries(snapshot)) {
@@ -1297,9 +1299,29 @@ void AnimationEditorWindow::delete_animation_with_confirmation(const std::string
         return;
     }
 
+    std::string source_delete_error;
+    std::string cache_delete_error;
+    const bool removed_source_folder = remove_animation_source_folder(animation_id, source_delete_error);
+    const bool removed_cache_folder = remove_animation_cache_folder(animation_id, cache_delete_error);
+
+    if (!removed_source_folder && !source_delete_error.empty()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] %s",
+                    source_delete_error.c_str());
+    }
+    if (!removed_cache_folder && !cache_delete_error.empty()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] %s",
+                    cache_delete_error.c_str());
+    }
+
     document_->delete_animation(animation_id);
     preview_provider_->invalidate(animation_id);
-    set_status_message("Deleted animation '" + animation_id + "'.", 240);
+    if (!removed_source_folder || !removed_cache_folder) {
+        set_status_message("Deleted animation '" + animation_id + "' (some files could not be removed).", 300);
+    } else {
+        set_status_message("Deleted animation '" + animation_id + "'.", 240);
+    }
     if (list_context_menu_) {
         list_context_menu_->close();
     }
@@ -1823,6 +1845,82 @@ bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& a
     return copied > 0;
 }
 
+bool AnimationEditorWindow::remove_animation_source_folder(const std::string& animation_id,
+                                                           std::string& error_message) {
+    error_message.clear();
+    if (asset_root_path_.empty() || animation_id.empty()) {
+        return true;
+    }
+
+    const std::filesystem::path source_root = asset_root_path_.lexically_normal();
+    const std::filesystem::path target_folder = (source_root / animation_id).lexically_normal();
+    if (!path_has_prefix(target_folder, source_root)) {
+        error_message = "Refusing to delete animation source folder outside asset root: '" + target_folder.generic_string() + "'";
+        return false;
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::exists(target_folder, ec)) {
+        return true;
+    }
+    ec.clear();
+    std::filesystem::remove_all(target_folder, ec);
+    if (ec) {
+        error_message = "Failed to delete animation source folder '" + target_folder.generic_string() + "': " + ec.message();
+        return false;
+    }
+    return true;
+}
+
+bool AnimationEditorWindow::remove_animation_cache_folder(const std::string& animation_id,
+                                                          std::string& error_message) {
+    error_message.clear();
+    if (animation_id.empty()) {
+        return true;
+    }
+
+    std::string asset_cache_key;
+    if (auto info_ptr = info_.lock()) {
+        asset_cache_key = info_ptr->name;
+    }
+    if (asset_cache_key.empty()) {
+        asset_cache_key = asset_root_path_.filename().string();
+    }
+    if (asset_cache_key.empty()) {
+        return true;
+    }
+
+    const std::filesystem::path cache_root = std::filesystem::path("cache").lexically_normal();
+    const std::filesystem::path cache_animations_root = (cache_root / asset_cache_key / "animations").lexically_normal();
+    const std::filesystem::path target_folder = (cache_animations_root / animation_id).lexically_normal();
+    if (!path_has_prefix(target_folder, cache_animations_root)) {
+        error_message = "Refusing to delete animation cache folder outside cache root: '" + target_folder.generic_string() + "'";
+        return false;
+    }
+
+    std::error_code ec;
+    if (std::filesystem::exists(target_folder, ec)) {
+        ec.clear();
+        std::filesystem::remove_all(target_folder, ec);
+        if (ec) {
+            error_message = "Failed to delete animation cache folder '" + target_folder.generic_string() + "': " + ec.message();
+            return false;
+        }
+    }
+
+    const std::filesystem::path bundle_path = (cache_root / asset_cache_key / "bundle.bin").lexically_normal();
+    if (path_has_prefix(bundle_path, cache_root) && std::filesystem::exists(bundle_path, ec)) {
+        ec.clear();
+        std::filesystem::remove(bundle_path, ec);
+        if (ec) {
+            error_message = "Deleted animation cache folder but failed to delete bundle cache '" + bundle_path.generic_string() + "': " + ec.message();
+            return false;
+        }
+    }
+
+    return true;
+}
+
 nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const std::string& animation_id,
                                                                           int frame_count,
                                                                           int dx,
@@ -2236,7 +2334,7 @@ void AnimationEditorWindow::process_auto_save() {
         return;
     }
 
-    document_->save_to_file();
+    document_->save_to_file_checked(true);
     if (using_manifest_store_) {
         set_status_message("Animations auto-saved.", 180);
     }

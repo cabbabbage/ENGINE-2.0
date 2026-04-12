@@ -556,6 +556,7 @@ animation_update::FrameAttackBox parse_attack_box(const nlohmann::json& node,
         }
         parse_box_common_fields(box, node, "attack_box", "attack_box", frame_index, ordinal);
         box.damage_amount = read_int_field_like(node, "damage_amount", 0);
+        box.payload_id = read_string_field_like(node, "payload_id", box.id);
         if (node.contains("meta") && node["meta"].is_object()) {
                 box.meta_json = node["meta"].dump();
         } else {
@@ -605,6 +606,9 @@ std::vector<animation_update::FrameAttackBox> parse_attack_box_frame(const nlohm
                 box.name = make_unique_name(box.name, "attack_box", used_names, idx);
                 box.id = make_unique_id(box.id, "attack_box", frame_index, idx, used_ids);
                 box.type = "attack_box";
+                if (box.payload_id.empty()) {
+                        box.payload_id = box.id;
+                }
                 if (box.is_valid()) {
                         boxes.push_back(std::move(box));
                 }

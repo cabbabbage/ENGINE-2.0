@@ -175,9 +175,13 @@ TEST_CASE("Attack box payload writes canonical corners and preserves damage") {
     CHECK(box["size"]["w"] == 7);
     CHECK(box["size"]["h"] == 12);
     CHECK(box["anchor_link"] == "hand_r");
+    CHECK(box["payload_id"] == "attack_box_alpha");
     CHECK(box["damage_amount"] == 12);
     REQUIRE(box["meta"].is_object());
     CHECK(box["meta"]["category"] == "heavy");
+    REQUIRE(box["meta"].contains("attack_payload"));
+    CHECK(box["meta"]["attack_payload"]["damage_amount"] == 12);
+    CHECK(box["meta"]["attack_payload"]["payload_id"] == "attack_box_alpha");
     const auto& corners = box["corners"];
     REQUIRE(corners.is_array());
     REQUIRE(corners.size() == 4);
@@ -218,7 +222,12 @@ TEST_CASE("Default room box factories populate canonical schema fields") {
     CHECK(attack_box.frame_end == -1);
     CHECK(attack_box.anchor_link.empty());
     CHECK(attack_box.damage_amount == 0);
-    CHECK(attack_box.meta_json == "{}");
+    CHECK(attack_box.payload_id == attack_box.id);
+    const nlohmann::json default_meta = nlohmann::json::parse(attack_box.meta_json, nullptr, false);
+    REQUIRE(default_meta.is_object());
+    REQUIRE(default_meta.contains("attack_payload"));
+    CHECK(default_meta["attack_payload"]["damage_amount"] == 0);
+    CHECK(default_meta["attack_payload"]["payload_id"] == attack_box.id);
 }
 
 TEST_CASE("Room box payload keeps explicit box id stable across writes") {

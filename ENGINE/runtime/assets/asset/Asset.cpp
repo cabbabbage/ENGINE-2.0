@@ -1211,6 +1211,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                             const std::string& anchor_link,
                             int extrusion_amount,
                             int damage_amount,
+                            const std::string& payload_id,
                             const std::string& meta_json,
                             const std::array<animation_update::FrameBoxCorner, 4>& corners,
                             RuntimeBoxVolume& out_volume) -> bool {
@@ -1225,6 +1226,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         out_volume.frame_index = current_frame ? current_frame->frame_index : -1;
         out_volume.extrusion_amount = std::max(0, extrusion_amount);
         out_volume.damage_amount = damage_amount;
+        out_volume.payload_id = payload_id;
         out_volume.meta_json = meta_json;
 
         float sum_x = 0.0f;
@@ -1310,6 +1312,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                           box.anchor_link,
                           box.extrusion_amount,
                           0,
+                          std::string{},
                           "{}",
                           runtime_corners,
                           volume)) {
@@ -1335,6 +1338,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                           box.anchor_link,
                           box.extrusion_amount,
                           box.damage_amount,
+                          box.payload_id,
                           box.meta_json,
                           runtime_corners,
                           volume)) {

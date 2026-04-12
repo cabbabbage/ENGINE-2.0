@@ -29,9 +29,12 @@ Asset::RuntimeBoxVolume make_box(float center_x,
                                  int damage_amount,
                                  std::string type = "attack_box") {
     Asset::RuntimeBoxVolume out{};
+    out.id = type + "_id";
+    out.payload_id = out.id;
     out.valid = true;
     out.type = std::move(type);
     out.damage_amount = damage_amount;
+    out.meta_json = "{}";
     out.centroid = Asset::RuntimeBoxPoint3{center_x, center_y, center_z};
     out.world_points = {{
         {center_x - half_extent, center_y - half_extent, center_z - half_extent},
@@ -81,6 +84,8 @@ TEST_CASE("attack dispatch enqueues attacker metadata, damage, and attack type")
     CHECK(queued[0].target_asset_name == "target");
     CHECK(queued[0].damage_amount == 12);
     CHECK(queued[0].attack_type == "heavy_slash");
+    CHECK(queued[0].attack_payload_id == "heavy_slash_id");
+    CHECK(queued[0].payload.damage_amount == 12);
 }
 
 TEST_CASE("attack dispatch skips non-overlapping attack and hit volumes") {
@@ -185,4 +190,22 @@ TEST_CASE("controllers delegating to base pending processing receive damage") {
 
     CHECK(target_ptr->runtime_health == 4);
     CHECK_FALSE(target_ptr->dead);
+}
+
+TEST_CASE("knockback uses payload hitback distance when configured") {
+    auto self = test_child_asset_runtime::make_test_asset("target", 30, 0, 0, 0);
+    Asset* self_ptr = self.get();
+    REQUIRE(self_ptr != nullptr);
+
+    animation_update::Attack incoming{};
+    incoming.damage_amount = 1;
+    incoming.hit_x = 0.0f;
+    incoming.hit_z = 0.0f;
+    incoming.payload.hitback_enabled = true;
+    incoming.payload.hitback_distance = 30.0f;
+
+    SDL_Point delta{};
+    REQUIRE(AttackProcessingHelper::compute_knockback_delta(*self_ptr, incoming, delta, 50.0f, 100));
+    CHECK(delta.x == 30);
+    CHECK(delta.y == 0);
 }

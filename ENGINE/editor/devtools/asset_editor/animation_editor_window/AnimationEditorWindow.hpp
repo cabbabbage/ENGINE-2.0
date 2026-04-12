@@ -113,6 +113,8 @@ class AnimationEditorWindow {
     std::optional<int> parse_defaults_total_movement() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
+    bool remove_animation_source_folder(const std::string& animation_id, std::string& error_message);
+    bool remove_animation_cache_folder(const std::string& animation_id, std::string& error_message);
     nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id,
                                                        int frame_count,
                                                        int dx,

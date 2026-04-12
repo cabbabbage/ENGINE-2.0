@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+#include "animation/controllers/shared/attack_payload.hpp"
+
 namespace animation_update {
 
 struct Attack {
@@ -11,8 +13,10 @@ struct Attack {
     std::string target_asset_id;
     std::string target_asset_name;
     std::string attack_type;
+    std::string attack_payload_id;
 
     int damage_amount = 0;
+    AttackPayload payload{};
 
     float hit_x = 0.0f;
     float hit_y = 0.0f;

@@ -18,12 +18,30 @@ class Input;
 class SpawnGroupLabelWidget;
 class Assets;
 namespace devmode::core { class ManifestStore; }
-namespace devmode::core { class ManifestStore; }
 
 class SpawnGroupConfig : public DockableCollapsible {
     struct Entry;
 public:
     using DockableCollapsible::open;
+
+    enum class ChangeReason {
+        Loaded,
+        LoadFailed,
+        EntryEdited,
+        EntryAdded,
+        EntryDeleted,
+        EntryReordered,
+        RegenerateRequested,
+        CommitFailed
+    };
+
+    enum class PatchType {
+        Add,
+        Update,
+        Delete,
+        Reorder
+    };
+
     struct ChangeSummary {
         bool method_changed = false;
         bool quantity_changed = false;
@@ -31,15 +49,31 @@ public:
         std::string method;
         bool resolution_changed = false;
         int resolution = 0;
-};
+    };
+
+    struct PatchOperation {
+        PatchType type = PatchType::Update;
+        std::string spawn_id;
+        nlohmann::json entry = nlohmann::json::object();
+        size_t from_index = 0;
+        size_t to_index = 0;
+    };
+
+    struct ChangeEvent {
+        ChangeReason reason = ChangeReason::EntryEdited;
+        std::string spawn_id;
+        nlohmann::json entry = nlohmann::json::object();
+        ChangeSummary summary{};
+        std::vector<PatchOperation> patches{};
+        std::string error_message;
+    };
 
     struct Callbacks {
-        std::function<void(const std::string&)> on_regenerate;
-        std::function<void(const std::string&)> on_delete;
-        std::function<void(const std::string&, size_t)> on_reorder;
-        std::function<void()> on_add;
+        std::function<bool(const std::vector<PatchOperation>&, std::string&)> on_commit;
+        std::function<void(const ChangeEvent&)> on_change_event;
+        std::function<void(const std::string&)> on_error;
         std::function<void(const std::string&, SDL_Point)> on_open_floating;
-};
+    };
 
     class EntryController {
     public:
@@ -54,40 +88,18 @@ public:
         explicit EntryController(Entry* entry) : entry_(entry) {}
         Entry* entry_ = nullptr;
         friend class SpawnGroupConfig;
-};
+    };
 
     using ConfigureEntryCallback = std::function<void(EntryController&, const nlohmann::json&)>;
-
-    struct EntryCallbacks {
-        std::function<void(const std::string&)> on_method_changed;
-        std::function<void(int min_number, int max_number)> on_quantity_changed;
-        std::function<void(const nlohmann::json&)> on_candidates_changed;
-};
 
     explicit SpawnGroupConfig(bool floatable = true);
     ~SpawnGroupConfig() override;
 
     void set_screen_dimensions(int width, int height);
 
-    void load(nlohmann::json& groups,
-              std::function<void()> on_change,
-              std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change = {},
+    void load(const nlohmann::json& groups,
+              const std::vector<std::string>& stable_ids,
               ConfigureEntryCallback configure_entry = {});
-
-    void bind_entry(nlohmann::json& entry,
-                    EntryCallbacks callbacks = {},
-                    ConfigureEntryCallback configure_entry = {});
-    void bind_entry(nlohmann::json& entry,
-                    std::function<void()> on_change,
-                    std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
-                    EntryCallbacks callbacks = {},
-                    ConfigureEntryCallback configure_entry = {});
-    void bind_entry_by_id(std::string spawn_id,
-                          std::function<nlohmann::json*()> resolver,
-                          std::function<void()> on_change,
-                          std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
-                          EntryCallbacks callbacks = {},
-                          ConfigureEntryCallback configure_entry = {});
 
     void load(const nlohmann::json& groups);
 
@@ -101,9 +113,7 @@ public:
     void set_default_resolution(int resolution);
     void set_manifest_store(class devmode::core::ManifestStore* store);
     void set_assets(class Assets* assets);
-    // Detach from any bound JSON so external callers can safely mutate/delete
-    // the underlying spawn group data without leaving dangling pointers inside
-    // the config panel.
+    // Reset the panel to an empty draft model.
     void clear_binding();
 
     void expand_group(const std::string& id);
@@ -120,12 +130,14 @@ public:
     void render(SDL_Renderer* r) const override;
     void render_content(SDL_Renderer* r) const override;
 
-    void open(nlohmann::json& groups, std::function<void(const nlohmann::json&)> on_save);
+    void open(const nlohmann::json& groups, std::function<void(const nlohmann::json&)> on_save);
     void request_open_spawn_group(const std::string& id, int x, int y);
     void set_anchor(int x, int y);
     void close_embedded_search();
 
-    void load_impl(nlohmann::json* array, nlohmann::json* entry, std::function<void()> on_change, std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change, ConfigureEntryCallback configure_entry);
+    void load_impl(const nlohmann::json& source,
+                   std::vector<std::string> stable_ids,
+                   ConfigureEntryCallback configure_entry);
     void rebuild_rows();
     void apply_configuration(Entry& entry);
     void rebuild_layout();
@@ -134,7 +146,10 @@ public:
     const nlohmann::json* current_source() const;
     void enqueue_notification(std::function<void()> cb);
     void process_pending_notifications();
-    void fire_entry_callbacks(const nlohmann::json& entry, const ChangeSummary& summary);
+    bool commit_patches(const std::vector<PatchOperation>& patches,
+                        const ChangeEvent& event,
+                        std::string* error_message = nullptr);
+    void emit_change_event(ChangeEvent event);
     bool single_entry_mode() const { return single_entry_mode_; }
 
 private:
@@ -149,7 +164,7 @@ private:
         SDL_Rect source_rect{0, 0, 0, 0};
         int pointer_y = 0;
         bool pointer_inside = false;
-};
+    };
 
     bool default_floatable_mode_ = true;
     bool embedded_mode_ = false;
@@ -158,17 +173,11 @@ private:
     int screen_h_ = 1080;
 
     std::vector<std::unique_ptr<Entry>> entries_;
-    nlohmann::json* bound_array_ = nullptr;
-    nlohmann::json* bound_entry_ = nullptr;
-    std::string bound_entry_id_{};
-    std::function<nlohmann::json*()> bound_entry_resolver_{};
-    nlohmann::json single_entry_shadow_{};
-    nlohmann::json readonly_snapshot_{};
-
-    std::function<void()> on_change_{};
-    std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change_{};
+    nlohmann::json source_snapshot_{};
+    nlohmann::json draft_groups_{};
+    std::vector<std::string> draft_stable_ids_{};
+    bool editable_mode_ = false;
     ConfigureEntryCallback configure_entry_{};
-    EntryCallbacks entry_callbacks_{};
     Callbacks callbacks_{};
     std::function<void()> on_layout_change_{};
 
@@ -188,7 +197,6 @@ private:
     bool processing_notifications_ = false;
 
     DragState drag_state_{};
-    Entry* current_entry_ = nullptr;
     class devmode::core::ManifestStore* manifest_store_ = nullptr;
     class Assets* assets_ = nullptr;
 
@@ -202,6 +210,7 @@ private:
     void reorder_json(size_t from, size_t to);
     void restore_order_from_snapshot(const std::vector<std::string>& order);
     void nudge_priority(Entry& entry, int delta);
+    std::string stable_id_for_index(size_t index) const;
 
     friend class SpawnGroupConfigTestAccessor;
 

@@ -505,7 +505,7 @@ TEST_CASE("Vibble assets seed default oval mappings") {
     AssetInfo vibble("vibble");
     REQUIRE(vibble.oval_anchor_mappings.size() >= 5);
 
-    for (const std::string& required_name : {"eyes", "hat", "mouth", "neck", "weapon"}) {
+    for (const std::string& required_name : {"eyes", "hat", "mouth", "neck", "melee"}) {
         const AssetInfo::OvalAnchorMapping* mapping = vibble.find_oval_anchor_mapping(required_name, false);
         REQUIRE(mapping != nullptr);
         CHECK(mapping->asset_name == "vibble");
@@ -590,7 +590,7 @@ TEST_CASE("Oval runtime anchor transform composes with owner sprite transform") 
     info->oval_anchor_mappings.clear();
 
     AssetInfo::OvalAnchorMapping mapping{};
-    mapping.name = "weapon";
+    mapping.name = "melee";
     mapping.asset_name = "oval_runtime_owner_transform_asset";
     mapping.width_radius_x = 25.0f;
     mapping.height_radius_z = 15.0f;
@@ -604,7 +604,7 @@ TEST_CASE("Oval runtime anchor transform composes with owner sprite transform") 
     Asset asset(info, spawn_area, SDL_Point{30, 40}, 0);
     REQUIRE(asset.set_directional_heading_radians(0.0f));
 
-    auto base = asset.anchor_state("weapon", anchor_points::GridMaterialization::None, Asset::AnchorResolveMode::ForceRecompute);
+    auto base = asset.anchor_state("melee", anchor_points::GridMaterialization::None, Asset::AnchorResolveMode::ForceRecompute);
     REQUIRE(base.has_value());
     CHECK(base->rotation_degrees == doctest::Approx(15.0f).epsilon(1e-4));
     CHECK(base->flip_horizontal == false);
@@ -612,7 +612,7 @@ TEST_CASE("Oval runtime anchor transform composes with owner sprite transform") 
 
     REQUIRE(asset.set_anchor_sprite_transform_override(SDL_FLIP_HORIZONTAL, 30.0));
     auto composed =
-        asset.anchor_state("weapon", anchor_points::GridMaterialization::None, Asset::AnchorResolveMode::ForceRecompute);
+        asset.anchor_state("melee", anchor_points::GridMaterialization::None, Asset::AnchorResolveMode::ForceRecompute);
     REQUIRE(composed.has_value());
     CHECK(composed->rotation_degrees == doctest::Approx(45.0f).epsilon(1e-4));
     CHECK(composed->flip_horizontal == true);
@@ -624,8 +624,8 @@ TEST_CASE("Oval runtime resolves anchors on the XZ plane and applies depth_offse
     info->oval_anchor_mappings.clear();
 
     AssetInfo::OvalAnchorMapping mapping{};
-    mapping.name = "weapon";
-    mapping.asset_name = "vibble_weapon";
+    mapping.name = "melee";
+    mapping.asset_name = "vibble_melee";
     mapping.width_radius_x = 40.0f;
     mapping.height_radius_z = 20.0f;
     mapping.points = {
@@ -639,7 +639,7 @@ TEST_CASE("Oval runtime resolves anchors on the XZ plane and applies depth_offse
     asset.move_to_world_position(100, 40, 200, 0);
 
     REQUIRE(asset.set_directional_heading_radians(degrees_to_radians(90.0f)));
-    const auto resolved = asset.anchor_state("weapon");
+    const auto resolved = asset.anchor_state("melee");
     REQUIRE(resolved.has_value());
     CHECK(resolved->is_active());
     CHECK(resolved->world_exact_pos_2d.x == doctest::Approx(100.0f).epsilon(1e-4f));
@@ -755,7 +755,7 @@ TEST_CASE("Oval runtime interpolation wraps across 360-degree seam") {
     info->oval_anchor_mappings.clear();
 
     AssetInfo::OvalAnchorMapping mapping{};
-    mapping.name = "weapon";
+    mapping.name = "melee";
     mapping.asset_name = "oval_wrap_asset";
     mapping.width_radius_x = 40.0f;
     mapping.height_radius_z = 20.0f;
@@ -769,7 +769,7 @@ TEST_CASE("Oval runtime interpolation wraps across 360-degree seam") {
     Asset asset(info, spawn_area, SDL_Point{25, 25}, 0);
     REQUIRE(asset.set_directional_heading_radians(0.0f));
 
-    auto resolved = asset.anchor_state("weapon");
+    auto resolved = asset.anchor_state("melee");
     REQUIRE(resolved.has_value());
     CHECK(resolved->depth_offset == doctest::Approx(0.0f).epsilon(1e-4));
     CHECK(resolved->rotation_degrees == doctest::Approx(0.0f).epsilon(1e-4));

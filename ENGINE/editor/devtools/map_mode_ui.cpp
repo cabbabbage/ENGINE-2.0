@@ -1323,14 +1323,6 @@ void MapModeUI::ensure_room_configurator() {
                 }
             }
         });
-        room_configurator_->set_spawn_group_callbacks(
-            {},
-            [this](const std::string& spawn_id) { this->delete_active_room_spawn_group(spawn_id); },
-            [this](const std::string& spawn_id, size_t index) {
-                this->reorder_active_room_spawn_group(spawn_id, index);
-            },
-            {},
-            {});
         room_configurator_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired) {
             return this->rename_active_room(old_name, desired);
         });
@@ -1393,16 +1385,8 @@ void MapModeUI::open_room_configuration(const std::string& room_key, SlidingPane
             rooms_display_->refresh();
         }
 };
-    auto on_entry_change = [this](const nlohmann::json&, const auto&) {
-        sync_active_room_runtime_data();
-        mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
-        if (layers_panel_) {
-            layers_panel_->mark_dirty(true);
-        }
-};
-
     apply_sliding_area_bounds();
-    room_configurator_->open(room_entry, on_change, on_entry_change, {});
+    room_configurator_->open(room_entry, on_change);
     show_sliding_panel(SlidingPanel::RoomConfig);
 }
 
@@ -1618,11 +1602,6 @@ std::string MapModeUI::rename_active_room(const std::string& old_name, const std
         active_room_config_key_ = result_key;
     }
     handle_rooms_data_mutated(true);
-    if (renaming_active && room_configurator_ && active_room_config_key_ == result_key) {
-        if (nlohmann::json* entry = active_room_entry()) {
-            room_configurator_->refresh_spawn_groups(*entry);
-        }
-    }
     return result_key;
 }
 
@@ -1670,12 +1649,6 @@ void MapModeUI::delete_active_room_spawn_group(const std::string& spawn_id) {
     sanitize_perimeter_spawn_groups(groups);
     sync_active_room_runtime_data();
 
-    if (room_configurator_) {
-        if (nlohmann::json* room_entry = active_room_entry()) {
-            room_configurator_->refresh_spawn_groups(*room_entry);
-        }
-        room_configurator_->notify_spawn_groups_mutated();
-    }
     handle_rooms_data_mutated(true);
 }
 
@@ -1722,12 +1695,6 @@ void MapModeUI::reorder_active_room_spawn_group(const std::string& spawn_id, siz
     }
     sync_active_room_runtime_data();
 
-    if (room_configurator_) {
-        if (nlohmann::json* room_entry = active_room_entry()) {
-            room_configurator_->refresh_spawn_groups(*room_entry);
-        }
-        room_configurator_->notify_spawn_groups_mutated();
-    }
     handle_rooms_data_mutated(false);
 }
 

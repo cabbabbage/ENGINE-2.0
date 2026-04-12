@@ -92,8 +92,8 @@ void vibble_controller::movement(const Input& input) {
         meleeCooldownEndTime = std::chrono::steady_clock::now()
                                + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                                    std::chrono::duration<float>(meleeCooldown));
-       // if (weapon_child_.has_value()) {
-        //    weapon_child_->set_animation("attack");
+       // if (melee_child_.has_value()) {
+        //    melee_child_->set_animation("attack");
        // }
     }
 

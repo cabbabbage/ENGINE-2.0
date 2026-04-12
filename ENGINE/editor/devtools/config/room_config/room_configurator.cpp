@@ -3,13 +3,10 @@
 #include "DockableCollapsible.hpp"
 #include "dm_styles.hpp"
 #include "gameplay/map_generation/room.hpp"
-#include "../../spawn_groups/SpawnGroupConfig.hpp"
-#include "../../spawn_groups/spawn_group_utils.hpp"
 #include "tag_editor_widget.hpp"
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
 #include "utils/sdl_mouse_utils.hpp"
-#include "utils/map_grid_settings.hpp"
 #include "widgets.hpp"
 #include "font_cache.hpp"
 
@@ -116,12 +113,6 @@ bool append_unique(std::vector<std::string>& options, const std::string& value) 
     options.push_back(value);
     return true;
 }
-
-struct SpawnCallbackGuard {
-    bool& flag;
-    explicit SpawnCallbackGuard(bool& f) : flag(f) { flag = true; }
-    ~SpawnCallbackGuard() { flag = false; }
-};
 
 }
 
@@ -368,6 +359,72 @@ struct RoomConfigurator::State {
     }
 };
 
+std::vector<std::string> sorted_strings(const std::vector<std::string>& values) {
+    std::vector<std::string> copy = values;
+    std::sort(copy.begin(), copy.end());
+    return copy;
+}
+
+nlohmann::json sorted_strings_json(const std::vector<std::string>& values) {
+    return sorted_strings(values);
+}
+
+nlohmann::json build_metadata_snapshot_json(const nlohmann::json& canonical_metadata,
+                                            const std::vector<std::string>& tags,
+                                            const std::vector<std::string>& anti_tags,
+                                            bool include_tags) {
+    nlohmann::json snapshot = nlohmann::json::object();
+    if (canonical_metadata.is_object()) {
+        snapshot = canonical_metadata;
+    }
+    if (include_tags) {
+        snapshot["tags"] = sorted_strings_json(tags);
+        snapshot["anti_tags"] = sorted_strings_json(anti_tags);
+    }
+    return snapshot;
+}
+
+std::size_t hash_metadata_snapshot(const nlohmann::json& snapshot) {
+    return std::hash<std::string>{}(snapshot.dump());
+}
+
+nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
+                                                 bool include_tags,
+                                                 bool allow_height) {
+    nlohmann::json raw = nlohmann::json::object();
+    if (!source.is_object()) {
+        return raw;
+    }
+    auto copy_field = [&source, &raw](const char* key) {
+        auto it = source.find(key);
+        if (it != source.end()) {
+            raw[key] = *it;
+        }
+    };
+    copy_field("name");
+    copy_field("room_name");
+    copy_field("geometry");
+    copy_field("min_width");
+    copy_field("max_width");
+    copy_field("min_height");
+    copy_field("max_height");
+    copy_field("radius");
+    copy_field("min_radius");
+    copy_field("max_radius");
+    copy_field("edge_smoothness");
+    if (allow_height) {
+        copy_field("curvyness");
+    }
+    copy_field("is_spawn");
+    copy_field("is_boss");
+    copy_field("inherits_map_assets");
+    if (include_tags) {
+        copy_field("tags");
+        copy_field("anti_tags");
+    }
+    return raw;
+}
+
 RoomConfigurator::RoomConfigurator() {
     geometry_options_ = {"Square", "Circle"};
     state_ = std::make_unique<State>();
@@ -392,20 +449,10 @@ void RoomConfigurator::set_room_metadata_only_mode(bool enabled) {
 
 void RoomConfigurator::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
-    for (auto& cfg : spawn_group_configs_) {
-        if (cfg) {
-            cfg->set_manifest_store(manifest_store_);
-        }
-    }
 }
 
 void RoomConfigurator::set_assets(Assets* assets) {
     assets_ = assets;
-    for (auto& cfg : spawn_group_configs_) {
-        if (cfg) {
-            cfg->set_assets(assets_);
-        }
-    }
 }
 
 void RoomConfigurator::set_bounds(const SDL_Rect& bounds) {
@@ -539,16 +586,6 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
                 panel->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
             }
         }
-        for (size_t i = 0; i < spawn_group_configs_.size(); ++i) {
-            const auto& cfg = spawn_group_configs_[i];
-            if (cfg && cfg->is_visible()) {
-                SDL_Rect bounds = (i < spawn_config_bounds_.size()) ? spawn_config_bounds_[i] : cfg->rect();
-                cfg->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
-            }
-        }
-        if (add_spawn_widget_) {
-            add_spawn_widget_->render(renderer);
-        }
     });
     container.set_event_function([this](const SDL_Event& e) {
         if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
@@ -571,11 +608,6 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
                             return true;
                         }
                     }
-                    for (const auto& cfg : spawn_group_configs_) {
-                        if (cfg && cfg.get() == candidate) {
-                            return true;
-                        }
-                    }
                     return false;
                 };
                 if (panel_still_active(focused_before_event)) {
@@ -587,17 +619,11 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
                 return true;
             }
         }
-        if (add_spawn_widget_ && add_spawn_widget_->handle_event(e)) {
-            return true;
-        }
         return false;
     });
     container.set_update_function([this](const Input& input, int screen_w, int screen_h) {
         for (auto* panel : ordered_base_panels_) {
             if (panel) panel->update(input, screen_w, screen_h);
-        }
-        for (auto& cfg : spawn_group_configs_) {
-            if (cfg) cfg->update(input, screen_w, screen_h);
         }
     });
     container.set_blocks_editor_interactions(blocks_editor_interactions_);
@@ -620,40 +646,6 @@ void RoomConfigurator::clear_container_callbacks(SlidingWindowContainer& contain
     container.set_header_visibility_controller({});
     container.set_blocks_editor_interactions(false);
     container.clear_panel_bounds_override();
-}
-
-bool RoomConfigurator::add_spawn_group_direct() {
-    nlohmann::json& root = live_room_json();
-    nlohmann::json& groups = devmode::spawn::ensure_spawn_groups_array(root);
-
-    nlohmann::json new_group = nlohmann::json::object();
-    devmode::spawn::ensure_spawn_group_entry_defaults(new_group, "New Spawn");
-    groups.push_back(new_group);
-    renumber_spawn_group_priorities(groups);
-    devmode::spawn::sanitize_perimeter_spawn_groups(groups);
-
-    if (room_) {
-        refresh_spawn_groups(room_);
-    } else if (external_room_json_) {
-        refresh_spawn_groups(*external_room_json_);
-    } else {
-        bool changed = apply_room_data(root);
-        if (changed) {
-            rebuild_rows();
-        } else {
-            request_rebuild();
-        }
-    }
-    persist_spawn_group_changes();
-    return true;
-}
-
-void RoomConfigurator::renumber_spawn_group_priorities(nlohmann::json& groups) const {
-    if (!groups.is_array()) return;
-    for (size_t i = 0; i < groups.size(); ++i) {
-        if (!groups[i].is_object()) continue;
-        groups[i]["priority"] = static_cast<int>(i);
-    }
 }
 
 SDL_Rect RoomConfigurator::clamp_to_work_area(const SDL_Rect& bounds) const {
@@ -720,8 +712,6 @@ void RoomConfigurator::ensure_base_panels() {
 void RoomConfigurator::refresh_base_panel_rows() {
     ordered_base_panels_.clear();
     ordered_panel_bounds_.clear();
-    spawn_config_bounds_.clear();
-    add_spawn_bounds_ = SDL_Rect{0,0,0,0};
 
     if (geometry_panel_) {
         DockableCollapsible::Rows rows;
@@ -781,12 +771,9 @@ void RoomConfigurator::request_container_layout() {
 
 void RoomConfigurator::prune_collapsible_caches() {
     std::unordered_set<const DockableCollapsible*> active;
-    active.reserve(ordered_base_panels_.size() + spawn_group_configs_.size());
+    active.reserve(ordered_base_panels_.size());
     for (auto* panel : ordered_base_panels_) {
         if (panel) active.insert(panel);
-    }
-    for (const auto& cfg : spawn_group_configs_) {
-        if (cfg) active.insert(cfg.get());
     }
 
     for (auto it = collapsible_height_cache_.begin(); it != collapsible_height_cache_.end();) {
@@ -848,37 +835,6 @@ void RoomConfigurator::set_base_panel_expanded(const std::string& key, bool expa
     base_panel_expanded_state_[key] = expanded;
 }
 
-void RoomConfigurator::persist_spawn_group_changes() {
-    if (room_metadata_only_mode_) {
-        return;
-    }
-    if (room_) {
-        if (room_save_callback_) { room_save_callback_(false); } else { room_->mark_dirty(); }
-    } else if (on_external_spawn_change_) {
-        on_external_spawn_change_();
-    }
-}
-
-void RoomConfigurator::handle_spawn_groups_mutated() {
-    if (room_metadata_only_mode_) {
-        return;
-    }
-    SpawnCallbackGuard guard(spawn_callbacks_active_);
-    request_rebuild();
-    persist_spawn_group_changes();
-}
-
-void RoomConfigurator::handle_spawn_group_entry_changed(const nlohmann::json& entry,
-                                                        const SpawnGroupConfig::ChangeSummary& summary) {
-    if (room_metadata_only_mode_) {
-        return;
-    }
-    SpawnCallbackGuard guard(spawn_callbacks_active_);
-    if (on_external_spawn_entry_change_) {
-        on_external_spawn_entry_change_(entry, summary);
-    }
-}
-
 void RoomConfigurator::apply_panel_focus_states() {
     auto panel_is_active = [this](DockableCollapsible* candidate) -> bool {
         if (!candidate) {
@@ -886,11 +842,6 @@ void RoomConfigurator::apply_panel_focus_states() {
         }
         for (auto* panel : ordered_base_panels_) {
             if (panel == candidate) {
-                return true;
-            }
-        }
-        for (const auto& cfg : spawn_group_configs_) {
-            if (cfg && cfg.get() == candidate) {
                 return true;
             }
         }
@@ -913,9 +864,6 @@ void RoomConfigurator::apply_panel_focus_states() {
     for (auto* panel : ordered_base_panels_) {
         apply_state(panel);
     }
-    for (const auto& cfg : spawn_group_configs_) {
-        apply_state(cfg.get());
-    }
 }
 
 void RoomConfigurator::focus_panel(DockableCollapsible* panel) {
@@ -925,11 +873,6 @@ void RoomConfigurator::focus_panel(DockableCollapsible* panel) {
         }
         for (auto* base : ordered_base_panels_) {
             if (base == candidate) {
-                return true;
-            }
-        }
-        for (const auto& cfg : spawn_group_configs_) {
-            if (cfg && cfg.get() == candidate) {
                 return true;
             }
         }
@@ -967,19 +910,6 @@ DockableCollapsible* RoomConfigurator::panel_at_point(SDL_Point p) const {
         }
         if (SDL_PointInRect(&p, &bounds)) {
             return panel;
-        }
-    }
-    for (size_t i = 0; i < spawn_group_configs_.size(); ++i) {
-        const auto& cfg = spawn_group_configs_[i];
-        if (!cfg || !cfg->is_visible()) {
-            continue;
-        }
-        SDL_Rect bounds = (i < spawn_config_bounds_.size()) ? spawn_config_bounds_[i] : cfg->rect();
-        if (bounds.w <= 0 || bounds.h <= 0) {
-            continue;
-        }
-        if (SDL_PointInRect(&p, &bounds)) {
-            return cfg.get();
         }
     }
     return nullptr;
@@ -1025,46 +955,10 @@ int RoomConfigurator::layout_content(const SlidingWindowContainer::LayoutContext
         ++panel_index;
     }
 
-    bool any_spawn_visible = false;
-    spawn_config_bounds_.resize(spawn_group_configs_.size());
-    for (size_t i = 0; i < spawn_group_configs_.size(); ++i) {
-        const auto& cfg = spawn_group_configs_[i];
-        if (!cfg || !cfg->is_visible()) {
-            spawn_config_bounds_[i] = SDL_Rect{0,0,0,0};
-            continue;
-        }
-        if (!any_spawn_visible && y > ctx.content_top) {
-            y += ctx.gap;
-        }
-        int cfg_height = cfg->embedded_height(ctx.content_width, embed_screen_h);
-        SDL_Rect rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, cfg_height};
-        cfg->set_rect(rect);
-        spawn_config_bounds_[i] = rect;
-        y += cfg_height + ctx.gap;
-        any_spawn_visible = true;
-    }
-
-    if (add_spawn_widget_) {
-        if (y > ctx.content_top) {
-            y += ctx.gap;
-        }
-        SDL_Rect rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()};
-        add_spawn_widget_->set_rect(rect);
-        add_spawn_bounds_ = rect;
-        y += rect.h;
-    }
-
     return y + ctx.gap;
 }
 
 void RoomConfigurator::handle_container_closed() {
-    for (auto& config : spawn_group_configs_) {
-        if (config) {
-            config->close();
-            config->set_visible(false);
-            config->close_embedded_search();
-        }
-    }
     for (auto* panel : ordered_base_panels_) {
         if (panel) {
             panel->set_visible(false);
@@ -1072,28 +966,20 @@ void RoomConfigurator::handle_container_closed() {
     }
     clear_panel_focus();
     external_room_json_ = nullptr;
-    on_external_spawn_change_ = {};
-    on_external_spawn_entry_change_ = {};
-    external_configure_entry_ = {};
+    on_external_change_ = {};
     if (on_close_) on_close_();
 }
 
 bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
-    const nlohmann::json& normalized = data.is_object() ? data : empty_object();
-
-    nlohmann::json normalized_copy = normalized;
-    if (!room_metadata_only_mode_) {
-        if (!normalized_copy.contains("spawn_groups") || !normalized_copy["spawn_groups"].is_array()) {
-            normalized_copy["spawn_groups"] = nlohmann::json::array();
-        }
-    }
-
+    const nlohmann::json& source = data.is_object() ? data : empty_object();
     const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
+    const bool include_tags = !room_metadata_only_mode_;
+
+    nlohmann::json source_object = source.is_object() ? source : nlohmann::json::object();
+    nlohmann::json source_metadata_raw = collect_owned_metadata_fields_raw(source_object, include_tags, allow_height);
 
     State new_state = state_ ? *state_ : State{};
-    new_state.load_from_json(normalized_copy, geometry_options_, allow_height);
-    new_state.apply_to_json(normalized_copy, allow_height, !room_metadata_only_mode_);
-
+    new_state.load_from_json(source_object, geometry_options_, allow_height);
     bool geometry_added = append_unique(geometry_options_, new_state.geometry);
 
     bool state_changed = false;
@@ -1115,57 +1001,68 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     }
 
     bool tags_changed = false;
-    if (!room_metadata_only_mode_) {
-        std::vector<std::string> include;
-        std::vector<std::string> exclude;
-        auto capture_tags = [&](const std::vector<std::string>& src, std::vector<std::string>& dst) {
-            dst = src;
-            std::sort(dst.begin(), dst.end());
-        };
-
-        std::vector<std::string> prev_include = room_tags_;
-        std::vector<std::string> prev_exclude = room_anti_tags_;
-        capture_tags(prev_include, prev_include);
-        capture_tags(prev_exclude, prev_exclude);
-
-        load_tags_from_json(normalized_copy);
-        capture_tags(room_tags_, include);
-        capture_tags(room_anti_tags_, exclude);
+    if (include_tags) {
+        std::vector<std::string> prev_include = sorted_strings(room_tags_);
+        std::vector<std::string> prev_exclude = sorted_strings(room_anti_tags_);
+        load_tags_from_json(source_object);
+        std::vector<std::string> include = sorted_strings(room_tags_);
+        std::vector<std::string> exclude = sorted_strings(room_anti_tags_);
         tags_changed = (include != prev_include) || (exclude != prev_exclude);
-        write_tags_to_json(normalized_copy);
     }
 
-    const bool json_changed = (normalized_copy != loaded_json_);
-    const bool changed = geometry_added || state_changed || tags_changed || json_changed;
-    if (!changed) {
-        return false;
+    if (!loaded_json_.is_object()) {
+        loaded_json_ = nlohmann::json::object();
+    }
+    if (loaded_json_ != source_object) {
+        loaded_json_ = source_object;
     }
 
-    loaded_json_ = std::move(normalized_copy);
-    if (!state_) state_ = std::make_unique<State>();
-    *state_ = std::move(new_state);
+    if (!state_) {
+        state_ = std::make_unique<State>();
+    }
+    *state_ = new_state;
     tags_dirty_ = false;
 
-    if (room_) {
-        nlohmann::json& room_json = room_->assets_data();
-        if (room_json != loaded_json_) {
-            room_json = loaded_json_;
+    state_->apply_to_json(loaded_json_, allow_height, false);
+    if (include_tags) {
+        write_tags_to_json(loaded_json_);
+    }
+
+    nlohmann::json patched_metadata_raw = collect_owned_metadata_fields_raw(loaded_json_, include_tags, allow_height);
+    const bool needs_persist = (patched_metadata_raw != source_metadata_raw);
+
+    nlohmann::json canonical_metadata = nlohmann::json::object();
+    state_->apply_to_json(canonical_metadata, allow_height, false);
+    nlohmann::json new_snapshot = build_metadata_snapshot_json(canonical_metadata, room_tags_, room_anti_tags_, include_tags);
+    std::size_t new_snapshot_hash = hash_metadata_snapshot(new_snapshot);
+    const bool snapshot_changed = (new_snapshot_hash != metadata_snapshot_hash_);
+
+    if (needs_persist) {
+        if (room_ || external_room_json_) {
+            nlohmann::json& target = live_room_json();
+            if (!target.is_object()) {
+                target = nlohmann::json::object();
+            }
+            state_->apply_to_json(target, allow_height, false);
+            if (include_tags) {
+                write_tags_to_json(target);
+            }
+        }
+        if (room_) {
             if (room_save_callback_) {
                 room_save_callback_(false);
             } else {
                 room_->mark_dirty();
             }
-        }
-    } else if (external_room_json_) {
-        if (*external_room_json_ != loaded_json_) {
-            *external_room_json_ = loaded_json_;
-            if (on_external_spawn_change_) {
-                on_external_spawn_change_();
-            }
+        } else if (external_room_json_ && on_external_change_) {
+            on_external_change_();
         }
     }
 
-    return true;
+    metadata_snapshot_ = std::move(new_snapshot);
+    metadata_snapshot_hash_ = new_snapshot_hash;
+
+    return geometry_added || state_changed || tags_changed || snapshot_changed || needs_persist;
 }
 
 void RoomConfigurator::open(const nlohmann::json& room_data) {
@@ -1177,9 +1074,7 @@ void RoomConfigurator::open(const nlohmann::json& room_data) {
 
     room_ = nullptr;
     external_room_json_ = nullptr;
-    on_external_spawn_change_ = {};
-    on_external_spawn_entry_change_ = {};
-    external_configure_entry_ = {};
+    on_external_change_ = {};
     is_trail_context_ = false;
     bool changed = apply_room_data(room_data);
     if (changed || !was_visible) {
@@ -1193,10 +1088,7 @@ void RoomConfigurator::open(const nlohmann::json& room_data) {
     }
 }
 
-void RoomConfigurator::open(nlohmann::json& room_data,
-                            std::function<void()> on_change,
-                            std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_entry_change,
-                            SpawnGroupConfig::ConfigureEntryCallback configure_entry) {
+void RoomConfigurator::open(nlohmann::json& room_data, std::function<void()> on_change) {
     const bool was_visible = container_ && container_->is_visible();
 
     if (!was_visible) {
@@ -1205,9 +1097,7 @@ void RoomConfigurator::open(nlohmann::json& room_data,
 
     room_ = nullptr;
     external_room_json_ = &room_data;
-    on_external_spawn_change_ = std::move(on_change);
-    on_external_spawn_entry_change_ = std::move(on_entry_change);
-    external_configure_entry_ = std::move(configure_entry);
+    on_external_change_ = std::move(on_change);
     is_trail_context_ = false;
     bool changed = apply_room_data(room_data);
     if (changed || !was_visible) {
@@ -1231,9 +1121,7 @@ void RoomConfigurator::open(Room* room) {
     Room* previous = room_;
     room_ = room;
     external_room_json_ = nullptr;
-    on_external_spawn_change_ = {};
-    on_external_spawn_entry_change_ = {};
-    external_configure_entry_ = {};
+    on_external_change_ = {};
     is_trail_context_ = false;
     if (room_) {
         const std::string& dir = room_->room_directory;
@@ -1255,60 +1143,11 @@ void RoomConfigurator::open(Room* room) {
     }
 }
 
-bool RoomConfigurator::refresh_spawn_groups(const nlohmann::json& room_data) {
-    if (room_metadata_only_mode_) {
-        return false;
-    }
-    bool changed = apply_room_data(room_data);
-    if (changed) {
-        if (spawn_callbacks_active_) {
-            deferred_rebuild_ = true;
-        } else {
-            rebuild_rows();
-        }
-    }
-    return changed;
-}
-
-bool RoomConfigurator::refresh_spawn_groups(nlohmann::json& room_data) {
-    if (room_metadata_only_mode_) {
-        external_room_json_ = &room_data;
-        return false;
-    }
-    external_room_json_ = &room_data;
-    bool changed = apply_room_data(room_data);
-    if (changed) {
-        if (spawn_callbacks_active_) {
-            deferred_rebuild_ = true;
-        } else {
-            rebuild_rows();
-        }
-    }
-    return changed;
-}
-
-bool RoomConfigurator::refresh_spawn_groups(Room* room) {
-    const nlohmann::json& src = room ? room->assets_data() : empty_object();
-    return refresh_spawn_groups(src);
-}
-
-void RoomConfigurator::notify_spawn_groups_mutated() {
-    if (room_metadata_only_mode_) {
-        return;
-    }
-    handle_spawn_groups_mutated();
-}
-
 void RoomConfigurator::close() {
     clear_panel_focus();
     if (!container_ || !container_->is_visible()) {
-        for (auto& config : spawn_group_configs_) {
-            if (config) config->set_visible(false);
-        }
         external_room_json_ = nullptr;
-        on_external_spawn_change_ = {};
-        on_external_spawn_entry_change_ = {};
-        external_configure_entry_ = {};
+        on_external_change_ = {};
         return;
     }
     container_->close();
@@ -1319,8 +1158,8 @@ bool RoomConfigurator::visible() const { return container_ && container_->is_vis
 bool RoomConfigurator::any_panel_visible() const { return visible(); }
 
 bool RoomConfigurator::is_locked() const {
-    for (const auto& cfg : spawn_group_configs_) {
-        if (cfg && cfg->isLocked()) {
+    for (auto* panel : ordered_base_panels_) {
+        if (panel && panel->isLocked()) {
             return true;
         }
     }
@@ -1333,243 +1172,6 @@ std::string RoomConfigurator::selected_geometry() const {
     auto it = std::find(geometry_options_.begin(), geometry_options_.end(), state_->geometry);
     if (it != geometry_options_.end()) return *it;
     return geometry_options_.front();
-}
-
-void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
-    add_spawn_button_.reset();
-    add_spawn_widget_.reset();
-
-    auto previous_configs = std::move(spawn_group_configs_);
-    auto previous_ids = std::move(spawn_group_config_ids_);
-    spawn_group_configs_.clear();
-    spawn_group_config_ids_.clear();
-
-    auto take_config = [&](const std::string& id) -> std::unique_ptr<SpawnGroupConfig> {
-        if (!id.empty()) {
-            for (size_t i = 0; i < previous_configs.size(); ++i) {
-                if (!previous_configs[i]) continue;
-                if (i < previous_ids.size() && previous_ids[i] == id) {
-                    auto cfg = std::move(previous_configs[i]);
-                    previous_configs[i].reset();
-                    return cfg;
-                }
-            }
-        }
-        for (auto& cfg : previous_configs) {
-            if (cfg) {
-                auto result = std::move(cfg);
-                cfg.reset();
-                return result;
-            }
-        }
-        return nullptr;
-};
-
-    auto bind_spawn_entry = [&](nlohmann::json& entry,
-                                nlohmann::json& group_array,
-                                SpawnGroupConfig::ConfigureEntryCallback configure_entry,
-                                std::function<void()> on_change,
-                                std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_entry_change) {
-        bool have_id_field = entry.is_object() && entry.contains("spawn_id");
-        std::string id = have_id_field ? entry.value("spawn_id", std::string{}) : std::string{};
-        auto config = take_config(id);
-        const bool created_new = !config;
-        if (!config) {
-            config = std::make_unique<SpawnGroupConfig>();
-        }
-
-        config->set_manifest_store(manifest_store_);
-        config->set_assets(assets_);
-
-        int default_resolution = MapGridSettings::defaults().grid_resolution;
-        if (room_) {
-            default_resolution = room_->map_grid_settings().grid_resolution;
-        } else if (external_room_json_) {
-            const auto it = external_room_json_->find("map_grid_settings");
-            if (it != external_room_json_->end()) {
-                MapGridSettings settings = MapGridSettings::from_json(&*it);
-                default_resolution = settings.grid_resolution;
-            }
-        }
-        config->set_default_resolution(default_resolution);
-
-        config->set_embedded_mode(true);
-        config->set_show_header(true);
-        config->set_close_button_enabled(false);
-        config->set_scroll_enabled(false);
-        config->set_row_gap(DMSpacing::item_gap());
-        config->set_col_gap(DMSpacing::item_gap());
-        config->set_padding(DMSpacing::panel_padding());
-        config->set_header_button_style(&DMStyles::AccentButton());
-        config->set_header_highlight_color(DMStyles::AccentButton().bg);
-        config->force_pointer_ready();
-        config->set_embedded_focus_state(false);
-        config->set_embedded_interaction_enabled(false);
-        if (created_new) {
-            config->set_expanded(false);
-        }
-        if (force_collapse_sections) {
-            config->set_expanded(false);
-        }
-
-        config->set_screen_dimensions(last_screen_w_, last_screen_h_);
-
-        SpawnGroupConfig::Callbacks callbacks{};
-        callbacks.on_regenerate = [this](const std::string& value) {
-            SpawnCallbackGuard guard(this->spawn_callbacks_active_);
-            if (on_spawn_regenerate_) on_spawn_regenerate_(value);
-};
-        callbacks.on_delete = [this](const std::string& value) {
-            SpawnCallbackGuard guard(this->spawn_callbacks_active_);
-            const bool handled_externally = static_cast<bool>(on_spawn_delete_);
-            if (handled_externally) {
-                on_spawn_delete_(value);
-            } else {
-                if (room_) {
-                    this->refresh_spawn_groups(room_);
-                } else if (external_room_json_) {
-                    this->refresh_spawn_groups(*external_room_json_);
-                } else {
-                    this->request_rebuild();
-                }
-            }
-            this->request_rebuild();
-            this->persist_spawn_group_changes();
-};
-        callbacks.on_reorder = [this, groups = &group_array](const std::string& value, size_t index) {
-            SpawnCallbackGuard guard(this->spawn_callbacks_active_);
-            if (on_spawn_reorder_) {
-                on_spawn_reorder_(value, index);
-                this->request_rebuild();
-                return;
-            }
-
-            if (!groups || !groups->is_array()) {
-                return;
-            }
-            (void)value;
-            (void)index;
-            renumber_spawn_group_priorities(*groups);
-            this->request_rebuild();
-};
-        callbacks.on_open_floating = [this, id](const std::string&, SDL_Point point) {
-            SpawnCallbackGuard guard(this->spawn_callbacks_active_);
-            if (on_spawn_open_panel_) on_spawn_open_panel_(id, point);
-};
-        config->set_callbacks(std::move(callbacks));
-
-        SpawnGroupConfig::EntryCallbacks entry_callbacks{};
-        nlohmann::json* entry_ptr = &entry;
-        auto request_regenerate = [this, entry_ptr, id]() {
-            std::string target = id;
-            if (target.empty() && entry_ptr && entry_ptr->is_object()) {
-                target = entry_ptr->value("spawn_id", std::string{});
-            }
-            if (target.empty()) return;
-            if (on_spawn_regenerate_) on_spawn_regenerate_(target);
-};
-        entry_callbacks.on_method_changed = [request_regenerate](const std::string&) { request_regenerate(); };
-        entry_callbacks.on_quantity_changed = [request_regenerate](int, int) { request_regenerate(); };
-        entry_callbacks.on_candidates_changed = [request_regenerate](const nlohmann::json&) { request_regenerate(); };
-
-        SpawnGroupConfig::ConfigureEntryCallback final_configure_entry = std::move(configure_entry);
-
-        auto title_from = [](const nlohmann::json& e) -> std::string {
-            if (e.is_object()) {
-                if (e.contains("display_name") && e["display_name"].is_string()) {
-                    std::string t = e["display_name"].get<std::string>();
-                    if (!t.empty()) return t;
-                }
-                if (e.contains("spawn_id") && e["spawn_id"].is_string()) {
-                    std::string id = e["spawn_id"].get<std::string>();
-                    if (!id.empty()) return id;
-                }
-            }
-            return std::string{"Spawn Group"};
-};
-        config->set_title(title_from(entry));
-
-        auto wrapped_entry_change = [this, cfg=config.get(), on_entry_change = std::move(on_entry_change), title_from](
-                                        const nlohmann::json& updated,
-                                        const SpawnGroupConfig::ChangeSummary& summary) {
-
-            if (cfg) cfg->set_title(title_from(updated));
-            this->handle_spawn_group_entry_changed(updated, summary);
-            if (on_entry_change) on_entry_change(updated, summary);
-};
-        auto wrapped_on_change = [this, extra = std::move(on_change)]() {
-            this->handle_spawn_groups_mutated();
-            if (extra) extra();
-};
-        config->bind_entry(entry, std::move(wrapped_on_change), std::move(wrapped_entry_change), std::move(entry_callbacks), std::move(final_configure_entry));
-
-        config->set_on_layout_changed([this, cfg_ptr = config.get()]() {
-            this->update_collapsible_height_cache(cfg_ptr, cfg_ptr->height());
-            this->request_container_layout();
-        });
-
-        spawn_group_config_ids_.push_back(id);
-        spawn_group_configs_.push_back(std::move(config));
-};
-
-    bool have_groups = false;
-    if (room_) {
-        auto& root = live_room_json();
-        nlohmann::json& groups = devmode::spawn::ensure_spawn_groups_array(root);
-
-        auto configure_entry = [this](SpawnGroupConfig::EntryController& entry, const nlohmann::json&) {
-            entry.set_area_names_provider([this]() {
-                std::vector<std::string> names;
-                if (!room_) return names;
-                auto& data = room_->assets_data();
-                if (data.contains("areas") && data["areas"].is_array()) {
-                    for (const auto& entry : data["areas"]) {
-                        if (entry.is_object() && entry.contains("name") && entry["name"].is_string()) {
-                            names.push_back(entry["name"].get<std::string>());
-                        }
-                    }
-                }
-                return names;
-            });
-            if (room_) {
-                std::string label = room_->room_name.empty() ? std::string("Room") : room_->room_name;
-                entry.set_ownership_label(label, SDL_Color{255, 224, 96, 255});
-            }
-
-};
-
-        for (auto& entry : groups) {
-            have_groups = true;
-            std::function<void()> on_change;
-            std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_entry_change;
-            bind_spawn_entry(entry, groups, configure_entry, std::move(on_change), std::move(on_entry_change));
-        }
-    } else if (external_room_json_) {
-        auto& root = live_room_json();
-        nlohmann::json& groups = devmode::spawn::ensure_spawn_groups_array(root);
-
-        for (auto& entry : groups) {
-            have_groups = true;
-            std::function<void()> on_change;
-            std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_entry_change;
-            bind_spawn_entry(entry, groups, external_configure_entry_, std::move(on_change), std::move(on_entry_change));
-        }
-    } else {
-        nlohmann::json& root = loaded_json_;
-        if (!root.is_object()) {
-            root = nlohmann::json::object();
-        }
-        nlohmann::json& groups = devmode::spawn::ensure_spawn_groups_array(root);
-        for (auto& entry : groups) {
-            have_groups = true;
-            std::function<void()> on_change;
-            std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_entry_change;
-            bind_spawn_entry(entry, groups, {}, std::move(on_change), std::move(on_entry_change));
-        }
-    }
-    (void)have_groups;
-    request_container_layout();
-    apply_panel_focus_states();
 }
 
 void RoomConfigurator::rebuild_rows() {
@@ -1722,11 +1324,6 @@ void RoomConfigurator::rebuild_rows_internal() {
         }
     }
 
-    spawn_group_configs_.clear();
-    spawn_group_config_ids_.clear();
-    add_spawn_button_.reset();
-    add_spawn_widget_.reset();
-
     prune_collapsible_caches();
     request_container_layout();
 }
@@ -1734,7 +1331,7 @@ void RoomConfigurator::rebuild_rows_internal() {
 void RoomConfigurator::update(const Input& input, int screen_w, int screen_h) {
     last_screen_w_ = screen_w;
     last_screen_h_ = screen_h;
-    if (deferred_rebuild_ && !rebuild_in_progress_ && !spawn_callbacks_active_) {
+    if (deferred_rebuild_ && !rebuild_in_progress_) {
         deferred_rebuild_ = false;
         rebuild_rows();
     }
@@ -1751,12 +1348,6 @@ void RoomConfigurator::update(const Input& input, int screen_w, int screen_h) {
             panel->set_work_area(panel_work_area);
         }
     }
-    for (auto& config : spawn_group_configs_) {
-        if (!config) continue;
-        config->set_visible(panel_visible);
-        config->set_screen_dimensions(screen_w, screen_h);
-    }
-
     if (container_) {
         container_->update(input, screen_w, screen_h);
     }
@@ -1769,11 +1360,6 @@ void RoomConfigurator::update(const Input& input, int screen_w, int screen_h) {
             set_base_panel_expanded(it->second, panel->is_expanded());
         }
     }
-    for (auto& config : spawn_group_configs_) {
-        if (!config) continue;
-        update_collapsible_height_cache(config.get(), config->height());
-    }
-
     if (!state_) return;
 
     bool needs_rebuild = sync_state_from_widgets();
@@ -1808,12 +1394,6 @@ void RoomConfigurator::prepare_for_event(int screen_w, int screen_h) {
             if (panel_work_area.w > 0 && panel_work_area.h > 0) {
                 panel->set_work_area(panel_work_area);
             }
-        }
-    }
-    for (auto& config : spawn_group_configs_) {
-        if (config) {
-            config->set_visible(panel_visible);
-            config->set_screen_dimensions(use_w, use_h);
         }
     }
 }
@@ -2002,30 +1582,39 @@ bool RoomConfigurator::sync_state_from_widgets() {
     }
 
     if (changed) {
-        const bool include_camera = !room_metadata_only_mode_;
-        state_->apply_to_json(loaded_json_, allow_height, include_camera);
-        if (!room_metadata_only_mode_) {
-            write_tags_to_json(loaded_json_);
-        }
-        if (room_) {
-            auto& root = live_room_json();
-            state_->apply_to_json(root, allow_height, include_camera);
-            if (!room_metadata_only_mode_) {
-                write_tags_to_json(root);
+        const bool include_tags = !room_metadata_only_mode_;
+        nlohmann::json canonical_metadata = nlohmann::json::object();
+        state_->apply_to_json(canonical_metadata, allow_height, false);
+        nlohmann::json new_snapshot = build_metadata_snapshot_json(canonical_metadata, room_tags_, room_anti_tags_, include_tags);
+        std::size_t new_snapshot_hash = hash_metadata_snapshot(new_snapshot);
+        if (new_snapshot_hash != metadata_snapshot_hash_) {
+            if (!loaded_json_.is_object()) {
+                loaded_json_ = nlohmann::json::object();
             }
-            if (room_save_callback_) { room_save_callback_(false); } else { room_->mark_dirty(); }
-            if (tags_changed) {
-                tag_utils::notify_tags_changed();
+            state_->apply_to_json(loaded_json_, allow_height, false);
+            if (include_tags) {
+                write_tags_to_json(loaded_json_);
             }
-        } else if (external_room_json_) {
-            auto& root = live_room_json();
-            state_->apply_to_json(root, allow_height, include_camera);
-            if (!room_metadata_only_mode_) {
-                write_tags_to_json(root);
+
+            if (room_ || external_room_json_) {
+                auto& root = live_room_json();
+                state_->apply_to_json(root, allow_height, false);
+                if (include_tags) {
+                    write_tags_to_json(root);
+                }
             }
-        }
-        if (on_external_spawn_change_) {
-            on_external_spawn_change_();
+
+            if (room_) {
+                if (room_save_callback_) { room_save_callback_(false); } else { room_->mark_dirty(); }
+                if (tags_changed) {
+                    tag_utils::notify_tags_changed();
+                }
+            } else if (external_room_json_ && on_external_change_) {
+                on_external_change_();
+            }
+
+            metadata_snapshot_ = std::move(new_snapshot);
+            metadata_snapshot_hash_ = new_snapshot_hash;
         }
     }
 
@@ -2094,6 +1683,9 @@ nlohmann::json RoomConfigurator::build_json() const {
         const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
         copy.ensure_valid(allow_height);
         copy.apply_to_json(result, allow_height, !room_metadata_only_mode_);
+        if (!room_metadata_only_mode_) {
+            write_tags_to_json(result);
+        }
     }
     return result;
 }
@@ -2157,87 +1749,6 @@ void RoomConfigurator::write_tags_to_json(nlohmann::json& object) const {
     object.erase("anti_tags");
 }
 
-void RoomConfigurator::set_spawn_group_callbacks(std::function<void(const std::string&)> on_edit,
-                                                 std::function<void(const std::string&)> on_delete,
-                                                 std::function<void(const std::string&, size_t)> on_reorder,
-                                                 std::function<void()> on_add,
-                                                 std::function<void(const std::string&)> on_regenerate,
-                                                 std::function<void(const std::string&, SDL_Point)> on_open_floating) {
-    if (room_metadata_only_mode_) {
-        on_spawn_edit_ = {};
-        on_spawn_delete_ = {};
-        on_spawn_reorder_ = {};
-        on_spawn_add_ = {};
-        on_spawn_regenerate_ = {};
-        on_spawn_open_panel_ = {};
-        return;
-    }
-    on_spawn_edit_ = std::move(on_edit);
-    on_spawn_delete_ = std::move(on_delete);
-    on_spawn_reorder_ = std::move(on_reorder);
-    on_spawn_add_ = std::move(on_add);
-    on_spawn_regenerate_ = std::move(on_regenerate);
-    on_spawn_open_panel_ = std::move(on_open_floating);
-}
-
-bool RoomConfigurator::focus_spawn_group(const std::string& spawn_id) {
-    if (room_metadata_only_mode_) {
-        return false;
-    }
-    if (spawn_id.empty()) {
-        return false;
-    }
-    ensure_base_panels();
-    if (!container_) {
-        return false;
-    }
-
-    SpawnGroupConfig* target = nullptr;
-    for (size_t i = 0; i < spawn_group_config_ids_.size(); ++i) {
-        if (spawn_group_config_ids_[i] == spawn_id && i < spawn_group_configs_.size() && spawn_group_configs_[i]) {
-            target = spawn_group_configs_[i].get();
-            break;
-        }
-    }
-    if (!target) {
-        return false;
-    }
-
-    focus_panel(target);
-    target->request_open_spawn_group(spawn_id, 0, 0);
-
-    prepare_for_event(last_screen_w_, last_screen_h_);
-    container_->prepare_layout(last_screen_w_, last_screen_h_);
-
-    SDL_Rect view = container_->scroll_region();
-    if (view.h <= 0) {
-        return true;
-    }
-
-    SDL_Rect rect = target->rect();
-    int current_scroll = container_->scroll_value();
-    int new_scroll = current_scroll;
-
-    const int actual_top = rect.y + current_scroll;
-    int actual_bottom = rect.y + rect.h + current_scroll;
-    if (rect.h <= 0) {
-        actual_bottom = actual_top + cached_collapsible_height(target);
-    }
-
-    if (rect.y < view.y) {
-        new_scroll = std::max(0, actual_top - view.y);
-    } else if (rect.y + rect.h > view.y + view.h) {
-        new_scroll = std::max(0, actual_bottom - (view.y + view.h));
-    }
-
-    if (new_scroll != current_scroll) {
-        container_->set_scroll_value(new_scroll);
-        container_->prepare_layout(last_screen_w_, last_screen_h_);
-    }
-
-    return true;
-}
-
 bool RoomConfigurator::focus_name_field() {
     if (!visible() || !name_box_) {
         return false;
@@ -2245,23 +1756,6 @@ bool RoomConfigurator::focus_name_field() {
     focus_panel(geometry_panel_.get());
     name_box_->start_editing();
     return true;
-}
-
-void RoomConfigurator::set_spawn_area_open_callback(
-    std::function<void(const std::string&, const std::string&)> cb,
-    std::string stack_key) {
-    if (room_metadata_only_mode_) {
-        on_spawn_area_open_ = {};
-        spawn_area_stack_key_.clear();
-        return;
-    }
-    on_spawn_area_open_ = std::move(cb);
-    spawn_area_stack_key_ = std::move(stack_key);
-    for (auto& config : spawn_group_configs_) {
-        if (config) {
-            config->refresh_row_configuration();
-        }
-    }
 }
 
 void RoomConfigurator::request_rebuild() {

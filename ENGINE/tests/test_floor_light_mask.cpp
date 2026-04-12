@@ -1,8 +1,11 @@
 #include <doctest/doctest.h>
 
 #include <SDL3/SDL.h>
+#include <cmath>
+#include <vector>
 
 #include "rendering/render/render.hpp"
+#include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
 
@@ -112,6 +115,15 @@ bool read_pixel(SDL_Renderer* renderer, SDL_Texture* texture, int x, int y, SDL_
     return true;
 }
 
+Area make_starting_area() {
+    std::vector<SDL_Point> corners{
+        SDL_Point{-100, -100},
+        SDL_Point{100, -100},
+        SDL_Point{100, 100},
+        SDL_Point{-100, 100}};
+    return Area("floor_light_mask_start", corners, 0);
+}
+
 } // namespace
 
 TEST_CASE("Floor light mask clear helper preserves solid background clear") {
@@ -150,16 +162,21 @@ TEST_CASE("Floor light depth weighting reaches zero at half-cull and is monotoni
 }
 
 TEST_CASE("Floor light height attenuation and footprint scale realistically") {
-    constexpr float kRadius = 120.0f;
-    const float low_height_weight = render_internal::floor_light_height_weight(0.0f, kRadius);
-    const float mid_height_weight = render_internal::floor_light_height_weight(20.0f, kRadius);
-    const float high_height_weight = render_internal::floor_light_height_weight(80.0f, kRadius);
+    constexpr float kRadiusWorld = 120.0f;
+    const float low_height_weight = render_internal::floor_light_height_weight(0.0f, kRadiusWorld);
+    const float mid_height_weight = render_internal::floor_light_height_weight(20.0f, kRadiusWorld);
+    const float high_height_weight = render_internal::floor_light_height_weight(80.0f, kRadiusWorld);
 
     CHECK(low_height_weight >= mid_height_weight);
     CHECK(mid_height_weight >= high_height_weight);
+    CHECK(low_height_weight == doctest::Approx(1.0f));
 
-    const float base_footprint = render_internal::floor_light_footprint_radius(kRadius, 0.0f);
-    const float raised_footprint = render_internal::floor_light_footprint_radius(kRadius, 40.0f);
+    const float base_spread = render_internal::floor_light_height_spread_scale(0.0f, kRadiusWorld);
+    const float raised_spread = render_internal::floor_light_height_spread_scale(40.0f, kRadiusWorld);
+    CHECK(raised_spread > base_spread);
+
+    const float base_footprint = render_internal::floor_light_footprint_radius(120.0f, 0.0f);
+    const float raised_footprint = render_internal::floor_light_footprint_radius(120.0f, 40.0f);
     CHECK(raised_footprint > base_footprint);
 }
 
@@ -179,4 +196,130 @@ TEST_CASE("Layer light strength multipliers split front and behind depths indepe
     CHECK(boundary_side == doctest::Approx(kBaseIntensity * kFrontMultiplier));
     CHECK(behind_side == doctest::Approx(kBaseIntensity * kBehindMultiplier));
     CHECK(front_side > behind_side);
+}
+
+TEST_CASE("Floor light contact resolution locks to flat world point") {
+    constexpr float kFlatX = 100.0f;
+    constexpr float kFlatZ = 260.0f;
+    constexpr float kDisplacedX = 180.0f;
+    constexpr float kDisplacedZ = 340.0f;
+    constexpr float kHeight = 42.0f;
+
+    const render_internal::FloorLightContact contact = render_internal::resolve_floor_light_contact(
+        kFlatX, kFlatZ, kDisplacedX, kDisplacedZ, kHeight);
+    REQUIRE(contact.valid);
+    CHECK(contact.world_x == doctest::Approx(kFlatX));
+    CHECK(contact.world_z == doctest::Approx(kFlatZ));
+    CHECK(contact.world_height == doctest::Approx(kHeight));
+}
+
+TEST_CASE("Floor projection center is invariant with light height for fixed floor XZ") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const auto params = grid.projection_params();
+    const SDL_FPoint map_center =
+        grid.screen_to_map(SDL_Point{params.screen_width / 2, params.screen_height / 2});
+
+    const render_internal::FloorLightContact low_contact =
+        render_internal::resolve_floor_light_contact(map_center.x, map_center.y, map_center.x, map_center.y, 5.0f);
+    const render_internal::FloorLightContact high_contact =
+        render_internal::resolve_floor_light_contact(map_center.x, map_center.y, map_center.x + 120.0f, map_center.y + 120.0f, 180.0f);
+
+    SDL_FPoint low_screen{};
+    SDL_FPoint high_screen{};
+    REQUIRE(render_internal::project_floor_contact_to_screen(grid, low_contact, low_screen));
+    REQUIRE(render_internal::project_floor_contact_to_screen(grid, high_contact, high_screen));
+
+    CHECK(low_screen.x == doctest::Approx(high_screen.x).epsilon(1e-5));
+    CHECK(low_screen.y == doctest::Approx(high_screen.y).epsilon(1e-5));
+}
+
+TEST_CASE("Floor footprint axes widen while intensity decays with increasing height") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const auto params = grid.projection_params();
+    const SDL_FPoint map_center =
+        grid.screen_to_map(SDL_Point{params.screen_width / 2, params.screen_height / 2});
+
+    const render_internal::FloorLightContact contact =
+        render_internal::resolve_floor_light_contact(map_center.x, map_center.y, map_center.x, map_center.y, 0.0f);
+    SDL_FPoint floor_screen{};
+    REQUIRE(render_internal::project_floor_contact_to_screen(grid, contact, floor_screen));
+
+    constexpr float kRadiusWorld = 120.0f;
+
+    float rx_low = 0.0f;
+    float ry_low = 0.0f;
+    REQUIRE(render_internal::sample_floor_light_footprint_axes_px(grid,
+                                                                  contact,
+                                                                  floor_screen,
+                                                                  kRadiusWorld,
+                                                                  render_internal::floor_light_height_spread_scale(0.0f, kRadiusWorld),
+                                                                  rx_low,
+                                                                  ry_low));
+
+    float rx_high = 0.0f;
+    float ry_high = 0.0f;
+    REQUIRE(render_internal::sample_floor_light_footprint_axes_px(grid,
+                                                                  contact,
+                                                                  floor_screen,
+                                                                  kRadiusWorld,
+                                                                  render_internal::floor_light_height_spread_scale(180.0f, kRadiusWorld),
+                                                                  rx_high,
+                                                                  ry_high));
+
+    CHECK(rx_high > rx_low);
+    CHECK(ry_high > ry_low);
+
+    const float low_weight = render_internal::floor_light_height_weight(0.0f, kRadiusWorld);
+    const float high_weight = render_internal::floor_light_height_weight(180.0f, kRadiusWorld);
+    CHECK(low_weight > high_weight);
+}
+
+TEST_CASE("Near-camera floor footprint sampling remains finite and stable") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const auto params = grid.projection_params();
+    const SDL_FPoint near_floor_world =
+        grid.screen_to_map(SDL_Point{static_cast<int>(params.screen_width * 0.35f),
+                                     static_cast<int>(params.screen_height * 0.92f)});
+
+    const render_internal::FloorLightContact low_contact =
+        render_internal::resolve_floor_light_contact(near_floor_world.x, near_floor_world.y, near_floor_world.x, near_floor_world.y, 5.0f);
+    const render_internal::FloorLightContact high_contact =
+        render_internal::resolve_floor_light_contact(near_floor_world.x, near_floor_world.y, near_floor_world.x + 100.0f, near_floor_world.y + 150.0f, 220.0f);
+
+    SDL_FPoint low_screen{};
+    SDL_FPoint high_screen{};
+    REQUIRE(render_internal::project_floor_contact_to_screen(grid, low_contact, low_screen));
+    REQUIRE(render_internal::project_floor_contact_to_screen(grid, high_contact, high_screen));
+
+    CHECK(std::isfinite(low_screen.x));
+    CHECK(std::isfinite(high_screen.x));
+    CHECK(low_screen.x == doctest::Approx(high_screen.x).epsilon(1e-5));
+
+    float rx_low = 0.0f;
+    float ry_low = 0.0f;
+    float rx_high = 0.0f;
+    float ry_high = 0.0f;
+    REQUIRE(render_internal::sample_floor_light_footprint_axes_px(grid,
+                                                                  low_contact,
+                                                                  low_screen,
+                                                                  80.0f,
+                                                                  render_internal::floor_light_height_spread_scale(5.0f, 80.0f),
+                                                                  rx_low,
+                                                                  ry_low));
+    REQUIRE(render_internal::sample_floor_light_footprint_axes_px(grid,
+                                                                  high_contact,
+                                                                  high_screen,
+                                                                  80.0f,
+                                                                  render_internal::floor_light_height_spread_scale(220.0f, 80.0f),
+                                                                  rx_high,
+                                                                  ry_high));
+    CHECK(std::isfinite(rx_low));
+    CHECK(std::isfinite(ry_low));
+    CHECK(std::isfinite(rx_high));
+    CHECK(std::isfinite(ry_high));
+    CHECK(rx_high > rx_low);
+    CHECK(ry_high > ry_low);
 }

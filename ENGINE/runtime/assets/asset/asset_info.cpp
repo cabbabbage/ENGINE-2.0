@@ -2372,7 +2372,7 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                     "hat",
                     "mouth",
                     "neck",
-                    "weapon",
+                    "melee",
                 };
                 std::vector<OvalAnchorMapping> defaults;
                 defaults.reserve(vibble_mapping_names.size());

@@ -15,19 +15,16 @@ namespace devmode::core { class ManifestStore; }
 
 #include "SlidingWindowContainer.hpp"
 #include "widgets.hpp"
-#include "../../spawn_groups/SpawnGroupConfig.hpp"
 
 class Input;
 class Room;
 class Assets;
 class TagEditorWidget;
-class SpawnGroupConfig;
 class DropdownWidget;
 class SliderWidget;
 class RangeSliderWidget;
 class CheckboxWidget;
 class TextBoxWidget;
-class ButtonWidget;
 class DockableCollapsible;
 class DMSlider;
 class DMCheckbox;
@@ -53,10 +50,7 @@ public:
     const SlidingWindowContainer* container() const;
 
     void open(const nlohmann::json& room_data);
-    void open(nlohmann::json& room_data,
-              std::function<void()> on_change,
-              std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_entry_change = {},
-              SpawnGroupConfig::ConfigureEntryCallback configure_entry = {});
+    void open(nlohmann::json& room_data, std::function<void()> on_change = {});
     void open(Room* room);
 
     void set_manifest_store(class devmode::core::ManifestStore* store);
@@ -64,12 +58,6 @@ public:
     void set_room_save_callback(std::function<bool(bool immediate)> cb) { room_save_callback_ = std::move(cb); }
     void set_room_metadata_only_mode(bool enabled);
     bool room_metadata_only_mode() const { return room_metadata_only_mode_; }
-
-    bool refresh_spawn_groups(const nlohmann::json& room_data);
-    bool refresh_spawn_groups(nlohmann::json& room_data);
-    bool refresh_spawn_groups(Room* room);
-
-    void notify_spawn_groups_mutated();
 
     void close();
     bool visible() const;
@@ -88,16 +76,7 @@ public:
     nlohmann::json build_json() const;
     bool is_point_inside(int x, int y) const;
 
-    void set_spawn_group_callbacks(std::function<void(const std::string&)> on_edit,
-                                   std::function<void(const std::string&)> on_delete,
-                                   std::function<void(const std::string&, size_t)> on_reorder,
-                                   std::function<void()> on_add,
-                                   std::function<void(const std::string&)> on_regenerate = {},
-                                   std::function<void(const std::string&, SDL_Point)> on_open_floating = {});
-    bool focus_spawn_group(const std::string& spawn_id);
     bool focus_name_field();
-    void set_spawn_area_open_callback(std::function<void(const std::string&, const std::string&)> cb,
-                                      std::string stack_key = {});
 
     void set_on_room_renamed(std::function<std::string(const std::string&, const std::string&)> cb) {
         on_room_renamed_ = std::move(cb);
@@ -124,7 +103,6 @@ private:
     bool apply_room_data(const nlohmann::json& data);
     void rebuild_rows();
     void rebuild_rows_internal();
-    void rebuild_spawn_rows(bool force_collapse_sections = false);
 
     void request_rebuild();
     void load_tags_from_json(const nlohmann::json& data);
@@ -137,8 +115,6 @@ private:
     SDL_Rect clamp_to_work_area(const SDL_Rect& bounds) const;
     void handle_container_closed();
     void reset_scroll();
-    bool add_spawn_group_direct();
-    void renumber_spawn_group_priorities(nlohmann::json& groups) const;
     void ensure_base_panels();
     void refresh_base_panel_rows();
     void request_container_layout();
@@ -150,9 +126,6 @@ private:
     void forget_collapsible(const DockableCollapsible* panel);
     bool base_panel_expanded(const std::string& key) const;
     void set_base_panel_expanded(const std::string& key, bool expanded);
-    void persist_spawn_group_changes();
-    void handle_spawn_groups_mutated();
-    void handle_spawn_group_entry_changed(const nlohmann::json& entry, const SpawnGroupConfig::ChangeSummary& summary);
     void focus_panel(DockableCollapsible* panel);
     void clear_panel_focus();
     void apply_panel_focus_states();
@@ -175,11 +148,12 @@ private:
     bool rebuild_in_progress_ = false;
     bool pending_rebuild_ = false;
     bool deferred_rebuild_ = false;
-    bool spawn_callbacks_active_ = false;
 
     Room* room_ = nullptr;
     nlohmann::json* external_room_json_ = nullptr;
     nlohmann::json loaded_json_;
+    nlohmann::json metadata_snapshot_;
+    std::size_t metadata_snapshot_hash_ = 0;
     bool is_trail_context_ = false;
 
     std::vector<std::string> geometry_options_;
@@ -215,13 +189,6 @@ private:
     std::unique_ptr<DockableCollapsible> types_panel_;
     std::vector<DockableCollapsible*> ordered_base_panels_;
     mutable std::vector<SDL_Rect> ordered_panel_bounds_;
-    mutable std::vector<SDL_Rect> spawn_config_bounds_;
-    mutable SDL_Rect add_spawn_bounds_{0,0,0,0};
-
-    std::vector<std::unique_ptr<SpawnGroupConfig>> spawn_group_configs_;
-    std::vector<std::string> spawn_group_config_ids_;
-    std::unique_ptr<DMButton> add_spawn_button_;
-    std::unique_ptr<ButtonWidget> add_spawn_widget_;
     std::unordered_map<const DockableCollapsible*, int> collapsible_height_cache_;
     std::unordered_map<const DockableCollapsible*, std::string> base_panel_keys_;
     std::unordered_map<std::string, bool> base_panel_expanded_state_;
@@ -229,18 +196,8 @@ private:
 
     bool reset_expanded_state_pending_ = false;
 
-    std::function<void(const std::string&)> on_spawn_edit_;
-    std::function<void(const std::string&)> on_spawn_delete_;
-    std::function<void(const std::string&, size_t)> on_spawn_reorder_;
-    std::function<void()> on_spawn_add_;
-    std::function<void(const std::string&)> on_spawn_regenerate_;
-    std::function<void(const std::string&, SDL_Point)> on_spawn_open_panel_;
-    std::function<void(const std::string&, const std::string&)> on_spawn_area_open_;
-    std::string spawn_area_stack_key_;
-    std::function<void()> on_external_spawn_change_;
+    std::function<void()> on_external_change_;
     std::function<bool(bool immediate)> room_save_callback_;
-    std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_external_spawn_entry_change_;
-    SpawnGroupConfig::ConfigureEntryCallback external_configure_entry_;
     std::function<std::string(const std::string&, const std::string&)> on_room_renamed_;
     std::function<void(bool)> header_visibility_controller_{};
     std::function<void(Room*)> on_camera_changed_;

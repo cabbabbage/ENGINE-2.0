@@ -1118,6 +1118,11 @@ constexpr int kAnchorHandlePickRadiusPx = 12;
 constexpr int kShiftAnchorHoverRadiusPx = 20;
 constexpr int kShiftAnchorSelectRadiusPx = 24;
 constexpr float kAnchorDepthScrollStepWorldPx = 0.1f;
+constexpr int kSpawnGroupAnchorXOffsetPx = 16;
+constexpr int kSpawnGroupAnchorYOffsetPx = 8;
+constexpr int kSpawnGroupHeaderSafeZoneMarginPx = 52;
+constexpr int kSpawnGroupFloatingAnchorOffsetPx = 12;
+constexpr int kSpawnGroupFloatingMinHeightPx = 420;
 
 bool is_debug_marker_in_bounds(const SDL_FPoint& point, int screen_width, int screen_height) {
     if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
@@ -15673,27 +15678,6 @@ void RoomEditor::ensure_spawn_group_config_ui() {
     });
 
     SpawnGroupConfig::Callbacks callbacks{};
-    callbacks.on_add = [this]() {
-        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        add_spawn_group_internal();
-    };
-    callbacks.on_delete = [this](const std::string& id) {
-        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        delete_spawn_group_internal(id);
-    };
-    callbacks.on_reorder = [this](const std::string& id, size_t index) {
-        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        reorder_spawn_group_internal(id, index);
-};
-    callbacks.on_regenerate = [this](const std::string& id) {
-        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        if (id.empty()) {
-            return;
-        }
-        if (nlohmann::json* entry = find_spawn_entry(id)) {
-            enqueue_spawn_group_work(*entry, true, false, true, true, true);
-        }
-};
     callbacks.on_open_floating = [this](const std::string& id, SDL_Point point) {
         open_spawn_group_floating_panel(id, point);
 };
@@ -16630,38 +16614,6 @@ void RoomEditor::refresh_spawn_group_config_ui() {
         return names;
 };
 
-    auto on_change = [this]() {
-        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        if (!current_room_) {
-            return;
-        }
-        commit_room_edit_transaction([]() { return true; }, "spawn group update", false,
-                                     devmode::core::DevSaveCoordinator::Priority::Debounced);
-};
-
-    auto on_entry_change = [this](const nlohmann::json& entry, const SpawnGroupConfig::ChangeSummary& summary) {
-        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        if (!current_room_) {
-            return;
-        }
-        bool sanitized = false;
-        const bool committed = commit_room_edit_transaction([&sanitized, this, &entry]() {
-            if (entry.is_object()) {
-                const std::string id = entry.value("spawn_id", std::string{});
-                SpawnEntryResolution current = locate_spawn_entry(id);
-                if (current.owner_array) {
-                    sanitized = sanitize_perimeter_spawn_groups(*current.owner_array);
-                }
-            }
-            return true;
-        }, "spawn group update", false,
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
-        if (committed && (sanitized || summary.method_changed || summary.quantity_changed || summary.candidates_changed ||
-            summary.resolution_changed)) {
-            enqueue_spawn_group_work(entry, true, false, true, true, true);
-        }
-};
-
     SpawnGroupConfig::ConfigureEntryCallback configure_entry = [area_names_provider, this](
                                                                  SpawnGroupConfig::EntryController& entry,
                                                                  const nlohmann::json&) {
@@ -16673,62 +16625,218 @@ void RoomEditor::refresh_spawn_group_config_ui() {
 
 };
 
-    SpawnEntryResolution resolved;
-    if (active_spawn_group_id_) {
-        resolved = locate_spawn_entry(*active_spawn_group_id_);
-        if (resolved.source == SpawnEntryResolution::Source::Map && resolved.owner_array) {
-            if (sanitize_perimeter_spawn_groups(*resolved.owner_array)) {
-                mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    SpawnGroupConfig::Callbacks panel_callbacks{};
+    panel_callbacks.on_open_floating = [this](const std::string& id, SDL_Point point) {
+        open_spawn_group_floating_panel(id, point);
+    };
+    panel_callbacks.on_error = [this](const std::string& message) {
+        if (assets_) {
+            assets_->show_dev_notice("Spawn-group save failed: " + message, 2400);
+        }
+    };
+    panel_callbacks.on_change_event = [this](const SpawnGroupConfig::ChangeEvent& event) {
+        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
+        if (!current_room_) {
+            return;
+        }
+        if (event.reason == SpawnGroupConfig::ChangeReason::RegenerateRequested) {
+            const std::string id = !event.spawn_id.empty()
+                                       ? event.spawn_id
+                                       : event.entry.value("spawn_id", std::string{});
+            if (id.empty()) {
+                return;
+            }
+            if (nlohmann::json* entry = find_spawn_entry(id)) {
+                enqueue_spawn_group_work(*entry, true, true, true, true, true);
             }
         }
-    }
-
-    auto map_on_change = [this]() {
+    };
+    panel_callbacks.on_commit = [this](const std::vector<SpawnGroupConfig::PatchOperation>& patches,
+                                       std::string& error) -> bool {
         ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
-};
+        if (!current_room_) {
+            error = "No active room.";
+            return false;
+        }
+        auto renumber_priorities = [](nlohmann::json& groups) {
+            if (!groups.is_array()) {
+                return;
+            }
+            for (size_t i = 0; i < groups.size(); ++i) {
+                if (groups[i].is_object()) {
+                    groups[i]["priority"] = static_cast<int>(i);
+                }
+            }
+        };
 
-    auto map_on_entry_change = [this](const nlohmann::json& entry, const SpawnGroupConfig::ChangeSummary& summary) {
-        ScopedBoolOverride callback_guard(spawn_group_callback_in_progress_);
-        bool sanitized = false;
-        if (entry.is_object()) {
-            const std::string id = entry.value("spawn_id", std::string{});
-            SpawnEntryResolution current = locate_spawn_entry(id);
-            if (current.owner_array) {
-                sanitized = sanitize_perimeter_spawn_groups(*current.owner_array);
+        bool touched_room = false;
+        bool touched_map = false;
+        std::vector<nlohmann::json> changed_entries;
+        std::vector<std::string> removed_ids;
+
+        for (const auto& patch : patches) {
+            const std::string patch_id = !patch.spawn_id.empty()
+                                             ? patch.spawn_id
+                                             : patch.entry.value("spawn_id", std::string{});
+            switch (patch.type) {
+                case SpawnGroupConfig::PatchType::Add: {
+                    auto& room_arr = ensure_spawn_groups_array(current_room_->assets_data());
+                    nlohmann::json entry = patch.entry.is_object() ? patch.entry : nlohmann::json::object();
+                    if (entry.value("spawn_id", std::string{}).empty()) {
+                        entry["spawn_id"] = patch_id.empty() ? devmode::spawn::generate_spawn_id() : patch_id;
+                    }
+                    devmode::spawn::ensure_spawn_group_entry_defaults(
+                        entry, entry.value("display_name", std::string{"New Spawn"}), current_grid_resolution());
+                    room_arr.push_back(entry);
+                    renumber_priorities(room_arr);
+                    sanitize_perimeter_spawn_groups(room_arr);
+                    touched_room = true;
+                    if (room_arr.is_array() && !room_arr.empty()) {
+                        changed_entries.push_back(room_arr.back());
+                    } else {
+                        changed_entries.push_back(std::move(entry));
+                    }
+                    break;
+                }
+                case SpawnGroupConfig::PatchType::Update: {
+                    if (patch_id.empty()) {
+                        error = "Update patch missing spawn_id.";
+                        return false;
+                    }
+                    SpawnEntryResolution resolved = locate_spawn_entry(patch_id);
+                    if (!resolved.valid() || !resolved.entry) {
+                        error = "Spawn group not found for update: " + patch_id;
+                        return false;
+                    }
+                    nlohmann::json updated = patch.entry.is_object() ? patch.entry : nlohmann::json::object();
+                    if (updated.value("spawn_id", std::string{}).empty()) {
+                        updated["spawn_id"] = patch_id;
+                    }
+                    devmode::spawn::ensure_spawn_group_entry_defaults(
+                        updated, updated.value("display_name", std::string{"Spawn Group"}), current_grid_resolution());
+                    *resolved.entry = std::move(updated);
+                    if (resolved.owner_array) {
+                        renumber_priorities(*resolved.owner_array);
+                        sanitize_perimeter_spawn_groups(*resolved.owner_array);
+                    }
+                    touched_room = touched_room || (resolved.source == SpawnEntryResolution::Source::Room);
+                    touched_map = touched_map || (resolved.source == SpawnEntryResolution::Source::Map);
+                    changed_entries.push_back(*resolved.entry);
+                    break;
+                }
+                case SpawnGroupConfig::PatchType::Delete: {
+                    if (patch_id.empty()) {
+                        error = "Delete patch missing spawn_id.";
+                        return false;
+                    }
+                    SpawnEntryResolution resolved = locate_spawn_entry(patch_id);
+                    if (!resolved.valid() || !resolved.owner_array || !resolved.owner_array->is_array()) {
+                        error = "Spawn group not found for deletion: " + patch_id;
+                        return false;
+                    }
+                    nlohmann::json& owner = *resolved.owner_array;
+                    if (owner.size() <= 1) {
+                        error = "At least one spawn group is required.";
+                        return false;
+                    }
+                    auto it = std::find_if(owner.begin(), owner.end(), [&patch_id](const nlohmann::json& entry) {
+                        return entry.is_object() && entry.value("spawn_id", std::string{}) == patch_id;
+                    });
+                    if (it == owner.end()) {
+                        error = "Spawn group not found in owner array: " + patch_id;
+                        return false;
+                    }
+                    owner.erase(it);
+                    renumber_priorities(owner);
+                    sanitize_perimeter_spawn_groups(owner);
+                    touched_room = touched_room || (resolved.source == SpawnEntryResolution::Source::Room);
+                    touched_map = touched_map || (resolved.source == SpawnEntryResolution::Source::Map);
+                    removed_ids.push_back(patch_id);
+                    break;
+                }
+                case SpawnGroupConfig::PatchType::Reorder: {
+                    if (patch_id.empty()) {
+                        error = "Reorder patch missing spawn_id.";
+                        return false;
+                    }
+                    SpawnEntryResolution resolved = locate_spawn_entry(patch_id);
+                    if (!resolved.valid() || !resolved.owner_array || !resolved.owner_array->is_array()) {
+                        error = "Spawn group not found for reorder: " + patch_id;
+                        return false;
+                    }
+                    nlohmann::json& owner = *resolved.owner_array;
+                    size_t current_index = owner.size();
+                    for (size_t i = 0; i < owner.size(); ++i) {
+                        const auto& entry = owner[i];
+                        if (!entry.is_object()) continue;
+                        if (entry.value("spawn_id", std::string{}) == patch_id) {
+                            current_index = i;
+                            break;
+                        }
+                    }
+                    if (current_index >= owner.size()) {
+                        error = "Spawn group reorder source missing: " + patch_id;
+                        return false;
+                    }
+                    const size_t bounded_index = owner.empty() ? 0 : std::min(patch.to_index, owner.size() - 1);
+                    if (current_index != bounded_index) {
+                        nlohmann::json moved = std::move(owner[current_index]);
+                        owner.erase(owner.begin() + static_cast<nlohmann::json::difference_type>(current_index));
+                        owner.insert(owner.begin() + static_cast<nlohmann::json::difference_type>(std::min(bounded_index, owner.size())),
+                                     std::move(moved));
+                    }
+                    renumber_priorities(owner);
+                    sanitize_perimeter_spawn_groups(owner);
+                    touched_room = touched_room || (resolved.source == SpawnEntryResolution::Source::Room);
+                    touched_map = touched_map || (resolved.source == SpawnEntryResolution::Source::Map);
+                    SpawnEntryResolution post = locate_spawn_entry(patch_id);
+                    if (post.valid() && post.entry) {
+                        changed_entries.push_back(*post.entry);
+                    }
+                    break;
+                }
             }
         }
-        mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
-        if (sanitized || summary.method_changed || summary.quantity_changed || summary.candidates_changed ||
-            summary.resolution_changed) {
-            enqueue_spawn_group_work(entry, false, true, true, false, true);
-        }
-};
 
-    if (resolved.valid()) {
-        if (resolved.source == SpawnEntryResolution::Source::Room) {
-            const std::string spawn_id = *active_spawn_group_id_;
-            spawn_group_panel_->bind_entry_by_id(spawn_id,
-                                                 [this, spawn_id]() -> nlohmann::json* {
-                                                     SpawnEntryResolution lookup = locate_spawn_entry(spawn_id);
-                                                     return lookup.source == SpawnEntryResolution::Source::Room ? lookup.entry : nullptr;
-                                                 },
-                                                 on_change,
-                                                 on_entry_change,
-                                                 SpawnGroupConfig::EntryCallbacks{},
-                                                 configure_entry);
-        } else {
-            spawn_group_panel_->bind_entry(*resolved.entry,
-                                           map_on_change,
-                                           map_on_entry_change,
-                                           SpawnGroupConfig::EntryCallbacks{},
-                                           configure_entry);
+        if (touched_room) {
+            const bool committed = commit_room_edit_transaction(
+                []() { return true; },
+                "spawn group update",
+                false,
+                devmode::core::DevSaveCoordinator::Priority::Debounced);
+            if (!committed) {
+                error = "Failed to persist room spawn-group updates.";
+                return false;
+            }
         }
-    } else {
-        spawn_group_panel_->load(arr, on_change, on_entry_change, configure_entry);
-        spawn_group_panel_->restore_expanded_groups(reopen);
-        spawn_group_panel_->set_scroll_enabled(true);
+        if (touched_map) {
+            mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        }
+        if (assets_) {
+            for (const auto& spawn_id : removed_ids) {
+                assets_->notify_spawn_group_removed(spawn_id);
+            }
+            if (!removed_ids.empty()) {
+                assets_->refresh_active_asset_lists();
+                mark_highlight_dirty();
+            }
+        }
+        for (const auto& entry : changed_entries) {
+            enqueue_spawn_group_work(entry, true, true, true, true, true);
+        }
+        rebuild_room_spawn_id_cache();
+        return true;
+    };
+    spawn_group_panel_->set_callbacks(std::move(panel_callbacks));
+
+    std::vector<std::string> stable_ids;
+    stable_ids.reserve(arr.size());
+    for (const auto& item : arr) {
+        stable_ids.push_back(item.is_object() ? item.value("spawn_id", std::string{}) : std::string{});
     }
+    spawn_group_panel_->load(arr, stable_ids, configure_entry);
+    spawn_group_panel_->restore_expanded_groups(reopen);
+    spawn_group_panel_->set_scroll_enabled(true);
     update_spawn_group_config_anchor();
 }
 
@@ -16737,7 +16845,11 @@ void RoomEditor::update_spawn_group_config_anchor() {
         return;
     }
     spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
-    spawn_group_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    SDL_Rect work = DockManager::instance().usableRect();
+    if (work.w <= 0 || work.h <= 0) {
+        work = SDL_Rect{0, 0, screen_w_, screen_h_};
+    }
+    spawn_group_panel_->set_work_area(work);
     SDL_Point anchor = spawn_groups_anchor_point();
     spawn_group_panel_->set_anchor(anchor.x, anchor.y);
 }
@@ -16750,8 +16862,18 @@ SDL_Point RoomEditor::spawn_groups_anchor_point() const {
             reference = rect;
         }
     }
-    int anchor_x = reference.x + reference.w + 16;
-    int anchor_y = reference.y;
+    SDL_Rect work = DockManager::instance().usableRect();
+    if (work.w <= 0 || work.h <= 0) {
+        work = SDL_Rect{0, 0, screen_w_, screen_h_};
+    }
+    int anchor_x = reference.x + reference.w + kSpawnGroupAnchorXOffsetPx;
+    int anchor_y = reference.y + kSpawnGroupAnchorYOffsetPx;
+    const int safe_top = work.y + kSpawnGroupHeaderSafeZoneMarginPx;
+    anchor_y = std::max(anchor_y, safe_top);
+    const int max_x = std::max(work.x, work.x + work.w - 1);
+    const int max_y = std::max(work.y, work.y + work.h - 1);
+    anchor_x = std::clamp(anchor_x, work.x, max_x);
+    anchor_y = std::clamp(anchor_y, work.y, max_y);
     return SDL_Point{anchor_x, anchor_y};
 }
 
@@ -17211,26 +17333,25 @@ void RoomEditor::open_spawn_group_floating_panel(const std::string& spawn_id, st
 
     refresh_spawn_group_config_ui();
     update_spawn_group_config_anchor();
-    spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
-    spawn_group_panel_->set_work_area(DockManager::instance().usableRect());
-    spawn_group_panel_->reset_scroll();
-    spawn_group_panel_->open();
-    spawn_group_panel_->force_pointer_ready();
-
     SDL_Rect work = DockManager::instance().usableRect();
     if (work.w <= 0 || work.h <= 0) {
         work = SDL_Rect{0, 0, screen_w_, screen_h_};
     }
+    spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
+    spawn_group_panel_->set_work_area(work);
+    spawn_group_panel_->reset_scroll();
+    spawn_group_panel_->open();
+    spawn_group_panel_->force_pointer_ready();
 
     SDL_Point desired = screen_anchor.value_or(spawn_groups_anchor_point());
     if (screen_anchor) {
-        desired.x += 12;
-        desired.y += 12;
+        desired.x += kSpawnGroupFloatingAnchorOffsetPx;
+        desired.y += kSpawnGroupFloatingAnchorOffsetPx;
     }
 
     SDL_Rect rect = spawn_group_panel_->rect();
     const int width = std::max(rect.w, DockableCollapsible::kDefaultFloatingContentWidth);
-    const int height = std::max(rect.h, 420);
+    const int height = std::max(rect.h, kSpawnGroupFloatingMinHeightPx);
     const int max_x = std::max(work.x, work.x + work.w - width);
     const int max_y = std::max(work.y, work.y + work.h - height);
     const int min_x = work.x;

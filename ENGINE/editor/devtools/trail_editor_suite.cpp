@@ -106,9 +106,6 @@ void TrailEditorSuite::set_on_open_area(
     std::string stack_key) {
     on_open_area_ = std::move(cb);
     open_area_stack_key_ = std::move(stack_key);
-    if (configurator_) {
-        configurator_->set_spawn_area_open_callback(on_open_area_, open_area_stack_key_);
-    }
 }
 
 void TrailEditorSuite::ensure_ui() {
@@ -129,12 +126,6 @@ void TrailEditorSuite::ensure_ui() {
                     ? devmode::core::DevSaveCoordinator::Priority::Immediate
                     : devmode::core::DevSaveCoordinator::Priority::Debounced);
             });
-            configurator_->set_spawn_group_callbacks(
-                {},
-                [this](const std::string& id) { delete_spawn_group(id); },
-                [this](const std::string& id, size_t index) { reorder_spawn_group(id, index); },
-                [this]() { add_spawn_group(); });
-            configurator_->set_spawn_area_open_callback(on_open_area_, open_area_stack_key_);
         }
     }
     update_bounds();
@@ -183,10 +174,6 @@ void TrailEditorSuite::delete_spawn_group(const std::string& id) {
     sanitize_perimeter_spawn_groups(groups);
     enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
 
-    if (configurator_) {
-        configurator_->refresh_spawn_groups(active_trail_);
-        configurator_->notify_spawn_groups_mutated();
-    }
 }
 
 void TrailEditorSuite::reorder_spawn_group(const std::string& id, size_t new_index) {
@@ -234,10 +221,6 @@ void TrailEditorSuite::reorder_spawn_group(const std::string& id, size_t new_ind
     }
 
     enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
-    if (configurator_) {
-        configurator_->refresh_spawn_groups(active_trail_);
-        configurator_->notify_spawn_groups_mutated();
-    }
 }
 
 void TrailEditorSuite::add_spawn_group() {
@@ -253,10 +236,6 @@ void TrailEditorSuite::add_spawn_group() {
     groups.push_back(entry);
     sanitize_perimeter_spawn_groups(groups);
     enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
-    if (configurator_) {
-        configurator_->refresh_spawn_groups(active_trail_);
-        configurator_->notify_spawn_groups_mutated();
-    }
 }
 
 nlohmann::json* TrailEditorSuite::find_spawn_entry(const std::string& id) {

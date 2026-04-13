@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include "core/runtime_game_config.hpp"
+
 class Asset;
 class Assets;
 class Room;
@@ -49,6 +51,7 @@ struct ControllerGameContext {
     bool Flies_mad = false;
     FlyOrbitTargetSnapshot fly_orbit_target{};
     bool fly_orbit_target_changed = false;
+    const runtime::config::RuntimeGameConfig* runtime_config = nullptr;
 
     bool has_self() const;
     bool has_assets() const;
@@ -63,6 +66,9 @@ struct ControllerGameContext {
     bool player_in_current_room() const;
     bool self_and_player_share_room() const;
     void set_flies_mad() const;
+    bool has_runtime_config() const;
+    const runtime::config::RuntimeGameConfig& runtime_game_config() const;
+    const runtime::config::RandomOrbit3DControllerBehaviorConfig& fly_orbit_behavior_config() const;
 };
 
 ControllerGameContext build_controller_game_context(

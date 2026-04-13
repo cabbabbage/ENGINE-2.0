@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runtime_game_config.hpp"
+
 #include <cstddef>
 #include <memory>
 #include <vector>
@@ -24,9 +26,12 @@ public:
     const std::vector<std::unique_ptr<Room>>& owned_rooms() const { return owned_rooms_; }
 
     std::size_t topology_generation() const { return topology_generation_; }
+    runtime::config::RuntimeGameConfig& game_config() { return game_config_; }
+    const runtime::config::RuntimeGameConfig& game_config() const { return game_config_; }
 
 private:
     std::vector<std::unique_ptr<Room>> owned_rooms_;
     std::vector<Room*> rooms_view_;
     std::size_t topology_generation_ = 0;
+    runtime::config::RuntimeGameConfig game_config_{};
 };

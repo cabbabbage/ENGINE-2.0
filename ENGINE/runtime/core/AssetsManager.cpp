@@ -738,6 +738,24 @@ std::size_t Assets::rooms_generation() const {
     return world_context_ ? world_context_->topology_generation() : 0;
 }
 
+RuntimeWorldContext* Assets::runtime_world_context() {
+    return world_context_.get();
+}
+
+const RuntimeWorldContext* Assets::runtime_world_context() const {
+    return world_context_.get();
+}
+
+runtime::config::RuntimeGameConfig& Assets::runtime_game_config() {
+    static runtime::config::RuntimeGameConfig fallback{};
+    return world_context_ ? world_context_->game_config() : fallback;
+}
+
+const runtime::config::RuntimeGameConfig& Assets::runtime_game_config() const {
+    static const runtime::config::RuntimeGameConfig fallback{};
+    return world_context_ ? world_context_->game_config() : fallback;
+}
+
 void Assets::notify_rooms_changed() {
     if (world_context_) {
         world_context_->notify_topology_changed();

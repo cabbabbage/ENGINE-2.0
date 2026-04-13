@@ -3869,6 +3869,10 @@
       "can_invert": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
+      },
       "start": "default",
       "tags": [
         "bottle",
@@ -15041,7 +15045,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            138,
+            140,
             36,
             255
           ],
@@ -15136,15 +15140,15 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1018,
-          "camera_center_dz": -80,
-          "camera_height_px": 169,
+          "camera_center_dx": -1010,
+          "camera_center_dz": -231,
+          "camera_height_px": 272,
           "camera_tilt_deg": 30.751903533935547,
           "camera_zoom_percent": 33,
           "curvyness": 2,
           "display_color": [
             36,
-            149,
+            133,
             242,
             255
           ],

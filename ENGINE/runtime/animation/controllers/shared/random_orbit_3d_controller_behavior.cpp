@@ -62,6 +62,28 @@ bool same_world_pos(const axis::WorldPos& lhs, const axis::WorldPos& rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
 }
 
+bool almost_equal(double lhs, double rhs) {
+    return std::abs(lhs - rhs) <= 1e-6;
+}
+
+bool same_config(const RandomOrbit3DControllerBehaviorConfig& lhs,
+                 const RandomOrbit3DControllerBehaviorConfig& rhs) {
+    return lhs.visit_threshold_px == rhs.visit_threshold_px &&
+           lhs.orbit_radius_px == rhs.orbit_radius_px &&
+           lhs.orbit_vertical_amplitude_px == rhs.orbit_vertical_amplitude_px &&
+           lhs.orbit_segment_checkpoints == rhs.orbit_segment_checkpoints &&
+           lhs.orbit_enter_distance_px == rhs.orbit_enter_distance_px &&
+           lhs.orbit_exit_distance_px == rhs.orbit_exit_distance_px &&
+           lhs.approach_checkpoint_count == rhs.approach_checkpoint_count &&
+           lhs.approach_min_wave_px == rhs.approach_min_wave_px &&
+           lhs.approach_max_wave_px == rhs.approach_max_wave_px &&
+           lhs.approach_vertical_wave_px == rhs.approach_vertical_wave_px &&
+           almost_equal(lhs.orbit_angular_velocity_radians, rhs.orbit_angular_velocity_radians) &&
+           almost_equal(lhs.retarget_blend_step, rhs.retarget_blend_step) &&
+           lhs.debug_enabled == rhs.debug_enabled &&
+           lhs.override_non_locked == rhs.override_non_locked;
+}
+
 } // namespace
 
 RandomOrbit3DControllerBehavior::RandomOrbit3DControllerBehavior(
@@ -91,6 +113,41 @@ RandomOrbit3DControllerBehavior::RandomOrbit3DControllerBehavior(
     }
     if (self && self->anim_) {
         self->anim_->set_debug_enabled(config_.debug_enabled);
+    }
+}
+
+void RandomOrbit3DControllerBehavior::set_config(RandomOrbit3DControllerBehaviorConfig config) {
+    if (same_config(config_, config)) {
+        return;
+    }
+
+    const bool debug_changed = config_.debug_enabled != config.debug_enabled;
+    const bool radius_changed = config_.orbit_radius_px != config.orbit_radius_px;
+    const bool velocity_changed = !almost_equal(config_.orbit_angular_velocity_radians,
+                                                config.orbit_angular_velocity_radians);
+
+    config_ = config;
+
+    if (velocity_changed) {
+        const double sign = (angular_velocity_ < 0.0) ? -1.0 : 1.0;
+        angular_velocity_ = config_.orbit_angular_velocity_radians;
+        if (std::abs(angular_velocity_) < 1e-4) {
+            angular_velocity_ = 0.45;
+        }
+        angular_velocity_ = std::abs(angular_velocity_) * sign;
+    }
+
+    if (radius_changed) {
+        orbit_radius_goal_ =
+            std::max(24.0, static_cast<double>(config_.orbit_radius_px) * orbit_radius_jitter_(rng_));
+        orbit_radius_current_ = std::max(24.0, orbit_radius_current_);
+    }
+
+    if (debug_changed && controller_) {
+        Asset* self = controller_->self_ptr();
+        if (self && self->anim_) {
+            self->anim_->set_debug_enabled(config_.debug_enabled);
+        }
     }
 }
 

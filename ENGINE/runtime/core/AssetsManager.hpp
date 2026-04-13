@@ -3,6 +3,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
+#include "core/runtime_game_config.hpp"
 #include "utils/map_grid_settings.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -226,6 +227,10 @@ public:
     const std::vector<Room*>& rooms() const;
     void notify_rooms_changed();
     std::size_t rooms_generation() const;
+    RuntimeWorldContext* runtime_world_context();
+    const RuntimeWorldContext* runtime_world_context() const;
+    runtime::config::RuntimeGameConfig& runtime_game_config();
+    const runtime::config::RuntimeGameConfig& runtime_game_config() const;
 
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();

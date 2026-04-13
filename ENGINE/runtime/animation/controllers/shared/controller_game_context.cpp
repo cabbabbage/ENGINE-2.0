@@ -27,6 +27,11 @@ constexpr int kOrbitRadiusMax = 40;
 constexpr double kTwoPi = 6.28318530717958647692;
 constexpr std::uint64_t kGoldenRatio64 = 0x9e3779b97f4a7c15ULL;
 
+const runtime::config::RuntimeGameConfig& default_runtime_game_config() {
+    static const runtime::config::RuntimeGameConfig default_config{};
+    return default_config;
+}
+
 bool is_valid_player_target(const Asset* self, const Asset* player) {
     if (!self || !player || self == player) {
         return false;
@@ -329,6 +334,19 @@ void ControllerGameContext::set_flies_mad() const {
     const_cast<ControllerGameContext*>(this)->Flies_mad = true;
 }
 
+bool ControllerGameContext::has_runtime_config() const {
+    return runtime_config != nullptr;
+}
+
+const runtime::config::RuntimeGameConfig& ControllerGameContext::runtime_game_config() const {
+    return runtime_config ? *runtime_config : default_runtime_game_config();
+}
+
+const runtime::config::RandomOrbit3DControllerBehaviorConfig&
+ControllerGameContext::fly_orbit_behavior_config() const {
+    return runtime_game_config().fly_orbit_behavior;
+}
+
 ControllerGameContext build_controller_game_context(Asset* self,
                                                     Assets* assets,
                                                     const FlyOrbitTargetSnapshot* previous_orbit_target) {
@@ -338,6 +356,7 @@ ControllerGameContext build_controller_game_context(Asset* self,
     context.player = assets ? assets->player : nullptr;
     context.resolved_player = is_valid_player_target(self, context.player) ? context.player : nullptr;
     context.player_valid = context.resolved_player != nullptr;
+    context.runtime_config = assets ? &assets->runtime_game_config() : nullptr;
 
     if (previous_orbit_target) {
         context.fly_orbit_target = *previous_orbit_target;

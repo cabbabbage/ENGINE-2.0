@@ -10,30 +10,28 @@
 #include <iostream>
 #include "fly_controller.hpp"
 #include "assets/asset/Asset.hpp"
+#include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
+
+namespace {
+
+animation_update::custom_controllers::RandomOrbit3DControllerBehaviorConfig
+resolve_fly_orbit_behavior_config(Asset* self) {
+    if (!self) {
+        return runtime::config::make_default_fly_orbit_behavior_config();
+    }
+    Assets* owner_assets = self->get_assets();
+    if (!owner_assets) {
+        return runtime::config::make_default_fly_orbit_behavior_config();
+    }
+    return owner_assets->runtime_game_config().fly_orbit_behavior;
+}
+
+} // namespace
 
 fly_controller::fly_controller(Asset* self)
     : CustomAssetController(self),
-      orbit_behavior_(
-          this,
-          [] {
-              animation_update::custom_controllers::RandomOrbit3DControllerBehaviorConfig cfg{};
-              cfg.visit_threshold_px = 18;
-              cfg.orbit_radius_px = 10;
-              cfg.orbit_vertical_amplitude_px = 36;
-              cfg.orbit_segment_checkpoints = 4;
-              cfg.orbit_enter_distance_px = 280;
-              cfg.orbit_exit_distance_px = 420;
-              cfg.approach_checkpoint_count = 5;
-              cfg.approach_min_wave_px = 18;
-              cfg.approach_max_wave_px = 160;
-              cfg.approach_vertical_wave_px = 48;
-              cfg.orbit_angular_velocity_radians = 0.45;
-              cfg.retarget_blend_step = 0.35;
-              cfg.debug_enabled = false;
-              cfg.override_non_locked = true;
-              return cfg;
-          }()) {
+      orbit_behavior_(this, resolve_fly_orbit_behavior_config(self)) {
     Asset* owner = self_ptr();
     if (owner) {
         // Ensure the orbit behavior can issue its first movement plan immediately.
@@ -42,6 +40,7 @@ fly_controller::fly_controller(Asset* self)
 }
 
 void fly_controller::on_update(const Input& in) {
+    orbit_behavior_.set_config(game_context().fly_orbit_behavior_config());
     if(orbiting) {
         
         orbit_behavior_.tick(in, !orbiting);

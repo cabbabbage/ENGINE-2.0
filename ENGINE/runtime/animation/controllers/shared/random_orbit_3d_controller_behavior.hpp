@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core/axis_convention.hpp"
+#include "core/runtime_game_config.hpp"
 
 class Input;
 class Asset;
@@ -13,22 +14,8 @@ class CustomAssetController;
 
 namespace animation_update::custom_controllers {
 
-struct RandomOrbit3DControllerBehaviorConfig {
-    int visit_threshold_px = 48;
-    int orbit_radius_px = 180;
-    int orbit_vertical_amplitude_px = 36;
-    int orbit_segment_checkpoints = 4;
-    int orbit_enter_distance_px = 280;
-    int orbit_exit_distance_px = 420;
-    int approach_checkpoint_count = 5;
-    int approach_min_wave_px = 18;
-    int approach_max_wave_px = 160;
-    int approach_vertical_wave_px = 48;
-    double orbit_angular_velocity_radians = 0.45;
-    double retarget_blend_step = 0.35;
-    bool debug_enabled = false;
-    bool override_non_locked = true;
-};
+using RandomOrbit3DControllerBehaviorConfig =
+    runtime::config::RandomOrbit3DControllerBehaviorConfig;
 
 class RandomOrbit3DControllerBehavior {
 public:
@@ -40,6 +27,7 @@ public:
 
     RandomOrbit3DControllerBehavior(CustomAssetController* controller,
                                     RandomOrbit3DControllerBehaviorConfig config = {});
+    void set_config(RandomOrbit3DControllerBehaviorConfig config);
 
     void tick(const Input& in, bool mad);
 

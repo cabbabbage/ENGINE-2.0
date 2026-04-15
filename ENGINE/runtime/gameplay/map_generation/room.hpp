@@ -49,20 +49,21 @@ class Room {
     typedef std::pair<int, int> Point;
     using ManifestWriter = std::function<void(const std::string&, const nlohmann::json&)>;
     Room(Point origin,
-         std::string type_,
-         const std::string& room_def_name,
-         Room* parent,
-         const std::string& manifest_context,
-         AssetLibrary* asset_lib,
-         Area* precomputed_area,
-         nlohmann::json* room_data,
-         const MapGridSettings& grid_settings,
-         double map_radius,
-         const std::string& data_section,
-         nlohmann::json* map_info_root = nullptr,
-         devmode::core::ManifestStore* manifest_store = nullptr,
-         std::string manifest_map_id = {},
-         ManifestWriter manifest_writer = {});
+        std::string type_,
+        const std::string& room_def_name,
+        Room* parent,
+        const std::string& manifest_context,
+        AssetLibrary* asset_lib,
+        Area* precomputed_area,
+        nlohmann::json* room_data,
+        const MapGridSettings& grid_settings,
+        double map_radius,
+        const std::string& data_section,
+        nlohmann::json* map_info_root = nullptr,
+        devmode::core::ManifestStore* manifest_store = nullptr,
+        std::string manifest_map_id = {},
+        ManifestWriter manifest_writer = {},
+        bool auto_populate_assets = true);
     void set_sibling_left(Room* left_room);
     void set_sibling_right(Room* right_room);
     void add_connecting_room(Room* room);

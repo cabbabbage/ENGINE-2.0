@@ -12212,7 +12212,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 5.0,
+        "scale_percentage": 3.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -18566,7 +18566,7 @@
       "camera_settings": {
         "base_height_px": 720.0,
         "behind_layer_light_strength_multiplier": 1.809999942779541,
-        "blur_px": 0.0,
+        "blur_px": 0.07000000029802322,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
@@ -18588,7 +18588,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 0.20999999344348907,
+        "radial_blur_px": 2.869999885559082,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -18762,9 +18762,9 @@
           "camera_zoom_percent": 82,
           "curvyness": 2,
           "display_color": [
+            167,
             242,
             36,
-            241,
             255
           ],
           "edge_smoothness": 2,
@@ -19158,16 +19158,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": 75,
-          "camera_center_dz": 78,
-          "camera_height_px": 624,
-          "camera_tilt_deg": 42.9212646484375,
+          "camera_center_dx": -510,
+          "camera_center_dz": 120,
+          "camera_height_px": 265,
+          "camera_tilt_deg": 28.12126350402832,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -19672,6 +19672,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 16,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19701,6 +19702,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 17,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19730,6 +19732,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 18,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19759,6 +19762,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 19,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,

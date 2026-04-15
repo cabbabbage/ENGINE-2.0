@@ -1,8 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <array>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -12,17 +12,23 @@
 #include <unordered_map>
 #include <vector>
 
-#include "rendering/render/composite_asset_renderer.hpp"
+#include <SDL3/SDL.h>
+#include <nlohmann/json.hpp>
+
 #include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
-#include <SDL3/SDL.h>
-
-#include <nlohmann/json.hpp>
+#include "rendering/render/debug_overlay_renderer.hpp"
 
 class Assets;
+class Asset;
 class WarpedScreenGrid;
 class AssetLibrary;
+class FloorComposer;
+class BlurChainRenderer;
+class LayerStackRenderer;
+class LayerSubmissionBuilder;
+class SceneCompositePass;
 namespace world { class WorldGrid; }
 
 namespace render_internal {
@@ -85,9 +91,8 @@ std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_cou
                                                 std::size_t layer_count);
 std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
 std::vector<int> foreground_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
-}
+} // namespace render_internal
 
-// Geometry batching system for reducing draw calls
 class GeometryBatcher {
 public:
     explicit GeometryBatcher(SDL_Renderer* renderer);
@@ -99,18 +104,16 @@ public:
         double depth = 0.0;
     };
 
-    // Add a quad to the batch with depth for sorting
-    void addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4], const int indices[6],
-                 SDL_BlendMode blend_mode, double depth);
+    void addQuad(SDL_Texture* texture,
+                 const SDL_Vertex vertices[4],
+                 const int indices[6],
+                 SDL_BlendMode blend_mode,
+                 double depth);
 
-    // Flush all batches to the renderer
     void flush();
-
-    // Clear all batches (call at start of frame)
     void clear();
     void for_each_item_far_to_near(const std::function<void(const DrawItem&)>& fn) const;
 
-    // Get statistics for profiling
     size_t getDrawCallCount() const { return draw_call_count_; }
     size_t getTotalVertices() const { return total_vertices_; }
     double getLastFlushCpuMs() const { return last_flush_cpu_ms_; }
@@ -120,41 +123,24 @@ private:
         std::vector<DrawItem> items;
     };
 
-    SDL_Renderer* renderer_;
+    SDL_Renderer* renderer_ = nullptr;
     std::map<std::int64_t, DepthBucket> depth_buckets_;
     DepthBucket invalid_depth_bucket_;
     size_t draw_call_count_ = 0;
     size_t total_vertices_ = 0;
     double last_flush_cpu_ms_ = 0.0;
-
-    // Reusable buffers to avoid allocations
     std::vector<SDL_Vertex> vertex_buffer_;
     std::vector<int> index_buffer_;
 };
 
-class GridTileRenderer {
-public:
-    explicit GridTileRenderer(Assets* assets) : assets_(assets) {}
-
-    void render(SDL_Renderer* renderer);
-
-    void render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid);
-
-    void render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher);
-
-    // Call when tile textures are rebuilt or assets are reloaded
-    void invalidate_texture_cache();
-
-private:
-    bool fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size);
-
-    Assets* assets_ = nullptr;
-    std::unordered_map<SDL_Texture*, SDL_FPoint> texture_size_cache_;
-};
-
 class SceneRenderer {
 public:
-    SceneRenderer(SDL_Renderer* renderer, Assets* assets, int screen_width, int screen_height, const nlohmann::json& map_manifest, const std::string& map_id);
+    SceneRenderer(SDL_Renderer* renderer,
+                  Assets* assets,
+                  int screen_width,
+                  int screen_height,
+                  const nlohmann::json& map_manifest,
+                  const std::string& map_id);
     ~SceneRenderer();
 
     void invalidate_dynamic_boundary_system();
@@ -185,125 +171,66 @@ public:
     bool movement_debug_visible() const { return movement_debug_visible_; }
     void set_anchor_point_debug_enabled(bool enabled);
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
-    void set_map_clear_color(SDL_Color color) {
-        map_clear_color_ = color;
-    }
+    void set_map_clear_color(SDL_Color color) { map_clear_color_ = color; }
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
 private:
-    struct MovementDebugPathSnapshot {
-        std::vector<SDL_Point> world_points;
-        SDL_Color color{48, 200, 255, 220};
-    };
-
-    struct MovementDebugAssetSnapshot {
-        std::vector<MovementDebugPathSnapshot> paths;
-    };
-
-    struct MovementDebugObservedState {
-        std::string animation_id;
-        const class AnimationFrame* frame = nullptr;
-        bool frame_is_first = false;
-        bool frame_is_last = false;
-    };
-
     struct RuntimeLightFadeState {
         float intensity_current = 0.0f;
         std::uint64_t last_seen_frame = 0;
     };
 
-    struct RuntimeLightDebugOverlayEntry {
-        SDL_FPoint center{0.0f, 0.0f};
-        float radius = 0.0f;
-        bool rendered = false;
-    };
-
     struct PrevalidatedTag {};
 
-    SceneRenderer(PrevalidatedTag, SDL_Renderer* renderer, Assets* assets, int screen_width, int screen_height, const nlohmann::json& map_manifest, const std::string& map_id);
     static PrevalidatedTag require_prerequisites(SDL_Renderer* renderer, Assets* assets);
 
-    bool ensure_sky_texture();
-    void destroy_sky_texture();
-    bool ensure_mountain_texture();
-    void destroy_mountain_texture();
-    bool ensure_floor_background_textures();
-    SDL_Texture* ensure_floor_light_falloff_texture();
-    void render_floor_background_layer(const WarpedScreenGrid& cam,
-                                       const world::WorldGrid& grid,
-                                       const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-                                       bool runtime_lighting_enabled,
-                                       double max_cull_depth,
-                                       SDL_Texture* gameplay_target,
-                                       bool render_floor_tiles);
-    void render_sky_layer(const WarpedScreenGrid& cam,
-                          double anchor_depth,
-                          double max_cull_depth);
-    void render_mountain_layer(const WarpedScreenGrid& cam,
-                               double anchor_depth,
-                               double max_cull_depth);
-    void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
-    void render_movement_debug_snapshots(const WarpedScreenGrid& cam,
-                                         int screen_width,
-                                         int screen_height,
-                                         const std::vector<Asset*>& visible_assets) const;
+    SceneRenderer(PrevalidatedTag,
+                  SDL_Renderer* renderer,
+                  Assets* assets,
+                  int screen_width,
+                  int screen_height,
+                  const nlohmann::json& map_manifest,
+                  const std::string& map_id);
+
+    bool ensure_scene_target();
+    void collect_frame_geometry(const WarpedScreenGrid& cam,
+                                world::WorldGrid& grid,
+                                double anchor_depth,
+                                double max_cull_depth,
+                                std::vector<Asset*>& rendered_assets_for_debug);
     void gather_runtime_lights(const WarpedScreenGrid& cam,
                                const std::vector<Asset*>& rendered_assets,
                                std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
-    void render_light_culling_debug_overlay() const;
+    void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
 
-    SDL_Renderer*  renderer_;
-    Assets*        assets_;
-    int            screen_width_;
-    int            screen_height_;
-
-    std::unique_ptr<GridTileRenderer> tile_renderer_;
-    std::unique_ptr<GeometryBatcher> geometry_batcher_;
-
-    bool           debugging = false;
-    bool           low_quality_rendering_ = false;
-
-    std::uint64_t frame_counter_ = 0;
-
-    SDL_Color    map_clear_color_{0, 128, 0, 255};
-    bool         debug_auto_paths_ = true;
-    bool         movement_debug_visible_ = true;
-    bool         anchor_point_debug_enabled_ = false;
-    std::unordered_map<const Asset*, MovementDebugAssetSnapshot> movement_debug_snapshots_;
-    std::unordered_map<const Asset*, MovementDebugObservedState> movement_debug_observed_state_;
-    std::unordered_map<std::string, RuntimeLightFadeState> runtime_light_fade_states_;
-    std::vector<RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
-    std::uint32_t runtime_light_rendered_count_ = 0;
-    std::uint32_t runtime_light_culled_count_ = 0;
-    std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
-
-    CompositeAssetRenderer composite_renderer_;
-    LayerEffectProcessor layer_effect_processor_;
-    std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
+    SDL_Renderer* renderer_ = nullptr;
+    Assets* assets_ = nullptr;
+    int screen_width_ = 1;
+    int screen_height_ = 1;
+    SDL_Color map_clear_color_{69, 101, 74, 255};
 
     SDL_Texture* scene_composite_tex_ = nullptr;
-    SDL_Texture* postprocess_tex_     = nullptr;
-    SDL_Texture* blur_tex_            = nullptr;
-    SDL_Texture* background_seed_tex_ = nullptr;
-    SDL_Texture* background_mid_tex_ = nullptr;
-    SDL_Texture* foreground_mid_tex_ = nullptr;
-    SDL_Texture* chain_temp_tex_ = nullptr;
-    SDL_Texture* floor_base_texture_ = nullptr;
-    SDL_Texture* floor_light_mask_texture_ = nullptr;
-    SDL_Texture* floor_light_falloff_texture_ = nullptr;
-    std::vector<SDL_Texture*> dof_layer_textures_;
-    std::vector<SDL_Texture*> dof_dark_mask_textures_;
-    std::vector<SDL_Texture*> dof_lit_textures_;
-    std::vector<SDL_Texture*> dof_blur_textures_;
-    std::filesystem::path sky_texture_path_;
-    std::filesystem::path mountain_texture_path_;
-    double                map_radius_world_ = 0.0;
-    SDL_Texture*          sky_texture_       = nullptr;
-    int                   sky_texture_width_ = 0;
-    int                   sky_texture_height_ = 0;
-    bool                  sky_texture_failed_ = false;
-    SDL_Texture*          mountain_texture_ = nullptr;
-    int                   mountain_texture_width_ = 0;
-    int                   mountain_texture_height_ = 0;
-    bool                  mountain_texture_failed_ = false;
+    double map_radius_world_ = 0.0;
+
+    std::unique_ptr<GeometryBatcher> geometry_batcher_;
+    std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
+    std::unique_ptr<FloorComposer> floor_composer_;
+    std::unique_ptr<BlurChainRenderer> blur_chain_renderer_;
+    std::unique_ptr<LayerStackRenderer> layer_stack_renderer_;
+    std::unique_ptr<LayerSubmissionBuilder> layer_submission_builder_;
+    std::unique_ptr<SceneCompositePass> scene_composite_pass_;
+    std::unique_ptr<DebugOverlayRenderer> debug_overlay_renderer_;
+
+    bool debug_auto_paths_ = false;
+    bool movement_debug_visible_ = true;
+    bool anchor_point_debug_enabled_ = false;
+
+    std::unordered_map<const Asset*, render_debug::MovementDebugAssetSnapshot> movement_debug_snapshots_;
+    std::unordered_map<const Asset*, render_debug::MovementDebugObservedState> movement_debug_observed_state_;
+    std::vector<render_debug::RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
+
+    std::unordered_map<std::string, RuntimeLightFadeState> runtime_light_fade_states_;
+    std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
+    int runtime_light_rendered_count_ = 0;
+    int runtime_light_culled_count_ = 0;
 };

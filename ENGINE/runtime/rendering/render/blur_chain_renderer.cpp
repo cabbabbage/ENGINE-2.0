@@ -1,0 +1,398 @@
+#include "rendering/render/blur_chain_renderer.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <utility>
+#include <vector>
+
+#include "rendering/render/render.hpp"
+
+namespace {
+
+constexpr float kBlurEpsilon = 1.0e-4f;
+
+void destroy_texture(SDL_Texture*& texture) {
+    if (texture) {
+        SDL_DestroyTexture(texture);
+        texture = nullptr;
+    }
+}
+
+float sanitized_non_negative(float value) {
+    return (std::isfinite(value) && value > 0.0f) ? value : 0.0f;
+}
+
+} // namespace
+
+BlurChainRenderer::BlurChainRenderer(SDL_Renderer* renderer)
+    : renderer_(renderer),
+      blur_processor_(renderer) {}
+
+BlurChainRenderer::~BlurChainRenderer() {
+    destroy_targets();
+}
+
+void BlurChainRenderer::destroy_targets() {
+    destroy_texture(background_mid_tex_);
+    destroy_texture(foreground_mid_tex_);
+    destroy_texture(chain_temp_tex_);
+    destroy_texture(blur_work_tex_);
+}
+
+void BlurChainRenderer::set_output_dimensions(int screen_width, int screen_height) {
+    const int safe_w = std::max(1, screen_width);
+    const int safe_h = std::max(1, screen_height);
+    if (safe_w == screen_width_ && safe_h == screen_height_) {
+        return;
+    }
+
+    screen_width_ = safe_w;
+    screen_height_ = safe_h;
+    destroy_targets();
+}
+
+bool BlurChainRenderer::ensure_target(SDL_Texture*& texture) {
+    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
+        return false;
+    }
+
+    if (texture) {
+        float w = 0.0f;
+        float h = 0.0f;
+        if (SDL_GetTextureSize(texture, &w, &h) &&
+            static_cast<int>(std::lround(w)) == screen_width_ &&
+            static_cast<int>(std::lround(h)) == screen_height_) {
+            return true;
+        }
+        destroy_texture(texture);
+    }
+
+    texture = SDL_CreateTexture(renderer_,
+                                SDL_PIXELFORMAT_RGBA8888,
+                                SDL_TEXTUREACCESS_TARGET,
+                                screen_width_,
+                                screen_height_);
+    if (!texture) {
+        return false;
+    }
+
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    return true;
+}
+
+bool BlurChainRenderer::ensure_targets() {
+    return ensure_target(background_mid_tex_) &&
+           ensure_target(foreground_mid_tex_) &&
+           ensure_target(chain_temp_tex_) &&
+           ensure_target(blur_work_tex_);
+}
+
+void BlurChainRenderer::clear_target(SDL_Texture* texture) const {
+    if (!renderer_ || !texture) {
+        return;
+    }
+
+    SDL_SetRenderTarget(renderer_, texture);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+    SDL_RenderClear(renderer_);
+}
+
+bool BlurChainRenderer::copy_texture(SDL_Texture* src, SDL_Texture* dst) const {
+    if (!renderer_ || !src || !dst) {
+        return false;
+    }
+
+    clear_target(dst);
+    SDL_SetRenderTarget(renderer_, dst);
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    return true;
+}
+
+bool BlurChainRenderer::composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const {
+    if (!renderer_ || !src || !dst) {
+        return false;
+    }
+
+    SDL_SetRenderTarget(renderer_, dst);
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    return true;
+}
+
+bool BlurChainRenderer::blur_step(SDL_Texture* src,
+                                  SDL_Texture* dst,
+                                  SDL_Texture* blur_work,
+                                  float blur_px,
+                                  SDL_FPoint optical_center,
+                                  float radial_blur_px,
+                                  float quality_scale) const {
+    if (!src || !dst || !blur_work) {
+        return false;
+    }
+
+    const float safe_blur_px = sanitized_non_negative(blur_px);
+    const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
+    if (!render_internal::dof_blur_chain_enabled(true, safe_blur_px, safe_radial_blur_px)) {
+        return copy_texture(src, dst);
+    }
+
+    return blur_processor_.apply_lens_blur(src,
+                                           dst,
+                                           blur_work,
+                                           screen_width_,
+                                           screen_height_,
+                                           safe_blur_px,
+                                           optical_center,
+                                           safe_radial_blur_px,
+                                           quality_scale);
+}
+
+std::vector<int> BlurChainRenderer::build_repeat_schedule(std::size_t chain_size, int total_pass_budget) {
+    if (chain_size == 0 || total_pass_budget <= 0) {
+        return {};
+    }
+
+    std::vector<int> schedule(chain_size, 0);
+
+    const std::size_t pass_count = static_cast<std::size_t>(std::max(0, total_pass_budget));
+    for (std::size_t pass_index = 0; pass_index < pass_count; ++pass_index) {
+        const std::size_t slot =
+            std::min(chain_size - 1,
+                     ((pass_index + 1) * chain_size) / (pass_count + 1));
+        ++schedule[slot];
+    }
+
+    if (schedule.back() == 0) {
+        if (total_pass_budget > 0) {
+            ++schedule.back();
+        }
+    }
+
+    return schedule;
+}
+
+int BlurChainRenderer::compute_total_pass_budget(std::size_t chain_size,
+                                                 float blur_px,
+                                                 float radial_blur_px) {
+    if (chain_size == 0) {
+        return 0;
+    }
+
+    const float safe_blur_px = sanitized_non_negative(blur_px);
+    const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
+    const float max_radius = std::max(safe_blur_px, safe_radial_blur_px);
+
+    if (max_radius <= kBlurEpsilon) {
+        return 0;
+    }
+
+    int budget = 1;
+    if (max_radius >= 6.0f) {
+        budget = 2;
+    }
+    if (max_radius >= 16.0f) {
+        budget = 3;
+    }
+    if (max_radius >= 36.0f) {
+        budget = 4;
+    }
+
+    if (chain_size <= 1) {
+        budget = 1;
+    } else if (chain_size == 2) {
+        budget = std::min(budget, 2);
+    } else {
+        budget = std::min(budget, 3);
+    }
+
+    return std::max(0, budget);
+}
+
+float BlurChainRenderer::compute_quality_scale(int screen_width,
+                                               int screen_height,
+                                               float blur_px,
+                                               float radial_blur_px) {
+    const float safe_blur_px = sanitized_non_negative(blur_px);
+    const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
+    const float max_radius = std::max(safe_blur_px, safe_radial_blur_px);
+    const int min_dim = std::max(1, std::min(screen_width, screen_height));
+
+    if (max_radius <= 2.0f || min_dim <= 540) {
+        return 1.0f;
+    }
+    if (max_radius <= 6.0f) {
+        return 0.9f;
+    }
+    if (max_radius <= 12.0f) {
+        return 0.8f;
+    }
+    if (max_radius <= 24.0f) {
+        return 0.65f;
+    }
+    if (min_dim <= 720) {
+        return 0.6f;
+    }
+    return 0.5f;
+}
+
+bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
+                                      const std::vector<SDL_Texture*>& layer_textures,
+                                      SDL_Texture* seed_texture,
+                                      SDL_Texture* output_texture,
+                                      SDL_Texture* temp_texture,
+                                      bool blur_enabled,
+                                      float blur_px,
+                                      float radial_blur_px,
+                                      SDL_FPoint optical_center,
+                                      float blur_quality_scale,
+                                      bool& out_has_content) const {
+    out_has_content = false;
+    if (!renderer_ || !output_texture) {
+        return false;
+    }
+
+    clear_target(output_texture);
+
+    SDL_Texture* accum = output_texture;
+    SDL_Texture* temp = temp_texture;
+    bool initialized = false;
+
+    if (seed_texture) {
+        if (!copy_texture(seed_texture, accum)) {
+            return false;
+        }
+        initialized = true;
+        out_has_content = true;
+    }
+
+    if (chain.empty()) {
+        return true;
+    }
+
+    const int total_pass_budget =
+        blur_enabled ? compute_total_pass_budget(chain.size(), blur_px, radial_blur_px) : 0;
+    const std::vector<int> repeat_schedule =
+        blur_enabled ? build_repeat_schedule(chain.size(), total_pass_budget) : std::vector<int>{};
+
+    for (std::size_t step = 0; step < chain.size(); ++step) {
+        const int layer_index = chain[step];
+        if (layer_index < 0 || static_cast<std::size_t>(layer_index) >= layer_textures.size()) {
+            continue;
+        }
+
+        SDL_Texture* layer_texture = layer_textures[static_cast<std::size_t>(layer_index)];
+        if (!layer_texture) {
+            continue;
+        }
+
+        if (!initialized) {
+            if (!copy_texture(layer_texture, accum)) {
+                return false;
+            }
+            initialized = true;
+        } else {
+            if (!composite_texture_over(layer_texture, accum)) {
+                return false;
+            }
+        }
+        out_has_content = true;
+
+        const int repeat_count =
+            (step < repeat_schedule.size()) ? std::max(0, repeat_schedule[step]) : 0;
+        for (int pass = 0; pass < repeat_count; ++pass) {
+            if (!blur_step(accum,
+                           temp,
+                           blur_work_tex_,
+                           blur_px,
+                           optical_center,
+                           radial_blur_px,
+                           blur_quality_scale)) {
+                return false;
+            }
+            std::swap(accum, temp);
+        }
+    }
+
+    if (out_has_content && accum != output_texture) {
+        return copy_texture(accum, output_texture);
+    }
+
+    return true;
+}
+
+render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
+    const render_pipeline::LayerRenderResult& layer_render,
+    SDL_Texture* background_seed,
+    bool depth_of_field_enabled,
+    float blur_px,
+    float radial_blur_px,
+    SDL_FPoint optical_center) {
+    render_pipeline::BlurCompositeResult result{};
+    if (!renderer_ || !layer_render.valid || layer_render.non_empty_layers.empty()) {
+        return result;
+    }
+    if (!ensure_targets()) {
+        return result;
+    }
+
+    const float safe_blur_px = sanitized_non_negative(blur_px);
+    const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
+    const bool blur_enabled =
+        render_internal::dof_blur_chain_enabled(depth_of_field_enabled,
+                                                safe_blur_px,
+                                                safe_radial_blur_px);
+
+    const float blur_quality_scale =
+        blur_enabled
+            ? compute_quality_scale(screen_width_, screen_height_, safe_blur_px, safe_radial_blur_px)
+            : 1.0f;
+
+    const std::vector<int> background_chain =
+        render_internal::background_chain_layers(layer_render.non_empty_layers,
+                                                 layer_render.player_layer_index);
+    const std::vector<int> foreground_chain =
+        render_internal::foreground_chain_layers(layer_render.non_empty_layers,
+                                                 layer_render.player_layer_index);
+
+    bool background_has_content = false;
+    bool foreground_has_content = false;
+
+    if (!compose_chain(background_chain,
+                       layer_render.final_layer_textures,
+                       background_seed,
+                       background_mid_tex_,
+                       chain_temp_tex_,
+                       blur_enabled,
+                       safe_blur_px,
+                       safe_radial_blur_px,
+                       optical_center,
+                       blur_quality_scale,
+                       background_has_content)) {
+        return result;
+    }
+
+    if (!compose_chain(foreground_chain,
+                       layer_render.final_layer_textures,
+                       nullptr,
+                       foreground_mid_tex_,
+                       chain_temp_tex_,
+                       blur_enabled,
+                       safe_blur_px,
+                       safe_radial_blur_px,
+                       optical_center,
+                       blur_quality_scale,
+                       foreground_has_content)) {
+        return result;
+    }
+
+    result.valid = background_has_content || foreground_has_content;
+    result.background_mid = background_has_content ? background_mid_tex_ : nullptr;
+    result.foreground_mid = foreground_has_content ? foreground_mid_tex_ : nullptr;
+    return result;
+}

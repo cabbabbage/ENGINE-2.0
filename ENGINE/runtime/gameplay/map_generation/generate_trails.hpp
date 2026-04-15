@@ -29,7 +29,6 @@ public:
 
     std::vector<std::unique_ptr<Room>> generate_trails(
         const std::vector<std::pair<Room*, Room*>>& room_pairs,
-        const std::vector<Area>& existing_areas,
         const std::string& manifest_context,
         AssetLibrary* asset_lib,
         double map_radius,

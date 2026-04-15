@@ -240,24 +240,79 @@ std::vector<std::filesystem::path> normalize_sequence_paths(const std::vector<st
     return normalized;
 }
 
-nlohmann::json build_movement_sequence(int frame_count, int dx, int depth_dz) {
+nlohmann::json build_movement_sequence(int frame_count, int total_dx, int total_dy, int total_dz) {
     nlohmann::json movement = nlohmann::json::array();
     const int safe_frames = std::max(frame_count, 1);
     movement.get_ref<nlohmann::json::array_t&>().reserve(static_cast<std::size_t>(safe_frames));
+
+    auto distribute_component = [safe_frames](int total) {
+        std::vector<int> values(static_cast<std::size_t>(safe_frames), 0);
+        if (safe_frames <= 0) {
+            return values;
+        }
+        const int base = total / safe_frames;
+        int remainder = total % safe_frames;
+        for (int i = 0; i < safe_frames; ++i) {
+            values[static_cast<std::size_t>(i)] = base;
+            if (remainder > 0) {
+                ++values[static_cast<std::size_t>(i)];
+                --remainder;
+            } else if (remainder < 0) {
+                --values[static_cast<std::size_t>(i)];
+                ++remainder;
+            }
+        }
+        return values;
+    };
+
+    const std::vector<int> dx_frames = distribute_component(total_dx);
+    const std::vector<int> dy_frames = distribute_component(total_dy);
+    const std::vector<int> dz_frames = distribute_component(total_dz);
     for (int i = 0; i < safe_frames; ++i) {
-        const bool first = (i == 0);
-        const int frame_dx = first ? 0 : dx;
-        const int frame_dz = first ? 0 : depth_dz;
-        movement.push_back(nlohmann::json::object({
-            {"x", frame_dx},
-            {"y", 0},
-            {"z", frame_dz},
-            {"dx", frame_dx},
-            {"dy", 0},
-            {"dz", frame_dz},
-        }));
+        const int frame_dx = dx_frames[static_cast<std::size_t>(i)];
+        const int frame_dy = dy_frames[static_cast<std::size_t>(i)];
+        const int frame_dz = dz_frames[static_cast<std::size_t>(i)];
+        movement.push_back(nlohmann::json::array({frame_dx, frame_dy, frame_dz}));
     }
     return movement;
+}
+
+nlohmann::json build_empty_geometry_frames(int frame_count) {
+    nlohmann::json frames = nlohmann::json::array();
+    const int safe_frames = std::max(frame_count, 1);
+    frames.get_ref<nlohmann::json::array_t&>().reserve(static_cast<std::size_t>(safe_frames));
+    for (int i = 0; i < safe_frames; ++i) {
+        frames.push_back(nlohmann::json::array());
+    }
+    return frames;
+}
+
+nlohmann::json build_movement_total(const nlohmann::json& movement) {
+    int total_dx = 0;
+    int total_dy = 0;
+    int total_dz = 0;
+    if (movement.is_array()) {
+        for (std::size_t i = 0; i < movement.size(); ++i) {
+            const auto& entry = movement[i];
+            if (!entry.is_array()) {
+                continue;
+            }
+            if (entry.size() > 0 && entry[0].is_number()) {
+                total_dx += static_cast<int>(std::lround(entry[0].get<double>()));
+            }
+            if (entry.size() > 1 && entry[1].is_number()) {
+                total_dy += static_cast<int>(std::lround(entry[1].get<double>()));
+            }
+            if (entry.size() > 2 && entry[2].is_number()) {
+                total_dz += static_cast<int>(std::lround(entry[2].get<double>()));
+            }
+        }
+    }
+    return nlohmann::json::object({
+        {"dx", total_dx},
+        {"dy", total_dy},
+        {"dz", total_dz},
+    });
 }
 
 std::string default_audio_subdir() { return "audio"; }
@@ -323,7 +378,9 @@ nlohmann::json build_folder_payload(const std::filesystem::path& folder) {
         nlohmann::json payload = {
             {"locked", false},
             {"reverse_source", false},
-            {"flipped_source", false},
+            {"invert_x", false},
+            {"invert_y", false},
+            {"invert_z", false},
             {"rnd_start", false},
             {"on_end", "default"},
             {"source",
@@ -609,18 +666,20 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         std::cerr << "[AnimationEditor] Manifest store unavailable; animations will not persist for '" << info->name << "'\n";
     }
 
-    if (has_animation_entries(info_snapshot)) {
-        snapshot = std::move(info_snapshot);
-        recovery_source = SnapshotRecoverySource::AssetMetadata;
-        seed_transaction_with_recovery = true;
-        std::cerr << "[AnimationEditor] Using animations from AssetInfo for '" << info->name << "'\n";
-    } else if (manifest_transaction_) {
+    if (manifest_transaction_) {
         nlohmann::json manifest_data = manifest_transaction_.data();
         if (has_animation_entries(manifest_data)) {
             snapshot = std::move(manifest_data);
             recovery_source = SnapshotRecoverySource::Manifest;
             std::cerr << "[AnimationEditor] Loaded animations from manifest for '" << info->name << "'\n";
         }
+    }
+
+    if (!has_animation_entries(snapshot) && has_animation_entries(info_snapshot)) {
+        snapshot = std::move(info_snapshot);
+        recovery_source = SnapshotRecoverySource::AssetMetadata;
+        seed_transaction_with_recovery = true;
+        std::cerr << "[AnimationEditor] Using animations from AssetInfo for '" << info->name << "'\n";
     }
 
     if (!has_animation_entries(snapshot)) {
@@ -1240,9 +1299,29 @@ void AnimationEditorWindow::delete_animation_with_confirmation(const std::string
         return;
     }
 
+    std::string source_delete_error;
+    std::string cache_delete_error;
+    const bool removed_source_folder = remove_animation_source_folder(animation_id, source_delete_error);
+    const bool removed_cache_folder = remove_animation_cache_folder(animation_id, cache_delete_error);
+
+    if (!removed_source_folder && !source_delete_error.empty()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] %s",
+                    source_delete_error.c_str());
+    }
+    if (!removed_cache_folder && !cache_delete_error.empty()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] %s",
+                    cache_delete_error.c_str());
+    }
+
     document_->delete_animation(animation_id);
     preview_provider_->invalidate(animation_id);
-    set_status_message("Deleted animation '" + animation_id + "'.", 240);
+    if (!removed_source_folder || !removed_cache_folder) {
+        set_status_message("Deleted animation '" + animation_id + "' (some files could not be removed).", 300);
+    } else {
+        set_status_message("Deleted animation '" + animation_id + "'.", 240);
+    }
     if (list_context_menu_) {
         list_context_menu_->close();
     }
@@ -1428,13 +1507,19 @@ void AnimationEditorWindow::set_status_message(const std::string& message, int f
 
 void AnimationEditorWindow::ensure_defaults_modal_widgets() {
     if (!defaults_diagonals_checkbox_) {
-        defaults_diagonals_checkbox_ = std::make_unique<DMCheckbox>("Diagonals", true);
+        defaults_diagonals_checkbox_ = std::make_unique<DMCheckbox>("Ground Diagonals", true);
     }
     if (!defaults_basic_movement_checkbox_) {
         defaults_basic_movement_checkbox_ = std::make_unique<DMCheckbox>("Basic Movement", true);
     }
+    if (!defaults_elevation_checkbox_) {
+        defaults_elevation_checkbox_ = std::make_unique<DMCheckbox>("Elevation", false);
+    }
+    if (!defaults_3d_diagonals_checkbox_) {
+        defaults_3d_diagonals_checkbox_ = std::make_unique<DMCheckbox>("3D Diagonals (8-Way)", false);
+    }
     if (!defaults_distance_box_) {
-        defaults_distance_box_ = std::make_unique<DMTextBox>("Distance per frame", "5");
+        defaults_distance_box_ = std::make_unique<DMTextBox>("Total movement per animation", "5");
     }
     if (!defaults_base_frames_button_) {
         defaults_base_frames_button_ = std::make_unique<DMButton>("Add Base Movement Animation", &DMStyles::AccentButton(), 260, DMButton::height());
@@ -1470,7 +1555,7 @@ void AnimationEditorWindow::layout_defaults_modal() {
     ensure_defaults_modal_widgets();
 
     const int modal_width = std::clamp(bounds_.w - 120, 460, 720);
-    const int modal_height = 360;
+    const int modal_height = 430;
     defaults_modal_rect_ = SDL_Rect{
         bounds_.x + std::max(0, (bounds_.w - modal_width) / 2),
         bounds_.y + std::max(0, (bounds_.h - modal_height) / 2),
@@ -1484,12 +1569,20 @@ void AnimationEditorWindow::layout_defaults_modal() {
     const int content_w = std::max(0, defaults_modal_rect_.w - padding * 2);
     int y = defaults_modal_rect_.y + padding + DMStyles::Label().font_size + row_gap + 6;
 
+    if (defaults_basic_movement_checkbox_) {
+        defaults_basic_movement_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
+        y += DMCheckbox::height() + row_gap;
+    }
     if (defaults_diagonals_checkbox_) {
         defaults_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
         y += DMCheckbox::height() + row_gap;
     }
-    if (defaults_basic_movement_checkbox_) {
-        defaults_basic_movement_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
+    if (defaults_elevation_checkbox_) {
+        defaults_elevation_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
+        y += DMCheckbox::height() + row_gap;
+    }
+    if (defaults_3d_diagonals_checkbox_) {
+        defaults_3d_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
         y += DMCheckbox::height() + row_gap;
     }
     if (defaults_distance_box_) {
@@ -1529,10 +1622,16 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
     layout_defaults_modal();
 
     bool consumed = false;
+    if (defaults_basic_movement_checkbox_ && defaults_basic_movement_checkbox_->handle_event(e)) {
+        consumed = true;
+    }
     if (defaults_diagonals_checkbox_ && defaults_diagonals_checkbox_->handle_event(e)) {
         consumed = true;
     }
-    if (defaults_basic_movement_checkbox_ && defaults_basic_movement_checkbox_->handle_event(e)) {
+    if (defaults_elevation_checkbox_ && defaults_elevation_checkbox_->handle_event(e)) {
+        consumed = true;
+    }
+    if (defaults_3d_diagonals_checkbox_ && defaults_3d_diagonals_checkbox_->handle_event(e)) {
         consumed = true;
     }
     if (defaults_distance_box_ && defaults_distance_box_->handle_event(e)) {
@@ -1622,10 +1721,12 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
     int title_y = defaults_modal_rect_.y + padding;
     render_label(renderer, "Create Defaults", title_x, title_y);
     title_y += DMStyles::Label().font_size + DMSpacing::small_gap();
-    render_label(renderer, "Generate or replace movement animations from selected base frames.", title_x, title_y);
+    render_label(renderer, "Generate canonical [dx, dy, dz] data (per-frame = total / frames).", title_x, title_y);
 
-    if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
     if (defaults_basic_movement_checkbox_) defaults_basic_movement_checkbox_->render(renderer);
+    if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
+    if (defaults_elevation_checkbox_) defaults_elevation_checkbox_->render(renderer);
+    if (defaults_3d_diagonals_checkbox_) defaults_3d_diagonals_checkbox_->render(renderer);
     if (defaults_distance_box_) defaults_distance_box_->render(renderer);
     if (defaults_base_frames_button_) defaults_base_frames_button_->render(renderer);
     if (defaults_create_button_) defaults_create_button_->render(renderer);
@@ -1670,7 +1771,7 @@ void AnimationEditorWindow::handle_pick_defaults_base_frames() {
     set_status_message("Selected " + std::to_string(defaults_base_frame_paths_.size()) + " base frame(s).", 180);
 }
 
-std::optional<int> AnimationEditorWindow::parse_defaults_distance_per_frame() const {
+std::optional<int> AnimationEditorWindow::parse_defaults_total_movement() const {
     if (!defaults_distance_box_) {
         return std::nullopt;
     }
@@ -1744,22 +1845,105 @@ bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& a
     return copied > 0;
 }
 
+bool AnimationEditorWindow::remove_animation_source_folder(const std::string& animation_id,
+                                                           std::string& error_message) {
+    error_message.clear();
+    if (asset_root_path_.empty() || animation_id.empty()) {
+        return true;
+    }
+
+    const std::filesystem::path source_root = asset_root_path_.lexically_normal();
+    const std::filesystem::path target_folder = (source_root / animation_id).lexically_normal();
+    if (!path_has_prefix(target_folder, source_root)) {
+        error_message = "Refusing to delete animation source folder outside asset root: '" + target_folder.generic_string() + "'";
+        return false;
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::exists(target_folder, ec)) {
+        return true;
+    }
+    ec.clear();
+    std::filesystem::remove_all(target_folder, ec);
+    if (ec) {
+        error_message = "Failed to delete animation source folder '" + target_folder.generic_string() + "': " + ec.message();
+        return false;
+    }
+    return true;
+}
+
+bool AnimationEditorWindow::remove_animation_cache_folder(const std::string& animation_id,
+                                                          std::string& error_message) {
+    error_message.clear();
+    if (animation_id.empty()) {
+        return true;
+    }
+
+    std::string asset_cache_key;
+    if (auto info_ptr = info_.lock()) {
+        asset_cache_key = info_ptr->name;
+    }
+    if (asset_cache_key.empty()) {
+        asset_cache_key = asset_root_path_.filename().string();
+    }
+    if (asset_cache_key.empty()) {
+        return true;
+    }
+
+    const std::filesystem::path cache_root = std::filesystem::path("cache").lexically_normal();
+    const std::filesystem::path cache_animations_root = (cache_root / asset_cache_key / "animations").lexically_normal();
+    const std::filesystem::path target_folder = (cache_animations_root / animation_id).lexically_normal();
+    if (!path_has_prefix(target_folder, cache_animations_root)) {
+        error_message = "Refusing to delete animation cache folder outside cache root: '" + target_folder.generic_string() + "'";
+        return false;
+    }
+
+    std::error_code ec;
+    if (std::filesystem::exists(target_folder, ec)) {
+        ec.clear();
+        std::filesystem::remove_all(target_folder, ec);
+        if (ec) {
+            error_message = "Failed to delete animation cache folder '" + target_folder.generic_string() + "': " + ec.message();
+            return false;
+        }
+    }
+
+    const std::filesystem::path bundle_path = (cache_root / asset_cache_key / "bundle.bin").lexically_normal();
+    if (path_has_prefix(bundle_path, cache_root) && std::filesystem::exists(bundle_path, ec)) {
+        ec.clear();
+        std::filesystem::remove(bundle_path, ec);
+        if (ec) {
+            error_message = "Deleted animation cache folder but failed to delete bundle cache '" + bundle_path.generic_string() + "': " + ec.message();
+            return false;
+        }
+    }
+
+    return true;
+}
+
 nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const std::string& animation_id,
                                                                           int frame_count,
                                                                           int dx,
-                                                                          int depth_dz) const {
+                                                                          int dy,
+                                                                          int dz) const {
+    const int safe_frames = std::max(frame_count, 1);
     nlohmann::json payload = nlohmann::json::object();
     payload["source"] = nlohmann::json::object({
         {"kind", "folder"},
         {"path", animation_id},
         {"name", ""}
     });
-    payload["number_of_frames"] = std::max(frame_count, 1);
-    payload["movement"] = build_movement_sequence(frame_count, dx, depth_dz);
+    payload["number_of_frames"] = safe_frames;
+    payload["movement"] = build_movement_sequence(safe_frames, dx, dy, dz);
+    payload["movement_total"] = build_movement_total(payload["movement"]);
+    payload["anchor_points"] = build_empty_geometry_frames(safe_frames);
+    payload["hit_boxes"] = build_empty_geometry_frames(safe_frames);
+    payload["attack_boxes"] = build_empty_geometry_frames(safe_frames);
     payload["locked"] = false;
     payload["reverse_source"] = false;
-    payload["flipped_source"] = false;
-    payload["flip_vertical_source"] = false;
+    payload["invert_x"] = false;
+    payload["invert_y"] = false;
+    payload["invert_z"] = false;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
     return payload;
@@ -1768,27 +1952,36 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
 nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::string& animation_id,
                                                                      const std::string& source_animation_id,
                                                                      int frame_count,
-                                                                     bool flip_x,
-                                                                     bool flip_y) const {
+                                                                     int dx,
+                                                                     int dy,
+                                                                     int dz,
+                                                                     bool invert_frames_horizontal) const {
     (void)animation_id;
+    const int safe_frames = std::max(frame_count, 1);
     nlohmann::json payload = nlohmann::json::object();
     payload["source"] = nlohmann::json::object({
         {"kind", "animation"},
         {"path", ""},
         {"name", source_animation_id}
     });
-    payload["number_of_frames"] = std::max(frame_count, 1);
-    payload["inherit_data"] = true;
+    payload["number_of_frames"] = safe_frames;
+    payload["inherit_data"] = false;
+    payload["movement"] = build_movement_sequence(safe_frames, dx, dy, dz);
+    payload["movement_total"] = build_movement_total(payload["movement"]);
+    payload["anchor_points"] = build_empty_geometry_frames(safe_frames);
+    payload["hit_boxes"] = build_empty_geometry_frames(safe_frames);
+    payload["attack_boxes"] = build_empty_geometry_frames(safe_frames);
     payload["locked"] = false;
     payload["reverse_source"] = false;
-    payload["flipped_source"] = false;
-    payload["flip_vertical_source"] = flip_y;
+    payload["invert_x"] = false;
+    payload["invert_y"] = false;
+    payload["invert_z"] = false;
+    payload["invert_frames_horizontal"] = invert_frames_horizontal;
+    payload["invert_frames_vertical"] = false;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
     payload["derived_modifiers"] = nlohmann::json::object({
-        {"reverse", false},
-        {"flipX", flip_x},
-        {"flipY", flip_y}
+        {"reverse", false}
     });
     return payload;
 }
@@ -1833,9 +2026,11 @@ void AnimationEditorWindow::handle_create_defaults() {
         return;
     }
 
-    const bool create_diagonals = defaults_diagonals_checkbox_ && defaults_diagonals_checkbox_->value();
     const bool create_basic = defaults_basic_movement_checkbox_ && defaults_basic_movement_checkbox_->value();
-    if (!create_diagonals && !create_basic) {
+    const bool create_diagonals = defaults_diagonals_checkbox_ && defaults_diagonals_checkbox_->value();
+    const bool create_elevation = defaults_elevation_checkbox_ && defaults_elevation_checkbox_->value();
+    const bool create_3d_diagonals = defaults_3d_diagonals_checkbox_ && defaults_3d_diagonals_checkbox_->value();
+    if (!create_basic && !create_diagonals && !create_elevation && !create_3d_diagonals) {
         set_status_message("Select at least one defaults group.", 180);
         return;
     }
@@ -1853,24 +2048,24 @@ void AnimationEditorWindow::handle_create_defaults() {
     }
     base_frames = normalize_sequence_paths(base_frames);
 
-    std::optional<int> distance_per_frame = parse_defaults_distance_per_frame();
-    if (!distance_per_frame.has_value()) {
-        set_status_message("Distance per frame must be a positive integer.", 180);
+    std::optional<int> total_movement_per_animation = parse_defaults_total_movement();
+    if (!total_movement_per_animation.has_value()) {
+        set_status_message("Total movement per animation must be a positive integer.", 180);
         return;
     }
 
-    const int d = *distance_per_frame;
+    const int d = *total_movement_per_animation;
     const int frame_count = static_cast<int>(base_frames.size());
     bool ok = true;
     std::vector<std::string> created_ids;
 
-    auto create_file_based = [&](const std::string& id, int dx, int depth_dz) {
+    auto create_file_based = [&](const std::string& id, int dx, int dy, int dz) {
         if (!ok) return;
         if (!copy_frames_to_animation_folder(id, base_frames)) {
             ok = false;
             return;
         }
-        nlohmann::json payload = build_file_sourced_movement_payload(id, frame_count, dx, depth_dz);
+        nlohmann::json payload = build_file_sourced_movement_payload(id, frame_count, dx, dy, dz);
         if (!create_or_replace_animation_payload(id, payload)) {
             ok = false;
             return;
@@ -1880,10 +2075,13 @@ void AnimationEditorWindow::handle_create_defaults() {
 
     auto create_derived = [&](const std::string& id,
                               const std::string& source,
-                              bool flip_x,
-                              bool flip_y) {
+                              int dx,
+                              int dy,
+                              int dz,
+                              bool invert_frames_horizontal) {
         if (!ok) return;
-        nlohmann::json payload = build_derived_movement_payload(id, source, frame_count, flip_x, flip_y);
+        nlohmann::json payload =
+            build_derived_movement_payload(id, source, frame_count, dx, dy, dz, invert_frames_horizontal);
         if (!create_or_replace_animation_payload(id, payload)) {
             ok = false;
             return;
@@ -1891,18 +2089,35 @@ void AnimationEditorWindow::handle_create_defaults() {
         created_ids.push_back(id);
     };
 
-    if (create_diagonals) {
-        create_file_based("up_left", -d, -d);
-        create_derived("up_right", "up_left", true, false);
-        create_derived("down_left", "up_left", false, true);
-        create_derived("down_right", "up_left", true, true);
+    if (create_basic) {
+        create_file_based("left", -d, 0, 0);
+        create_file_based("right", d, 0, 0);
+        create_file_based("forward", 0, 0, -d);
+        create_file_based("backward", 0, 0, d);
     }
 
-    if (create_basic) {
-        create_file_based("up", 0, -d);
-        create_file_based("left", -d, 0);
-        create_derived("down", "up", false, true);
-        create_derived("right", "left", true, false);
+    if (create_diagonals) {
+        create_file_based("forward_left", -d, 0, -d);
+        create_file_based("forward_right", d, 0, -d);
+        create_file_based("backward_left", -d, 0, d);
+        create_file_based("backward_right", d, 0, d);
+    }
+
+    if (create_elevation) {
+        create_file_based("up", 0, d, 0);
+        create_file_based("down", 0, -d, 0);
+    }
+
+    if (create_3d_diagonals) {
+        create_file_based("up_forward_left", -d, d, -d);
+        create_derived("up_forward_right", "up_forward_left", d, d, -d, true);
+        create_derived("up_backward_left", "up_forward_left", -d, d, d, false);
+        create_derived("up_backward_right", "up_forward_left", d, d, d, true);
+
+        create_file_based("down_forward_left", -d, -d, -d);
+        create_derived("down_forward_right", "down_forward_left", d, -d, -d, true);
+        create_derived("down_backward_left", "down_forward_left", -d, -d, d, false);
+        create_derived("down_backward_right", "down_forward_left", d, -d, d, true);
     }
 
     if (!ok) {
@@ -2119,7 +2334,7 @@ void AnimationEditorWindow::process_auto_save() {
         return;
     }
 
-    document_->save_to_file();
+    document_->save_to_file_checked(true);
     if (using_manifest_store_) {
         set_status_message("Animations auto-saved.", 180);
     }

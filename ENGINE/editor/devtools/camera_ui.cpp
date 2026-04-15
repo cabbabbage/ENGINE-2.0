@@ -44,6 +44,48 @@ private:
     int height_ = 0;
 };
 
+class SectionToggleWidget : public Widget {
+public:
+    SectionToggleWidget(std::string title,
+                        std::function<bool()> expanded_getter,
+                        std::function<void()> on_toggle)
+        : title_(std::move(title)),
+          expanded_getter_(std::move(expanded_getter)),
+          on_toggle_(std::move(on_toggle)),
+          button_(compose_label(), &DMStyles::SecondaryButton(), 1, DMButton::height()) {}
+
+    void set_rect(const SDL_Rect& r) override { button_.set_rect(r); }
+    const SDL_Rect& rect() const override { return button_.rect(); }
+    int height_for_width(int) const override { return DMButton::height(); }
+    bool wants_full_row() const override { return true; }
+
+    bool handle_event(const SDL_Event& e) override {
+        bool used = button_.handle_event(e);
+        if (used &&
+            e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            e.button.button == SDL_BUTTON_LEFT &&
+            on_toggle_) {
+            on_toggle_();
+            button_.set_text(compose_label());
+        }
+        return used;
+    }
+
+    void render(SDL_Renderer* renderer) const override { button_.render(renderer); }
+
+private:
+    std::string compose_label() const {
+        const bool expanded = expanded_getter_ ? expanded_getter_() : true;
+        return std::string(expanded ? "[-] " : "[+] ") + title_;
+    }
+
+private:
+    std::string title_;
+    std::function<bool()> expanded_getter_;
+    std::function<void()> on_toggle_;
+    DMButton button_;
+};
+
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     : DockableCollapsible("Camera Settings", true, x, y),
@@ -72,16 +114,19 @@ void CameraUIPanel::set_dirty_callback(std::function<void()> callback) {
 
 void CameraUIPanel::open() {
     set_visible(true);
+    sync_runtime_lighting_state_with_visibility();
     suppress_apply_once_ = true;
     sync_from_camera();
 }
 
 void CameraUIPanel::close() {
     set_visible(false);
+    sync_runtime_lighting_state_with_visibility();
 }
 
 void CameraUIPanel::toggle() {
     set_visible(!is_visible());
+    sync_runtime_lighting_state_with_visibility();
     if (is_visible()) {
         suppress_apply_once_ = true;
         sync_from_camera();
@@ -102,6 +147,9 @@ void CameraUIPanel::update(const Input& input, int screen_w, int screen_h) {
 
         suppress_apply_once_ = true;
         sync_from_camera();
+    }
+    if (currently_visible != previously_visible) {
+        sync_runtime_lighting_state_with_visibility();
     }
     was_visible_ = currently_visible;
 
@@ -145,10 +193,12 @@ void CameraUIPanel::sync_from_camera() {
     if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
     if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
     if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
-    if (fog_thickness_slider_) fog_thickness_slider_->set_value(settings.fog_thickness);
-    if (fog_bottom_curve_slider_) fog_bottom_curve_slider_->set_value(settings.fog_bottom_curve);
-    if (aperture_f_stop_slider_) aperture_f_stop_slider_->set_value(settings.aperture_f_stop);
-    if (focal_length_mm_slider_) focal_length_mm_slider_->set_value(settings.focal_length_mm);
+    if (front_layer_light_strength_multiplier_slider_) {
+        front_layer_light_strength_multiplier_slider_->set_value(settings.front_layer_light_strength_multiplier);
+    }
+    if (behind_layer_light_strength_multiplier_slider_) {
+        behind_layer_light_strength_multiplier_slider_->set_value(settings.behind_layer_light_strength_multiplier);
+    }
     if (blur_px_slider_) blur_px_slider_->set_value(settings.blur_px);
     if (radial_blur_px_slider_) radial_blur_px_slider_->set_value(settings.radial_blur_px);
     if (depth_of_field_checkbox_) {
@@ -203,6 +253,7 @@ void CameraUIPanel::build_ui() {
         "Cull dynamically spawned boundary assets once their height drops below this fraction of the screen (0.01 = 1%).");
     boundary_min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     max_cull_depth_slider_ = std::make_unique<FloatSliderWidget>("Max Cull Depth", 1.0f, 50000.0f, 1.0f, defaults.max_cull_depth, 0);
+    max_cull_depth_slider_->set_tooltip("Maximum depth considered for scene layers and light falloff. Higher values add distant detail but can increase rendering work.");
     max_cull_depth_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     layer_depth_interval_slider_ = std::make_unique<FloatSliderWidget>(
         "Layer Depth Interval",
@@ -222,29 +273,28 @@ void CameraUIPanel::build_ui() {
         2);
     layer_depth_curve_slider_->set_tooltip("Non-linear bin growth with distance. Higher values create fewer far-depth layers.");
     layer_depth_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    fog_thickness_slider_ = std::make_unique<FloatSliderWidget>(
-        "Fog Thickness",
+    front_layer_light_strength_multiplier_slider_ = std::make_unique<FloatSliderWidget>(
+        "Front Layer Light Strength",
         0.0f,
         4.0f,
         0.01f,
-        defaults.fog_thickness,
+        defaults.front_layer_light_strength_multiplier,
         2);
-    fog_thickness_slider_->set_tooltip("Controls fog density buildup with depth. Higher values thicken far-layer fog.");
-    fog_thickness_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    fog_bottom_curve_slider_ = std::make_unique<FloatSliderWidget>(
-        "Fog Bottom Curve",
-        0.25f,
-        3.0f,
+    front_layer_light_strength_multiplier_slider_->set_tooltip(
+        "Scales lighting energy for layers in front of the camera plane. Higher values punch up nearby lights and may increase additive light passes.");
+    front_layer_light_strength_multiplier_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    behind_layer_light_strength_multiplier_slider_ = std::make_unique<FloatSliderWidget>(
+        "Behind Layer Light Strength",
+        0.0f,
+        4.0f,
         0.01f,
-        defaults.fog_bottom_curve,
+        defaults.behind_layer_light_strength_multiplier,
         2);
-    fog_bottom_curve_slider_->set_tooltip("Controls how quickly fog opacity rises from the depth cutoff toward the horizon.");
-    fog_bottom_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    aperture_f_stop_slider_ = std::make_unique<FloatSliderWidget>("Aperture (f-stop)", 0.01f, 64.0f, 0.01f, defaults.aperture_f_stop, 2);
-    aperture_f_stop_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    focal_length_mm_slider_ = std::make_unique<FloatSliderWidget>("Focal Length (mm)", 0.01f, 500.0f, 0.1f, defaults.focal_length_mm, 1);
-    focal_length_mm_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    behind_layer_light_strength_multiplier_slider_->set_tooltip(
+        "Scales lighting energy for layers behind the camera plane. Raise to keep deep background lights readable; lower to reduce distant glow and cost.");
+    behind_layer_light_strength_multiplier_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     blur_px_slider_ = std::make_unique<FloatSliderWidget>("Blur (px)", 0.0f, 128.0f, 0.01f, defaults.blur_px, 3);
+    blur_px_slider_->set_tooltip("Per-layer Gaussian-like blur budget. Larger values produce softer focus transitions and increase blur processing cost.");
     blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     radial_blur_px_slider_ = std::make_unique<FloatSliderWidget>(
         "Radial Blur (px)",
@@ -253,6 +303,7 @@ void CameraUIPanel::build_ui() {
         0.01f,
         defaults.radial_blur_px,
         3);
+    radial_blur_px_slider_->set_tooltip("Additional radial blur from the optical center. Higher values can add cinematic depth but increase post-process work.");
     radial_blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     auto dof_checkbox = std::make_unique<DMCheckbox>("Enable Depth Of Field", defaults.depth_of_field_enabled);
     depth_of_field_checkbox_ = dof_checkbox.get();
@@ -276,7 +327,43 @@ void CameraUIPanel::build_ui() {
     camera_height_max_widget_ = std::make_unique<SliderWidget>(camera_height_max_slider_.get());
     camera_height_max_widget_->set_tooltip("Global maximum camera height. All room camera heights will be clamped to this value.");
 
+    movement_section_widget_ = std::make_unique<SectionToggleWidget>(
+        "Movement",
+        [this]() { return movement_section_expanded_; },
+        [this]() {
+            movement_section_expanded_ = !movement_section_expanded_;
+            rebuild_rows();
+        });
+    framing_section_widget_ = std::make_unique<SectionToggleWidget>(
+        "Framing",
+        [this]() { return framing_section_expanded_; },
+        [this]() {
+            framing_section_expanded_ = !framing_section_expanded_;
+            rebuild_rows();
+        });
+    lighting_section_widget_ = std::make_unique<SectionToggleWidget>(
+        "Lighting",
+        [this]() { return lighting_section_expanded_; },
+        [this]() {
+            lighting_section_expanded_ = !lighting_section_expanded_;
+            rebuild_rows();
+        });
+    debug_section_widget_ = std::make_unique<SectionToggleWidget>(
+        "Debug",
+        [this]() { return debug_section_expanded_; },
+        [this]() {
+            debug_section_expanded_ = !debug_section_expanded_;
+            rebuild_rows();
+        });
+
     rebuild_rows();
+}
+
+void CameraUIPanel::sync_runtime_lighting_state_with_visibility() {
+    if (!assets_) {
+        return;
+    }
+    assets_->set_camera_settings_panel_active(is_visible());
 }
 
 void CameraUIPanel::on_control_value_changed() {
@@ -324,22 +411,33 @@ void CameraUIPanel::rebuild_rows() {
     Rows rows;
     if (header_spacer_) rows.push_back({ header_spacer_.get() });
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
-    if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
-    if (max_cull_depth_slider_) rows.push_back({ max_cull_depth_slider_.get() });
-    if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
-    if (layer_depth_curve_slider_) rows.push_back({ layer_depth_curve_slider_.get() });
-    if (fog_thickness_slider_) rows.push_back({ fog_thickness_slider_.get() });
-    if (fog_bottom_curve_slider_) rows.push_back({ fog_bottom_curve_slider_.get() });
-    if (aperture_f_stop_slider_) rows.push_back({ aperture_f_stop_slider_.get() });
-    if (focal_length_mm_slider_) rows.push_back({ focal_length_mm_slider_.get() });
-    if (blur_px_slider_) rows.push_back({ blur_px_slider_.get() });
-    if (radial_blur_px_slider_) rows.push_back({ radial_blur_px_slider_.get() });
-    if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
+    if (movement_section_widget_) rows.push_back({ movement_section_widget_.get() });
+    if (movement_section_expanded_) {
+        if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
+        if (camera_height_max_widget_) rows.push_back({ camera_height_max_widget_.get() });
+    }
 
-    // Camera height bounds section
-    if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
-    if (camera_height_max_widget_) rows.push_back({ camera_height_max_widget_.get() });
+    if (framing_section_widget_) rows.push_back({ framing_section_widget_.get() });
+    if (framing_section_expanded_) {
+        if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
+        if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
+    }
+
+    if (lighting_section_widget_) rows.push_back({ lighting_section_widget_.get() });
+    if (lighting_section_expanded_) {
+        if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
+        if (blur_px_slider_) rows.push_back({ blur_px_slider_.get() });
+        if (radial_blur_px_slider_) rows.push_back({ radial_blur_px_slider_.get() });
+        if (front_layer_light_strength_multiplier_slider_) rows.push_back({ front_layer_light_strength_multiplier_slider_.get() });
+        if (behind_layer_light_strength_multiplier_slider_) rows.push_back({ behind_layer_light_strength_multiplier_slider_.get() });
+    }
+
+    if (debug_section_widget_) rows.push_back({ debug_section_widget_.get() });
+    if (debug_section_expanded_) {
+        if (max_cull_depth_slider_) rows.push_back({ max_cull_depth_slider_.get() });
+        if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
+        if (layer_depth_curve_slider_) rows.push_back({ layer_depth_curve_slider_.get() });
+    }
 
     set_rows(rows);
 }
@@ -363,10 +461,12 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (max_cull_depth_slider_) updated.max_cull_depth = max_cull_depth_slider_->value();
     if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
     if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
-    if (fog_thickness_slider_) updated.fog_thickness = fog_thickness_slider_->value();
-    if (fog_bottom_curve_slider_) updated.fog_bottom_curve = fog_bottom_curve_slider_->value();
-    if (aperture_f_stop_slider_) updated.aperture_f_stop = aperture_f_stop_slider_->value();
-    if (focal_length_mm_slider_) updated.focal_length_mm = focal_length_mm_slider_->value();
+    if (front_layer_light_strength_multiplier_slider_) {
+        updated.front_layer_light_strength_multiplier = front_layer_light_strength_multiplier_slider_->value();
+    }
+    if (behind_layer_light_strength_multiplier_slider_) {
+        updated.behind_layer_light_strength_multiplier = behind_layer_light_strength_multiplier_slider_->value();
+    }
     if (blur_px_slider_) updated.blur_px = blur_px_slider_->value();
     if (radial_blur_px_slider_) updated.radial_blur_px = radial_blur_px_slider_->value();
     if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
@@ -379,10 +479,8 @@ void CameraUIPanel::apply_settings_if_needed() {
         float_changed(updated.max_cull_depth, current.max_cull_depth) ||
         float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
-        float_changed(updated.fog_thickness, current.fog_thickness) ||
-        float_changed(updated.fog_bottom_curve, current.fog_bottom_curve) ||
-        float_changed(updated.aperture_f_stop, current.aperture_f_stop) ||
-        float_changed(updated.focal_length_mm, current.focal_length_mm) ||
+        float_changed(updated.front_layer_light_strength_multiplier, current.front_layer_light_strength_multiplier) ||
+        float_changed(updated.behind_layer_light_strength_multiplier, current.behind_layer_light_strength_multiplier) ||
         float_changed(updated.blur_px, current.blur_px) ||
         float_changed(updated.radial_blur_px, current.radial_blur_px) ||
         (updated.depth_of_field_enabled != current.depth_of_field_enabled);

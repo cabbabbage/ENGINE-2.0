@@ -56,7 +56,6 @@ constexpr float kHeaderShowZoneRatio = 0.10f;
 constexpr float kHeaderUnlockZoneRatio = 0.20f;
 
 constexpr const char* kSettingsInitializedKey = "dev.asset_filter.initialized";
-constexpr const char* kSettingsMapAssetsKey = "dev.asset_filter.map_assets";
 constexpr const char* kSettingsCurrentRoomKey = "dev.asset_filter.current_room";
 constexpr const char* kSettingsFiltersExpandedKey = "dev.asset_filter.filters_expanded";
 
@@ -261,14 +260,12 @@ void OtherSettingsAndControls::ensure_persistent_state_loaded() {
     persistent_state_initialized_flag() = devmode::ui_settings::load_bool(kSettingsInitializedKey, false);
     if (!persistent_state_initialized_flag()) {
         FilterState& state = persistent_state();
-        state.map_assets = true;
         state.current_room = true;
         state.fog = false;
         persistent_filters_expanded_flag() = false;
         return;
     }
     FilterState& state = persistent_state();
-    state.map_assets = devmode::ui_settings::load_bool(kSettingsMapAssetsKey, true);
     state.current_room = devmode::ui_settings::load_bool(kSettingsCurrentRoomKey, true);
     state.fog = false;
     persistent_filters_expanded_flag() = devmode::ui_settings::load_bool(kSettingsFiltersExpandedKey, false);
@@ -340,7 +337,6 @@ OtherSettingsAndControls::FilterState& OtherSettingsAndControls::mutable_state()
         has_saved_state_ = persistent_state_initialized_flag();
         filters_expanded_ = persistent_filters_expanded_flag();
         if (!has_saved_state_) {
-            state_->map_assets = true;
             state_->current_room = true;
             state_->fog = false;
         }
@@ -358,16 +354,6 @@ void OtherSettingsAndControls::initialize() {
 
     FilterState& state_ref = mutable_state();
     const bool use_saved_state = has_saved_state_;
-
-    FilterEntry map_entry;
-    map_entry.id = "map_assets";
-    map_entry.kind = FilterKind::MapAssets;
-    const bool map_assets_value = use_saved_state ? state_ref.map_assets : true;
-    map_entry.checkbox = std::make_unique<DMCheckbox>("Map Assets", map_assets_value);
-    if (!use_saved_state) {
-        state_ref.map_assets = map_assets_value;
-    }
-    entries_.push_back(std::move(map_entry));
 
     FilterEntry room_entry;
     room_entry.id = "current_room";
@@ -445,7 +431,6 @@ void OtherSettingsAndControls::set_screen_dimensions(int width, int height) {
 
 void OtherSettingsAndControls::set_map_info(nlohmann::json* map_info) {
     map_info_json_ = map_info;
-    rebuild_map_spawn_ids();
     notify_state_changed();
 }
 
@@ -1090,9 +1075,6 @@ void OtherSettingsAndControls::reset() {
             continue;
         }
         switch (entry.kind) {
-            case FilterKind::MapAssets:
-                entry.checkbox->set_value(true);
-                break;
             case FilterKind::CurrentRoom:
                 entry.checkbox->set_value(true);
                 break;
@@ -1102,7 +1084,6 @@ void OtherSettingsAndControls::reset() {
         }
     }
     FilterState& state_ref = mutable_state();
-    state_ref.map_assets = true;
     state_ref.current_room = true;
     state_ref.fog = false;
     for (auto& kv : state_ref.type_filters) {
@@ -1134,15 +1115,7 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
     if (!type.empty() && !type_filter_enabled(type)) {
         return false;
     }
-    const std::string& method_tag = asset.filter_method_tag();
-    const bool is_map_wide_method = (method_tag == "mapwide");
-    const bool is_map_asset = is_map_wide_method ||
-                              (!asset.spawn_id.empty() &&
-                               map_spawn_ids_.find(asset.spawn_id) != map_spawn_ids_.end());
     const FilterState& state_ref = state();
-    if (is_map_asset && !state_ref.map_assets) {
-        return false;
-    }
     const bool is_room_asset = !asset.spawn_id.empty() && room_spawn_ids_.find(asset.spawn_id) != room_spawn_ids_.end();
     if (is_room_asset && !state_ref.current_room) {
         return false;
@@ -1152,20 +1125,6 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
 
 bool OtherSettingsAndControls::is_type_filter_enabled(const std::string& type) const {
     return type_filter_enabled(type);
-}
-
-void OtherSettingsAndControls::rebuild_map_spawn_ids() {
-    map_spawn_ids_.clear();
-    if (!map_info_json_) {
-        return;
-    }
-    try {
-        auto it = map_info_json_->find("map_assets_data");
-        if (it != map_info_json_->end()) {
-            collect_spawn_ids(*it, map_spawn_ids_);
-        }
-    } catch (...) {
-    }
 }
 
 void OtherSettingsAndControls::rebuild_room_spawn_ids() {
@@ -1188,9 +1147,6 @@ void OtherSettingsAndControls::sync_state_from_ui() {
         }
         const bool value = entry.checkbox->value();
         switch (entry.kind) {
-        case FilterKind::MapAssets:
-            state_ref.map_assets = value;
-            break;
         case FilterKind::CurrentRoom:
             state_ref.current_room = value;
             break;
@@ -1517,7 +1473,6 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
             continue;
         }
         switch (entry.kind) {
-        case FilterKind::MapAssets:
         case FilterKind::CurrentRoom:
             primary_entries.push_back(&entry);
             break;
@@ -1945,13 +1900,11 @@ void OtherSettingsAndControls::load_persisted_state() {
     state_ref.type_filters.clear();
     has_saved_state_ = persistent_state_initialized_flag();
     if (!has_saved_state_) {
-        state_ref.map_assets = true;
         state_ref.current_room = true;
         state_ref.fog = false;
         filters_expanded_ = false;
         return;
     }
-    state_ref.map_assets = devmode::ui_settings::load_bool(kSettingsMapAssetsKey, true);
     state_ref.current_room = devmode::ui_settings::load_bool(kSettingsCurrentRoomKey, true);
     state_ref.fog = false;
     filters_expanded_ = persistent_filters_expanded_flag();
@@ -1960,7 +1913,6 @@ void OtherSettingsAndControls::load_persisted_state() {
 void OtherSettingsAndControls::persist_state() {
     FilterState& state_ref = mutable_state();
     devmode::ui_settings::save_bool(kSettingsInitializedKey, true);
-    devmode::ui_settings::save_bool(kSettingsMapAssetsKey, state_ref.map_assets);
     devmode::ui_settings::save_bool(kSettingsCurrentRoomKey, state_ref.current_room);
     (void)state_ref;
     for (const auto& kv : state_ref.type_filters) {

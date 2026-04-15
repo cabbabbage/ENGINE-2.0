@@ -86,6 +86,13 @@ double clamp_non_negative_finite(double value) {
     return value;
 }
 
+float clamp_size_variation_percent(float value) {
+    if (!std::isfinite(value)) {
+        return 0.0f;
+    }
+    return std::clamp(value, 0.0f, 20.0f);
+}
+
 std::optional<double> parse_number_like_json(const nlohmann::json& value) {
     if (value.is_number_float()) {
         return value.get<double>();
@@ -724,6 +731,7 @@ nlohmann::json encode_anchor_point_json(const DisplacedAssetAnchorPoint& anchor)
         light_json["enabled"] = anchor.light.enabled;
         light_json["color"] = nlohmann::json::array(
             {anchor.light.color_r, anchor.light.color_g, anchor.light.color_b});
+        light_json["opacity"] = anchor.light.opacity;
         light_json["intensity"] = anchor.light.intensity;
         light_json["radius"] = anchor.light.radius;
         light_json["falloff"] = anchor.light.falloff;
@@ -2001,6 +2009,15 @@ void AssetInfo::set_scale_percentage(float percent) {
         info_json_["size_settings"]["scale_percentage"] = percent;
 }
 
+void AssetInfo::set_size_variation_percentage(float percent) {
+        size_variation_percent = clamp_size_variation_percent(percent);
+        if (!info_json_.contains("size_settings") ||
+        !info_json_["size_settings"].is_object()) {
+                info_json_["size_settings"] = nlohmann::json::object();
+        }
+        info_json_["size_settings"]["size_variation"] = size_variation_percent;
+}
+
 void AssetInfo::set_weight_kg(float weight) {
         if (weight < 0.0f) {
                 weight = 0.0f;
@@ -2324,6 +2341,7 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
 
         const auto &ss = data.value("size_settings", nlohmann::json::object());
         scale_factor = ss.value("scale_percentage", 100.0f) / 100.0f;
+        size_variation_percent = clamp_size_variation_percent(ss.value("size_variation", 0.0f));
         if (ss.contains("scale_filter")) {
                 std::string filter = ss.value("scale_filter", std::string{});
                 for (char& ch : filter) {
@@ -2354,7 +2372,7 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                     "hat",
                     "mouth",
                     "neck",
-                    "weapon",
+                    "melee",
                 };
                 std::vector<OvalAnchorMapping> defaults;
                 defaults.reserve(vibble_mapping_names.size());

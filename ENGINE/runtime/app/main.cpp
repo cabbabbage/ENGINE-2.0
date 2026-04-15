@@ -319,7 +319,7 @@ void MainApp::setup() {
 }
 
 void MainApp::game_loop() {
-        constexpr double TARGET_FPS = 60.0;
+        constexpr double TARGET_FPS = 10.0;
         constexpr double TARGET_FRAME_SECONDS = 1.0 / TARGET_FPS;
         const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
         const double target_counts  = TARGET_FRAME_SECONDS * perf_frequency;

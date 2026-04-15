@@ -6,14 +6,12 @@ enum class SelectionFilter {
     All,
     Normal,
     Tiled,
-    MapWide,
     Boundary,
     Anchored,
 };
 
 enum class SpawnOwnership {
     Room,
-    MapAssets,
     MapBoundary,
     Other,
 };

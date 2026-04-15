@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "animation/controllers/shared/attack_payload.hpp"
+
 namespace animation_update {
 
 struct FrameBoxCorner {
@@ -317,7 +319,9 @@ struct FrameHitBox : FrameBoxBase {
 };
 
 struct FrameAttackBox : FrameBoxBase {
+    AttackPayload payload{};
     int damage_amount = 0;
+    std::string payload_id;
     std::string meta_json;
 };
 

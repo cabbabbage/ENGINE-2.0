@@ -359,7 +359,7 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
 
     bool reverse = payload.value("reverse_source", false);
     bool flip_x = payload.value("invert_frames_horizontal", false);
-    bool flip_y = payload.value("invert_frames_vertical", false);
+    bool flip_y = false;
     if (kind == "animation" && payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
         const auto& modifiers = payload["derived_modifiers"];
         reverse = modifiers.value("reverse", reverse);

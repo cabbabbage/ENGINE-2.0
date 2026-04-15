@@ -17,4 +17,8 @@ inline bool should_advance_animation_for_asset(bool dev_mode,
     return runtime_updates_enabled;
 }
 
+inline bool should_allow_movement_for_asset(bool dev_mode) {
+    return !dev_mode;
+}
+
 } // namespace runtime::dev_mode_policy

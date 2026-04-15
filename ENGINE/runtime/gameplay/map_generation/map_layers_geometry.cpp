@@ -13,7 +13,6 @@ namespace map_layers {
 namespace {
 
 constexpr double kTau = 6.28318530717958647692;
-constexpr double kCircleRoomMaxAspectRatio = 18.0 / 9.0;
 
 double clamp_min_edge(double value) {
     if (!std::isfinite(value)) {
@@ -178,34 +177,16 @@ double room_extent_from_rooms_data(const nlohmann::json* rooms_data,
     double max_depth = extract_dimension(room, "max_height");
     const bool is_circle = is_circle_geometry(room.value("geometry", std::string()));
 
-    double radius_value = 0.0;
-    const auto radius_it = room.find("radius");
-    if (radius_it != room.end() && (radius_it->is_number_float() || radius_it->is_number_integer())) {
-        radius_value = std::max(0.0, radius_it->get<double>());
-    }
-
     if (is_circle) {
-        if (radius_value <= 0.0) {
-            double diameter_guess = std::max(max_width, max_depth);
-            if (diameter_guess <= 0.0) {
-                const double alt_w = extract_dimension(room, "min_width");
-                const double alt_h = extract_dimension(room, "min_height");
-                diameter_guess = std::max(alt_w, alt_h);
-            }
-            if (diameter_guess > 0.0) {
-                radius_value = diameter_guess * 0.5;
-            }
+        if (max_width <= 0.0) {
+            max_width = extract_dimension(room, "min_width");
         }
-        if (radius_value <= 0.0) {
-            radius_value = std::max(max_width, max_depth) * 0.5;
+        if (max_depth <= 0.0) {
+            max_depth = extract_dimension(room, "min_height");
         }
-        if (radius_value <= 0.0) {
-            radius_value = 1.0;
-        }
-        const double max_horizontal_radius_from_aspect = radius_value * kCircleRoomMaxAspectRatio;
         const double half_width_extent = std::max(0.0, max_width) * 0.5;
         const double half_depth_extent = std::max(0.0, max_depth) * 0.5;
-        return std::max({max_horizontal_radius_from_aspect, half_width_extent, half_depth_extent, 1.0});
+        return std::max({half_width_extent, half_depth_extent, 1.0});
     }
 
     if (max_width <= 0.0 && max_depth <= 0.0) {

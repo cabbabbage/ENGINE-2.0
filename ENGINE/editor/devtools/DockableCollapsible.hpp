@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <cstdint>
 #include <unordered_set>
 #include <vector>
 
@@ -143,6 +144,7 @@ protected:
     mutable SDL_Rect body_viewport_{0,0,0,0};
 
     Rows rows_;
+    std::uint64_t rows_epoch_ = 0;
     mutable std::vector<int> row_heights_;
     mutable int content_height_ = 0;
     mutable int widest_row_w_ = 0;

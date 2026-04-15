@@ -7,19 +7,24 @@
 // CONTROLLER_META_END
 
 #include "vibble_controller.hpp"
-#include <iostream>
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 
 namespace {
+
+constexpr std::string_view kMeleeChildAssetName = "vibble_attack_1";
+constexpr std::string_view kLegacyMeleeChildAssetName = "vibble_attack";
+constexpr std::string_view kMeleeAttackAnimation = "attack";
 
 int consume_axis(float& accumulator) {
     const int whole = static_cast<int>(accumulator);
@@ -50,6 +55,40 @@ vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
         has_camera_basis);
 }
 
+Asset* find_child_asset_by_name(Asset& owner, std::string_view child_asset_name) {
+    for (Asset* child : owner.children()) {
+        if (!child || !child->info) {
+            continue;
+        }
+        if (child->info->name == child_asset_name) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+Asset* resolve_melee_child_asset(Asset& owner) {
+    if (Asset* child = find_child_asset_by_name(owner, kMeleeChildAssetName)) {
+        return child;
+    }
+    return find_child_asset_by_name(owner, kLegacyMeleeChildAssetName);
+}
+
+void trigger_melee_child_attack_animation(Asset& owner) {
+    Asset* melee_child = resolve_melee_child_asset(owner);
+    if (!melee_child || !melee_child->anim_) {
+        return;
+    }
+
+    if (melee_child->info &&
+        melee_child->info->animations.find(std::string{kMeleeAttackAnimation}) ==
+            melee_child->info->animations.end()) {
+        return;
+    }
+
+    melee_child->anim_->set_animation(std::string{kMeleeAttackAnimation});
+}
+
 }
 
 vibble_controller::vibble_controller(Asset* player)
@@ -77,23 +116,20 @@ void vibble_controller::movement(const Input& input) {
     const bool sprint =
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool dash_pressed = input.isScancodeDown(SDL_SCANCODE_SPACE);
-    const bool melee_pressed = input.wasScancodePressed(SDL_SCANCODE_E);
+    const bool melee_pressed = input.wasPressed(Input::LEFT);
 
     const vibble::player_direction::DirectionIntent direction_intent =
         resolve_direction_intent_for_player(player, input_x, input_y);
     const int world_x = direction_intent.world_x;
     const int world_y = direction_intent.world_y;
 
-    if (melee_pressed) {
-        std::cout << "Melee attack initiated!" << std::endl;
+    if (melee_pressed && canMelee) {
         canMelee = false;
         isMeleeing = true;
         meleeCooldownEndTime = std::chrono::steady_clock::now()
                                + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                                    std::chrono::duration<float>(meleeCooldown));
-       // if (weapon_child_.has_value()) {
-        //    weapon_child_->set_animation("attack");
-       // }
+        trigger_melee_child_attack_animation(*player);
     }
 
 
@@ -122,20 +158,60 @@ void vibble_controller::movement(const Input& input) {
     subpixel_x_ = std::clamp(subpixel_x_, -kResidualClamp, kResidualClamp);
     subpixel_y_ = std::clamp(subpixel_y_, -kResidualClamp, kResidualClamp);
 
-    // Keep animation-facing/anchor selection aligned with actual world movement.
-    std::string animation_id = animation_for_direction(
-        direction_intent.world_x,
-        direction_intent.world_y);
+    const bool has_pixel_motion = (dx_ != 0 || dy_ != 0);
+    const bool has_movement_intent = (input_x != 0 || input_y != 0);
+    const std::string movement_animation =
+        animation_for_direction(input_x, input_y);
+    const CardinalVector movement_vector = movement_cardinal_vector(input_x, input_y);
+    const FacingSelection facing = facing_from_mouse(*player, input, last_facing_animation_);
+    if (facing.valid) {
+        last_facing_animation_ = facing.animation_id;
+    }
+
+    std::string selected_animation = movement_animation;
+    bool reverse_selected_animation = false;
+
+    if (!has_movement_intent) {
+        const std::string idle_animation = facing.valid
+            ? facing.animation_id
+            : (!last_facing_animation_.empty()
+                   ? last_facing_animation_
+                   : std::string{animation_update::detail::kDefaultAnimation});
+        last_facing_animation_ = idle_animation;
+        apply_idle_facing(idle_animation);
+        return;
+    }
+
+    if (facing.valid) {
+        const int dot = movement_vector.x * facing.vector.x + movement_vector.y * facing.vector.y;
+        if (dot == 0) {
+            selected_animation = movement_animation;
+            reverse_selected_animation = false;
+        } else {
+            selected_animation = facing.animation_id;
+            reverse_selected_animation = (dot < 0);
+        }
+    } else {
+        selected_animation = movement_animation;
+        reverse_selected_animation = false;
+    }
+
     if (isDashing && player->info) {
         const auto& animations = player->info->animations;
         if (animations.find("dash") != animations.end()) {
-            animation_id = "dash";
+            selected_animation = "dash";
+            reverse_selected_animation = false;
         }
     }
 
-    player->anim_->move(SDL_Point{ dx_, dy_ }, animation_id);
+    player->anim_->move(SDL_Point{ dx_, dy_ }, selected_animation);
+    if (reverse_selected_animation) {
+        animation_update::custom_controllers::begin_reverse_current_animation_until_stop(player);
+    } else {
+        animation_update::custom_controllers::stop_reverse_current_animation(player);
+    }
 
-    if (dx_ != 0 || dy_ != 0) {
+    if (has_pixel_motion) {
         anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
             player,
             std::string{});
@@ -223,6 +299,92 @@ std::string vibble_controller::animation_for_direction(int screen_x, int screen_
         return horizontal_choice;
     }
     return animation_update::detail::kDefaultAnimation;
+}
+
+vibble_controller::FacingSelection vibble_controller::facing_from_mouse(
+    const Asset& player,
+    const Input& input,
+    const std::string& fallback_animation) const {
+    FacingSelection selection{};
+    if (!input.mouse_world_position().has_value()) {
+        return selection;
+    }
+
+    SDL_FPoint player_screen = SDL_FPoint{
+        static_cast<float>(player.world_x()),
+        static_cast<float>(player.world_z())
+    };
+    if (const Assets* assets = player.get_assets()) {
+        player_screen = assets->getView().map_to_screen(SDL_Point{player.world_x(), player.world_z()});
+    }
+
+    const int delta_x = input.getX() - static_cast<int>(std::lround(player_screen.x));
+    const int delta_y = input.getY() - static_cast<int>(std::lround(player_screen.y));
+
+    if (delta_x == 0 && delta_y == 0) {
+        selection.animation_id = fallback_animation.empty()
+            ? std::string{animation_update::detail::kDefaultAnimation}
+            : fallback_animation;
+        selection.vector = cardinal_vector_for_animation(selection.animation_id);
+        selection.valid = (selection.vector.x != 0 || selection.vector.y != 0);
+        return selection;
+    }
+
+    const bool horizontal = std::abs(delta_x) >= std::abs(delta_y);
+    std::string preferred_animation;
+    if (horizontal) {
+        preferred_animation = (delta_x < 0) ? "left" : "right";
+    } else {
+        // Mouse screen-space semantics: below means down, above means up.
+        preferred_animation = (delta_y > 0) ? "down" : "up";
+    }
+
+    auto has_animation = [&](const std::string& id) {
+        return player.info && player.info->animations.find(id) != player.info->animations.end();
+    };
+
+    if (has_animation(preferred_animation)) {
+        selection.animation_id = preferred_animation;
+    } else if (!fallback_animation.empty() && has_animation(fallback_animation)) {
+        selection.animation_id = fallback_animation;
+    } else {
+        selection.animation_id = animation_update::detail::kDefaultAnimation;
+    }
+    selection.vector = cardinal_vector_for_animation(selection.animation_id);
+    selection.valid = (selection.vector.x != 0 || selection.vector.y != 0);
+    return selection;
+}
+
+vibble_controller::CardinalVector vibble_controller::movement_cardinal_vector(int world_x, int world_y) const {
+    const std::string animation_id = animation_for_direction(world_x, world_y);
+    return cardinal_vector_for_animation(animation_id);
+}
+
+vibble_controller::CardinalVector vibble_controller::cardinal_vector_for_animation(const std::string& animation_id) {
+    if (animation_id == "left") {
+        return CardinalVector{-1, 0};
+    }
+    if (animation_id == "right") {
+        return CardinalVector{1, 0};
+    }
+    if (animation_id == "up") {
+        return CardinalVector{0, 1};
+    }
+    if (animation_id == "down") {
+        return CardinalVector{0, -1};
+    }
+    return CardinalVector{0, 0};
+}
+
+void vibble_controller::apply_idle_facing(const std::string& animation_id) {
+    Asset* player = self_ptr();
+    if (!player || !player->anim_) {
+        return;
+    }
+    const std::string resolved_animation =
+        animation_id.empty() ? std::string{animation_update::detail::kDefaultAnimation} : animation_id;
+    animation_update::custom_controllers::stop_reverse_current_animation(player);
+    player->anim_->set_animation(resolved_animation);
 }
 
 void vibble_controller::start_dash() {

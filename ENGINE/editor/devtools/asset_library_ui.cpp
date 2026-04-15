@@ -1595,7 +1595,9 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
             {"on_end", "default"},
             {"locked", false},
             {"reverse_source", false},
-            {"flipped_source", false},
+            {"invert_x", false},
+            {"invert_y", false},
+            {"invert_z", false},
             {"rnd_start", false},
             {"source", nlohmann::json{
                 {"kind", "folder"},
@@ -1620,7 +1622,8 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         manifest_entry["min_distance_all"] = 0;
         manifest_entry["can_invert"] = false;
         manifest_entry["size_settings"] = {
-            {"scale_percentage", 100.0}
+            {"scale_percentage", 100.0},
+            {"size_variation", 0.0}
 };
 
         session.data() = manifest_entry;
@@ -2093,6 +2096,5 @@ void AssetLibraryUI::set_expanded(bool e) {
 bool AssetLibraryUI::is_expanded() const {
     return floating_ && floating_->is_expanded();
 }
-
 
 

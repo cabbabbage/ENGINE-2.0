@@ -15,6 +15,10 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#ifndef FRAME_EDITOR_ACCESS
+#define FRAME_EDITOR_ACCESS private
+#endif
+
 class Asset;
 class Assets;
 class AssetInfo;
@@ -74,7 +78,7 @@ class AnimationEditorWindow {
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
     void on_live_frame_editor_closed(const std::string& animation_id);
 
-  private:
+  FRAME_EDITOR_ACCESS:
     struct LiveFrameEditorToken {};
     void handle_document_saved();
     void layout_children();
@@ -106,15 +110,23 @@ class AnimationEditorWindow {
     void handle_create_defaults();
     bool ensure_animation_exists(const std::string& animation_id);
     bool create_or_replace_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
-    std::optional<int> parse_defaults_distance_per_frame() const;
+    std::optional<int> parse_defaults_total_movement() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
-    nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id, int frame_count, int dx, int depth_dz) const;
+    bool remove_animation_source_folder(const std::string& animation_id, std::string& error_message);
+    bool remove_animation_cache_folder(const std::string& animation_id, std::string& error_message);
+    nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id,
+                                                       int frame_count,
+                                                       int dx,
+                                                       int dy,
+                                                       int dz) const;
     nlohmann::json build_derived_movement_payload(const std::string& animation_id,
                                                   const std::string& source_animation_id,
                                                   int frame_count,
-                                                  bool flip_x,
-                                                  bool flip_y) const;
+                                                  int dx,
+                                                  int dy,
+                                                  int dz,
+                                                  bool invert_frames_horizontal) const;
     void open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode);
     Asset* resolve_frame_editor_asset();
     void create_animation_via_prompt();
@@ -145,7 +157,7 @@ class AnimationEditorWindow {
     void refresh_inspector_animation_callback();
     std::string normalize_animation_name(std::string_view raw) const;
 
-  private:
+  FRAME_EDITOR_ACCESS:
     bool visible_ = false;
     SDL_Rect bounds_{0, 0, 0, 0};
     std::weak_ptr<AssetInfo> info_;
@@ -163,6 +175,8 @@ class AnimationEditorWindow {
     bool defaults_modal_visible_ = false;
     std::unique_ptr<DMCheckbox> defaults_diagonals_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
+    std::unique_ptr<DMCheckbox> defaults_elevation_checkbox_;
+    std::unique_ptr<DMCheckbox> defaults_3d_diagonals_checkbox_;
     std::unique_ptr<DMTextBox> defaults_distance_box_;
     std::unique_ptr<DMButton> defaults_base_frames_button_;
     std::unique_ptr<DMButton> defaults_create_button_;

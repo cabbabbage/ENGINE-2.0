@@ -802,7 +802,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             sliding_headers_hidden_ = visible;
             apply_header_suppression();
         });
-        room_editor_->set_map_assets_panel_callback([this]() { this->open_map_assets_modal(); });
         room_editor_->set_boundary_assets_panel_callback([this]() { this->open_boundary_assets_modal(); });
         room_editor_->set_snap_to_grid_enabled(snap_to_grid_enabled_);
     }
@@ -915,7 +914,11 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             },
             devmode::core::SaveManager::Stage::Cache});
     }
-    map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
+    map_grid_regen_cb_ = [this]() {
+        if (assets_) {
+            assets_->invalidate_dynamic_boundary_system();
+        }
+    };
     apply_header_suppression();
     camera_panel_ = std::make_unique<CameraUIPanel>(assets_, 72, 72);
     if (camera_panel_) {
@@ -1444,7 +1447,9 @@ void DevControls::apply_grid_resolution_change(int resolution) {
     if (map_grid_save_cb_) {
         map_grid_save_cb_();
     }
-    regenerate_map_grid_assets();
+    if (assets_) {
+        assets_->invalidate_dynamic_boundary_system();
+    }
 }
 
 void DevControls::set_player(Asset* player) {
@@ -1476,7 +1481,6 @@ void DevControls::set_screen_dimensions(int width, int height) {
     if (trail_suite_) trail_suite_->set_screen_dimensions(width, height);
 
     other_settings_.set_screen_dimensions(width, height);
-    if (map_assets_modal_) map_assets_modal_->set_screen_dimensions(width, height);
     if (boundary_assets_modal_) boundary_assets_modal_->set_screen_dimensions(width, height);
 
     other_settings_.set_right_accessory_width(0);
@@ -1915,9 +1919,6 @@ void DevControls::update(const Input& input) {
     other_settings_.update(input);
     if (map_mode_ui_) {
         map_mode_ui_->update(input);
-    }
-    if (map_assets_modal_ && map_assets_modal_->visible()) {
-        map_assets_modal_->update(input);
     }
     if (boundary_assets_modal_ && boundary_assets_modal_->visible()) {
         boundary_assets_modal_->update(input);
@@ -2887,7 +2888,9 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         {"on_end", "default"},
         {"locked", false},
         {"reverse_source", false},
-        {"flipped_source", false},
+        {"invert_x", false},
+        {"invert_y", false},
+        {"invert_z", false},
         {"rnd_start", false},
         {"source", nlohmann::json{{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
         {"number_of_frames", frames_written}
@@ -2908,7 +2911,10 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     manifest_entry["min_same_type_distance"] = 0;
     manifest_entry["min_distance_all"] = 0;
     manifest_entry["can_invert"] = false;
-    manifest_entry["size_settings"] = {{"scale_percentage", 100.0}};
+    manifest_entry["size_settings"] = {
+        {"scale_percentage", 100.0},
+        {"size_variation", 0.0}
+    };
 
     auto session = manifest_store_.begin_asset_edit(sanitized, true);
     if (!session || !session.is_new_asset()) {
@@ -3145,9 +3151,6 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (consume_modal_event(map_assets_modal_.get(), event, pointer, pointer_relevant, input_)) {
-        return;
-    }
     if (consume_modal_event(boundary_assets_modal_.get(), event, pointer, pointer_relevant, input_)) {
         return;
     }
@@ -3553,9 +3556,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     }
 
     if (renderer && map_mode_ui_) map_mode_ui_->render(renderer);
-    if (renderer && map_assets_modal_ && map_assets_modal_->visible()) {
-        map_assets_modal_->render(renderer);
-    }
     if (renderer && boundary_assets_modal_ && boundary_assets_modal_->visible()) {
         boundary_assets_modal_->render(renderer);
     }
@@ -3917,26 +3917,6 @@ void DevControls::configure_header_button_sets() {
     room_buttons.push_back(make_layers_button());
 
     {
-        MapModeUI::HeaderButtonConfig map_assets_btn;
-        map_assets_btn.id = "map_assets";
-        map_assets_btn.label = "Map Assets";
-        map_assets_btn.active = (map_assets_modal_ && map_assets_modal_->visible());
-        map_assets_btn.group = FooterButtonGroup::Panels;
-        map_assets_btn.style_override = &DMStyles::ListButton();
-        map_assets_btn.active_style_override = &DMStyles::AccentButton();
-        map_assets_btn.on_toggle = [this](bool active) {
-            if (active) {
-                toggle_map_assets_modal();
-            } else {
-                if (room_editor_) room_editor_->clear_selection();
-                if (map_assets_modal_) map_assets_modal_->close();
-            }
-            sync_header_button_states();
-};
-        room_buttons.push_back(std::move(map_assets_btn));
-    }
-
-    {
         MapModeUI::HeaderButtonConfig boundary_btn;
         boundary_btn.id = "map_boundary";
         boundary_btn.label = "Boundary Assets";
@@ -4061,9 +4041,7 @@ void DevControls::sync_header_button_states() {
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "layers", layers_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "regenerate", false);
 
-    const bool map_assets_open = map_assets_modal_ && map_assets_modal_->visible();
     const bool boundary_open = boundary_assets_modal_ && boundary_assets_modal_->visible();
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "map_assets", map_assets_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "map_boundary", boundary_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_trail", false);
 
@@ -4078,7 +4056,6 @@ void DevControls::sync_header_button_states() {
             room_editor_->is_asset_info_editor_open() ||
             (regenerate_popup_ && regenerate_popup_->visible()) ||
             (trail_suite_ && trail_suite_->is_open()) ||
-            map_assets_open ||
             boundary_open ||
             camera_open ||
             map_ui_panels_open;
@@ -4104,10 +4081,6 @@ void DevControls::close_all_floating_panels() {
     }
     if (map_mode_ui_) {
         map_mode_ui_->close_all_panels();
-    }
-    if (map_assets_modal_) {
-        if (room_editor_) room_editor_->clear_selection();
-        map_assets_modal_->close();
     }
     if (boundary_assets_modal_) {
         if (room_editor_) room_editor_->clear_selection();
@@ -4488,73 +4461,10 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
     integrate_spawned_assets(spawned);
 }
 
-void DevControls::regenerate_map_grid_assets() {
-    if (!map_info_json_ || !map_info_json_->is_object()) {
-        return;
-    }
-    ensure_map_grid_settings(*map_info_json_);
-    if (assets_) {
-        MapGridSettings settings = MapGridSettings::from_json(&(*map_info_json_)["map_grid_settings"]);
-        assets_->apply_map_grid_settings(settings);
-    }
-    auto section_it = map_info_json_->find("map_assets_data");
-    if (section_it == map_info_json_->end() || !section_it->is_object()) {
-        return;
-    }
-    auto groups_it = section_it->find("spawn_groups");
-    if (groups_it == section_it->end() || !groups_it->is_array()) {
-        return;
-    }
-    for (const auto& group : *groups_it) {
-        regenerate_map_spawn_group(group);
-    }
-}
-
 void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
     if (assets_) {
         assets_->invalidate_dynamic_boundary_system();
     }
-}
-
-void DevControls::ensure_map_assets_modal_open() {
-    if (!assets_) return;
-    if (!map_assets_modal_) {
-        map_assets_modal_ = std::make_unique<SingleSpawnGroupModal>();
-        map_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
-        map_assets_modal_->set_floating_stack_key("map_assets_modal");
-    } else {
-        map_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
-    }
-    map_assets_modal_->set_manifest_store(&manifest_store_);
-    map_assets_modal_->set_assets(assets_);
-    map_assets_modal_->set_on_close([this]() {
-        if (room_editor_) room_editor_->clear_selection();
-        this->sync_header_button_states();
-    });
-    auto save = [this]() { mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced); return true; };
-    auto regen = [this](const nlohmann::json& entry) { this->regenerate_map_spawn_group(entry); };
-    auto& map_json = assets_->map_info_json();
-    SDL_Color color{200, 200, 255, 255};
-    map_assets_modal_->open(map_json, "map_assets_data", "batch_map_assets", "Map-wide", color, save, regen);
-}
-
-void DevControls::open_map_assets_modal() {
-    if (map_assets_modal_ && map_assets_modal_->visible()) {
-        map_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
-    } else {
-        ensure_map_assets_modal_open();
-    }
-    sync_header_button_states();
-}
-
-void DevControls::toggle_map_assets_modal() {
-    if (map_assets_modal_ && map_assets_modal_->visible()) {
-        if (room_editor_) room_editor_->clear_selection();
-        map_assets_modal_->close();
-    } else {
-        ensure_map_assets_modal_open();
-    }
-    sync_header_button_states();
 }
 
 void DevControls::apply_camera_area_render_flag() {
@@ -4704,12 +4614,6 @@ void DevControls::create_trail_template() {
     nlohmann::json& trails = map_info["trails_data"];
     nlohmann::json& inserted = trails[key];
 
-    nlohmann::json* map_assets_section = nullptr;
-    auto assets_it = map_info.find("map_assets_data");
-    if (assets_it != map_info.end() && assets_it->is_object()) {
-        map_assets_section = &(*assets_it);
-    }
-
     const MapGridSettings grid_settings = assets_->map_grid_settings();
     const std::string manifest_context = assets_->map_id();
 
@@ -4721,7 +4625,6 @@ void DevControls::create_trail_template() {
                                                      &assets_->library(),        // asset_lib
                                                      nullptr,                    // precomputed_area
                                                      &inserted,                  // room_data
-                                                     map_assets_section,         // map_assets_data
                                                      grid_settings,
                                                      static_cast<double>(map_radius_or_default()),
                                                      "trails_data",

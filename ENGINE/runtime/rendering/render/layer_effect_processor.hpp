@@ -1,7 +1,6 @@
 #pragma once
 
 #include <SDL3/SDL.h>
-#include <array>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -10,9 +9,12 @@ class LayerEffectProcessor {
 public:
     struct RuntimeLight {
         SDL_FPoint screen_center{0.0f, 0.0f};
+        SDL_FPoint floor_screen_center{0.0f, 0.0f};
         SDL_Color color{255, 255, 255, 255};
         float intensity = 1.0f;
+        float opacity = 50.0f;
         float radius_px = 220.0f;
+        float radius_world = 0.0f;
         float falloff = 1.8f;
         float world_z = 0.0f;
         float floor_world_x = 0.0f;
@@ -53,13 +55,6 @@ public:
 
     void set_renderer(SDL_Renderer* renderer);
 
-    static double radial_lens_factor_from_optics(double focal_length_mm, double f_stop);
-    static double coc_blur_radius_from_depth_delta(double depth_delta,
-                                                   double max_cull_depth,
-                                                   double focal_length_mm,
-                                                   double f_stop,
-                                                   double max_blur_px);
-
     LayerProcessResult process_layer(SDL_Texture* base_layer_texture,
                                      SDL_Texture* composited_output_texture,
                                      double layer_depth_min,
@@ -80,14 +75,8 @@ public:
                          float quality_scale = 1.0f) const;
 
 private:
-    static constexpr int kFogVariantCount = 6;
-
     void destroy_owned_resources();
-    void destroy_fog_resources();
     void destroy_lighting_resources();
-    bool ensure_fog_band_textures(int target_w, float bottom_opacity_curve);
-    SDL_Texture* fog_band_texture_for_cycle(int layer_cycle_index) const;
-    bool ensure_light_accum_texture(int target_w, int target_h);
     SDL_Texture* ensure_light_falloff_texture(float falloff);
 
     SDL_BlendMode alpha_copy_blend_mode();
@@ -95,19 +84,7 @@ private:
     SDL_BlendMode alpha_masked_multiply_blend_mode();
     bool supports_strict_dark_mask_pipeline();
 
-    float behind_occlusion_weight(double light_world_z,
-                                  double layer_depth_min,
-                                  double layer_depth_max,
-                                  float light_radius_px) const;
-
     SDL_Renderer* renderer_ = nullptr;
-    std::array<SDL_Texture*, kFogVariantCount> fog_band_textures_{};
-    int fog_band_baked_width_ = 0;
-    int fog_band_baked_height_ = 0;
-    float fog_band_baked_curve_ = 1.0f;
-    SDL_Texture* light_accum_texture_ = nullptr;
-    int light_accum_width_ = 0;
-    int light_accum_height_ = 0;
     std::unordered_map<int, SDL_Texture*> light_falloff_textures_;
 
     SDL_BlendMode alpha_copy_blend_mode_ = SDL_BLENDMODE_INVALID;

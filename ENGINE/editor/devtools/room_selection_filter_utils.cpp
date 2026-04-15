@@ -10,7 +10,6 @@ SelectionFilter effective_filter(SelectionFilter filter, bool shift_down) {
 bool matches_filter(SelectionFilter filter, bool shift_down, const SelectionTraits& traits) {
     const SelectionFilter effective = effective_filter(filter, shift_down);
 
-    const bool is_map_wide = traits.ownership == SpawnOwnership::MapAssets;
     const bool is_boundary_domain = traits.ownership == SpawnOwnership::MapBoundary;
 
     if (effective != SelectionFilter::Anchored &&
@@ -25,19 +24,14 @@ bool matches_filter(SelectionFilter filter, bool shift_down, const SelectionTrai
         case SelectionFilter::Normal:
             return !traits.is_tiled &&
                    !traits.is_anchored &&
-                   !is_map_wide &&
                    !is_boundary_domain;
         case SelectionFilter::Tiled:
             return traits.is_tiled &&
-                   !is_map_wide &&
                    !is_boundary_domain;
-        case SelectionFilter::MapWide:
-            return is_map_wide;
         case SelectionFilter::Boundary:
             return is_boundary_domain;
         case SelectionFilter::Anchored:
             return traits.is_anchored &&
-                   !is_map_wide &&
                    !is_boundary_domain;
         default:
             return false;

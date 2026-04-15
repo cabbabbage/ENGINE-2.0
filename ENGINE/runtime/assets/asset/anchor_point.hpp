@@ -80,6 +80,7 @@ struct AnchorLightData {
     std::uint8_t color_r = 255;
     std::uint8_t color_g = 236;
     std::uint8_t color_b = 196;
+    float opacity = 50.0f;
     float intensity = 1.0f;
     float radius = 220.0f;
     float falloff = 1.8f;
@@ -90,6 +91,8 @@ struct AnchorLightData {
     static constexpr float kMaxRadius = 4096.0f;
     static constexpr float kMinIntensity = 0.0f;
     static constexpr float kMaxIntensity = 8.0f;
+    static constexpr float kMinOpacity = 0.0f;
+    static constexpr float kMaxOpacity = 100.0f;
     static constexpr float kMinFalloff = 0.05f;
     static constexpr float kMaxFalloff = 8.0f;
     static constexpr float kMinShadowStrength = 0.0f;
@@ -97,9 +100,13 @@ struct AnchorLightData {
 
     void sanitize() {
         intensity = std::clamp(intensity, kMinIntensity, kMaxIntensity);
+        opacity = std::clamp(opacity, kMinOpacity, kMaxOpacity);
         radius = std::clamp(radius, kMinRadius, kMaxRadius);
         if (!std::isfinite(intensity)) {
             intensity = 1.0f;
+        }
+        if (!std::isfinite(opacity)) {
+            opacity = 50.0f;
         }
         if (!std::isfinite(radius)) {
             radius = 220.0f;

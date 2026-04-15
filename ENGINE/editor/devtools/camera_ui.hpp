@@ -42,6 +42,7 @@ private:
     void build_ui();
     void rebuild_rows();
     void apply_settings_if_needed();
+    void sync_runtime_lighting_state_with_visibility();
 
     void on_control_value_changed();
 
@@ -63,10 +64,8 @@ private:
     std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
-    std::unique_ptr<FloatSliderWidget> fog_thickness_slider_;
-    std::unique_ptr<FloatSliderWidget> fog_bottom_curve_slider_;
-    std::unique_ptr<FloatSliderWidget> aperture_f_stop_slider_;
-    std::unique_ptr<FloatSliderWidget> focal_length_mm_slider_;
+    std::unique_ptr<FloatSliderWidget> front_layer_light_strength_multiplier_slider_;
+    std::unique_ptr<FloatSliderWidget> behind_layer_light_strength_multiplier_slider_;
     std::unique_ptr<FloatSliderWidget> blur_px_slider_;
     std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
 
@@ -77,6 +76,14 @@ private:
     std::unique_ptr<SliderWidget> camera_height_max_widget_;
     std::unique_ptr<CallbackCheckboxWidget> depth_of_field_widget_;
     DMCheckbox* depth_of_field_checkbox_ = nullptr;
+    std::unique_ptr<Widget> movement_section_widget_;
+    std::unique_ptr<Widget> framing_section_widget_;
+    std::unique_ptr<Widget> lighting_section_widget_;
+    std::unique_ptr<Widget> debug_section_widget_;
+    bool movement_section_expanded_ = false;
+    bool framing_section_expanded_ = false;
+    bool lighting_section_expanded_ = false;
+    bool debug_section_expanded_ = false;
 
     bool applying_settings_ = false;
     int last_screen_w_ = 0;

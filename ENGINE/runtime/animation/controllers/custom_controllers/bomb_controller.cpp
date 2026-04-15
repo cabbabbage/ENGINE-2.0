@@ -1,11 +1,18 @@
 #include "bomb_controller.hpp"
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "assets/asset/Asset.hpp"
-#include "core/AssetsManager.hpp"
 #include "utils/range_util.hpp"
+#include <iostream>
+#include <optional>
+#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
+namespace animation_update::custom_controllers {}
+namespace custom_controllers = animation_update::custom_controllers;
 
 bomb_controller::bomb_controller(Asset* self)
     : CustomAssetController(self) {
+        std::cout<<"bomb Controller Connected";
     Asset* owner = self_ptr();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
@@ -14,34 +21,31 @@ bomb_controller::bomb_controller(Asset* self)
 }
 
 void bomb_controller::on_update(const Input&) {
-    constexpr int kExplosionRangePx = 700;
+    constexpr int kbombStopRadiusPx = 60;
 
+    const auto& ctx = game_context();
     Asset* self = self_ptr();
-    Assets* assets = this->assets();
-    if (!self || !self->anim_ || !assets) {
+    if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
-    Asset* player = assets->player;
+    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(ctx);
 
-    if (!player || player == self || player->dead || !player->active) {
+    if (!player) {
         return;
     }
 
-    const bool in_explosion_range = Range::is_in_range(self, player, kExplosionRangePx);
-    if (in_explosion_range) {
+    const bool in_attack_range = Range::is_in_range(self, player, kbombStopRadiusPx);
+    if (in_attack_range) {
         if (!self->needs_target) {
             self->anim_->cancel_all_movement();
         }
-        if (self->info && self->info->animations.count("explosion")) {
-            self->anim_->set_animation("explosion");
-        }
     } else if (self->needs_target) {
-        self->anim_->auto_move(player);
+        self->anim_->auto_move_3d({player->world_x(), player->world_y(), player->world_z()}, 0, std::nullopt, false);
     }
 
-    animation_update::custom_controllers::AttackDetectionHelper::send_attack_if_hit(self, player);
+    animation_update::custom_controllers::dispatch_contact_attack(ctx);
 }
 
 void bomb_controller::on_process_pending_attacks(Asset& self) {
-    CustomAssetController::on_process_pending_attacks(self);
+    custom_controllers::AttackProcessingHelper::process_pending_attacks(self);
 }

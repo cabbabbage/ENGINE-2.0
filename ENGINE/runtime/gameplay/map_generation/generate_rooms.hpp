@@ -186,7 +186,13 @@ class GenerateRooms {
                   double min_edge_distance,
                   devmode::core::ManifestStore* manifest_store = nullptr,
                   Room::ManifestWriter manifest_writer = {});
-    std::vector<std::unique_ptr<Room>> build(AssetLibrary* asset_lib, double map_radius, const std::vector<double>& layer_radii, const nlohmann::json& boundary_data, nlohmann::json& rooms_data, nlohmann::json& trails_data, nlohmann::json& map_assets_data, const MapGridSettings& grid_settings);
+    std::vector<std::unique_ptr<Room>> build(AssetLibrary* asset_lib,
+                                             double map_radius,
+                                             const std::vector<double>& layer_radii,
+                                             const nlohmann::json& boundary_data,
+                                             nlohmann::json& rooms_data,
+                                             nlohmann::json& trails_data,
+                                             const MapGridSettings& grid_settings);
     bool testing = false;
 
 	private:

@@ -111,7 +111,7 @@ public:
     bool fog_visible() const;
 
 private:
-    enum class FilterKind { MapAssets, CurrentRoom, Type };
+    enum class FilterKind { CurrentRoom, Type };
 
     struct FilterEntry {
         std::string id;
@@ -120,13 +120,11 @@ private:
 };
 
     struct FilterState {
-        bool map_assets = false;
         bool current_room = true;
         bool fog = false;
         std::unordered_map<std::string, bool> type_filters;
 };
 
-    void rebuild_map_spawn_ids();
     void rebuild_room_spawn_ids();
     void rebuild_layout();
     void sync_state_from_ui();
@@ -191,7 +189,6 @@ private:
     SDL_Rect stats_heading_rect_{0, 0, 0, 0};
     std::array<SDL_Rect, 4> stats_line_rects_{};
     bool layout_dirty_ = true;
-    std::unordered_set<std::string> map_spawn_ids_;
     std::unordered_set<std::string> room_spawn_ids_;
     StateChangedCallback on_state_changed_{};
     std::uint64_t state_version_ = 1;

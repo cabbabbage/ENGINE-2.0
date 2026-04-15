@@ -26,6 +26,13 @@ class AssetLibrary;
 namespace world { class WorldGrid; }
 
 namespace render_internal {
+struct FloorLightContact {
+    float world_x = 0.0f;
+    float world_z = 0.0f;
+    float world_height = 0.0f;
+    bool valid = false;
+};
+
 bool composite_dof_layers_to_gameplay_target(SDL_Renderer* renderer,
                                              SDL_Texture* gameplay_target,
                                              const std::vector<SDL_Texture*>& final_layer_textures,
@@ -37,18 +44,43 @@ bool composite_scene_mid_layers(SDL_Renderer* renderer,
 bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
                                     SDL_Texture* gameplay_target,
                                     SDL_Color clear_color);
-bool should_apply_background_layer_fog(int layer_index,
-                                       int foreground_layer_count,
-                                       int background_layer_count,
-                                       int player_layer_index,
-                                       bool single_layer_fallback_active);
-int fog_cycle_index_for_background_segment(int background_segment_index);
-float clamp_fog_bottom_to_player_floor(float fog_bottom_y,
-                                       float player_floor_y,
-                                       int screen_height);
+FloorLightContact resolve_floor_light_contact(float flat_world_x,
+                                              float flat_world_z,
+                                              float displaced_world_x,
+                                              float displaced_world_z,
+                                              float world_height);
+bool project_floor_contact_to_screen(const WarpedScreenGrid& cam,
+                                     const FloorLightContact& contact,
+                                     SDL_FPoint& out_screen);
+bool sample_floor_light_footprint_axes_px(const WarpedScreenGrid& cam,
+                                          const FloorLightContact& contact,
+                                          const SDL_FPoint& floor_screen_center,
+                                          float base_radius_world,
+                                          float height_spread_scale,
+                                          float& out_radius_x_px,
+                                          float& out_radius_y_px);
 float floor_light_depth_weight(float abs_depth_from_anchor, float floor_light_cull_depth);
-float floor_light_height_weight(float world_height, float base_radius_px);
+float floor_light_height_normalized(float world_height, float base_radius_world);
+float floor_light_height_weight(float world_height, float base_radius_world);
+float floor_light_height_spread_scale(float world_height, float base_radius_world);
 float floor_light_footprint_radius(float base_radius_px, float world_height);
+float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
+                                                float front_multiplier,
+                                                float behind_multiplier);
+float apply_layer_light_strength_bias(float intensity,
+                                      double depth_from_camera_plane,
+                                      float front_multiplier,
+                                      float behind_multiplier);
+bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
+                                double layer_depth_min,
+                                double layer_depth_max,
+                                float layer_bounds_min_x,
+                                float layer_bounds_min_y,
+                                float layer_bounds_max_x,
+                                float layer_bounds_max_y);
+bool dof_blur_chain_enabled(bool depth_of_field_enabled,
+                            float blur_px,
+                            float radial_blur_px);
 std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_count,
                                                 std::size_t layer_count);
 std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
@@ -175,6 +207,17 @@ private:
         bool frame_is_last = false;
     };
 
+    struct RuntimeLightFadeState {
+        float intensity_current = 0.0f;
+        std::uint64_t last_seen_frame = 0;
+    };
+
+    struct RuntimeLightDebugOverlayEntry {
+        SDL_FPoint center{0.0f, 0.0f};
+        float radius = 0.0f;
+        bool rendered = false;
+    };
+
     struct PrevalidatedTag {};
 
     SceneRenderer(PrevalidatedTag, SDL_Renderer* renderer, Assets* assets, int screen_width, int screen_height, const nlohmann::json& map_manifest, const std::string& map_id);
@@ -193,7 +236,9 @@ private:
                                        double max_cull_depth,
                                        SDL_Texture* gameplay_target,
                                        bool render_floor_tiles);
-    void render_sky_layer(const WarpedScreenGrid& cam);
+    void render_sky_layer(const WarpedScreenGrid& cam,
+                          double anchor_depth,
+                          double max_cull_depth);
     void render_mountain_layer(const WarpedScreenGrid& cam,
                                double anchor_depth,
                                double max_cull_depth);
@@ -204,7 +249,8 @@ private:
                                          const std::vector<Asset*>& visible_assets) const;
     void gather_runtime_lights(const WarpedScreenGrid& cam,
                                const std::vector<Asset*>& rendered_assets,
-                               std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) const;
+                               std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
+    void render_light_culling_debug_overlay() const;
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -225,6 +271,11 @@ private:
     bool         anchor_point_debug_enabled_ = false;
     std::unordered_map<const Asset*, MovementDebugAssetSnapshot> movement_debug_snapshots_;
     std::unordered_map<const Asset*, MovementDebugObservedState> movement_debug_observed_state_;
+    std::unordered_map<std::string, RuntimeLightFadeState> runtime_light_fade_states_;
+    std::vector<RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
+    std::uint32_t runtime_light_rendered_count_ = 0;
+    std::uint32_t runtime_light_culled_count_ = 0;
+    std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
 
     CompositeAssetRenderer composite_renderer_;
     LayerEffectProcessor layer_effect_processor_;

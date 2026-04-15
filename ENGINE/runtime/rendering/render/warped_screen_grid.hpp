@@ -58,6 +58,11 @@ namespace world {
 
 class WarpedScreenGrid {
 public:
+    enum class CameraTransitionState {
+        Idle = 0,
+        BlendingToNewRoom = 1,
+        Settling = 2
+    };
 
     static constexpr float kMinHeightAnchors = 0.5f;
     static constexpr float kMaxHeightAnchors = 20.0f;
@@ -67,14 +72,19 @@ public:
     struct RealismSettings {
 
         float min_visible_screen_ratio     = 0.015f;
+        bool min_visible_uses_light_radius = true;
         float base_height_px               = 1000.0f;
         float max_cull_depth               = 5000.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
-        float fog_thickness               = 1.35f;
-        float fog_bottom_curve            = 1.0f;
-        float aperture_f_stop              = 2.8f;
-        float focal_length_mm              = 50.0f;
+        float front_layer_light_strength_multiplier = 1.0f;
+        float behind_layer_light_strength_multiplier = 1.0f;
+        bool light_radius_overlap_culling_enabled = true;
+        bool light_fade_smoothing_enabled = true;
+        float light_fade_in_seconds = 0.08f;
+        float light_fade_out_seconds = 0.14f;
+        float light_min_fade_seconds = 0.03f;
+        bool light_culling_debug_overlay = false;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;
         bool depth_of_field_enabled         = false;
@@ -103,7 +113,38 @@ public:
         float vertical_scale = 1.0f;
         float distance_scale = 1.0f;
         float horizon_fade_alpha = 1.0f;
-};
+    };
+
+    struct CameraTransitionSettings {
+        // First-order dt-stable damping (1/seconds). Larger values settle faster.
+        float transition_damping = 9.0f;
+        // World-pixel velocity cap for camera center movement.
+        float max_camera_velocity = 2200.0f;
+        // Scale applied to damping while blending between rooms (<1 slows transitions).
+        float room_blend_damping_scale = 0.14f;
+        // Scale applied to camera max velocity while blending between rooms.
+        float room_blend_velocity_scale = 0.18f;
+        // Scale applied to player-follow influence while blending between rooms.
+        float room_blend_follow_weight_scale = 0.28f;
+        // Keep settling toward room target briefly after movement stops.
+        float settle_duration_after_stop = 0.20f;
+        // Optional movement look-ahead scale. 0 disables look-ahead.
+        float movement_look_ahead_weight = 0.12f;
+        // Blend room target toward player focus (0 keeps room framing, 1 locks to player).
+        float player_follow_weight = 0.75f;
+        // Soft leash radius from camera center to player focus in world pixels.
+        float player_soft_leash_px = 220.0f;
+        // Hard leash radius that player focus should never exceed.
+        float player_hard_leash_px = 360.0f;
+    };
+
+    struct CameraTransitionTelemetry {
+        CameraTransitionState state = CameraTransitionState::Idle;
+        SDL_FPoint target{0.0f, 0.0f};
+        SDL_FPoint velocity{0.0f, 0.0f};
+        float blend_factor = 0.0f;
+        float settle_time_remaining = 0.0f;
+    };
 
     struct GridBounds {
         float left = 0.0f;
@@ -242,6 +283,9 @@ public:
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
     const CameraController::State& camera_state() const { return camera_.state(); }
+    const CameraTransitionSettings& transition_settings() const { return transition_settings_; }
+    const CameraTransitionTelemetry& camera_transition_telemetry() const { return transition_telemetry_; }
+    static const char* transition_state_name(CameraTransitionState state);
     std::uint64_t camera_state_version() const;
     std::uint64_t projection_state_version() const { return camera_state_version(); }
     const std::vector<VisibleTraversalEntry>& visible_traversal_entries() const { return visible_traversal_entries_; }
@@ -333,4 +377,11 @@ private:
     bool depth_debug_logging_ = false;
     std::optional<float> tilt_override_deg_{};
     const Asset* tracked_player_asset_ = nullptr;
+    CameraTransitionSettings transition_settings_{};
+    CameraTransitionTelemetry transition_telemetry_{};
+    Room* previous_transition_room_ = nullptr;
+    SDL_FPoint previous_player_world_{0.0f, 0.0f};
+    bool previous_player_world_valid_ = false;
+    bool previous_player_moving_ = false;
+    float settle_time_remaining_ = 0.0f;
 };

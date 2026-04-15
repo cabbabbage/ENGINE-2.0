@@ -7,18 +7,15 @@ from PIL import Image, ImageFilter
 # -----------------------------
 # Config
 # -----------------------------
-NUM_IMAGES = 5
+NUM_IMAGES = 4
 
 # Portrait canvas
 WIDTH = 720 * 3
 HEIGHT_MIN_MULT = 2.0
 HEIGHT_MAX_MULT = 2.0
 
-# When true, generate solid random-color test rectangles instead of fog
-CREATE_TEST_IMAGES = False
-
 # Final opacity multiplier applied as the LAST step (0.0 to 1.0)
-FINAL_OPACITY_MULT = 0.6
+FINAL_OPACITY_MULT = 0.1
 
 # Keep portrait canvas size instead of cropping to visible fog bounds
 CROP_TO_ALPHA_BOUNDS = False
@@ -78,17 +75,6 @@ def apply_final_opacity(img_rgba: Image.Image, mult: float) -> Image.Image:
     return out
 
 
-def make_test_image(width, height, seed):
-    rng = np.random.default_rng(seed)
-
-    color = rng.integers(0, 256, size=(3,), dtype=np.uint8)
-    rgb = np.full((height, width, 3), color, dtype=np.uint8)
-    a = np.full((height, width, 1), 255, dtype=np.uint8)
-
-    rgba = np.concatenate([rgb, a], axis=2)
-    return Image.fromarray(rgba, mode="RGBA")
-
-
 def make_fog_image(width, height, seed):
     rng = np.random.default_rng(seed)
 
@@ -128,7 +114,6 @@ def make_fog_image(width, height, seed):
 
     bottom_stretch = 0.55
 
-    # Use width and height independently so the visible shape can stay tall
     rx_base = min(x_limit / (1.0 + bottom_stretch), width * (0.42 + 0.06 * rng.random()))
     ry = min(y_limit, height * (0.42 + 0.08 * rng.random()))
 
@@ -187,17 +172,8 @@ def main():
         height = int(round(WIDTH * master_rng.uniform(HEIGHT_MIN_MULT, HEIGHT_MAX_MULT)))
         seed = int(master_rng.integers(0, 2**31 - 1))
 
-        if CREATE_TEST_IMAGES:
-            img = make_test_image(width, height, seed=seed)
-        else:
-            img = make_fog_image(width, height, seed=seed)
-
+        img = make_fog_image(width, height, seed=seed)
         img = img.convert("RGBA")
-        arr = np.array(img, dtype=np.float32)
-        arr[..., :3] *= 0.25
-        arr[..., :3] = np.clip(arr[..., :3], 0, 255)
-        img = Image.fromarray(arr.astype(np.uint8), mode="RGBA")
-
         img = apply_final_opacity(img, FINAL_OPACITY_MULT)
 
         out_path = os.path.join(script_dir, f"fog_{i}.png")

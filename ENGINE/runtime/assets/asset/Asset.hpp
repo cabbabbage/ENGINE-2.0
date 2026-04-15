@@ -166,6 +166,8 @@ class Asset {
     float runtime_resolved_scale() const;
     float runtime_width_px() const;
     float runtime_height_px() const;
+    float runtime_effective_base_scale() const;
+    float size_variation_sample() const { return size_variation_sample_; }
     enum class PerspectiveSource {
         AnchorBindingOverride,
         CameraTraversal,
@@ -368,7 +370,9 @@ class Asset {
         int frame_index = -1;
         int extrusion_amount = 0;
         int damage_amount = 0;
+        std::string payload_id;
         std::string meta_json;
+        animation_update::AttackPayload payload{};
         std::array<RuntimeBoxPoint3, 8> world_points{};
         RuntimeBoxPoint3 centroid{};
         bool valid = false;
@@ -516,6 +520,7 @@ private:
 
 
     std::optional<TilingInfo> tiling_info_{};
+    float size_variation_sample_ = 0.0f;
     void ensure_animation_runtime(bool force_recreate);
 
     void clear_downscale_cache();

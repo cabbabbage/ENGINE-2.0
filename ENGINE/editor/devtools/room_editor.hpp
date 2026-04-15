@@ -51,6 +51,8 @@ class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
 class DevFooterBar;
 class DevControls;
+namespace animation_update { struct AttackPayload; }
+namespace devmode::room_config { class AttackPayloadEditor; }
 
 namespace devmode::core {
 class ManifestStore;
@@ -73,7 +75,6 @@ public:
     void set_shared_footer_bar(DevFooterBar* footer);
     void set_snap_to_grid_enabled(bool enabled);
     void set_header_visibility_callback(std::function<void(bool)> cb);
-    void set_map_assets_panel_callback(std::function<void()> cb);
     void set_boundary_assets_panel_callback(std::function<void()> cb);
     void set_manifest_store(devmode::core::ManifestStore* store);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
@@ -218,7 +219,32 @@ private:
         Input::Button button = Input::LEFT;
         bool active = false;
 };
+    struct MousePressState {
+        bool prev_left_down = false;
+        SDL_Point press_screen{0, 0};
+        Asset* pressed_asset = nullptr;
+        const void* pressed_identity = nullptr;
+        std::string pressed_spawn_id{};
+        bool pressed_has_spawn_group = false;
+        bool was_dragged = false;
+        bool valid = false;
+    };
+    struct PendingSpawnGroupWork {
+        std::string spawn_id{};
+        nlohmann::json entry_snapshot = nlohmann::json::object();
+        bool has_entry_snapshot = false;
+        bool needs_respawn = false;
+        bool needs_map_notify = false;
+        bool needs_panel_refresh = false;
+        bool needs_room_config_reopen = false;
+        bool needs_selection_resync = false;
+    };
     void handle_mouse_input(const Input& input);
+    static DragMode drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
+    bool is_asset_active_for_input(const Asset* asset) const;
+    bool is_mouse_press_asset_valid() const;
+    void clear_mouse_press_state(bool reset_click_tracking = false);
+    bool consume_pressed_asset_release(Uint32 click_time_ms, std::string& out_spawn_id);
     bool apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam);
     static float edge_pan_intensity(int value, int max_value, float threshold_fraction);
     bool handle_camera_settings_mouse_controls(const Input& input);
@@ -289,6 +315,15 @@ private:
     const Area* find_edge_area_for_entry(const nlohmann::json& entry) const;
     double edge_length_along_direction(const Area& area, SDL_Point center, SDL_FPoint direction) const;
     void respawn_spawn_group(const nlohmann::json& entry);
+    void prune_spawn_group_transient_references(const std::string& spawn_id);
+    void enqueue_spawn_group_work(const nlohmann::json& entry,
+                                  bool needs_respawn,
+                                  bool needs_map_notify,
+                                  bool needs_panel_refresh,
+                                  bool needs_room_config_reopen,
+                                  bool needs_selection_resync);
+    void enqueue_spawn_group_ui_refresh(bool reopen_room_config, bool sync_selection);
+    void process_pending_spawn_group_work();
     std::unique_ptr<vibble::grid::Occupancy> build_room_grid(const std::string& ignore_spawn_id) const;
     bool snap_spawn_group_to_resolution(Asset* anchor, int resolution);
     void render_room_trail_nav_buttons(SDL_Renderer* renderer);
@@ -400,6 +435,7 @@ private:
     void ensure_movement_editor_widgets();
     void ensure_hitbox_editor_widgets();
     void ensure_attack_box_editor_widgets();
+    void ensure_attack_payload_editor_widget();
     void update_asset_editor_layout();
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
@@ -408,6 +444,7 @@ private:
     bool movement_mode_active() const;
     bool hitbox_mode_active() const;
     bool attack_box_mode_active() const;
+    bool is_asset_pointer_live(const Asset* asset) const;
     Asset* selected_anchor_mode_asset() const;
     AssetEditorSubview next_asset_editor_subview(AssetEditorSubview subview) const;
     bool can_enter_asset_editor_subview(AssetEditorSubview subview) const;
@@ -505,6 +542,7 @@ private:
                                                                bool& changed);
     void sync_hitbox_tools_panel();
     void sync_attack_box_tools_panel();
+    void sync_attack_payload_editor();
     void ensure_anchor_selection_valid();
     bool anchor_visible_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
     bool anchor_mutable_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
@@ -600,6 +638,7 @@ private:
                                          devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool persist_specific_attack_box_frame(int frame_index, devmode::core::DevSaveCoordinator::Priority priority);
     bool drag_hitbox_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);
@@ -618,6 +657,7 @@ private:
     bool apply_attack_box_current_frame_to_scope(EditorFramePropagationScope scope);
     bool apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
     bool apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
+    bool apply_attack_payload_editor_update(const animation_update::AttackPayload& payload);
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
@@ -658,9 +698,8 @@ private:
 
     enum class SelectionFilter {
         All,             // All selectable assets
-        Normal,          // Primary room assets (excluding map-wide, boundary-domain, tiled, and anchored)
+        Normal,          // Primary room assets (excluding boundary-domain, tiled, and anchored)
         Tiled,           // Tiled assets only
-        MapWide,         // map_assets_data spawn-group assets only
         Boundary,        // map_boundary_data spawn-group assets/sprites only
         Anchored,        // Assets following another asset's anchor point
     };
@@ -698,6 +737,7 @@ private:
     std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;
+    std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
 
     struct AnchorHandleSample {
@@ -865,7 +905,6 @@ private:
     bool suppress_room_config_selection_clear_ = false;
     ActiveModal active_modal_ = ActiveModal::None;
     std::function<void(bool)> header_visibility_callback_{};
-    std::function<void()> open_map_assets_panel_callback_{};
     std::function<void()> open_boundary_assets_panel_callback_{};
     bool room_config_panel_visible_ = false;
     bool asset_info_panel_visible_ = false;
@@ -926,8 +965,16 @@ private:
     int hover_miss_frames_ = 0;
     const void* last_click_asset_ = nullptr;
     Uint32 last_click_time_ms_ = 0;
+    MousePressState mouse_press_state_{};
+    int suppress_world_left_click_frames_ = 0;
     bool spawn_group_panel_sync_in_progress_ = false;
     bool spawn_group_panel_open_in_progress_ = false;
+    bool spawn_group_callback_in_progress_ = false;
+    bool processing_pending_spawn_group_work_ = false;
+    std::unordered_map<std::string, PendingSpawnGroupWork> pending_spawn_group_work_{};
+    bool pending_spawn_group_panel_refresh_ = false;
+    bool pending_spawn_group_room_config_reopen_ = false;
+    bool pending_spawn_group_selection_resync_ = false;
     std::optional<SDL_Point> pending_spawn_world_pos_{};
     std::optional<std::string> active_spawn_group_id_{};
     std::uint64_t room_assets_edit_version_ = 0;
@@ -977,7 +1024,6 @@ private:
     bool camera_pan_active_notified_ = false;
     bool camera_pan_just_finished_ = false;
     int suppress_left_click_frames_ = 0;
-    bool map_assets_panel_requested_by_shift_click_ = false;
     bool camera_settings_drag_active_notified_ = false;
     struct CameraLockState {
         bool valid = false;
@@ -992,7 +1038,6 @@ private:
     bool camera_settings_lock_active_ = false;
     CameraSettingsDragState camera_settings_drag_{};
     std::unordered_set<std::string> room_spawn_ids_;
-    std::unordered_set<std::string> map_assets_spawn_ids_;
     std::unordered_set<std::string> map_boundary_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;
@@ -1007,6 +1052,7 @@ private:
     friend class DevControls;
 #if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
     std::uint32_t test_snap_spawn_group_to_resolution_call_count_ = 0;
+    std::uint32_t test_respawn_spawn_group_call_count_ = 0;
     friend struct RoomEditorTestAccess;
 #endif
 
@@ -1053,5 +1099,28 @@ struct RoomEditorTestAccess {
                                                         bool has_spawn_group,
                                                         std::uint32_t click_time_ms);
     static void reset_click_tracking(RoomEditor& editor);
+    static bool consume_pressed_asset_release(RoomEditor& editor,
+                                              std::uint32_t click_time_ms,
+                                              std::string& out_spawn_id);
+    static void set_active_asset_identities(RoomEditor& editor, const std::vector<const void*>& identities);
+    static void set_mouse_press_state(RoomEditor& editor,
+                                      const void* asset_identity,
+                                      const std::string& spawn_id,
+                                      bool has_spawn_group,
+                                      bool was_dragged);
+    static void clear_mouse_press_state(RoomEditor& editor, bool reset_click_tracking);
+    static int drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
+    static void set_spawn_group_callback_in_progress(RoomEditor& editor, bool in_progress);
+    static bool spawn_group_callback_in_progress(const RoomEditor& editor);
+    static void enqueue_spawn_group_work(RoomEditor& editor,
+                                         const std::string& spawn_id,
+                                         bool needs_respawn,
+                                         bool needs_panel_refresh,
+                                         bool needs_room_config_reopen,
+                                         bool needs_selection_resync);
+    static std::size_t pending_spawn_group_work_size(const RoomEditor& editor);
+    static void process_pending_spawn_group_work(RoomEditor& editor);
+    static std::uint32_t respawn_spawn_group_call_count(const RoomEditor& editor);
+    static void reset_respawn_spawn_group_call_count(RoomEditor& editor);
 };
 #endif

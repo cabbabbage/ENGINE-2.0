@@ -6,6 +6,7 @@
 #include "rendering/render/render.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/shared/attack_payload.hpp"
 #include "utils/area_helpers.hpp"
 #include "assets/asset_filter_tags.hpp"
 #include "asset_types.hpp"
@@ -60,6 +61,13 @@ static std::mutex& asset_rng_mutex()
 {
         static std::mutex mutex;
         return mutex;
+}
+
+static float sample_size_variation_identity()
+{
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        std::lock_guard<std::mutex> lock(asset_rng_mutex());
+        return dist(asset_rng());
 }
 
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
@@ -367,6 +375,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         alpha_smoothing_.set_params(transform_smoothing::asset_alpha_params());
 
         alpha_smoothing_.reset(hidden ? 0.0f : 1.0f);
+        size_variation_sample_ = sample_size_variation_identity();
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
 }
@@ -487,6 +496,7 @@ Asset::Asset(const Asset& o)
         clear_render_caches();
         last_scale_usage_ = o.last_scale_usage_;
         scale_variant_state_ = o.scale_variant_state_;
+        size_variation_sample_ = o.size_variation_sample_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
@@ -534,6 +544,7 @@ Asset& Asset::operator=(const Asset& o) {
         assets_              = o.assets_;
         spawn_id             = o.spawn_id;
         spawn_method         = o.spawn_method;
+        size_variation_sample_ = o.size_variation_sample_;
         owning_room_name_    = o.owning_room_name_;
         controller_.reset();
         children_.clear();
@@ -791,8 +802,7 @@ void Asset::update_scale_values(bool force) {
     last_scale_update_camera_state_version_ = camera_state_version;
 
     const PerspectiveSample perspective_sample = runtime_perspective_sample();
-    const float base_scale =
-        (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
+    const float base_scale = runtime_effective_base_scale();
     const float perspective_scale = perspective_sample.scale;
     const char* perspective_source = perspective_source_label(perspective_sample.source);
 
@@ -880,6 +890,32 @@ void Asset::update_scale_values(bool force) {
     mark_composite_dirty();
     mark_anchors_dirty();
     mark_mesh_dirty();
+}
+
+float Asset::runtime_effective_base_scale() const {
+    const float authored_base =
+        (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
+    if (!info) {
+        return authored_base;
+    }
+    if (info->tillable) {
+        return authored_base;
+    }
+
+    float variation = info->size_variation_percent;
+    if (!std::isfinite(variation)) {
+        variation = 0.0f;
+    }
+    variation = std::clamp(variation, 0.0f, 20.0f);
+    if (variation <= 0.0f) {
+        return authored_base;
+    }
+
+    const float multiplier = 1.0f + (size_variation_sample_ * (variation / 100.0f));
+    if (!std::isfinite(multiplier) || multiplier <= 0.0f) {
+        return authored_base;
+    }
+    return authored_base * multiplier;
 }
 
 const char* Asset::perspective_source_label(PerspectiveSource source) {
@@ -1176,7 +1212,9 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                             const std::string& anchor_link,
                             int extrusion_amount,
                             int damage_amount,
+                            const std::string& payload_id,
                             const std::string& meta_json,
+                            const animation_update::AttackPayload& payload,
                             const std::array<animation_update::FrameBoxCorner, 4>& corners,
                             RuntimeBoxVolume& out_volume) -> bool {
         out_volume = RuntimeBoxVolume{};
@@ -1190,7 +1228,9 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         out_volume.frame_index = current_frame ? current_frame->frame_index : -1;
         out_volume.extrusion_amount = std::max(0, extrusion_amount);
         out_volume.damage_amount = damage_amount;
+        out_volume.payload_id = payload_id;
         out_volume.meta_json = meta_json;
+        out_volume.payload = payload;
 
         float sum_x = 0.0f;
         float sum_y = 0.0f;
@@ -1275,7 +1315,9 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                           box.anchor_link,
                           box.extrusion_amount,
                           0,
+                          std::string{},
                           "{}",
+                          animation_update::make_default_attack_payload(),
                           runtime_corners,
                           volume)) {
             continue;
@@ -1289,6 +1331,17 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         if (!box.is_valid() || !box.enabled) {
             continue;
         }
+        animation_update::AttackPayload payload = box.payload;
+        if (payload.payload_id.empty()) {
+            payload = animation_update::attack_payload_from_box(
+                box.damage_amount,
+                box.payload_id.empty() ? box.id : box.payload_id,
+                box.meta_json);
+        }
+        if (payload.payload_id.empty()) {
+            payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+        }
+        payload.damage_amount = std::max(0, payload.damage_amount);
         RuntimeBoxVolume volume{};
         const auto runtime_corners = box.to_runtime_clockwise_points();
         if (!build_volume(box.name,
@@ -1299,8 +1352,10 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                           box.frame_end,
                           box.anchor_link,
                           box.extrusion_amount,
-                          box.damage_amount,
+                          payload.damage_amount,
+                          payload.payload_id,
                           box.meta_json,
+                          payload,
                           runtime_corners,
                           volume)) {
             continue;

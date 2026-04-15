@@ -3,6 +3,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
+#include "core/runtime_game_config.hpp"
 #include "utils/map_grid_settings.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -209,6 +210,7 @@ public:
     const std::string& map_id() const { return map_id_; }
     world::WorldGrid& world_grid() { return world_grid_; }
     const world::WorldGrid& world_grid() const { return world_grid_; }
+    world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
 
     // Suspend/reactivate assets outside the grid for shared binding helper.
     std::unique_ptr<Asset> extract_asset(Asset* asset);
@@ -225,6 +227,10 @@ public:
     const std::vector<Room*>& rooms() const;
     void notify_rooms_changed();
     std::size_t rooms_generation() const;
+    RuntimeWorldContext* runtime_world_context();
+    const RuntimeWorldContext* runtime_world_context() const;
+    runtime::config::RuntimeGameConfig& runtime_game_config();
+    const runtime::config::RuntimeGameConfig& runtime_game_config() const;
 
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();
@@ -240,6 +246,7 @@ public:
 
     bool should_run_runtime_updates() const;
     bool should_render_runtime_lighting() const;
+    void set_camera_settings_panel_active(bool active);
     bool is_dev_mode() const { return dev_mode; }
     bool is_frame_editor_target_active(const Asset* asset) const;
     bool should_advance_animation_for(const Asset* asset) const;
@@ -276,8 +283,6 @@ private:
     void schedule_removal(Asset* a);
     std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
     std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
-    world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
-
     bool process_removals();
     bool apply_world_mutation_batch(WorldMutationBatch& batch);
     void addAsset(const std::string& name, SDL_Point g);
@@ -314,6 +319,7 @@ private:
     Room* current_room_ = nullptr;
     bool dev_mode = false;
     bool camera_settings_dirty_ = false;
+    bool camera_settings_panel_active_ = false;
     bool suppress_render_ = false;
 
     bool suppress_dev_renderer_ = false;

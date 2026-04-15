@@ -18,7 +18,10 @@ nlohmann::json square_room_fixture() {
         {"curvyness", 3},
         {"is_spawn", true},
         {"is_boss", false},
-        {"inherits_map_assets", true}
+        {"inherits_map_assets", true},
+        {"camera_height_px", 1450},
+        {"camera_tilt_deg", 27.5f},
+        {"camera_zoom_percent", 125}
     });
 }
 
@@ -29,10 +32,6 @@ nlohmann::json circle_room_fixture() {
         {"radius", 320},
         {"min_radius", 240},
         {"max_radius", 320},
-        {"min_width", 480},
-        {"max_width", 640},
-        {"min_height", 480},
-        {"max_height", 640},
         {"edge_smoothness", 2},
         {"curvyness", 1},
         {"is_spawn", false},
@@ -43,7 +42,7 @@ nlohmann::json circle_room_fixture() {
 
 }  // namespace
 
-TEST_CASE("RoomConfigurator compact mode preserves room metadata and omits tags and camera keys") {
+TEST_CASE("RoomConfigurator compact mode preserves room metadata and existing camera keys") {
     RoomConfigurator configurator;
     configurator.set_room_metadata_only_mode(true);
 
@@ -64,12 +63,12 @@ TEST_CASE("RoomConfigurator compact mode preserves room metadata and omits tags 
     CHECK(saved.value("inherits_map_assets", false));
     CHECK_FALSE(saved.contains("tags"));
     CHECK_FALSE(saved.contains("anti_tags"));
-    CHECK_FALSE(saved.contains("camera_height_px"));
-    CHECK_FALSE(saved.contains("camera_tilt_deg"));
-    CHECK_FALSE(saved.contains("camera_zoom_percent"));
+    CHECK(saved.value("camera_height_px", 0) == 1450);
+    CHECK(saved.value("camera_tilt_deg", 0.0f) == doctest::Approx(27.5f));
+    CHECK(saved.value("camera_zoom_percent", 0) == 125);
 }
 
-TEST_CASE("RoomConfigurator compact mode round-trips circular room dimensions") {
+TEST_CASE("RoomConfigurator compact mode migrates legacy radius to width and height bounds") {
     RoomConfigurator configurator;
     configurator.set_room_metadata_only_mode(true);
 
@@ -79,16 +78,47 @@ TEST_CASE("RoomConfigurator compact mode round-trips circular room dimensions") 
     const nlohmann::json saved = configurator.build_json();
     CHECK(saved.value("name", std::string{}) == "Round");
     CHECK(saved.value("geometry", std::string{}) == "Circle");
-    CHECK(saved.value("radius", 0) == 320);
-    CHECK(saved.value("min_radius", 0) == 240);
-    CHECK(saved.value("max_radius", 0) == 320);
     CHECK(saved.value("min_width", 0) == 480);
     CHECK(saved.value("max_width", 0) == 640);
     CHECK(saved.value("min_height", 0) == 480);
     CHECK(saved.value("max_height", 0) == 640);
+    CHECK_FALSE(saved.contains("radius"));
+    CHECK_FALSE(saved.contains("min_radius"));
+    CHECK_FALSE(saved.contains("max_radius"));
     CHECK(saved.value("edge_smoothness", 0) == 2);
     CHECK(saved.value("curvyness", 0) == 1);
     CHECK_FALSE(saved.value("is_spawn", true));
     CHECK(saved.value("is_boss", false));
     CHECK_FALSE(saved.value("inherits_map_assets", true));
+}
+
+TEST_CASE("RoomConfigurator compact mode self-heals malformed dimensions and preserves existing canonical bounds") {
+    RoomConfigurator configurator;
+    configurator.set_room_metadata_only_mode(true);
+
+    nlohmann::json malformed = nlohmann::json::object({
+        {"name", "Broken"},
+        {"geometry", "Circle"},
+        {"min_width", -25},
+        {"max_width", "oops"},
+        {"min_height", 9000},
+        {"max_height", 2},
+        {"radius", 111},
+        {"min_radius", 10},
+        {"max_radius", 11},
+        {"edge_smoothness", 999}
+    });
+
+    configurator.open(malformed);
+    const nlohmann::json saved = configurator.build_json();
+
+    CHECK(saved.value("min_width", 0) >= 1);
+    CHECK(saved.value("max_width", 0) >= saved.value("min_width", 0));
+    CHECK(saved.value("min_height", 0) >= 1);
+    CHECK(saved.value("max_height", 0) >= saved.value("min_height", 0));
+    CHECK(saved.value("max_height", 0) <= 4000);
+    CHECK(saved.value("edge_smoothness", 0) == 101);
+    CHECK_FALSE(saved.contains("radius"));
+    CHECK_FALSE(saved.contains("min_radius"));
+    CHECK_FALSE(saved.contains("max_radius"));
 }

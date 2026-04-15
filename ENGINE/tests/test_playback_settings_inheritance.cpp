@@ -7,7 +7,9 @@
 
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "devtools/asset_editor/animation_editor_window/PanelLayoutConstants.hpp"
+#define private public
 #include "devtools/asset_editor/animation_editor_window/PlaybackSettingsPanel.hpp"
+#undef private
 
 #include <nlohmann/json.hpp>
 
@@ -19,13 +21,15 @@ TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-source
              {"base", {{"source", {{"kind", "folder"}, {"path", "base"}, {"name", ""}}}, {"number_of_frames", 1}}},
              {"mid", {{"source", {{"kind", "animation"}, {"path", ""}, {"name", "base"}}}, {"number_of_frames", 1}}},
              {"derived",
-              {{"source", {{"kind", "animation"}, {"path", ""}, {"name", "mid"}}},
-               {"number_of_frames", 1},
-               {"inherit_data", true},
-               {"flipped_source", true},
-               {"flip_vertical_source", true},
-               {"reverse_source", false},
-               {"derived_modifiers", {{"flipX", true}, {"flipY", true}, {"reverse", false}}}}},
+             {{"source", {{"kind", "animation"}, {"path", ""}, {"name", "mid"}}},
+              {"number_of_frames", 1},
+              {"inherit_data", true},
+              {"invert_frames_vertical", true},
+              {"invert_x", true},
+              {"invert_y", true},
+              {"invert_z", true},
+              {"reverse_source", false},
+              {"derived_modifiers", {{"reverse", false}}}}},
          }},
     };
 
@@ -43,12 +47,18 @@ TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-source
 
     CHECK((*payload)["reverse_source"] == false);
     CHECK((*payload)["inherit_data"] == true);
-    CHECK((*payload)["flipped_source"] == true);
-    CHECK((*payload)["flip_vertical_source"] == true);
+    CHECK((*payload)["invert_frames_vertical"] == false);
+    CHECK((*payload)["invert_x"] == true);
+    CHECK((*payload)["invert_y"] == true);
+    CHECK((*payload)["invert_z"] == true);
+    CHECK_FALSE(payload->contains("flipped_source"));
+    CHECK_FALSE(payload->contains("flip_vertical_source"));
     REQUIRE(payload->contains("derived_modifiers"));
-    CHECK((*payload)["derived_modifiers"]["flipX"] == true);
-    CHECK((*payload)["derived_modifiers"]["flipY"] == true);
     CHECK((*payload)["derived_modifiers"]["reverse"] == false);
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipX"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipY"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipMovementX"));
+    CHECK_FALSE((*payload)["derived_modifiers"].contains("flipMovementY"));
 }
 
 TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is toggled") {
@@ -93,8 +103,11 @@ TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is togg
         panel.handle_event(up);
     };
 
-    const int checkbox_stride = DMCheckbox::height() + 8;
-    click_checkbox(animation_editor::kPanelPadding + 6, animation_editor::kPanelPadding + 6);
+    REQUIRE(panel.inherit_geometry_checkbox_);
+    SDL_Rect inherit_rect = panel.inherit_geometry_checkbox_->rect();
+    REQUIRE(inherit_rect.w > 0);
+    REQUIRE(inherit_rect.h > 0);
+    click_checkbox(inherit_rect.x + inherit_rect.w / 2, inherit_rect.y + inherit_rect.h / 2);
 
     auto after_inherit_on = document->animation_payload_json("derived");
     REQUIRE(after_inherit_on.has_value());
@@ -103,8 +116,10 @@ TEST_CASE("PlaybackSettingsPanel updates on_end when inherit source data is togg
     CHECK((*after_inherit_on)["on_end"] == "reverse");
 
     panel.update();
-    click_checkbox(animation_editor::kPanelPadding + 6,
-                   animation_editor::kPanelPadding + checkbox_stride * 2 + 6);
+    inherit_rect = panel.inherit_geometry_checkbox_->rect();
+    REQUIRE(inherit_rect.w > 0);
+    REQUIRE(inherit_rect.h > 0);
+    click_checkbox(inherit_rect.x + inherit_rect.w / 2, inherit_rect.y + inherit_rect.h / 2);
 
     auto after_inherit_off = document->animation_payload_json("derived");
     REQUIRE(after_inherit_off.has_value());

@@ -195,6 +195,7 @@ nlohmann::json serialize_anchor_frame(const std::vector<DisplacedAssetAnchorPoin
             light_json["enabled"] = anchor.light.enabled;
             light_json["color"] = nlohmann::json::array(
                 {anchor.light.color_r, anchor.light.color_g, anchor.light.color_b});
+            light_json["opacity"] = anchor.light.opacity;
             light_json["intensity"] = anchor.light.intensity;
             light_json["radius"] = anchor.light.radius;
             light_json["falloff"] = anchor.light.falloff;

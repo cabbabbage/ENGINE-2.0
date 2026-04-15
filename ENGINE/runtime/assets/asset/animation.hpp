@@ -82,8 +82,9 @@ public:
         std::string path;
         std::string name;
     } source{};
-    bool flipped_source = false;
-    bool flip_vertical_source = false;
+    bool invert_x = false;
+    bool invert_y = false;
+    bool invert_z = false;
     bool invert_frames_horizontal = false;
     bool invert_frames_vertical = false;
     bool reverse_source = false;

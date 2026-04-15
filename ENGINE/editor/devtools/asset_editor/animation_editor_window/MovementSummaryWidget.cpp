@@ -185,13 +185,12 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
 
     if (kind == "animation") {
         bool reverse = payload.value("reverse_source", false);
-        bool flip_x = payload.value("flipped_source", false);
-        bool flip_y = payload.value("flip_vertical_source", false);
+        bool invert_x = payload.value("invert_x", false);
+        bool invert_y = payload.value("invert_y", false);
+        bool invert_z = payload.value("invert_z", false);
         if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
             const auto& modifiers = payload["derived_modifiers"];
             reverse = modifiers.value("reverse", reverse);
-            flip_x = modifiers.value("flipX", flip_x);
-            flip_y = modifiers.value("flipY", flip_y);
         }
 
         std::string reference = source ? source->value("name", std::string{}) : std::string{};
@@ -213,17 +212,20 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
         result.derived = true;
         result.source_id = reference;
 
-        if (flip_x) result.total_dx = -result.total_dx;
-        if (flip_y) result.total_dz = -result.total_dz;
+        if (invert_x) result.total_dx = -result.total_dx;
+        if (invert_y) result.total_dy = -result.total_dy;
+        if (invert_z) result.total_dz = -result.total_dz;
         if (reverse) result.modifiers.push_back("Reverse");
-        if (flip_x) result.modifiers.push_back("Flip X");
-        if (flip_y) result.modifiers.push_back("Flip Y");
+        if (invert_x) result.modifiers.push_back("Invert X");
+        if (invert_y) result.modifiers.push_back("Invert Y");
+        if (invert_z) result.modifiers.push_back("Invert Z");
         result.modifiers.push_back("Inherit Geometry");
 
         result.signature += "|mods:";
         result.signature.push_back(reverse ? '1' : '0');
-        result.signature.push_back(flip_x ? '1' : '0');
-        result.signature.push_back(flip_y ? '1' : '0');
+        result.signature.push_back(invert_x ? '1' : '0');
+        result.signature.push_back(invert_y ? '1' : '0');
+        result.signature.push_back(invert_z ? '1' : '0');
         return result;
     }
 
@@ -236,7 +238,7 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
     float dx = 0.0f;
     float dy = 0.0f;
     float dz = 0.0f;
-    for (size_t i = 1; i < movement.size(); ++i) {
+    for (size_t i = 0; i < movement.size(); ++i) {
         const nlohmann::json& entry = movement[i];
         dx += read_movement_component(entry, 0);
         dy += read_movement_component(entry, 1);

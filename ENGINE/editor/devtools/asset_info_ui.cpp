@@ -119,6 +119,7 @@ class Section_BasicInfo : public DockableCollapsible {
 
     std::unique_ptr<DMDropdown>  dd_type_;
     std::unique_ptr<DMSlider>    s_scale_pct_;
+    std::unique_ptr<DMSlider>    s_size_variation_pct_;
     std::unique_ptr<DMSlider>    s_weight_kg_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
@@ -128,6 +129,7 @@ class Section_BasicInfo : public DockableCollapsible {
     std::vector<std::string> type_options_;
     AssetInfoUI* ui_ = nullptr;
     void on_scale_slider_value_changed(int new_value);
+    void on_size_variation_slider_value_changed(int new_value);
 
   protected:
     std::string_view lock_settings_namespace() const override { return "asset_info"; }
@@ -176,6 +178,9 @@ inline void Section_BasicInfo::build() {
     int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
     s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
+    int size_variation_pct = std::clamp(static_cast<int>(std::lround(info_->size_variation_percent)), 0, 20);
+    s_size_variation_pct_ = std::make_unique<DMSlider>("Size Variation (%)", 0, 20, size_variation_pct);
+    s_size_variation_pct_->set_on_value_changed([this](int value) { this->on_size_variation_slider_value_changed(value); });
     int weight_val = std::max(0, static_cast<int>(std::lround(info_->weight_kg)));
     s_weight_kg_ = std::make_unique<DMSlider>("Weight (kg)", 0, 10000, weight_val);
     if (!is_tiled_asset) {
@@ -192,6 +197,10 @@ inline void Section_BasicInfo::build() {
     auto w_scale = std::make_unique<SliderWidget>(s_scale_pct_.get());
     rows.push_back({ w_scale.get() });
     widgets_.push_back(std::move(w_scale));
+
+    auto w_size_variation = std::make_unique<SliderWidget>(s_size_variation_pct_.get());
+    rows.push_back({ w_size_variation.get() });
+    widgets_.push_back(std::move(w_size_variation));
 
     auto w_weight = std::make_unique<SliderWidget>(s_weight_kg_.get());
     rows.push_back({ w_weight.get() });
@@ -231,6 +240,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (!used) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
+        if (s_size_variation_pct_ && s_size_variation_pct_->handle_event(e)) used = true;
         if (s_weight_kg_ && s_weight_kg_->handle_event(e)) used = true;
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
@@ -387,6 +397,20 @@ inline void Section_BasicInfo::on_scale_slider_value_changed(int new_value) {
     if (ui_) {
         ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
                                    "Scale",
+                                   [this]() {
+                                       if (ui_) {
+                                           ui_->refresh_target_asset_scale();
+                                       }
+                                   });
+    }
+}
+
+inline void Section_BasicInfo::on_size_variation_slider_value_changed(int new_value) {
+    if (!info_) return;
+    info_->set_size_variation_percentage(static_cast<float>(new_value));
+    if (ui_) {
+        ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                   "Size variation",
                                    [this]() {
                                        if (ui_) {
                                            ui_->refresh_target_asset_scale();
@@ -1095,7 +1119,7 @@ void AssetInfoUI::open()  {
     container_.open();
     apply_camera_override(true);
 }
-void AssetInfoUI::close() {
+void AssetInfoUI::close(bool flush_changes) {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
     animation_editor_fullscreen_mode_ = false;
@@ -1112,7 +1136,7 @@ void AssetInfoUI::close() {
 
         forcing_high_quality_rendering_ = false;
     }
-    if (save_coordinator_) {
+    if (flush_changes && save_coordinator_) {
         save_coordinator_->flush_now("AssetInfoUI close");
     }
 }
@@ -2698,6 +2722,5 @@ bool AssetInfoUI::handle_delete_modal_event(const SDL_Event& e) {
     }
     return false;
 }
-
 
 

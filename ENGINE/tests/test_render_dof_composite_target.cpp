@@ -244,3 +244,25 @@ TEST_CASE("Scene mid-layer composite draws foreground over background") {
     SDL_DestroyTexture(background_mid);
     SDL_DestroyTexture(gameplay_target);
 }
+
+TEST_CASE("DoF blur-chain gate requires DoF enabled and non-zero blur") {
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(false, 32.0f, 0.0f));
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(false, 0.0f, 16.0f));
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(false, 16.0f, 16.0f));
+
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(true, 0.0f, 0.0f));
+    CHECK_FALSE(render_internal::dof_blur_chain_enabled(true, 1.0e-6f, 1.0e-6f));
+
+    CHECK(render_internal::dof_blur_chain_enabled(true, 0.25f, 0.0f));
+    CHECK(render_internal::dof_blur_chain_enabled(true, 0.0f, 0.25f));
+}
+
+TEST_CASE("DoF background chain keeps the player split layer in the blur path") {
+    const std::vector<int> non_empty_layers{0, 1, 2, 3};
+
+    const std::vector<int> background_chain = render_internal::background_chain_layers(non_empty_layers, 2);
+    const std::vector<int> foreground_chain = render_internal::foreground_chain_layers(non_empty_layers, 2);
+
+    CHECK(background_chain == std::vector<int>({3, 2}));
+    CHECK(foreground_chain == std::vector<int>({0, 1}));
+}

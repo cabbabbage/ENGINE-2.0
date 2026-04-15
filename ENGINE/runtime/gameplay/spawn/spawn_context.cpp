@@ -150,16 +150,6 @@ Asset* SpawnContext::spawnTiledAsset(const std::string& name,
         aligned_pos.x = align_down(pos.x, tile_w) + tile_w / 2;
         aligned_pos.y = align_down(pos.y, tile_h) + tile_h / 2;
 
-        // Apply position jitter for map-wide assets after grid alignment
-        if (spawn_method == "MapWide") {
-                int jitter = map_grid_settings_.position_jitter_px;
-                if (jitter > 0) {
-                        std::uniform_int_distribution<> dist(-jitter, jitter);
-                        aligned_pos.x += dist(rng_);
-                        aligned_pos.y += dist(rng_);
-                }
-        }
-
         tiling.grid_origin = SDL_Point{ origin_x, origin_y };
         tiling.tile_size   = SDL_Point{ tile_w, tile_h };
         tiling.anchor      = aligned_pos;

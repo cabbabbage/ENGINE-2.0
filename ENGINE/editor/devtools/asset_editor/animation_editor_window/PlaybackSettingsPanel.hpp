@@ -35,22 +35,22 @@ class PlaybackSettingsPanel {
 
   private:
     struct PlaybackState {
-        bool flipped_source = false;
+        bool invert_x = false;
+        bool invert_y = false;
+        bool invert_z = false;
         bool reverse_source = false;
-        bool flip_vertical = false;
         bool inherit_data = true;
         bool invert_frames_horizontal = false;
-        bool invert_frames_vertical = false;
         bool locked = false;
         bool random_start = false;
 
         bool operator==(const PlaybackState& other) const {
-            return flipped_source == other.flipped_source &&
+            return invert_x == other.invert_x &&
+                   invert_y == other.invert_y &&
+                   invert_z == other.invert_z &&
                    reverse_source == other.reverse_source &&
-                   flip_vertical == other.flip_vertical &&
                    inherit_data == other.inherit_data &&
                    invert_frames_horizontal == other.invert_frames_horizontal &&
-                   invert_frames_vertical == other.invert_frames_vertical &&
                    locked == other.locked &&
                    random_start == other.random_start;
         }
@@ -82,10 +82,10 @@ class PlaybackSettingsPanel {
     std::string animation_id_;
     SDL_Rect bounds_{0, 0, 0, 0};
 
-    std::unique_ptr<DMCheckbox> flip_checkbox_;
-    std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;
+    std::unique_ptr<DMCheckbox> invert_x_checkbox_;
+    std::unique_ptr<DMCheckbox> invert_y_checkbox_;
+    std::unique_ptr<DMCheckbox> invert_z_checkbox_;
     std::unique_ptr<DMCheckbox> invert_frames_horizontal_checkbox_;
-    std::unique_ptr<DMCheckbox> invert_frames_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> inherit_geometry_checkbox_;
     std::unique_ptr<DMCheckbox> reverse_checkbox_;
     std::unique_ptr<DMCheckbox> locked_checkbox_;

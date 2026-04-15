@@ -453,7 +453,6 @@ void Assets::hydrate_map_info_sections() {
         }
 };
 
-    ensure_object("map_assets_data");
     ensure_object("map_boundary_data");
     ensure_object("rooms_data");
     ensure_object("trails_data");
@@ -604,6 +603,7 @@ void Assets::log_camera_fog_state(const char* label) const {
 
     const Room* room = current_room_;
     const auto& settings = camera_.realism_settings();
+    const auto& transition = camera_.camera_transition_telemetry();
     const double camera_height = camera_.current_camera_height();
     const float pitch_deg = camera_.current_pitch_degrees();
     const auto& controller_state = camera_.camera_state();
@@ -623,7 +623,11 @@ void Assets::log_camera_fog_state(const char* label) const {
         " pitch_deg=" + std::to_string(pitch_deg) +
         " zoom_percent=" + std::to_string(controller_state.params.zoom_percent) +
         " scale=" + std::to_string(camera_.get_scale()) +
-        " screen_center=(" + std::to_string(center.x) + "," + std::to_string(center.y) + ")"
+        " screen_center=(" + std::to_string(center.x) + "," + std::to_string(center.y) + ")" +
+        " transition_state=" + std::string(WarpedScreenGrid::transition_state_name(transition.state)) +
+        " transition_target=(" + std::to_string(transition.target.x) + "," + std::to_string(transition.target.y) + ")" +
+        " transition_velocity=(" + std::to_string(transition.velocity.x) + "," + std::to_string(transition.velocity.y) + ")" +
+        " transition_blend=" + std::to_string(transition.blend_factor)
     );
 }
 
@@ -732,6 +736,24 @@ const std::vector<Room*>& Assets::rooms() const {
 
 std::size_t Assets::rooms_generation() const {
     return world_context_ ? world_context_->topology_generation() : 0;
+}
+
+RuntimeWorldContext* Assets::runtime_world_context() {
+    return world_context_.get();
+}
+
+const RuntimeWorldContext* Assets::runtime_world_context() const {
+    return world_context_.get();
+}
+
+runtime::config::RuntimeGameConfig& Assets::runtime_game_config() {
+    static runtime::config::RuntimeGameConfig fallback{};
+    return world_context_ ? world_context_->game_config() : fallback;
+}
+
+const runtime::config::RuntimeGameConfig& Assets::runtime_game_config() const {
+    static const runtime::config::RuntimeGameConfig fallback{};
+    return world_context_ ? world_context_->game_config() : fallback;
 }
 
 void Assets::notify_rooms_changed() {
@@ -1412,13 +1434,13 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         grid_registration_buffer_.clear();
     }
 
-    const bool height_animation_active = false;
-    const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;
+    const bool camera_motion_active_before_update = camera_.is_height_animating();
+    const bool camera_refresh_needed = room_changed || player_moved || camera_motion_active_before_update || camera_settings_dirty_;
     if (dev_controls_) {
         dev_controls_->sync_camera_tilt_override();
     }
     camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
-    if (camera_refresh_needed) {
+    if (camera_refresh_needed || camera_.is_height_animating()) {
         note_frame_rebuild_request();
     }
     camera_settings_dirty_ = false;
@@ -3358,6 +3380,9 @@ bool Assets::should_run_runtime_updates() const {
 }
 
 bool Assets::should_render_runtime_lighting() const {
+    if (camera_settings_panel_active_) {
+        return true;
+    }
     if (dev_controls_ && dev_controls_->is_runtime_light_editor_active()) {
         return true;
     }
@@ -3365,6 +3390,10 @@ bool Assets::should_render_runtime_lighting() const {
         return false;
     }
     return true;
+}
+
+void Assets::set_camera_settings_panel_active(bool active) {
+    camera_settings_panel_active_ = active;
 }
 
 bool Assets::should_advance_animation_for(const Asset* asset) const {

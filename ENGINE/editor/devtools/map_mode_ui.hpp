@@ -127,6 +127,7 @@ private:
     SDL_Rect effective_work_area() const;
     void apply_sliding_area_bounds();
     nlohmann::json* active_room_entry();
+    void sync_active_room_runtime_data();
     std::string rename_active_room(const std::string& old_name, const std::string& desired_name);
     void delete_active_room_spawn_group(const std::string& spawn_id);
     void reorder_active_room_spawn_group(const std::string& spawn_id, size_t index);

@@ -9,9 +9,13 @@
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/animation_frame.hpp"
+#include "assets/asset/asset_library.hpp"
+#include "core/find_current_room.hpp"
 #include "core/manifest/map_data.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
@@ -71,6 +75,64 @@ bool traversal_contains_asset(const WarpedScreenGrid& camera_grid, const Asset* 
         }
     }
     return false;
+}
+
+std::unique_ptr<AnimationFrame> make_light_anchor_frame(float radius_world,
+                                                        bool enabled = true,
+                                                        float intensity = 1.0f) {
+    auto frame = std::make_unique<AnimationFrame>();
+    DisplacedAssetAnchorPoint anchor{"light_anchor", 0, 0, 0.0f};
+    anchor.has_light_data = true;
+    anchor.light.enabled = enabled;
+    anchor.light.radius = radius_world;
+    anchor.light.intensity = intensity;
+    anchor.light.sanitize();
+    frame->anchor_points.push_back(anchor);
+    frame->rebuild_anchor_lookup();
+    return frame;
+}
+
+Asset* move_world_grid_asset(world::WorldGrid& grid, Asset* asset, int world_x, int world_z) {
+    REQUIRE(asset != nullptr);
+    const world::GridPoint* start = grid.point_for_asset(asset);
+    REQUIRE(start != nullptr);
+    const world::GridPoint old_pos = world::GridPoint::make_virtual(
+        start->world_x(),
+        start->world_y(),
+        start->world_z(),
+        start->resolution_layer());
+    const world::GridPoint new_pos = world::GridPoint::make_virtual(
+        world_x,
+        start->world_y(),
+        world_z,
+        start->resolution_layer());
+    Asset* moved = grid.move_asset(asset, old_pos, new_pos);
+    REQUIRE(moved == asset);
+    return moved;
+}
+
+std::unique_ptr<Room> make_transition_test_room(AssetLibrary& library,
+                                                const std::string& name,
+                                                SDL_Point center,
+                                                int width,
+                                                int height) {
+    Area area = make_warped_screen_test_view(name + "_area", center, width, height);
+    MapGridSettings grid_settings{};
+    auto room = std::make_unique<Room>(
+        Room::Point{center.x, center.y},
+        "room",
+        name,
+        nullptr,
+        "test_manifest",
+        &library,
+        &area,
+        nullptr,
+        grid_settings,
+        5000.0,
+        "rooms_data");
+    room->camera_center_dx = 0;
+    room->camera_center_dz = 0;
+    return room;
 }
 
 } // namespace
@@ -450,6 +512,29 @@ TEST_CASE("WarpedScreenGrid min on-screen culling exempts tracked player asset")
     CHECK_FALSE(traversal_contains_asset(camera_grid, npc_asset));
 }
 
+TEST_CASE("WarpedScreenGrid min on-screen culling uses light radius when enabled") {
+    world::WorldGrid grid;
+    Asset* tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(tiny_asset != nullptr);
+    tiny_asset->info->original_canvas_width = 1;
+    tiny_asset->info->original_canvas_height = 1;
+    std::unique_ptr<AnimationFrame> light_frame = make_light_anchor_frame(900.0f, true, 1.0f);
+    tiny_asset->current_frame = light_frame.get();
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.05f;
+    settings.min_visible_uses_light_radius = true;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, tiny_asset));
+
+    settings.min_visible_uses_light_radius = false;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 2);
+    CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
+}
+
 TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
@@ -483,6 +568,8 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
+    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
+    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys handled by Assets") {
@@ -501,40 +588,92 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
+    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
+    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
 }
 
-TEST_CASE("WarpedScreenGrid camera settings roundtrip includes aperture and layer controls") {
+TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer and DoF controls") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{
         {"max_cull_depth", 2500.0},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
-        {"fog_thickness", 2.2},
-        {"aperture_f_stop", 4.0},
-        {"focal_length_mm", 35.0},
+        {"front_layer_light_strength_multiplier", 1.4},
+        {"behind_layer_light_strength_multiplier", 0.65},
+        {"min_visible_uses_light_radius", true},
+        {"light_radius_overlap_culling_enabled", true},
+        {"light_fade_smoothing_enabled", true},
+        {"light_fade_in_seconds", 0.12},
+        {"light_fade_out_seconds", 0.22},
+        {"light_min_fade_seconds", 0.05},
+        {"light_culling_debug_overlay", true},
         {"blur_px", 20.0},
         {"radial_blur_px", 64.0},
-        {"depth_of_field_enabled", true}
+        {"depth_of_field_enabled", true},
+        {"transition_damping", 11.0},
+        {"max_camera_velocity", 1800.0},
+        {"room_blend_damping_scale", 0.30},
+        {"room_blend_velocity_scale", 0.55},
+        {"room_blend_follow_weight_scale", 0.40},
+        {"settle_duration_after_stop", 0.35},
+        {"movement_look_ahead_weight", 0.4},
+        {"player_follow_weight", 0.45},
+        {"player_soft_leash_px", 180.0},
+        {"player_hard_leash_px", 320.0}
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
-    CHECK(settings.fog_thickness == doctest::Approx(2.2f));
-    CHECK(settings.aperture_f_stop == doctest::Approx(4.0f));
-    CHECK(settings.focal_length_mm == doctest::Approx(35.0f));
+    CHECK(settings.front_layer_light_strength_multiplier == doctest::Approx(1.4f));
+    CHECK(settings.behind_layer_light_strength_multiplier == doctest::Approx(0.65f));
+    CHECK(settings.min_visible_uses_light_radius);
+    CHECK(settings.light_radius_overlap_culling_enabled);
+    CHECK(settings.light_fade_smoothing_enabled);
+    CHECK(settings.light_fade_in_seconds == doctest::Approx(0.12f));
+    CHECK(settings.light_fade_out_seconds == doctest::Approx(0.22f));
+    CHECK(settings.light_min_fade_seconds == doctest::Approx(0.05f));
+    CHECK(settings.light_culling_debug_overlay);
     CHECK(settings.blur_px == doctest::Approx(20.0f));
     CHECK(settings.radial_blur_px == doctest::Approx(64.0f));
     CHECK(settings.depth_of_field_enabled);
+    CHECK(camera_grid.transition_settings().transition_damping == doctest::Approx(11.0f));
+    CHECK(camera_grid.transition_settings().max_camera_velocity == doctest::Approx(1800.0f));
+    CHECK(camera_grid.transition_settings().room_blend_damping_scale == doctest::Approx(0.30f));
+    CHECK(camera_grid.transition_settings().room_blend_velocity_scale == doctest::Approx(0.55f));
+    CHECK(camera_grid.transition_settings().room_blend_follow_weight_scale == doctest::Approx(0.40f));
+    CHECK(camera_grid.transition_settings().settle_duration_after_stop == doctest::Approx(0.35f));
+    CHECK(camera_grid.transition_settings().movement_look_ahead_weight == doctest::Approx(0.4f));
+    CHECK(camera_grid.transition_settings().player_follow_weight == doctest::Approx(0.45f));
+    CHECK(camera_grid.transition_settings().player_soft_leash_px == doctest::Approx(180.0f));
+    CHECK(camera_grid.transition_settings().player_hard_leash_px == doctest::Approx(320.0f));
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
-    CHECK(serialized["fog_thickness"] == doctest::Approx(2.2));
+    CHECK(serialized["front_layer_light_strength_multiplier"] == doctest::Approx(1.4));
+    CHECK(serialized["behind_layer_light_strength_multiplier"] == doctest::Approx(0.65));
+    CHECK(serialized["min_visible_uses_light_radius"] == true);
+    CHECK(serialized["light_radius_overlap_culling_enabled"] == true);
+    CHECK(serialized["light_fade_smoothing_enabled"] == true);
+    CHECK(serialized["light_fade_in_seconds"] == doctest::Approx(0.12));
+    CHECK(serialized["light_fade_out_seconds"] == doctest::Approx(0.22));
+    CHECK(serialized["light_min_fade_seconds"] == doctest::Approx(0.05));
+    CHECK(serialized["light_culling_debug_overlay"] == true);
     CHECK(serialized["blur_px"] == doctest::Approx(20.0));
     CHECK(serialized["radial_blur_px"] == doctest::Approx(64.0));
     CHECK(serialized["depth_of_field_enabled"] == true);
+    CHECK(serialized["transition_damping"] == doctest::Approx(11.0));
+    CHECK(serialized["max_camera_velocity"] == doctest::Approx(1800.0));
+    CHECK(serialized["room_blend_damping_scale"] == doctest::Approx(0.30));
+    CHECK(serialized["room_blend_velocity_scale"] == doctest::Approx(0.55));
+    CHECK(serialized["room_blend_follow_weight_scale"] == doctest::Approx(0.40));
+    CHECK(serialized["settle_duration_after_stop"] == doctest::Approx(0.35));
+    CHECK(serialized["movement_look_ahead_weight"] == doctest::Approx(0.4));
+    CHECK(serialized["player_follow_weight"] == doctest::Approx(0.45));
+    CHECK(serialized["player_soft_leash_px"] == doctest::Approx(180.0));
+    CHECK(serialized["player_hard_leash_px"] == doctest::Approx(320.0));
     CHECK_FALSE(serialized.contains("max_blur_px"));
     CHECK_FALSE(serialized.contains("radial_max_blur_px"));
     CHECK_FALSE(serialized.contains("focus_depth"));
@@ -568,4 +707,91 @@ TEST_CASE("WarpedScreenGrid blur settings preserve tiny decimal values") {
     REQUIRE(serialized.contains("radial_blur_px"));
     CHECK(serialized["blur_px"].get<double>() == doctest::Approx(0.013).epsilon(1e-6));
     CHECK(serialized["radial_blur_px"].get<double>() == doctest::Approx(0.027).epsilon(1e-6));
+}
+
+TEST_CASE("WarpedScreenGrid transition state machine handles room crossing, reversal, stop settle, and rapid transitions") {
+    AssetLibrary library(false);
+    world::WorldGrid player_grid;
+    Asset* player_asset = player_grid.create_asset_at_point(make_world_grid_test_asset(0, 0));
+    REQUIRE(player_asset != nullptr);
+
+    auto room_a = make_transition_test_room(library, "room_a", SDL_Point{0, 0}, 560, 420);
+    auto room_b = make_transition_test_room(library, "room_b", SDL_Point{600, 0}, 560, 420);
+    room_a->add_connecting_room(room_b.get());
+    room_b->add_connecting_room(room_a.get());
+
+    std::vector<Room*> rooms{room_a.get(), room_b.get()};
+    Asset* tracked_player = player_asset;
+    CurrentRoomFinder finder(rooms, tracked_player);
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    finder.setCamera(&camera_grid);
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"transition_damping", 30.0},
+        {"max_camera_velocity", 200.0},
+        {"settle_duration_after_stop", 0.20},
+        {"movement_look_ahead_weight", 0.5},
+        {"player_follow_weight", 0.40},
+        {"player_soft_leash_px", 170.0},
+        {"player_hard_leash_px", 280.0}
+    });
+
+    auto step_camera = [&](float dt_seconds) {
+        Room* current = finder.getCurrentRoom();
+        camera_grid.update_camera_height(current, &finder, player_asset, true, dt_seconds, false);
+        return camera_grid.camera_transition_telemetry();
+    };
+
+    // Initial stabilization in room A.
+    step_camera(1.0f / 60.0f);
+
+    // Fast room crossing.
+    move_world_grid_asset(player_grid, player_asset, 600, 0);
+    auto telemetry = step_camera(1.0f / 60.0f);
+    CHECK(telemetry.state == WarpedScreenGrid::CameraTransitionState::BlendingToNewRoom);
+
+    // Instant direction reversal.
+    move_world_grid_asset(player_grid, player_asset, 0, 0);
+    telemetry = step_camera(1.0f / 60.0f);
+    CHECK(telemetry.state == WarpedScreenGrid::CameraTransitionState::BlendingToNewRoom);
+    const SDL_FPoint reversal_velocity = camera_grid.camera_state().center_velocity;
+    const float reversal_speed = std::sqrt(reversal_velocity.x * reversal_velocity.x +
+                                           reversal_velocity.y * reversal_velocity.y);
+    CHECK(reversal_speed <= doctest::Approx(200.0f).epsilon(0.01f));
+
+    // Stop at doorway and verify settle window.
+    move_world_grid_asset(player_grid, player_asset, 300, 0);
+    step_camera(0.05f); // movement frame
+    telemetry = step_camera(0.05f); // first stopped frame
+    CHECK(telemetry.state == WarpedScreenGrid::CameraTransitionState::Settling);
+    CHECK(telemetry.settle_time_remaining > 0.0f);
+    for (int i = 0; i < 6; ++i) {
+        telemetry = step_camera(0.05f);
+    }
+    CHECK(telemetry.state == WarpedScreenGrid::CameraTransitionState::Idle);
+
+    // Repeated rapid room transitions should remain clamped and stable.
+    SDL_FPoint previous_center = camera_grid.camera_state().center;
+    bool saw_blending_state = false;
+    for (int i = 0; i < 12; ++i) {
+        const int target_x = (i % 2 == 0) ? 600 : 0;
+        move_world_grid_asset(player_grid, player_asset, target_x, 0);
+        telemetry = step_camera(1.0f / 60.0f);
+        saw_blending_state = saw_blending_state ||
+            telemetry.state == WarpedScreenGrid::CameraTransitionState::BlendingToNewRoom;
+
+        const SDL_FPoint center = camera_grid.camera_state().center;
+        const float dx = center.x - previous_center.x;
+        const float dy = center.y - previous_center.y;
+        const float frame_distance = std::sqrt(dx * dx + dy * dy);
+        CHECK(frame_distance <= doctest::Approx(200.0f / 60.0f).epsilon(0.20f));
+        const float player_distance = std::sqrt(
+            (center.x - static_cast<float>(player_asset->world_x())) *
+                (center.x - static_cast<float>(player_asset->world_x())) +
+            (center.y - static_cast<float>(player_asset->world_z())) *
+                (center.y - static_cast<float>(player_asset->world_z())));
+        CHECK(player_distance <= doctest::Approx(280.0f).epsilon(0.20f));
+        previous_center = center;
+    }
+    CHECK(saw_blending_state);
 }

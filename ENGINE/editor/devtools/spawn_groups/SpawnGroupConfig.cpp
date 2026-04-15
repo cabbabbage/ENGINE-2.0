@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cmath>
 #include <deque>
+#include <exception>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -295,15 +296,24 @@ public:
         std::string before = box_->value();
         bool used = box_->handle_event(e);
         bool now_editing = box_->is_editing();
-        const std::string& after = box_->value();
-        if (used && on_change_ && after != before) {
-            on_change_(after);
+        const std::string after = box_->value();
+
+        if (!was_editing && now_editing) {
+            edit_session_start_value_ = before;
         }
+
         if (on_change_ && was_editing && !now_editing) {
-            if (!used || after == before) {
+            const std::string start_value =
+                edit_session_start_value_.has_value() ? *edit_session_start_value_ : before;
+            if (after != start_value) {
                 on_change_(after);
             }
             used = true;
+            edit_session_start_value_.reset();
+        } else if (!now_editing && used && on_change_ && after != before) {
+            on_change_(after);
+        } else if (!now_editing) {
+            edit_session_start_value_.reset();
         }
         return used || was_editing != now_editing;
     }
@@ -334,6 +344,7 @@ private:
     bool full_row_ = false;
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
+    std::optional<std::string> edit_session_start_value_{};
 };
 
 class SpawnGroupCallbackSliderWidget : public Widget {
@@ -344,6 +355,7 @@ public:
         : slider_(std::move(slider)), on_change_(std::move(on_change)), editable_(editable) {
         if (slider_) {
             last_value_ = slider_->value();
+            committed_value_ = last_value_;
         }
     }
 
@@ -363,18 +375,35 @@ public:
 
     bool handle_event(const SDL_Event& e) override {
         if (!slider_) return false;
+        const bool was_dragging = slider_->is_dragging();
         int before = slider_->value();
         bool used = editable_ ? slider_->handle_event(e) : false;
         if (!editable_) {
             return used;
         }
+        const bool now_dragging = slider_->is_dragging();
         int after = slider_->value();
-        if (after != before) {
+        const bool value_changed = (after != before);
+        if (value_changed) {
             last_value_ = after;
-            if (on_change_) on_change_(after);
+        }
+
+        bool commit = false;
+        if (was_dragging && !now_dragging) {
+            commit = (after != committed_value_);
+        } else if (!now_dragging && value_changed) {
+            commit = true;
+        }
+
+        if (commit && on_change_) {
+            committed_value_ = after;
+            on_change_(after);
             return true;
         }
-        return used;
+        if (!now_dragging && value_changed) {
+            committed_value_ = after;
+        }
+        return used || value_changed;
     }
 
     void render(SDL_Renderer* renderer) const override {
@@ -393,6 +422,7 @@ public:
         if (!slider_) return;
         slider_->set_value(value);
         last_value_ = slider_->value();
+        committed_value_ = last_value_;
     }
 
     int value() const { return slider_ ? slider_->value() : last_value_; }
@@ -405,6 +435,7 @@ private:
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
     int last_value_ = 0;
+    int committed_value_ = 0;
 };
 
 
@@ -530,7 +561,7 @@ struct SpawnGroupConfig::Entry {
         : owner_(&owner),
           area_provider_(empty_provider()),
           candidate_graph_(std::make_unique<CandidateEditorPieGraphWidget>()) {
-        editable_ = (owner_->bound_array_ != nullptr) || (owner_->bound_entry_ != nullptr);
+        editable_ = owner_ && owner_->editable_mode_;
         current_resolution_ = owner_ ? owner_->default_resolution_ : vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
         method_options_ = build_method_options(kDefaultMethod);
 
@@ -562,10 +593,71 @@ struct SpawnGroupConfig::Entry {
         delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 200, DMButton::height());
         delete_widget_ = std::make_unique<ButtonWidget>(delete_button_.get(), [this]() {
             if (!owner_ || !editable_) return;
+            const size_t source_index = array_index_.value_or(owner_->draft_groups_.is_array() ? owner_->draft_groups_.size() : 0);
             std::string id = spawn_id();
-            owner_->enqueue_notification([owner = owner_, id]() {
+            if (id.empty()) {
+                id = owner_->stable_id_for_index(source_index);
+            }
+            owner_->enqueue_notification([owner = owner_, id = std::move(id), source_index]() mutable {
                 if (!owner) return;
-                if (owner->callbacks_.on_delete) owner->callbacks_.on_delete(id);
+                if (!owner->draft_groups_.is_array()) return;
+
+                auto& arr = owner->draft_groups_;
+                size_t removed_index = arr.size();
+                nlohmann::json removed_entry = nlohmann::json::object();
+                if (!id.empty()) {
+                    for (size_t i = 0; i < arr.size(); ++i) {
+                        const auto& entry = arr[i];
+                        if (!entry.is_object()) continue;
+                        if (entry.value("spawn_id", std::string{}) == id ||
+                            owner->stable_id_for_index(i) == id) {
+                            removed_index = i;
+                            removed_entry = entry;
+                            break;
+                        }
+                    }
+                }
+                if (removed_index >= arr.size() && source_index < arr.size()) {
+                    removed_index = source_index;
+                    removed_entry = arr[source_index];
+                }
+                if (removed_index >= arr.size()) {
+                    return;
+                }
+                std::string removed_id = !id.empty() ? id : owner->stable_id_for_index(removed_index);
+
+                arr.erase(arr.begin() + static_cast<nlohmann::json::difference_type>(removed_index));
+                if (removed_index < owner->draft_stable_ids_.size()) {
+                    owner->draft_stable_ids_.erase(
+                        owner->draft_stable_ids_.begin() + static_cast<std::ptrdiff_t>(removed_index));
+                }
+                for (size_t i = 0; i < arr.size(); ++i) {
+                    if (arr[i].is_object()) {
+                        arr[i]["priority"] = static_cast<int>(i);
+                    }
+                }
+                devmode::spawn::sanitize_perimeter_spawn_groups(arr);
+
+                owner->rebuild_rows();
+
+                SpawnGroupConfig::PatchOperation patch{};
+                patch.type = SpawnGroupConfig::PatchType::Delete;
+                patch.spawn_id = std::move(removed_id);
+                patch.entry = std::move(removed_entry);
+                patch.from_index = removed_index;
+                patch.to_index = removed_index;
+
+                SpawnGroupConfig::ChangeEvent event{};
+                event.reason = SpawnGroupConfig::ChangeReason::EntryDeleted;
+                event.spawn_id = patch.spawn_id;
+                event.patches.push_back(std::move(patch));
+
+                std::string error;
+                if (!owner->commit_patches(event.patches, event, &error)) {
+                    event.reason = SpawnGroupConfig::ChangeReason::CommitFailed;
+                    event.error_message = std::move(error);
+                }
+                owner->emit_change_event(std::move(event));
             });
         });
 
@@ -692,15 +784,13 @@ struct SpawnGroupConfig::Entry {
     }
 
     ~Entry() {
-        if (owner_ && owner_->current_entry_ == this) {
-            owner_->current_entry_ = nullptr;
-        }
+        (void)owner_;
     }
 
     void bind(nlohmann::json* entry, std::optional<size_t> index = std::nullopt) {
         array_index_ = index;
         entry_ = entry;
-        editable_ = owner_ && (owner_->bound_array_ != nullptr || owner_->bound_entry_ != nullptr);
+        editable_ = owner_ && owner_->editable_mode_;
         if (!entry_) {
             shadow_entry_ = nlohmann::json::object();
         }
@@ -713,8 +803,8 @@ struct SpawnGroupConfig::Entry {
     }
 
     nlohmann::json* mutable_entry() {
-        if (array_index_ && owner_ && owner_->bound_array_) {
-            auto* arr = owner_->bound_array_;
+        if (array_index_ && owner_ && owner_->draft_groups_.is_array()) {
+            auto* arr = &owner_->draft_groups_;
             if (*array_index_ < arr->size()) {
                 entry_ = &(*arr)[*array_index_];
             } else {
@@ -781,7 +871,7 @@ struct SpawnGroupConfig::Entry {
         std::string display = safe_string(entry, "display_name", {});
         name_widget_->set_value(display);
 
-        bool base_editable = (owner_ && (owner_->bound_array_ != nullptr || owner_->bound_entry_ != nullptr));
+        bool base_editable = (owner_ && owner_->editable_mode_);
         locked_ = safe_bool(entry, "locked", false);
         if (lock_widget_) {
             lock_widget_->set_value(locked_);
@@ -1000,7 +1090,7 @@ struct SpawnGroupConfig::Entry {
         }
 
         if (lock_widget_) {
-            bool base_editable = (owner_ && (owner_->bound_array_ != nullptr || owner_->bound_entry_ != nullptr));
+            bool base_editable = (owner_ && owner_->editable_mode_);
             lock_widget_->set_editable(base_editable);
         }
 
@@ -1162,16 +1252,36 @@ private:
         summary.resolution = current_resolution_;
 
         nlohmann::json entry_copy = entry_view();
+        std::string source_spawn_id = spawn_id();
+        const size_t idx = array_index_.value_or(0);
 
-        owner_->enqueue_notification([owner = owner_, entry = std::move(entry_copy), summary, self = this]() mutable {
+        owner_->enqueue_notification([owner = owner_,
+                                      entry = std::move(entry_copy),
+                                      summary,
+                                      source_spawn_id = std::move(source_spawn_id),
+                                      idx]() mutable {
             if (!owner) return;
-            owner->current_entry_ = self;
-            if (owner->on_change_) owner->on_change_();
-            if (owner->on_entry_change_) owner->on_entry_change_(entry, summary);
-            owner->fire_entry_callbacks(entry, summary);
-            if (owner->current_entry_ == self) {
-                owner->current_entry_ = nullptr;
+            const std::string patch_id = !source_spawn_id.empty() ? source_spawn_id : owner->stable_id_for_index(idx);
+            SpawnGroupConfig::PatchOperation patch{};
+            patch.type = SpawnGroupConfig::PatchType::Update;
+            patch.spawn_id = patch_id;
+            patch.entry = entry;
+            patch.from_index = idx;
+            patch.to_index = idx;
+
+            SpawnGroupConfig::ChangeEvent event{};
+            event.reason = SpawnGroupConfig::ChangeReason::EntryEdited;
+            event.spawn_id = patch_id;
+            event.entry = std::move(entry);
+            event.summary = summary;
+            event.patches.push_back(std::move(patch));
+
+            std::string error;
+            if (!owner->commit_patches(event.patches, event, &error)) {
+                event.reason = SpawnGroupConfig::ChangeReason::CommitFailed;
+                event.error_message = std::move(error);
             }
+            owner->emit_change_event(std::move(event));
         });
     }
 
@@ -1263,13 +1373,25 @@ private:
             graph->set_on_delete([this](int index){
                 this->remove_candidate_at(index);
             });
-            if (owner_ && owner_->callbacks_.on_regenerate && editable_) {
+            if (owner_ && editable_) {
                 graph->set_on_regenerate([this]() {
                     if (!owner_) return;
                     std::string id = spawn_id();
-                    owner_->enqueue_notification([owner = owner_, id]() {
+                    const size_t idx = array_index_.value_or(0);
+                    nlohmann::json entry_snapshot = entry_view();
+                    owner_->enqueue_notification([owner = owner_,
+                                                  id = std::move(id),
+                                                  idx,
+                                                  entry = std::move(entry_snapshot)]() mutable {
                         if (!owner) return;
-                        if (owner->callbacks_.on_regenerate) owner->callbacks_.on_regenerate(id);
+                        SpawnGroupConfig::ChangeEvent event{};
+                        event.reason = SpawnGroupConfig::ChangeReason::RegenerateRequested;
+                        event.spawn_id = std::move(id);
+                        if (event.spawn_id.empty()) {
+                            event.spawn_id = owner->stable_id_for_index(idx);
+                        }
+                        event.entry = std::move(entry);
+                        owner->emit_change_event(std::move(event));
                     });
                 });
             } else {
@@ -1466,7 +1588,6 @@ private:
             current_method_ = method;
             use_exact_quantity_ = (method == "Exact" || method == "Exact Position");
             notify_change(method != previous, true, false);
-            owner_->mark_layout_dirty();
             sync_from_json();
         }
     }
@@ -1599,7 +1720,7 @@ private:
 
     void on_locked_changed(bool value) {
 
-        bool base_editable = (owner_ && (owner_->bound_array_ != nullptr || owner_->bound_entry_ != nullptr));
+        bool base_editable = (owner_ && owner_->editable_mode_);
         if (!base_editable) return;
         if (auto* entry = mutable_entry()) {
             (*entry)["locked"] = value;
@@ -1732,118 +1853,87 @@ void SpawnGroupConfig::set_assets(Assets* assets) {
     }
 }
 
-void SpawnGroupConfig::load(nlohmann::json& groups,
-                          std::function<void()> on_change,
-                          std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
-                          ConfigureEntryCallback configure_entry) {
-    load_impl(&groups, nullptr, std::move(on_change), std::move(on_entry_change), std::move(configure_entry));
+void SpawnGroupConfig::load(const nlohmann::json& groups,
+                            const std::vector<std::string>& stable_ids,
+                            ConfigureEntryCallback configure_entry) {
+    load_impl(groups, stable_ids, std::move(configure_entry));
 }
-
-void SpawnGroupConfig::bind_entry(nlohmann::json& entry,
-                                  EntryCallbacks callbacks,
-                                  ConfigureEntryCallback configure_entry) {
-    bind_entry(entry, {}, {}, std::move(callbacks), std::move(configure_entry));
-}
-
-void SpawnGroupConfig::bind_entry(nlohmann::json& entry,
-                                  std::function<void()> on_change,
-                                  std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
-                                  EntryCallbacks callbacks,
-                                  ConfigureEntryCallback configure_entry) {
-    entry_callbacks_ = std::move(callbacks);
-    auto relay = [this, cb = std::move(on_entry_change)](const nlohmann::json& updated, const ChangeSummary& summary) {
-        if (cb) cb(updated, summary);
-        fire_entry_callbacks(updated, summary);
-};
-    load_impl(nullptr, &entry, std::move(on_change), std::move(relay), std::move(configure_entry));
-}
-
-void SpawnGroupConfig::bind_entry_by_id(std::string spawn_id,
-                                       std::function<nlohmann::json*()> resolver,
-                                       std::function<void()> on_change,
-                                       std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
-                                       EntryCallbacks callbacks,
-                                       ConfigureEntryCallback configure_entry) {
-    bound_entry_id_ = std::move(spawn_id);
-    bound_entry_resolver_ = std::move(resolver);
-    nlohmann::json* resolved = bound_entry_resolver_ ? bound_entry_resolver_() : nullptr;
-    if (!resolved) {
-        clear_binding();
-        return;
-    }
-    bind_entry(*resolved, std::move(on_change), std::move(on_entry_change), std::move(callbacks), std::move(configure_entry));
-}
-
 
 void SpawnGroupConfig::load(const nlohmann::json& groups) {
-    bound_array_ = nullptr;
-    bound_entry_ = nullptr;
-    bound_entry_id_.clear();
-    bound_entry_resolver_ = {};
-    entry_callbacks_ = {};
-    on_change_ = {};
-    on_entry_change_ = {};
-    configure_entry_ = {};
-    single_entry_mode_ = false;
-    readonly_snapshot_ = groups;
-    if (!readonly_snapshot_.is_array()) {
-        readonly_snapshot_ = nlohmann::json::array();
-    }
-    for (auto& item : readonly_snapshot_) {
-        if (!item.is_object()) continue;
-        devmode::spawn::ensure_spawn_group_entry_defaults(item, default_display_name_for(item), default_resolution_);
-    }
-    single_entry_shadow_.clear();
-    rebuild_rows();
+    load_impl(groups, {}, {});
 }
 
-void SpawnGroupConfig::load_impl(nlohmann::json* array,
-                                 nlohmann::json* entry,
-                                 std::function<void()> on_change,
-                                 std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
+void SpawnGroupConfig::load_impl(const nlohmann::json& source,
+                                 std::vector<std::string> stable_ids,
                                  ConfigureEntryCallback configure_entry) {
-    bound_array_ = array;
-    bound_entry_ = entry;
-    if (!bound_entry_) {
-        bound_entry_id_.clear();
-        bound_entry_resolver_ = {};
-    }
-    single_entry_mode_ = (bound_entry_ != nullptr);
-    if (bound_entry_) {
-        devmode::spawn::ensure_spawn_group_entry_defaults(*bound_entry_, default_display_name_for(*bound_entry_), default_resolution_);
-    }
-    if (bound_array_) {
-        devmode::spawn::ensure_spawn_groups_array(*bound_array_);
-        for (auto& item : *bound_array_) {
-            if (!item.is_object()) continue;
+    configure_entry_ = std::move(configure_entry);
+    source_snapshot_.clear();
+    draft_groups_.clear();
+    draft_stable_ids_.clear();
+    single_entry_mode_ = false;
+
+    try {
+        source_snapshot_ = source.is_array() ? source : nlohmann::json::array();
+        draft_groups_ = source_snapshot_;
+        if (!draft_groups_.is_array()) {
+            draft_groups_ = nlohmann::json::array();
+        }
+        for (auto& item : draft_groups_) {
+            if (!item.is_object()) {
+                item = nlohmann::json::object();
+            }
             devmode::spawn::ensure_spawn_group_entry_defaults(item, default_display_name_for(item), default_resolution_);
         }
-    }
-    if (bound_entry_) {
-        single_entry_shadow_ = nlohmann::json::array();
-        single_entry_shadow_.push_back(*bound_entry_);
-        devmode::spawn::ensure_spawn_group_entry_defaults(single_entry_shadow_.at(0), default_display_name_for(single_entry_shadow_.at(0)), default_resolution_);
-    } else {
-        single_entry_shadow_.clear();
-        if (bound_array_) {
-            entry_callbacks_ = {};
+        devmode::spawn::sanitize_perimeter_spawn_groups(draft_groups_);
+        draft_stable_ids_ = std::move(stable_ids);
+        if (draft_stable_ids_.empty()) {
+            draft_stable_ids_.reserve(draft_groups_.size());
+            for (const auto& item : draft_groups_) {
+                draft_stable_ids_.push_back(item.is_object() ? item.value("spawn_id", std::string{}) : std::string{});
+            }
         }
+        if (draft_stable_ids_.size() < draft_groups_.size()) {
+            draft_stable_ids_.resize(draft_groups_.size());
+        } else if (draft_stable_ids_.size() > draft_groups_.size()) {
+            draft_stable_ids_.resize(draft_groups_.size());
+        }
+        for (size_t i = 0; i < draft_groups_.size(); ++i) {
+            auto& item = draft_groups_[i];
+            if (!item.is_object()) continue;
+            const std::string stable_id = draft_stable_ids_[i];
+            if (item.value("spawn_id", std::string{}).empty() && !stable_id.empty()) {
+                item["spawn_id"] = stable_id;
+            }
+        }
+        single_entry_mode_ = draft_groups_.size() <= 1;
+        editable_mode_ = static_cast<bool>(callbacks_.on_commit);
+        rebuild_rows();
+        ChangeEvent loaded{};
+        loaded.reason = ChangeReason::Loaded;
+        emit_change_event(std::move(loaded));
+    } catch (...) {
+        source_snapshot_ = nlohmann::json::array();
+        draft_groups_ = nlohmann::json::array();
+        draft_stable_ids_.clear();
+        single_entry_mode_ = false;
+        editable_mode_ = static_cast<bool>(callbacks_.on_commit);
+        rebuild_rows();
+        ChangeEvent failed{};
+        failed.reason = ChangeReason::LoadFailed;
+        failed.error_message = "Failed to load spawn-group draft state.";
+        if (callbacks_.on_error) {
+            callbacks_.on_error(failed.error_message);
+        }
+        emit_change_event(std::move(failed));
     }
-    readonly_snapshot_.clear();
-    on_change_ = std::move(on_change);
-    on_entry_change_ = std::move(on_entry_change);
-    configure_entry_ = std::move(configure_entry);
-    rebuild_rows();
 }
 
 void SpawnGroupConfig::clear_binding() {
-    bound_array_ = nullptr;
-    bound_entry_ = nullptr;
-    bound_entry_id_.clear();
-    bound_entry_resolver_ = {};
+    source_snapshot_.clear();
+    draft_groups_.clear();
+    draft_stable_ids_.clear();
+    editable_mode_ = false;
     single_entry_mode_ = false;
-    single_entry_shadow_.clear();
-    readonly_snapshot_.clear();
     entries_.clear();
     mark_layout_dirty();
 }
@@ -1862,7 +1952,15 @@ void SpawnGroupConfig::append_rows(Rows& rows) {
     set_rows(layout_rows);
 }
 
-void SpawnGroupConfig::set_callbacks(Callbacks cb) { callbacks_ = std::move(cb); }
+void SpawnGroupConfig::set_callbacks(Callbacks cb) {
+    callbacks_ = std::move(cb);
+    editable_mode_ = static_cast<bool>(callbacks_.on_commit);
+    for (auto& entry : entries_) {
+        if (!entry) continue;
+        entry->refresh_configuration();
+    }
+    mark_layout_dirty();
+}
 
 void SpawnGroupConfig::set_on_layout_changed(std::function<void()> cb) { on_layout_change_ = std::move(cb); }
 
@@ -1928,8 +2026,7 @@ void SpawnGroupConfig::restore_expanded_groups(const std::vector<std::string>& i
 }
 
 nlohmann::json SpawnGroupConfig::to_json() const {
-    if (bound_array_) return *bound_array_;
-    return readonly_snapshot_;
+    return draft_groups_.is_array() ? draft_groups_ : nlohmann::json::array();
 }
 
 void SpawnGroupConfig::update(const Input& input, int screen_w, int screen_h) {
@@ -1967,6 +2064,17 @@ void SpawnGroupConfig::update(const Input& input, int screen_w, int screen_h) {
 bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+    auto entry_at_header_point = [this](const SDL_Point& pointer) -> Entry* {
+        for (const auto& entry : entries_) {
+            if (!entry) continue;
+            const SDL_Rect header = entry->header_rect();
+            if (header.w <= 0 || header.h <= 0) continue;
+            if (SDL_PointInRect(&pointer, &header)) {
+                return entry.get();
+            }
+        }
+        return nullptr;
+    };
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         int mx = 0;
@@ -1984,20 +2092,18 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT && e.button.clicks >= 2) {
-        SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
-        for (const auto& entry : entries_) {
-            if (!entry) continue;
-            SDL_Rect header = entry->header_rect();
-            if (header.w <= 0 || header.h <= 0) continue;
-            if (SDL_PointInRect(&pointer, &header)) {
-                const std::string id = entry->spawn_id();
-                if (!id.empty() && callbacks_.on_open_floating) {
-                    callbacks_.on_open_floating(id, pointer);
-                }
-                process_pending_notifications();
-                return true;
+    if (!drag_state_.active &&
+        e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+        e.button.button == SDL_BUTTON_LEFT &&
+        e.button.clicks == 2) {
+        const SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
+        if (Entry* entry = entry_at_header_point(pointer)) {
+            const std::string id = entry->spawn_id();
+            if (!id.empty() && callbacks_.on_open_floating) {
+                callbacks_.on_open_floating(id, pointer);
             }
+            process_pending_notifications();
+            return true;
         }
     }
 
@@ -2053,7 +2159,7 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && e.button.clicks == 1) {
         SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
         for (size_t i = 0; i < entries_.size(); ++i) {
             if (!entries_[i]) continue;
@@ -2097,9 +2203,9 @@ void SpawnGroupConfig::render_content(SDL_Renderer* r) const {
     }
 }
 
-void SpawnGroupConfig::open(nlohmann::json& groups, std::function<void(const nlohmann::json&)> on_save) {
+void SpawnGroupConfig::open(const nlohmann::json& groups, std::function<void(const nlohmann::json&)> on_save) {
     pending_save_callback_ = std::move(on_save);
-    load(groups, {}, {}, {});
+    load(groups);
     DockableCollapsible::open();
 }
 
@@ -2206,6 +2312,9 @@ void SpawnGroupConfig::finalize_drag(bool commit) {
     }
 
     std::string moved_id = entries_[source]->spawn_id();
+    if (moved_id.empty()) {
+        moved_id = stable_id_for_index(source);
+    }
     size_t dest_slot = std::min(slot, entries_.size());
     if (dest_slot > entries_.size()) dest_slot = entries_.size();
     size_t dest = dest_slot;
@@ -2233,12 +2342,23 @@ void SpawnGroupConfig::finalize_drag(bool commit) {
     if (dest >= entries_.size()) dest = entries_.empty() ? 0 : entries_.size() - 1;
     Entry* moved_entry = entries_.empty() ? nullptr : entries_[dest].get();
     nlohmann::json entry_snapshot = moved_entry ? moved_entry->entry_view() : nlohmann::json::object();
-    enqueue_notification([this, entry = std::move(entry_snapshot), moved_id, dest]() mutable {
-        ChangeSummary summary{};
-        if (on_change_) on_change_();
-        if (on_entry_change_) on_entry_change_(entry, summary);
-        fire_entry_callbacks(entry, summary);
-        if (callbacks_.on_reorder) callbacks_.on_reorder(moved_id, dest);
+    enqueue_notification([this, entry = std::move(entry_snapshot), moved_id, dest, source]() mutable {
+        ChangeEvent event{};
+        event.reason = ChangeReason::EntryReordered;
+        event.spawn_id = moved_id.empty() ? stable_id_for_index(source) : moved_id;
+        event.entry = std::move(entry);
+        PatchOperation patch{};
+        patch.type = PatchType::Reorder;
+        patch.spawn_id = event.spawn_id;
+        patch.from_index = source;
+        patch.to_index = dest;
+        event.patches.push_back(std::move(patch));
+        std::string error;
+        if (!commit_patches(event.patches, event, &error)) {
+            event.reason = ChangeReason::CommitFailed;
+            event.error_message = std::move(error);
+        }
+        emit_change_event(std::move(event));
     });
 }
 
@@ -2345,23 +2465,20 @@ void SpawnGroupConfig::reorder_json(size_t from, size_t to) {
         arr.erase(arr.begin() + static_cast<std::ptrdiff_t>(from));
         if (target > arr.size()) target = arr.size();
         arr.insert(arr.begin() + static_cast<std::ptrdiff_t>(target), std::move(moved));
-};
-
-    if (bound_array_) apply(*bound_array_);
-    if (bound_entry_) apply(single_entry_shadow_);
-    if (!bound_array_ && !bound_entry_ && readonly_snapshot_.is_array()) apply(readonly_snapshot_);
+    };
+    apply(draft_groups_);
+    if (!draft_stable_ids_.empty() && from < draft_stable_ids_.size()) {
+        size_t target = std::min(to, draft_stable_ids_.size());
+        std::string moved = std::move(draft_stable_ids_[from]);
+        draft_stable_ids_.erase(draft_stable_ids_.begin() + static_cast<std::ptrdiff_t>(from));
+        if (target > draft_stable_ids_.size()) target = draft_stable_ids_.size();
+        draft_stable_ids_.insert(draft_stable_ids_.begin() + static_cast<std::ptrdiff_t>(target), std::move(moved));
+    }
 }
 
 void SpawnGroupConfig::restore_order_from_snapshot(const std::vector<std::string>& order) {
     if (order.empty()) return;
-    nlohmann::json* arr = nullptr;
-    if (bound_array_) {
-        arr = bound_array_;
-    } else if (bound_entry_) {
-        arr = &single_entry_shadow_;
-    } else if (readonly_snapshot_.is_array()) {
-        arr = &readonly_snapshot_;
-    }
+    nlohmann::json* arr = draft_groups_.is_array() ? &draft_groups_ : nullptr;
     if (!arr || !arr->is_array()) return;
     if (arr->size() != order.size()) return;
 
@@ -2426,37 +2543,33 @@ void SpawnGroupConfig::nudge_priority(Entry& entry, int delta) {
     Entry* moved_entry = entries_[resolved_target].get();
     std::string moved_id = moved_entry ? moved_entry->spawn_id() : std::string{};
     if (moved_id.empty()) {
-        moved_id = entry.spawn_id();
+        moved_id = stable_id_for_index(resolved_target);
+    }
+    if (moved_id.empty()) {
+        moved_id = stable_id_for_index(source_index);
     }
     nlohmann::json entry_snapshot = moved_entry ? moved_entry->entry_view() : nlohmann::json::object();
-    enqueue_notification([this, entry_data = std::move(entry_snapshot), moved_id, dest = resolved_target]() mutable {
-        ChangeSummary summary{};
-        if (on_change_) on_change_();
-        if (on_entry_change_) on_entry_change_(entry_data, summary);
-        fire_entry_callbacks(entry_data, summary);
-        if (callbacks_.on_reorder) callbacks_.on_reorder(moved_id, dest);
+    enqueue_notification([this, entry_data = std::move(entry_snapshot), moved_id, dest = resolved_target, source_index]() mutable {
+        ChangeEvent event{};
+        event.reason = ChangeReason::EntryReordered;
+        event.spawn_id = moved_id.empty() ? stable_id_for_index(source_index) : moved_id;
+        event.entry = std::move(entry_data);
+        PatchOperation patch{};
+        patch.type = PatchType::Reorder;
+        patch.spawn_id = event.spawn_id;
+        patch.from_index = source_index;
+        patch.to_index = dest;
+        event.patches.push_back(std::move(patch));
+        std::string error;
+        if (!commit_patches(event.patches, event, &error)) {
+            event.reason = ChangeReason::CommitFailed;
+            event.error_message = std::move(error);
+        }
+        emit_change_event(std::move(event));
     });
 }
 
 void SpawnGroupConfig::rebuild_rows() {
-    if (bound_entry_resolver_) {
-        nlohmann::json* resolved = bound_entry_resolver_();
-        if (!resolved) {
-            clear_binding();
-            return;
-        }
-        bound_entry_ = resolved;
-    }
-    if (bound_entry_) {
-        if (!single_entry_shadow_.is_array()) {
-            single_entry_shadow_ = nlohmann::json::array();
-        }
-        if (single_entry_shadow_.empty()) {
-            single_entry_shadow_.push_back(*bound_entry_);
-        } else {
-            single_entry_shadow_.at(0) = *bound_entry_;
-        }
-    }
     const nlohmann::json* source = current_source();
     if (!source || !source->is_array()) {
         entries_.clear();
@@ -2487,14 +2600,7 @@ void SpawnGroupConfig::rebuild_rows() {
         if (!group_entry) {
             group_entry = std::make_unique<Entry>(*this);
         }
-        if (bound_array_) {
-            group_entry->bind(&(*bound_array_)[i], i);
-        } else if (bound_entry_ && i == 0) {
-            group_entry->bind(bound_entry_);
-        } else {
-            group_entry->bind(nullptr);
-            group_entry->set_shadow_entry(json_entry);
-        }
+        group_entry->bind(&draft_groups_[i], i);
         apply_configuration(*group_entry);
         group_entry->sync_from_json();
         group_entry->set_expanded(is_expanded(group_entry->spawn_id()));
@@ -2544,11 +2650,49 @@ DockableCollapsible::Rows SpawnGroupConfig::build_layout_rows() {
         result.push_back({empty_state_label_.get()});
     }
 
-    if (callbacks_.on_add && !single_entry_mode_) {
+    if (editable_mode_ && !single_entry_mode_) {
         if (!add_button_) {
             add_button_ = std::make_unique<DMButton>("Add Spawn Group", &DMStyles::CreateButton(), 0, DMButton::height());
             add_button_widget_ = std::make_unique<ButtonWidget>(add_button_.get(), [this]() {
-                if (callbacks_.on_add) callbacks_.on_add();
+                if (!editable_mode_) {
+                    return;
+                }
+                if (!draft_groups_.is_array()) {
+                    draft_groups_ = nlohmann::json::array();
+                }
+                nlohmann::json entry = nlohmann::json::object();
+                const std::string spawn_id = devmode::spawn::generate_spawn_id();
+                entry["spawn_id"] = spawn_id;
+                devmode::spawn::ensure_spawn_group_entry_defaults(entry, "New Spawn", default_resolution_);
+                draft_groups_.push_back(entry);
+                draft_stable_ids_.push_back(spawn_id);
+                for (size_t i = 0; i < draft_groups_.size(); ++i) {
+                    if (draft_groups_[i].is_object()) {
+                        draft_groups_[i]["priority"] = static_cast<int>(i);
+                    }
+                }
+                devmode::spawn::sanitize_perimeter_spawn_groups(draft_groups_);
+                rebuild_rows();
+                request_open_spawn_group(spawn_id, 0, 0);
+
+                PatchOperation patch{};
+                patch.type = PatchType::Add;
+                patch.spawn_id = spawn_id;
+                patch.entry = entry;
+                patch.from_index = draft_groups_.size() > 0 ? draft_groups_.size() - 1 : 0;
+                patch.to_index = patch.from_index;
+
+                ChangeEvent event{};
+                event.reason = ChangeReason::EntryAdded;
+                event.spawn_id = spawn_id;
+                event.entry = std::move(entry);
+                event.patches.push_back(std::move(patch));
+                std::string error;
+                if (!commit_patches(event.patches, event, &error)) {
+                    event.reason = ChangeReason::CommitFailed;
+                    event.error_message = std::move(error);
+                }
+                emit_change_event(std::move(event));
             });
         }
         result.push_back({add_button_widget_.get()});
@@ -2558,10 +2702,17 @@ DockableCollapsible::Rows SpawnGroupConfig::build_layout_rows() {
 }
 
 const nlohmann::json* SpawnGroupConfig::current_source() const {
-    if (bound_array_) return bound_array_;
-    if (bound_entry_) return &single_entry_shadow_;
-    if (!readonly_snapshot_.is_null()) return &readonly_snapshot_;
-    return nullptr;
+    return draft_groups_.is_array() ? &draft_groups_ : nullptr;
+}
+
+std::string SpawnGroupConfig::stable_id_for_index(size_t index) const {
+    if (index < draft_stable_ids_.size() && !draft_stable_ids_[index].empty()) {
+        return draft_stable_ids_[index];
+    }
+    if (draft_groups_.is_array() && index < draft_groups_.size() && draft_groups_[index].is_object()) {
+        return draft_groups_[index].value("spawn_id", std::string{});
+    }
+    return {};
 }
 
 void SpawnGroupConfig::enqueue_notification(std::function<void()> cb) {
@@ -2577,51 +2728,70 @@ void SpawnGroupConfig::process_pending_notifications() {
         pending_notifications_.pop_front();
         if (cb) {
             cb();
-            if (current_entry_) {
-                current_entry_ = nullptr;
-            }
         }
     }
     processing_notifications_ = false;
 }
 
-void SpawnGroupConfig::fire_entry_callbacks(const nlohmann::json& entry, const ChangeSummary& summary) {
-    if (summary.method_changed && entry_callbacks_.on_method_changed) {
-        std::string method = summary.method;
-        if (entry.is_object()) {
-            method = entry.value("position", method);
+bool SpawnGroupConfig::commit_patches(const std::vector<PatchOperation>& patches,
+                                      const ChangeEvent& event,
+                                      std::string* error_message) {
+    for (const auto& patch : patches) {
+        switch (patch.type) {
+            case PatchType::Add:
+            case PatchType::Update:
+            case PatchType::Delete:
+                if (patch.spawn_id.empty()) {
+                    if (error_message) {
+                        *error_message = "Invalid spawn-group patch: missing spawn_id.";
+                    }
+                    return false;
+                }
+                break;
+            case PatchType::Reorder:
+                if (patch.spawn_id.empty() && event.spawn_id.empty()) {
+                    if (error_message) {
+                        *error_message = "Invalid reorder patch: missing spawn_id.";
+                    }
+                    return false;
+                }
+                break;
         }
-        entry_callbacks_.on_method_changed(method);
     }
-    if (summary.quantity_changed && entry_callbacks_.on_quantity_changed) {
-        int min_value = 0;
-        int max_value = 0;
-        if (entry.is_object()) {
-            if (entry.contains("quantity") && entry["quantity"].is_number()) {
-                int quantity = entry["quantity"].get<int>();
-                min_value = quantity;
-                max_value = quantity;
-            } else {
-                min_value = safe_int(entry, "min_number", 0);
-                max_value = safe_int(entry, "max_number", min_value);
-            }
-        }
-        entry_callbacks_.on_quantity_changed(min_value, max_value);
+
+    if (!callbacks_.on_commit) {
+        return true;
     }
-    if (summary.candidates_changed && entry_callbacks_.on_candidates_changed) {
-        entry_callbacks_.on_candidates_changed(entry);
+    std::string error;
+    bool ok = true;
+    try {
+        ok = callbacks_.on_commit(patches, error);
+    } catch (const std::exception& ex) {
+        ok = false;
+        if (error.empty()) {
+            error = ex.what();
+        }
+    } catch (...) {
+        ok = false;
+        if (error.empty()) {
+            error = "Unknown spawn-group commit failure.";
+        }
     }
-    if (summary.method_changed && callbacks_.on_regenerate && !entry_callbacks_.on_method_changed) {
-        std::string id;
-        if (entry.is_object() && entry.contains("spawn_id") && entry["spawn_id"].is_string()) {
-            id = entry["spawn_id"].get<std::string>();
-        }
-        if (id.empty() && current_entry_) {
-            id = current_entry_->spawn_id();
-        }
-        if (!id.empty()) {
-            callbacks_.on_regenerate(id);
-        }
+    if (!ok && error.empty()) {
+        error = "Spawn-group commit was rejected.";
+    }
+    if (!ok && error_message) {
+        *error_message = error;
+    }
+    if (!ok && callbacks_.on_error) {
+        callbacks_.on_error(error);
+    }
+    return ok;
+}
+
+void SpawnGroupConfig::emit_change_event(ChangeEvent event) {
+    if (callbacks_.on_change_event) {
+        callbacks_.on_change_event(event);
     }
 }
 

@@ -13,6 +13,18 @@ TEST_CASE("Shared frame edit payload does not synthesize unrelated geometry arra
 
     CHECK(payload.contains("movement"));
     CHECK(payload.contains("movement_total"));
+    REQUIRE(payload["movement"].is_array());
+    REQUIRE(payload["movement"].size() == 3);
+    for (const auto& frame : payload["movement"]) {
+        REQUIRE(frame.is_array());
+        CHECK(frame.size() >= 3);
+        CHECK(frame[0] == 0);
+        CHECK(frame[1] == 0);
+        CHECK(frame[2] == 0);
+    }
+    CHECK(payload["movement_total"]["dx"] == 0);
+    CHECK(payload["movement_total"]["dy"] == 0);
+    CHECK(payload["movement_total"]["dz"] == doctest::Approx(0.0));
     CHECK(!payload.contains("anchor_points"));
     CHECK(!payload.contains("hit_boxes"));
     CHECK(!payload.contains("attack_boxes"));
@@ -28,11 +40,57 @@ TEST_CASE("Room movement payload does not synthesize unrelated geometry arrays")
 
     CHECK(payload.contains("movement"));
     CHECK(payload.contains("movement_total"));
+    REQUIRE(payload["movement"].is_array());
+    REQUIRE(payload["movement"].size() == 2);
+    for (const auto& frame : payload["movement"]) {
+        REQUIRE(frame.is_array());
+        CHECK(frame.size() >= 3);
+        CHECK(frame[0] == 0);
+        CHECK(frame[1] == 0);
+        CHECK(frame[2] == 0);
+    }
+    CHECK(payload["movement_total"]["dx"] == 0);
+    CHECK(payload["movement_total"]["dy"] == 0);
+    CHECK(payload["movement_total"]["dz"] == doctest::Approx(0.0));
     CHECK(!payload.contains("anchor_points"));
     CHECK(!payload.contains("hit_boxes"));
     CHECK(!payload.contains("attack_boxes"));
     CHECK(!payload.contains("hit_geometry"));
     CHECK(!payload.contains("attack_geometry"));
+}
+
+TEST_CASE("Movement payload totals include frame zero for shared and room builders") {
+    std::vector<devmode::frame_editors::MovementFrame> shared_frames(2);
+    shared_frames[0].dx = 2.0f;
+    shared_frames[0].dy = -3.0f;
+    shared_frames[0].dz = 4.0f;
+    shared_frames[1].dx = 5.0f;
+    shared_frames[1].dy = 7.0f;
+    shared_frames[1].dz = -2.0f;
+
+    const nlohmann::json shared_payload =
+        devmode::frame_editors::build_payload_from_frames(shared_frames, nlohmann::json::object());
+    CHECK(shared_payload["movement_total"]["dx"] == 7);
+    CHECK(shared_payload["movement_total"]["dy"] == 4);
+    CHECK(shared_payload["movement_total"]["dz"] == doctest::Approx(2.0));
+    CHECK(shared_payload["movement"][0] == nlohmann::json::array({2, -3, 4}));
+    CHECK(shared_payload["movement"][1] == nlohmann::json::array({5, 7, -2}));
+
+    std::vector<devmode::room_movement_payload::MovementFrame> room_frames(2);
+    room_frames[0].dx = -6.0f;
+    room_frames[0].dy = 1.0f;
+    room_frames[0].dz = 3.0f;
+    room_frames[1].dx = 4.0f;
+    room_frames[1].dy = -5.0f;
+    room_frames[1].dz = 9.0f;
+
+    const nlohmann::json room_payload =
+        devmode::room_movement_payload::build_payload_from_frames(room_frames, nlohmann::json::object());
+    CHECK(room_payload["movement_total"]["dx"] == -2);
+    CHECK(room_payload["movement_total"]["dy"] == -4);
+    CHECK(room_payload["movement_total"]["dz"] == doctest::Approx(12.0));
+    CHECK(room_payload["movement"][0] == nlohmann::json::array({-6, 1, 3}));
+    CHECK(room_payload["movement"][1] == nlohmann::json::array({4, -5, 9}));
 }
 
 TEST_CASE("Room movement payload parses legacy 2-element arrays as floor depth") {

@@ -847,7 +847,7 @@ TEST_CASE("LayerEffectProcessor tiny blur values are applied and accumulate acro
     REQUIRE(blurred_twice != nullptr);
     REQUIRE(scratch != nullptr);
 
-    REQUIRE(clear_texture(renderer, source, SDL_Color{0, 0, 0, 255}));
+    REQUIRE(clear_texture(renderer, source, SDL_Color{0, 0, 0, 0}));
     REQUIRE(fill_texture_rect(renderer, source, 12, 12, 24, 24, SDL_Color{255, 255, 255, 255}));
 
     LayerEffectProcessor processor(renderer);
@@ -893,15 +893,80 @@ TEST_CASE("LayerEffectProcessor tiny blur values are applied and accumulate acro
         }
         return accum;
     };
+    auto l1_alpha_diff = [](const std::vector<SDL_Color>& a, const std::vector<SDL_Color>& b) {
+        std::uint64_t accum = 0;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            accum += static_cast<std::uint64_t>(std::abs(static_cast<int>(a[i].a) - static_cast<int>(b[i].a)));
+        }
+        return accum;
+    };
 
     const std::uint64_t single_pass_diff = l1_diff(source_pixels, once_pixels);
     const std::uint64_t repeated_pass_diff = l1_diff(source_pixels, twice_pixels);
+    const std::uint64_t single_pass_alpha_diff = l1_alpha_diff(source_pixels, once_pixels);
+    const std::uint64_t repeated_pass_alpha_diff = l1_alpha_diff(source_pixels, twice_pixels);
     CHECK(single_pass_diff > 0);
     CHECK(repeated_pass_diff > single_pass_diff);
+    CHECK(single_pass_alpha_diff > 0);
+    CHECK(repeated_pass_alpha_diff > single_pass_alpha_diff);
 
     SDL_DestroyTexture(scratch);
     SDL_DestroyTexture(blurred_twice);
     SDL_DestroyTexture(blurred_once);
+    SDL_DestroyTexture(source);
+}
+
+TEST_CASE("LayerEffectProcessor zero blur radii copy the source exactly") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_sum_blend()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 32;
+    constexpr int kH = 32;
+    SDL_Texture* source = create_target_texture(renderer, kW, kH);
+    SDL_Texture* output = create_target_texture(renderer, kW, kH);
+    SDL_Texture* scratch = create_target_texture(renderer, kW, kH);
+    REQUIRE(source != nullptr);
+    REQUIRE(output != nullptr);
+    REQUIRE(scratch != nullptr);
+
+    REQUIRE(clear_texture(renderer, source, SDL_Color{0, 0, 0, 0}));
+    REQUIRE(fill_texture_rect(renderer, source, 0, 0, 16, 16, SDL_Color{255, 40, 20, 64}));
+    REQUIRE(fill_texture_rect(renderer, source, 16, 0, 16, 16, SDL_Color{20, 255, 40, 128}));
+    REQUIRE(fill_texture_rect(renderer, source, 0, 16, 16, 16, SDL_Color{40, 20, 255, 200}));
+    REQUIRE(fill_texture_rect(renderer, source, 16, 16, 16, 16, SDL_Color{250, 250, 250, 255}));
+
+    LayerEffectProcessor processor(renderer);
+    const SDL_FPoint optical_center{16.0f, 16.0f};
+    REQUIRE(processor.apply_lens_blur(source,
+                                      output,
+                                      scratch,
+                                      kW,
+                                      kH,
+                                      0.0f,
+                                      optical_center,
+                                      0.0f,
+                                      1.0f));
+
+    std::vector<SDL_Color> source_pixels{};
+    std::vector<SDL_Color> output_pixels{};
+    REQUIRE(capture_texture_pixels(renderer, source, kW, kH, source_pixels));
+    REQUIRE(capture_texture_pixels(renderer, output, kW, kH, output_pixels));
+    REQUIRE(source_pixels.size() == output_pixels.size());
+    for (std::size_t i = 0; i < source_pixels.size(); ++i) {
+        CHECK(source_pixels[i].r == output_pixels[i].r);
+        CHECK(source_pixels[i].g == output_pixels[i].g);
+        CHECK(source_pixels[i].b == output_pixels[i].b);
+        CHECK(source_pixels[i].a == output_pixels[i].a);
+    }
+
+    SDL_DestroyTexture(scratch);
+    SDL_DestroyTexture(output);
     SDL_DestroyTexture(source);
 }
 

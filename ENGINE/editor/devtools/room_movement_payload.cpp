@@ -108,7 +108,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
                                   ? payload["movement"]
                                   : nlohmann::json::array();
     if (movement.size() < frame_count) {
-        movement.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array({0, 0}));
+        movement.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array({0, 0, 0}));
     } else if (movement.size() > frame_count) {
         movement.erase(movement.begin() + static_cast<std::ptrdiff_t>(frame_count), movement.end());
     }
@@ -119,8 +119,8 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         if (!entry.is_array()) {
             entry = nlohmann::json::array();
         }
-        if (entry.size() < 2) {
-            entry = nlohmann::json::array({0, 0});
+        if (entry.size() < 3) {
+            entry = nlohmann::json::array({0, 0, 0});
         }
 
         nlohmann::json preserved_color;
@@ -161,7 +161,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
     int total_dx = 0;
     int total_dy = 0;
     double total_dz = 0.0;
-    for (std::size_t i = 1; i < movement.size(); ++i) {
+    for (std::size_t i = 0; i < movement.size(); ++i) {
         const auto& entry = movement[i];
         if (!entry.is_array()) {
             continue;
@@ -182,7 +182,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
     }
 
     if (movement.empty()) {
-        movement.push_back(nlohmann::json::array({0, 0}));
+        movement.push_back(nlohmann::json::array({0, 0, 0}));
     }
     payload["movement"] = std::move(movement);
     payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};

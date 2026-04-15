@@ -18,20 +18,13 @@ TEST_CASE("Room selection filter keeps explicit mode while shift is held") {
     CHECK(effective_filter(SelectionFilter::Normal, false) == SelectionFilter::Normal);
 }
 
-TEST_CASE("Room selection filter gates map-wide and boundary domains by mode") {
-    SelectionTraits map_asset{};
-    map_asset.ownership = SpawnOwnership::MapAssets;
-
+TEST_CASE("Room selection filter gates boundary domain by mode") {
     SelectionTraits boundary_asset{};
     boundary_asset.ownership = SpawnOwnership::MapBoundary;
 
-    CHECK(matches_filter(SelectionFilter::MapWide, false, map_asset));
-    CHECK_FALSE(matches_filter(SelectionFilter::Normal, false, map_asset));
-    CHECK_FALSE(matches_filter(SelectionFilter::Boundary, false, map_asset));
-
     CHECK(matches_filter(SelectionFilter::Boundary, false, boundary_asset));
     CHECK_FALSE(matches_filter(SelectionFilter::Normal, false, boundary_asset));
-    CHECK_FALSE(matches_filter(SelectionFilter::MapWide, false, boundary_asset));
+    CHECK_FALSE(matches_filter(SelectionFilter::Tiled, false, boundary_asset));
 }
 
 TEST_CASE("Room selection filter keeps anchored/tiled assets out of normal mode") {

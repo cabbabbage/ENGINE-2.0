@@ -9948,18 +9948,6 @@
           "candidates": {
             "candidates": []
           }
-        },
-        {
-          "anchor_point_name": "anchor_24",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "anchor_25",
-          "candidates": {
-            "candidates": []
-          }
         }
       ],
       "animations": {
@@ -10563,58 +10551,6 @@
                 "scaling_method": "parent",
                 "texture_x": 831,
                 "texture_y": 398
-              },
-              {
-                "depth_offset": 100.0,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": true,
-                  "color": [
-                    255,
-                    236,
-                    196
-                  ],
-                  "enabled": true,
-                  "falloff": 2.1600000858306885,
-                  "intensity": 0.47999998927116394,
-                  "opacity": 0.0,
-                  "radius": 991.0,
-                  "shadow_strength": 0.8199999928474426
-                },
-                "name": "anchor_24",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 464,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 800.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": true,
-                  "color": [
-                    255,
-                    236,
-                    196
-                  ],
-                  "enabled": true,
-                  "falloff": 5.670000076293945,
-                  "intensity": 0.1899999976158142,
-                  "opacity": 0.0,
-                  "radius": 1964.0,
-                  "shadow_strength": 0.8199999928474426
-                },
-                "name": "anchor_25",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 479,
-                "texture_y": 369
               }
             ]
           ],
@@ -12212,7 +12148,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 3.0,
+        "scale_percentage": 21.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -18565,15 +18501,15 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 1.809999942779541,
-        "blur_px": 0.07000000029802322,
+        "behind_layer_light_strength_multiplier": 1.2899999618530273,
+        "blur_px": 0.0,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
         "depth_of_field_enabled": true,
-        "front_layer_light_strength_multiplier": 2.819999933242798,
-        "layer_depth_curve": 22.869998931884766,
-        "layer_depth_interval": 32.0,
+        "front_layer_light_strength_multiplier": 2.4099998474121094,
+        "layer_depth_curve": 96.40999603271484,
+        "layer_depth_interval": 292.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -18588,7 +18524,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 2.869999885559082,
+        "radial_blur_px": 2.879999876022339,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -18657,10 +18593,6 @@
               {
                 "chance": 3,
                 "name": "null"
-              },
-              {
-                "chance": 6.25,
-                "name": "fog_1"
               },
               {
                 "chance": 7.3125,
@@ -18755,11 +18687,11 @@
       "map_name": "forrest",
       "rooms_data": {
         "NewRoom": {
-          "camera_center_dx": -558,
-          "camera_center_dz": -535,
-          "camera_height_px": 310,
-          "camera_tilt_deg": 15.72830581665039,
-          "camera_zoom_percent": 82,
+          "camera_center_dx": -7,
+          "camera_center_dz": 75,
+          "camera_height_px": 456,
+          "camera_tilt_deg": 37.47359085083008,
+          "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
             167,
@@ -19158,10 +19090,10 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -510,
-          "camera_center_dz": 120,
-          "camera_height_px": 265,
-          "camera_tilt_deg": 28.12126350402832,
+          "camera_center_dx": -653,
+          "camera_center_dz": -667,
+          "camera_height_px": 434,
+          "camera_tilt_deg": 45.79377365112305,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [

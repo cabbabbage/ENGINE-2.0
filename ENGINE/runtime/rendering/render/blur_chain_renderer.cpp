@@ -11,6 +11,18 @@ namespace {
 
 constexpr float kBlurEpsilon = 1.0e-4f;
 
+/*
+    CLEARLY MARKED ATMOSPHERE TUNING
+
+    Increase this to make distant layers hazier and a little dustier.
+    Good starting range: 0.0f to 1.5f
+*/
+constexpr float kAtmosphereDustAmount = 0.95f;
+
+constexpr Uint8 kClearNightTintR = 168;
+constexpr Uint8 kClearNightTintG = 188;
+constexpr Uint8 kClearNightTintB = 232;
+
 void destroy_texture(SDL_Texture*& texture) {
     if (texture) {
         SDL_DestroyTexture(texture);
@@ -20,6 +32,30 @@ void destroy_texture(SDL_Texture*& texture) {
 
 float sanitized_non_negative(float value) {
     return (std::isfinite(value) && value > 0.0f) ? value : 0.0f;
+}
+
+float clamp01(float value) {
+    if (!std::isfinite(value)) {
+        return 0.0f;
+    }
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
+Uint8 lerp_u8(Uint8 a, Uint8 b, float t) {
+    const float clamped_t = clamp01(t);
+    const float value = static_cast<float>(a) + (static_cast<float>(b) - static_cast<float>(a)) * clamped_t;
+    return static_cast<Uint8>(std::clamp(std::lround(value), 0l, 255l));
+}
+
+SDL_Texture* find_player_layer_texture(const render_pipeline::LayerRenderResult& layer_render) {
+    const int player_layer_index = layer_render.player_layer_index;
+    if (player_layer_index < 0) {
+        return nullptr;
+    }
+    if (static_cast<std::size_t>(player_layer_index) >= layer_render.final_layer_textures.size()) {
+        return nullptr;
+    }
+    return layer_render.final_layer_textures[static_cast<std::size_t>(player_layer_index)];
 }
 
 } // namespace
@@ -153,25 +189,77 @@ bool BlurChainRenderer::blur_step(SDL_Texture* src,
                                            quality_scale);
 }
 
+bool BlurChainRenderer::apply_atmosphere_to_texture(SDL_Texture* src,
+                                                    SDL_Texture* dst,
+                                                    const AtmosphereParams& params) const {
+    if (!renderer_ || !src || !dst) {
+        return false;
+    }
+
+    const float amount = clamp01(params.amount);
+    if (amount <= 0.0001f) {
+        return copy_texture(src, dst);
+    }
+
+    clear_target(dst);
+    SDL_SetRenderTarget(renderer_, dst);
+
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(src, 255);
+
+    const float desaturation = clamp01(params.desaturation);
+    const float tint_mix = amount * (0.50f + 0.50f * desaturation);
+
+    const Uint8 mod_r = lerp_u8(255, params.tint_r, tint_mix);
+    const Uint8 mod_g = lerp_u8(255, params.tint_g, tint_mix);
+    const Uint8 mod_b = lerp_u8(255, params.tint_b, tint_mix);
+
+    SDL_SetTextureColorMod(src, mod_r, mod_g, mod_b);
+    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+
+    const float lift = clamp01(params.lift);
+    if (lift > 0.0001f) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_ADD);
+        SDL_SetRenderDrawColor(renderer_,
+                               params.tint_r,
+                               params.tint_g,
+                               params.tint_b,
+                               static_cast<Uint8>(std::clamp(std::lround(lift * 255.0f), 0l, 255l)));
+        SDL_RenderFillRect(renderer_, nullptr);
+    }
+
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    return true;
+}
+
 std::vector<int> BlurChainRenderer::build_repeat_schedule(std::size_t chain_size, int total_pass_budget) {
     if (chain_size == 0 || total_pass_budget <= 0) {
         return {};
     }
 
     std::vector<int> schedule(chain_size, 0);
-
     const std::size_t pass_count = static_cast<std::size_t>(std::max(0, total_pass_budget));
+
     for (std::size_t pass_index = 0; pass_index < pass_count; ++pass_index) {
-        const std::size_t slot =
+        std::size_t slot =
             std::min(chain_size - 1,
                      ((pass_index + 1) * chain_size) / (pass_count + 1));
+
+        if (chain_size > 1) {
+            slot = std::max<std::size_t>(1, slot);
+        }
+
         ++schedule[slot];
     }
 
-    if (schedule.back() == 0) {
-        if (total_pass_budget > 0) {
-            ++schedule.back();
-        }
+    if (chain_size == 1 && schedule[0] == 0 && total_pass_budget > 0) {
+        schedule[0] = 1;
+    }
+
+    if (chain_size > 1 && schedule.back() == 0 && total_pass_budget > 0) {
+        ++schedule.back();
     }
 
     return schedule;
@@ -208,7 +296,7 @@ int BlurChainRenderer::compute_total_pass_budget(std::size_t chain_size,
     } else if (chain_size == 2) {
         budget = std::min(budget, 2);
     } else {
-        budget = std::min(budget, 3);
+        budget = std::min(budget, static_cast<int>(chain_size));
     }
 
     return std::max(0, budget);
@@ -227,18 +315,52 @@ float BlurChainRenderer::compute_quality_scale(int screen_width,
         return 1.0f;
     }
     if (max_radius <= 6.0f) {
-        return 0.9f;
+        return 0.92f;
     }
     if (max_radius <= 12.0f) {
-        return 0.8f;
+        return 0.84f;
     }
     if (max_radius <= 24.0f) {
-        return 0.65f;
+        return 0.72f;
     }
     if (min_dim <= 720) {
-        return 0.6f;
+        return 0.62f;
     }
-    return 0.5f;
+    return 0.54f;
+}
+
+BlurChainRenderer::AtmosphereParams BlurChainRenderer::compute_atmosphere_params(int chain_step_index,
+                                                                                 int chain_size,
+                                                                                 AtmosphereSide side) {
+    AtmosphereParams params{};
+    if (chain_size <= 0 || chain_step_index < 0) {
+        return params;
+    }
+
+    const float dust = std::max(0.0f, kAtmosphereDustAmount);
+    if (dust <= 0.0001f) {
+        return params;
+    }
+
+    const float t =
+        (chain_size <= 1)
+            ? 1.0f
+            : clamp01(static_cast<float>(chain_step_index) / static_cast<float>(chain_size - 1));
+
+    if (side == AtmosphereSide::Background) {
+        params.amount = clamp01((0.10f + 0.40f * t) * dust);
+        params.desaturation = clamp01((0.18f + 0.34f * t) * dust);
+        params.lift = clamp01((0.025f + 0.065f * t) * dust);
+    } else {
+        params.amount = clamp01((0.02f + 0.10f * t) * dust);
+        params.desaturation = clamp01((0.04f + 0.10f * t) * dust);
+        params.lift = clamp01((0.006f + 0.022f * t) * dust);
+    }
+
+    params.tint_r = kClearNightTintR;
+    params.tint_g = kClearNightTintG;
+    params.tint_b = kClearNightTintB;
+    return params;
 }
 
 bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
@@ -251,9 +373,10 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
                                       float radial_blur_px,
                                       SDL_FPoint optical_center,
                                       float blur_quality_scale,
+                                      AtmosphereSide atmosphere_side,
                                       bool& out_has_content) const {
     out_has_content = false;
-    if (!renderer_ || !output_texture) {
+    if (!renderer_ || !output_texture || !temp_texture) {
         return false;
     }
 
@@ -291,13 +414,22 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
             continue;
         }
 
+        const AtmosphereParams atmosphere =
+            compute_atmosphere_params(static_cast<int>(step),
+                                      static_cast<int>(chain.size()),
+                                      atmosphere_side);
+
+        if (!apply_atmosphere_to_texture(layer_texture, temp, atmosphere)) {
+            return false;
+        }
+
         if (!initialized) {
-            if (!copy_texture(layer_texture, accum)) {
+            if (!copy_texture(temp, accum)) {
                 return false;
             }
             initialized = true;
         } else {
-            if (!composite_texture_over(layer_texture, accum)) {
+            if (!composite_texture_over(temp, accum)) {
                 return false;
             }
         }
@@ -353,12 +485,18 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
             ? compute_quality_scale(screen_width_, screen_height_, safe_blur_px, safe_radial_blur_px)
             : 1.0f;
 
-    const std::vector<int> background_chain =
+    std::vector<int> background_chain =
         render_internal::background_chain_layers(layer_render.non_empty_layers,
                                                  layer_render.player_layer_index);
     const std::vector<int> foreground_chain =
         render_internal::foreground_chain_layers(layer_render.non_empty_layers,
                                                  layer_render.player_layer_index);
+
+    background_chain.erase(
+        std::remove(background_chain.begin(),
+                    background_chain.end(),
+                    layer_render.player_layer_index),
+        background_chain.end());
 
     bool background_has_content = false;
     bool foreground_has_content = false;
@@ -373,8 +511,22 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
                        safe_radial_blur_px,
                        optical_center,
                        blur_quality_scale,
+                       AtmosphereSide::Background,
                        background_has_content)) {
         return result;
+    }
+
+    if (SDL_Texture* player_layer_texture = find_player_layer_texture(layer_render)) {
+        if (!background_has_content) {
+            if (!copy_texture(player_layer_texture, background_mid_tex_)) {
+                return result;
+            }
+            background_has_content = true;
+        } else {
+            if (!composite_texture_over(player_layer_texture, background_mid_tex_)) {
+                return result;
+            }
+        }
     }
 
     if (!compose_chain(foreground_chain,
@@ -387,6 +539,7 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
                        safe_radial_blur_px,
                        optical_center,
                        blur_quality_scale,
+                       AtmosphereSide::Foreground,
                        foreground_has_content)) {
         return result;
     }

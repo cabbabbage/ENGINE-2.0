@@ -1,8 +1,10 @@
 #pragma once
 
-#include <vector>
-
 #include <SDL3/SDL.h>
+
+#include <array>
+#include <cstdint>
+#include <vector>
 
 #include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/render_pipeline_types.hpp"
@@ -11,6 +13,9 @@ class LayerStackRenderer {
 public:
     explicit LayerStackRenderer(SDL_Renderer* renderer);
     ~LayerStackRenderer();
+
+    LayerStackRenderer(const LayerStackRenderer&) = delete;
+    LayerStackRenderer& operator=(const LayerStackRenderer&) = delete;
 
     void set_output_dimensions(int screen_width, int screen_height);
 
@@ -22,17 +27,26 @@ public:
         float behind_layer_light_strength_multiplier);
 
 private:
+
+
     struct TextureSet {
         SDL_Texture* base = nullptr;
         SDL_Texture* dark_mask = nullptr;
+        SDL_Texture* dark_mask_merged = nullptr;
         SDL_Texture* lit = nullptr;
+        std::uint8_t dark_mask_history_write_index = 0;
+        std::uint8_t valid_dark_mask_history_count = 0;
     };
 
-    void reset_targets();
     bool ensure_target(SDL_Texture*& texture) const;
     bool ensure_layer_capacity(int layer_count);
+    void reset_targets();
     void clear_target(SDL_Texture* texture) const;
-    void render_layer_base(const render_pipeline::LayerSubmission& layer, SDL_Texture* target) const;
+    bool copy_texture(SDL_Texture* src, SDL_Texture* dst) const;
+  
+
+    void render_layer_base(const render_pipeline::LayerSubmission& layer,
+                           SDL_Texture* target) const;
 
     std::vector<LayerEffectProcessor::RuntimeLight> bias_lights_for_layer(
         const std::vector<LayerEffectProcessor::RuntimeLight>& source_lights,
@@ -50,8 +64,8 @@ private:
         const std::vector<LayerEffectProcessor::RuntimeLight>& biased_lights) const;
 
     SDL_Renderer* renderer_ = nullptr;
-    int screen_width_ = 1;
-    int screen_height_ = 1;
+    int screen_width_ = 0;
+    int screen_height_ = 0;
     LayerEffectProcessor layer_effect_processor_;
     std::vector<TextureSet> layer_targets_;
 };

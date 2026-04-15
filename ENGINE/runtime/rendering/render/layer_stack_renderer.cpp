@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "rendering/render/render.hpp"
 
@@ -61,7 +62,10 @@ void LayerStackRenderer::reset_targets() {
     for (TextureSet& set : layer_targets_) {
         destroy_texture(set.base);
         destroy_texture(set.dark_mask);
+        destroy_texture(set.dark_mask_merged);
         destroy_texture(set.lit);
+        set.dark_mask_history_write_index = 0;
+        set.valid_dark_mask_history_count = 0;
     }
     layer_targets_.clear();
 }
@@ -113,6 +117,7 @@ bool LayerStackRenderer::ensure_layer_capacity(int layer_count) {
     for (TextureSet& set : layer_targets_) {
         if (!ensure_target(set.base) ||
             !ensure_target(set.dark_mask) ||
+            !ensure_target(set.dark_mask_merged) ||
             !ensure_target(set.lit)) {
             return false;
         }
@@ -120,6 +125,22 @@ bool LayerStackRenderer::ensure_layer_capacity(int layer_count) {
 
     return true;
 }
+
+bool LayerStackRenderer::copy_texture(SDL_Texture* src, SDL_Texture* dst) const {
+    if (!renderer_ || !src || !dst) {
+        return false;
+    }
+
+    clear_target(dst);
+    SDL_SetRenderTarget(renderer_, dst);
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    return true;
+}
+
+
 
 void LayerStackRenderer::clear_target(SDL_Texture* texture) const {
     if (!renderer_ || !texture) {
@@ -283,6 +304,8 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             biased_lights,
             fog_params,
             scratch);
+
+
 
         out.final_layer_textures[static_cast<std::size_t>(layer_index)] =
             result.final_texture ? result.final_texture : targets.lit;

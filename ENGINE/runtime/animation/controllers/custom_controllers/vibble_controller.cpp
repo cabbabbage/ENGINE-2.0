@@ -204,7 +204,7 @@ void vibble_controller::movement(const Input& input) {
         }
     }
 
-    player->anim_->move(SDL_Point{ dx_, dy_ }, selected_animation);
+
     if (reverse_selected_animation) {
         animation_update::custom_controllers::begin_reverse_current_animation_until_stop(player);
     } else {
@@ -216,9 +216,12 @@ void vibble_controller::movement(const Input& input) {
             player,
             std::string{});
     }
+    player->anim_->move(SDL_Point{ dx_, dy_ }, selected_animation);
 }
 
 void vibble_controller::on_update(const Input& input) {
+    
+    movement(input);
     using namespace std::chrono;
     auto now = steady_clock::now();
 
@@ -262,7 +265,7 @@ void vibble_controller::on_update(const Input& input) {
         isMeleeing = false;
     }
 
-    movement(input);
+
 }
 
 std::string vibble_controller::animation_for_direction(int screen_x, int screen_y) const {

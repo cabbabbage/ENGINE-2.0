@@ -11,6 +11,6 @@ public:
 
     render_pipeline::LayerBuildResult build(const GeometryBatcher& geometry_batcher,
                                             const WarpedScreenGrid& cam,
-                                            double anchor_depth,
+                                            double focus_plane_world_z,
                                             double max_cull_depth) const;
 };

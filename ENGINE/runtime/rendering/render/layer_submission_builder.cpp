@@ -117,13 +117,95 @@ void expand_layer_bounds(render_pipeline::LayerSubmission& layer,
     }
 }
 
+bool layer_contains_relative_focus(const render_pipeline::LayerSubmission& layer) {
+    if (!std::isfinite(layer.depth_min) || !std::isfinite(layer.depth_max)) {
+        return false;
+    }
+    const double min_depth = std::min(layer.depth_min, layer.depth_max);
+    const double max_depth = std::max(layer.depth_min, layer.depth_max);
+    return min_depth <= 0.0 && max_depth >= 0.0;
+}
+
+double distance_from_focus_plane(const render_pipeline::LayerSubmission& layer) {
+    if (!std::isfinite(layer.depth_min) || !std::isfinite(layer.depth_max)) {
+        return std::numeric_limits<double>::infinity();
+    }
+
+    const double min_depth = std::min(layer.depth_min, layer.depth_max);
+    const double max_depth = std::max(layer.depth_min, layer.depth_max);
+    if (min_depth <= 0.0 && max_depth >= 0.0) {
+        return 0.0;
+    }
+    if (max_depth < 0.0) {
+        return std::fabs(max_depth);
+    }
+    return std::fabs(min_depth);
+}
+
+int resolve_player_layer_index(const render_pipeline::LayerBuildResult& result,
+                               int fallback_index) {
+    int best_containing_index = -1;
+    double best_containing_span = std::numeric_limits<double>::infinity();
+
+    for (int layer_idx : result.non_empty_layers) {
+        if (layer_idx < 0 || static_cast<std::size_t>(layer_idx) >= result.layers.size()) {
+            continue;
+        }
+
+        const auto& layer = result.layers[static_cast<std::size_t>(layer_idx)];
+        if (!layer_contains_relative_focus(layer)) {
+            continue;
+        }
+
+        const double span = std::fabs(layer.depth_max - layer.depth_min);
+        if (best_containing_index < 0 || span < best_containing_span) {
+            best_containing_index = layer_idx;
+            best_containing_span = span;
+        }
+    }
+
+    if (best_containing_index >= 0) {
+        return best_containing_index;
+    }
+
+    int nearest_index = -1;
+    double nearest_distance = std::numeric_limits<double>::infinity();
+    double nearest_midpoint_abs = std::numeric_limits<double>::infinity();
+
+    for (int layer_idx : result.non_empty_layers) {
+        if (layer_idx < 0 || static_cast<std::size_t>(layer_idx) >= result.layers.size()) {
+            continue;
+        }
+
+        const auto& layer = result.layers[static_cast<std::size_t>(layer_idx)];
+        const double distance = distance_from_focus_plane(layer);
+        const double midpoint_abs = std::isfinite(layer.representative_depth)
+            ? std::fabs(layer.representative_depth)
+            : std::numeric_limits<double>::infinity();
+
+        if (nearest_index < 0 ||
+            distance < nearest_distance ||
+            (distance == nearest_distance && midpoint_abs < nearest_midpoint_abs)) {
+            nearest_index = layer_idx;
+            nearest_distance = distance;
+            nearest_midpoint_abs = midpoint_abs;
+        }
+    }
+
+    if (nearest_index >= 0) {
+        return nearest_index;
+    }
+
+    return fallback_index;
+}
+
 } // namespace
 
 render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBatcher& geometry_batcher,
                                                                 const WarpedScreenGrid& cam,
-                                                                double anchor_depth,
+                                                                double focus_plane_world_z,
                                                                 double max_cull_depth) const {
-    (void)anchor_depth;
+    (void)focus_plane_world_z;
 
     render_pipeline::LayerBuildResult result{};
     const auto realism = cam.get_settings();
@@ -142,7 +224,8 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
 
     result.layer_count = layer_count;
     result.layers.resize(static_cast<std::size_t>(layer_count));
-    result.player_layer_index = std::clamp(
+
+    const int theoretical_focus_layer_index = std::clamp(
         depth_to_layer_index(0.0,
                              safe_max_cull_depth,
                              foreground_depth_edges,
@@ -152,6 +235,8 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
                              layer_count),
         0,
         std::max(0, layer_count - 1));
+
+    result.player_layer_index = theoretical_focus_layer_index;
 
     geometry_batcher.for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
         const int layer_idx = depth_to_layer_index(item.depth,
@@ -220,6 +305,7 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
         result.non_empty_layers.push_back(i);
     }
 
+    result.player_layer_index = resolve_player_layer_index(result, theoretical_focus_layer_index);
     result.valid = !result.non_empty_layers.empty();
     return result;
 }

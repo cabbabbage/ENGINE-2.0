@@ -1025,7 +1025,7 @@ void SceneRenderer::set_anchor_point_debug_enabled(bool enabled) {
 
 void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
                                            world::WorldGrid& grid,
-                                           double anchor_depth,
+                                           double focus_plane_world_z,
                                            double max_cull_depth,
                                            std::vector<Asset*>& rendered_assets_for_debug) {
     if (!geometry_batcher_ || !dynamic_boundary_system_) {
@@ -1055,8 +1055,8 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
     const float boundary_cull_margin = 64.0f;
     const float boundary_min_visible_px = static_cast<float>(screen_height_) * std::clamp(assets_->boundary_min_visible_screen_ratio(), 0.0f, 0.5f);
 
-    auto queue_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite, double depth_from_anchor) {
-        const double depth_distance = std::fabs(depth_from_anchor);
+    auto queue_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite, double depth_from_focus_plane) {
+        const double depth_distance = std::fabs(depth_from_focus_plane);
         if (!std::isfinite(depth_distance) || depth_distance > max_cull_depth || !sprite.texture ||
             sprite.texture_w <= 0 || sprite.texture_h <= 0 || sprite.world_width <= 0.0f || sprite.world_height <= 0.0f ||
             !assets_->is_spawn_id_in_focus_filter(sprite.spawn_id)) {
@@ -1097,7 +1097,7 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         vertices[1].tex_coord = SDL_FPoint{1.0f - pad_x, pad_y};
         vertices[2].tex_coord = SDL_FPoint{1.0f - pad_x, 1.0f - pad_y};
         vertices[3].tex_coord = SDL_FPoint{pad_x, 1.0f - pad_y};
-        geometry_batcher_->addQuad(sprite.texture, vertices, kQuadIndices, SDL_BLENDMODE_BLEND, depth_from_anchor);
+        geometry_batcher_->addQuad(sprite.texture, vertices, kQuadIndices, SDL_BLENDMODE_BLEND, depth_from_focus_plane);
     };
 
     auto normalize_depth = [](double depth) {
@@ -1110,12 +1110,13 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         if (std::isfinite(entry.depth_from_anchor)) {
             return normalize_depth(entry.depth_from_anchor);
         }
-        return normalize_depth(render_depth::depth_from_anchor(anchor_depth,
+        return normalize_depth(render_depth::depth_from_anchor(focus_plane_world_z,
                                                                static_cast<double>(entry.asset->world_z()),
                                                                entry.asset->render_depth_bias()));
     };
     auto depth_for_boundary = [&](const DynamicBoundarySystem::BoundarySprite& sprite) {
-        return normalize_depth(render_depth::depth_from_anchor(anchor_depth, static_cast<double>(sprite.world_z)));
+        return normalize_depth(render_depth::depth_from_anchor(focus_plane_world_z,
+                                                               static_cast<double>(sprite.world_z)));
     };
 
     rendered_assets_for_debug.reserve(assets_->active_traversal().size());
@@ -1152,24 +1153,29 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
             const bool has_camera_metrics = camera_metrics.valid &&
                                             camera_metrics.frame_id == assets_->frame_id() &&
                                             camera_metrics.camera_state_version == cam.camera_state_version();
-            const double asset_depth_from_anchor = has_camera_metrics
+            const double asset_depth_from_focus_plane = has_camera_metrics
                 ? camera_metrics.world_z_depth_from_anchor
-                : render_depth::depth_from_anchor(anchor_depth,
+                : render_depth::depth_from_anchor(focus_plane_world_z,
                                                   static_cast<double>(asset->world_z()),
                                                   asset->render_depth_bias());
 
-            WarpedMesh mesh{};
-            if (!obj.texture ||
-                !build_perspective_mesh(obj, cam, perspective_scale, base_world_z + obj.world_z_offset, mesh) ||
-                !mesh.valid) {
-                continue;
-            }
+        WarpedMesh mesh{};
+        if (!obj.texture ||
+            !build_perspective_mesh(obj, cam, perspective_scale, base_world_z + obj.world_z_offset, mesh) ||
+            !mesh.valid) {
+            continue;
+        }
 
-            geometry_batcher_->addQuad(obj.texture,
-                                       mesh.vertices.data(),
-                                       mesh.indices.data(),
-                                       obj.blend_mode,
-                                       asset_depth_from_anchor - static_cast<double>(obj.world_z_offset));
+        // IMPORTANT:
+        // Project the quad using the render Z offset so it appears in the right place,
+        // but keep DOF/layer bucketing tied to the asset's focus-plane depth, not the
+        // sprite's render-anchor Z offset. Otherwise the player/focus object can get
+        // pushed into an adjacent blurred layer even when the camera focus plane is correct.
+        geometry_batcher_->addQuad(obj.texture,
+                                mesh.vertices.data(),
+                                mesh.indices.data(),
+                                obj.blend_mode,
+                                asset_depth_from_focus_plane);
             continue;
         }
 
@@ -1179,7 +1185,9 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
     }
 }
 
+
 void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
+                                          double focus_plane_world_z,
                                           const std::vector<Asset*>& rendered_assets,
                                           std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) {
     out_lights.clear();
@@ -1310,7 +1318,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             instance.radius_px = radius_px;
             instance.radius_world = radius_world;
             instance.falloff = light.falloff;
-            instance.world_z = static_cast<float>(render_depth::depth_from_anchor(cam.anchor_world_z(), static_cast<double>(anchor_world_z)));
+            instance.world_z = static_cast<float>(
+                render_depth::depth_from_anchor(focus_plane_world_z,
+                                                static_cast<double>(anchor_world_z)));
             const render_internal::FloorLightContact floor_contact = render_internal::resolve_floor_light_contact(
                 resolved->flat_world_exact_pos_2d.x,
                 resolved->flat_world_exact_z,
@@ -1460,18 +1470,17 @@ void SceneRenderer::render() {
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
     const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
-    const double anchor_depth = cam.anchor_world_z();
+    const double focus_plane_world_z = cam.anchor_world_z();
     const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
 
     std::vector<Asset*> rendered_assets_for_debug;
-    collect_frame_geometry(cam, grid, anchor_depth, max_cull_depth, rendered_assets_for_debug);
+    collect_frame_geometry(cam, grid, focus_plane_world_z, max_cull_depth, rendered_assets_for_debug);
 
     std::vector<LayerEffectProcessor::RuntimeLight> runtime_lights;
     const bool runtime_lighting_enabled = assets_->should_render_runtime_lighting();
     if (runtime_lighting_enabled) {
-        gather_runtime_lights(cam, rendered_assets_for_debug, runtime_lights);
+        gather_runtime_lights(cam, focus_plane_world_z, rendered_assets_for_debug, runtime_lights);
     }
-
     SDL_Texture* floor_texture = nullptr;
     if (floor_composer_) {
         floor_texture = floor_composer_->compose(cam,
@@ -1498,7 +1507,7 @@ void SceneRenderer::render() {
     }
 
     const render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
-        ? layer_submission_builder_->build(*geometry_batcher_, cam, anchor_depth, max_cull_depth)
+        ? layer_submission_builder_->build(*geometry_batcher_, cam, focus_plane_world_z, max_cull_depth)
         : render_pipeline::LayerBuildResult{};
 
     bool composed = false;
@@ -1512,7 +1521,7 @@ void SceneRenderer::render() {
                                           front_mult,
                                           behind_mult);
 
-        SDL_Point screen_center = cam.get_screen_center();
+        SDL_Point screen_center = cam.get_focus_override_point();
         const SDL_FPoint optical_center{
             std::clamp(static_cast<float>(screen_center.x), 0.0f, static_cast<float>(screen_width_)),
             std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(screen_height_))};

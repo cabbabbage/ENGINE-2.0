@@ -195,12 +195,13 @@ private:
     bool ensure_scene_target();
     void collect_frame_geometry(const WarpedScreenGrid& cam,
                                 world::WorldGrid& grid,
-                                double anchor_depth,
+                                double focus_plane_world_z,
                                 double max_cull_depth,
                                 std::vector<Asset*>& rendered_assets_for_debug);
     void gather_runtime_lights(const WarpedScreenGrid& cam,
-                               const std::vector<Asset*>& rendered_assets,
-                               std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
+                            double focus_plane_world_z,
+                            const std::vector<Asset*>& rendered_assets,
+                            std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
 
     SDL_Renderer* renderer_ = nullptr;

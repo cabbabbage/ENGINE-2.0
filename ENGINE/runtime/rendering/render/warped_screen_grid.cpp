@@ -1631,9 +1631,13 @@ double WarpedScreenGrid::view_height_world() const {
     return static_cast<double>(std::max(0, maxy - miny));
 }
 
-double WarpedScreenGrid::anchor_world_z() const {
-
+double WarpedScreenGrid::focus_plane_world_z() const {
     return runtime_anchor_world_z_;
+}
+
+
+double WarpedScreenGrid::anchor_world_z() const {
+    return focus_plane_world_z();
 }
 
 void WarpedScreenGrid::clear_grid_state() {

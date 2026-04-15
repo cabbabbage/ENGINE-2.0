@@ -60,12 +60,22 @@ void fly_controller::on_process_pending_attacks(Asset& self_ref) {
     if(pending_attacks.empty()) {
         return;
     }
-    std::cout<<"fly_controller::on_process_pending_attacks called, transitioning to non-orbiting state."<<std::endl;
-    orbiting = false;
 
-    self_ref.anim_->cancel_all_movement();
-    self_ref.anim_->auto_move_3d({self_ref.world_x(), -10, self_ref.world_z()}, 0, std::nullopt, true);
+    for (const auto& attack : pending_attacks) {
+        if (attack.attacker_asset_name == "vibble_attack_1" || attack.attacker_asset_name == "vibble") {
+
+        
+            
+            std::cout<<"fly_controller::on_process_pending_attacks called, transitioning to non-orbiting state."<<std::endl;
 
 
+            self_ref.anim_->cancel_all_movement();
+            self_ref.anim_->auto_move_3d({self_ref.world_x(), -10, self_ref.world_z()}, 0, std::nullopt, true);
+            orbiting = false;
+            return;    
+    
+        }
 
+
+    }
 }

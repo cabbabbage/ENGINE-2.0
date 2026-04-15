@@ -39,7 +39,7 @@ struct ControllerGameContext {
     bool player_valid = false;
 
     std::uint32_t frame_id = 0;
-    float delta_seconds = 1.0f / 60.0f;
+    float delta_seconds = 1.0f / 10.0f;
 
     const WarpedScreenGrid* camera_view = nullptr;
     Room* current_room = nullptr;

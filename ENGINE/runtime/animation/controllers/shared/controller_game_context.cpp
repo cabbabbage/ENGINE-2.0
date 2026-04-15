@@ -14,16 +14,16 @@ namespace animation_update::custom_controllers {
 
 namespace {
 
-constexpr std::uint32_t kOrbitRefreshMinFrames = 1000;
-constexpr std::uint32_t kOrbitRefreshMaxFrames = 3000;
-constexpr std::uint32_t kOrbitRefreshMinFramesMad = 10;
-constexpr std::uint32_t kOrbitRefreshMaxFramesMad = 20;
+constexpr std::uint32_t kOrbitRefreshMinFrames = 100;
+constexpr std::uint32_t kOrbitRefreshMaxFrames = 400;
+constexpr std::uint32_t kOrbitRefreshMinFramesMad = 100;
+constexpr std::uint32_t kOrbitRefreshMaxFramesMad = 500;
 
-constexpr int kOrbitHeightMinOffset = 100;
+constexpr int kOrbitHeightMinOffset = 300;
 constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
 constexpr int kOrbitRadiusMin = 20;
-constexpr int kOrbitRadiusMax = 40;
+constexpr int kOrbitRadiusMax = 900;
 constexpr double kTwoPi = 6.28318530717958647692;
 constexpr std::uint64_t kGoldenRatio64 = 0x9e3779b97f4a7c15ULL;
 
@@ -229,7 +229,10 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
             context.player->world_x() + static_cast<int>(std::lround(std::cos(context.frame_id * 0.1) * 50.0)),
             context.player->world_z() + static_cast<int>(std::lround(std::sin(context.frame_id * 0.1) * 50.0))
         };
-    }
+    
+
+    
+}
 
     if (!orbit_room->room_area->contains_point(candidate)) {
         candidate = context.self_world_xz;
@@ -331,7 +334,7 @@ bool ControllerGameContext::self_and_player_share_room() const {
 }
 
 void ControllerGameContext::set_flies_mad() const {
-    const_cast<ControllerGameContext*>(this)->Flies_mad = true;
+    const_cast<ControllerGameContext*>(this)->Flies_mad = false;
 }
 
 bool ControllerGameContext::has_runtime_config() const {

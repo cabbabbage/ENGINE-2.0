@@ -182,7 +182,8 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
         snapshot.valid = false;
         snapshot.next_refresh_frame = schedule_next_refresh_frame(
             context.frame_id,
-            orbit_refresh_interval_frames(context.self, 0, previous.target_version, context.Flies_mad));
+            orbit_refresh_interval_frames(
+                context.self, 0, previous.target_version, context.flies_aggressive));
         return snapshot;
     }
 
@@ -206,7 +207,7 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
 
     SDL_Point candidate{};
 
-    if (!context.Flies_mad) {
+    if (!context.flies_aggressive) {
         std::uint64_t seed = asset_runtime_seed(context.self);
         seed = mix_hash(seed, static_cast<std::uint64_t>(context.frame_id));
         seed = mix_hash(seed, static_cast<std::uint64_t>(previous.target_version));
@@ -224,15 +225,16 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
             anchor.x + static_cast<int>(std::lround(std::cos(angle) * static_cast<double>(radius))),
             anchor.y + static_cast<int>(std::lround(std::sin(angle) * static_cast<double>(radius)))
         };
-    } else {
+    } else if (context.player_is_valid() && context.resolved_player) {
         candidate = SDL_Point{
-            context.player->world_x() + static_cast<int>(std::lround(std::cos(context.frame_id * 0.1) * 50.0)),
-            context.player->world_z() + static_cast<int>(std::lround(std::sin(context.frame_id * 0.1) * 50.0))
+            context.resolved_player->world_x() +
+                static_cast<int>(std::lround(std::cos(context.frame_id * 0.1) * 50.0)),
+            context.resolved_player->world_z() +
+                static_cast<int>(std::lround(std::sin(context.frame_id * 0.1) * 50.0))
         };
-    
-
-    
-}
+    } else {
+        candidate = anchor;
+    }
 
     if (!orbit_room->room_area->contains_point(candidate)) {
         candidate = context.self_world_xz;
@@ -247,7 +249,8 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
         snapshot.valid = false;
         snapshot.next_refresh_frame = schedule_next_refresh_frame(
             context.frame_id,
-            orbit_refresh_interval_frames(context.self, 0, previous.target_version, context.Flies_mad));
+            orbit_refresh_interval_frames(
+                context.self, 0, previous.target_version, context.flies_aggressive));
         return snapshot;
     }
 
@@ -272,7 +275,7 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
             context.self,
             snapshot.target_id,
             snapshot.target_version,
-            context.Flies_mad));
+            context.flies_aggressive));
 
     return snapshot;
 }
@@ -333,8 +336,8 @@ bool ControllerGameContext::self_and_player_share_room() const {
     return self->owning_room_name() == player->owning_room_name();
 }
 
-void ControllerGameContext::set_flies_mad() const {
-    const_cast<ControllerGameContext*>(this)->Flies_mad = false;
+bool ControllerGameContext::room_flies_aggressive() const {
+    return flies_aggressive;
 }
 
 bool ControllerGameContext::has_runtime_config() const {
@@ -354,12 +357,24 @@ ControllerGameContext build_controller_game_context(Asset* self,
                                                     Assets* assets,
                                                     const FlyOrbitTargetSnapshot* previous_orbit_target) {
     ControllerGameContext context{};
+    context.shared = assets ? &assets->game_context() : nullptr;
+    const bool shared_available = context.shared && context.shared->assets() == assets;
     context.self = self;
     context.assets = assets;
-    context.player = assets ? assets->player : nullptr;
+    context.player = shared_available
+        ? context.shared->player()
+        : (assets ? assets->player : nullptr);
+    if (!context.player && assets) {
+        context.player = assets->player;
+    }
     context.resolved_player = is_valid_player_target(self, context.player) ? context.player : nullptr;
     context.player_valid = context.resolved_player != nullptr;
-    context.runtime_config = assets ? &assets->runtime_game_config() : nullptr;
+    context.runtime_config = shared_available
+        ? context.shared->runtime_config()
+        : (assets ? &assets->runtime_game_config() : nullptr);
+    if (!context.runtime_config && assets) {
+        context.runtime_config = &assets->runtime_game_config();
+    }
 
     if (previous_orbit_target) {
         context.fly_orbit_target = *previous_orbit_target;
@@ -380,10 +395,26 @@ ControllerGameContext build_controller_game_context(Asset* self,
     }
 
 #if !defined(ENGINE_WORLD_TESTS)
-    context.frame_id = assets->frame_id();
-    context.delta_seconds = assets->frame_delta_seconds_clamped();
-    context.camera_view = &assets->getView();
-    context.current_room = assets->current_room();
+    if (shared_available) {
+        context.frame_id = context.shared->frame_id();
+        context.delta_seconds = context.shared->delta_seconds();
+        context.camera_view = context.shared->camera_view();
+        context.current_room = context.shared->current_room();
+    } else {
+        context.frame_id = assets->frame_id();
+        context.delta_seconds = assets->frame_delta_seconds_clamped();
+        context.camera_view = &assets->getView();
+        context.current_room = assets->current_room();
+    }
+
+    std::string fly_room_name;
+    if (self && !self->owning_room_name().empty()) {
+        fly_room_name = self->owning_room_name();
+    } else if (context.current_room) {
+        fly_room_name = context.current_room->room_name;
+    }
+    context.flies_aggressive =
+        shared_available ? context.shared->is_room_fly_aggressive(fly_room_name) : false;
 
     const FlyOrbitTargetSnapshot previous =
         previous_orbit_target ? *previous_orbit_target : FlyOrbitTargetSnapshot{};

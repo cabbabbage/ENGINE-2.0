@@ -29,7 +29,7 @@ public:
                                     RandomOrbit3DControllerBehaviorConfig config = {});
     void set_config(RandomOrbit3DControllerBehaviorConfig config);
 
-    void tick(const Input& in, bool mad);
+    void tick(const Input& in);
 
 private:
     bool ingest_target_snapshot(const axis::WorldPos& target,
@@ -53,7 +53,6 @@ private:
                                                             const axis::WorldPos& target,
                                                             bool soft_transition) const;
     std::vector<axis::WorldPos> build_orbit_checkpoints(const axis::WorldPos& self_pos) const;
-    void set_state_mad();
 private:
     CustomAssetController* controller_ = nullptr;
     RandomOrbit3DControllerBehaviorConfig config_{};

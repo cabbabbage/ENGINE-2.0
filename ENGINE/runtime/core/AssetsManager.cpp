@@ -229,6 +229,15 @@ Assets::Assets(AssetLibrary& library,
         return nullptr;
 };
     Room* intro_room = current_room();
+    current_room_ = intro_room;
+    game_context_.begin_frame(
+        this,
+        frame_id_,
+        frame_delta_seconds_clamped(),
+        current_room_,
+        player,
+        &camera_,
+        &runtime_game_config());
 
     SDL_Point intro_center{screen_center_x, screen_center_z};
     if (player) {
@@ -1301,6 +1310,14 @@ void Assets::set_input(Input* m) {
 }
 
 void Assets::run_idle_frame_pipeline(const Input& input) {
+    game_context_.begin_frame(
+        this,
+        frame_id_,
+        0.0f,
+        current_room_,
+        player,
+        &camera_,
+        &runtime_game_config());
     run_visibility_build_stage();
     run_runtime_effects_stage(false);
     sync_dev_controls_for_frame(input);
@@ -1317,6 +1334,14 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     }
     room_changed = (current_room_ != active_room);
     current_room_ = active_room;
+    game_context_.begin_frame(
+        this,
+        frame_id_,
+        frame_delta_seconds_clamped(),
+        current_room_,
+        player,
+        &camera_,
+        &runtime_game_config());
 
     delta_x_ = delta_z_ = 0;
 

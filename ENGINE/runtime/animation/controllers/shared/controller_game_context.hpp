@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "core/game_runtime_context.hpp"
 #include "core/runtime_game_config.hpp"
 
 class Asset;
@@ -12,6 +13,8 @@ class Room;
 class WarpedScreenGrid;
 
 namespace animation_update::custom_controllers {
+
+namespace runtime_ctx = runtime::context;
 
 struct FlyOrbitTargetSnapshot {
     bool valid = false;
@@ -32,6 +35,7 @@ struct FlyOrbitPoint3D {
 };
 
 struct ControllerGameContext {
+    const runtime_ctx::GameRuntimeContext* shared = nullptr;
     Asset* self = nullptr;
     Assets* assets = nullptr;
     Asset* player = nullptr;
@@ -39,7 +43,7 @@ struct ControllerGameContext {
     bool player_valid = false;
 
     std::uint32_t frame_id = 0;
-    float delta_seconds = 1.0f / 10.0f;
+    float delta_seconds = 1.0f / 60.0f;
 
     const WarpedScreenGrid* camera_view = nullptr;
     Room* current_room = nullptr;
@@ -48,7 +52,7 @@ struct ControllerGameContext {
     int self_world_y = 0;
     int self_grid_resolution = 0;
     FlyOrbitPoint3D fly_orbit_point{};
-    bool Flies_mad = false;
+    bool flies_aggressive = false;
     FlyOrbitTargetSnapshot fly_orbit_target{};
     bool fly_orbit_target_changed = false;
     const runtime::config::RuntimeGameConfig* runtime_config = nullptr;
@@ -65,7 +69,7 @@ struct ControllerGameContext {
     bool self_in_current_room() const;
     bool player_in_current_room() const;
     bool self_and_player_share_room() const;
-    void set_flies_mad() const;
+    bool room_flies_aggressive() const;
     bool has_runtime_config() const;
     const runtime::config::RuntimeGameConfig& runtime_game_config() const;
     const runtime::config::RandomOrbit3DControllerBehaviorConfig& fly_orbit_behavior_config() const;

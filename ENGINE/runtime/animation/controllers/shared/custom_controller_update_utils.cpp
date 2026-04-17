@@ -12,8 +12,19 @@ Asset* resolve_valid_player_target(const ControllerGameContext& context) {
 }
 
 Asset* resolve_valid_player_target(Asset* self, Assets* assets) {
-    const ControllerGameContext context = build_controller_game_context(self, assets);
-    return resolve_valid_player_target(context);
+    if (!self || !assets) {
+        return nullptr;
+    }
+
+    const runtime::context::GameRuntimeContext& shared = assets->game_context();
+    Asset* player = shared.player();
+    if (!player) {
+        player = assets->player;
+    }
+    if (!player || player == self || player->dead || !player->active) {
+        return nullptr;
+    }
+    return player;
 }
 
 void dispatch_contact_attack(const ControllerGameContext& context) {

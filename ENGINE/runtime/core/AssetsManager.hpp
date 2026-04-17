@@ -3,6 +3,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
+#include "core/game_runtime_context.hpp"
 #include "core/runtime_game_config.hpp"
 #include "utils/map_grid_settings.hpp"
 #include <SDL3/SDL.h>
@@ -231,6 +232,8 @@ public:
     const RuntimeWorldContext* runtime_world_context() const;
     runtime::config::RuntimeGameConfig& runtime_game_config();
     const runtime::config::RuntimeGameConfig& runtime_game_config() const;
+    const runtime::context::GameRuntimeContext& game_context() const { return game_context_; }
+    runtime::context::GameRuntimeContext& mutable_game_context() { return game_context_; }
 
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();
@@ -490,4 +493,5 @@ private:
     Asset* focus_filter_asset_ = nullptr;
     std::string focus_filter_spawn_id_;
     std::uint64_t focus_filter_version_ = 0;
+    runtime::context::GameRuntimeContext game_context_{};
 };

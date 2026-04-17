@@ -372,7 +372,6 @@ private:
         std::uint64_t processed_anchor_revision = 0;
         std::uint64_t processed_camera_state_version = 0;
         int processed_frame_index = std::numeric_limits<int>::min();
-        std::uint32_t last_audio_frame_id = 0;
         std::uint32_t non_player_update_visit_epoch = 0;
     };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
@@ -385,7 +384,7 @@ private:
     std::uint32_t non_player_update_visit_epoch_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
-    std::uint32_t last_post_flush_refresh_frame_id_ = std::numeric_limits<std::uint32_t>::max();
+    std::uint32_t last_runtime_convergence_warning_frame_id_ = std::numeric_limits<std::uint32_t>::max();
     std::uint32_t frame_rebuild_metrics_frame_ = 0;
     std::uint32_t frame_rebuild_request_count_ = 0;
     std::uint32_t frame_rebuild_execution_count_ = 0;
@@ -447,7 +446,7 @@ private:
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
     std::uint64_t next_anchor_invalidation_version();
-    void run_active_runtime_single_pass(bool include_audio_update = true);
+    bool run_active_runtime_single_pass(bool include_audio_update = true);
     void run_active_runtime_single_pass_for_asset(Asset* asset,
                                                   const SDL_Point& camera_focus,
                                                   std::uint64_t camera_state_version,

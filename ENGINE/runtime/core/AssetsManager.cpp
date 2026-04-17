@@ -69,6 +69,7 @@ constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
 constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
 constexpr int kDefaultCameraHeightMinPx = 1;
 constexpr int kDefaultCameraHeightMaxPx = 100000;
+constexpr std::size_t kRuntimeAnchorConvergenceIterationCap = 8;
 
 float normalize_depth_axis_sign(float sign) {
     if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
@@ -772,7 +773,7 @@ void Assets::notify_rooms_changed() {
 
 void Assets::refresh_active_asset_lists() {
     run_frame_rebuild_stage();
-    run_active_runtime_single_pass();
+    run_runtime_effects_stage();
     update_filtered_active_assets();
 }
 
@@ -811,7 +812,7 @@ std::uint64_t Assets::next_anchor_invalidation_version() {
     return anchor_invalidation_version_counter_;
 }
 
-void Assets::run_active_runtime_single_pass(bool include_audio_update) {
+bool Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const SDL_Point camera_focus = camera_.get_screen_center();
     const std::uint64_t camera_state_version = camera_.camera_state_version();
     const float camera_anchor_world_z = static_cast<float>(camera_.anchor_world_z());
@@ -845,11 +846,7 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
         last_audio_engine_update_frame_id_ = frame_id_;
     }
 
-    const bool child_transforms_changed =
-        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
-    if (child_transforms_changed) {
-        run_post_flush_traversal_refresh_once();
-    }
+    return anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
 }
 
 void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
@@ -881,10 +878,6 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         state.processed_frame_index = current_frame_index;
     }
 
-    if (state.last_audio_frame_id == frame_id_) {
-        return;
-    }
-
     const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
     const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
     const float world_z = static_cast<float>(asset->world_z());
@@ -893,6 +886,7 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
     RuntimeCameraMetrics metrics{};
     metrics.frame_id = frame_id_;
     metrics.camera_state_version = camera_state_version;
+    metrics.anchor_revision = asset->anchor_world_revision();
     metrics.valid = true;
     metrics.planar_dx = dx;
     metrics.planar_dz = dz;
@@ -920,7 +914,6 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
     asset->runtime_camera_metrics = metrics;
     asset->distance_from_camera = metrics.planar_distance;
     asset->angle_from_camera = metrics.planar_angle_radians;
-    state.last_audio_frame_id = frame_id_;
 }
 
 void Assets::rebuild_frame_collision_context() const {
@@ -1463,11 +1456,6 @@ void Assets::run_visibility_build_stage() {
 }
 
 void Assets::run_post_flush_traversal_refresh_once() {
-    if (last_post_flush_refresh_frame_id_ == frame_id_) {
-        return;
-    }
-    last_post_flush_refresh_frame_id_ = frame_id_;
-
     post_runtime_traversal_refresh_pending_ = true;
     note_frame_rebuild_request();
     run_frame_rebuild_stage();
@@ -1475,7 +1463,26 @@ void Assets::run_post_flush_traversal_refresh_once() {
 }
 
 void Assets::run_runtime_effects_stage(bool include_audio_update) {
-    run_active_runtime_single_pass(include_audio_update);
+    bool audio_update_pending = include_audio_update;
+    bool converged = false;
+    std::size_t iteration = 0;
+    for (; iteration < kRuntimeAnchorConvergenceIterationCap; ++iteration) {
+        const bool child_transforms_changed = run_active_runtime_single_pass(audio_update_pending);
+        audio_update_pending = false;
+        if (!child_transforms_changed) {
+            converged = true;
+            break;
+        }
+        run_post_flush_traversal_refresh_once();
+    }
+
+    if (!converged && last_runtime_convergence_warning_frame_id_ != frame_id_) {
+        last_runtime_convergence_warning_frame_id_ = frame_id_;
+        std::cerr << "[Assets] Anchor convergence cap reached ("
+                  << kRuntimeAnchorConvergenceIterationCap
+                  << ") at frame " << frame_id_
+                  << "; deferring remaining anchor reconciliation to next frame.\n";
+    }
 }
 
 void Assets::sync_dev_controls_for_frame(const Input& input) {

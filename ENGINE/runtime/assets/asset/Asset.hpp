@@ -41,6 +41,7 @@ using world::GridPoint;
 struct RuntimeCameraMetrics {
     std::uint64_t frame_id = 0;
     std::uint64_t camera_state_version = 0;
+    std::uint64_t anchor_revision = 0;
     bool valid = false;
     float planar_dx = 0.0f;
     float planar_dz = 0.0f;
@@ -104,6 +105,7 @@ class Asset {
         SDL_assert(grid_point_ != nullptr);
         return grid_point_ ? grid_point_->world_z() : 0;
     }
+    std::uint64_t anchor_world_revision() const { return anchor_world_revision_; }
     SDL_Point world_xz_point() const { return SDL_Point{world_x(), world_z()}; }
     SDL_Point world_xy_point() const { return SDL_Point{world_x(), world_y()}; }
     int height() const {

@@ -117,18 +117,12 @@ void check_local_movement_payload(const nlohmann::json& payload,
     CHECK(payload["invert_z"] == false);
 
     REQUIRE(payload.contains("anchor_points"));
-    REQUIRE(payload.contains("hit_boxes"));
-    REQUIRE(payload.contains("attack_boxes"));
+    CHECK_FALSE(payload.contains("hit_boxes"));
+    CHECK_FALSE(payload.contains("attack_boxes"));
     CHECK(payload["anchor_points"].size() == static_cast<std::size_t>(frame_count));
-    CHECK(payload["hit_boxes"].size() == static_cast<std::size_t>(frame_count));
-    CHECK(payload["attack_boxes"].size() == static_cast<std::size_t>(frame_count));
     for (int i = 0; i < frame_count; ++i) {
         CHECK(payload["anchor_points"][i].is_array());
-        CHECK(payload["hit_boxes"][i].is_array());
-        CHECK(payload["attack_boxes"][i].is_array());
         CHECK(payload["anchor_points"][i].empty());
-        CHECK(payload["hit_boxes"][i].empty());
-        CHECK(payload["attack_boxes"][i].empty());
     }
 }
 

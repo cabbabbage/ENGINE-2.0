@@ -109,6 +109,10 @@
       "asset_directory": "resources/assets/3_candles",
       "asset_name": "3_candles",
       "asset_type": "object",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -158,6 +162,10 @@
       "asset_directory": "resources/assets/attack_speed",
       "asset_name": "attack_speed",
       "asset_type": "object",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -189,6 +197,10 @@
       },
       "asset_directory": "resources/assets/axe_in_stump",
       "asset_name": "axe_in_stump",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "barrel": {
@@ -330,7 +342,24 @@
       "asset_directory": "resources/assets/barrel",
       "asset_name": "barrel",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes": [
+        {
+          "depth": 128.0,
+          "enabled": true,
+          "id": "floor_box",
+          "is_boundary": false,
+          "name": "Floor Box",
+          "position_x": 0.0,
+          "position_z": 0.0,
+          "rotation_degrees": 0.0,
+          "width": 128.0
+        }
+      ],
+      "floor_boxes_enabled": true,
+      "hitbox_enabled": true,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -358,6 +387,10 @@
       },
       "asset_directory": "resources/assets/bench",
       "asset_name": "bench",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "big_rock": {
@@ -376,6 +409,10 @@
       },
       "asset_directory": "resources/assets/big_rock",
       "asset_name": "big_rock",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "blacksmith": {
@@ -396,6 +433,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/blacksmith",
       "asset_name": "blacksmith",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -441,7 +482,11 @@
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9135,9 +9180,13 @@
       "asset_directory": "resources/assets/bomb",
       "asset_name": "bomb",
       "asset_type": "object",
+      "attack_box_enabled": true,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -9168,6 +9217,10 @@
       },
       "asset_directory": "resources/assets/bone",
       "asset_name": "bone",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bone_1": {
@@ -9186,6 +9239,10 @@
       },
       "asset_directory": "resources/assets/bone_1",
       "asset_name": "bone_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bone_pile": {
@@ -9204,6 +9261,10 @@
       },
       "asset_directory": "resources/assets/bone_pile",
       "asset_name": "bone_pile",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "book": {
@@ -9240,7 +9301,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/book",
       "asset_name": "book",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -9286,7 +9351,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/book_1",
       "asset_name": "book_1",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9335,6 +9404,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/book_pile",
       "asset_name": "book_pile",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9379,7 +9452,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/booze_1",
       "asset_name": "booze_1",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9413,6 +9490,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/booze_2",
       "asset_name": "booze_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9441,6 +9522,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/box",
       "asset_name": "box",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9469,6 +9554,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/building_1",
       "asset_name": "building_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9495,6 +9584,10 @@
       },
       "asset_directory": "resources/assets/building_2",
       "asset_name": "building_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bush_1_fps_2": {
@@ -9513,6 +9606,10 @@
       },
       "asset_directory": "resources/assets/bush_1_fps_2",
       "asset_name": "bush_1_fps_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bush_fps_2": {
@@ -9531,6 +9628,10 @@
       },
       "asset_directory": "resources/assets/bush_fps_2",
       "asset_name": "bush_fps_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "candle_fps_12": {
@@ -9749,6 +9850,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/candle_fps_12",
       "asset_name": "candle_fps_12",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9867,7 +9972,11 @@
       "asset_directory": "resources/assets/car",
       "asset_name": "car",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -10584,6 +10693,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/casino",
       "asset_name": "casino",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10612,6 +10725,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/chest_opening",
       "asset_name": "chest_opening",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10757,6 +10874,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/church",
       "asset_name": "church",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10785,6 +10906,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/curse_circle",
       "asset_name": "curse_circle",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10830,9 +10955,13 @@
       "asset_directory": "resources/assets/dot",
       "asset_name": "dot",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -11544,7 +11673,11 @@
       "asset_directory": "resources/assets/flame_fps_12",
       "asset_name": "flame_fps_12",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -11604,7 +11737,11 @@
       "asset_directory": "resources/assets/flame_no_light",
       "asset_name": "flame_no_light",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -12141,9 +12278,13 @@
       "asset_directory": "resources/assets/fly",
       "asset_name": "fly",
       "asset_type": "Object",
+      "attack_box_enabled": true,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": true,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -12192,9 +12333,13 @@
       "asset_directory": "resources/assets/fog_1",
       "asset_name": "fog_1",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -12247,9 +12392,13 @@
       "asset_directory": "resources/assets/fog_2",
       "asset_name": "fog_2",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -12298,9 +12447,13 @@
       "asset_directory": "resources/assets/fog_3",
       "asset_name": "fog_3",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -12352,9 +12505,13 @@
       "asset_directory": "resources/assets/fog_4",
       "asset_name": "fog_4",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -13068,6 +13225,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/fountain",
       "asset_name": "fountain",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -13110,9 +13271,13 @@
       "asset_directory": "resources/assets/frog",
       "asset_name": "frog",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -13160,7 +13325,11 @@
       "asset_directory": "resources/assets/grass_1_fps_2",
       "asset_name": "grass_1_fps_2",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13208,7 +13377,11 @@
       "asset_directory": "resources/assets/grass_fps_2",
       "asset_name": "grass_fps_2",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13238,6 +13411,10 @@
       },
       "asset_directory": "resources/assets/grave_1",
       "asset_name": "grave_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "grave_2": {
@@ -13256,6 +13433,10 @@
       },
       "asset_directory": "resources/assets/grave_2",
       "asset_name": "grave_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "grave_3": {
@@ -13274,6 +13455,10 @@
       },
       "asset_directory": "resources/assets/grave_3",
       "asset_name": "grave_3",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "grave_4": {
@@ -13292,6 +13477,10 @@
       },
       "asset_directory": "resources/assets/grave_4",
       "asset_name": "grave_4",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "health": {
@@ -13310,6 +13499,10 @@
       },
       "asset_directory": "resources/assets/health",
       "asset_name": "health",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "health_beer": {
@@ -13328,6 +13521,10 @@
       },
       "asset_directory": "resources/assets/health_beer",
       "asset_name": "health_beer",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "key": {
@@ -13346,6 +13543,10 @@
       },
       "asset_directory": "resources/assets/key",
       "asset_name": "key",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "lamp_left": {
@@ -13484,9 +13685,13 @@
       "asset_directory": "resources/assets/lamp_left",
       "asset_name": "lamp_left",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -13538,7 +13743,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/mana",
       "asset_name": "mana",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13570,6 +13779,10 @@
       },
       "asset_directory": "resources/assets/mana_beer",
       "asset_name": "mana_beer",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "movement_speed": {
@@ -13588,6 +13801,10 @@
       },
       "asset_directory": "resources/assets/movement_speed",
       "asset_name": "movement_speed",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom": {
@@ -13606,6 +13823,10 @@
       },
       "asset_directory": "resources/assets/mushroom",
       "asset_name": "mushroom",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom_1": {
@@ -13624,6 +13845,10 @@
       },
       "asset_directory": "resources/assets/mushroom_1",
       "asset_name": "mushroom_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom_2": {
@@ -13642,6 +13867,10 @@
       },
       "asset_directory": "resources/assets/mushroom_2",
       "asset_name": "mushroom_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom_3": {
@@ -13660,6 +13889,10 @@
       },
       "asset_directory": "resources/assets/mushroom_3",
       "asset_name": "mushroom_3",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "noose": {
@@ -13678,6 +13911,10 @@
       },
       "asset_directory": "resources/assets/noose",
       "asset_name": "noose",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "path": {
@@ -13696,6 +13933,10 @@
       },
       "asset_directory": "resources/assets/path",
       "asset_name": "path",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "pub": {
@@ -13714,6 +13955,10 @@
       },
       "asset_directory": "resources/assets/pub",
       "asset_name": "pub",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "purple_flower": {
@@ -13750,7 +13995,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/purple_flower",
       "asset_name": "purple_flower",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13801,7 +14050,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/red_flower",
       "asset_name": "red_flower",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13833,6 +14086,10 @@
       },
       "asset_directory": "resources/assets/rock",
       "asset_name": "rock",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "sigil_of_fortune": {
@@ -13851,6 +14108,10 @@
       },
       "asset_directory": "resources/assets/sigil_of_fortune",
       "asset_name": "sigil_of_fortune",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "skull": {
@@ -13869,6 +14130,10 @@
       },
       "asset_directory": "resources/assets/skull",
       "asset_name": "skull",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "skull_pile": {
@@ -13887,6 +14152,10 @@
       },
       "asset_directory": "resources/assets/skull_pile",
       "asset_name": "skull_pile",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "skull_pile_1": {
@@ -13905,6 +14174,10 @@
       },
       "asset_directory": "resources/assets/skull_pile_1",
       "asset_name": "skull_pile_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "small_rock": {
@@ -13923,6 +14196,10 @@
       },
       "asset_directory": "resources/assets/small_rock",
       "asset_name": "small_rock",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "small_rock_1": {
@@ -13941,6 +14218,10 @@
       },
       "asset_directory": "resources/assets/small_rock_1",
       "asset_name": "small_rock_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "spider": {
@@ -15197,7 +15478,11 @@
       "asset_directory": "resources/assets/spider",
       "asset_name": "spider",
       "asset_type": "object",
+      "attack_box_enabled": true,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": true,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -15226,6 +15511,10 @@
       },
       "asset_directory": "resources/assets/stagecoach",
       "asset_name": "stagecoach",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "store": {
@@ -15244,6 +15533,10 @@
       },
       "asset_directory": "resources/assets/store",
       "asset_name": "store",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "stump": {
@@ -15262,6 +15555,10 @@
       },
       "asset_directory": "resources/assets/stump",
       "asset_name": "stump",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "table": {
@@ -15280,6 +15577,10 @@
       },
       "asset_directory": "resources/assets/table",
       "asset_name": "table",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "tailor": {
@@ -15298,6 +15599,10 @@
       },
       "asset_directory": "resources/assets/tailor",
       "asset_name": "tailor",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "townhall": {
@@ -15316,6 +15621,10 @@
       },
       "asset_directory": "resources/assets/townhall",
       "asset_name": "townhall",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "trail": {
@@ -15334,6 +15643,10 @@
       },
       "asset_directory": "resources/assets/trail",
       "asset_name": "trail",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "tree_dark": {
@@ -15370,7 +15683,11 @@
       "asset_directory": "resources/assets/tree_dark",
       "asset_name": "tree_dark",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -15419,7 +15736,11 @@
       "asset_directory": "resources/assets/tree_darker",
       "asset_name": "tree_darker",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -15449,6 +15770,10 @@
       },
       "asset_directory": "resources/assets/tree_eyes_fps_2",
       "asset_name": "tree_eyes_fps_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "tree_fps_2": {
@@ -15485,7 +15810,11 @@
       "asset_directory": "resources/assets/tree_fps_2",
       "asset_name": "tree_fps_2",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -17682,6 +18011,10 @@
       "asset_directory": "resources/assets/vibble",
       "asset_name": "vibble",
       "asset_type": "player",
+      "attack_box_enabled": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": true,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [
         {
@@ -18367,6 +18700,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/vibble_attack_1",
       "asset_name": "vibble_attack_1",
+      "attack_box_enabled": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -18390,6 +18727,10 @@
       },
       "asset_directory": "resources/assets/vibble_eyes",
       "asset_name": "vibble_eyes",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "vibble_hat": {
@@ -18426,6 +18767,10 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/vibble_hat",
       "asset_name": "vibble_hat",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -18452,6 +18797,10 @@
       },
       "asset_directory": "resources/assets/vibble_mouth",
       "asset_name": "vibble_mouth",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "vibble_neck": {
@@ -18470,6 +18819,10 @@
       },
       "asset_directory": "resources/assets/vibble_neck",
       "asset_name": "vibble_neck",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "water": {
@@ -18488,6 +18841,10 @@
       },
       "asset_directory": "resources/assets/water",
       "asset_name": "water",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     }
   },
@@ -18506,10 +18863,10 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "front_layer_light_strength_multiplier": 2.4099998474121094,
         "layer_depth_curve": 96.40999603271484,
-        "layer_depth_interval": 292.0,
+        "layer_depth_interval": 102.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -18726,9 +19083,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -19129,9 +19486,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            203,
-            242,
-            36,
+            44,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,

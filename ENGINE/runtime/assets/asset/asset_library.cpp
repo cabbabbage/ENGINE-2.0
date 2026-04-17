@@ -136,32 +136,6 @@ bool ensure_bool_field(nlohmann::json& metadata, const char* key, bool default_v
         return true;
 }
 
-bool has_animation_payload_key(const nlohmann::json& metadata, const char* key) {
-        auto animations_it = metadata.find("animations");
-        if (animations_it == metadata.end() || !animations_it->is_object()) {
-                return false;
-        }
-        for (auto it = animations_it->begin(); it != animations_it->end(); ++it) {
-                if (!it.value().is_object()) {
-                        continue;
-                }
-                auto key_it = it.value().find(key);
-                if (key_it == it.value().end()) {
-                        continue;
-                }
-                if (key_it->is_array()) {
-                        if (!key_it->empty()) {
-                                return true;
-                        }
-                        continue;
-                }
-                if (!key_it->is_null()) {
-                        return true;
-                }
-        }
-        return false;
-}
-
 bool normalize_animation_system_payload(nlohmann::json& animation_payload,
                                         bool movement_enabled,
                                         bool hitbox_enabled,
@@ -417,20 +391,10 @@ bool ensure_manifest_entry_shape(const std::string& asset_name,
                 metadata["asset_directory"] = default_dir;
                 mutated = true;
         }
-        const bool inferred_movement_enabled =
-            has_animation_payload_key(metadata, "movement") ||
-            has_animation_payload_key(metadata, "movement_paths");
-        const bool inferred_attack_box_enabled = has_animation_payload_key(metadata, "attack_boxes");
-        const bool inferred_hitbox_enabled = has_animation_payload_key(metadata, "hit_boxes");
-        const bool inferred_floor_boxes_enabled =
-            metadata.contains(kFloorBoxesKey) &&
-            metadata[kFloorBoxesKey].is_array() &&
-            !metadata[kFloorBoxesKey].empty();
-
-        mutated = ensure_bool_field(metadata, kMovementEnabledKey, inferred_movement_enabled) || mutated;
-        mutated = ensure_bool_field(metadata, kAttackBoxEnabledKey, inferred_attack_box_enabled) || mutated;
-        mutated = ensure_bool_field(metadata, kHitboxEnabledKey, inferred_hitbox_enabled) || mutated;
-        mutated = ensure_bool_field(metadata, kFloorBoxesEnabledKey, inferred_floor_boxes_enabled) || mutated;
+        mutated = ensure_bool_field(metadata, kMovementEnabledKey, false) || mutated;
+        mutated = ensure_bool_field(metadata, kAttackBoxEnabledKey, false) || mutated;
+        mutated = ensure_bool_field(metadata, kHitboxEnabledKey, false) || mutated;
+        mutated = ensure_bool_field(metadata, kFloorBoxesEnabledKey, false) || mutated;
 
         const bool movement_enabled = metadata.value(kMovementEnabledKey, false);
         const bool attack_box_enabled = metadata.value(kAttackBoxEnabledKey, false);

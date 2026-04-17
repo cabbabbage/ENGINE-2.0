@@ -7,6 +7,8 @@ Each asset manifest entry is authoritative via four booleans:
 - `hitbox_enabled`
 - `floor_boxes_enabled`
 
+All four flags are required on every asset entry.
+
 ## Persistence Rules
 
 - Disabled systems omit their payload keys entirely.

@@ -2492,51 +2492,18 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         if (!info_json_.contains("anti_tags") || !info_json_["anti_tags"].is_array()) {
                 info_json_["anti_tags"] = nlohmann::json::array();
         }
-        const auto has_animation_payload_key = [&](const char* key) {
-                auto animations_it = data.find("animations");
-                if (animations_it == data.end() || !animations_it->is_object()) {
-                        return false;
-                }
-                for (auto it = animations_it->begin(); it != animations_it->end(); ++it) {
-                        if (!it.value().is_object()) {
-                                continue;
-                        }
-                        auto key_it = it.value().find(key);
-                        if (key_it == it.value().end()) {
-                                continue;
-                        }
-                        if (key_it->is_array()) {
-                                if (!key_it->empty()) {
-                                        return true;
-                                }
-                                continue;
-                        }
-                        if (!key_it->is_null()) {
-                                return true;
-                        }
-                }
-                return false;
-        };
-
-        const bool inferred_movement_enabled =
-            has_animation_payload_key("movement") || has_animation_payload_key("movement_paths");
-        const bool inferred_attack_box_enabled = has_animation_payload_key("attack_boxes");
-        const bool inferred_hitbox_enabled = has_animation_payload_key("hit_boxes");
-        const bool inferred_floor_boxes_enabled =
-            data.contains(kFloorBoxesKey) && data[kFloorBoxesKey].is_array() && !data[kFloorBoxesKey].empty();
-
         movement_enabled = data.contains(kMovementEnabledKey) && data[kMovementEnabledKey].is_boolean()
             ? data[kMovementEnabledKey].get<bool>()
-            : inferred_movement_enabled;
+            : false;
         attack_box_enabled = data.contains(kAttackBoxEnabledKey) && data[kAttackBoxEnabledKey].is_boolean()
             ? data[kAttackBoxEnabledKey].get<bool>()
-            : inferred_attack_box_enabled;
+            : false;
         hitbox_enabled = data.contains(kHitboxEnabledKey) && data[kHitboxEnabledKey].is_boolean()
             ? data[kHitboxEnabledKey].get<bool>()
-            : inferred_hitbox_enabled;
+            : false;
         floor_boxes_enabled = data.contains(kFloorBoxesEnabledKey) && data[kFloorBoxesEnabledKey].is_boolean()
             ? data[kFloorBoxesEnabledKey].get<bool>()
-            : inferred_floor_boxes_enabled;
+            : false;
         info_json_[kMovementEnabledKey] = movement_enabled;
         info_json_[kAttackBoxEnabledKey] = attack_box_enabled;
         info_json_[kHitboxEnabledKey] = hitbox_enabled;
@@ -3574,44 +3541,18 @@ bool AssetInfo::reload_animations_from_disk() {
             return false;
         }
 
-        const auto has_animation_payload_key = [&](const char* key) {
-            auto animations_it = payload.find("animations");
-            if (animations_it == payload.end() || !animations_it->is_object()) {
-                return false;
-            }
-            for (auto it = animations_it->begin(); it != animations_it->end(); ++it) {
-                if (!it.value().is_object()) {
-                    continue;
-                }
-                auto key_it = it.value().find(key);
-                if (key_it == it.value().end()) {
-                    continue;
-                }
-                if (key_it->is_array()) {
-                    if (!key_it->empty()) {
-                        return true;
-                    }
-                    continue;
-                }
-                if (!key_it->is_null()) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
         movement_enabled = payload.contains(kMovementEnabledKey) && payload[kMovementEnabledKey].is_boolean()
             ? payload[kMovementEnabledKey].get<bool>()
-            : (has_animation_payload_key("movement") || has_animation_payload_key("movement_paths"));
+            : false;
         attack_box_enabled = payload.contains(kAttackBoxEnabledKey) && payload[kAttackBoxEnabledKey].is_boolean()
             ? payload[kAttackBoxEnabledKey].get<bool>()
-            : has_animation_payload_key("attack_boxes");
+            : false;
         hitbox_enabled = payload.contains(kHitboxEnabledKey) && payload[kHitboxEnabledKey].is_boolean()
             ? payload[kHitboxEnabledKey].get<bool>()
-            : has_animation_payload_key("hit_boxes");
+            : false;
         floor_boxes_enabled = payload.contains(kFloorBoxesEnabledKey) && payload[kFloorBoxesEnabledKey].is_boolean()
             ? payload[kFloorBoxesEnabledKey].get<bool>()
-            : (payload.contains(kFloorBoxesKey) && payload[kFloorBoxesKey].is_array() && !payload[kFloorBoxesKey].empty());
+            : false;
         floor_boxes.clear();
         if (floor_boxes_enabled && payload.contains(kFloorBoxesKey) && payload[kFloorBoxesKey].is_array()) {
             floor_boxes = parse_floor_boxes_payload(payload[kFloorBoxesKey]);

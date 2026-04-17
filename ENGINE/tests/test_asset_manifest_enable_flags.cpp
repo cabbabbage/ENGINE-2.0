@@ -34,6 +34,40 @@ TEST_CASE("AssetInfo strips animation payload systems when disabled") {
     CHECK_FALSE(default_anim.contains("attack_boxes"));
 }
 
+TEST_CASE("AssetInfo does not infer enable flags from payload presence") {
+    const nlohmann::json metadata = {
+        {"animations",
+         {
+             {"default",
+              {
+                  {"source", {{"kind", "folder"}, {"path", "default"}}},
+                  {"movement", nlohmann::json::array({nlohmann::json::array({1, 0, 0})})},
+                  {"movement_total", {{"dx", 1}, {"dy", 0}, {"dz", 0}}},
+                  {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
+                  {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
+              }},
+         }}};
+
+    AssetInfo info("manifest_no_inference_test_asset", metadata);
+    const nlohmann::json payload = info.manifest_payload();
+    CHECK(payload.contains("movement_enabled"));
+    CHECK(payload.contains("attack_box_enabled"));
+    CHECK(payload.contains("hitbox_enabled"));
+    CHECK(payload.contains("floor_boxes_enabled"));
+    CHECK_FALSE(payload.value("movement_enabled", true));
+    CHECK_FALSE(payload.value("attack_box_enabled", true));
+    CHECK_FALSE(payload.value("hitbox_enabled", true));
+    CHECK_FALSE(payload.value("floor_boxes_enabled", true));
+
+    const nlohmann::json default_anim = info.animation_payload("default");
+    CHECK(default_anim.is_object());
+    CHECK_FALSE(default_anim.contains("movement"));
+    CHECK_FALSE(default_anim.contains("movement_paths"));
+    CHECK_FALSE(default_anim.contains("movement_total"));
+    CHECK_FALSE(default_anim.contains("hit_boxes"));
+    CHECK_FALSE(default_anim.contains("attack_boxes"));
+}
+
 TEST_CASE("AssetInfo floor boxes normalize canonical fields and single-boundary invariant") {
     const nlohmann::json metadata = {
         {"movement_enabled", false},

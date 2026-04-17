@@ -196,21 +196,17 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
         };
         for (const char* key : bool_keys) {
             auto flag_it = asset.find(key);
-            if (flag_it != asset.end() && !flag_it->is_boolean()) {
+            if (flag_it == asset.end() || !flag_it->is_boolean()) {
                 std::ostringstream oss;
                 oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
-                    << "' key '" << key << "' must be boolean when present.";
+                    << "' key '" << key << "' must be present and boolean.";
                 throw std::runtime_error(oss.str());
             }
         }
 
         auto floor_boxes_it = asset.find("floor_boxes");
-        const bool has_floor_boxes_enabled_flag =
-            asset.contains("floor_boxes_enabled") && asset["floor_boxes_enabled"].is_boolean();
-        const bool floor_boxes_enabled = has_floor_boxes_enabled_flag
-            ? asset["floor_boxes_enabled"].get<bool>()
-            : (floor_boxes_it != asset.end() && floor_boxes_it->is_array() && !floor_boxes_it->empty());
-        if (has_floor_boxes_enabled_flag && !floor_boxes_enabled) {
+        const bool floor_boxes_enabled = asset["floor_boxes_enabled"].get<bool>();
+        if (!floor_boxes_enabled) {
             if (floor_boxes_it != asset.end()) {
                 std::ostringstream oss;
                 oss << "manifest: '" << path.string() << "' asset entry '" << it.key()

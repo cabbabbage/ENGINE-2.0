@@ -2397,6 +2397,9 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     refresh_draft_from_store();
 
     nlohmann::json& draft = manifest_transaction_.data();
+    if (!draft.is_object()) {
+        draft = nlohmann::json::object();
+    }
     auto ensure_enable_flag = [&](const char* key) {
         if (!draft.contains(key) || !draft[key].is_boolean()) {
             draft[key] = false;
@@ -2417,6 +2420,9 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     } else if (!payload.is_null()) {
 
         draft = payload;
+        if (!draft.is_object()) {
+            draft = nlohmann::json::object();
+        }
     }
 
     ensure_enable_flag("movement_enabled");

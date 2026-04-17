@@ -23,8 +23,6 @@ public:
         float rotation_degrees = 0.0f;
         bool hidden = false;
         bool resolve_x = true;
-        bool flip_horizontal = true;
-        bool flip_vertical = true;
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
         std::vector<std::string> tags;
         std::vector<std::string> anti_tags;
@@ -122,8 +120,6 @@ private:
     std::unique_ptr<DMSlider> point_rotation_slider_;
     std::unique_ptr<DMCheckbox> point_hidden_checkbox_;
     std::unique_ptr<DMButton> advanced_options_button_;
-    std::unique_ptr<DMCheckbox> point_flip_horizontal_checkbox_;
-    std::unique_ptr<DMCheckbox> point_flip_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> point_resolve_x_checkbox_;
     std::unique_ptr<DMDropdown> point_scaling_method_dropdown_;
     std::unique_ptr<DMTextBox> search_box_;

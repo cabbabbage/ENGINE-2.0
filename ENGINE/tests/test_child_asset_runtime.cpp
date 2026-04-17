@@ -923,8 +923,8 @@ TEST_CASE("CustomAssetController falls back to oval mapping asset_name when expl
     mapping.width_radius_x = 18.0f;
     mapping.height_radius_z = 12.0f;
     mapping.points = {
-        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
-        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
     };
     REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
 
@@ -958,8 +958,8 @@ TEST_CASE("CustomAssetController explicit anchor candidates take precedence over
     mapping.width_radius_x = 10.0f;
     mapping.height_radius_z = 10.0f;
     mapping.points = {
-        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
-        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
     };
     REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
 
@@ -1000,8 +1000,8 @@ TEST_CASE("CustomAssetController skips oval fallback when fallback asset is miss
     mapping.width_radius_x = 10.0f;
     mapping.height_radius_z = 10.0f;
     mapping.points = {
-        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
-        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
     };
     REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
 

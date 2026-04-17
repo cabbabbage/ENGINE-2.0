@@ -20,6 +20,7 @@
 #include <system_error>
 #include <utility>
 #include <optional>
+#include <stdexcept>
 #include <unordered_set>
 #include <SDL3/SDL.h>
 
@@ -636,8 +637,6 @@ AssetInfo::OvalAnchorPoint make_default_oval_anchor_point(std::size_t point_inde
     point.angle_degrees =
         normalize_angle_degrees((360.0f * static_cast<float>(point_index)) / static_cast<float>(clamped_count));
     recompute_oval_point_position(point, width_radius_x, height_radius_z);
-    point.flip_horizontal = true;
-    point.flip_vertical = true;
     point.rotation_degrees = 0.0f;
     point.hidden = false;
     point.resolve_x = true;
@@ -709,11 +708,9 @@ AssetInfo::OvalAnchorPoint normalize_oval_anchor_point(const nlohmann::json& pay
     if (payload.contains("resolve_x") && payload["resolve_x"].is_boolean()) {
         point.resolve_x = payload["resolve_x"].get<bool>();
     }
-    if (payload.contains("flip_horizontal") && payload["flip_horizontal"].is_boolean()) {
-        point.flip_horizontal = payload["flip_horizontal"].get<bool>();
-    }
-    if (payload.contains("flip_vertical") && payload["flip_vertical"].is_boolean()) {
-        point.flip_vertical = payload["flip_vertical"].get<bool>();
+    if (payload.contains("flip_horizontal") || payload.contains("flip_vertical")) {
+        throw std::runtime_error(
+            "oval point payload contains removed inversion fields 'flip_horizontal'/'flip_vertical'");
     }
     if (payload.contains("scaling_method") && payload["scaling_method"].is_string()) {
         point.scaling_method = anchor_points::anchor_scaling_method_from_token(
@@ -823,8 +820,6 @@ nlohmann::json encode_oval_anchor_point(const AssetInfo::OvalAnchorPoint& point)
     encoded["texture_x"] = point.texture_x;
     encoded["texture_y"] = point.texture_y;
     encoded["depth_offset"] = std::isfinite(point.depth_offset) ? point.depth_offset : 0.0f;
-    encoded["flip_horizontal"] = point.flip_horizontal;
-    encoded["flip_vertical"] = point.flip_vertical;
     encoded["rotation_degrees"] = std::isfinite(point.rotation_degrees) ? point.rotation_degrees : 0.0f;
     encoded["hidden"] = point.hidden;
     encoded["resolve_x"] = point.resolve_x;

@@ -18054,8 +18054,6 @@
               "angle_degrees": 0.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": -18.0,
@@ -18068,8 +18066,6 @@
               "angle_degrees": 90.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18082,8 +18078,6 @@
               "angle_degrees": 180.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 18.0,
@@ -18096,8 +18090,6 @@
               "angle_degrees": 270.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18120,8 +18112,6 @@
               "angle_degrees": 0.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18134,8 +18124,6 @@
               "angle_degrees": 45.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18148,8 +18136,6 @@
               "angle_degrees": 90.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18162,8 +18148,6 @@
               "angle_degrees": 135.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18176,8 +18160,6 @@
               "angle_degrees": 180.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18190,8 +18172,6 @@
               "angle_degrees": 225.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18204,8 +18184,6 @@
               "angle_degrees": 270.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18218,8 +18196,6 @@
               "angle_degrees": 315.0,
               "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18244,8 +18220,6 @@
                 "attack"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18262,8 +18236,6 @@
                 "attack"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18280,8 +18252,6 @@
                 "attack"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18298,8 +18268,6 @@
                 "attack"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18313,11 +18281,10 @@
             {
               "angle_degrees": 180.0,
               "anti_tags": [
-                "attack"
+                "attack",
+                "right"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18334,8 +18301,6 @@
                 "attack"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18352,8 +18317,6 @@
                 "attack"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18370,8 +18333,6 @@
                 "attack"
               ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
@@ -18785,34 +18746,10 @@
           },
           "tags": [
             "attack",
-            "left"
-          ]
-        },
-        "attack_left": {
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "inherit_data": true,
-          "invert_frames_horizontal": false,
-          "invert_frames_vertical": false,
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "attack",
-            "path": ""
-          },
-          "tags": [
-            "attack",
             "right"
           ]
         },
-        "attack_right": {
+        "attack_left": {
           "derived_modifiers": {
             "reverse": false
           },
@@ -18823,7 +18760,7 @@
           "invert_y": false,
           "invert_z": false,
           "number_of_frames": 1,
-          "on_end": "default",
+          "on_end": "reverse",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -18833,7 +18770,7 @@
           },
           "tags": [
             "attack",
-            "right"
+            "left"
           ]
         },
         "default": {
@@ -18869,30 +18806,11 @@
             "name": "",
             "path": "default"
           },
-          "tags": []
+          "tags": [
+            "right"
+          ]
         },
         "left": {
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "inherit_data": true,
-          "invert_frames_horizontal": false,
-          "invert_frames_vertical": false,
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "default",
-            "path": ""
-          },
-          "tags": []
-        },
-        "right": {
           "derived_modifiers": {
             "reverse": false
           },
@@ -18912,7 +18830,7 @@
             "path": ""
           },
           "tags": [
-            "right"
+            "left"
           ]
         }
       },
@@ -19100,7 +19018,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 2.879999876022339,
+        "radial_blur_px": 4.019999980926514,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,

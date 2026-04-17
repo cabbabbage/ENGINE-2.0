@@ -47,8 +47,6 @@ RoomOvalPointChildEditorPanel::RoomOvalPointChildEditorPanel() {
     point_rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
     point_hidden_checkbox_ = std::make_unique<DMCheckbox>("Hidden", false);
     advanced_options_button_ = std::make_unique<DMButton>("Advanced Options (Show)", &DMStyles::ListButton(), 180, DMButton::height());
-    point_flip_horizontal_checkbox_ = std::make_unique<DMCheckbox>("Flip Horizontal", true);
-    point_flip_vertical_checkbox_ = std::make_unique<DMCheckbox>("Flip Vertical", true);
     point_resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
     point_scaling_method_dropdown_ = std::make_unique<DMDropdown>("Scaling Method", scaling_method_options(), 0);
     search_box_ = std::make_unique<DMTextBox>("Find Tag", "");
@@ -112,12 +110,6 @@ void RoomOvalPointChildEditorPanel::set_point_detail_values(const PointDetailVal
     }
     if (point_resolve_x_checkbox_) {
         point_resolve_x_checkbox_->set_value(values.resolve_x);
-    }
-    if (point_flip_horizontal_checkbox_) {
-        point_flip_horizontal_checkbox_->set_value(values.flip_horizontal);
-    }
-    if (point_flip_vertical_checkbox_) {
-        point_flip_vertical_checkbox_->set_value(values.flip_vertical);
     }
     if (point_scaling_method_dropdown_) {
         point_scaling_method_dropdown_->set_selected(scaling_method_to_dropdown_index(values.scaling_method));
@@ -200,14 +192,6 @@ bool RoomOvalPointChildEditorPanel::handle_event(const SDL_Event& event) {
         }
     }
     if (advanced_options_expanded_ && point_resolve_x_checkbox_ && point_resolve_x_checkbox_->handle_event(event)) {
-        handled = true;
-        details_changed = true;
-    }
-    if (advanced_options_expanded_ && point_flip_vertical_checkbox_ && point_flip_vertical_checkbox_->handle_event(event)) {
-        handled = true;
-        details_changed = true;
-    }
-    if (advanced_options_expanded_ && point_flip_horizontal_checkbox_ && point_flip_horizontal_checkbox_->handle_event(event)) {
         handled = true;
         details_changed = true;
     }
@@ -331,8 +315,6 @@ void RoomOvalPointChildEditorPanel::render(SDL_Renderer* renderer) const {
     if (advanced_options_button_) advanced_options_button_->render(renderer);
     if (advanced_options_expanded_) {
         if (point_resolve_x_checkbox_) point_resolve_x_checkbox_->render(renderer);
-        if (point_flip_vertical_checkbox_) point_flip_vertical_checkbox_->render(renderer);
-        if (point_flip_horizontal_checkbox_) point_flip_horizontal_checkbox_->render(renderer);
         if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->render(renderer);
     }
     if (search_box_) search_box_->render(renderer);
@@ -448,8 +430,6 @@ void RoomOvalPointChildEditorPanel::update_layout() const {
         if (point_hidden_checkbox_) point_hidden_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (advanced_options_button_) advanced_options_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (point_resolve_x_checkbox_) point_resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (point_flip_vertical_checkbox_) point_flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (point_flip_horizontal_checkbox_) point_flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (search_box_) search_box_->set_rect(SDL_Rect{0, 0, 0, 0});
         layout_dirty_ = false;
@@ -457,17 +437,11 @@ void RoomOvalPointChildEditorPanel::update_layout() const {
     }
 
     y += kLineHeight + kRowGap;
-    const int split_gap = DMSpacing::small_gap();
-    const int split_w = std::max(0, content_w - split_gap);
-    const int left_w = split_w / 2;
-    const int right_w = std::max(0, content_w - left_w - split_gap);
 
     const int rotation_h = point_rotation_slider_ ? point_rotation_slider_->preferred_height(content_w) : DMSlider::height();
     const int hidden_h = point_hidden_checkbox_ ? DMCheckbox::height() : 0;
     const int advanced_h = advanced_options_button_ ? DMButton::height() : 0;
     const int resolve_h = point_resolve_x_checkbox_ ? DMCheckbox::height() : 0;
-    const int flip_h = std::max(point_flip_vertical_checkbox_ ? DMCheckbox::height() : 0,
-                                point_flip_horizontal_checkbox_ ? DMCheckbox::height() : 0);
     const int scale_h = point_scaling_method_dropdown_
         ? point_scaling_method_dropdown_->preferred_height(content_w)
         : DMDropdown::height();
@@ -487,21 +461,12 @@ void RoomOvalPointChildEditorPanel::update_layout() const {
             point_resolve_x_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, resolve_h});
             y += resolve_h + kRowGap;
         }
-        if (point_flip_vertical_checkbox_) {
-            point_flip_vertical_checkbox_->set_rect(SDL_Rect{content_x, y, left_w, flip_h});
-        }
-        if (point_flip_horizontal_checkbox_) {
-            point_flip_horizontal_checkbox_->set_rect(SDL_Rect{content_x + left_w + split_gap, y, right_w, flip_h});
-        }
-        y += flip_h + kRowGap;
         if (point_scaling_method_dropdown_) {
             point_scaling_method_dropdown_->set_rect(SDL_Rect{content_x, y, content_w, scale_h});
             y += scale_h + kSectionGap;
         }
     } else {
         if (point_resolve_x_checkbox_) point_resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (point_flip_vertical_checkbox_) point_flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (point_flip_horizontal_checkbox_) point_flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
         y += kSectionGap;
     }
@@ -678,8 +643,6 @@ RoomOvalPointChildEditorPanel::PointDetailValues RoomOvalPointChildEditorPanel::
     values.rotation_degrees = point_rotation_slider_ ? static_cast<float>(point_rotation_slider_->value()) : 0.0f;
     values.hidden = point_hidden_checkbox_ ? point_hidden_checkbox_->value() : false;
     values.resolve_x = point_resolve_x_checkbox_ ? point_resolve_x_checkbox_->value() : true;
-    values.flip_horizontal = point_flip_horizontal_checkbox_ ? point_flip_horizontal_checkbox_->value() : true;
-    values.flip_vertical = point_flip_vertical_checkbox_ ? point_flip_vertical_checkbox_->value() : true;
     values.scaling_method = dropdown_index_to_scaling_method(
         point_scaling_method_dropdown_ ? point_scaling_method_dropdown_->selected() : 0);
     values.tags = sorted_set_values(positive_tags_);

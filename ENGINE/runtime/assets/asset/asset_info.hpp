@@ -108,8 +108,6 @@ class AssetInfo {
         int texture_x = 0;
         int texture_y = 0;
         float depth_offset = 0.0f;
-        bool flip_horizontal = true;
-        bool flip_vertical = true;
         float rotation_degrees = 0.0f;
         bool hidden = false;
         bool resolve_x = true;

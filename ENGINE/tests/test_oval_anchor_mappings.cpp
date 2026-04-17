@@ -5,6 +5,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,8 @@ AssetInfo::OvalAnchorPoint make_oval_point(float angle_degrees,
                                            bool flip_horizontal,
                                            bool flip_vertical,
                                            AnchorScalingMethod scaling_method) {
+    (void)flip_horizontal;
+    (void)flip_vertical;
     AssetInfo::OvalAnchorPoint point{};
     point.angle_degrees = angle_degrees;
     point.texture_x = texture_x;
@@ -46,8 +49,6 @@ AssetInfo::OvalAnchorPoint make_oval_point(float angle_degrees,
     point.rotation_degrees = rotation_degrees;
     point.hidden = hidden;
     point.resolve_x = resolve_x;
-    point.flip_horizontal = flip_horizontal;
-    point.flip_vertical = flip_vertical;
     point.scaling_method = scaling_method;
     return point;
 }
@@ -548,8 +549,8 @@ TEST_CASE("Oval runtime interpolation blends numeric fields and uses nearest dis
     REQUIRE(near_ninety.has_value());
     CHECK(near_ninety->depth_offset == doctest::Approx(8.88889f).epsilon(1e-4));
     CHECK(near_ninety->rotation_degrees == doctest::Approx(80.0f).epsilon(1e-4));
-    CHECK(near_ninety->flip_horizontal == true);
-    CHECK(near_ninety->flip_vertical == true);
+    CHECK(near_ninety->flip_horizontal == false);
+    CHECK(near_ninety->flip_vertical == false);
     CHECK(near_ninety->hidden == true);
     CHECK(near_ninety->resolve_x == false);
     CHECK(near_ninety->scaling_method == AnchorScalingMethod::Real3DPoint);
@@ -608,7 +609,7 @@ TEST_CASE("Oval runtime anchor transform composes with owner sprite transform") 
     REQUIRE(base.has_value());
     CHECK(base->rotation_degrees == doctest::Approx(15.0f).epsilon(1e-4));
     CHECK(base->flip_horizontal == false);
-    CHECK(base->flip_vertical == true);
+    CHECK(base->flip_vertical == false);
 
     REQUIRE(asset.set_anchor_sprite_transform_override(SDL_FLIP_HORIZONTAL, 30.0));
     auto composed =
@@ -616,7 +617,47 @@ TEST_CASE("Oval runtime anchor transform composes with owner sprite transform") 
     REQUIRE(composed.has_value());
     CHECK(composed->rotation_degrees == doctest::Approx(45.0f).epsilon(1e-4));
     CHECK(composed->flip_horizontal == true);
-    CHECK(composed->flip_vertical == true);
+    CHECK(composed->flip_vertical == false);
+}
+
+TEST_CASE("AssetInfo oval mapping payload omits removed inversion keys for points") {
+    AssetInfo info("oval_payload_sanitize_asset");
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "oval_payload_sanitize_asset";
+    mapping.points = {
+        make_oval_point(0.0f, 10, 12, 1.0f, 2.0f, false, true, true, true, AnchorScalingMethod::Parent),
+    };
+    REQUIRE(info.upsert_oval_anchor_mapping(mapping));
+
+    const nlohmann::json payload = info.oval_anchor_mappings_payload();
+    REQUIRE(payload.is_array());
+    REQUIRE(payload.size() == 1);
+    REQUIRE(payload[0].contains("points"));
+    REQUIRE(payload[0]["points"].is_array());
+    REQUIRE(payload[0]["points"].size() == 1);
+    CHECK_FALSE(payload[0]["points"][0].contains("flip_horizontal"));
+    CHECK_FALSE(payload[0]["points"][0].contains("flip_vertical"));
+}
+
+TEST_CASE("AssetInfo rejects legacy oval point inversion keys in payload") {
+    AssetInfo info("oval_payload_reject_asset");
+    const nlohmann::json payload = nlohmann::json::array({
+        nlohmann::json{
+            {"name", "eyes"},
+            {"asset_name", "oval_payload_reject_asset"},
+            {"points", nlohmann::json::array({
+                nlohmann::json{
+                    {"angle_degrees", 0.0},
+                    {"texture_x", 5},
+                    {"texture_y", 6},
+                    {"flip_horizontal", false}
+                }
+            })}
+        }
+    });
+
+    CHECK_THROWS_AS(info.set_oval_anchor_mappings_payload(payload), std::runtime_error);
 }
 
 TEST_CASE("Oval runtime resolves anchors on the XZ plane and applies depth_offset vertically") {

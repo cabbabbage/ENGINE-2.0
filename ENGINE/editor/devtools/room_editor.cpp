@@ -7540,8 +7540,6 @@ void RoomEditor::ensure_oval_editor_widgets() {
                 base_values.rotation_degrees = values.rotation_degrees;
                 base_values.hidden = values.hidden;
                 base_values.resolve_x = values.resolve_x;
-                base_values.flip_horizontal = values.flip_horizontal;
-                base_values.flip_vertical = values.flip_vertical;
                 base_values.scaling_method = values.scaling_method;
                 apply_selected_oval_point_details_with_tags(base_values, values.tags, values.anti_tags, true);
             });
@@ -10278,8 +10276,6 @@ void RoomEditor::sync_oval_tools_panel() {
             values.rotation_degrees = point.rotation_degrees;
             values.hidden = point.hidden;
             values.resolve_x = point.resolve_x;
-            values.flip_horizontal = point.flip_horizontal;
-            values.flip_vertical = point.flip_vertical;
             values.scaling_method = point.scaling_method;
             oval_tools_panel_->set_point_detail_values(values);
             if (oval_point_child_editor_panel_) {
@@ -10287,8 +10283,6 @@ void RoomEditor::sync_oval_tools_panel() {
                 point_values.rotation_degrees = point.rotation_degrees;
                 point_values.hidden = point.hidden;
                 point_values.resolve_x = point.resolve_x;
-                point_values.flip_horizontal = point.flip_horizontal;
-                point_values.flip_vertical = point.flip_vertical;
                 point_values.scaling_method = point.scaling_method;
                 point_values.tags = point.tags;
                 point_values.anti_tags = point.anti_tags;
@@ -12438,8 +12432,6 @@ bool RoomEditor::add_oval_mapping() {
     for (int i = 0; i < 4; ++i) {
         AssetInfo::OvalAnchorPoint point{};
         point.angle_degrees = static_cast<float>(i) * 90.0f;
-        point.flip_horizontal = true;
-        point.flip_vertical = true;
         point.rotation_degrees = 0.0f;
         point.hidden = false;
         point.resolve_x = true;
@@ -12735,8 +12727,6 @@ bool RoomEditor::apply_selected_oval_point_details_with_tags(const RoomOvalTools
         point.rotation_degrees != values.rotation_degrees ||
         point.hidden != values.hidden ||
         point.resolve_x != values.resolve_x ||
-        point.flip_horizontal != values.flip_horizontal ||
-        point.flip_vertical != values.flip_vertical ||
         point.scaling_method != values.scaling_method ||
         (apply_tag_override && (point.tags != tags || point.anti_tags != anti_tags));
     if (!changed) {
@@ -12746,8 +12736,6 @@ bool RoomEditor::apply_selected_oval_point_details_with_tags(const RoomOvalTools
     point.rotation_degrees = values.rotation_degrees;
     point.hidden = values.hidden;
     point.resolve_x = values.resolve_x;
-    point.flip_horizontal = values.flip_horizontal;
-    point.flip_vertical = values.flip_vertical;
     point.scaling_method = values.scaling_method;
     if (apply_tag_override) {
         point.tags = tags;

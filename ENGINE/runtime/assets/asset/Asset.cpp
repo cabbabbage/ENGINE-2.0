@@ -268,8 +268,8 @@ std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_headi
                                                     synthesized.texture_x,
                                                     synthesized.texture_y);
     synthesized.depth_offset = lerp_value(prev.depth_offset, next.depth_offset, blend_t);
-    synthesized.flip_horizontal = nearest.flip_horizontal;
-    synthesized.flip_vertical = nearest.flip_vertical;
+    synthesized.flip_horizontal = true;
+    synthesized.flip_vertical = true;
     synthesized.rotation_degrees = lerp_value(prev.rotation_degrees, next.rotation_degrees, blend_t);
     synthesized.hidden = nearest.hidden;
     synthesized.resolve_x = nearest.resolve_x;
@@ -2178,13 +2178,8 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                         const SDL_FlipMode owner_flip = effective_render_flip();
                         const bool owner_flip_horizontal = (owner_flip & SDL_FLIP_HORIZONTAL) != 0;
                         const bool owner_flip_vertical = (owner_flip & SDL_FLIP_VERTICAL) != 0;
-                        const auto combine_inherit_parity = [](bool parent_axis_flip, bool preserve_parent_axis) {
-                                return preserve_parent_axis ? parent_axis_flip : !parent_axis_flip;
-                        };
-                        const bool runtime_flip_horizontal =
-                            combine_inherit_parity(owner_flip_horizontal, synthesized_anchor->flip_horizontal);
-                        const bool runtime_flip_vertical =
-                            combine_inherit_parity(owner_flip_vertical, synthesized_anchor->flip_vertical);
+                        const bool runtime_flip_horizontal = owner_flip_horizontal;
+                        const bool runtime_flip_vertical = owner_flip_vertical;
                         const float local_rotation = std::isfinite(synthesized_anchor->rotation_degrees)
                             ? synthesized_anchor->rotation_degrees
                             : 0.0f;

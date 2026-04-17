@@ -989,10 +989,8 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
             const float perspective_scale = perspective_sample.scale;
             const float base_world_z = static_cast<float>(asset->world_z());
             const RuntimeCameraMetrics& camera_metrics = asset->runtime_camera_metrics;
-            const bool has_camera_metrics = camera_metrics.valid &&
-                                            camera_metrics.frame_id == assets_->frame_id() &&
-                                            camera_metrics.camera_state_version == cam.camera_state_version() &&
-                                            camera_metrics.anchor_revision == asset->anchor_world_revision();
+            const bool has_camera_metrics =
+                asset->has_fresh_runtime_camera_metrics(assets_->frame_id(), cam.camera_state_version());
             const double asset_depth_from_focus_plane = has_camera_metrics
                 ? camera_metrics.world_z_depth_from_anchor
                 : render_depth::depth_from_anchor(focus_plane_world_z,

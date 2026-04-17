@@ -106,6 +106,13 @@ class Asset {
         return grid_point_ ? grid_point_->world_z() : 0;
     }
     std::uint64_t anchor_world_revision() const { return anchor_world_revision_; }
+    bool has_fresh_runtime_camera_metrics(std::uint64_t frame_id,
+                                          std::uint64_t camera_state_version) const {
+        return runtime_camera_metrics.valid &&
+               runtime_camera_metrics.frame_id == frame_id &&
+               runtime_camera_metrics.camera_state_version == camera_state_version &&
+               runtime_camera_metrics.anchor_revision == anchor_world_revision_;
+    }
     SDL_Point world_xz_point() const { return SDL_Point{world_x(), world_z()}; }
     SDL_Point world_xy_point() const { return SDL_Point{world_x(), world_y()}; }
     int height() const {

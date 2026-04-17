@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -312,6 +313,88 @@ TEST_CASE("AnchorBoundAssetHelper batches repeated owner anchor dirties and flus
     CHECK(spawned->world_y() == owner->world_y() + 5);
     CHECK(spawned->world_z() == owner->world_z() + 6);
     CHECK(spawned->world_x() == 71);
+}
+
+TEST_CASE("AnchorBoundAssetHelper resolves chained parent and grandchild bindings in the same flush") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 30, 40, 50, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 4, 5, 0, 0, 0.0f, true});
+
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    Asset* child_asset = child.get_asset();
+    REQUIRE(child_asset != nullptr);
+
+    test_child_asset_runtime::set_anchor(*child_asset, AnchorSpec{"hat", 2, 1, 4, 0, 0, 0.0f, true});
+    ChildAsset grandchild(*child_asset, "vibble_eyes");
+    grandchild.bind("hat");
+    Asset* grandchild_asset = grandchild.get_asset();
+    REQUIRE(grandchild_asset != nullptr);
+
+    const int initial_grandchild_x = grandchild_asset->world_x();
+    const int initial_grandchild_y = grandchild_asset->world_y();
+    const int initial_grandchild_z = grandchild_asset->world_z();
+
+    owner->move_to_world_position(70, 80, 90, 0);
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 5, 6, 7, 0, 0, 0.0f, true});
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+
+    CHECK(grandchild_asset->world_x() == initial_grandchild_x);
+    CHECK(grandchild_asset->world_y() == initial_grandchild_y);
+    CHECK(grandchild_asset->world_z() == initial_grandchild_z);
+
+    CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+    CHECK_FALSE(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+
+    CHECK(child_asset->world_x() == owner->world_x() + 5);
+    CHECK(child_asset->world_y() == owner->world_y() + 6);
+    CHECK(child_asset->world_z() == owner->world_z() + 7);
+    CHECK(grandchild_asset->world_x() == child_asset->world_x() + 2);
+    CHECK(grandchild_asset->world_y() == child_asset->world_y() + 1);
+    CHECK(grandchild_asset->world_z() == child_asset->world_z() + 4);
+}
+
+TEST_CASE("AnchorBoundAssetHelper preserves depth bias while moving toward and away from camera across frames") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 20, 30, 40, 0));
+    REQUIRE(owner != nullptr);
+
+    AnchorSpec anchor{};
+    anchor.name = "eyes";
+    anchor.offset_x = 2;
+    anchor.offset_y = 1;
+    anchor.offset_z = 3;
+    anchor.exact_offset_z = 3.4f;
+    anchor.world_depth_offset = 0.5f;
+    anchor.exists = true;
+    test_child_asset_runtime::set_anchor(*owner, anchor);
+
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    Asset* spawned = child.get_asset();
+    REQUIRE(spawned != nullptr);
+
+    const std::vector<int> world_z_sequence{40, 44, 48, 52, 48, 44, 40};
+    for (int world_z : world_z_sequence) {
+        owner->move_to_world_position(owner->world_x(), owner->world_y(), world_z, 0);
+        test_child_asset_runtime::set_anchor(*owner, anchor);
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+        CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+
+        const double anchor_world_depth = static_cast<double>(owner->world_z()) + 3.4 + 0.5;
+        const double expected_depth = render_depth::depth_from_anchor(anchor_world_depth,
+                                                                      static_cast<double>(owner->world_z()) + 3.4);
+        const double actual_depth = render_depth::depth_from_anchor(anchor_world_depth,
+                                                                    static_cast<double>(spawned->world_z()),
+                                                                    spawned->render_depth_bias());
+        CHECK(actual_depth == doctest::Approx(expected_depth).epsilon(1e-9));
+    }
 }
 
 TEST_CASE("Queued anchor flush keeps X-axis child placement stable across sequential moves") {

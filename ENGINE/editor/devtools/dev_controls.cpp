@@ -2899,6 +2899,10 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     nlohmann::json manifest_entry = {
         {"asset_name", sanitized},
         {"asset_type", "Object"},
+        {"movement_enabled", false},
+        {"attack_box_enabled", false},
+        {"hitbox_enabled", false},
+        {"floor_boxes_enabled", false},
         {"animations", nlohmann::json{{"default", default_anim}}},
         {"start", "default"},
         {"asset_directory", asset_dir.lexically_normal().generic_string()}

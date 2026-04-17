@@ -115,7 +115,7 @@ bool should_consider_overlap(const Asset& self, const Asset& other) {
         return false;
     }
 
-    if (self.info->movement_enabled && other.info->movement_enabled) {
+    if (self.isMovementEnabled() && other.isMovementEnabled()) {
         return true;
     }
 
@@ -329,6 +329,10 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
         return;
@@ -347,6 +351,10 @@ void AnimationUpdate::auto_move(Asset* target_asset,
                                 int visited_thresh_px,
                                 bool override_non_locked) {
     if (!self_ || !target_asset) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
         return;
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
@@ -373,6 +381,10 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
                                    std::optional<int> checkpoint_resolution,
                                    bool           override_non_locked) {
     if (!self_) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
         return;
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
@@ -412,6 +424,10 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
                                    std::optional<int>                 checkpoint_resolution,
                                    bool                               override_non_locked) {
     if (!self_) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
         return;
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
@@ -564,6 +580,10 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     if (!self_) {
         return;
     }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
         return;
@@ -694,6 +714,10 @@ void AnimationUpdate::move(SDL_Point delta,
     if (!self_ || !self_->info) {
         return;
     }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
         return;
@@ -712,6 +736,10 @@ void AnimationUpdate::move_3d(const axis::WorldPos& delta,
                               bool                  resort_z,
                               bool                  override_non_locked) {
     if (!self_ || !self_->info) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
         return;
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {

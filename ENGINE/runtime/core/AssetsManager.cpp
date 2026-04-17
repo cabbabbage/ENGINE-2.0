@@ -46,6 +46,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <utility>
 #include <execution>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
@@ -88,6 +89,73 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
     }
     const float sign = normalize_depth_axis_sign(depth_axis_sign);
     return (world_z - anchor_world_z) * sign;
+}
+
+bool build_boundary_floor_box_area(const Asset& asset, Area& out_area) {
+    if (!asset.isFloorBoxesEnabled()) {
+        return false;
+    }
+
+    const Asset::RuntimeFloorBox* boundary = asset.getBoundaryFloorBox();
+    if (!boundary || !boundary->enabled || !boundary->is_boundary) {
+        return false;
+    }
+
+    std::size_t enabled_boundary_count = 0;
+    for (const auto& box : asset.getFloorBoxes()) {
+        if (box.enabled && box.is_boundary) {
+            ++enabled_boundary_count;
+            if (enabled_boundary_count > 1) {
+                return false;
+            }
+        }
+    }
+    if (enabled_boundary_count != 1) {
+        return false;
+    }
+
+    const float width = boundary->width;
+    const float depth = boundary->depth;
+    if (!std::isfinite(width) || !std::isfinite(depth) || width <= 0.0f || depth <= 0.0f) {
+        return false;
+    }
+
+    constexpr double kPi = 3.14159265358979323846;
+    const double radians = static_cast<double>(boundary->rotation_degrees) * (kPi / 180.0);
+    const double cos_theta = std::cos(radians);
+    const double sin_theta = std::sin(radians);
+    const double half_w = static_cast<double>(width) * 0.5;
+    const double half_d = static_cast<double>(depth) * 0.5;
+    const double center_x = static_cast<double>(asset.world_x()) + static_cast<double>(boundary->position_x);
+    const double center_z = static_cast<double>(asset.world_z()) + static_cast<double>(boundary->position_z);
+
+    const std::array<std::pair<double, double>, 4> local_corners{{
+        {-half_w, -half_d},
+        { half_w, -half_d},
+        { half_w,  half_d},
+        {-half_w,  half_d},
+    }};
+
+    std::vector<Area::Point> points;
+    points.reserve(local_corners.size());
+    for (const auto& corner : local_corners) {
+        const double local_x = corner.first;
+        const double local_z = corner.second;
+        const double rotated_x = local_x * cos_theta - local_z * sin_theta;
+        const double rotated_z = local_x * sin_theta + local_z * cos_theta;
+        points.push_back(Area::Point{
+            static_cast<int>(std::lround(center_x + rotated_x)),
+            static_cast<int>(std::lround(center_z + rotated_z))
+        });
+    }
+
+    if (points.size() != 4) {
+        return false;
+    }
+
+    out_area = Area("impassable", points, asset.grid_resolution);
+    out_area.set_type(std::string(asset_types::boundary));
+    return true;
 }
 
 struct AssetWorldBounds {
@@ -943,18 +1011,21 @@ void Assets::rebuild_frame_collision_context() const {
         }
 
         const std::string canonical_type = asset_types::canonicalize(asset->info->type);
+        Area floor_boundary_area{"impassable"};
+        const bool has_floor_boundary_area = build_boundary_floor_box_area(*asset, floor_boundary_area);
         const bool impassable =
             canonical_type == asset_types::boundary ||
             canonical_type == asset_types::enemy ||
             canonical_type == asset_types::npc ||
-            asset->info->movement_enabled ||
+            asset->isMovementEnabled() ||
+            has_floor_boundary_area ||
             !asset->info->passable;
         if (!impassable || canonical_type == asset_types::player) {
             continue;
         }
 
-        Area collision = asset->get_area("impassable");
-        if (collision.get_points().empty()) {
+        Area collision = has_floor_boundary_area ? floor_boundary_area : asset->get_area("impassable");
+        if (!has_floor_boundary_area && collision.get_points().empty()) {
             collision = asset->get_area("collision_area");
         }
         if (collision.get_points().empty()) {
@@ -974,7 +1045,7 @@ void Assets::rebuild_frame_collision_context() const {
             std::move(collision),
             world_center,
             bottom_middle,
-            canonical_type
+            has_floor_boundary_area ? std::string(asset_types::boundary) : canonical_type
         });
         FrameCollisionEntry& entry = frame_collision_entries_.back();
         const world::GridPoint origin = world_grid_.origin();

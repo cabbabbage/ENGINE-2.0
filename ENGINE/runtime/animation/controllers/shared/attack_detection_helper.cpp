@@ -11,6 +11,7 @@ namespace {
 bool can_send_attacks_from(const Asset* attacker) {
     return attacker &&
            attacker->info &&
+           attacker->isAttackBoxEnabled() &&
            attacker->current_animation_frame() &&
            !attacker->dead &&
            attacker->active &&
@@ -23,6 +24,9 @@ bool can_receive_attacks_from(const Asset* attacker, const Asset* target) {
     }
 
     if (!target->info || !target->current_animation_frame() || target->dead || !target->active) {
+        return false;
+    }
+    if (!target->isHitboxEnabled()) {
         return false;
     }
 

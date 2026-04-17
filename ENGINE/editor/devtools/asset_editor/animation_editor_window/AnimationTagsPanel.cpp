@@ -22,8 +22,9 @@ namespace animation_editor {
 namespace {
 
 constexpr int kPanelPadding = 8;
-constexpr int kPanelGap = 8;
-constexpr int kChipWidth = 136;
+constexpr int kPanelGap = 10;
+constexpr int kChipMinWidth = 120;
+constexpr int kChipMaxWidth = 180;
 
 std::string to_lower_copy(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -119,6 +120,8 @@ AnimationTagsPanel::AnimationTagsPanel() {
     rebuild_buttons();
 }
 
+AnimationTagsPanel::~AnimationTagsPanel() = default;
+
 void AnimationTagsPanel::set_document(std::shared_ptr<AnimationDocument> document) {
     document_ = std::move(document);
     payload_signature_.clear();
@@ -181,7 +184,7 @@ void AnimationTagsPanel::render(SDL_Renderer* renderer) const {
     const DMLabelStyle& label_style = DMStyles::Label();
     DMFontCache::instance().draw_text(renderer,
                                       label_style,
-                                      "Animation Tags",
+                                      "Assigned Tags",
                                       tags_label_rect_.x,
                                       tags_label_rect_.y);
     DMFontCache::instance().draw_text(renderer,
@@ -360,14 +363,14 @@ void AnimationTagsPanel::rebuild_buttons() {
     for (const auto& value : tags_) {
         Chip chip;
         chip.value = value;
-        chip.button = std::make_unique<DMButton>(value, &DMStyles::HeaderButton(), kChipWidth, DMButton::height());
+        chip.button = std::make_unique<DMButton>(value, &DMStyles::HeaderButton(), kChipMinWidth, DMButton::height());
         tag_chips_.push_back(std::move(chip));
     }
 
     for (const auto& value : recommended_tags_) {
         Chip chip;
         chip.value = value;
-        chip.button = std::make_unique<DMButton>(value, &DMStyles::AccentButton(), kChipWidth, DMButton::height());
+        chip.button = std::make_unique<DMButton>(value, &DMStyles::AccentButton(), kChipMinWidth, DMButton::height());
         rec_chips_.push_back(std::move(chip));
     }
 }
@@ -415,13 +418,14 @@ int AnimationTagsPanel::layout_for_width(int width, int origin_x, int origin_y, 
 
     auto* self = const_cast<AnimationTagsPanel*>(this);
 
+    const int search_height = search_box_ ? search_box_->height_for_width(content_width) : DMTextBox::height();
     if (apply) {
-        self->search_rect_ = SDL_Rect{x, y, content_width, DMTextBox::height()};
+        self->search_rect_ = SDL_Rect{x, y, content_width, search_height};
         if (search_box_) {
             search_box_->set_rect(self->search_rect_);
         }
     }
-    y += DMTextBox::height() + kPanelGap;
+    y += search_height + kPanelGap;
 
     const int label_height = DMStyles::Label().font_size + 4;
     if (apply) {
@@ -462,15 +466,24 @@ int AnimationTagsPanel::layout_chip_grid(std::vector<Chip>& chips,
 
     const int gap = DMSpacing::small_gap();
     const int available = std::max(1, width);
-    const int columns = std::max(1, (available + gap) / (kChipWidth + gap));
+    const int max_columns = std::max(1, (available + gap) / (kChipMinWidth + gap));
+    int columns = std::min<int>(max_columns, static_cast<int>(chips.size()));
+    columns = std::max(1, columns);
+    int chip_width = (available - (columns - 1) * gap) / columns;
+    chip_width = std::clamp(chip_width, kChipMinWidth, kChipMaxWidth);
+    if (chip_width * columns + (columns - 1) * gap > available) {
+        columns = std::max(1, (available + gap) / (chip_width + gap));
+    }
+    const int row_width = columns * chip_width + (columns - 1) * gap;
+    const int offset_x = origin_x + std::max(0, (available - row_width) / 2);
 
     int row = 0;
     int col = 0;
     for (auto& chip : chips) {
-        const int x = origin_x + col * (kChipWidth + gap);
+        const int x = offset_x + col * (chip_width + gap);
         const int y = start_y + row * (DMButton::height() + gap);
         if (apply && chip.button) {
-            chip.button->set_rect(SDL_Rect{x, y, kChipWidth, DMButton::height()});
+            chip.button->set_rect(SDL_Rect{x, y, chip_width, DMButton::height()});
         }
 
         ++col;

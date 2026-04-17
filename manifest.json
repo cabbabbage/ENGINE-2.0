@@ -15975,7 +15975,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         },
         "down": {
           "anchor_points": [
@@ -17429,7 +17430,8 @@
             "kind": "animation",
             "name": "left",
             "path": ""
-          }
+          },
+          "tags": []
         },
         "up": {
           "anchor_points": [
@@ -17532,7 +17534,7 @@
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 195,
-                "texture_y": 372
+                "texture_y": 379
               },
               {
                 "depth_offset": 7.899998664855957,
@@ -18025,6 +18027,7 @@
           "points": [
             {
               "angle_degrees": 0.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18032,11 +18035,13 @@
               "resolve_x": true,
               "rotation_degrees": -18.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 30,
               "texture_y": 0
             },
             {
               "angle_degrees": 90.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18044,11 +18049,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
               "texture_y": 30
             },
             {
               "angle_degrees": 180.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18056,11 +18063,13 @@
               "resolve_x": true,
               "rotation_degrees": 18.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -30,
               "texture_y": 0
             },
             {
               "angle_degrees": 270.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18068,6 +18077,7 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
               "texture_y": -30
             }
@@ -18083,6 +18093,7 @@
           "points": [
             {
               "angle_degrees": 0.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18090,11 +18101,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 20,
               "texture_y": 0
             },
             {
               "angle_degrees": 45.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18102,11 +18115,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 14,
               "texture_y": 17
             },
             {
               "angle_degrees": 90.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18114,11 +18129,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
               "texture_y": 24
             },
             {
               "angle_degrees": 135.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18126,11 +18143,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -14,
               "texture_y": 17
             },
             {
               "angle_degrees": 180.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18138,11 +18157,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -20,
               "texture_y": 0
             },
             {
               "angle_degrees": 225.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18150,11 +18171,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -14,
               "texture_y": -17
             },
             {
               "angle_degrees": 270.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18162,11 +18185,13 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
               "texture_y": -24
             },
             {
               "angle_degrees": 315.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18174,6 +18199,7 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 14,
               "texture_y": -17
             }
@@ -18189,6 +18215,9 @@
           "points": [
             {
               "angle_degrees": 0.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18196,11 +18225,17 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
               "texture_x": 50,
               "texture_y": 0
             },
             {
-              "angle_degrees": 90.0,
+              "angle_degrees": 45.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18208,11 +18243,35 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
+              "texture_x": 35,
+              "texture_y": 42
+            },
+            {
+              "angle_degrees": 90.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
               "texture_x": 0,
               "texture_y": 60
             },
             {
-              "angle_degrees": 180.0,
+              "angle_degrees": 135.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18220,11 +18279,35 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
+              "texture_x": -35,
+              "texture_y": 42
+            },
+            {
+              "angle_degrees": 180.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
               "texture_x": -50,
               "texture_y": 0
             },
             {
-              "angle_degrees": 270.0,
+              "angle_degrees": 225.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
               "flip_horizontal": true,
               "flip_vertical": true,
@@ -18232,8 +18315,47 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
+              "texture_x": -35,
+              "texture_y": -42
+            },
+            {
+              "angle_degrees": 270.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
               "texture_x": 0,
               "texture_y": -60
+            },
+            {
+              "angle_degrees": 315.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "flip_horizontal": true,
+              "flip_vertical": true,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
+              "texture_x": 35,
+              "texture_y": -42
             }
           ],
           "radius_offset_degrees": 288.0,
@@ -18620,37 +18742,12 @@
               0,
               0,
               0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
             ]
           ],
           "movement_total": {
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 1,
           "on_end": "reverse",
@@ -18660,7 +18757,11 @@
             "kind": "folder",
             "name": "",
             "path": "attack"
-          }
+          },
+          "tags": [
+            "attack",
+            "left"
+          ]
         },
         "default": {
           "anchor_points": [
@@ -18694,7 +18795,52 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
+        },
+        "left": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "default",
+            "path": ""
+          },
+          "tags": []
+        },
+        "right": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "default",
+            "path": ""
+          },
+          "tags": [
+            "right"
+          ]
         }
       },
       "anti_tags": [],
@@ -19083,9 +19229,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            114,
+            242,
             36,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 2,
@@ -19486,8 +19632,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            44,
             204,
+            31,
             31,
             255
           ],
@@ -20089,6 +20235,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-75e8a7f4d853"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble_attack_1"
+                }
+              ],
+              "display_name": "vibble_attack_1",
+              "dx": -1894,
+              "dz": 293,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 20,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b20402995c48"
             }
           ]
         }

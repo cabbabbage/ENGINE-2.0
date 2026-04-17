@@ -23,6 +23,7 @@
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_tools_panel.hpp"
 #include "devtools/oval_point_topology.hpp"
+#include "devtools/room_oval_point_child_editorpanel.hpp"
 #include "devtools/room_oval_tools_panel.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_edit_transaction.hpp"
@@ -2610,6 +2611,14 @@ if (auto selected = library_ui_->consume_selection()) {
         oval_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         oval_tools_panel_->set_visible(oval_mode_active());
     }
+    if (oval_point_child_editor_panel_) {
+        oval_point_child_editor_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        oval_point_child_editor_panel_->set_visible(oval_mode_active());
+    }
+    if (oval_point_child_editor_panel_) {
+        oval_point_child_editor_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        oval_point_child_editor_panel_->set_visible(oval_mode_active());
+    }
     update_anchor_candidate_editor_search(input);
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -2884,6 +2893,14 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
                 result.handled = true;
                 result.pointer_blocked = true;
             } else if (pointer_based && oval_tools_panel_->is_point_inside(mx, my)) {
+                result.pointer_blocked = true;
+            }
+        }
+        if (oval_point_child_editor_panel_ && oval_point_child_editor_panel_->is_visible()) {
+            if (oval_point_child_editor_panel_->handle_event(event)) {
+                result.handled = true;
+                result.pointer_blocked = true;
+            } else if (pointer_based && oval_point_child_editor_panel_->is_point_inside(mx, my)) {
                 result.pointer_blocked = true;
             }
         }
@@ -4565,6 +4582,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         render_anchor_candidate_editor(renderer);
         if (oval_mode_active() && oval_tools_panel_ && oval_tools_panel_->is_visible()) {
             oval_tools_panel_->render(renderer);
+        }
+        if (oval_mode_active() && oval_point_child_editor_panel_ && oval_point_child_editor_panel_->is_visible()) {
+            oval_point_child_editor_panel_->render(renderer);
         }
         if (movement_mode_active() && movement_tools_panel_ && movement_tools_panel_->is_visible()) {
             movement_tools_panel_->render(renderer);
@@ -7512,9 +7532,28 @@ void RoomEditor::ensure_oval_editor_widgets() {
         });
     }
 
+    if (!oval_point_child_editor_panel_) {
+        oval_point_child_editor_panel_ = std::make_unique<RoomOvalPointChildEditorPanel>();
+        oval_point_child_editor_panel_->set_on_apply_point_details(
+            [this](const RoomOvalPointChildEditorPanel::PointDetailValues& values) {
+                RoomOvalToolsPanel::PointDetailValues base_values{};
+                base_values.rotation_degrees = values.rotation_degrees;
+                base_values.hidden = values.hidden;
+                base_values.resolve_x = values.resolve_x;
+                base_values.flip_horizontal = values.flip_horizontal;
+                base_values.flip_vertical = values.flip_vertical;
+                base_values.scaling_method = values.scaling_method;
+                apply_selected_oval_point_details_with_tags(base_values, values.tags, values.anti_tags, true);
+            });
+    }
+
     if (oval_tools_panel_) {
         oval_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         oval_tools_panel_->set_visible(oval_mode_active());
+    }
+    if (oval_point_child_editor_panel_) {
+        oval_point_child_editor_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        oval_point_child_editor_panel_->set_visible(oval_mode_active());
     }
 }
 
@@ -8949,6 +8988,7 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     const int payload_panel_right_limit = asset_info_rect.x - payload_panel_gap;
     const int payload_panel_w = std::max(0, std::min(332, payload_panel_right_limit - payload_panel_x));
     SDL_Rect attack_payload_rect{payload_panel_x, 56, payload_panel_w, left_panel_h};
+    SDL_Rect oval_point_child_rect{payload_panel_x, 56, payload_panel_w, left_panel_h};
 
     auto progress_for = [this]() -> float {
         if (!asset_editor_transition_.active || asset_editor_transition_.duration_frames <= 0) {
@@ -9023,6 +9063,14 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
             oval_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::OvalAnchor, left_panel_rect));
         } else {
             oval_tools_panel_->clear_panel_bounds_override();
+        }
+    }
+    if (oval_point_child_editor_panel_) {
+        if ((oval_mode_active() || asset_editor_transition_.active) && oval_point_child_rect.w >= 220) {
+            oval_point_child_editor_panel_->set_panel_bounds_override(
+                place_rect(AssetEditorSubview::OvalAnchor, oval_point_child_rect));
+        } else {
+            oval_point_child_editor_panel_->clear_panel_bounds_override();
         }
     }
     if (movement_tools_panel_) {
@@ -9971,10 +10019,19 @@ void RoomEditor::sync_oval_tools_panel() {
         oval_tools_panel_->set_asset_binding_status(RoomOvalToolsPanel::AssetBindingStatus{});
         oval_tools_panel_->set_center_anchor_status({}, false);
         oval_tools_panel_->set_center_selected(false);
+        if (oval_point_child_editor_panel_) {
+            oval_point_child_editor_panel_->set_visible(false);
+            oval_point_child_editor_panel_->set_point_selected(false);
+            oval_point_child_editor_panel_->set_resolved_asset_name({});
+            oval_point_child_editor_panel_->set_recommendation_pool({});
+        }
         return;
     }
 
     oval_tools_panel_->set_visible(true);
+    if (oval_point_child_editor_panel_) {
+        oval_point_child_editor_panel_->set_visible(true);
+    }
     std::vector<std::string> oval_names;
     if (!oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         oval_tools_panel_->set_oval_names({});
@@ -9983,6 +10040,11 @@ void RoomEditor::sync_oval_tools_panel() {
         oval_tools_panel_->set_selected_point_index(-1);
         oval_tools_panel_->set_asset_binding_status(RoomOvalToolsPanel::AssetBindingStatus{});
         oval_tools_panel_->set_center_selected(false);
+        if (oval_point_child_editor_panel_) {
+            oval_point_child_editor_panel_->set_point_selected(false);
+            oval_point_child_editor_panel_->set_resolved_asset_name({});
+            oval_point_child_editor_panel_->set_recommendation_pool({});
+        }
         return;
     }
 
@@ -10062,6 +10124,80 @@ void RoomEditor::sync_oval_tools_panel() {
         status.detail = fallback_asset;
         return status;
     };
+    auto resolve_binding_asset_name = [&](const AssetInfo::OvalAnchorMapping& selected_mapping) -> std::string {
+        const Asset* target = oval_edit_.target_asset;
+        if (!target || !target->info) {
+            return {};
+        }
+        const std::string anchor_name = vibble::strings::trim_copy(selected_mapping.name);
+        if (anchor_name.empty()) {
+            return {};
+        }
+
+        const auto explicit_it = std::find_if(
+            target->info->anchor_point_child_candidates.begin(),
+            target->info->anchor_point_child_candidates.end(),
+            [&](const AssetInfo::AnchorChildPointCandidate& entry) {
+                return vibble::strings::trim_copy(entry.anchor_point_name) == anchor_name;
+            });
+        if (explicit_it != target->info->anchor_point_child_candidates.end()) {
+            const nlohmann::json normalized_entry =
+                target->info->anchor_point_child_candidate_candidates(anchor_name);
+            const auto candidates_it = normalized_entry.find("candidates");
+            if (candidates_it == normalized_entry.end() || !candidates_it->is_array()) {
+                return {};
+            }
+            const vibble::spawn::RuntimeCandidates runtime_candidates =
+                vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
+            if (runtime_candidates.empty()) {
+                return {};
+            }
+            if (assets_) {
+                const vibble::spawn::RuntimeCandidates::AssetCatalogView catalog{
+                    &assets_->library().all(),
+                    false
+                };
+                const auto resolved =
+                    runtime_candidates.pick_hashed(0, catalog, vibble::spawn::ZeroWeightPolicy::NoSelection);
+                if (resolved && !resolved->is_null && !resolved->resolved_asset_name.empty()) {
+                    return resolved->resolved_asset_name;
+                }
+            }
+            return {};
+        }
+
+        const std::string fallback_asset = vibble::strings::trim_copy(selected_mapping.asset_name);
+        if (fallback_asset.empty()) {
+            return {};
+        }
+        if (target->info && fallback_asset == target->info->name) {
+            return {};
+        }
+        if (assets_ && !assets_->library().get(fallback_asset)) {
+            return {};
+        }
+        return fallback_asset;
+    };
+    auto build_recommendation_pool_for_asset = [&](const std::string& asset_name) {
+        std::set<std::string> deduped;
+        if (asset_name.empty() || !assets_) {
+            return std::vector<std::string>{};
+        }
+        const std::shared_ptr<AssetInfo> child_info = assets_->library().get(asset_name);
+        if (!child_info) {
+            return std::vector<std::string>{};
+        }
+        for (const auto& [anim_name, animation] : child_info->animations) {
+            (void)anim_name;
+            for (const auto& raw_tag : animation.tags) {
+                const std::string normalized = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw_tag));
+                if (!normalized.empty()) {
+                    deduped.insert(normalized);
+                }
+            }
+        }
+        return std::vector<std::string>(deduped.begin(), deduped.end());
+    };
     oval_names.reserve(mappings.size());
     for (const auto& mapping : mappings) {
         oval_names.push_back(mapping.name);
@@ -10089,6 +10225,7 @@ void RoomEditor::sync_oval_tools_panel() {
     if (oval_edit_.selected_oval_index >= 0 &&
         oval_edit_.selected_oval_index < static_cast<int>(mappings.size())) {
         const auto& mapping = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+        const std::string resolved_child_asset_name = resolve_binding_asset_name(mapping);
         RoomOvalToolsPanel::OvalProperties properties{};
         properties.name = mapping.name;
         properties.width_radius_x = mapping.width_radius_x;
@@ -10145,6 +10282,27 @@ void RoomEditor::sync_oval_tools_panel() {
             values.flip_vertical = point.flip_vertical;
             values.scaling_method = point.scaling_method;
             oval_tools_panel_->set_point_detail_values(values);
+            if (oval_point_child_editor_panel_) {
+                RoomOvalPointChildEditorPanel::PointDetailValues point_values{};
+                point_values.rotation_degrees = point.rotation_degrees;
+                point_values.hidden = point.hidden;
+                point_values.resolve_x = point.resolve_x;
+                point_values.flip_horizontal = point.flip_horizontal;
+                point_values.flip_vertical = point.flip_vertical;
+                point_values.scaling_method = point.scaling_method;
+                point_values.tags = point.tags;
+                point_values.anti_tags = point.anti_tags;
+                oval_point_child_editor_panel_->set_point_selected(true);
+                oval_point_child_editor_panel_->set_resolved_asset_name(resolved_child_asset_name);
+                oval_point_child_editor_panel_->set_recommendation_pool(
+                    build_recommendation_pool_for_asset(resolved_child_asset_name));
+                oval_point_child_editor_panel_->set_point_detail_values(point_values);
+            }
+        } else if (oval_point_child_editor_panel_) {
+            oval_point_child_editor_panel_->set_point_selected(false);
+            oval_point_child_editor_panel_->set_resolved_asset_name(resolved_child_asset_name);
+            oval_point_child_editor_panel_->set_recommendation_pool(
+                build_recommendation_pool_for_asset(resolved_child_asset_name));
         }
     } else {
         oval_edit_.selected_point_index = -1;
@@ -10156,6 +10314,11 @@ void RoomEditor::sync_oval_tools_panel() {
         oval_tools_panel_->set_center_selected(false);
         oval_tools_panel_->set_point_count(0);
         oval_tools_panel_->set_selected_point_index(-1);
+        if (oval_point_child_editor_panel_) {
+            oval_point_child_editor_panel_->set_point_selected(false);
+            oval_point_child_editor_panel_->set_resolved_asset_name({});
+            oval_point_child_editor_panel_->set_recommendation_pool({});
+        }
     }
     sync_anchor_candidate_editor();
     sync_oval_attachment_lock();
@@ -12544,6 +12707,13 @@ bool RoomEditor::decrement_selected_oval_point_count() {
 }
 
 bool RoomEditor::apply_selected_oval_point_details(const RoomOvalToolsPanel::PointDetailValues& values) {
+    return apply_selected_oval_point_details_with_tags(values, {}, {}, false);
+}
+
+bool RoomEditor::apply_selected_oval_point_details_with_tags(const RoomOvalToolsPanel::PointDetailValues& values,
+                                                             const std::vector<std::string>& tags,
+                                                             const std::vector<std::string>& anti_tags,
+                                                             bool apply_tag_override) {
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         return false;
     }
@@ -12567,7 +12737,8 @@ bool RoomEditor::apply_selected_oval_point_details(const RoomOvalToolsPanel::Poi
         point.resolve_x != values.resolve_x ||
         point.flip_horizontal != values.flip_horizontal ||
         point.flip_vertical != values.flip_vertical ||
-        point.scaling_method != values.scaling_method;
+        point.scaling_method != values.scaling_method ||
+        (apply_tag_override && (point.tags != tags || point.anti_tags != anti_tags));
     if (!changed) {
         return false;
     }
@@ -12578,6 +12749,10 @@ bool RoomEditor::apply_selected_oval_point_details(const RoomOvalToolsPanel::Poi
     point.flip_horizontal = values.flip_horizontal;
     point.flip_vertical = values.flip_vertical;
     point.scaling_method = values.scaling_method;
+    if (apply_tag_override) {
+        point.tags = tags;
+        point.anti_tags = anti_tags;
+    }
     if (!target_info->upsert_oval_anchor_mapping(updated)) {
         return false;
     }
@@ -14861,6 +15036,10 @@ bool RoomEditor::is_oval_ui_blocking_point(int x, int y) const {
     }
     if (oval_mode_active() && oval_tools_panel_ && oval_tools_panel_->is_visible() &&
         oval_tools_panel_->is_point_inside(x, y)) {
+        return true;
+    }
+    if (oval_mode_active() && oval_point_child_editor_panel_ && oval_point_child_editor_panel_->is_visible() &&
+        oval_point_child_editor_panel_->is_point_inside(x, y)) {
         return true;
     }
     if (anchor_candidate_editor_mode_active() && anchor_candidate_editor_.open && anchor_candidate_editor_.pie_widget) {

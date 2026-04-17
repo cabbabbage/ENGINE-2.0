@@ -556,16 +556,40 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
 
     if (scrollbar_visible_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        if (SDL_PointInRect(&p, &scrollbar_track_)) {
+        if (SDL_PointInRect(&p, &scrollbar_thumb_)) {
+            scrollbar_dragging_ = true;
+            scrollbar_drag_offset_y_ = p.y - scrollbar_thumb_.y;
+            handled = true;
+        } else if (SDL_PointInRect(&p, &scrollbar_track_)) {
             const int track_range = std::max(0, scrollbar_track_.h - scrollbar_thumb_.h);
             int relative = std::clamp(p.y - scrollbar_track_.y - scrollbar_thumb_.h / 2, 0, track_range);
             float ratio = (track_range > 0) ? static_cast<float>(relative) / static_cast<float>(track_range) : 0.0f;
-            int max_scroll = std::max(0, content_height_ - bounds_.h);
+            int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
             int new_scroll = static_cast<int>(std::round(ratio * max_scroll));
             scroll_controller_.set_scroll(new_scroll);
             layout_dirty_ = true;
             handled = true;
         }
+    }
+
+    if (scrollbar_dragging_ && e.type == SDL_EVENT_MOUSE_MOTION) {
+        const int track_range = std::max(0, scrollbar_track_.h - scrollbar_thumb_.h);
+        const int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
+        const int mouse_y = static_cast<int>(std::lround(e.motion.y));
+        int relative = std::clamp(mouse_y - scrollbar_track_.y - scrollbar_drag_offset_y_, 0, track_range);
+        float ratio = (track_range > 0) ? static_cast<float>(relative) / static_cast<float>(track_range) : 0.0f;
+        int new_scroll = static_cast<int>(std::round(ratio * max_scroll));
+        if (new_scroll != scroll_controller_.scroll()) {
+            scroll_controller_.set_scroll(new_scroll);
+            layout_dirty_ = true;
+        }
+        handled = true;
+    }
+
+    if (scrollbar_dragging_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        scrollbar_dragging_ = false;
+        scrollbar_drag_offset_y_ = 0;
+        handled = true;
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -1011,10 +1035,14 @@ void AnimationInspectorPanel::update_scrollbar_geometry() const {
     self->scrollbar_thumb_ = SDL_Rect{0, 0, 0, 0};
 
     if (scrollable_bounds_.h <= 0) {
+        self->scrollbar_dragging_ = false;
+        self->scrollbar_drag_offset_y_ = 0;
         return;
     }
     const int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
     if (max_scroll <= 0) {
+        self->scrollbar_dragging_ = false;
+        self->scrollbar_drag_offset_y_ = 0;
         return;
     }
 
@@ -1024,6 +1052,8 @@ void AnimationInspectorPanel::update_scrollbar_geometry() const {
                    kScrollbarWidth,
                    std::max(0, scrollable_bounds_.h - inset * 2)};
     if (track.h <= 0 || track.w <= 0) {
+        self->scrollbar_dragging_ = false;
+        self->scrollbar_drag_offset_y_ = 0;
         return;
     }
 

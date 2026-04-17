@@ -48,6 +48,7 @@ class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
 class RoomOvalToolsPanel;
+class RoomOvalPointChildEditorPanel;
 class RoomFloorBoxToolsPanel;
 class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
@@ -612,6 +613,10 @@ private:
     bool increment_selected_oval_point_count();
     bool decrement_selected_oval_point_count();
     bool apply_selected_oval_point_details(const RoomOvalToolsPanel::PointDetailValues& values);
+    bool apply_selected_oval_point_details_with_tags(const RoomOvalToolsPanel::PointDetailValues& values,
+                                                     const std::vector<std::string>& tags,
+                                                     const std::vector<std::string>& anti_tags,
+                                                     bool apply_tag_override);
     bool apply_selected_oval_center_details(const RoomOvalToolsPanel::CenterDetailValues& values);
     bool apply_oval_center_current_frame_to_scope(EditorFramePropagationScope scope);
     bool drag_oval_center_to_screen(SDL_Point screen_point);
@@ -763,6 +768,7 @@ private:
     std::unique_ptr<AssetInfoUI> info_ui_;
     std::unique_ptr<RoomAnchorToolsPanel> anchor_tools_panel_;
     std::unique_ptr<RoomOvalToolsPanel> oval_tools_panel_;
+    std::unique_ptr<RoomOvalPointChildEditorPanel> oval_point_child_editor_panel_;
     std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;

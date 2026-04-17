@@ -81,10 +81,10 @@ TEST_CASE("AnimationTagsPanel recommendations come from animation tags across ma
     animation_editor::AnimationTagsPanel panel;
     panel.set_document(make_document_with_tags());
     panel.set_animation_id("idle");
-    AnimationTagsPanelTestAccess::refresh_pool(panel);
-    AnimationTagsPanelTestAccess::set_query(panel, "");
+    animation_editor::AnimationTagsPanelTestAccess::refresh_pool(panel);
+    animation_editor::AnimationTagsPanelTestAccess::set_query(panel, "");
 
-    const auto& recs = AnimationTagsPanelTestAccess::recommended_tags(panel);
+    const auto& recs = animation_editor::AnimationTagsPanelTestAccess::recommended_tags(panel);
     CHECK(std::find(recs.begin(), recs.end(), "combat") != recs.end());
     CHECK(std::find(recs.begin(), recs.end(), "magic") != recs.end());
     CHECK(std::find(recs.begin(), recs.end(), "locomotion") == recs.end());
@@ -107,10 +107,10 @@ TEST_CASE("AnimationTagsPanel updates recommendations from query and persists ad
     animation_editor::AnimationTagsPanel panel;
     panel.set_document(document);
     panel.set_animation_id("idle");
-    AnimationTagsPanelTestAccess::refresh_pool(panel);
+    animation_editor::AnimationTagsPanelTestAccess::refresh_pool(panel);
 
-    AnimationTagsPanelTestAccess::set_query(panel, "com");
-    const auto& filtered = AnimationTagsPanelTestAccess::recommended_tags(panel);
+    animation_editor::AnimationTagsPanelTestAccess::set_query(panel, "com");
+    const auto& filtered = animation_editor::AnimationTagsPanelTestAccess::recommended_tags(panel);
     REQUIRE(!filtered.empty());
     CHECK(filtered.front() == "com");
     CHECK(std::find(filtered.begin(), filtered.end(), "combat") != filtered.end());
@@ -120,14 +120,14 @@ TEST_CASE("AnimationTagsPanel updates recommendations from query and persists ad
         callback_tags = tags;
     });
 
-    AnimationTagsPanelTestAccess::add_tag(panel, "combat");
+    animation_editor::AnimationTagsPanelTestAccess::add_tag(panel, "combat");
     auto payload = document->animation_payload_json("idle");
     REQUIRE(payload.has_value());
     REQUIRE(payload->contains("tags"));
     CHECK(json_string_array_contains((*payload)["tags"], "combat"));
     CHECK(std::find(callback_tags.begin(), callback_tags.end(), "combat") != callback_tags.end());
 
-    AnimationTagsPanelTestAccess::remove_tag(panel, "combat");
+    animation_editor::AnimationTagsPanelTestAccess::remove_tag(panel, "combat");
     payload = document->animation_payload_json("idle");
     REQUIRE(payload.has_value());
     CHECK_FALSE(json_string_array_contains((*payload)["tags"], "combat"));

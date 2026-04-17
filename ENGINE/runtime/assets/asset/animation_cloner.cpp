@@ -127,7 +127,6 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.total_dy         = source.total_dy;
     dest.total_dz         = source.total_dz;
     dest.audio_clip       = source.audio_clip;
-    dest.tags.clear();
 
     const std::size_t frame_count   = source.frame_cache_.size();
     const std::size_t variant_count = dest.variant_steps_.size();

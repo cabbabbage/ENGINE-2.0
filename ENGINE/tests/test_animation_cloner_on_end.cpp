@@ -170,6 +170,21 @@ TEST_CASE("AnimationCloner inherits source on_end and directive when enabled") {
     CHECK(destination.on_end_behavior == Animation::OnEndDirective::Animation);
 }
 
+TEST_CASE("AnimationCloner preserves destination tags and does not inherit source tags") {
+    Animation source = make_single_frame_animation();
+    Animation destination = make_single_frame_animation();
+
+    source.tags = {"source_only", "shared"};
+    destination.tags = {"derived_only", "shared"};
+
+    AssetInfo info("test_asset");
+    AnimationCloner::Options options{};
+
+    REQUIRE(AnimationCloner::Clone(source, destination, options, sentinel_renderer(), info));
+    CHECK(destination.tags == std::vector<std::string>{"derived_only", "shared"});
+    CHECK(std::find(destination.tags.begin(), destination.tags.end(), "source_only") == destination.tags.end());
+}
+
 TEST_CASE("AnimationCloner preserves source base texture dimensions") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());

@@ -20,6 +20,7 @@ class AnimationDocument;
 class AnimationTagsPanel {
   public:
     AnimationTagsPanel();
+    ~AnimationTagsPanel();
 
     void set_document(std::shared_ptr<AnimationDocument> document);
     void set_animation_id(const std::string& animation_id);

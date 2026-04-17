@@ -172,6 +172,8 @@ class AnimationInspectorPanel {
     mutable SDL_Rect scrollbar_thumb_{0, 0, 0, 0};
     mutable bool layout_dirty_ = true;
     mutable bool scrollbar_visible_ = false;
+    bool scrollbar_dragging_ = false;
+    int scrollbar_drag_offset_y_ = 0;
     mutable std::string preview_signature_;
     mutable bool preview_reverse_ = false;
     bool rename_pending_ = false;

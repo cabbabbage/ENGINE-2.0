@@ -1019,6 +1019,9 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
                 if (!result.changed) {
                     return;
                 }
+                if (properties.contains("tags")) {
+                    tag_utils::notify_tags_changed();
+                }
 
                 const RuntimeRefreshScope refresh_scope = result.structural
                     ? RuntimeRefreshScope::StructuralWithDependents

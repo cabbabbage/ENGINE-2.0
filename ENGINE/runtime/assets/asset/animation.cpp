@@ -325,6 +325,7 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     variant_steps_ = source.variant_steps_;
     render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps_);
     locked = source.locked;
+    tags.clear();
     const std::size_t frame_count = source.frame_cache_.size();
     const std::size_t variant_count = variant_steps_.size();
 

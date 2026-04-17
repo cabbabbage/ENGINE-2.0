@@ -18,6 +18,14 @@ void AnimationUpdate::move_3d(const axis::WorldPos&, const std::string&, bool, b
 }
 
 void AnimationUpdate::set_animation(const std::string&) {}
+std::optional<std::string> AnimationUpdate::resolve_animation_by_tags(const std::vector<std::string>&,
+                                                                      const std::vector<std::string>&) const {
+    return std::nullopt;
+}
+bool AnimationUpdate::set_animation_by_tags(const std::vector<std::string>&,
+                                            const std::vector<std::string>&) {
+    return false;
+}
 
 void AnimationUpdate::auto_move(const std::vector<SDL_Point>&, int, std::optional<int>, bool) {}
 void AnimationUpdate::auto_move(SDL_Point, int, std::optional<int>, bool) {}

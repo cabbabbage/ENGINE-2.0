@@ -4,9 +4,12 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <optional>
+#include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -22,6 +25,7 @@
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/grid_point.hpp"
+#include "utils/utils/string_utils.hpp"
 #include "utils/grid.hpp"
 #include "utils/area.hpp"
 #include "utils/log.hpp"
@@ -97,6 +101,30 @@ int bounded_step_toward(int delta, int max_step) {
     const int positive_step = std::max(1, max_step);
     const int magnitude = std::min(std::abs(delta), positive_step);
     return (delta > 0) ? magnitude : -magnitude;
+}
+
+std::vector<std::string> normalize_tag_list(const std::vector<std::string>& input) {
+    std::vector<std::string> normalized;
+    normalized.reserve(input.size());
+    std::unordered_set<std::string> seen;
+    seen.reserve(input.size());
+
+    for (const std::string& raw : input) {
+        std::string canonical = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw));
+        if (canonical.empty()) {
+            continue;
+        }
+        if (seen.insert(canonical).second) {
+            normalized.push_back(std::move(canonical));
+        }
+    }
+
+    return normalized;
+}
+
+std::mt19937& tag_selection_rng() {
+    static std::mt19937 rng{std::random_device{}()};
+    return rng;
 }
 
 }
@@ -884,4 +912,68 @@ void AnimationUpdate::set_animation(const std::string& animation_id) {
         return;
     }
     runtime_->switch_to(animation_id, path_index_for(animation_id));
+}
+
+std::optional<std::string> AnimationUpdate::resolve_animation_by_tags(
+    const std::vector<std::string>& required_tags,
+    const std::vector<std::string>& excluded_tags) const {
+    if (!self_ || !self_->info) {
+        return std::nullopt;
+    }
+
+    const std::vector<std::string> required = normalize_tag_list(required_tags);
+    const std::vector<std::string> excluded = normalize_tag_list(excluded_tags);
+    std::vector<const std::string*> candidates;
+
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        if (!animation.has_frames()) {
+            continue;
+        }
+
+        bool excluded_match = false;
+        for (const std::string& exclude_tag : excluded) {
+            if (std::find(animation.tags.begin(), animation.tags.end(), exclude_tag) != animation.tags.end()) {
+                excluded_match = true;
+                break;
+            }
+        }
+        if (excluded_match) {
+            continue;
+        }
+
+        bool required_match = true;
+        for (const std::string& required_tag : required) {
+            if (std::find(animation.tags.begin(), animation.tags.end(), required_tag) == animation.tags.end()) {
+                required_match = false;
+                break;
+            }
+        }
+        if (!required_match) {
+            continue;
+        }
+
+        candidates.push_back(&animation_id);
+    }
+
+    if (candidates.empty()) {
+        return std::nullopt;
+    }
+
+    std::uniform_int_distribution<std::size_t> pick(0, candidates.size() - 1);
+    return *candidates[pick(tag_selection_rng())];
+}
+
+bool AnimationUpdate::set_animation_by_tags(const std::vector<std::string>& required_tags,
+                                            const std::vector<std::string>& excluded_tags) {
+    if (!runtime_) {
+        return false;
+    }
+
+    const std::optional<std::string> resolved = resolve_animation_by_tags(required_tags, excluded_tags);
+    if (!resolved.has_value()) {
+        return false;
+    }
+
+    set_animation(*resolved);
+    return true;
 }

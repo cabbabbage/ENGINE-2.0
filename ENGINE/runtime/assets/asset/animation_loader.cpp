@@ -24,6 +24,7 @@
 #include <chrono>
 #include <limits>
 #include <memory>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <iterator>
@@ -88,6 +89,55 @@ std::string source_animation_id(const Animation& animation) {
 
 bool animation_inherits_data(const Animation& animation) {
         return animation.inherit_data && !source_animation_id(animation).empty();
+}
+
+std::string normalize_tag_value(std::string_view raw) {
+        const auto begin = std::find_if_not(raw.begin(), raw.end(), [](unsigned char ch) {
+                return std::isspace(ch) != 0;
+        });
+        const auto end = std::find_if_not(raw.rbegin(), raw.rend(), [](unsigned char ch) {
+                return std::isspace(ch) != 0;
+        }).base();
+        if (begin >= end) {
+                return {};
+        }
+
+        std::string normalized(begin, end);
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+        });
+        return normalized;
+}
+
+std::vector<std::string> parse_animation_tags(const nlohmann::json& payload) {
+        std::vector<std::string> tags;
+        std::unordered_set<std::string> seen;
+        if (!payload.is_object() || !payload.contains("tags")) {
+                return tags;
+        }
+
+        auto append_tag = [&](const nlohmann::json& node) {
+                if (!node.is_string()) {
+                        return;
+                }
+                std::string normalized = normalize_tag_value(node.get<std::string>());
+                if (normalized.empty()) {
+                        return;
+                }
+                if (seen.insert(normalized).second) {
+                        tags.push_back(std::move(normalized));
+                }
+        };
+
+        const nlohmann::json& tag_node = payload["tags"];
+        if (tag_node.is_array()) {
+                for (const auto& entry : tag_node) {
+                        append_tag(entry);
+                }
+        } else {
+                append_tag(tag_node);
+        }
+        return tags;
 }
 
 void apply_movement_transforms(std::vector<std::vector<AnimationFrame>>& paths,
@@ -1031,6 +1081,7 @@ void AnimationLoader::load(Animation& animation,
         const Animation* source_animation_ptr = nullptr;
         animation.clear_texture_cache();
         animation.variant_steps_.clear();
+        animation.tags.clear();
         enforce_canonical_variant_layout(animation.variant_steps_);
         (void)root_cache;
 
@@ -1046,6 +1097,7 @@ void AnimationLoader::load(Animation& animation,
                         animation.source.name = read_string_field_like(s, "name", std::string{});
                 } catch (...) { animation.source.name.clear(); }
         }
+        animation.tags = parse_animation_tags(anim_json);
 
         if (animation.source.kind == "animation" && !animation.source.name.empty()) {
                 auto it = info.animations.find(animation.source.name);

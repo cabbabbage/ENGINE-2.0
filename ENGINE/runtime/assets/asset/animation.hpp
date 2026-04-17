@@ -100,6 +100,7 @@ public:
     OnEndDirective on_end_behavior = OnEndDirective::Default;
     bool randomize = false;
     bool frozen = false;
+    std::vector<std::string> tags;
     SDL_Texture* preview_texture = nullptr;
     bool has_frames(std::size_t path_index = 0) const;
     std::size_t frame_count(std::size_t path_index = 0) const;

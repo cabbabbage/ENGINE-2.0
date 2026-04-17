@@ -350,6 +350,7 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     if (should_show_on_end_section(document_.get(), animation_id_)) {
         add_section(on_end_selector_.get());
     }
+    add_section(tags_panel_.get());
     add_section(audio_panel_.get());
 
     total += padding;
@@ -387,6 +388,7 @@ void AnimationInspectorPanel::update() {
 
     if (playback_settings_) playback_settings_->update();
     if (on_end_selector_ && show_on_end) on_end_selector_->update();
+    if (tags_panel_) tags_panel_->update();
     if (audio_panel_) audio_panel_->update();
     notify_payload_change_if_needed();
 }
@@ -442,6 +444,10 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
         if (on_end_selector_ && should_show_on_end_section(document_.get(), animation_id_)) {
             draw_section_header(renderer, on_end_header_rect_, "On End");
             on_end_selector_->render(renderer);
+        }
+        if (tags_panel_) {
+            draw_section_header(renderer, tags_header_rect_, "Tags");
+            tags_panel_->render(renderer);
         }
         if (audio_panel_) {
             draw_section_header(renderer, audio_header_rect_, "Audio");
@@ -589,6 +595,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
     if (on_end_selector_ &&
         should_show_on_end_section(document_.get(), animation_id_) &&
         on_end_selector_->handle_event(e)) handled = true;
+    if (tags_panel_ && tags_panel_->handle_event(e)) handled = true;
     if (audio_panel_ && audio_panel_->handle_event(e)) handled = true;
 
     if (was_editing && name_box_ && !name_box_->is_editing()) {
@@ -709,6 +716,15 @@ void AnimationInspectorPanel::rebuild_widgets() {
     }
     audio_panel_->set_document(document_);
     audio_panel_->set_animation_id(animation_id_);
+
+    if (!tags_panel_) {
+        tags_panel_ = std::make_unique<AnimationTagsPanel>();
+    }
+    tags_panel_->set_document(document_);
+    tags_panel_->set_animation_id(animation_id_);
+    tags_panel_->set_on_tags_changed([this](const std::vector<std::string>&) {
+        notify_payload_change_if_needed(true);
+    });
 
     rename_pending_ = false;
     refresh_start_indicator();
@@ -855,6 +871,7 @@ void AnimationInspectorPanel::layout_widgets() const {
             on_end_selector_->set_bounds(self->on_end_rect_);
         }
     }
+    place_static_section(tags_panel_.get(), self->tags_header_rect_, self->tags_rect_, self->tags_section_rect_);
     place_static_section(audio_panel_.get(), self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
 
     self->content_height_ = cursor.logical_y + padding - content_top;
@@ -1107,6 +1124,9 @@ void AnimationInspectorPanel::apply_dependencies() {
     if (audio_panel_) {
         audio_panel_->set_importer(audio_importer_);
         audio_panel_->set_file_picker(audio_file_picker_);
+    }
+    if (tags_panel_) {
+        tags_panel_->set_status_callback(status_callback_);
     }
 
     notify_payload_change_if_needed(true);

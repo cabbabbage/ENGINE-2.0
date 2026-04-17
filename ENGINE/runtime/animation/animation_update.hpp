@@ -86,6 +86,10 @@ public:
     void move_3d(const axis::WorldPos& delta, const std::string& animation, bool resort_z = true, bool override_non_locked = true);
 
     void set_animation(const std::string& animation_id);
+    std::optional<std::string> resolve_animation_by_tags(const std::vector<std::string>& required_tags,
+                                                         const std::vector<std::string>& excluded_tags) const;
+    bool set_animation_by_tags(const std::vector<std::string>& required_tags,
+                               const std::vector<std::string>& excluded_tags);
     void begin_reverse_current_animation_until_stop();
     void begin_reverse_current_animation_to_default();
     void stop_reverse_current_animation();

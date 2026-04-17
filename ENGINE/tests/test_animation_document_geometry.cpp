@@ -290,6 +290,43 @@ TEST_CASE("AnimationDocument create_animation emits on_end without loop") {
     CHECK_FALSE(payload->contains("loop"));
 }
 
+TEST_CASE("AnimationDocument canonicalizes animation tags and keeps local derived tags") {
+    animation_editor::AnimationDocument document;
+    const nlohmann::json manifest = {
+        {"animations",
+         {
+             {"base",
+              {
+                  {"source", {{"kind", "folder"}, {"path", "base"}, {"name", ""}}},
+                  {"number_of_frames", 2},
+                  {"tags", nlohmann::json::array({" Run ", "run", "Combat"})},
+              }},
+             {"derived",
+              {
+                  {"source", {{"kind", "animation"}, {"path", ""}, {"name", "base"}}},
+                  {"number_of_frames", 2},
+                  {"inherit_data", true},
+                  {"tags", nlohmann::json::array({" Variant ", "combat", "variant"})},
+              }},
+         }},
+    };
+
+    document.load_from_manifest(manifest, std::filesystem::path{}, nullptr);
+
+    const auto base_payload = document.animation_payload_json("base");
+    REQUIRE(base_payload.has_value());
+    REQUIRE(base_payload->is_object());
+    REQUIRE(base_payload->contains("tags"));
+    CHECK((*base_payload)["tags"] == nlohmann::json::array({"run", "combat"}));
+
+    const auto derived_payload = document.animation_payload_json("derived");
+    REQUIRE(derived_payload.has_value());
+    REQUIRE(derived_payload->is_object());
+    REQUIRE(derived_payload->contains("tags"));
+    CHECK((*derived_payload)["tags"] == nlohmann::json::array({"variant", "combat"}));
+    CHECK((*derived_payload)["inherit_data"] == true);
+}
+
 TEST_CASE("AnimationDocument clears dirty state only when no newer edits exist") {
     animation_editor::AnimationDocument document;
     const nlohmann::json manifest = {

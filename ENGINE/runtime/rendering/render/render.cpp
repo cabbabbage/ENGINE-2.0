@@ -562,9 +562,9 @@ std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layer
 std::vector<int> foreground_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index) {
     std::vector<int> result;
     result.reserve(non_empty_layers.size());
-    for (int layer_index : non_empty_layers) {
-        if (layer_index < player_layer_index) {
-            result.push_back(layer_index);
+    for (auto it = non_empty_layers.rbegin(); it != non_empty_layers.rend(); ++it) {
+        if (*it < player_layer_index) {
+            result.push_back(*it);
         }
     }
     return result;

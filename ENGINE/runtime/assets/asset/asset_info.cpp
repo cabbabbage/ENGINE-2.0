@@ -164,30 +164,62 @@ std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json&
     return boxes;
 }
 
+AssetInfo::FloorBox sanitize_floor_box_for_save(const AssetInfo::FloorBox& raw_box,
+                                                std::size_t index,
+                                                std::unordered_set<std::string>& used_ids,
+                                                bool& boundary_claimed) {
+    AssetInfo::FloorBox sanitized{};
+
+    std::string base_id = sanitize_floor_box_token(trim_copy(raw_box.id));
+    if (base_id.empty()) {
+        base_id = default_floor_box_id(index);
+    }
+    std::string unique_id = base_id;
+    for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
+        unique_id = base_id + "_" + std::to_string(suffix);
+    }
+    sanitized.id = std::move(unique_id);
+
+    sanitized.name = trim_copy(raw_box.name);
+    if (sanitized.name.empty()) {
+        sanitized.name = default_floor_box_name(index);
+    }
+
+    sanitized.is_boundary = raw_box.is_boundary;
+    if (sanitized.is_boundary) {
+        if (boundary_claimed) {
+            sanitized.is_boundary = false;
+        } else {
+            boundary_claimed = true;
+        }
+    }
+
+    sanitized.position_x = sanitize_finite_float(raw_box.position_x, 0.0f);
+    sanitized.position_z = sanitize_finite_float(raw_box.position_z, 0.0f);
+    sanitized.width = std::max(0.0f, sanitize_finite_float(raw_box.width, 0.0f));
+    sanitized.depth = std::max(0.0f, sanitize_finite_float(raw_box.depth, 0.0f));
+    sanitized.rotation_degrees = sanitize_finite_float(raw_box.rotation_degrees, 0.0f);
+    sanitized.enabled = raw_box.enabled;
+    return sanitized;
+}
+
 nlohmann::json encode_floor_boxes_payload(const std::vector<AssetInfo::FloorBox>& boxes) {
     nlohmann::json payload = nlohmann::json::array();
+    std::unordered_set<std::string> used_ids;
+    used_ids.reserve(boxes.size());
     bool boundary_claimed = false;
-    for (const auto& box : boxes) {
-        if (box.id.empty() || box.name.empty()) {
-            continue;
-        }
+    for (std::size_t index = 0; index < boxes.size(); ++index) {
+        const AssetInfo::FloorBox box =
+            sanitize_floor_box_for_save(boxes[index], index, used_ids, boundary_claimed);
         nlohmann::json entry = nlohmann::json::object();
         entry["id"] = box.id;
         entry["name"] = box.name;
-        bool is_boundary = box.is_boundary;
-        if (is_boundary) {
-            if (boundary_claimed) {
-                is_boundary = false;
-            } else {
-                boundary_claimed = true;
-            }
-        }
-        entry["is_boundary"] = is_boundary;
-        entry["position_x"] = sanitize_finite_float(box.position_x, 0.0f);
-        entry["position_z"] = sanitize_finite_float(box.position_z, 0.0f);
-        entry["width"] = std::max(0.0f, sanitize_finite_float(box.width, 0.0f));
-        entry["depth"] = std::max(0.0f, sanitize_finite_float(box.depth, 0.0f));
-        entry["rotation_degrees"] = sanitize_finite_float(box.rotation_degrees, 0.0f);
+        entry["is_boundary"] = box.is_boundary;
+        entry["position_x"] = box.position_x;
+        entry["position_z"] = box.position_z;
+        entry["width"] = box.width;
+        entry["depth"] = box.depth;
+        entry["rotation_degrees"] = box.rotation_degrees;
         entry["enabled"] = box.enabled;
         payload.push_back(std::move(entry));
     }
@@ -2513,7 +2545,12 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         floor_boxes.clear();
         if (floor_boxes_enabled && data.contains(kFloorBoxesKey) && data[kFloorBoxesKey].is_array()) {
                 floor_boxes = parse_floor_boxes_payload(data[kFloorBoxesKey]);
-                info_json_[kFloorBoxesKey] = encode_floor_boxes_payload(floor_boxes);
+                const nlohmann::json floor_payload = encode_floor_boxes_payload(floor_boxes);
+                if (!floor_payload.empty()) {
+                        info_json_[kFloorBoxesKey] = floor_payload;
+                } else {
+                        info_json_.erase(kFloorBoxesKey);
+                }
         } else {
                 info_json_.erase(kFloorBoxesKey);
         }

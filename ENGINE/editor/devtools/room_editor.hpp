@@ -21,6 +21,7 @@
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
+#include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
 #include "devtools/room_oval_tools_panel.hpp"
 #include "devtools/room_selection_filter_utils.hpp"
@@ -47,6 +48,7 @@ class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
 class RoomOvalToolsPanel;
+class RoomFloorBoxToolsPanel;
 class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
 class DevFooterBar;
@@ -435,6 +437,7 @@ private:
     void ensure_movement_editor_widgets();
     void ensure_hitbox_editor_widgets();
     void ensure_attack_box_editor_widgets();
+    void ensure_floor_box_editor_widgets();
     void ensure_attack_payload_editor_widget();
     void update_asset_editor_layout();
     bool should_show_asset_editor_navigation() const;
@@ -444,6 +447,7 @@ private:
     bool movement_mode_active() const;
     bool hitbox_mode_active() const;
     bool attack_box_mode_active() const;
+    bool floor_box_mode_active() const;
     bool is_asset_pointer_live(const Asset* asset) const;
     Asset* selected_anchor_mode_asset() const;
     AssetEditorSubview next_asset_editor_subview(AssetEditorSubview subview) const;
@@ -469,16 +473,20 @@ private:
     void exit_hitbox_edit_mode(bool persist_changes);
     bool enter_attack_box_edit_mode();
     void exit_attack_box_edit_mode(bool persist_changes);
+    bool enter_floor_box_edit_mode();
+    void exit_floor_box_edit_mode(bool persist_changes);
     void validate_anchor_edit_target();
     void validate_oval_edit_target();
     void validate_movement_edit_target();
     void validate_hitbox_edit_target();
     void validate_attack_box_edit_target();
+    void validate_floor_box_edit_target();
     bool is_anchor_ui_blocking_point(int x, int y) const;
     bool is_oval_ui_blocking_point(int x, int y) const;
     bool is_movement_ui_blocking_point(int x, int y) const;
     bool is_hitbox_ui_blocking_point(int x, int y) const;
     bool is_attack_box_ui_blocking_point(int x, int y) const;
+    bool is_floor_box_ui_blocking_point(int x, int y) const;
     bool any_editor_point_selected() const;
     enum class EditorFramePropagationScope {
         NextFrame,
@@ -543,6 +551,7 @@ private:
     void sync_hitbox_tools_panel();
     void sync_attack_box_tools_panel();
     void sync_attack_payload_editor();
+    void sync_floor_box_tools_panel();
     void ensure_anchor_selection_valid();
     bool anchor_visible_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
     bool anchor_mutable_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
@@ -563,6 +572,7 @@ private:
     bool set_movement_system_enabled(bool enabled);
     bool set_hitbox_system_enabled(bool enabled);
     bool set_attack_box_system_enabled(bool enabled);
+    bool set_floor_box_system_enabled(bool enabled);
     void refresh_movement_editor_selection(bool reset_drag_state);
     int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
     bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;
@@ -668,6 +678,13 @@ private:
     bool apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
     bool apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
     bool apply_attack_payload_editor_update(const animation_update::AttackPayload& payload);
+    bool add_floor_box();
+    bool delete_selected_floor_box();
+    bool apply_floor_box_panel_detail_update(const RoomFloorBoxToolsPanel::DetailValues& values);
+    bool persist_floor_boxes(devmode::core::DevSaveCoordinator::Priority priority,
+                             bool flush_now,
+                             const char* reason,
+                             const char* flush_tag);
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
@@ -722,6 +739,7 @@ private:
         MovementEdit,
         HitBoxEdit,
         AttackBoxEdit,
+        FloorBoxEdit,
     };
 
     enum class AssetEditorSubview {
@@ -733,6 +751,7 @@ private:
         Movement,
         Hitbox,
         AttackBox,
+        FloorBoxes,
     };
 
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
@@ -747,6 +766,7 @@ private:
     std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;
+    std::unique_ptr<RoomFloorBoxToolsPanel> floor_box_tools_panel_;
     std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
 
@@ -888,6 +908,13 @@ private:
     };
     BoxEditState hitbox_edit_;
     BoxEditState attack_box_edit_;
+
+    struct FloorBoxEditState {
+        Asset* target_asset = nullptr;
+        int selected_box_index = -1;
+        bool dirty_since_last_flush = false;
+    };
+    FloorBoxEditState floor_box_edit_;
 
     struct AssetEditorTransitionState {
         bool active = false;

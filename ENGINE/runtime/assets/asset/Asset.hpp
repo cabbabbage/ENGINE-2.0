@@ -242,6 +242,8 @@ class Asset {
     bool set_directional_target_world_xz(float world_x, float world_z);
     void clear_directional_target_world_xz();
     bool has_directional_target_world_xz() const { return directional_target_valid_; }
+    float directional_target_world_x() const { return directional_target_world_x_; }
+    float directional_target_world_z() const { return directional_target_world_z_; }
     void set_render_anchor_offset(float x, float y, float z);
     void clear_render_anchor_offset();
     float render_anchor_offset_x() const { return render_anchor_offset_x_; }

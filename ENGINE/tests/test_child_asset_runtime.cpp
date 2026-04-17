@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -172,6 +173,52 @@ AssetInfo::AnchorChildPointCandidate make_anchor_child_candidate_raw_entry(const
     entry.anchor_point_name = anchor_name;
     entry.candidates = std::move(candidates_payload);
     return entry;
+}
+
+void configure_test_animation_path(Asset& asset,
+                                   const std::vector<std::array<int, 3>>& frame_deltas) {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.reserve(frame_deltas.size());
+    for (const auto& delta : frame_deltas) {
+        AnimationFrame frame{};
+        frame.dx = delta[0];
+        frame.dy = delta[1];
+        frame.dz = delta[2];
+        path.push_back(frame);
+    }
+
+    asset.info->animations.clear();
+    asset.info->animations["default"] = std::move(animation);
+    asset.current_animation = "default";
+
+    Animation& stored_animation = asset.info->animations["default"];
+    auto& stored_path = stored_animation.movement_path(0);
+    for (std::size_t idx = 0; idx < stored_path.size(); ++idx) {
+        AnimationFrame& frame = stored_path[idx];
+        frame.frame_index = static_cast<int>(idx);
+        frame.is_first = (idx == 0);
+        frame.is_last = (idx + 1 == stored_path.size());
+        frame.prev = (idx > 0) ? &stored_path[idx - 1] : nullptr;
+        frame.next = (idx + 1 < stored_path.size()) ? &stored_path[idx + 1] : nullptr;
+    }
+    asset.current_frame = stored_path.empty() ? nullptr : &stored_path.front();
+}
+
+void set_current_frame_index(Asset& asset, std::size_t index) {
+    auto animation_it = asset.info->animations.find(asset.current_animation);
+    if (animation_it == asset.info->animations.end()) {
+        asset.current_frame = nullptr;
+        return;
+    }
+    auto& path = animation_it->second.movement_path(0);
+    if (path.empty()) {
+        asset.current_frame = nullptr;
+        return;
+    }
+    const std::size_t clamped = std::min(index, path.size() - 1);
+    asset.current_frame = &path[clamped];
 }
 
 std::optional<double> normalized_anchor_candidate_chance(const nlohmann::json& normalized_entry,
@@ -756,6 +803,99 @@ TEST_CASE("ChildAsset applies anchor flip and rotation overrides to spawned chil
     CHECK_FALSE(spawned->has_anchor_sprite_transform_override());
     CHECK(spawned->effective_render_flip() == SDL_FLIP_NONE);
     CHECK(spawned->effective_render_angle() == doctest::Approx(0.0));
+}
+
+TEST_CASE("ChildAsset rotates oval child movement displacement by owner directional heading") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
+    REQUIRE(owner != nullptr);
+
+    owner->info->oval_anchor_mappings.clear();
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "vibble_eyes";
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 2, 3, 4, 0, 0, 0.0f, true});
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    configure_test_animation_path(*spawned,
+                                  {
+                                      std::array<int, 3>{0, 0, 0},
+                                      std::array<int, 3>{4, 2, 1},
+                                  });
+    set_current_frame_index(*spawned, 1);
+
+    constexpr float kPi = 3.14159265358979323846f;
+    REQUIRE(owner->set_directional_heading_radians(kPi * 0.5f));
+    child->update();
+
+    // Anchor world = owner(10,15,20) + offset(2,3,4) => (12,18,24).
+    // Child displacement frame = (dx,dy,dz) = (4,2,1). At +90° yaw, rotated XZ = (-1,4).
+    CHECK(spawned->world_x() == 11);
+    CHECK(spawned->world_y() == 20);
+    CHECK(spawned->world_z() == 28);
+}
+
+TEST_CASE("ChildAsset keeps unrotated displacement when oval heading is unavailable") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
+    REQUIRE(owner != nullptr);
+
+    owner->info->oval_anchor_mappings.clear();
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "vibble_eyes";
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 2, 3, 4, 0, 0, 0.0f, true});
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    configure_test_animation_path(*spawned,
+                                  {
+                                      std::array<int, 3>{0, 0, 0},
+                                      std::array<int, 3>{4, 2, 1},
+                                  });
+    set_current_frame_index(*spawned, 1);
+
+    // No heading set -> preserve previous behavior (no oval displacement rotation).
+    child->update();
+
+    CHECK(spawned->world_x() == 16);
+    CHECK(spawned->world_y() == 20);
+    CHECK(spawned->world_z() == 25);
 }
 
 TEST_CASE("ChildAsset lifecycle controls visibility, one-shot placement, unbind, and deletion") {

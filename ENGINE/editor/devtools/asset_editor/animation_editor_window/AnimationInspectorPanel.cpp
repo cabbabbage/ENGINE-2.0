@@ -395,6 +395,11 @@ void AnimationInspectorPanel::update() {
 
 void AnimationInspectorPanel::apply_dropdown_selections() {
     if (source_config_) {
+        if (source_config_animation_id_ != animation_id_) {
+            source_config_->set_document(document_);
+            source_config_->set_animation_id(animation_id_);
+            source_config_animation_id_ = animation_id_;
+        }
         source_config_->commit_animation_dropdown_selection();
     }
     notify_payload_change_if_needed();
@@ -635,6 +640,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
 
 void AnimationInspectorPanel::rebuild_widgets() {
     widget_registry_.reset();
+    source_config_animation_id_.clear();
 
     if (!document_ || animation_id_.empty()) {
         return;
@@ -685,6 +691,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
     }
     source_config_->set_document(document_);
     source_config_->set_animation_id(animation_id_);
+    source_config_animation_id_ = animation_id_;
     source_uses_animation_ = source_config_->use_animation_reference();
 
     if (!source_frames_button_) {

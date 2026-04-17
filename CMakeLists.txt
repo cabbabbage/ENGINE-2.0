@@ -297,6 +297,7 @@ add_executable(engine_tests
     ENGINE/tests/test_asset_perspective_sample.cpp
     ENGINE/tests/test_animation_runtime_ownership.cpp
     ENGINE/tests/test_animation_cloner_on_end.cpp
+    ENGINE/tests/test_source_config_panel_regressions.cpp
     ENGINE/tests/test_auto_move_zero_stride_recovery.cpp
     ENGINE/tests/test_auto_move_3d_pathing.cpp
     ENGINE/tests/test_scaling_logic_variants.cpp

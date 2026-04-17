@@ -1317,6 +1317,9 @@ void AnimationLoader::load(Animation& animation,
                                 opts.flip_horizontal = animation.invert_frames_horizontal;
                                 opts.flip_vertical   = false;
                                 opts.reverse_frames  = animation.reverse_source;
+                                opts.invert_movement_x = animation.inherit_data && animation.invert_x;
+                                opts.invert_movement_y = animation.inherit_data && animation.invert_y;
+                                opts.invert_movement_z = animation.inherit_data && animation.invert_z;
                                 opts.inherit_on_end_from_source = animation.inherit_data;
 
                                 if (!AnimationCloner::Clone(src_anim, animation, opts, renderer, info)) {
@@ -1356,6 +1359,9 @@ void AnimationLoader::load(Animation& animation,
                         opts.flip_horizontal = animation.invert_frames_horizontal;
                         opts.flip_vertical   = false;
                         opts.reverse_frames  = animation.reverse_source;
+                        opts.invert_movement_x = animation.inherit_data && animation.invert_x;
+                        opts.invert_movement_y = animation.inherit_data && animation.invert_y;
+                        opts.invert_movement_z = animation.inherit_data && animation.invert_z;
                         opts.inherit_on_end_from_source = animation.inherit_data;
                         std::cout << "[AnimationLoader] " << info.name << "::" << trigger
                                   << " late-cloning from source animation '" << animation.source.name

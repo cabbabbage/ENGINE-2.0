@@ -1,6 +1,7 @@
 #include "child_asset.hpp"
 
 #include "animation/controllers/shared/anchored_child_placement.hpp"
+#include "animation/controllers/shared/oval_anchor_heading.hpp"
 #include "assets/asset/Asset.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "core/AssetsManager.hpp"
@@ -39,6 +40,7 @@ double desired_render_depth_bias(const AnchorPoint& anchor, int quantized_world_
 }
 
 anchor_points::AnchorWorldPoint3 child_anchor_world_displacement(const AnchorPoint& parent_anchor,
+                                                                  Asset* owner_asset,
                                                                   const Asset* child_asset) {
     anchor_points::AnchorWorldPoint3 displacement{};
     if (!child_asset) {
@@ -53,12 +55,20 @@ anchor_points::AnchorWorldPoint3 child_anchor_world_displacement(const AnchorPoi
 
     float displacement_x = cumulative.dx;
     float displacement_y = cumulative.dy;
-    const float displacement_z = cumulative.dz;
+    float displacement_z = cumulative.dz;
+
+    // Preserve existing operation ordering: movement sampling -> flip parity -> optional oval heading
+    // rotation around world Y (XZ plane only).
     if (parent_anchor.flip_horizontal) {
         displacement_x = -displacement_x;
     }
     if (parent_anchor.flip_vertical) {
         displacement_y = -displacement_y;
+    }
+    const std::optional<float> heading_radians =
+        oval_anchor_heading::resolve_effective_oval_heading_radians(owner_asset, parent_anchor);
+    if (heading_radians.has_value()) {
+        oval_anchor_heading::rotate_xz_about_world_y(*heading_radians, displacement_x, displacement_z);
     }
 
     displacement = anchor_points::AnchorWorldPoint3{
@@ -352,7 +362,7 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
         (owner_ && owner_->grid_point()) ? owner_->grid_point()->resolution_layer() : child_->grid_resolution;
     placement_input.anchor_definition.anchor = parent_anchor;
     const anchor_points::AnchorWorldPoint3 anchor_displacement =
-        child_anchor_world_displacement(parent_anchor, child_);
+        child_anchor_world_displacement(parent_anchor, owner_, child_);
     if (anchor_displacement.valid) {
         placement_input.anchor_world_displacement.x = anchor_displacement.x;
         placement_input.anchor_world_displacement.y = anchor_displacement.y;

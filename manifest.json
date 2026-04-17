@@ -18728,12 +18728,37 @@
               0,
               0,
               0
+            ],
+            [
+              -16,
+              0,
+              39
+            ],
+            [
+              -17,
+              0,
+              21
+            ],
+            [
+              -19,
+              0,
+              -12
+            ],
+            [
+              -23,
+              0,
+              -42
+            ],
+            [
+              -9,
+              0,
+              -66
             ]
           ],
           "movement_total": {
-            "dx": 0,
+            "dx": -84,
             "dy": 0,
-            "dz": 0
+            "dz": -60.0
           },
           "number_of_frames": 1,
           "on_end": "reverse",
@@ -18758,7 +18783,7 @@
           "invert_frames_vertical": false,
           "invert_x": true,
           "invert_y": false,
-          "invert_z": false,
+          "invert_z": true,
           "number_of_frames": 1,
           "on_end": "reverse",
           "reverse_source": false,
@@ -18806,9 +18831,7 @@
             "name": "",
             "path": "default"
           },
-          "tags": [
-            "right"
-          ]
+          "tags": []
         },
         "left": {
           "derived_modifiers": {

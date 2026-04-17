@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <utility>
+#include <vector>
 
 #include "asset_info.hpp"
 #include "rendering/render/scaling_logic.hpp"
@@ -99,6 +100,46 @@ TBox transform_box_corners(TBox box,
     return box;
 }
 
+void apply_movement_transforms(std::vector<std::vector<AnimationFrame>>& movement_paths,
+                               bool                                      reverse_frames,
+                               bool                                      invert_x,
+                               bool                                      invert_y,
+                               bool                                      invert_z) {
+    if (reverse_frames) {
+        for (auto& path : movement_paths) {
+            std::reverse(path.begin(), path.end());
+        }
+    }
+    for (auto& path : movement_paths) {
+        for (auto& frame : path) {
+            if (invert_x) frame.dx = -frame.dx;
+            if (invert_y) frame.dy = -frame.dy;
+            if (invert_z) frame.dz = -frame.dz;
+        }
+    }
+}
+
+void recompute_movement_totals(Animation& animation) {
+    animation.total_dx = 0;
+    animation.total_dy = 0;
+    animation.total_dz = 0;
+    animation.movment = false;
+
+    if (animation.movement_path_count() == 0) {
+        return;
+    }
+
+    const auto& primary_path = animation.movement_path(0);
+    for (const auto& frame : primary_path) {
+        animation.total_dx += frame.dx;
+        animation.total_dy += frame.dy;
+        animation.total_dz += frame.dz;
+        if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
+            animation.movment = true;
+        }
+    }
+}
+
 }
 
 bool AnimationCloner::Clone(const Animation& source,
@@ -122,10 +163,6 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.randomize        = source.randomize;
     dest.rnd_start        = source.rnd_start;
     dest.frozen           = source.frozen;
-    dest.movment          = source.movment;
-    dest.total_dx         = source.total_dx;
-    dest.total_dy         = source.total_dy;
-    dest.total_dz         = source.total_dz;
     dest.audio_clip       = source.audio_clip;
 
     const std::size_t frame_count   = source.frame_cache_.size();
@@ -173,6 +210,22 @@ bool AnimationCloner::Clone(const Animation& source,
     }
 
     dest.number_of_frames = static_cast<int>(frame_count);
+    std::vector<std::vector<AnimationFrame>> cloned_movement_paths;
+    cloned_movement_paths.reserve(source.movement_path_count());
+    for (std::size_t path_index = 0; path_index < source.movement_path_count(); ++path_index) {
+        cloned_movement_paths.push_back(source.movement_path(path_index));
+    }
+    if (cloned_movement_paths.empty()) {
+        cloned_movement_paths.emplace_back();
+    }
+
+    apply_movement_transforms(cloned_movement_paths,
+                              opts.reverse_frames,
+                              opts.invert_movement_x,
+                              opts.invert_movement_y,
+                              opts.invert_movement_z);
+    dest.replace_movement_paths(std::move(cloned_movement_paths));
+    recompute_movement_totals(dest);
 
     dest.synchronize_runtime_frames();
 

@@ -8,6 +8,7 @@
 #include "assets/asset/animation_frame.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/anchored_child_placement.hpp"
+#include "animation/controllers/shared/oval_anchor_heading.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -94,6 +95,7 @@ void draw_circle_outline(SDL_Renderer* renderer,
 }
 
 anchor_points::AnchorWorldPoint3 debug_child_anchor_world_displacement(const AnchorPoint& parent_anchor,
+                                                                       Asset* owner_asset,
                                                                        const Asset* child_asset) {
     anchor_points::AnchorWorldPoint3 displacement{};
     if (!child_asset) {
@@ -107,12 +109,17 @@ anchor_points::AnchorWorldPoint3 debug_child_anchor_world_displacement(const Anc
 
     float displacement_x = cumulative.dx;
     float displacement_y = cumulative.dy;
-    const float displacement_z = cumulative.dz;
+    float displacement_z = cumulative.dz;
     if (parent_anchor.flip_horizontal) {
         displacement_x = -displacement_x;
     }
     if (parent_anchor.flip_vertical) {
         displacement_y = -displacement_y;
+    }
+    const std::optional<float> heading_radians =
+        oval_anchor_heading::resolve_effective_oval_heading_radians(owner_asset, parent_anchor);
+    if (heading_radians.has_value()) {
+        oval_anchor_heading::rotate_xz_about_world_y(*heading_radians, displacement_x, displacement_z);
     }
 
     displacement = anchor_points::AnchorWorldPoint3{
@@ -270,7 +277,7 @@ void DebugOverlayRenderer::render_anchor_debug(const WarpedScreenGrid& cam,
             owner->grid_point() ? owner->grid_point()->resolution_layer() : owner->grid_resolution;
         expected_input.anchor_definition.anchor = *anchor;
         const anchor_points::AnchorWorldPoint3 anchor_displacement =
-            debug_child_anchor_world_displacement(*anchor, child);
+            debug_child_anchor_world_displacement(*anchor, owner, child);
         if (anchor_displacement.valid) {
             expected_input.anchor_world_displacement.x = anchor_displacement.x;
             expected_input.anchor_world_displacement.y = anchor_displacement.y;

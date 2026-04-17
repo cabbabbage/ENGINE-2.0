@@ -101,7 +101,7 @@ class SourceConfigPanel {
     void update_status(const std::string& message) const;
     void refresh_animation_options();
     void apply_animation_selection();
-    void clear_derived_fields();
+    bool apply_animation_selection_for_id(const std::string& expected_animation_id);
     void render_animation_preview(SDL_Renderer* renderer) const;
 
     void import_from_folder();
@@ -143,6 +143,7 @@ class SourceConfigPanel {
     bool use_animation_reference_ = false;
     std::vector<std::string> animation_options_;
     int animation_index_ = -1;
+    std::string animation_dropdown_owner_id_;
     std::string animation_ids_signature_;
     std::optional<std::uint64_t> animation_ids_revision_;
     std::vector<std::string> previous_animation_options_;

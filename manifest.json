@@ -18726,9 +18726,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
-            117,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -19122,16 +19122,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1162,
-          "camera_center_dz": -698,
-          "camera_height_px": 138,
-          "camera_tilt_deg": 21.593772888183594,
+          "camera_center_dx": -1045,
+          "camera_center_dz": -1153,
+          "camera_height_px": 287,
+          "camera_tilt_deg": 22.861263275146484,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            203,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 101,

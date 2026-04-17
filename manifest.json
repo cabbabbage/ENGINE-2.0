@@ -13219,14 +13219,39 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/fountain",
       "asset_name": "fountain",
       "attack_box_enabled": false,
-      "floor_boxes_enabled": false,
+      "floor_boxes": [
+        {
+          "depth": 128.0,
+          "enabled": true,
+          "id": "floor_box",
+          "is_boundary": false,
+          "name": "Floor Box",
+          "position_x": 0.0,
+          "position_z": 0.0,
+          "rotation_degrees": 0.0,
+          "width": 128.0
+        },
+        {
+          "depth": 128.0,
+          "enabled": true,
+          "id": "floor_box_1",
+          "is_boundary": false,
+          "name": "Floor Box 2",
+          "position_x": 0.0,
+          "position_z": 0.0,
+          "rotation_degrees": 0.0,
+          "width": 128.0
+        }
+      ],
+      "floor_boxes_enabled": true,
       "hitbox_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
@@ -18763,6 +18788,54 @@
             "left"
           ]
         },
+        "attack_left": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "attack",
+            "path": ""
+          },
+          "tags": [
+            "attack",
+            "right"
+          ]
+        },
+        "attack_right": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "attack",
+            "path": ""
+          },
+          "tags": [
+            "attack",
+            "right"
+          ]
+        },
         "default": {
           "anchor_points": [
             []
@@ -19229,9 +19302,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            114,
-            242,
             36,
+            242,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -19632,9 +19705,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            31,
+            32,
             204,
-            31,
-            31,
             255
           ],
           "edge_smoothness": 101,

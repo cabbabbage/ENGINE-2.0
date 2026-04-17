@@ -326,9 +326,7 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
     const bool has_selected_oval = selected_oval_index_ >= 0 &&
                                    selected_oval_index_ < static_cast<int>(oval_names_.size());
     const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
-    const bool has_selected_point = !has_selected_center &&
-                                    selected_point_index_ >= 0 &&
-                                    selected_point_index_ < point_count_;
+    const bool has_selected_point = false;
 
     layout_oval_buttons();
 
@@ -555,9 +553,7 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
     const bool has_selected_oval = selected_oval_index_ >= 0 &&
                                    selected_oval_index_ < static_cast<int>(oval_names_.size());
     const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
-    const bool has_selected_point = !has_selected_center &&
-                                    selected_point_index_ >= 0 &&
-                                    selected_point_index_ < point_count_;
+    const bool has_selected_point = false;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color bg = DMStyles::PanelBG();
@@ -762,9 +758,7 @@ void RoomOvalToolsPanel::update_layout() const {
     const bool has_selected_oval = selected_oval_index_ >= 0 &&
                                    selected_oval_index_ < static_cast<int>(oval_names_.size());
     const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
-    const bool has_selected_point = !has_selected_center &&
-                                    selected_point_index_ >= 0 &&
-                                    selected_point_index_ < point_count_;
+    const bool has_selected_point = false;
 
     const int safe_w = std::max(screen_w_, 360);
     const int safe_h = std::max(screen_h_, 420);

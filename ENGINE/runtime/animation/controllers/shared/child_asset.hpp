@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "assets/asset/anchor_point.hpp"
 
@@ -58,4 +59,7 @@ private:
     bool auto_hidden_for_anchor_ = true;
     bool has_successful_sync_ = false;
     bool spawn_warning_logged_ = false;
+    bool last_tag_criteria_initialized_ = false;
+    std::vector<std::string> last_required_tags_;
+    std::vector<std::string> last_excluded_tags_;
 };

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace world { struct GridPoint; }
 
@@ -143,6 +144,8 @@ struct DisplacedAssetAnchorPoint {
     bool        hidden = false;
     bool        resolve_x = true;
     AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+    std::vector<std::string> tags;
+    std::vector<std::string> anti_tags;
     bool        has_light_data = false;
     AnchorLightData light{};
 
@@ -205,6 +208,8 @@ struct AnchorPoint {
     bool hidden = false;
     bool resolve_x = true;
     AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+    std::vector<std::string> tags;
+    std::vector<std::string> anti_tags;
     SDL_FPoint screen_pos_2d{0.0f, 0.0f};
     Vec2 relative_pos_2d{};
     Vec2 world_pos_2d{}; // exact world-space anchor position (render-facing)

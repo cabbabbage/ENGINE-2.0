@@ -7,12 +7,31 @@
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
+#include "utils/string_utils.hpp"
 
 #include <cmath>
 #include <optional>
+#include <unordered_set>
 #include <utility>
 
 namespace {
+
+std::vector<std::string> normalize_tag_list(const std::vector<std::string>& values) {
+    std::vector<std::string> normalized;
+    normalized.reserve(values.size());
+    std::unordered_set<std::string> seen;
+    seen.reserve(values.size());
+    for (const std::string& raw : values) {
+        std::string token = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw));
+        if (token.empty()) {
+            continue;
+        }
+        if (seen.insert(token).second) {
+            normalized.push_back(std::move(token));
+        }
+    }
+    return normalized;
+}
 
 double desired_render_depth_bias(const AnchorPoint& anchor, int quantized_world_z) {
     return render_depth::bias_for_quantized_depth(anchor.world_depth,
@@ -307,6 +326,24 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
         return changed;
     }
 
+    const std::vector<std::string> required_tags = normalize_tag_list(parent_anchor.tags);
+    const std::vector<std::string> excluded_tags = normalize_tag_list(parent_anchor.anti_tags);
+    const bool has_tag_criteria = !required_tags.empty() || !excluded_tags.empty();
+    if (!has_tag_criteria) {
+        last_tag_criteria_initialized_ = false;
+        last_required_tags_.clear();
+        last_excluded_tags_.clear();
+    } else if (!last_tag_criteria_initialized_ ||
+               required_tags != last_required_tags_ ||
+               excluded_tags != last_excluded_tags_) {
+        if (child_ && child_->anim_) {
+            (void)child_->anim_->set_animation_by_tags(required_tags, excluded_tags);
+        }
+        last_required_tags_ = required_tags;
+        last_excluded_tags_ = excluded_tags;
+        last_tag_criteria_initialized_ = true;
+    }
+
     anchored_child_placement::PlacementInput placement_input{};
     placement_input.parent.world_x = owner_ ? static_cast<float>(owner_->world_x()) : 0.0f;
     placement_input.parent.world_y = owner_ ? static_cast<float>(owner_->world_y()) : 0.0f;
@@ -585,6 +622,9 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     auto_hidden_for_anchor_ = other.auto_hidden_for_anchor_;
     has_successful_sync_ = other.has_successful_sync_;
     spawn_warning_logged_ = other.spawn_warning_logged_;
+    last_tag_criteria_initialized_ = other.last_tag_criteria_initialized_;
+    last_required_tags_ = std::move(other.last_required_tags_);
+    last_excluded_tags_ = std::move(other.last_excluded_tags_);
     other.asset_name_.clear();
     other.owner_ = nullptr;
     other.assets_ = nullptr;
@@ -595,6 +635,9 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     other.auto_hidden_for_anchor_ = true;
     other.has_successful_sync_ = false;
     other.spawn_warning_logged_ = false;
+    other.last_tag_criteria_initialized_ = false;
+    other.last_required_tags_.clear();
+    other.last_excluded_tags_.clear();
     if (bound_) {
         register_anchor_binding();
     }

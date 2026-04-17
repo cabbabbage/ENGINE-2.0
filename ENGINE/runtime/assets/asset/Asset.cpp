@@ -274,6 +274,8 @@ std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_headi
     synthesized.hidden = nearest.hidden;
     synthesized.resolve_x = nearest.resolve_x;
     synthesized.scaling_method = nearest.scaling_method;
+    synthesized.tags = nearest.tags;
+    synthesized.anti_tags = nearest.anti_tags;
     return synthesized;
 }
 
@@ -1972,6 +1974,8 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         resolved.hidden = anchor_present ? frame_anchor->hidden : false;
         resolved.resolve_x = anchor_present ? frame_anchor->resolve_x : true;
         resolved.scaling_method = anchor_present ? frame_anchor->scaling_method : AnchorScalingMethod::Parent;
+        resolved.tags = anchor_present ? frame_anchor->tags : std::vector<std::string>{};
+        resolved.anti_tags = anchor_present ? frame_anchor->anti_tags : std::vector<std::string>{};
 
         if (resolved.exists) {
                 resolved.world_pos_2d = handle.world_exact_pos_2d;
@@ -2199,6 +2203,8 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                         resolved.hidden = synthesized_anchor->hidden;
                         resolved.resolve_x = synthesized_anchor->resolve_x;
                         resolved.scaling_method = synthesized_anchor->scaling_method;
+                        resolved.tags = synthesized_anchor->tags;
+                        resolved.anti_tags = synthesized_anchor->anti_tags;
                         resolved.world_pos_2d = Vec2{final_point.x, final_point.y};
                         resolved.world_exact_pos_2d = resolved.world_pos_2d;
                         resolved.flat_world_pos_2d = Vec2{flat_point.x, flat_point.y};

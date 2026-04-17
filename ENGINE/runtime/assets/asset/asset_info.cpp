@@ -80,6 +80,50 @@ std::string trim_copy(std::string value) {
     return std::string(begin_it, end_it);
 }
 
+std::string normalize_tag_token(std::string value) {
+    value = trim_copy(std::move(value));
+    if (value.empty()) {
+        return {};
+    }
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+std::vector<std::string> normalize_tag_list(const std::vector<std::string>& raw_values) {
+    std::vector<std::string> normalized;
+    normalized.reserve(raw_values.size());
+    std::unordered_set<std::string> seen;
+    seen.reserve(raw_values.size());
+    for (const std::string& raw : raw_values) {
+        std::string token = normalize_tag_token(raw);
+        if (token.empty()) {
+            continue;
+        }
+        if (seen.insert(token).second) {
+            normalized.push_back(std::move(token));
+        }
+    }
+    return normalized;
+}
+
+std::vector<std::string> parse_normalized_tag_list(const nlohmann::json& payload) {
+    std::vector<std::string> raw;
+    if (payload.is_array()) {
+        raw.reserve(payload.size());
+        for (const auto& entry : payload) {
+            if (!entry.is_string()) {
+                continue;
+            }
+            raw.push_back(entry.get<std::string>());
+        }
+    } else if (payload.is_string()) {
+        raw.push_back(payload.get<std::string>());
+    }
+    return normalize_tag_list(raw);
+}
+
 std::string sanitize_floor_box_token(std::string value) {
     std::string out;
     out.reserve(value.size());
@@ -489,6 +533,8 @@ void normalize_and_sort_oval_points(std::vector<AssetInfo::OvalAnchorPoint>& poi
         if (!std::isfinite(point.depth_offset)) {
             point.depth_offset = 0.0f;
         }
+        point.tags = normalize_tag_list(point.tags);
+        point.anti_tags = normalize_tag_list(point.anti_tags);
     }
 
     std::sort(points.begin(),
@@ -674,6 +720,12 @@ AssetInfo::OvalAnchorPoint normalize_oval_anchor_point(const nlohmann::json& pay
             payload["scaling_method"].get<std::string>(),
             AnchorScalingMethod::Parent);
     }
+    if (payload.contains("tags")) {
+        point.tags = parse_normalized_tag_list(payload["tags"]);
+    }
+    if (payload.contains("anti_tags")) {
+        point.anti_tags = parse_normalized_tag_list(payload["anti_tags"]);
+    }
     recompute_oval_point_position(point, width_radius_x, height_radius_z);
     return point;
 }
@@ -777,6 +829,8 @@ nlohmann::json encode_oval_anchor_point(const AssetInfo::OvalAnchorPoint& point)
     encoded["hidden"] = point.hidden;
     encoded["resolve_x"] = point.resolve_x;
     encoded["scaling_method"] = std::string(anchor_points::anchor_scaling_method_to_token(point.scaling_method));
+    encoded["tags"] = normalize_tag_list(point.tags);
+    encoded["anti_tags"] = normalize_tag_list(point.anti_tags);
     return encoded;
 }
 
@@ -2693,6 +2747,8 @@ void AssetInfo::set_oval_anchor_mappings_payload(const nlohmann::json& mappings)
         for (auto& point : mapping.points) {
             point.angle_degrees = normalize_angle_degrees(point.angle_degrees);
             recompute_oval_point_position(point, mapping.width_radius_x, mapping.height_radius_z);
+            point.tags = normalize_tag_list(point.tags);
+            point.anti_tags = normalize_tag_list(point.anti_tags);
         }
     }
     ensure_oval_center_anchors_for_all_mappings();
@@ -2733,6 +2789,8 @@ bool AssetInfo::upsert_oval_anchor_mapping(const OvalAnchorMapping& mapping) {
                 point.depth_offset = 0.0f;
             }
             recompute_oval_point_position(point, normalized.width_radius_x, normalized.height_radius_z);
+            point.tags = normalize_tag_list(point.tags);
+            point.anti_tags = normalize_tag_list(point.anti_tags);
         }
         normalize_and_sort_oval_points(normalized.points);
         if (normalized.points.empty()) {

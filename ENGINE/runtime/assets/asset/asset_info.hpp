@@ -114,6 +114,8 @@ class AssetInfo {
         bool hidden = false;
         bool resolve_x = true;
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+        std::vector<std::string> tags;
+        std::vector<std::string> anti_tags;
     };
 
     struct OvalAnchorMapping {

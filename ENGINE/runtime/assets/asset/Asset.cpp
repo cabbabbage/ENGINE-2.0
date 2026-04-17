@@ -3,7 +3,7 @@
 #include "animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/render.hpp"
+#include "rendering/render/scaling_logic.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_payload.hpp"
@@ -1604,9 +1604,6 @@ void Asset::deactivate() {
 
 void Asset::clear_render_caches() {
     mesh_dirty_ = true;
-    for (auto& obj : render_package) {
-        obj.mesh_dirty = true;
-    }
 }
 
 void Asset::invalidate_downscale_cache() {

@@ -18506,7 +18506,7 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "front_layer_light_strength_multiplier": 2.4099998474121094,
         "layer_depth_curve": 96.40999603271484,
         "layer_depth_interval": 292.0,
@@ -18670,7 +18670,7 @@
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 6159.0,
+          "ring_radius": 15159.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -18679,10 +18679,42 @@
               "required_children": []
             }
           ]
+        },
+        {
+          "bounding_extent": 2330.3252991803524,
+          "level": 2,
+          "max_rooms": 15,
+          "min_rooms": 8,
+          "name": "layer_2",
+          "ring_radius": 35362.15790073287,
+          "rooms": [
+            {
+              "max_instances": 15,
+              "min_instances": 8,
+              "name": "NewRoom",
+              "required_children": []
+            }
+          ]
+        },
+        {
+          "bounding_extent": 2330.3252991803524,
+          "level": 3,
+          "max_rooms": 25,
+          "min_rooms": 10,
+          "name": "layer_3",
+          "ring_radius": 58543.6893598971,
+          "rooms": [
+            {
+              "max_instances": 25,
+              "min_instances": 10,
+              "name": "NewRoom",
+              "required_children": []
+            }
+          ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 1000
+        "min_edge_distance": 10000
       },
       "map_name": "forrest",
       "rooms_data": {
@@ -18694,8 +18726,8 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            167,
             242,
+            36,
             36,
             255
           ],
@@ -19090,16 +19122,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -653,
-          "camera_center_dz": -667,
-          "camera_height_px": 434,
-          "camera_tilt_deg": 45.79377365112305,
+          "camera_center_dx": -1162,
+          "camera_center_dz": -698,
+          "camera_height_px": 138,
+          "camera_tilt_deg": 21.593772888183594,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
+            242,
             85,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 101,

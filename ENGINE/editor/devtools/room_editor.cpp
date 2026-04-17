@@ -45,6 +45,8 @@
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/render_object.hpp"
+#include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "core/axis_convention.hpp"
@@ -6187,13 +6189,15 @@ bool RoomEditor::ensure_spatial_index(const WarpedScreenGrid& cam) const {
     return !spatial_index_dirty_;
 }
 
-bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam,
-                                                     Asset* asset,
-                                                     SDL_Rect& out_rect) const {
+bool RoomEditor::compute_asset_render_object_bounds(const WarpedScreenGrid& cam,
+                                                    Asset* asset,
+                                                    SDL_Rect& out_rect) const {
     if (!asset) {
         return false;
     }
-    if (asset->render_package.empty()) {
+
+    RenderObject obj{};
+    if (!render_build::build_direct_asset_render_object(asset, obj)) {
         return false;
     }
 
@@ -6210,11 +6214,7 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
             ? gp->perspective_scale()
             : 1.0f;
 
-    for (const auto& obj : asset->render_package) {
-        if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
-            continue;
-        }
-
+    if (obj.screen_rect.w > 0 && obj.screen_rect.h > 0) {
         const float object_world_z = base_depth + obj.world_z_offset;
         render_projection::ProjectedSpriteFrame projection{};
         if (build_render_object_projection(cam, obj, perspective_scale, object_world_z, projection)) {
@@ -6234,38 +6234,39 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
                 max_x = std::max(max_x, obj_max_x);
                 max_y = std::max(max_y, obj_max_y);
                 have_bounds = true;
-                continue;
             }
         }
 
-        SDL_FPoint world_point{
-            static_cast<float>(obj.screen_rect.x),
-            static_cast<float>(obj.screen_rect.y)
-        };
-        if (!cam.project_world_point(world_point, object_world_z, base_screen)) {
-            continue;
-        }
-        const float half_width = static_cast<float>(obj.screen_rect.w) * 0.5f;
-        const float height = static_cast<float>(obj.screen_rect.h);
-        if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y) ||
-            !std::isfinite(half_width) || !std::isfinite(height)) {
-            continue;
-        }
+        if (!have_bounds) {
+            SDL_FPoint world_point{
+                static_cast<float>(obj.screen_rect.x),
+                static_cast<float>(obj.screen_rect.y)
+            };
+            if (!cam.project_world_point(world_point, object_world_z, base_screen)) {
+                return false;
+            }
+            const float half_width = static_cast<float>(obj.screen_rect.w) * 0.5f;
+            const float height = static_cast<float>(obj.screen_rect.h);
+            if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y) ||
+                !std::isfinite(half_width) || !std::isfinite(height)) {
+                return false;
+            }
 
-        const float left = base_screen.x - half_width;
-        const float right = base_screen.x + half_width;
-        const float top = base_screen.y - height;
-        const float bottom = base_screen.y;
-        if (!std::isfinite(left) || !std::isfinite(right) ||
-            !std::isfinite(top) || !std::isfinite(bottom)) {
-            continue;
-        }
+            const float left = base_screen.x - half_width;
+            const float right = base_screen.x + half_width;
+            const float top = base_screen.y - height;
+            const float bottom = base_screen.y;
+            if (!std::isfinite(left) || !std::isfinite(right) ||
+                !std::isfinite(top) || !std::isfinite(bottom)) {
+                return false;
+            }
 
-        min_x = std::min(min_x, left);
-        min_y = std::min(min_y, top);
-        max_x = std::max(max_x, right);
-        max_y = std::max(max_y, bottom);
-        have_bounds = true;
+            min_x = left;
+            min_y = top;
+            max_x = right;
+            max_y = bottom;
+            have_bounds = true;
+        }
     }
 
     if (!have_bounds) {
@@ -6301,7 +6302,7 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
         return false;
     }
 
-    if (compute_asset_render_package_bounds(cam, asset, out_rect)) {
+    if (compute_asset_render_object_bounds(cam, asset, out_rect)) {
         out_screen_y = static_cast<int>(std::lround(gp->screen_position().y));
         return true;
     }
@@ -18832,30 +18833,12 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
     };
 
     bool drew_mask = false;
-
-    SDL_Texture* base_texture = asset->get_current_frame();
-    for (const auto& obj : asset->render_package) {
-        // Only draw the primary sprite to avoid duplicating depth-cue/background layers.
-        if (base_texture) {
-            if (obj.texture != base_texture) {
-                continue;
-            }
-        } else {
-            // If no base texture, use the first render object only.
-            if (&obj != &asset->render_package.front()) {
-                continue;
-            }
-        }
-
+    RenderObject obj{};
+    if (render_build::build_direct_asset_render_object(asset, obj)) {
         SDL_FRect rect{};
-        if (!project_render_object_rect(obj, rect)) {
-            continue;
-        }
-        if (render_mask(obj.texture, rect, &obj)) {
+        if (project_render_object_rect(obj, rect) && render_mask(obj.texture, rect, &obj)) {
             drew_mask = true;
         }
-        // We only need one overlay draw.
-        break;
     }
 
     if (!drew_mask) {

@@ -6,7 +6,10 @@
 #include "rendering/render/blur_chain_renderer.hpp"
 #include "rendering/render/layer_stack_renderer.hpp"
 #include "rendering/render/layer_submission_builder.hpp"
+#include "rendering/render/render_object.hpp"
+#include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/scene_composite_pass.hpp"
+#include "rendering/render/render_texture_utils.hpp"
 #include "rendering/render/debug_overlay_renderer.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/log.hpp"
@@ -16,7 +19,6 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
-#include "assets/asset/animation_frame_variant.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
@@ -335,122 +337,6 @@ inline float ticks_to_seconds(Uint64 ticks) {
     return static_cast<float>(ticks) * 0.001f;
 }
 
-constexpr SDL_FPoint kBaseRenderPackageAnchorUv{0.5f, 1.0f};
-
-bool query_texture_size_direct(SDL_Texture* texture, int* out_w, int* out_h) {
-    if (!texture || !out_w || !out_h) {
-        return false;
-    }
-
-    float wf = 0.0f;
-    float hf = 0.0f;
-    if (!SDL_GetTextureSize(texture, &wf, &hf)) {
-        return false;
-    }
-
-    *out_w = std::max(1, static_cast<int>(std::lround(wf)));
-    *out_h = std::max(1, static_cast<int>(std::lround(hf)));
-    return true;
-}
-
-bool build_direct_asset_render_object(Asset* asset, RenderObject& out_object) {
-    out_object = RenderObject{};
-    if (!asset) {
-        return false;
-    }
-
-    SDL_Texture* base_tex = nullptr;
-    const FrameVariant* selected_variant = nullptr;
-
-    if (asset->info) {
-        auto anim_it = asset->info->animations.find(asset->current_animation);
-        if (anim_it != asset->info->animations.end() && asset->current_frame) {
-            const auto& variants = asset->current_frame->variants;
-            if (!variants.empty()) {
-                int variant_idx = std::clamp(asset->current_variant_index, 0, static_cast<int>(variants.size()) - 1);
-                const FrameVariant& variant = variants[static_cast<std::size_t>(variant_idx)];
-                selected_variant = &variant;
-                base_tex = variant.get_base_texture();
-            }
-        }
-    }
-
-    if (!base_tex) {
-        base_tex = asset->get_current_frame();
-    }
-    if (!base_tex) {
-        return false;
-    }
-
-    int texture_w = 0;
-    int texture_h = 0;
-    if (!query_texture_size_direct(base_tex, &texture_w, &texture_h)) {
-        return false;
-    }
-
-    SDL_Rect src_rect{0, 0, texture_w, texture_h};
-    bool has_src_rect = false;
-    int frame_w = texture_w;
-    int frame_h = texture_h;
-    if (selected_variant) {
-        if (selected_variant->source_rect.w > 0 && selected_variant->source_rect.h > 0) {
-            frame_w = selected_variant->source_rect.w;
-            frame_h = selected_variant->source_rect.h;
-            src_rect = selected_variant->source_rect;
-        }
-        has_src_rect = selected_variant->uses_atlas;
-    }
-
-    float remainder = asset->current_remaining_scale_adjustment;
-    if (!std::isfinite(remainder) || remainder <= 0.0f) {
-        remainder = 1.0f;
-    }
-
-    int final_w = static_cast<int>(std::lround(static_cast<float>(frame_w) * remainder));
-    int final_h = static_cast<int>(std::lround(static_cast<float>(frame_h) * remainder));
-    final_w = std::max(1, final_w);
-    final_h = std::max(1, final_h);
-
-    const float world_anchor_x = asset->smoothed_translation_x() + asset->render_anchor_offset_x();
-    const float world_anchor_y = asset->smoothed_translation_y() + asset->render_anchor_offset_y();
-    const float world_anchor_z_offset = asset->world_z_offset() + asset->render_anchor_offset_z();
-    const SDL_FlipMode base_flip = asset->effective_render_flip();
-    const double base_angle = asset->effective_render_angle();
-    const Uint8 asset_alpha = static_cast<Uint8>(std::lround(
-        std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
-
-    out_object.texture = base_tex;
-    out_object.screen_rect = SDL_Rect{
-        static_cast<int>(std::lround(world_anchor_x)),
-        static_cast<int>(std::lround(world_anchor_y)),
-        final_w,
-        final_h
-    };
-    out_object.world_anchor_x = world_anchor_x;
-    out_object.world_anchor_y = world_anchor_y;
-    out_object.color_mod = SDL_Color{255, 255, 255, asset_alpha};
-    out_object.blend_mode = SDL_BLENDMODE_BLEND;
-    out_object.angle = base_angle;
-    out_object.center = SDL_Point{0, 0};
-    out_object.use_custom_center = false;
-    out_object.flip = base_flip;
-    out_object.texture_w = frame_w;
-    out_object.texture_h = frame_h;
-    out_object.has_texture_size = (frame_w > 0 && frame_h > 0);
-    out_object.atlas_w = texture_w;
-    out_object.atlas_h = texture_h;
-    out_object.has_atlas_size = (texture_w > 0 && texture_h > 0);
-    out_object.dimension_cache_texture = base_tex;
-    out_object.world_z_offset = world_anchor_z_offset;
-    out_object.projection_anchor_uv = kBaseRenderPackageAnchorUv;
-    if (has_src_rect) {
-        out_object.has_src_rect = true;
-        out_object.src_rect = src_rect;
-    }
-
-    return true;
-}
-
 } // namespace
 
 namespace render_internal {
@@ -682,53 +568,6 @@ std::vector<int> foreground_chain_layers(const std::vector<int>& non_empty_layer
         }
     }
     return result;
-}
-
-bool composite_dof_layers_to_gameplay_target(SDL_Renderer* renderer,
-                                             SDL_Texture* gameplay_target,
-                                             const std::vector<SDL_Texture*>& final_layer_textures,
-                                             const std::vector<int>& non_empty_layers) {
-    if (!renderer || !gameplay_target) {
-        return false;
-    }
-    SDL_SetRenderTarget(renderer, gameplay_target);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    for (auto it = non_empty_layers.rbegin(); it != non_empty_layers.rend(); ++it) {
-        const int layer_index = *it;
-        if (layer_index < 0 || static_cast<std::size_t>(layer_index) >= final_layer_textures.size()) {
-            continue;
-        }
-        if (SDL_Texture* layer_texture = final_layer_textures[static_cast<std::size_t>(layer_index)]) {
-            SDL_RenderTexture(renderer, layer_texture, nullptr, nullptr);
-        }
-    }
-    return true;
-}
-
-bool composite_scene_mid_layers(SDL_Renderer* renderer,
-                                SDL_Texture* gameplay_target,
-                                SDL_Texture* background_mid,
-                                SDL_Texture* foreground_mid) {
-    if (!renderer || !gameplay_target) {
-        return false;
-    }
-    SDL_SetRenderTarget(renderer, gameplay_target);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-    if (background_mid) {
-        SDL_SetTextureBlendMode(background_mid, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(background_mid, 255);
-        SDL_SetTextureColorMod(background_mid, 255, 255, 255);
-        SDL_RenderTexture(renderer, background_mid, nullptr, nullptr);
-    }
-    if (foreground_mid) {
-        SDL_SetTextureBlendMode(foreground_mid, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(foreground_mid, 255);
-        SDL_SetTextureColorMod(foreground_mid, 255, 255, 255);
-        SDL_RenderTexture(renderer, foreground_mid, nullptr, nullptr);
-    }
-    return true;
 }
 
 } // namespace render_internal
@@ -1142,7 +981,7 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
             rendered_assets_for_debug.push_back(asset);
 
             RenderObject obj{};
-            if (!build_direct_asset_render_object(asset, obj)) {
+            if (!render_build::build_direct_asset_render_object(asset, obj)) {
                 continue;
             }
 
@@ -1500,10 +1339,7 @@ void SceneRenderer::render() {
     SDL_RenderClear(renderer_);
 
     if (floor_texture) {
-        SDL_SetTextureBlendMode(floor_texture, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(floor_texture, 255);
-        SDL_SetTextureColorMod(floor_texture, 255, 255, 255);
-        SDL_RenderTexture(renderer_, floor_texture, nullptr, nullptr);
+        render_texture_utils::draw_fullscreen_texture(renderer_, floor_texture);
     }
 
     const render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
@@ -1548,10 +1384,7 @@ void SceneRenderer::render() {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
     SDL_RenderClear(renderer_);
-    SDL_SetTextureBlendMode(scene_composite_tex_, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureAlphaMod(scene_composite_tex_, 255);
-    SDL_SetTextureColorMod(scene_composite_tex_, 255, 255, 255);
-    SDL_RenderTexture(renderer_, scene_composite_tex_, nullptr, nullptr);
+    render_texture_utils::draw_fullscreen_texture(renderer_, scene_composite_tex_);
 
     if (debug_overlay_renderer_) {
         if (realism.light_culling_debug_overlay) {

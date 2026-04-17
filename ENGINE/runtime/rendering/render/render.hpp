@@ -39,14 +39,6 @@ struct FloorLightContact {
     bool valid = false;
 };
 
-bool composite_dof_layers_to_gameplay_target(SDL_Renderer* renderer,
-                                             SDL_Texture* gameplay_target,
-                                             const std::vector<SDL_Texture*>& final_layer_textures,
-                                             const std::vector<int>& non_empty_layers);
-bool composite_scene_mid_layers(SDL_Renderer* renderer,
-                                SDL_Texture* gameplay_target,
-                                SDL_Texture* background_mid,
-                                SDL_Texture* foreground_mid);
 bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
                                     SDL_Texture* gameplay_target,
                                     SDL_Color clear_color);

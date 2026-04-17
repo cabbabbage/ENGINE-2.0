@@ -62,6 +62,11 @@ constexpr float kDefaultOvalHeightRadius = 24.0f;
 constexpr float kDefaultOvalRadiusOffsetDegrees = 0.0f;
 constexpr std::size_t kDefaultOvalPointCount = 8;
 constexpr const char* kOvalCenterSuffix = "_oval_center";
+constexpr const char* kMovementEnabledKey = "movement_enabled";
+constexpr const char* kAttackBoxEnabledKey = "attack_box_enabled";
+constexpr const char* kHitboxEnabledKey = "hitbox_enabled";
+constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
+constexpr const char* kFloorBoxesKey = "floor_boxes";
 
 std::string trim_copy(std::string value) {
     const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -73,6 +78,120 @@ std::string trim_copy(std::string value) {
         return {};
     }
     return std::string(begin_it, end_it);
+}
+
+std::string sanitize_floor_box_token(std::string value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        const unsigned char uch = static_cast<unsigned char>(ch);
+        if (std::isalnum(uch) != 0 || ch == '_' || ch == '-' || ch == '.') {
+            out.push_back(static_cast<char>(std::tolower(uch)));
+        } else if (std::isspace(uch) != 0) {
+            out.push_back('_');
+        }
+    }
+    return out;
+}
+
+std::string default_floor_box_id(std::size_t index) {
+    return std::string("floor_box_") + std::to_string(index + 1);
+}
+
+std::string default_floor_box_name(std::size_t index) {
+    return std::string("floor_box_") + std::to_string(index + 1);
+}
+
+float sanitize_finite_float(float value, float fallback = 0.0f) {
+    if (!std::isfinite(value)) {
+        return fallback;
+    }
+    return value;
+}
+
+std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json& payload) {
+    std::vector<AssetInfo::FloorBox> boxes;
+    if (!payload.is_array()) {
+        return boxes;
+    }
+
+    std::unordered_set<std::string> used_ids;
+    bool boundary_claimed = false;
+    boxes.reserve(payload.size());
+
+    for (std::size_t index = 0; index < payload.size(); ++index) {
+        const auto& entry = payload[index];
+        if (!entry.is_object()) {
+            continue;
+        }
+
+        AssetInfo::FloorBox box{};
+        box.id = sanitize_floor_box_token(entry.value("id", std::string{}));
+        if (box.id.empty()) {
+            box.id = default_floor_box_id(index);
+        }
+        std::string unique_id = box.id;
+        for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
+            unique_id = box.id + "_" + std::to_string(suffix);
+        }
+        box.id = unique_id;
+
+        box.name = trim_copy(entry.value("name", std::string{}));
+        if (box.name.empty()) {
+            box.name = default_floor_box_name(index);
+        }
+
+        box.is_boundary = entry.value("is_boundary", false);
+        box.position_x = sanitize_finite_float(entry.value("position_x", 0.0f), 0.0f);
+        box.position_z = sanitize_finite_float(entry.value("position_z", 0.0f), 0.0f);
+        box.width = std::max(0.0f, sanitize_finite_float(entry.value("width", 0.0f), 0.0f));
+        box.depth = std::max(0.0f, sanitize_finite_float(entry.value("depth", 0.0f), 0.0f));
+        box.rotation_degrees = sanitize_finite_float(entry.value("rotation_degrees", 0.0f), 0.0f);
+        box.enabled = entry.value("enabled", true);
+
+        // Deterministic single-boundary invariant: first surviving boundary wins.
+        if (box.is_boundary) {
+            if (boundary_claimed) {
+                box.is_boundary = false;
+            } else {
+                boundary_claimed = true;
+            }
+        }
+
+        boxes.push_back(std::move(box));
+    }
+
+    return boxes;
+}
+
+nlohmann::json encode_floor_boxes_payload(const std::vector<AssetInfo::FloorBox>& boxes) {
+    nlohmann::json payload = nlohmann::json::array();
+    bool boundary_claimed = false;
+    for (const auto& box : boxes) {
+        if (box.id.empty() || box.name.empty()) {
+            continue;
+        }
+        nlohmann::json entry = nlohmann::json::object();
+        entry["id"] = box.id;
+        entry["name"] = box.name;
+        bool is_boundary = box.is_boundary;
+        if (is_boundary) {
+            if (boundary_claimed) {
+                is_boundary = false;
+            } else {
+                boundary_claimed = true;
+            }
+        }
+        entry["is_boundary"] = is_boundary;
+        entry["position_x"] = sanitize_finite_float(box.position_x, 0.0f);
+        entry["position_z"] = sanitize_finite_float(box.position_z, 0.0f);
+        entry["width"] = std::max(0.0f, sanitize_finite_float(box.width, 0.0f));
+        entry["depth"] = std::max(0.0f, sanitize_finite_float(box.depth, 0.0f));
+        entry["rotation_degrees"] = sanitize_finite_float(box.rotation_degrees, 0.0f);
+        entry["enabled"] = box.enabled;
+        payload.push_back(std::move(entry));
+    }
+    return payload;
 }
 
 bool is_integral_number(double value) {
@@ -967,6 +1086,28 @@ nlohmann::json normalize_animation_payload(nlohmann::json payload) {
     }
 
     return payload;
+}
+
+void apply_system_enable_flags_to_animation_payload(nlohmann::json& payload,
+                                                    bool movement_enabled,
+                                                    bool hitbox_enabled,
+                                                    bool attack_box_enabled) {
+    if (!payload.is_object()) {
+        payload = nlohmann::json::object();
+        return;
+    }
+
+    if (!movement_enabled) {
+        payload.erase("movement");
+        payload.erase("movement_paths");
+        payload.erase("movement_total");
+    }
+    if (!hitbox_enabled) {
+        payload.erase("hit_boxes");
+    }
+    if (!attack_box_enabled) {
+        payload.erase("attack_boxes");
+    }
 }
 
 std::string source_value_string(const nlohmann::json& payload, const char* key) {
@@ -1879,10 +2020,35 @@ nlohmann::json AssetInfo::manifest_payload() const {
         if (!payload.is_object()) {
                 payload = nlohmann::json::object();
         }
+        payload[kMovementEnabledKey] = movement_enabled;
+        payload[kAttackBoxEnabledKey] = attack_box_enabled;
+        payload[kHitboxEnabledKey] = hitbox_enabled;
+        payload[kFloorBoxesEnabledKey] = floor_boxes_enabled;
+        if (floor_boxes_enabled) {
+                const nlohmann::json floor_payload = encode_floor_boxes_payload(floor_boxes);
+                if (!floor_payload.empty()) {
+                        payload[kFloorBoxesKey] = floor_payload;
+                } else {
+                        payload.erase(kFloorBoxesKey);
+                }
+        } else {
+                payload.erase(kFloorBoxesKey);
+        }
         payload["weight_kg"] = weight_kg;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
+        if (payload.contains("animations") && payload["animations"].is_object()) {
+                for (auto it = payload["animations"].begin(); it != payload["animations"].end(); ++it) {
+                        if (!it.value().is_object()) {
+                                continue;
+                        }
+                        apply_system_enable_flags_to_animation_payload(it.value(),
+                                                                       movement_enabled,
+                                                                       hitbox_enabled,
+                                                                       attack_box_enabled);
+                }
+        }
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
                 payload["asset_name"] = name;
         }
@@ -2262,7 +2428,12 @@ void AssetInfo::load_animations(const nlohmann::json& data) {
                 converted.erase("speed_multiplier");
                 converted.erase("fps");
             }
-            new_anim[it.key()] = normalize_animation_payload(std::move(converted));
+            nlohmann::json normalized = normalize_animation_payload(std::move(converted));
+            apply_system_enable_flags_to_animation_payload(normalized,
+                                                           movement_enabled,
+                                                           hitbox_enabled,
+                                                           attack_box_enabled);
+            new_anim[it.key()] = std::move(normalized);
         }
     }
 
@@ -2288,6 +2459,63 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         }
         if (!info_json_.contains("anti_tags") || !info_json_["anti_tags"].is_array()) {
                 info_json_["anti_tags"] = nlohmann::json::array();
+        }
+        const auto has_animation_payload_key = [&](const char* key) {
+                auto animations_it = data.find("animations");
+                if (animations_it == data.end() || !animations_it->is_object()) {
+                        return false;
+                }
+                for (auto it = animations_it->begin(); it != animations_it->end(); ++it) {
+                        if (!it.value().is_object()) {
+                                continue;
+                        }
+                        auto key_it = it.value().find(key);
+                        if (key_it == it.value().end()) {
+                                continue;
+                        }
+                        if (key_it->is_array()) {
+                                if (!key_it->empty()) {
+                                        return true;
+                                }
+                                continue;
+                        }
+                        if (!key_it->is_null()) {
+                                return true;
+                        }
+                }
+                return false;
+        };
+
+        const bool inferred_movement_enabled =
+            has_animation_payload_key("movement") || has_animation_payload_key("movement_paths");
+        const bool inferred_attack_box_enabled = has_animation_payload_key("attack_boxes");
+        const bool inferred_hitbox_enabled = has_animation_payload_key("hit_boxes");
+        const bool inferred_floor_boxes_enabled =
+            data.contains(kFloorBoxesKey) && data[kFloorBoxesKey].is_array() && !data[kFloorBoxesKey].empty();
+
+        movement_enabled = data.contains(kMovementEnabledKey) && data[kMovementEnabledKey].is_boolean()
+            ? data[kMovementEnabledKey].get<bool>()
+            : inferred_movement_enabled;
+        attack_box_enabled = data.contains(kAttackBoxEnabledKey) && data[kAttackBoxEnabledKey].is_boolean()
+            ? data[kAttackBoxEnabledKey].get<bool>()
+            : inferred_attack_box_enabled;
+        hitbox_enabled = data.contains(kHitboxEnabledKey) && data[kHitboxEnabledKey].is_boolean()
+            ? data[kHitboxEnabledKey].get<bool>()
+            : inferred_hitbox_enabled;
+        floor_boxes_enabled = data.contains(kFloorBoxesEnabledKey) && data[kFloorBoxesEnabledKey].is_boolean()
+            ? data[kFloorBoxesEnabledKey].get<bool>()
+            : inferred_floor_boxes_enabled;
+        info_json_[kMovementEnabledKey] = movement_enabled;
+        info_json_[kAttackBoxEnabledKey] = attack_box_enabled;
+        info_json_[kHitboxEnabledKey] = hitbox_enabled;
+        info_json_[kFloorBoxesEnabledKey] = floor_boxes_enabled;
+
+        floor_boxes.clear();
+        if (floor_boxes_enabled && data.contains(kFloorBoxesKey) && data[kFloorBoxesKey].is_array()) {
+                floor_boxes = parse_floor_boxes_payload(data[kFloorBoxesKey]);
+                info_json_[kFloorBoxesKey] = encode_floor_boxes_payload(floor_boxes);
+        } else {
+                info_json_.erase(kFloorBoxesKey);
         }
         if (data.contains(kAnchorPointChildCandidatesKey)) {
                 set_anchor_point_child_candidates_payload(data[kAnchorPointChildCandidatesKey]);
@@ -3218,6 +3446,10 @@ bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& 
 		}
 
 		nlohmann::json clean_payload = normalize_animation_payload(payload);
+		apply_system_enable_flags_to_animation_payload(clean_payload,
+		                                              movement_enabled,
+		                                              hitbox_enabled,
+		                                              attack_box_enabled);
 		if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
 			info_json_["animations"] = nlohmann::json::object();
 		}
@@ -3305,6 +3537,49 @@ bool AssetInfo::reload_animations_from_disk() {
             return false;
         }
 
+        const auto has_animation_payload_key = [&](const char* key) {
+            auto animations_it = payload.find("animations");
+            if (animations_it == payload.end() || !animations_it->is_object()) {
+                return false;
+            }
+            for (auto it = animations_it->begin(); it != animations_it->end(); ++it) {
+                if (!it.value().is_object()) {
+                    continue;
+                }
+                auto key_it = it.value().find(key);
+                if (key_it == it.value().end()) {
+                    continue;
+                }
+                if (key_it->is_array()) {
+                    if (!key_it->empty()) {
+                        return true;
+                    }
+                    continue;
+                }
+                if (!key_it->is_null()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        movement_enabled = payload.contains(kMovementEnabledKey) && payload[kMovementEnabledKey].is_boolean()
+            ? payload[kMovementEnabledKey].get<bool>()
+            : (has_animation_payload_key("movement") || has_animation_payload_key("movement_paths"));
+        attack_box_enabled = payload.contains(kAttackBoxEnabledKey) && payload[kAttackBoxEnabledKey].is_boolean()
+            ? payload[kAttackBoxEnabledKey].get<bool>()
+            : has_animation_payload_key("attack_boxes");
+        hitbox_enabled = payload.contains(kHitboxEnabledKey) && payload[kHitboxEnabledKey].is_boolean()
+            ? payload[kHitboxEnabledKey].get<bool>()
+            : has_animation_payload_key("hit_boxes");
+        floor_boxes_enabled = payload.contains(kFloorBoxesEnabledKey) && payload[kFloorBoxesEnabledKey].is_boolean()
+            ? payload[kFloorBoxesEnabledKey].get<bool>()
+            : (payload.contains(kFloorBoxesKey) && payload[kFloorBoxesKey].is_array() && !payload[kFloorBoxesKey].empty());
+        floor_boxes.clear();
+        if (floor_boxes_enabled && payload.contains(kFloorBoxesKey) && payload[kFloorBoxesKey].is_array()) {
+            floor_boxes = parse_floor_boxes_payload(payload[kFloorBoxesKey]);
+        }
+
         load_animations(payload);
 
         std::string new_start = start_animation;
@@ -3322,6 +3597,20 @@ bool AssetInfo::reload_animations_from_disk() {
         start_animation = new_start;
         if (!info_json_.is_object()) {
             info_json_ = nlohmann::json::object();
+        }
+        info_json_[kMovementEnabledKey] = movement_enabled;
+        info_json_[kAttackBoxEnabledKey] = attack_box_enabled;
+        info_json_[kHitboxEnabledKey] = hitbox_enabled;
+        info_json_[kFloorBoxesEnabledKey] = floor_boxes_enabled;
+        if (floor_boxes_enabled) {
+            const nlohmann::json floor_payload = encode_floor_boxes_payload(floor_boxes);
+            if (!floor_payload.empty()) {
+                info_json_[kFloorBoxesKey] = floor_payload;
+            } else {
+                info_json_.erase(kFloorBoxesKey);
+            }
+        } else {
+            info_json_.erase(kFloorBoxesKey);
         }
         info_json_["start"] = start_animation;
         return true;
@@ -3377,6 +3666,10 @@ AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed
                 }
             }
         }
+        apply_system_enable_flags_to_animation_payload(updated_animation,
+                                                       movement_enabled,
+                                                       hitbox_enabled,
+                                                       attack_box_enabled);
 
         const bool should_set_start =
             properties.contains("start") && properties["start"].is_boolean() && properties["start"].get<bool>();

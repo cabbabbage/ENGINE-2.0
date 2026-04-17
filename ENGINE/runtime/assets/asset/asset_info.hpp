@@ -131,7 +131,23 @@ class AssetInfo {
     };
     std::vector<OvalAnchorMapping> oval_anchor_mappings;
 
-    bool moving_asset = false;
+    struct FloorBox {
+        std::string id;
+        std::string name;
+        bool is_boundary = false;
+        float position_x = 0.0f;
+        float position_z = 0.0f;
+        float width = 0.0f;
+        float depth = 0.0f;
+        float rotation_degrees = 0.0f;
+        bool enabled = true;
+    };
+
+    bool movement_enabled = false;
+    bool attack_box_enabled = false;
+    bool hitbox_enabled = false;
+    bool floor_boxes_enabled = false;
+    std::vector<FloorBox> floor_boxes;
     std::vector<float>  scale_variants;
     struct NamedArea {
         struct RenderFrame {
@@ -246,6 +262,11 @@ class AssetInfo {
 
     bool remove_area(const std::string& name);
     bool rename_area(const std::string& old_name, const std::string& new_name);
+    bool is_movement_enabled() const { return movement_enabled; }
+    bool is_hitbox_enabled() const { return hitbox_enabled; }
+    bool is_attack_box_enabled() const { return attack_box_enabled; }
+    bool is_floor_boxes_enabled() const { return floor_boxes_enabled; }
+    const std::vector<FloorBox>& floor_boxes_payload() const { return floor_boxes; }
 
     std::vector<std::string> animation_names() const;
 

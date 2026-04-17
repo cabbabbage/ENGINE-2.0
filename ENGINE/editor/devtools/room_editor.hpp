@@ -553,6 +553,16 @@ private:
     void normalize_movement_frames_to_current_animation();
     void refresh_movement_runtime_animation();
     bool persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority priority);
+    bool persist_asset_manifest_from_info(const std::shared_ptr<AssetInfo>& target_info,
+                                          devmode::core::DevSaveCoordinator::Priority priority,
+                                          const char* reason,
+                                          const char* flush_tag,
+                                          bool flush_now);
+    std::vector<std::string> system_editable_animation_names(const Asset* target,
+                                                             const std::string& animation_id) const;
+    bool set_movement_system_enabled(bool enabled);
+    bool set_hitbox_system_enabled(bool enabled);
+    bool set_attack_box_system_enabled(bool enabled);
     void refresh_movement_editor_selection(bool reset_drag_state);
     int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
     bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;

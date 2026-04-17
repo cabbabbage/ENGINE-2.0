@@ -10,6 +10,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <cmath>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -49,6 +50,139 @@ bool is_reserved_animation_name(const std::string& raw_name) {
             "areas",
 };
         return reserved.find(name) != reserved.end();
+}
+
+constexpr const char* kMovementEnabledKey = "movement_enabled";
+constexpr const char* kAttackBoxEnabledKey = "attack_box_enabled";
+constexpr const char* kHitboxEnabledKey = "hitbox_enabled";
+constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
+constexpr const char* kFloorBoxesKey = "floor_boxes";
+
+std::string sanitize_floor_box_token(std::string value) {
+        std::string out;
+        out.reserve(value.size());
+        for (char ch : value) {
+                const unsigned char uch = static_cast<unsigned char>(ch);
+                if (std::isalnum(uch) != 0 || ch == '_' || ch == '-' || ch == '.') {
+                        out.push_back(static_cast<char>(std::tolower(uch)));
+                } else if (std::isspace(uch) != 0) {
+                        out.push_back('_');
+                }
+        }
+        return out;
+}
+
+nlohmann::json normalize_floor_boxes_payload(const nlohmann::json& payload) {
+        nlohmann::json normalized = nlohmann::json::array();
+        if (!payload.is_array()) {
+                return normalized;
+        }
+
+        std::unordered_set<std::string> used_ids;
+        bool boundary_claimed = false;
+        for (std::size_t index = 0; index < payload.size(); ++index) {
+                const auto& entry = payload[index];
+                if (!entry.is_object()) {
+                        continue;
+                }
+
+                std::string id = sanitize_floor_box_token(entry.value("id", std::string{}));
+                if (id.empty()) {
+                        id = std::string("floor_box_") + std::to_string(index + 1);
+                }
+                std::string unique_id = id;
+                for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
+                        unique_id = id + "_" + std::to_string(suffix);
+                }
+
+                std::string name = entry.value("name", std::string{});
+                if (name.empty()) {
+                        name = std::string("floor_box_") + std::to_string(index + 1);
+                }
+
+                bool is_boundary = entry.value("is_boundary", false);
+                if (is_boundary) {
+                        if (boundary_claimed) {
+                                is_boundary = false;
+                        } else {
+                                boundary_claimed = true;
+                        }
+                }
+
+                auto finite_or = [](double value, double fallback) {
+                        return std::isfinite(value) ? value : fallback;
+                };
+
+                nlohmann::json canonical = nlohmann::json::object();
+                canonical["id"] = unique_id;
+                canonical["name"] = name;
+                canonical["is_boundary"] = is_boundary;
+                canonical["position_x"] = finite_or(entry.value("position_x", 0.0), 0.0);
+                canonical["position_z"] = finite_or(entry.value("position_z", 0.0), 0.0);
+                canonical["width"] = std::max(0.0, finite_or(entry.value("width", 0.0), 0.0));
+                canonical["depth"] = std::max(0.0, finite_or(entry.value("depth", 0.0), 0.0));
+                canonical["rotation_degrees"] = finite_or(entry.value("rotation_degrees", 0.0), 0.0);
+                canonical["enabled"] = entry.value("enabled", true);
+                normalized.push_back(std::move(canonical));
+        }
+        return normalized;
+}
+
+bool ensure_bool_field(nlohmann::json& metadata, const char* key, bool default_value = false) {
+        if (metadata.contains(key) && metadata[key].is_boolean()) {
+                return false;
+        }
+        metadata[key] = default_value;
+        return true;
+}
+
+bool has_animation_payload_key(const nlohmann::json& metadata, const char* key) {
+        auto animations_it = metadata.find("animations");
+        if (animations_it == metadata.end() || !animations_it->is_object()) {
+                return false;
+        }
+        for (auto it = animations_it->begin(); it != animations_it->end(); ++it) {
+                if (!it.value().is_object()) {
+                        continue;
+                }
+                auto key_it = it.value().find(key);
+                if (key_it == it.value().end()) {
+                        continue;
+                }
+                if (key_it->is_array()) {
+                        if (!key_it->empty()) {
+                                return true;
+                        }
+                        continue;
+                }
+                if (!key_it->is_null()) {
+                        return true;
+                }
+        }
+        return false;
+}
+
+bool normalize_animation_system_payload(nlohmann::json& animation_payload,
+                                        bool movement_enabled,
+                                        bool hitbox_enabled,
+                                        bool attack_box_enabled) {
+        if (!animation_payload.is_object()) {
+                return false;
+        }
+
+        bool mutated = false;
+        if (!movement_enabled) {
+                mutated = animation_payload.erase("movement") > 0 || mutated;
+                mutated = animation_payload.erase("movement_paths") > 0 || mutated;
+                mutated = animation_payload.erase("movement_total") > 0 || mutated;
+        }
+        if (!hitbox_enabled) {
+                mutated = animation_payload.erase("hit_boxes") > 0 || mutated;
+        }
+        if (!attack_box_enabled) {
+                mutated = animation_payload.erase("attack_boxes") > 0 || mutated;
+        }
+        return mutated;
 }
 
 int count_png_frames(const std::filesystem::path& folder) {
@@ -283,7 +417,53 @@ bool ensure_manifest_entry_shape(const std::string& asset_name,
                 metadata["asset_directory"] = default_dir;
                 mutated = true;
         }
+        const bool inferred_movement_enabled =
+            has_animation_payload_key(metadata, "movement") ||
+            has_animation_payload_key(metadata, "movement_paths");
+        const bool inferred_attack_box_enabled = has_animation_payload_key(metadata, "attack_boxes");
+        const bool inferred_hitbox_enabled = has_animation_payload_key(metadata, "hit_boxes");
+        const bool inferred_floor_boxes_enabled =
+            metadata.contains(kFloorBoxesKey) &&
+            metadata[kFloorBoxesKey].is_array() &&
+            !metadata[kFloorBoxesKey].empty();
+
+        mutated = ensure_bool_field(metadata, kMovementEnabledKey, inferred_movement_enabled) || mutated;
+        mutated = ensure_bool_field(metadata, kAttackBoxEnabledKey, inferred_attack_box_enabled) || mutated;
+        mutated = ensure_bool_field(metadata, kHitboxEnabledKey, inferred_hitbox_enabled) || mutated;
+        mutated = ensure_bool_field(metadata, kFloorBoxesEnabledKey, inferred_floor_boxes_enabled) || mutated;
+
+        const bool movement_enabled = metadata.value(kMovementEnabledKey, false);
+        const bool attack_box_enabled = metadata.value(kAttackBoxEnabledKey, false);
+        const bool hitbox_enabled = metadata.value(kHitboxEnabledKey, false);
+        const bool floor_boxes_enabled = metadata.value(kFloorBoxesEnabledKey, false);
+
+        if (floor_boxes_enabled) {
+                const nlohmann::json normalized_floor_boxes =
+                    normalize_floor_boxes_payload(metadata.value(kFloorBoxesKey, nlohmann::json::array()));
+                if (normalized_floor_boxes.empty()) {
+                        mutated = metadata.erase(kFloorBoxesKey) > 0 || mutated;
+                } else if (!metadata.contains(kFloorBoxesKey) || metadata[kFloorBoxesKey] != normalized_floor_boxes) {
+                        metadata[kFloorBoxesKey] = normalized_floor_boxes;
+                        mutated = true;
+                }
+        } else {
+                mutated = metadata.erase(kFloorBoxesKey) > 0 || mutated;
+        }
+
         mutated |= ensure_animation_metadata(asset_name, metadata, assets_root);
+        if (metadata.contains("animations") && metadata["animations"].is_object()) {
+                for (auto it = metadata["animations"].begin(); it != metadata["animations"].end(); ++it) {
+                        if (!it.value().is_object()) {
+                                continue;
+                        }
+                        if (normalize_animation_system_payload(it.value(),
+                                                              movement_enabled,
+                                                              hitbox_enabled,
+                                                              attack_box_enabled)) {
+                                mutated = true;
+                        }
+                }
+        }
         return mutated;
 }
 

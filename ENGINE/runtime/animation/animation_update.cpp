@@ -115,7 +115,7 @@ bool should_consider_overlap(const Asset& self, const Asset& other) {
         return false;
     }
 
-    if (self.info->moving_asset && other.info->moving_asset) {
+    if (self.info->movement_enabled && other.info->movement_enabled) {
         return true;
     }
 

@@ -14,6 +14,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - Manifest-driven loading keeps game data out of the executable so asset changes do not require recompiles.
 - Dev Mode ships in-engine for editing rooms, lighting, assets, and spawns with immediate write-through to content files.
 - Asset tools regenerate animation and lighting caches from explicit requests and missing-file repair.
+- Asset manifest enable-flag contract and floor-box schema: `ENGINE/runtime/core/manifest/ASSET_MANIFEST_SCHEMA.md`.
 
 ## Running
 - Preferred: run `run.bat` to configure, build, and start the engine.

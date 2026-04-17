@@ -503,6 +503,7 @@ Asset::Asset(const Asset& o)
         finalized_                = o.finalized_;
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
+        refresh_runtime_floor_boxes_cache();
 }
 
 Asset& Asset::operator=(const Asset& o) {
@@ -586,11 +587,14 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_name_to_index_.clear();
         current_hit_box_volumes_.clear();
         current_attack_box_volumes_.clear();
+        floor_boxes_.clear();
+        boundary_floor_box_ = nullptr;
         runtime_hit_box_lookup_.clear();
         runtime_attack_box_lookup_.clear();
         anchors_initialized_ = false;
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
+        refresh_runtime_floor_boxes_cache();
         return *this;
 }
 
@@ -787,6 +791,7 @@ void Asset::finalize_setup() {
         refresh_cached_dimensions();
         refresh_anchor_point_cache_from_frame();
         refresh_runtime_box_cache_from_frame();
+        refresh_runtime_floor_boxes_cache();
 
         finalized_ = true;
 }
@@ -1193,6 +1198,60 @@ void Asset::refresh_anchor_point_cache_from_frame() {
     }
 }
 
+bool Asset::isMovementEnabled() const {
+    return info && info->is_movement_enabled();
+}
+
+bool Asset::isHitboxEnabled() const {
+    return info && info->is_hitbox_enabled();
+}
+
+bool Asset::isAttackBoxEnabled() const {
+    return info && info->is_attack_box_enabled();
+}
+
+bool Asset::isFloorBoxesEnabled() const {
+    return info && info->is_floor_boxes_enabled();
+}
+
+const std::vector<Asset::RuntimeFloorBox>& Asset::getFloorBoxes() const {
+    return floor_boxes_;
+}
+
+const Asset::RuntimeFloorBox* Asset::getBoundaryFloorBox() const {
+    return boundary_floor_box_;
+}
+
+void Asset::refresh_runtime_floor_boxes_cache() {
+    floor_boxes_.clear();
+    boundary_floor_box_ = nullptr;
+    if (!info || !isFloorBoxesEnabled()) {
+        return;
+    }
+
+    floor_boxes_.reserve(info->floor_boxes_payload().size());
+    for (const auto& authored : info->floor_boxes_payload()) {
+        RuntimeFloorBox box{};
+        box.id = authored.id;
+        box.name = authored.name;
+        box.is_boundary = authored.is_boundary;
+        box.position_x = authored.position_x;
+        box.position_z = authored.position_z;
+        box.width = authored.width;
+        box.depth = authored.depth;
+        box.rotation_degrees = authored.rotation_degrees;
+        box.enabled = authored.enabled;
+        if (box.id.empty() || box.name.empty()) {
+            continue;
+        }
+        floor_boxes_.push_back(std::move(box));
+        RuntimeFloorBox& inserted = floor_boxes_.back();
+        if (inserted.enabled && inserted.is_boundary && boundary_floor_box_ == nullptr) {
+            boundary_floor_box_ = &inserted;
+        }
+    }
+}
+
 void Asset::refresh_runtime_box_cache_from_frame() {
     current_hit_box_volumes_.clear();
     current_attack_box_volumes_.clear();
@@ -1299,69 +1358,73 @@ void Asset::refresh_runtime_box_cache_from_frame() {
     }
 #endif
 
-    current_hit_box_volumes_.reserve(current_frame->hit_boxes.boxes.size());
-    for (const auto& box : current_frame->hit_boxes.boxes) {
-        if (!box.is_valid() || !box.enabled) {
-            continue;
+    if (isHitboxEnabled()) {
+        current_hit_box_volumes_.reserve(current_frame->hit_boxes.boxes.size());
+        for (const auto& box : current_frame->hit_boxes.boxes) {
+            if (!box.is_valid() || !box.enabled) {
+                continue;
+            }
+            RuntimeBoxVolume volume{};
+            const auto runtime_corners = box.to_runtime_clockwise_points();
+            if (!build_volume(box.name,
+                              box.id,
+                              box.type.empty() ? std::string{"hitbox"} : box.type,
+                              box.enabled,
+                              box.frame_start,
+                              box.frame_end,
+                              box.anchor_link,
+                              box.extrusion_amount,
+                              0,
+                              std::string{},
+                              "{}",
+                              animation_update::make_default_attack_payload(),
+                              runtime_corners,
+                              volume)) {
+                continue;
+            }
+            runtime_hit_box_lookup_.emplace(volume.name, current_hit_box_volumes_.size());
+            current_hit_box_volumes_.push_back(std::move(volume));
         }
-        RuntimeBoxVolume volume{};
-        const auto runtime_corners = box.to_runtime_clockwise_points();
-        if (!build_volume(box.name,
-                          box.id,
-                          box.type.empty() ? std::string{"hitbox"} : box.type,
-                          box.enabled,
-                          box.frame_start,
-                          box.frame_end,
-                          box.anchor_link,
-                          box.extrusion_amount,
-                          0,
-                          std::string{},
-                          "{}",
-                          animation_update::make_default_attack_payload(),
-                          runtime_corners,
-                          volume)) {
-            continue;
-        }
-        runtime_hit_box_lookup_.emplace(volume.name, current_hit_box_volumes_.size());
-        current_hit_box_volumes_.push_back(std::move(volume));
     }
 
-    current_attack_box_volumes_.reserve(current_frame->attack_boxes.boxes.size());
-    for (const auto& box : current_frame->attack_boxes.boxes) {
-        if (!box.is_valid() || !box.enabled) {
-            continue;
+    if (isAttackBoxEnabled()) {
+        current_attack_box_volumes_.reserve(current_frame->attack_boxes.boxes.size());
+        for (const auto& box : current_frame->attack_boxes.boxes) {
+            if (!box.is_valid() || !box.enabled) {
+                continue;
+            }
+            animation_update::AttackPayload payload = box.payload;
+            if (payload.payload_id.empty()) {
+                payload = animation_update::attack_payload_from_box(
+                    box.damage_amount,
+                    box.payload_id.empty() ? box.id : box.payload_id,
+                    box.meta_json);
+            }
+            if (payload.payload_id.empty()) {
+                payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+            }
+            payload.damage_amount = std::max(0, payload.damage_amount);
+            RuntimeBoxVolume volume{};
+            const auto runtime_corners = box.to_runtime_clockwise_points();
+            if (!build_volume(box.name,
+                              box.id,
+                              box.type.empty() ? std::string{"attack_box"} : box.type,
+                              box.enabled,
+                              box.frame_start,
+                              box.frame_end,
+                              box.anchor_link,
+                              box.extrusion_amount,
+                              payload.damage_amount,
+                              payload.payload_id,
+                              box.meta_json,
+                              payload,
+                              runtime_corners,
+                              volume)) {
+                continue;
+            }
+            runtime_attack_box_lookup_.emplace(volume.name, current_attack_box_volumes_.size());
+            current_attack_box_volumes_.push_back(std::move(volume));
         }
-        animation_update::AttackPayload payload = box.payload;
-        if (payload.payload_id.empty()) {
-            payload = animation_update::attack_payload_from_box(
-                box.damage_amount,
-                box.payload_id.empty() ? box.id : box.payload_id,
-                box.meta_json);
-        }
-        if (payload.payload_id.empty()) {
-            payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
-        }
-        payload.damage_amount = std::max(0, payload.damage_amount);
-        RuntimeBoxVolume volume{};
-        const auto runtime_corners = box.to_runtime_clockwise_points();
-        if (!build_volume(box.name,
-                          box.id,
-                          box.type.empty() ? std::string{"attack_box"} : box.type,
-                          box.enabled,
-                          box.frame_start,
-                          box.frame_end,
-                          box.anchor_link,
-                          box.extrusion_amount,
-                          payload.damage_amount,
-                          payload.payload_id,
-                          box.meta_json,
-                          payload,
-                          runtime_corners,
-                          volume)) {
-            continue;
-        }
-        runtime_attack_box_lookup_.emplace(volume.name, current_attack_box_volumes_.size());
-        current_attack_box_volumes_.push_back(std::move(volume));
     }
 
     if (vibble_box_trace_enabled()) {

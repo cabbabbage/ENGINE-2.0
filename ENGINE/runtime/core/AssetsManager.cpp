@@ -881,6 +881,7 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         asset->update_anchor_basis_if_needed();
         asset->refresh_anchor_point_cache_from_frame();
         asset->refresh_runtime_box_cache_from_frame();
+        asset->refresh_runtime_floor_boxes_cache();
         state.processed_anchor_invalidation_version = state.pending_anchor_invalidation_version;
         state.processed_anchor_revision = asset->anchor_world_revision_;
         state.processed_camera_state_version = camera_state_version;
@@ -946,7 +947,7 @@ void Assets::rebuild_frame_collision_context() const {
             canonical_type == asset_types::boundary ||
             canonical_type == asset_types::enemy ||
             canonical_type == asset_types::npc ||
-            asset->info->moving_asset ||
+            asset->info->movement_enabled ||
             !asset->info->passable;
         if (!impassable || canonical_type == asset_types::player) {
             continue;

@@ -51,6 +51,9 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     name_textbox_ = std::make_unique<DMTextBox>("Name", "");
     extrusion_textbox_ = std::make_unique<DMTextBox>("Extrusion", "0");
     damage_textbox_ = std::make_unique<DMTextBox>("Damage", "0");
+    system_enabled_checkbox_ = std::make_unique<DMCheckbox>(
+        kind_ == Kind::HitBox ? "Hit Boxes Enabled" : "Attack Boxes Enabled",
+        false);
     onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
 }
 
@@ -146,6 +149,16 @@ bool RoomBoxToolsPanel::onion_skin_enabled() const {
     return onion_skin_checkbox_ ? onion_skin_checkbox_->value() : false;
 }
 
+void RoomBoxToolsPanel::set_system_enabled(bool enabled) {
+    if (system_enabled_checkbox_) {
+        system_enabled_checkbox_->set_value(enabled);
+    }
+}
+
+bool RoomBoxToolsPanel::system_enabled() const {
+    return system_enabled_checkbox_ ? system_enabled_checkbox_->value() : false;
+}
+
 void RoomBoxToolsPanel::set_on_select(SelectCallback callback) {
     on_select_ = std::move(callback);
 }
@@ -170,6 +183,10 @@ void RoomBoxToolsPanel::set_on_onion_skin_toggle(OnionSkinToggleCallback callbac
     on_onion_skin_toggle_ = std::move(callback);
 }
 
+void RoomBoxToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCallback callback) {
+    on_system_enabled_toggle_ = std::move(callback);
+}
+
 RoomBoxToolsPanel::DetailValues RoomBoxToolsPanel::collect_detail_values() const {
     DetailValues values;
     values.name = name_textbox_ ? name_textbox_->value() : std::string{};
@@ -190,6 +207,7 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         event.type == SDL_EVENT_MOUSE_MOTION ||
         event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
         event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+    const bool wheel_event = event.type == SDL_EVENT_MOUSE_WHEEL;
 
     if (event.type == SDL_EVENT_MOUSE_MOTION) {
         pointer_x = event.motion.x;
@@ -203,6 +221,24 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
 
     const bool pointer_inside_panel = point_in_rect(pointer_x, pointer_y, panel_rect_);
     bool handled = false;
+
+    if (system_enabled_checkbox_) {
+        const bool before = system_enabled_checkbox_->value();
+        if (system_enabled_checkbox_->handle_event(event)) {
+            handled = true;
+            const bool after = system_enabled_checkbox_->value();
+            if (before != after && on_system_enabled_toggle_) {
+                on_system_enabled_toggle_(after);
+            }
+        }
+    }
+
+    if (!system_enabled()) {
+        if ((pointer_event || wheel_event) && pointer_inside_panel) {
+            return true;
+        }
+        return handled;
+    }
 
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         if (point_in_rect(pointer_x, pointer_y, list_clip_rect_)) {
@@ -360,6 +396,12 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     const std::string subtitle = selected_box_index_ >= 0 && selected_box_index_ < static_cast<int>(box_names_.size())
                                      ? box_names_[static_cast<std::size_t>(selected_box_index_)]
                                      : "No box selected";
+    if (system_enabled_checkbox_) {
+        system_enabled_checkbox_->render(renderer);
+    }
+    if (!system_enabled()) {
+        return;
+    }
     DMFontCache::instance().draw_text(renderer, label_style, subtitle, subtitle_rect_.x, subtitle_rect_.y);
 
     SDL_SetRenderDrawColor(renderer, 20, 24, 30, 180);
@@ -449,9 +491,52 @@ void RoomBoxToolsPanel::update_layout() const {
         panel_rect_.y + kPanelPadding,
         panel_rect_.w - (kPanelPadding * 2),
         kHeaderHeight};
+    enabled_toggle_rect_ = SDL_Rect{
+        header_rect_.x,
+        header_rect_.y + header_rect_.h + 2,
+        header_rect_.w,
+        DMCheckbox::height()};
+    if (system_enabled_checkbox_) {
+        system_enabled_checkbox_->set_rect(enabled_toggle_rect_);
+    }
+    if (!system_enabled()) {
+        subtitle_rect_ = SDL_Rect{0, 0, 0, 0};
+        list_clip_rect_ = SDL_Rect{0, 0, 0, 0};
+        detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
+        corner_label_rect_ = SDL_Rect{0, 0, 0, 0};
+        if (name_textbox_) {
+            name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (extrusion_textbox_) {
+            extrusion_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (damage_textbox_) {
+            damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (add_button_) {
+            add_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (delete_button_) {
+            delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (onion_skin_checkbox_) {
+            onion_skin_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (apply_next_frame_button_) {
+            apply_next_frame_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (apply_animation_button_) {
+            apply_animation_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (apply_asset_button_) {
+            apply_asset_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        layout_dirty_ = false;
+        return;
+    }
     subtitle_rect_ = SDL_Rect{
         header_rect_.x,
-        header_rect_.y + header_rect_.h - 2,
+        enabled_toggle_rect_.y + enabled_toggle_rect_.h + 2,
         header_rect_.w,
         20};
 

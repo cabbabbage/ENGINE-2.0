@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <functional>
 
 #include <SDL3/SDL.h>
 
@@ -9,6 +10,8 @@ class DMCheckbox;
 
 class RoomMovementToolsPanel {
 public:
+    using SystemEnabledToggleCallback = std::function<void(bool)>;
+
     RoomMovementToolsPanel();
     ~RoomMovementToolsPanel();
 
@@ -23,6 +26,9 @@ public:
     bool smooth_enabled() const;
     void set_curve_enabled(bool enabled);
     bool curve_enabled() const;
+    void set_system_enabled(bool enabled);
+    bool system_enabled() const;
+    void set_on_system_enabled_toggle(SystemEnabledToggleCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -42,10 +48,13 @@ private:
     mutable bool layout_dirty_ = true;
     mutable SDL_Rect panel_rect_{12, 56, 300, 210};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect enabled_rect_{0, 0, 0, 0};
     mutable SDL_Rect hint_rect_{0, 0, 0, 0};
     mutable SDL_Rect smooth_rect_{0, 0, 0, 0};
     mutable SDL_Rect curve_rect_{0, 0, 0, 0};
 
+    std::unique_ptr<DMCheckbox> enabled_checkbox_;
     std::unique_ptr<DMCheckbox> smooth_checkbox_;
     std::unique_ptr<DMCheckbox> curve_checkbox_;
+    SystemEnabledToggleCallback on_system_enabled_toggle_;
 };

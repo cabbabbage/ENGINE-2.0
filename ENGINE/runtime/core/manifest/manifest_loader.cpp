@@ -172,6 +172,111 @@ void validate_manifest_grid_settings_schema(const nlohmann::json& manifest_json,
     }
 }
 
+void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
+                                    const std::filesystem::path& path) {
+    auto assets_it = manifest_json.find("assets");
+    if (assets_it == manifest_json.end() || !assets_it->is_object()) {
+        return;
+    }
+
+    for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
+        if (!it.value().is_object()) {
+            std::ostringstream oss;
+            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                << "' must be an object.";
+            throw std::runtime_error(oss.str());
+        }
+
+        const auto& asset = it.value();
+        const char* bool_keys[] = {
+            "movement_enabled",
+            "attack_box_enabled",
+            "hitbox_enabled",
+            "floor_boxes_enabled",
+        };
+        for (const char* key : bool_keys) {
+            auto flag_it = asset.find(key);
+            if (flag_it != asset.end() && !flag_it->is_boolean()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' key '" << key << "' must be boolean when present.";
+                throw std::runtime_error(oss.str());
+            }
+        }
+
+        auto floor_boxes_it = asset.find("floor_boxes");
+        const bool has_floor_boxes_enabled_flag =
+            asset.contains("floor_boxes_enabled") && asset["floor_boxes_enabled"].is_boolean();
+        const bool floor_boxes_enabled = has_floor_boxes_enabled_flag
+            ? asset["floor_boxes_enabled"].get<bool>()
+            : (floor_boxes_it != asset.end() && floor_boxes_it->is_array() && !floor_boxes_it->empty());
+        if (has_floor_boxes_enabled_flag && !floor_boxes_enabled) {
+            if (floor_boxes_it != asset.end()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' must omit 'floor_boxes' when 'floor_boxes_enabled' is false.";
+                throw std::runtime_error(oss.str());
+            }
+            continue;
+        }
+
+        if (floor_boxes_it == asset.end()) {
+            continue;
+        }
+        if (!floor_boxes_it->is_array()) {
+            std::ostringstream oss;
+            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                << "' key 'floor_boxes' must be an array.";
+            throw std::runtime_error(oss.str());
+        }
+
+        std::size_t boundary_count = 0;
+        for (const auto& floor_box : *floor_boxes_it) {
+            if (!floor_box.is_object()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' contains non-object floor box entry.";
+                throw std::runtime_error(oss.str());
+            }
+            const char* string_keys[] = {"id", "name"};
+            for (const char* key : string_keys) {
+                if (!floor_box.contains(key) || !floor_box[key].is_string()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key '" << key << "' must be a string.";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            const char* number_keys[] = {"position_x", "position_z", "width", "depth", "rotation_degrees"};
+            for (const char* key : number_keys) {
+                if (!floor_box.contains(key) || !floor_box[key].is_number()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key '" << key << "' must be numeric.";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            if (!floor_box.contains("is_boundary") || !floor_box["is_boundary"].is_boolean() ||
+                !floor_box.contains("enabled") || !floor_box["enabled"].is_boolean()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' floor box keys 'is_boundary' and 'enabled' must be booleans.";
+                throw std::runtime_error(oss.str());
+            }
+            if (floor_box.value("is_boundary", false)) {
+                ++boundary_count;
+            }
+        }
+        if (boundary_count > 1) {
+            std::ostringstream oss;
+            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                << "' has " << boundary_count
+                << " boundary floor boxes; at most one is allowed.";
+            throw std::runtime_error(oss.str());
+        }
+    }
+}
+
 } // namespace
 
 std::string manifest_path() {
@@ -208,6 +313,7 @@ ManifestData load_manifest() {
 
     validate_manifest_json(manifest_json, path);
     validate_manifest_grid_settings_schema(manifest_json, path);
+    validate_manifest_asset_schema(manifest_json, path);
     return make_manifest_data(std::move(manifest_json));
 }
 

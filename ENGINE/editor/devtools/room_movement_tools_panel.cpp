@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -22,6 +23,7 @@ constexpr int kSectionGap = 10;
 }  // namespace
 
 RoomMovementToolsPanel::RoomMovementToolsPanel() {
+    enabled_checkbox_ = std::make_unique<DMCheckbox>("Movement Enabled", false);
     smooth_checkbox_ = std::make_unique<DMCheckbox>("Smooth interpolation", false);
     curve_checkbox_ = std::make_unique<DMCheckbox>("Curve interpolation", false);
 }
@@ -89,6 +91,20 @@ bool RoomMovementToolsPanel::curve_enabled() const {
     return curve_checkbox_ ? curve_checkbox_->value() : false;
 }
 
+void RoomMovementToolsPanel::set_system_enabled(bool enabled) {
+    if (enabled_checkbox_) {
+        enabled_checkbox_->set_value(enabled);
+    }
+}
+
+bool RoomMovementToolsPanel::system_enabled() const {
+    return enabled_checkbox_ ? enabled_checkbox_->value() : false;
+}
+
+void RoomMovementToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCallback callback) {
+    on_system_enabled_toggle_ = std::move(callback);
+}
+
 bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
     if (!visible_) {
         return false;
@@ -97,6 +113,22 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
     update_layout();
 
     bool handled = false;
+    if (enabled_checkbox_) {
+        const bool before = enabled_checkbox_->value();
+        if (enabled_checkbox_->handle_event(event)) {
+            handled = true;
+            const bool after = enabled_checkbox_->value();
+            if (before != after && on_system_enabled_toggle_) {
+                on_system_enabled_toggle_(after);
+            }
+        }
+    }
+
+    if (!system_enabled()) {
+        if (handled) {
+            return true;
+        }
+    } else {
     if (smooth_checkbox_ && smooth_checkbox_->handle_event(event)) {
         handled = true;
     }
@@ -110,6 +142,7 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
 
     if (handled) {
         return true;
+    }
     }
 
     SDL_Point pointer{0, 0};
@@ -154,6 +187,14 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
 
     const DMLabelStyle& label_style = DMStyles::Label();
     DMFontCache::instance().draw_text(renderer, label_style, "Movement Editor", header_rect_.x, header_rect_.y);
+    if (enabled_checkbox_) {
+        enabled_checkbox_->render(renderer);
+    }
+
+    if (!system_enabled()) {
+        return;
+    }
+
     DMFontCache::instance().draw_text(renderer, label_style, "Drag selected point on ground", hint_rect_.x, hint_rect_.y);
     DMFontCache::instance().draw_text(renderer, label_style, "Mouse wheel adjusts height", hint_rect_.x, hint_rect_.y + 18);
 
@@ -188,10 +229,14 @@ void RoomMovementToolsPanel::update_layout() const {
     panel_rect_.h = std::max(panel_rect_.h, 0);
 
     header_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, panel_rect_.y + kPanelPadding, panel_rect_.w - kPanelPadding * 2, 20};
-    hint_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, header_rect_.y + 28, panel_rect_.w - kPanelPadding * 2, 40};
+    enabled_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, header_rect_.y + 26, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
+    hint_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, enabled_rect_.y + enabled_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, 40};
     smooth_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, hint_rect_.y + 48, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
     curve_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, smooth_rect_.y + smooth_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
 
+    if (enabled_checkbox_) {
+        enabled_checkbox_->set_rect(enabled_rect_);
+    }
     if (smooth_checkbox_) {
         smooth_checkbox_->set_rect(smooth_rect_);
     }

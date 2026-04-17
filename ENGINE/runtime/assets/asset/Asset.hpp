@@ -345,6 +345,25 @@ class Asset {
         bool valid = false;
     };
 
+    struct RuntimeFloorBox {
+        std::string id;
+        std::string name;
+        bool is_boundary = false;
+        float position_x = 0.0f;
+        float position_z = 0.0f;
+        float width = 0.0f;
+        float depth = 0.0f;
+        float rotation_degrees = 0.0f;
+        bool enabled = true;
+    };
+
+    bool isMovementEnabled() const;
+    bool isHitboxEnabled() const;
+    bool isAttackBoxEnabled() const;
+    bool isFloorBoxesEnabled() const;
+    const std::vector<RuntimeFloorBox>& getFloorBoxes() const;
+    const RuntimeFloorBox* getBoundaryFloorBox() const;
+
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
     const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
     void test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes);
@@ -444,6 +463,7 @@ class Asset {
                                     const DisplacedAssetAnchorPoint* frame_anchor) const;
     void refresh_anchor_point_cache_from_frame();
     void refresh_runtime_box_cache_from_frame();
+    void refresh_runtime_floor_boxes_cache();
     void mark_anchors_dirty();
     void invalidate_anchor_registry();
     bool update_anchor_basis_if_needed();
@@ -549,6 +569,8 @@ private:
     std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
     std::vector<RuntimeBoxVolume> current_hit_box_volumes_;
     std::vector<RuntimeBoxVolume> current_attack_box_volumes_;
+    std::vector<RuntimeFloorBox> floor_boxes_;
+    const RuntimeFloorBox* boundary_floor_box_ = nullptr;
     std::unordered_map<std::string, std::size_t> runtime_hit_box_lookup_;
     std::unordered_map<std::string, std::size_t> runtime_attack_box_lookup_;
     bool anchors_initialized_ = false;

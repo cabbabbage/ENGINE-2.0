@@ -751,6 +751,14 @@ resolve_room_movement_frames_for_animation(const Asset* target, const std::strin
     return {devmode::room_movement_payload::MovementFrame{}};
 }
 
+nlohmann::json build_empty_box_frame_array(std::size_t frame_count) {
+    nlohmann::json frames = nlohmann::json::array();
+    for (std::size_t i = 0; i < frame_count; ++i) {
+        frames.push_back(nlohmann::json::array());
+    }
+    return frames;
+}
+
 int clamp_box_corner_index(int index) {
     return std::clamp(index, 0, 3);
 }
@@ -4294,7 +4302,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         };
 
-        if (!suppress_asset_info_overlays && hitbox_mode_active() && hitbox_edit_.target_asset) {
+        if (!suppress_asset_info_overlays &&
+            hitbox_mode_active() &&
+            hitbox_edit_.target_asset &&
+            hitbox_edit_.target_asset->info &&
+            hitbox_edit_.target_asset->info->is_hitbox_enabled()) {
             if (hitbox_edit_.onion_skin_enabled) {
                 AnimationFrame* prev_frame = adjacent_frame_for_editor(hitbox_edit_.target_asset,
                                                                        hitbox_edit_.animation_id,
@@ -4336,7 +4348,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                               isolate_selected_box);
         }
 
-        if (!suppress_asset_info_overlays && attack_box_mode_active() && attack_box_edit_.target_asset) {
+        if (!suppress_asset_info_overlays &&
+            attack_box_mode_active() &&
+            attack_box_edit_.target_asset &&
+            attack_box_edit_.target_asset->info &&
+            attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
             if (attack_box_edit_.onion_skin_enabled) {
                 AnimationFrame* prev_frame = adjacent_frame_for_editor(attack_box_edit_.target_asset,
                                                                        attack_box_edit_.animation_id,
@@ -7392,10 +7408,18 @@ void RoomEditor::ensure_oval_editor_widgets() {
 void RoomEditor::ensure_movement_editor_widgets() {
     if (!movement_tools_panel_) {
         movement_tools_panel_ = std::make_unique<RoomMovementToolsPanel>();
+        movement_tools_panel_->set_on_system_enabled_toggle([this](bool enabled) {
+            set_movement_system_enabled(enabled);
+        });
     }
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         movement_tools_panel_->set_visible(movement_mode_active());
+        const bool movement_enabled = movement_mode_active() &&
+                                      movement_edit_.target_asset &&
+                                      movement_edit_.target_asset->info &&
+                                      movement_edit_.target_asset->info->is_movement_enabled();
+        movement_tools_panel_->set_system_enabled(movement_enabled);
         movement_tools_panel_->set_smooth_enabled(movement_edit_.smooth_enabled);
         movement_tools_panel_->set_curve_enabled(movement_edit_.curve_enabled);
     }
@@ -7445,10 +7469,18 @@ void RoomEditor::ensure_hitbox_editor_widgets() {
         hitbox_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
             hitbox_edit_.onion_skin_enabled = enabled;
         });
+        hitbox_tools_panel_->set_on_system_enabled_toggle([this](bool enabled) {
+            set_hitbox_system_enabled(enabled);
+        });
     }
     if (hitbox_tools_panel_) {
         hitbox_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         hitbox_tools_panel_->set_visible(hitbox_mode_active());
+        const bool hitbox_enabled = hitbox_mode_active() &&
+                                    hitbox_edit_.target_asset &&
+                                    hitbox_edit_.target_asset->info &&
+                                    hitbox_edit_.target_asset->info->is_hitbox_enabled();
+        hitbox_tools_panel_->set_system_enabled(hitbox_enabled);
         hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     }
 }
@@ -7497,10 +7529,18 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
         attack_box_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
             attack_box_edit_.onion_skin_enabled = enabled;
         });
+        attack_box_tools_panel_->set_on_system_enabled_toggle([this](bool enabled) {
+            set_attack_box_system_enabled(enabled);
+        });
     }
     if (attack_box_tools_panel_) {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
+        const bool attack_enabled = attack_box_mode_active() &&
+                                    attack_box_edit_.target_asset &&
+                                    attack_box_edit_.target_asset->info &&
+                                    attack_box_edit_.target_asset->info->is_attack_box_enabled();
+        attack_box_tools_panel_->set_system_enabled(attack_enabled);
         attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
     ensure_attack_payload_editor_widget();
@@ -7515,7 +7555,11 @@ void RoomEditor::ensure_attack_payload_editor_widget() {
     }
     if (attack_payload_editor_) {
         attack_payload_editor_->set_screen_dimensions(screen_w_, screen_h_);
-        attack_payload_editor_->set_visible(attack_box_mode_active());
+        const bool attack_enabled = attack_box_mode_active() &&
+                                    attack_box_edit_.target_asset &&
+                                    attack_box_edit_.target_asset->info &&
+                                    attack_box_edit_.target_asset->info->is_attack_box_enabled();
+        attack_payload_editor_->set_visible(attack_enabled);
     }
 }
 
@@ -7523,9 +7567,12 @@ void RoomEditor::sync_hitbox_tools_panel() {
     if (!hitbox_tools_panel_) {
         return;
     }
+    const bool hitbox_enabled = hitbox_edit_.target_asset &&
+                                hitbox_edit_.target_asset->info &&
+                                hitbox_edit_.target_asset->info->is_hitbox_enabled();
     std::vector<std::string> names;
     AnimationFrame* frame = hitbox_edit_.target_asset ? hitbox_edit_.target_asset->current_frame : nullptr;
-    if (frame) {
+    if (hitbox_enabled && frame) {
         const auto& boxes = frame->hit_boxes.boxes;
         names.reserve(boxes.size());
         for (std::size_t i = 0; i < boxes.size(); ++i) {
@@ -7572,9 +7619,12 @@ void RoomEditor::sync_attack_box_tools_panel() {
     if (!attack_box_tools_panel_) {
         return;
     }
+    const bool attack_enabled = attack_box_edit_.target_asset &&
+                                attack_box_edit_.target_asset->info &&
+                                attack_box_edit_.target_asset->info->is_attack_box_enabled();
     std::vector<std::string> names;
     AnimationFrame* frame = attack_box_edit_.target_asset ? attack_box_edit_.target_asset->current_frame : nullptr;
-    if (frame) {
+    if (attack_enabled && frame) {
         const auto& boxes = frame->attack_boxes.boxes;
         names.reserve(boxes.size());
         for (std::size_t i = 0; i < boxes.size(); ++i) {
@@ -7868,6 +7918,9 @@ bool RoomEditor::apply_attack_payload_editor_update(const animation_update::Atta
     if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
         return false;
     }
+    if (!attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
+        return false;
+    }
     auto anim_it = attack_box_edit_.target_asset->info->animations.find(attack_box_edit_.animation_id);
     if (anim_it == attack_box_edit_.target_asset->info->animations.end() || !anim_it->second.has_frames()) {
         return false;
@@ -7925,6 +7978,9 @@ bool RoomEditor::apply_attack_payload_editor_update(const animation_update::Atta
 
 bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope scope) {
     if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return false;
+    }
+    if (!hitbox_edit_.target_asset->info->is_hitbox_enabled()) {
         return false;
     }
 
@@ -8058,6 +8114,9 @@ bool RoomEditor::apply_hitbox_current_frame_to_scope(EditorFramePropagationScope
 
 bool RoomEditor::apply_attack_box_current_frame_to_scope(EditorFramePropagationScope scope) {
     if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+    if (!attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
         return false;
     }
 
@@ -10416,6 +10475,9 @@ bool RoomEditor::persist_hitbox_current_frame(devmode::core::DevSaveCoordinator:
     if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
         return false;
     }
+    if (!hitbox_edit_.target_asset->info->is_hitbox_enabled()) {
+        return false;
+    }
 
     Asset* target = hitbox_edit_.target_asset;
     auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
@@ -10495,6 +10557,9 @@ bool RoomEditor::mutate_hitbox_current_frame(
     if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
         return false;
     }
+    if (!hitbox_edit_.target_asset->info->is_hitbox_enabled()) {
+        return false;
+    }
     Asset* target = hitbox_edit_.target_asset;
     auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
     if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
@@ -10561,6 +10626,9 @@ bool RoomEditor::mutate_hitbox_current_frame(
 
 bool RoomEditor::persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now) {
     if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+    if (!attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
         return false;
     }
 
@@ -10662,6 +10730,9 @@ bool RoomEditor::mutate_attack_box_current_frame(
     const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
     devmode::core::DevSaveCoordinator::Priority priority) {
     if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+    if (!attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
         return false;
     }
     Asset* target = attack_box_edit_.target_asset;
@@ -13148,6 +13219,9 @@ bool RoomEditor::persist_movement_current_animation(devmode::core::DevSaveCoordi
     if (!movement_edit_.target_asset || !movement_edit_.target_asset->info || movement_edit_.animation_id.empty()) {
         return false;
     }
+    if (!movement_edit_.target_asset->info->is_movement_enabled()) {
+        return false;
+    }
 
     std::shared_ptr<AssetInfo> target_info = movement_edit_.target_asset->info;
     if (!target_info) {
@@ -13194,6 +13268,240 @@ bool RoomEditor::persist_movement_current_animation(devmode::core::DevSaveCoordi
     }
 
     movement_edit_.dirty_since_last_flush = false;
+    return true;
+}
+
+bool RoomEditor::persist_asset_manifest_from_info(const std::shared_ptr<AssetInfo>& target_info,
+                                                  devmode::core::DevSaveCoordinator::Priority priority,
+                                                  const char* reason,
+                                                  const char* flush_tag,
+                                                  bool flush_now) {
+    if (!target_info) {
+        return false;
+    }
+
+    target_info->mark_dirty();
+    nlohmann::json manifest_payload = target_info->manifest_payload();
+    if (save_coordinator_ && manifest_store_) {
+        save_coordinator_->enqueue_manifest_asset(
+            target_info->name,
+            std::move(manifest_payload),
+            priority,
+            reason ? reason : "Asset System Toggle",
+            [assets = assets_, target_info]() {
+                devmode::refresh_loaded_animation_instances(assets, target_info);
+            });
+        if (flush_now) {
+            save_coordinator_->flush_now(flush_tag ? flush_tag : "room-asset-system-toggle");
+        }
+        return true;
+    }
+
+    if (manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = std::move(manifest_payload);
+        if (!session.commit()) {
+            return false;
+        }
+        devmode::refresh_loaded_animation_instances(assets_, target_info);
+        return true;
+    }
+
+    return false;
+}
+
+std::vector<std::string> RoomEditor::system_editable_animation_names(const Asset* target,
+                                                                     const std::string& animation_id) const {
+    if (!target || !target->info) {
+        return {};
+    }
+    return resolve_file_sourced_animation_selection_for_target(target, animation_id).navigable_animation_ids;
+}
+
+bool RoomEditor::set_movement_system_enabled(bool enabled) {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = movement_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    if (!target_info || target_info->is_movement_enabled() == enabled) {
+        return false;
+    }
+
+    target_info->movement_enabled = enabled;
+    const auto animation_ids = system_editable_animation_names(target, movement_edit_.animation_id);
+    for (const std::string& animation_id : animation_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end()) {
+            continue;
+        }
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        if (enabled) {
+            const auto frames = movement_frames_from_runtime_animation(anim_it->second);
+            payload = devmode::room_movement_payload::build_payload_from_frames(frames, payload);
+        } else {
+            payload.erase("movement");
+            payload.erase("movement_paths");
+            payload.erase("movement_total");
+        }
+        if (!target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
+
+    if (!enabled) {
+        movement_edit_.frames.clear();
+        movement_edit_.rel_positions.clear();
+        movement_edit_.rel_positions_z.clear();
+        movement_edit_.point_selected = false;
+        movement_edit_.selected_point_active = false;
+        movement_edit_.hovered_point_index = -1;
+        movement_edit_.dragging_point = false;
+        movement_edit_.dirty_since_last_flush = false;
+    } else {
+        movement_edit_.frames = resolve_room_movement_frames_for_animation(target, movement_edit_.animation_id);
+        if (movement_edit_.frames.empty()) {
+            movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
+        }
+        normalize_movement_frames_to_current_animation();
+        rebuild_movement_rel_positions();
+    }
+
+    if (!persist_asset_manifest_from_info(target_info,
+                                          devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                          "Movement Toggle",
+                                          "room-movement-toggle",
+                                          true)) {
+        return false;
+    }
+
+    if (enabled) {
+        movement_edit_.frame_index = resolve_movement_mode_frame_index();
+        refresh_movement_editor_selection(true);
+        (void)apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index);
+    }
+    update_asset_editor_layout();
+    return true;
+}
+
+bool RoomEditor::set_hitbox_system_enabled(bool enabled) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = hitbox_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    if (!target_info || target_info->is_hitbox_enabled() == enabled) {
+        return false;
+    }
+
+    target_info->hitbox_enabled = enabled;
+    const auto animation_ids = system_editable_animation_names(target, hitbox_edit_.animation_id);
+    for (const std::string& animation_id : animation_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end()) {
+            continue;
+        }
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        if (enabled) {
+            payload["hit_boxes"] = build_empty_box_frame_array(anim_it->second.frame_count());
+            payload["box_schema_version"] = 1;
+            payload.erase("hit_geometry");
+        } else {
+            payload.erase("hit_boxes");
+            payload.erase("hit_geometry");
+        }
+        if (!target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
+
+    hitbox_edit_.selected_box_index = -1;
+    hitbox_edit_.selected_corner_index = 0;
+    hitbox_edit_.selected_point_index = 0;
+    hitbox_edit_.point_selected = false;
+    hitbox_edit_.dragging_corner = false;
+    hitbox_edit_.dragging_box = false;
+    hitbox_edit_.dragging_rotation = false;
+    hitbox_edit_.hovered_box_index = -1;
+    hitbox_edit_.hovered_corner_index = -1;
+    hitbox_edit_.hovered_point_index = -1;
+    hitbox_edit_.hovered_rotation_handle = false;
+    hitbox_edit_.dirty_since_last_flush = false;
+
+    if (!persist_asset_manifest_from_info(target_info,
+                                          devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                          "Hitbox Toggle",
+                                          "room-hitbox-toggle",
+                                          true)) {
+        return false;
+    }
+
+    sync_hitbox_tools_panel();
+    update_asset_editor_layout();
+    return true;
+}
+
+bool RoomEditor::set_attack_box_system_enabled(bool enabled) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
+        return false;
+    }
+
+    Asset* target = attack_box_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    if (!target_info || target_info->is_attack_box_enabled() == enabled) {
+        return false;
+    }
+
+    target_info->attack_box_enabled = enabled;
+    const auto animation_ids = system_editable_animation_names(target, attack_box_edit_.animation_id);
+    for (const std::string& animation_id : animation_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end()) {
+            continue;
+        }
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        if (enabled) {
+            payload["attack_boxes"] = build_empty_box_frame_array(anim_it->second.frame_count());
+            payload["box_schema_version"] = 1;
+            payload.erase("attack_geometry");
+        } else {
+            payload.erase("attack_boxes");
+            payload.erase("attack_geometry");
+        }
+        if (!target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
+
+    attack_box_edit_.selected_box_index = -1;
+    attack_box_edit_.selected_corner_index = 0;
+    attack_box_edit_.selected_point_index = 0;
+    attack_box_edit_.point_selected = false;
+    attack_box_edit_.dragging_corner = false;
+    attack_box_edit_.dragging_box = false;
+    attack_box_edit_.dragging_rotation = false;
+    attack_box_edit_.hovered_box_index = -1;
+    attack_box_edit_.hovered_corner_index = -1;
+    attack_box_edit_.hovered_point_index = -1;
+    attack_box_edit_.hovered_rotation_handle = false;
+    attack_box_edit_.dirty_since_last_flush = false;
+
+    if (!persist_asset_manifest_from_info(target_info,
+                                          devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                          "Attack Box Toggle",
+                                          "room-attack-box-toggle",
+                                          true)) {
+        return false;
+    }
+
+    sync_attack_box_tools_panel();
+    sync_attack_payload_editor();
+    update_asset_editor_layout();
     return true;
 }
 
@@ -14911,6 +15219,9 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !assets_ || !input_) {
         return false;
     }
+    if (!hitbox_edit_.target_asset->info || !hitbox_edit_.target_asset->info->is_hitbox_enabled()) {
+        return true;
+    }
     const SDL_Point screen_pt{input_->getX(), input_->getY()};
     const bool left_down = input_->isDown(Input::LEFT);
     const bool left_pressed = input_->wasPressed(Input::LEFT);
@@ -15109,6 +15420,9 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !assets_ || !input_) {
         return false;
     }
+    if (!attack_box_edit_.target_asset->info || !attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
+        return true;
+    }
     const SDL_Point screen_pt{input_->getX(), input_->getY()};
     const bool left_down = input_->isDown(Input::LEFT);
     const bool left_pressed = input_->wasPressed(Input::LEFT);
@@ -15304,6 +15618,9 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
 bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info || !assets_) {
         return false;
+    }
+    if (!movement_edit_.target_asset->info->is_movement_enabled()) {
+        return true;
     }
     if (movement_edit_.rel_positions.empty() || movement_edit_.rel_positions_z.empty()) {
         return true;

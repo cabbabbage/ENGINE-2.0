@@ -491,6 +491,12 @@ private:
     bool is_hitbox_ui_blocking_point(int x, int y) const;
     bool is_attack_box_ui_blocking_point(int x, int y) const;
     bool is_floor_box_ui_blocking_point(int x, int y) const;
+    struct EditorInteractionState {
+        bool has_selected_editable = false;
+        bool is_dragging_editable = false;
+        bool camera_blocked = false;
+    };
+    EditorInteractionState current_editor_interaction_state() const;
     bool any_editor_point_selected() const;
     enum class EditorFramePropagationScope {
         NextFrame,
@@ -606,6 +612,7 @@ private:
     bool handle_oval_mode_mouse_input(const Input& input);
     bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
                                      devmode::core::DevSaveCoordinator::Priority priority);
+    void clear_anchor_selection();
     bool persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::DetailValues& values);
     bool apply_anchor_panel_light_update(const RoomAnchorToolsPanel::LightValues& values);

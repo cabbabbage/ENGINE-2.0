@@ -5771,28 +5771,36 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         const float prev_scale = cam.get_scale();
         const SDL_Point prev_center = cam.get_screen_center();
         const SDL_Point screen_pt{input_->getX(), input_->getY()};
-        const bool selection_blocks_camera_pan = any_editor_point_selected();
-        bool pointer_blocks_pan = selection_blocks_camera_pan;
+        const EditorInteractionState interaction_state = current_editor_interaction_state();
+        bool pointer_blocks_camera_controls = interaction_state.camera_blocked;
 
         if (anchor_mode_active()) {
-            pointer_blocks_pan = pointer_blocks_pan || is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y);
+            pointer_blocks_camera_controls =
+                pointer_blocks_camera_controls || is_anchor_ui_blocking_point(screen_pt.x, screen_pt.y);
         } else if (oval_mode_active()) {
-            pointer_blocks_pan = pointer_blocks_pan || is_oval_ui_blocking_point(screen_pt.x, screen_pt.y);
+            pointer_blocks_camera_controls =
+                pointer_blocks_camera_controls || is_oval_ui_blocking_point(screen_pt.x, screen_pt.y);
         } else if (movement_mode_active()) {
-            pointer_blocks_pan = pointer_blocks_pan || is_movement_ui_blocking_point(screen_pt.x, screen_pt.y);
+            pointer_blocks_camera_controls =
+                pointer_blocks_camera_controls || is_movement_ui_blocking_point(screen_pt.x, screen_pt.y);
         } else if (hitbox_mode_active()) {
-            pointer_blocks_pan = pointer_blocks_pan || is_hitbox_ui_blocking_point(screen_pt.x, screen_pt.y);
+            pointer_blocks_camera_controls =
+                pointer_blocks_camera_controls || is_hitbox_ui_blocking_point(screen_pt.x, screen_pt.y);
         } else if (attack_box_mode_active()) {
-            pointer_blocks_pan = pointer_blocks_pan || is_attack_box_ui_blocking_point(screen_pt.x, screen_pt.y);
+            pointer_blocks_camera_controls =
+                pointer_blocks_camera_controls || is_attack_box_ui_blocking_point(screen_pt.x, screen_pt.y);
         } else if (floor_box_mode_active()) {
-            pointer_blocks_pan = pointer_blocks_pan || is_floor_box_ui_blocking_point(screen_pt.x, screen_pt.y);
+            pointer_blocks_camera_controls =
+                pointer_blocks_camera_controls || is_floor_box_ui_blocking_point(screen_pt.x, screen_pt.y);
         }
 
-        if (selection_blocks_camera_pan && camera_controls_.is_panning()) {
+        if (interaction_state.camera_blocked) {
             camera_controls_.cancel(cam);
         }
         if (!camera_settings_lock_active_) {
-            camera_controls_.handle_input(cam, input, pointer_blocks_pan);
+            if (!pointer_blocks_camera_controls) {
+                camera_controls_.handle_input(cam, input, false);
+            }
         }
         if (std::fabs(cam.get_scale() - prev_scale) > 1e-6 ||
             cam.get_screen_center().x != prev_center.x ||
@@ -11092,6 +11100,14 @@ int RoomEditor::find_anchor_handle_at_point(SDL_Point screen_point,
     return best_index;
 }
 
+void RoomEditor::clear_anchor_selection() {
+    anchor_edit_.selected_anchor_name.clear();
+    anchor_edit_.hovered_anchor_name.clear();
+    anchor_edit_.dragging_anchor_name.clear();
+    anchor_edit_.point_selected = false;
+    anchor_edit_.dragging = false;
+}
+
 bool RoomEditor::persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now) {
     if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
@@ -13488,16 +13504,9 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
             anchor_edit_.dragging = true;
             drag_anchor_to_screen(anchor_edit_.dragging_anchor_name, screen_pt);
             sync_anchor_tools_panel();
-        } else if (!selection_locked) {
-            anchor_edit_.selected_anchor_name.clear();
-            anchor_edit_.hovered_anchor_name.clear();
-            anchor_edit_.dragging_anchor_name.clear();
-            anchor_edit_.point_selected = false;
-            anchor_edit_.dragging = false;
-            sync_anchor_tools_panel();
         } else {
-            anchor_edit_.dragging = false;
-            anchor_edit_.dragging_anchor_name.clear();
+            clear_anchor_selection();
+            sync_anchor_tools_panel();
         }
     }
 
@@ -13511,9 +13520,11 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
     }
 
     if (!anchor_edit_.dragging && !pointer_blocked) {
-        const std::string preferred_anchor = selection_locked ? anchor_edit_.selected_anchor_name : std::string{};
+        const bool selection_locked_now =
+            anchor_edit_.point_selected && !anchor_edit_.selected_anchor_name.empty();
+        const std::string preferred_anchor = selection_locked_now ? anchor_edit_.selected_anchor_name : std::string{};
         int hover = find_anchor_handle_at_point(screen_pt, kAnchorHandlePickRadiusPx, preferred_anchor);
-        if (selection_locked &&
+        if (selection_locked_now &&
             hover >= 0 &&
             static_cast<std::size_t>(hover) < anchor_edit_.handles.size() &&
             anchor_edit_.handles[static_cast<std::size_t>(hover)].name != anchor_edit_.selected_anchor_name) {
@@ -15397,22 +15408,38 @@ bool RoomEditor::is_floor_box_ui_blocking_point(int x, int y) const {
     return false;
 }
 
+RoomEditor::EditorInteractionState RoomEditor::current_editor_interaction_state() const {
+    EditorInteractionState state{};
+
+    if (anchor_mode_active()) {
+        state.has_selected_editable = anchor_edit_.point_selected;
+        state.is_dragging_editable = anchor_edit_.dragging;
+    } else if (oval_mode_active()) {
+        state.has_selected_editable = oval_edit_.selected_point_index >= 0 || oval_edit_.center_selected;
+        state.is_dragging_editable = oval_edit_.center_dragging;
+    } else if (movement_mode_active()) {
+        state.has_selected_editable = movement_edit_.point_selected;
+        state.is_dragging_editable = movement_edit_.dragging_point;
+    } else if (hitbox_mode_active()) {
+        state.has_selected_editable = hitbox_edit_.point_selected;
+        state.is_dragging_editable =
+            hitbox_edit_.dragging_corner || hitbox_edit_.dragging_box || hitbox_edit_.dragging_rotation;
+    } else if (attack_box_mode_active()) {
+        state.has_selected_editable = attack_box_edit_.point_selected;
+        state.is_dragging_editable =
+            attack_box_edit_.dragging_corner || attack_box_edit_.dragging_box || attack_box_edit_.dragging_rotation;
+    } else if (floor_box_mode_active()) {
+        state.has_selected_editable = floor_box_edit_.selected_box_index >= 0;
+        state.is_dragging_editable = false;
+    }
+
+    state.camera_blocked = state.has_selected_editable || state.is_dragging_editable;
+    return state;
+}
+
 bool RoomEditor::any_editor_point_selected() const {
-    const bool anchor_selected = anchor_mode_active() && (anchor_edit_.point_selected || anchor_edit_.dragging);
-    const bool oval_selected =
-        oval_mode_active() &&
-        (oval_edit_.selected_point_index >= 0 || oval_edit_.center_selected || oval_edit_.center_dragging);
-    const bool movement_selected =
-        movement_mode_active() && (movement_edit_.point_selected || movement_edit_.dragging_point);
-    const bool hitbox_selected =
-        hitbox_mode_active() &&
-        (hitbox_edit_.point_selected || hitbox_edit_.dragging_corner || hitbox_edit_.dragging_box || hitbox_edit_.dragging_rotation);
-    const bool attack_box_selected =
-        attack_box_mode_active() &&
-        (attack_box_edit_.point_selected || attack_box_edit_.dragging_corner || attack_box_edit_.dragging_box || attack_box_edit_.dragging_rotation);
-    const bool floor_box_selected =
-        floor_box_mode_active() && floor_box_edit_.selected_box_index >= 0;
-    return anchor_selected || oval_selected || movement_selected || hitbox_selected || attack_box_selected || floor_box_selected;
+    const EditorInteractionState state = current_editor_interaction_state();
+    return state.camera_blocked;
 }
 
 int RoomEditor::find_hitbox_corner_at_screen_point(SDL_Point screen_point,

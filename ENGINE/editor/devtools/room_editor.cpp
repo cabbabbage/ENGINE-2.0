@@ -2664,11 +2664,11 @@ if (auto selected = library_ui_->consume_selection()) {
     }
     if (oval_point_child_editor_panel_) {
         oval_point_child_editor_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        oval_point_child_editor_panel_->set_visible(oval_mode_active());
+        oval_point_child_editor_panel_->set_visible(oval_mode_active() && oval_edit_.selected_point_index >= 0);
     }
     if (oval_point_child_editor_panel_) {
         oval_point_child_editor_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        oval_point_child_editor_panel_->set_visible(oval_mode_active());
+        oval_point_child_editor_panel_->set_visible(oval_mode_active() && oval_edit_.selected_point_index >= 0);
     }
     update_anchor_candidate_editor_search(input);
     if (movement_tools_panel_) {
@@ -7654,7 +7654,7 @@ void RoomEditor::ensure_oval_editor_widgets() {
     }
     if (oval_point_child_editor_panel_) {
         oval_point_child_editor_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        oval_point_child_editor_panel_->set_visible(oval_mode_active());
+        oval_point_child_editor_panel_->set_visible(oval_mode_active() && oval_edit_.selected_point_index >= 0);
     }
 }
 

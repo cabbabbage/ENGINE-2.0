@@ -104,6 +104,7 @@ constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr int kMovementPointPickRadiusPx = 16;
 constexpr int kOvalPointPickRadiusPx = 20;
 constexpr int kOvalCenterPickRadiusPx = 22;
+constexpr int kOvalGuidePickRadiusPx = 16;
 constexpr int kBoxCornerPickRadiusPx = 18;
 constexpr int kBoxRotationHandlePickRadiusPx = 16;
 constexpr float kBoxRotationHandleDistancePx = 26.0f;
@@ -13322,12 +13323,48 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
         const float dist_sq = dx * dx + dy * dy;
         return dist_sq <= static_cast<float>(kOvalCenterPickRadiusPx * kOvalCenterPickRadiusPx);
     };
+    const auto guide_is_hit = [&](SDL_Point point) {
+        if (oval_edit_.guide_screen_samples.size() < 2) {
+            return false;
+        }
+        const float threshold_sq = static_cast<float>(kOvalGuidePickRadiusPx * kOvalGuidePickRadiusPx);
+        const float px = static_cast<float>(point.x);
+        const float py = static_cast<float>(point.y);
+        for (std::size_t i = 0; i < oval_edit_.guide_screen_samples.size(); ++i) {
+            const SDL_FPoint a = oval_edit_.guide_screen_samples[i];
+            const SDL_FPoint b = oval_edit_.guide_screen_samples[(i + 1) % oval_edit_.guide_screen_samples.size()];
+            if (!std::isfinite(a.x) || !std::isfinite(a.y) || !std::isfinite(b.x) || !std::isfinite(b.y)) {
+                continue;
+            }
+            const float abx = b.x - a.x;
+            const float aby = b.y - a.y;
+            const float apx = px - a.x;
+            const float apy = py - a.y;
+            const float ab_len_sq = abx * abx + aby * aby;
+            float t = 0.0f;
+            if (ab_len_sq > 1e-4f) {
+                t = std::clamp((apx * abx + apy * aby) / ab_len_sq, 0.0f, 1.0f);
+            }
+            const float nearest_x = a.x + (abx * t);
+            const float nearest_y = a.y + (aby * t);
+            const float dx = nearest_x - px;
+            const float dy = nearest_y - py;
+            const float dist_sq = dx * dx + dy * dy;
+            if (dist_sq <= threshold_sq) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     if (!pointer_blocked) {
         oval_edit_.center_hovered = center_is_hit(screen_pt);
         oval_edit_.hovered_point_index =
             find_oval_point_handle_at_point(screen_pt, kOvalPointPickRadiusPx, oval_edit_.selected_point_index);
-        if (left_pressed && oval_edit_.center_hovered) {
+        const bool guide_hovered = guide_is_hit(screen_pt);
+        const bool center_or_guide_hit =
+            oval_edit_.center_hovered || (guide_hovered && oval_edit_.hovered_point_index < 0);
+        if (left_pressed && center_or_guide_hit) {
             const bool selection_changed = !oval_edit_.center_selected || oval_edit_.selected_point_index >= 0;
             oval_edit_.center_selected = true;
             oval_edit_.selected_point_index = -1;
@@ -13347,7 +13384,7 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
             oval_edit_.center_dragging = false;
             sync_oval_tools_panel();
         } else if (left_pressed &&
-                   !oval_edit_.center_hovered &&
+                   !center_or_guide_hit &&
                    oval_edit_.hovered_point_index < 0 &&
                    (oval_edit_.selected_point_index >= 0 || oval_edit_.center_selected)) {
             oval_edit_.selected_point_index = -1;

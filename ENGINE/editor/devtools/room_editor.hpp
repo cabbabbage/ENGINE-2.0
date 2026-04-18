@@ -670,8 +670,13 @@ private:
     int find_attack_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_hitbox_body_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_body_at_screen_point(SDL_Point screen_point) const;
+    int find_floor_box_corner_at_screen_point(SDL_Point screen_point,
+                                              int radius_px,
+                                              int& out_corner_index) const;
+    int find_floor_box_body_at_screen_point(SDL_Point screen_point) const;
     bool handle_hitbox_mode_mouse_input(const Input& input);
     bool handle_attack_box_mode_mouse_input(const Input& input);
+    bool handle_floor_box_mode_mouse_input(const Input& input);
     bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
                                      devmode::core::DevSaveCoordinator::Priority priority);
     bool mutate_attack_box_current_frame(const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
@@ -705,6 +710,10 @@ private:
                              bool flush_now,
                              const char* reason,
                              const char* flush_tag);
+    bool drag_floor_box_corner_to_screen(int box_index, int corner_index, SDL_Point screen_point);
+    bool begin_floor_box_drag(int box_index, SDL_Point screen_point);
+    bool drag_floor_box_to_screen(int box_index, SDL_Point screen_point);
+    std::vector<std::string> floor_box_recommendation_pool() const;
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
@@ -937,6 +946,17 @@ private:
     struct FloorBoxEditState {
         Asset* target_asset = nullptr;
         int selected_box_index = -1;
+        int selected_corner_index = -1;
+        int hovered_box_index = -1;
+        int hovered_corner_index = -1;
+        bool dragging_corner = false;
+        bool dragging_box = false;
+        SDL_FPoint drag_reference_screen_offset{0.0f, 0.0f};
+        float drag_start_position_x = 0.0f;
+        float drag_start_position_z = 0.0f;
+        float drag_start_width = 0.0f;
+        float drag_start_depth = 0.0f;
+        SDL_Point drag_anchor_world{0, 0};
         bool dirty_since_last_flush = false;
     };
     FloorBoxEditState floor_box_edit_;

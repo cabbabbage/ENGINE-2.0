@@ -304,13 +304,15 @@ bool RoomFloorBoxToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    auto handle_textbox = [&](DMTextBox* textbox, bool emits_layout) {
+    auto handle_textbox = [&](DMTextBox* textbox, bool emits_layout, bool mark_details) {
         if (!has_selected_box || !textbox) {
             return;
         }
         if (textbox->handle_event(event)) {
             handled = true;
-            details_changed = true;
+            if (mark_details) {
+                details_changed = true;
+            }
             if (emits_layout) {
                 const std::string value = textbox->value();
                 if (value != search_input_) {
@@ -323,12 +325,12 @@ bool RoomFloorBoxToolsPanel::handle_event(const SDL_Event& event) {
             }
         }
     };
-    handle_textbox(name_textbox_.get(), false);
-    handle_textbox(position_x_textbox_.get(), false);
-    handle_textbox(position_z_textbox_.get(), false);
-    handle_textbox(width_textbox_.get(), false);
-    handle_textbox(depth_textbox_.get(), false);
-    handle_textbox(tag_search_textbox_.get(), true);
+    handle_textbox(name_textbox_.get(), false, true);
+    handle_textbox(position_x_textbox_.get(), false, true);
+    handle_textbox(position_z_textbox_.get(), false, true);
+    handle_textbox(width_textbox_.get(), false, true);
+    handle_textbox(depth_textbox_.get(), false, true);
+    handle_textbox(tag_search_textbox_.get(), true, false);
 
     if (has_selected_box) {
         std::optional<std::string> add_tag_value;

@@ -349,11 +349,10 @@
           "depth": 128.0,
           "enabled": true,
           "id": "floor_box",
-          "is_boundary": false,
           "name": "Floor Box",
           "position_x": 0.0,
           "position_z": 0.0,
-          "rotation_degrees": 0.0,
+          "tags": [],
           "width": 128.0
         }
       ],
@@ -13232,22 +13231,20 @@
           "depth": 128.0,
           "enabled": true,
           "id": "floor_box",
-          "is_boundary": false,
           "name": "Floor Box",
           "position_x": 0.0,
           "position_z": 0.0,
-          "rotation_degrees": 0.0,
+          "tags": [],
           "width": 128.0
         },
         {
           "depth": 128.0,
           "enabled": true,
           "id": "floor_box_1",
-          "is_boundary": false,
           "name": "Floor Box 2",
           "position_x": 0.0,
           "position_z": 0.0,
-          "rotation_degrees": 0.0,
+          "tags": [],
           "width": 128.0
         }
       ],
@@ -19244,9 +19241,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            114,
-            242,
             36,
+            242,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -19647,9 +19644,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            31,
+            32,
             204,
-            31,
-            31,
             255
           ],
           "edge_smoothness": 101,

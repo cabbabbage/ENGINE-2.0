@@ -419,9 +419,9 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
                                       static_cast<int>(chain.size()),
                                       atmosphere_side);
 
-        //if (!apply_atmosphere_to_texture(layer_texture, temp, atmosphere)) {
-         //   return false;
-        //}
+        if (!apply_atmosphere_to_texture(layer_texture, temp, atmosphere)) {
+            return false;
+        }
 
         if (!initialized) {
             if (!copy_texture(temp, accum)) {

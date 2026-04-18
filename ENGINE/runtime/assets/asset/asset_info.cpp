@@ -191,7 +191,7 @@ std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json&
         box.width = std::max(0.0f, sanitize_finite_float(entry.value("width", 0.0f), 0.0f));
         box.depth = std::max(0.0f, sanitize_finite_float(entry.value("depth", 0.0f), 0.0f));
         box.enabled = entry.value("enabled", true);
-        box.tags = normalize_tag_list(parse_string_array(entry.value("tags", nlohmann::json::array())));
+        box.tags = parse_normalized_tag_list(entry.value("tags", nlohmann::json::array()));
         if (entry.value("is_boundary", false)) {
             box.tags.push_back(std::string(kBoundaryTag));
             box.tags = normalize_tag_list(box.tags);

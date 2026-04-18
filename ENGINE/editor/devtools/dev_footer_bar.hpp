@@ -119,6 +119,7 @@ private:
     void ensure_editor_frame_visible(int frame_index);
     int editor_frame_index_at_point(const SDL_Point& point) const;
     SDL_Rect editor_frame_chip_rect(int frame_index) const;
+    bool editor_navigation_contains_point(const SDL_Point& point) const;
     bool handle_editor_navigation_event(const SDL_Event& e);
     void render_editor_navigation(SDL_Renderer* renderer) const;
     int content_start_x() const;

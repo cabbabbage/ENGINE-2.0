@@ -4067,6 +4067,7 @@ void DevControls::sync_header_button_states() {
             enabled_ &&
             mode_ == Mode::RoomEditor &&
             room_editor_->is_enabled() &&
+            !room_editor_->is_asset_stack_editor_active() &&
             !room_editor_->is_asset_editor_tab_scope_active() &&
             !room_editor_->any_blocking_panel_visible() &&
             !any_modal_open;

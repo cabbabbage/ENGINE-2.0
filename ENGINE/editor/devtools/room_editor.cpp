@@ -15377,6 +15377,9 @@ bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
+    if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
+        return true;
+    }
     if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
         anchor_navigation_panel_->is_point_inside(x, y)) {
         return true;
@@ -15391,6 +15394,9 @@ bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
 bool RoomEditor::is_oval_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
+        return true;
     }
     if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
         anchor_navigation_panel_->is_point_inside(x, y)) {
@@ -15419,6 +15425,9 @@ bool RoomEditor::is_hitbox_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
+    if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
+        return true;
+    }
     if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
         anchor_navigation_panel_->is_point_inside(x, y)) {
         return true;
@@ -15433,6 +15442,9 @@ bool RoomEditor::is_hitbox_ui_blocking_point(int x, int y) const {
 bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
+        return true;
     }
     if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
         anchor_navigation_panel_->is_point_inside(x, y)) {
@@ -15452,6 +15464,9 @@ bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
 bool RoomEditor::is_floor_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
+        return true;
     }
     if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
         anchor_navigation_panel_->is_point_inside(x, y)) {
@@ -16955,6 +16970,9 @@ void RoomEditor::validate_floor_box_edit_target() {
 bool RoomEditor::is_anchor_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
+        return true;
     }
 
     if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&

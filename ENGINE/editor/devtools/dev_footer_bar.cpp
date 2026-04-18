@@ -24,11 +24,11 @@ constexpr int kFooterButtonMinWidth = 110;
 constexpr int kFooterHideButtonWidth = 32;
 constexpr int kEditorTabGap = 8;
 constexpr int kEditorFrameRowGap = 6;
-constexpr int kEditorFrameStripHeight = 46;
+constexpr int kEditorFrameStripHeight = 56;
 constexpr int kEditorFrameChipWidth = 56;
 constexpr int kEditorFrameChipGap = 8;
 constexpr int kEditorFrameNavButtonWidth = 56;
-constexpr int kEditorAnimationLabelHeight = 20;
+constexpr int kEditorAnimationLabelHeight = 24;
 constexpr Uint64 kFooterSlideDurationMs = 88;
 constexpr Uint64 kFooterZoneDebounceMs = 36;
 constexpr float kFooterShowZoneRatio = 0.90f;
@@ -80,7 +80,7 @@ const DMButtonStyle* editor_tab_style_for(const DevFooterBar::EditorTab& tab) {
 }
 
 const DMButtonStyle* editor_nav_button_style(bool enabled) {
-    return enabled ? &DMStyles::SecondaryButton() : &DMStyles::ListButton();
+    return enabled ? &DMStyles::AccentButton() : &DMStyles::ListButton();
 }
 
 void draw_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
@@ -371,7 +371,7 @@ bool DevFooterBar::handle_event(const SDL_Event& e) {
         sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
     }
 
-    const bool in_footer = (pointer_event || wheel_event) && SDL_PointInRect(&pointer, &rect_);
+    const bool in_footer = (pointer_event || wheel_event) && contains(pointer.x, pointer.y);
 
     bool used = false;
 
@@ -542,7 +542,13 @@ std::optional<SDL_Rect> DevFooterBar::button_rect(const std::string& id) const {
 bool DevFooterBar::contains(int x, int y) const {
     if (!visible_) return false;
     SDL_Point p{x, y};
-    return SDL_PointInRect(&p, &rect_);
+    if (SDL_PointInRect(&p, &rect_)) {
+        return true;
+    }
+    if (!editor_navigation_enabled_) {
+        return false;
+    }
+    return editor_navigation_contains_point(p);
 }
 
 void DevFooterBar::layout() {
@@ -848,22 +854,22 @@ void DevFooterBar::layout_editor_navigation() {
     }
 
     const int button_h = DMButton::height();
-    const int button_y = y + (kEditorFrameStripHeight - button_h) / 2;
     const int button_gap = 6;
-    const int min_strip_w = 120;
-    const int desired_nav_button_w = kEditorFrameNavButtonWidth;
-    const int reserved_for_buttons = std::max(0, available_width - min_strip_w - 20);
-    const int cluster_budget = reserved_for_buttons / 2;
-    const int nav_button_w = std::clamp((cluster_budget - button_gap) / 2, 34, desired_nav_button_w);
-    const int left_cluster_w = (nav_button_w * 2) + button_gap;
-    const int right_cluster_w = left_cluster_w;
+    const int button_grid_gap = 4;
+    const int nav_cluster_w = std::clamp(available_width / 5, 132, 168);
+    const int nav_button_w = std::clamp((nav_cluster_w - button_gap) / 2, 54, 84);
+    const int nav_cluster_real_w = (nav_button_w * 2) + button_gap;
+    const int nav_cluster_h = (button_h * 2) + button_grid_gap;
+    const int row_h = std::max(kEditorFrameStripHeight, nav_cluster_h);
+    const int button_top = y + (row_h - nav_cluster_h) / 2;
+    const int nav_x = right - nav_cluster_real_w;
 
-    const SDL_Rect anim_prev_rect{left, button_y, nav_button_w, button_h};
-    const SDL_Rect anim_next_rect{left + nav_button_w + button_gap, button_y, nav_button_w, button_h};
-    const SDL_Rect frame_prev_rect{right - right_cluster_w, button_y, nav_button_w, button_h};
+    const SDL_Rect anim_prev_rect{nav_x, button_top, nav_button_w, button_h};
+    const SDL_Rect anim_next_rect{nav_x + nav_button_w + button_gap, button_top, nav_button_w, button_h};
+    const SDL_Rect frame_prev_rect{nav_x, button_top + button_h + button_grid_gap, nav_button_w, button_h};
     const SDL_Rect frame_next_rect{
-        right - nav_button_w,
-        button_y,
+        nav_x + nav_button_w + button_gap,
+        button_top + button_h + button_grid_gap,
         nav_button_w,
         button_h};
 
@@ -872,16 +878,43 @@ void DevFooterBar::layout_editor_navigation() {
     editor_prev_frame_button_->set_rect(frame_prev_rect);
     editor_next_frame_button_->set_rect(frame_next_rect);
 
-    const int strip_x = anim_next_rect.x + anim_next_rect.w + 10;
-    const int strip_right = frame_prev_rect.x - 10;
+    const int strip_x = left;
+    const int strip_right = nav_x - 12;
     editor_frame_strip_rect_ = SDL_Rect{
         strip_x,
-        y,
+        y + (row_h - kEditorFrameStripHeight) / 2,
         std::max(0, strip_right - strip_x),
         kEditorFrameStripHeight};
 
     clamp_editor_frame_scroll();
     ensure_editor_frame_visible(editor_frame_navigation_.selected_frame);
+}
+
+bool DevFooterBar::editor_navigation_contains_point(const SDL_Point& point) const {
+    if (SDL_PointInRect(&point, &editor_tabs_row_rect_) ||
+        SDL_PointInRect(&point, &editor_animation_label_rect_) ||
+        SDL_PointInRect(&point, &editor_frame_strip_rect_)) {
+        return true;
+    }
+    for (const auto& tab : editor_tabs_) {
+        if (tab.widget) {
+            const SDL_Rect rect = tab.widget->rect();
+            if (SDL_PointInRect(&point, &rect)) {
+                return true;
+            }
+        }
+    }
+    auto point_in_button = [&point](const std::unique_ptr<DMButton>& button) {
+        if (!button) {
+            return false;
+        }
+        const SDL_Rect rect = button->rect();
+        return SDL_PointInRect(&point, &rect);
+    };
+    return point_in_button(editor_prev_animation_button_) ||
+        point_in_button(editor_next_animation_button_) ||
+        point_in_button(editor_prev_frame_button_) ||
+        point_in_button(editor_next_frame_button_);
 }
 
 void DevFooterBar::clamp_editor_frame_scroll() {
@@ -951,19 +984,11 @@ SDL_Rect DevFooterBar::editor_frame_chip_rect(int frame_index) const {
 bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
     bool used = false;
 
-    auto trigger_button = [&](DMButton* button, const std::function<void()>& callback) {
+    auto trigger_button = [&](DMButton* button) {
         if (!button) {
             return false;
         }
-        if (!button->handle_event(e)) {
-            return false;
-        }
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            e.button.button == SDL_BUTTON_LEFT &&
-            callback) {
-            callback();
-        }
-        return true;
+        return button->handle_event(e);
     };
 
     for (auto& tab : editor_tabs_) {
@@ -981,14 +1006,18 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
         }
     }
 
-    used = trigger_button(editor_prev_animation_button_.get(), editor_frame_navigation_.on_prev_animation) || used;
-    used = trigger_button(editor_next_animation_button_.get(), editor_frame_navigation_.on_next_animation) || used;
-    used = trigger_button(editor_prev_frame_button_.get(), editor_frame_navigation_.on_prev_frame) || used;
-    used = trigger_button(editor_next_frame_button_.get(), editor_frame_navigation_.on_next_frame) || used;
+    used = trigger_button(editor_prev_animation_button_.get()) || used;
+    used = trigger_button(editor_next_animation_button_.get()) || used;
+    used = trigger_button(editor_prev_frame_button_.get()) || used;
+    used = trigger_button(editor_next_frame_button_.get()) || used;
 
-    if (!editor_frame_navigation_.visible || editor_frame_navigation_.frame_count <= 0) {
-        return used;
-    }
+    auto point_in_button = [](const SDL_Point& pt, const std::unique_ptr<DMButton>& button) {
+        if (!button) {
+            return false;
+        }
+        const SDL_Rect rect = button->rect();
+        return SDL_PointInRect(&pt, &rect);
+    };
 
     SDL_Point pointer{0, 0};
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
@@ -996,26 +1025,74 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
             static_cast<int>(std::lround(e.motion.x)),
             static_cast<int>(std::lround(e.motion.y))
         };
-        editor_hovered_frame_index_ = editor_frame_index_at_point(pointer);
-        const bool over_label = SDL_PointInRect(&pointer, &editor_animation_label_rect_);
-        used = used || over_label || editor_hovered_frame_index_ >= 0;
-    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         pointer = SDL_Point{
             static_cast<int>(std::lround(e.button.x)),
             static_cast<int>(std::lround(e.button.y))
         };
+    }
+
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (point_in_button(pointer, editor_prev_animation_button_) ||
+            point_in_button(pointer, editor_next_animation_button_) ||
+            point_in_button(pointer, editor_prev_frame_button_) ||
+            point_in_button(pointer, editor_next_frame_button_)) {
+            used = true;
+        }
+        for (auto& tab : editor_tabs_) {
+            if (!tab.widget) {
+                continue;
+            }
+            const SDL_Rect rect = tab.widget->rect();
+            if (SDL_PointInRect(&pointer, &rect)) {
+                used = true;
+                break;
+            }
+        }
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        for (auto& tab : editor_tabs_) {
+            if (!tab.widget || !tab.enabled || !tab.on_select) {
+                continue;
+            }
+            const SDL_Rect rect = tab.widget->rect();
+            if (SDL_PointInRect(&pointer, &rect)) {
+                tab.on_select();
+                used = true;
+                break;
+            }
+        }
+        if (point_in_button(pointer, editor_prev_animation_button_) && editor_frame_navigation_.on_prev_animation) {
+            editor_frame_navigation_.on_prev_animation();
+            used = true;
+        } else if (point_in_button(pointer, editor_next_animation_button_) && editor_frame_navigation_.on_next_animation) {
+            editor_frame_navigation_.on_next_animation();
+            used = true;
+        } else if (point_in_button(pointer, editor_prev_frame_button_) && editor_frame_navigation_.on_prev_frame) {
+            editor_frame_navigation_.on_prev_frame();
+            used = true;
+        } else if (point_in_button(pointer, editor_next_frame_button_) && editor_frame_navigation_.on_next_frame) {
+            editor_frame_navigation_.on_next_frame();
+            used = true;
+        }
+    }
+
+    if (!editor_frame_navigation_.visible || editor_frame_navigation_.frame_count <= 0) {
+        return used;
+    }
+
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        editor_hovered_frame_index_ = editor_frame_index_at_point(pointer);
+        const bool over_label = SDL_PointInRect(&pointer, &editor_animation_label_rect_);
+        used = used || over_label || editor_hovered_frame_index_ >= 0;
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         editor_pressed_frame_index_ = editor_frame_index_at_point(pointer);
         editor_hovered_frame_index_ = editor_pressed_frame_index_;
         if (editor_pressed_frame_index_ >= 0) {
             used = true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        pointer = SDL_Point{
-            static_cast<int>(std::lround(e.button.x)),
-            static_cast<int>(std::lround(e.button.y))
-        };
         const int released_index = editor_frame_index_at_point(pointer);
-        if (released_index >= 0 && released_index == editor_pressed_frame_index_) {
+        if (released_index >= 0) {
             editor_frame_navigation_.selected_frame = released_index;
             ensure_editor_frame_visible(released_index);
             if (editor_frame_navigation_.on_select_frame) {
@@ -1068,10 +1145,14 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
     }
 
     DMLabelStyle animation_style = DMStyles::Label();
-    animation_style.font_size = 14;
+    animation_style.font_size = 16;
     animation_style.color = editor_frame_navigation_.animation_clickable
         ? DMStyles::ButtonFocusOutline()
         : DMStyles::Label().color;
+    SDL_Color animation_bg = dm_draw::DarkenColor(DMStyles::PanelBG(), 0.10f);
+    animation_bg.a = 220;
+    dm_draw::DrawRoundedSolidRect(renderer, editor_animation_label_rect_, 8, animation_bg);
+    dm_draw::DrawRoundedOutline(renderer, editor_animation_label_rect_, 8, 1, DMStyles::Border());
     const SDL_Point animation_text_size =
         DMFontCache::instance().measure_text(animation_style, editor_frame_navigation_.animation_label);
     const int animation_text_x = editor_animation_label_rect_.x +

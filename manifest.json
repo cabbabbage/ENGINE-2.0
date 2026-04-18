@@ -15216,6 +15216,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": -10,
             "dy": 0,
             "dz": -10
@@ -15228,7 +15229,8 @@
             "kind": "folder",
             "name": "",
             "path": "forward_left"
-          }
+          },
+          "tags": []
         },
         "forward_right": {
           "box_schema_version": 1,
@@ -15508,8 +15510,10 @@
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 513,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
+      "neighbor_search_distance": 203,
       "oval_anchor_mappings": [],
       "size_settings": {
         "scale_percentage": 18.0,
@@ -19245,9 +19249,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            114,
-            242,
             36,
+            242,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -19648,9 +19652,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            31,
+            32,
             204,
-            31,
-            31,
             255
           ],
           "edge_smoothness": 101,

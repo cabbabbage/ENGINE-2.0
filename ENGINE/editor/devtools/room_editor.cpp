@@ -4629,6 +4629,135 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                               true,
                               isolate_selected_box);
         }
+
+        if (!suppress_asset_info_overlays &&
+            floor_box_mode_active() &&
+            floor_box_edit_.target_asset &&
+            floor_box_edit_.target_asset->info &&
+            floor_box_edit_.target_asset->info->is_floor_boxes_enabled()) {
+            const auto& boxes = floor_box_edit_.target_asset->info->floor_boxes;
+            const auto to_fcolor = [](SDL_Color color) -> SDL_FColor {
+                return SDL_FColor{
+                    static_cast<float>(color.r) / 255.0f,
+                    static_cast<float>(color.g) / 255.0f,
+                    static_cast<float>(color.b) / 255.0f,
+                    static_cast<float>(color.a) / 255.0f,
+                };
+            };
+            constexpr std::array<int, 6> kQuadIndices{{0, 1, 2, 0, 2, 3}};
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+            for (std::size_t i = 0; i < boxes.size(); ++i) {
+                const auto& box = boxes[i];
+                const auto corners_world = floor_box_world_corners(*floor_box_edit_.target_asset, box);
+                const SDL_FPoint tl = cam.map_to_screen_f(corners_world[0]);
+                const SDL_FPoint tr = cam.map_to_screen_f(corners_world[1]);
+                const SDL_FPoint br = cam.map_to_screen_f(corners_world[3]);
+                const SDL_FPoint bl = cam.map_to_screen_f(corners_world[2]);
+                if (!std::isfinite(tl.x) || !std::isfinite(tl.y) ||
+                    !std::isfinite(tr.x) || !std::isfinite(tr.y) ||
+                    !std::isfinite(br.x) || !std::isfinite(br.y) ||
+                    !std::isfinite(bl.x) || !std::isfinite(bl.y)) {
+                    continue;
+                }
+
+                const int box_index = static_cast<int>(i);
+                const bool selected = (floor_box_edit_.selected_box_index == box_index);
+                const bool hovered = (floor_box_edit_.hovered_box_index == box_index);
+                SDL_Color edge{96, 208, 246, box.enabled ? 236 : 140};
+                SDL_Color fill{96, 208, 246, box.enabled ? 80 : 44};
+                if (selected) {
+                    edge = SDL_Color{255, 190, 76, 255};
+                    fill = SDL_Color{255, 190, 76, box.enabled ? 104 : 68};
+                } else if (hovered) {
+                    edge = SDL_Color{255, 227, 132, box.enabled ? 245 : 165};
+                    fill = SDL_Color{255, 227, 132, box.enabled ? 92 : 58};
+                }
+
+                SDL_Vertex vertices[4]{};
+                vertices[0].position = tl;
+                vertices[1].position = tr;
+                vertices[2].position = br;
+                vertices[3].position = bl;
+                for (auto& vertex : vertices) {
+                    vertex.color = to_fcolor(fill);
+                    vertex.tex_coord = SDL_FPoint{0.0f, 0.0f};
+                }
+                SDL_RenderGeometry(renderer,
+                                   nullptr,
+                                   vertices,
+                                   4,
+                                   kQuadIndices.data(),
+                                   static_cast<int>(kQuadIndices.size()));
+
+                SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(tl.x)),
+                               static_cast<int>(std::lround(tl.y)),
+                               static_cast<int>(std::lround(tr.x)),
+                               static_cast<int>(std::lround(tr.y)));
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(tr.x)),
+                               static_cast<int>(std::lround(tr.y)),
+                               static_cast<int>(std::lround(br.x)),
+                               static_cast<int>(std::lround(br.y)));
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(br.x)),
+                               static_cast<int>(std::lround(br.y)),
+                               static_cast<int>(std::lround(bl.x)),
+                               static_cast<int>(std::lround(bl.y)));
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(bl.x)),
+                               static_cast<int>(std::lround(bl.y)),
+                               static_cast<int>(std::lround(tl.x)),
+                               static_cast<int>(std::lround(tl.y)));
+
+                const std::array<SDL_FPoint, 4> corner_screens{tl, tr, bl, br};
+                for (int corner_index = 0; corner_index < 4; ++corner_index) {
+                    SDL_Color corner_color = edge;
+                    int handle_radius = 5;
+                    const bool corner_selected = selected && floor_box_edit_.selected_corner_index == corner_index;
+                    const bool corner_hovered = hovered && floor_box_edit_.hovered_corner_index == corner_index;
+                    if (corner_selected) {
+                        corner_color = SDL_Color{255, 255, 255, 255};
+                        handle_radius = 6;
+                    } else if (corner_hovered) {
+                        corner_color = SDL_Color{255, 241, 176, 255};
+                        handle_radius = 6;
+                    }
+                    const SDL_FPoint handle = corner_screens[static_cast<std::size_t>(corner_index)];
+                    const SDL_Rect handle_rect{
+                        static_cast<int>(std::lround(handle.x)) - handle_radius,
+                        static_cast<int>(std::lround(handle.y)) - handle_radius,
+                        handle_radius * 2 + 1,
+                        handle_radius * 2 + 1};
+                    SDL_SetRenderDrawColor(renderer, corner_color.r, corner_color.g, corner_color.b, corner_color.a);
+                    sdl_render::FillRect(renderer, &handle_rect);
+                    SDL_SetRenderDrawColor(renderer, 24, 24, 24, 235);
+                    sdl_render::Rect(renderer, &handle_rect);
+                }
+
+                const SDL_FPoint center_world = floor_box_world_center(*floor_box_edit_.target_asset, box);
+                const SDL_FPoint center_screen = cam.map_to_screen_f(center_world);
+                if (std::isfinite(center_screen.x) && std::isfinite(center_screen.y)) {
+                    SDL_Color center_color{240, 240, 240, box.enabled ? 235 : 145};
+                    int center_radius = 5;
+                    if (hovered && floor_box_edit_.hovered_corner_index == kFloorBoxCenterHandleHoverIndex) {
+                        center_color = SDL_Color{255, 255, 255, 255};
+                        center_radius = 6;
+                    }
+                    const SDL_Rect center_rect{
+                        static_cast<int>(std::lround(center_screen.x)) - center_radius,
+                        static_cast<int>(std::lround(center_screen.y)) - center_radius,
+                        center_radius * 2 + 1,
+                        center_radius * 2 + 1};
+                    SDL_SetRenderDrawColor(renderer, center_color.r, center_color.g, center_color.b, center_color.a);
+                    sdl_render::FillRect(renderer, &center_rect);
+                    SDL_SetRenderDrawColor(renderer, 28, 28, 28, 235);
+                    sdl_render::Rect(renderer, &center_rect);
+                }
+            }
+        }
     }
 
     if (library_ui_ && library_ui_->is_visible()) {

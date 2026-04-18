@@ -2374,6 +2374,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     }
 
     if (input_) input_->clearClickBuffer();
+    configure_shared_panel();
 }
 
 void RoomEditor::update(const Input& input) {

@@ -815,10 +815,43 @@ std::string make_unique_floor_box_name(const std::vector<AssetInfo::FloorBox>& b
     return candidate;
 }
 
-void enforce_single_floor_box_boundary(std::vector<AssetInfo::FloorBox>& boxes, int boundary_index) {
-    for (std::size_t i = 0; i < boxes.size(); ++i) {
-        boxes[i].is_boundary = static_cast<int>(i) == boundary_index;
+std::string normalize_floor_box_tag(std::string raw_tag) {
+    std::string normalized = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw_tag));
+    if (normalized.empty()) {
+        return std::string{};
     }
+    return normalized;
+}
+
+std::vector<std::string> normalize_floor_box_tags(const std::vector<std::string>& tags) {
+    std::set<std::string> deduped;
+    for (const auto& raw_tag : tags) {
+        const std::string normalized = normalize_floor_box_tag(raw_tag);
+        if (!normalized.empty()) {
+            deduped.insert(normalized);
+        }
+    }
+    return std::vector<std::string>(deduped.begin(), deduped.end());
+}
+
+std::array<SDL_FPoint, 4> floor_box_world_corners(const Asset& asset, const AssetInfo::FloorBox& box) {
+    const float half_width = std::max(0.0f, box.width) * 0.5f;
+    const float half_depth = std::max(0.0f, box.depth) * 0.5f;
+    const float center_x = static_cast<float>(asset.world_x()) + box.position_x;
+    const float center_z = static_cast<float>(asset.world_z()) + box.position_z;
+    return std::array<SDL_FPoint, 4>{
+        SDL_FPoint{center_x - half_width, center_z - half_depth}, // TL
+        SDL_FPoint{center_x + half_width, center_z - half_depth}, // TR
+        SDL_FPoint{center_x - half_width, center_z + half_depth}, // BL
+        SDL_FPoint{center_x + half_width, center_z + half_depth}, // BR
+    };
+}
+
+SDL_FPoint floor_box_world_center(const Asset& asset, const AssetInfo::FloorBox& box) {
+    return SDL_FPoint{
+        static_cast<float>(asset.world_x()) + box.position_x,
+        static_cast<float>(asset.world_z()) + box.position_z,
+    };
 }
 
 nlohmann::json build_empty_box_frame_array(std::size_t frame_count) {

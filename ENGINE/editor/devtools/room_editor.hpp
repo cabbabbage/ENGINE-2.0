@@ -90,6 +90,7 @@ public:
     bool is_anchor_edit_mode_active() const;
     bool is_light_edit_mode_active() const;
     bool is_asset_stack_editor_active() const;
+    bool is_asset_editor_tab_scope_active() const;
     void set_room_trail_nav_visibility(bool visible);
 
     void update(const Input& input);

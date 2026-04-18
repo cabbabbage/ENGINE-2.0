@@ -2311,6 +2311,7 @@ void RoomEditor::set_shared_footer_bar(DevFooterBar* footer) {
     Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
     update_grid_resolution_for_selection(primary);
     refresh_cursor_snap();
+    update_asset_editor_layout();
 }
 
 void RoomEditor::set_snap_to_grid_enabled(bool enabled) {
@@ -7475,6 +7476,10 @@ bool RoomEditor::is_asset_stack_editor_active() const {
            floor_box_mode_active();
 }
 
+bool RoomEditor::is_asset_editor_tab_scope_active() const {
+    return asset_editor_tab_scope_active();
+}
+
 bool RoomEditor::is_asset_pointer_live(const Asset* asset) const {
     if (!asset || !assets_) {
         return false;
@@ -9290,19 +9295,27 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
         usable = SDL_Rect{0, 0, screen_w_, screen_h_};
     }
 
-    int info_panel_x = screen_w_ - std::max(screen_w_ / 3, 320);
-    info_panel_x = std::clamp(info_panel_x, 0, screen_w_);
-    const int info_panel_w = std::max(0, screen_w_ - info_panel_x);
+    const int usable_left = usable.x;
+    const int usable_right = usable.x + usable.w;
+    const int desired_info_panel_w = std::max(usable.w / 3, 320);
+    const int info_panel_w = std::clamp(desired_info_panel_w, 0, usable.w);
+    int info_panel_x = usable_right - info_panel_w;
+    info_panel_x = std::clamp(info_panel_x, usable_left, usable_right);
     SDL_Rect asset_info_rect{info_panel_x, usable.y, info_panel_w, usable.h};
 
-    const int left_panel_h = std::max(0, usable.h - 56);
-    SDL_Rect left_panel_rect{12, 56, 320, left_panel_h};
+    const int panel_margin = 12;
+    const int left_panel_y = usable.y + panel_margin;
+    const int left_panel_h = std::max(0, usable.h - panel_margin * 2);
+    const int left_panel_x = usable.x + panel_margin;
+    int left_panel_w = std::min(320, std::max(220, usable.w / 3));
+    left_panel_w = std::min(left_panel_w, std::max(0, info_panel_x - left_panel_x - panel_margin));
+    SDL_Rect left_panel_rect{left_panel_x, left_panel_y, left_panel_w, left_panel_h};
     const int payload_panel_gap = 12;
     const int payload_panel_x = left_panel_rect.x + left_panel_rect.w + payload_panel_gap;
     const int payload_panel_right_limit = asset_info_rect.x - payload_panel_gap;
     const int payload_panel_w = std::max(0, std::min(332, payload_panel_right_limit - payload_panel_x));
-    SDL_Rect attack_payload_rect{payload_panel_x, 56, payload_panel_w, left_panel_h};
-    SDL_Rect oval_point_child_rect{payload_panel_x, 56, payload_panel_w, left_panel_h};
+    SDL_Rect attack_payload_rect{payload_panel_x, left_panel_y, payload_panel_w, left_panel_h};
+    SDL_Rect oval_point_child_rect{payload_panel_x, left_panel_y, payload_panel_w, left_panel_h};
 
     auto progress_for = [this]() -> float {
         if (!asset_editor_transition_.active || asset_editor_transition_.duration_frames <= 0) {

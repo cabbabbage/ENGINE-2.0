@@ -1221,6 +1221,9 @@ const std::vector<Asset::RuntimeFloorBox>& Asset::getFloorBoxes() const {
 }
 
 bool Asset::RuntimeFloorBox::has_tag(const std::string& tag) const {
+    if (tag == "boundary") {
+        return boundary_tag || std::find(tags.begin(), tags.end(), tag) != tags.end();
+    }
     return std::find(tags.begin(), tags.end(), tag) != tags.end();
 }
 
@@ -1240,6 +1243,8 @@ void Asset::refresh_runtime_floor_boxes_cache() {
         box.width = authored.width;
         box.depth = authored.depth;
         box.enabled = authored.enabled;
+        box.boundary_tag =
+            std::find(authored.tags.begin(), authored.tags.end(), "boundary") != authored.tags.end();
         box.tags = authored.tags;
         if (box.id.empty() || box.name.empty()) {
             continue;

@@ -355,9 +355,11 @@ class Asset {
         float width = 0.0f;
         float depth = 0.0f;
         bool enabled = true;
+        bool boundary_tag = false;
         std::vector<std::string> tags;
 
         bool has_tag(const std::string& tag) const;
+        bool has_boundary_tag() const { return boundary_tag; }
     };
 
     bool isMovementEnabled() const;

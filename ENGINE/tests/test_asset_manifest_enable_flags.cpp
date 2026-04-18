@@ -4,6 +4,7 @@
 #include <limits>
 #include <unordered_set>
 
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 
 TEST_CASE("AssetInfo strips animation payload systems when disabled") {
@@ -223,4 +224,18 @@ TEST_CASE("AssetInfo save-time floor box sanitization applies defaults and canon
     const auto& second_tags = payload["floor_boxes"][1]["tags"];
     CHECK(std::find(second_tags.begin(), second_tags.end(), "enemy_block") != second_tags.end());
     CHECK(std::find(second_tags.begin(), second_tags.end(), "ally_block") != second_tags.end());
+}
+
+TEST_CASE("Runtime floor box boundary lookup uses cached boundary flag") {
+    Asset::RuntimeFloorBox box{};
+    box.boundary_tag = true;
+    CHECK(box.has_tag("boundary"));
+
+    box.boundary_tag = false;
+    box.tags = {"enemy_block"};
+    CHECK_FALSE(box.has_tag("boundary"));
+    CHECK(box.has_tag("enemy_block"));
+
+    box.tags.push_back("boundary");
+    CHECK(box.has_tag("boundary"));
 }

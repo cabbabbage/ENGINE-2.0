@@ -94,7 +94,7 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
 bool build_boundary_floor_box_area_for_box(const Asset& asset,
                                            const Asset::RuntimeFloorBox& boundary_box,
                                            Area& out_area) {
-    if (!boundary_box.enabled || !boundary_box.has_tag("boundary")) {
+    if (!boundary_box.enabled || !boundary_box.has_boundary_tag()) {
         return false;
     }
 
@@ -920,7 +920,6 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         asset->update_anchor_basis_if_needed();
         asset->refresh_anchor_point_cache_from_frame();
         asset->refresh_runtime_box_cache_from_frame();
-        asset->refresh_runtime_floor_boxes_cache();
         state.processed_anchor_invalidation_version = state.pending_anchor_invalidation_version;
         state.processed_anchor_revision = asset->anchor_world_revision_;
         state.processed_camera_state_version = camera_state_version;
@@ -982,26 +981,6 @@ void Assets::rebuild_frame_collision_context() const {
         }
 
         const std::string canonical_type = asset_types::canonicalize(asset->info->type);
-        std::vector<Area> floor_boundary_areas;
-        if (asset->isFloorBoxesEnabled()) {
-            for (const auto& floor_box : asset->getFloorBoxes()) {
-                Area area{"impassable"};
-                if (build_boundary_floor_box_area_for_box(*asset, floor_box, area)) {
-                    floor_boundary_areas.push_back(std::move(area));
-                }
-            }
-        }
-        const bool has_floor_boundary_area = !floor_boundary_areas.empty();
-        const bool impassable =
-            canonical_type == asset_types::boundary ||
-            canonical_type == asset_types::enemy ||
-            canonical_type == asset_types::npc ||
-            asset->isMovementEnabled() ||
-            has_floor_boundary_area ||
-            !asset->info->passable;
-        if (!impassable || canonical_type == asset_types::player) {
-            continue;
-        }
 
         auto push_collision_entry = [&](Area collision, const std::string& resolved_type, SDL_Point world_center) {
             if (collision.get_points().empty()) {
@@ -1029,11 +1008,30 @@ void Assets::rebuild_frame_collision_context() const {
             frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
         };
 
-        if (has_floor_boundary_area) {
-            for (auto& floor_boundary_area : floor_boundary_areas) {
-                const SDL_Point center = floor_boundary_area.get_center();
-                push_collision_entry(std::move(floor_boundary_area), std::string(asset_types::boundary), center);
+        bool has_floor_boundary_area = false;
+        if (asset->isFloorBoxesEnabled()) {
+            for (const auto& floor_box : asset->getFloorBoxes()) {
+                Area area{"impassable"};
+                if (!build_boundary_floor_box_area_for_box(*asset, floor_box, area)) {
+                    continue;
+                }
+                has_floor_boundary_area = true;
+                const SDL_Point center = area.get_center();
+                push_collision_entry(std::move(area), std::string(asset_types::boundary), center);
             }
+        }
+
+        if (has_floor_boundary_area) {
+            continue;
+        }
+
+        const bool impassable =
+            canonical_type == asset_types::boundary ||
+            canonical_type == asset_types::enemy ||
+            canonical_type == asset_types::npc ||
+            asset->isMovementEnabled() ||
+            !asset->info->passable;
+        if (!impassable || canonical_type == asset_types::player) {
             continue;
         }
 

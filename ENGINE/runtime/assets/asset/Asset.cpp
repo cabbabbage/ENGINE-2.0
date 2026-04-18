@@ -1078,6 +1078,7 @@ void Asset::set_current_animation(const std::string& name)
 		Animation& anim = it->second;
 		anim.change(current_frame, static_frame);
 		frame_progress = 0.0f;
+                refresh_frame_texture_bindings();
 		refresh_cached_dimensions();
                 mark_anchors_dirty();
                 refresh_anchor_point_cache_from_frame();
@@ -1708,6 +1709,56 @@ void Asset::refresh_cached_dimensions() {
 }
 
 void Asset::refresh_frame_texture_bindings() {
+        Animation* active_animation = nullptr;
+        if (info) {
+                auto animation_it = info->animations.find(current_animation);
+                if (animation_it != info->animations.end()) {
+                        active_animation = &animation_it->second;
+                } else {
+                        auto default_it = info->animations.find("default");
+                        if (default_it != info->animations.end()) {
+                                current_animation = "default";
+                                active_animation = &default_it->second;
+                        } else if (!info->animations.empty()) {
+                                auto fallback_it = info->animations.begin();
+                                current_animation = fallback_it->first;
+                                active_animation = &fallback_it->second;
+                        }
+                }
+        }
+
+        if (active_animation && (!current_frame || active_animation->index_of(current_frame) < 0)) {
+                current_frame = active_animation->get_first_frame();
+                frame_progress = 0.0f;
+        }
+
+        auto ensure_texture_binding = [&]() {
+                if (!current_frame || !active_animation) {
+                        return;
+                }
+                if (get_current_variant_texture()) {
+                        return;
+                }
+                if (current_variant_index != 0 && current_frame->get_base_texture(0)) {
+                        current_variant_index = 0;
+                        return;
+                }
+                for (AnimationFrame* candidate = active_animation->get_first_frame();
+                     candidate != nullptr;
+                     candidate = candidate->next) {
+                        if (candidate->get_base_texture(current_variant_index)) {
+                                current_frame = candidate;
+                                return;
+                        }
+                        if (candidate->get_base_texture(0)) {
+                                current_frame = candidate;
+                                current_variant_index = 0;
+                                return;
+                        }
+                }
+        };
+
+        ensure_texture_binding();
         if (!current_frame) {
                 last_rendered_frame_ = nullptr;
                 return;
@@ -1718,6 +1769,14 @@ void Asset::refresh_frame_texture_bindings() {
         mark_composite_dirty();
         mark_mesh_dirty();
         mark_anchors_dirty();
+#if !defined(NDEBUG)
+        if (get_current_variant_texture() == nullptr) {
+                const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                vibble::log::warn("[AssetRefresh] Missing texture binding for asset '" +
+                                  asset_name + "' animation='" + current_animation +
+                                  "' frame=" + std::to_string(current_frame->frame_index));
+        }
+#endif
 }
 
 float Asset::runtime_scale_remainder() const {

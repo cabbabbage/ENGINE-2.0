@@ -57,6 +57,7 @@ constexpr const char* kAttackBoxEnabledKey = "attack_box_enabled";
 constexpr const char* kHitboxEnabledKey = "hitbox_enabled";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
+constexpr const char* kBoundaryTag = "boundary";
 
 std::string sanitize_floor_box_token(std::string value) {
         std::string out;
@@ -79,7 +80,6 @@ nlohmann::json normalize_floor_boxes_payload(const nlohmann::json& payload) {
         }
 
         std::unordered_set<std::string> used_ids;
-        bool boundary_claimed = false;
         for (std::size_t index = 0; index < payload.size(); ++index) {
                 const auto& entry = payload[index];
                 if (!entry.is_object()) {
@@ -100,29 +100,49 @@ nlohmann::json normalize_floor_boxes_payload(const nlohmann::json& payload) {
                         name = std::string("floor_box_") + std::to_string(index + 1);
                 }
 
-                bool is_boundary = entry.value("is_boundary", false);
-                if (is_boundary) {
-                        if (boundary_claimed) {
-                                is_boundary = false;
-                        } else {
-                                boundary_claimed = true;
-                        }
-                }
-
                 auto finite_or = [](double value, double fallback) {
                         return std::isfinite(value) ? value : fallback;
                 };
 
+                std::unordered_set<std::string> seen_tags;
+                std::vector<std::string> normalized_tags;
+                auto append_tag = [&](const std::string& raw_tag) {
+                        std::string tag = raw_tag;
+                        std::transform(tag.begin(), tag.end(), tag.begin(), [](unsigned char c) {
+                                return static_cast<char>(std::tolower(c));
+                        });
+                        if (tag.empty()) {
+                                return;
+                        }
+                        if (seen_tags.insert(tag).second) {
+                                normalized_tags.push_back(std::move(tag));
+                        }
+                };
+                if (entry.contains("tags")) {
+                        const auto& tags_payload = entry["tags"];
+                        if (tags_payload.is_array()) {
+                                for (const auto& tag_value : tags_payload) {
+                                        if (tag_value.is_string()) {
+                                                append_tag(tag_value.get<std::string>());
+                                        }
+                                }
+                        } else if (tags_payload.is_string()) {
+                                append_tag(tags_payload.get<std::string>());
+                        }
+                }
+                if (entry.value("is_boundary", false)) {
+                        append_tag(std::string(kBoundaryTag));
+                }
+
                 nlohmann::json canonical = nlohmann::json::object();
                 canonical["id"] = unique_id;
                 canonical["name"] = name;
-                canonical["is_boundary"] = is_boundary;
                 canonical["position_x"] = finite_or(entry.value("position_x", 0.0), 0.0);
                 canonical["position_z"] = finite_or(entry.value("position_z", 0.0), 0.0);
                 canonical["width"] = std::max(0.0, finite_or(entry.value("width", 0.0), 0.0));
                 canonical["depth"] = std::max(0.0, finite_or(entry.value("depth", 0.0), 0.0));
-                canonical["rotation_degrees"] = finite_or(entry.value("rotation_degrees", 0.0), 0.0);
                 canonical["enabled"] = entry.value("enabled", true);
+                canonical["tags"] = normalized_tags;
                 normalized.push_back(std::move(canonical));
         }
         return normalized;

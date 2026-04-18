@@ -590,7 +590,6 @@ Asset& Asset::operator=(const Asset& o) {
         current_hit_box_volumes_.clear();
         current_attack_box_volumes_.clear();
         floor_boxes_.clear();
-        boundary_floor_box_ = nullptr;
         runtime_hit_box_lookup_.clear();
         runtime_attack_box_lookup_.clear();
         anchors_initialized_ = false;
@@ -1221,13 +1220,12 @@ const std::vector<Asset::RuntimeFloorBox>& Asset::getFloorBoxes() const {
     return floor_boxes_;
 }
 
-const Asset::RuntimeFloorBox* Asset::getBoundaryFloorBox() const {
-    return boundary_floor_box_;
+bool Asset::RuntimeFloorBox::has_tag(const std::string& tag) const {
+    return std::find(tags.begin(), tags.end(), tag) != tags.end();
 }
 
 void Asset::refresh_runtime_floor_boxes_cache() {
     floor_boxes_.clear();
-    boundary_floor_box_ = nullptr;
     if (!info || !isFloorBoxesEnabled()) {
         return;
     }
@@ -1237,21 +1235,16 @@ void Asset::refresh_runtime_floor_boxes_cache() {
         RuntimeFloorBox box{};
         box.id = authored.id;
         box.name = authored.name;
-        box.is_boundary = authored.is_boundary;
         box.position_x = authored.position_x;
         box.position_z = authored.position_z;
         box.width = authored.width;
         box.depth = authored.depth;
-        box.rotation_degrees = authored.rotation_degrees;
         box.enabled = authored.enabled;
+        box.tags = authored.tags;
         if (box.id.empty() || box.name.empty()) {
             continue;
         }
         floor_boxes_.push_back(std::move(box));
-        RuntimeFloorBox& inserted = floor_boxes_.back();
-        if (inserted.enabled && inserted.is_boundary && boundary_floor_box_ == nullptr) {
-            boundary_floor_box_ = &inserted;
-        }
     }
 }
 

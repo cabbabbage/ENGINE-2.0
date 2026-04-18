@@ -226,7 +226,6 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
             throw std::runtime_error(oss.str());
         }
 
-        std::size_t boundary_count = 0;
         for (const auto& floor_box : *floor_boxes_it) {
             if (!floor_box.is_object()) {
                 std::ostringstream oss;
@@ -243,7 +242,7 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
                     throw std::runtime_error(oss.str());
                 }
             }
-            const char* number_keys[] = {"position_x", "position_z", "width", "depth", "rotation_degrees"};
+            const char* number_keys[] = {"position_x", "position_z", "width", "depth"};
             for (const char* key : number_keys) {
                 if (!floor_box.contains(key) || !floor_box[key].is_number()) {
                     std::ostringstream oss;
@@ -252,23 +251,31 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
                     throw std::runtime_error(oss.str());
                 }
             }
-            if (!floor_box.contains("is_boundary") || !floor_box["is_boundary"].is_boolean() ||
-                !floor_box.contains("enabled") || !floor_box["enabled"].is_boolean()) {
+            if (!floor_box.contains("enabled") || !floor_box["enabled"].is_boolean()) {
                 std::ostringstream oss;
                 oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
-                    << "' floor box keys 'is_boundary' and 'enabled' must be booleans.";
+                    << "' floor box key 'enabled' must be boolean.";
                 throw std::runtime_error(oss.str());
             }
-            if (floor_box.value("is_boundary", false)) {
-                ++boundary_count;
+            if (floor_box.contains("tags")) {
+                const auto& tags = floor_box["tags"];
+                if (!(tags.is_array() || tags.is_string())) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key 'tags' must be an array or string.";
+                    throw std::runtime_error(oss.str());
+                }
+                if (tags.is_array()) {
+                    for (const auto& tag_value : tags) {
+                        if (!tag_value.is_string()) {
+                            std::ostringstream oss;
+                            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                                << "' floor box 'tags' entries must be strings.";
+                            throw std::runtime_error(oss.str());
+                        }
+                    }
+                }
             }
-        }
-        if (boundary_count > 1) {
-            std::ostringstream oss;
-            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
-                << "' has " << boundary_count
-                << " boundary floor boxes; at most one is allowed.";
-            throw std::runtime_error(oss.str());
         }
     }
 }

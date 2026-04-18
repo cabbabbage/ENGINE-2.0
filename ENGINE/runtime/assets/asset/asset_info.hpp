@@ -134,13 +134,12 @@ class AssetInfo {
     struct FloorBox {
         std::string id;
         std::string name;
-        bool is_boundary = false;
         float position_x = 0.0f;
         float position_z = 0.0f;
         float width = 0.0f;
         float depth = 0.0f;
-        float rotation_degrees = 0.0f;
         bool enabled = true;
+        std::vector<std::string> tags;
     };
 
     bool movement_enabled = false;

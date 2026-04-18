@@ -30,18 +30,19 @@ Canonical floor box fields:
 
 - `id` (string)
 - `name` (string)
-- `is_boundary` (bool)
 - `position_x` (number)
 - `position_z` (number)
 - `width` (number)
 - `depth` (number)
-- `rotation_degrees` (number)
 - `enabled` (bool)
+- `tags` (array of strings)
 
-Invariant:
+Behavior:
 
-- At most one `is_boundary=true` floor box per asset.
-- Normalization is deterministic: first boundary entry wins, later boundary entries are demoted to `is_boundary=false`.
+- `floor_boxes` are axis-aligned floor rectangles (no per-box rotation).
+- The `boundary` tag marks a floor box as engine-level impassable geometry.
+- Multiple floor boxes may carry `boundary`; all enabled boundary-tagged boxes are used.
+- Legacy manifests with `is_boundary` are upgraded by adding the `boundary` tag.
 
 ## Runtime/Loader Behavior
 

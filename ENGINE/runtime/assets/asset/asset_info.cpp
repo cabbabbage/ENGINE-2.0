@@ -68,6 +68,7 @@ constexpr const char* kAttackBoxEnabledKey = "attack_box_enabled";
 constexpr const char* kHitboxEnabledKey = "hitbox_enabled";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
+constexpr const char* kBoundaryTag = "boundary";
 
 std::string trim_copy(std::string value) {
     const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -161,7 +162,6 @@ std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json&
     }
 
     std::unordered_set<std::string> used_ids;
-    bool boundary_claimed = false;
     boxes.reserve(payload.size());
 
     for (std::size_t index = 0; index < payload.size(); ++index) {
@@ -186,21 +186,15 @@ std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json&
             box.name = default_floor_box_name(index);
         }
 
-        box.is_boundary = entry.value("is_boundary", false);
         box.position_x = sanitize_finite_float(entry.value("position_x", 0.0f), 0.0f);
         box.position_z = sanitize_finite_float(entry.value("position_z", 0.0f), 0.0f);
         box.width = std::max(0.0f, sanitize_finite_float(entry.value("width", 0.0f), 0.0f));
         box.depth = std::max(0.0f, sanitize_finite_float(entry.value("depth", 0.0f), 0.0f));
-        box.rotation_degrees = sanitize_finite_float(entry.value("rotation_degrees", 0.0f), 0.0f);
         box.enabled = entry.value("enabled", true);
-
-        // Deterministic single-boundary invariant: first surviving boundary wins.
-        if (box.is_boundary) {
-            if (boundary_claimed) {
-                box.is_boundary = false;
-            } else {
-                boundary_claimed = true;
-            }
+        box.tags = normalize_tag_list(parse_string_array(entry.value("tags", nlohmann::json::array())));
+        if (entry.value("is_boundary", false)) {
+            box.tags.push_back(std::string(kBoundaryTag));
+            box.tags = normalize_tag_list(box.tags);
         }
 
         boxes.push_back(std::move(box));
@@ -211,8 +205,7 @@ std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json&
 
 AssetInfo::FloorBox sanitize_floor_box_for_save(const AssetInfo::FloorBox& raw_box,
                                                 std::size_t index,
-                                                std::unordered_set<std::string>& used_ids,
-                                                bool& boundary_claimed) {
+                                                std::unordered_set<std::string>& used_ids) {
     AssetInfo::FloorBox sanitized{};
 
     std::string base_id = sanitize_floor_box_token(trim_copy(raw_box.id));
@@ -230,21 +223,12 @@ AssetInfo::FloorBox sanitize_floor_box_for_save(const AssetInfo::FloorBox& raw_b
         sanitized.name = default_floor_box_name(index);
     }
 
-    sanitized.is_boundary = raw_box.is_boundary;
-    if (sanitized.is_boundary) {
-        if (boundary_claimed) {
-            sanitized.is_boundary = false;
-        } else {
-            boundary_claimed = true;
-        }
-    }
-
     sanitized.position_x = sanitize_finite_float(raw_box.position_x, 0.0f);
     sanitized.position_z = sanitize_finite_float(raw_box.position_z, 0.0f);
     sanitized.width = std::max(0.0f, sanitize_finite_float(raw_box.width, 0.0f));
     sanitized.depth = std::max(0.0f, sanitize_finite_float(raw_box.depth, 0.0f));
-    sanitized.rotation_degrees = sanitize_finite_float(raw_box.rotation_degrees, 0.0f);
     sanitized.enabled = raw_box.enabled;
+    sanitized.tags = normalize_tag_list(raw_box.tags);
     return sanitized;
 }
 
@@ -252,20 +236,18 @@ nlohmann::json encode_floor_boxes_payload(const std::vector<AssetInfo::FloorBox>
     nlohmann::json payload = nlohmann::json::array();
     std::unordered_set<std::string> used_ids;
     used_ids.reserve(boxes.size());
-    bool boundary_claimed = false;
     for (std::size_t index = 0; index < boxes.size(); ++index) {
         const AssetInfo::FloorBox box =
-            sanitize_floor_box_for_save(boxes[index], index, used_ids, boundary_claimed);
+            sanitize_floor_box_for_save(boxes[index], index, used_ids);
         nlohmann::json entry = nlohmann::json::object();
         entry["id"] = box.id;
         entry["name"] = box.name;
-        entry["is_boundary"] = box.is_boundary;
         entry["position_x"] = box.position_x;
         entry["position_z"] = box.position_z;
         entry["width"] = box.width;
         entry["depth"] = box.depth;
-        entry["rotation_degrees"] = box.rotation_degrees;
         entry["enabled"] = box.enabled;
+        entry["tags"] = box.tags;
         payload.push_back(std::move(entry));
     }
     return payload;

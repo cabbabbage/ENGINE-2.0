@@ -91,63 +91,34 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
     return (world_z - anchor_world_z) * sign;
 }
 
-bool build_boundary_floor_box_area(const Asset& asset, Area& out_area) {
-    if (!asset.isFloorBoxesEnabled()) {
+bool build_boundary_floor_box_area_for_box(const Asset& asset,
+                                           const Asset::RuntimeFloorBox& boundary_box,
+                                           Area& out_area) {
+    if (!boundary_box.enabled || !boundary_box.has_tag("boundary")) {
         return false;
     }
 
-    const Asset::RuntimeFloorBox* boundary = asset.getBoundaryFloorBox();
-    if (!boundary || !boundary->enabled || !boundary->is_boundary) {
-        return false;
-    }
-
-    std::size_t enabled_boundary_count = 0;
-    for (const auto& box : asset.getFloorBoxes()) {
-        if (box.enabled && box.is_boundary) {
-            ++enabled_boundary_count;
-            if (enabled_boundary_count > 1) {
-                return false;
-            }
-        }
-    }
-    if (enabled_boundary_count != 1) {
-        return false;
-    }
-
-    const float width = boundary->width;
-    const float depth = boundary->depth;
+    const float width = boundary_box.width;
+    const float depth = boundary_box.depth;
     if (!std::isfinite(width) || !std::isfinite(depth) || width <= 0.0f || depth <= 0.0f) {
         return false;
     }
 
-    constexpr double kPi = 3.14159265358979323846;
-    const double radians = static_cast<double>(boundary->rotation_degrees) * (kPi / 180.0);
-    const double cos_theta = std::cos(radians);
-    const double sin_theta = std::sin(radians);
     const double half_w = static_cast<double>(width) * 0.5;
     const double half_d = static_cast<double>(depth) * 0.5;
-    const double center_x = static_cast<double>(asset.world_x()) + static_cast<double>(boundary->position_x);
-    const double center_z = static_cast<double>(asset.world_z()) + static_cast<double>(boundary->position_z);
-
-    const std::array<std::pair<double, double>, 4> local_corners{{
-        {-half_w, -half_d},
-        { half_w, -half_d},
-        { half_w,  half_d},
-        {-half_w,  half_d},
-    }};
+    const double center_x = static_cast<double>(asset.world_x()) + static_cast<double>(boundary_box.position_x);
+    const double center_z = static_cast<double>(asset.world_z()) + static_cast<double>(boundary_box.position_z);
+    const double min_x = center_x - half_w;
+    const double max_x = center_x + half_w;
+    const double min_z = center_z - half_d;
+    const double max_z = center_z + half_d;
 
     std::vector<Area::Point> points;
-    points.reserve(local_corners.size());
-    for (const auto& corner : local_corners) {
-        const double local_x = corner.first;
-        const double local_z = corner.second;
-        const double rotated_x = local_x * cos_theta - local_z * sin_theta;
-        const double rotated_z = local_x * sin_theta + local_z * cos_theta;
-        points.push_back(Area::Point{
-            static_cast<int>(std::lround(center_x + rotated_x)),
-            static_cast<int>(std::lround(center_z + rotated_z))
-        });
-    }
+    points.reserve(4);
+    points.push_back(Area::Point{static_cast<int>(std::lround(min_x)), static_cast<int>(std::lround(min_z))});
+    points.push_back(Area::Point{static_cast<int>(std::lround(max_x)), static_cast<int>(std::lround(min_z))});
+    points.push_back(Area::Point{static_cast<int>(std::lround(max_x)), static_cast<int>(std::lround(max_z))});
+    points.push_back(Area::Point{static_cast<int>(std::lround(min_x)), static_cast<int>(std::lround(max_z))});
 
     if (points.size() != 4) {
         return false;
@@ -1011,8 +982,16 @@ void Assets::rebuild_frame_collision_context() const {
         }
 
         const std::string canonical_type = asset_types::canonicalize(asset->info->type);
-        Area floor_boundary_area{"impassable"};
-        const bool has_floor_boundary_area = build_boundary_floor_box_area(*asset, floor_boundary_area);
+        std::vector<Area> floor_boundary_areas;
+        if (asset->isFloorBoxesEnabled()) {
+            for (const auto& floor_box : asset->getFloorBoxes()) {
+                Area area{"impassable"};
+                if (build_boundary_floor_box_area_for_box(*asset, floor_box, area)) {
+                    floor_boundary_areas.push_back(std::move(area));
+                }
+            }
+        }
+        const bool has_floor_boundary_area = !floor_boundary_areas.empty();
         const bool impassable =
             canonical_type == asset_types::boundary ||
             canonical_type == asset_types::enemy ||
@@ -1024,36 +1003,46 @@ void Assets::rebuild_frame_collision_context() const {
             continue;
         }
 
-        Area collision = has_floor_boundary_area ? floor_boundary_area : asset->get_area("impassable");
-        if (!has_floor_boundary_area && collision.get_points().empty()) {
-            collision = asset->get_area("collision_area");
-        }
-        if (collision.get_points().empty()) {
+        auto push_collision_entry = [&](Area collision, const std::string& resolved_type, SDL_Point world_center) {
+            if (collision.get_points().empty()) {
+                return;
+            }
+            const world::GridPoint center = world::grid_math::from_sdl(
+                world_center,
+                asset->world_y(),
+                asset->grid_resolution);
+            const world::GridPoint bottom_middle =
+                animation_update::detail::bottom_middle_for(*asset, center);
+            frame_collision_entries_.push_back(FrameCollisionEntry{
+                asset,
+                std::move(collision),
+                world_center,
+                bottom_middle,
+                resolved_type
+            });
+            FrameCollisionEntry& entry = frame_collision_entries_.back();
+            const world::GridPoint origin = world_grid_.origin();
+            const int spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
+            const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), spacing);
+            const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), spacing);
+            const world::GridCoord cell{cell_x, cell_z};
+            frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
+        };
+
+        if (has_floor_boundary_area) {
+            for (auto& floor_boundary_area : floor_boundary_areas) {
+                const SDL_Point center = floor_boundary_area.get_center();
+                push_collision_entry(std::move(floor_boundary_area), std::string(asset_types::boundary), center);
+            }
             continue;
         }
 
+        Area collision = asset->get_area("impassable");
+        if (collision.get_points().empty()) {
+            collision = asset->get_area("collision_area");
+        }
         const SDL_Point world_center = asset->world_xz_point();
-        const world::GridPoint center = world::grid_math::from_sdl(
-            world_center,
-            asset->world_y(),
-            asset->grid_resolution);
-        const world::GridPoint bottom_middle =
-            animation_update::detail::bottom_middle_for(*asset, center);
-
-        frame_collision_entries_.push_back(FrameCollisionEntry{
-            asset,
-            std::move(collision),
-            world_center,
-            bottom_middle,
-            has_floor_boundary_area ? std::string(asset_types::boundary) : canonical_type
-        });
-        FrameCollisionEntry& entry = frame_collision_entries_.back();
-        const world::GridPoint origin = world_grid_.origin();
-        const int spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
-        const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), spacing);
-        const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), spacing);
-        const world::GridCoord cell{cell_x, cell_z};
-        frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
+        push_collision_entry(std::move(collision), canonical_type, world_center);
     }
 
     frame_collision_context_frame_id_ = frame_id_;

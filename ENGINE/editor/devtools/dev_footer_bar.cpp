@@ -982,19 +982,28 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
 
     SDL_Point pointer{0, 0};
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        pointer = SDL_Point{e.motion.x, e.motion.y};
+        pointer = SDL_Point{
+            static_cast<int>(std::lround(e.motion.x)),
+            static_cast<int>(std::lround(e.motion.y))
+        };
         editor_hovered_frame_index_ = editor_frame_index_at_point(pointer);
         const bool over_label = SDL_PointInRect(&pointer, &editor_animation_label_rect_);
         used = used || over_label || editor_hovered_frame_index_ >= 0;
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        pointer = SDL_Point{e.button.x, e.button.y};
+        pointer = SDL_Point{
+            static_cast<int>(std::lround(e.button.x)),
+            static_cast<int>(std::lround(e.button.y))
+        };
         editor_pressed_frame_index_ = editor_frame_index_at_point(pointer);
         editor_hovered_frame_index_ = editor_pressed_frame_index_;
         if (editor_pressed_frame_index_ >= 0) {
             used = true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        pointer = SDL_Point{e.button.x, e.button.y};
+        pointer = SDL_Point{
+            static_cast<int>(std::lround(e.button.x)),
+            static_cast<int>(std::lround(e.button.y))
+        };
         const int released_index = editor_frame_index_at_point(pointer);
         if (released_index >= 0 && released_index == editor_pressed_frame_index_) {
             editor_frame_navigation_.selected_frame = released_index;

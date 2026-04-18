@@ -14380,7 +14380,7 @@ bool RoomEditor::apply_movement_panel_numeric_edits() {
     frame.dy = values.dy;
     frame.dz = values.dz;
     frame.rotation_degrees = values.rotation_degrees;
-    rebuild_rel_positions();
+    rebuild_movement_rel_positions();
     refresh_movement_runtime_animation();
     movement_edit_.dirty_since_last_flush = true;
     return true;

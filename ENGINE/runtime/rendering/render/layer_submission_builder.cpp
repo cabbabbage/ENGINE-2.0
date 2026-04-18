@@ -121,10 +121,8 @@ void expand_layer_bounds(render_pipeline::LayerSubmission& layer,
 
 render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBatcher& geometry_batcher,
                                                                 const WarpedScreenGrid& cam,
-                                                                double focus_plane_world_z,
+                                                                double player_split_world_z,
                                                                 double max_cull_depth) const {
-    (void)focus_plane_world_z;
-
     render_pipeline::LayerBuildResult result{};
     const auto realism = cam.get_settings();
     const double safe_max_cull_depth = std::max(1.0, max_cull_depth);
@@ -143,7 +141,7 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
     result.layer_count = layer_count;
     result.layers.resize(static_cast<std::size_t>(layer_count));
 
-    const int theoretical_focus_layer_index = std::clamp(
+    const int center_split_layer_index = std::clamp(
         depth_to_layer_index(0.0,
                              safe_max_cull_depth,
                              foreground_depth_edges,
@@ -154,7 +152,28 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
         0,
         std::max(0, layer_count - 1));
 
-    result.player_layer_index = theoretical_focus_layer_index;
+    double player_layer_depth_from_anchor = 0.0;
+    if (std::isfinite(player_split_world_z)) {
+        const double anchor_world_z = cam.anchor_world_z();
+        if (std::isfinite(anchor_world_z)) {
+            player_layer_depth_from_anchor = anchor_world_z - player_split_world_z;
+        }
+    }
+    if (!std::isfinite(player_layer_depth_from_anchor)) {
+        player_layer_depth_from_anchor = 0.0;
+    }
+
+    int resolved_player_layer_index = depth_to_layer_index(player_layer_depth_from_anchor,
+                                                           safe_max_cull_depth,
+                                                           foreground_depth_edges,
+                                                           background_depth_edges,
+                                                           foreground_layer_count,
+                                                           background_layer_count,
+                                                           layer_count);
+    if (resolved_player_layer_index < 0 || resolved_player_layer_index >= layer_count) {
+        resolved_player_layer_index = center_split_layer_index;
+    }
+    result.player_layer_index = resolved_player_layer_index;
 
     geometry_batcher.for_each_item_far_to_near([&](const GeometryBatcher::DrawItem& item) {
         const int layer_idx = depth_to_layer_index(item.depth,
@@ -223,7 +242,6 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
         result.non_empty_layers.push_back(i);
     }
 
-    result.player_layer_index = theoretical_focus_layer_index;
     result.valid = !result.non_empty_layers.empty();
     return result;
 }

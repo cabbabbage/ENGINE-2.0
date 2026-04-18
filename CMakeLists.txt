@@ -311,6 +311,7 @@ add_executable(engine_tests
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
     ENGINE/tests/test_layer_effect_processor.cpp
     ENGINE/tests/test_render_dof_composite_target.cpp
+    ENGINE/tests/test_layer_submission_player_split.cpp
     ENGINE/tests/test_floor_light_mask.cpp
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_dynamic_boundary_size_variation.cpp

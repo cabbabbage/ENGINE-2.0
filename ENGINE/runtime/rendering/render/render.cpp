@@ -13,6 +13,7 @@
 #include "rendering/render/debug_overlay_renderer.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/log.hpp"
+#include "utils/input.hpp"
 #include "utils/AnchorPointResolver.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/anchored_child_placement.hpp"
@@ -1354,16 +1355,33 @@ void SceneRenderer::render() {
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
     const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
-    const double focus_plane_world_z = cam.anchor_world_z();
+    const double depth_anchor_world_z = cam.anchor_world_z();
+    double player_split_world_z = depth_anchor_world_z;
+    if (assets_->is_dev_mode()) {
+        if (const Input* input = assets_->get_input()) {
+            const SDL_FPoint cursor_world = cam.screen_to_map(SDL_Point{input->getX(), input->getY()});
+            if (std::isfinite(cursor_world.y)) {
+                player_split_world_z = static_cast<double>(cursor_world.y);
+            }
+        }
+    } else if (assets_->player) {
+        const double player_world_z = static_cast<double>(assets_->player->world_z());
+        if (std::isfinite(player_world_z)) {
+            player_split_world_z = player_world_z;
+        }
+    }
+    if (!std::isfinite(player_split_world_z)) {
+        player_split_world_z = depth_anchor_world_z;
+    }
     const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
 
     std::vector<Asset*> rendered_assets_for_debug;
-    collect_frame_geometry(cam, grid, focus_plane_world_z, max_cull_depth, rendered_assets_for_debug);
+    collect_frame_geometry(cam, grid, depth_anchor_world_z, max_cull_depth, rendered_assets_for_debug);
 
     std::vector<LayerEffectProcessor::RuntimeLight> runtime_lights;
     const bool runtime_lighting_enabled = assets_->should_render_runtime_lighting();
     if (runtime_lighting_enabled) {
-        gather_runtime_lights(cam, focus_plane_world_z, rendered_assets_for_debug, runtime_lights);
+        gather_runtime_lights(cam, depth_anchor_world_z, rendered_assets_for_debug, runtime_lights);
     }
     SDL_Texture* floor_texture = nullptr;
     if (floor_composer_) {
@@ -1388,7 +1406,7 @@ void SceneRenderer::render() {
     }
 
     const render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
-        ? layer_submission_builder_->build(*geometry_batcher_, cam, focus_plane_world_z, max_cull_depth)
+        ? layer_submission_builder_->build(*geometry_batcher_, cam, player_split_world_z, max_cull_depth)
         : render_pipeline::LayerBuildResult{};
 
     bool composed = false;

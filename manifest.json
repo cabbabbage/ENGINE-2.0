@@ -19244,9 +19244,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            114,
-            242,
             36,
+            242,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -19647,9 +19647,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            31,
+            32,
             204,
-            31,
-            31,
             255
           ],
           "edge_smoothness": 101,

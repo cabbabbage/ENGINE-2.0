@@ -71,6 +71,9 @@ constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
 constexpr int kDefaultCameraHeightMinPx = 1;
 constexpr int kDefaultCameraHeightMaxPx = 100000;
 constexpr std::size_t kRuntimeAnchorConvergenceIterationCap = 8;
+constexpr int kCollisionIndexSpacingMinPx = 64;
+constexpr int kCollisionIndexSpacingMaxPx = 256;
+constexpr int kAggressiveMaxCollisionSearchRadiusPx = 320;
 
 float normalize_depth_axis_sign(float sign) {
     if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
@@ -91,10 +94,19 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
     return (world_z - anchor_world_z) * sign;
 }
 
+bool runtime_floor_box_contributes_boundary(const Asset::RuntimeFloorBox& floor_box) {
+    return floor_box.enabled &&
+           floor_box.has_boundary_tag() &&
+           std::isfinite(floor_box.width) &&
+           std::isfinite(floor_box.depth) &&
+           floor_box.width > 0.0f &&
+           floor_box.depth > 0.0f;
+}
+
 bool build_boundary_floor_box_area_for_box(const Asset& asset,
                                            const Asset::RuntimeFloorBox& boundary_box,
                                            Area& out_area) {
-    if (!boundary_box.enabled || !boundary_box.has_boundary_tag()) {
+    if (!runtime_floor_box_contributes_boundary(boundary_box)) {
         return false;
     }
 
@@ -127,6 +139,10 @@ bool build_boundary_floor_box_area_for_box(const Asset& asset,
     out_area = Area("impassable", points, asset.grid_resolution);
     out_area.set_type(std::string(asset_types::boundary));
     return true;
+}
+
+int runtime_collision_index_cell_spacing_world(const MapGridSettings& settings) {
+    return std::clamp(settings.spacing(), kCollisionIndexSpacingMinPx, kCollisionIndexSpacingMaxPx);
 }
 
 struct AssetWorldBounds {
@@ -965,18 +981,42 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
 }
 
 void Assets::rebuild_frame_collision_context() const {
-    if (!frame_collision_context_dirty_ && frame_collision_context_frame_id_ == frame_id_) {
+    if (!frame_collision_context_dirty_) {
         return;
     }
 
+    std::size_t estimated_entry_count = 0;
+    for (Asset* asset : active_assets) {
+        if (!asset || asset->dead || !asset->info || !asset->affects_collision_context()) {
+            continue;
+        }
+
+        std::size_t boundary_floor_box_count = 0;
+        if (asset->isFloorBoxesEnabled()) {
+            for (const auto& floor_box : asset->getFloorBoxes()) {
+                if (runtime_floor_box_contributes_boundary(floor_box)) {
+                    ++boundary_floor_box_count;
+                }
+            }
+        }
+        estimated_entry_count += boundary_floor_box_count > 0 ? boundary_floor_box_count : 1;
+    }
+
     frame_collision_entries_.clear();
-    frame_collision_entries_.reserve(active_assets.size());
+    frame_collision_entries_.reserve(estimated_entry_count);
     frame_collision_index_.clear();
-    frame_collision_index_.reserve(active_assets.size());
-    const int index_layer = world_grid_.grid_resolution();
+    frame_collision_index_.reserve(estimated_entry_count);
+    frame_collision_query_cache_.clear();
+    ++frame_collision_context_version_;
+    if (frame_collision_context_version_ == 0) {
+        ++frame_collision_context_version_;
+    }
+
+    const world::GridPoint origin = world_grid_.origin();
+    const int cell_spacing = runtime_collision_index_cell_spacing_world(map_grid_settings_);
 
     for (Asset* asset : active_assets) {
-        if (!asset || asset->dead || !asset->info) {
+        if (!asset || asset->dead || !asset->info || !asset->affects_collision_context()) {
             continue;
         }
 
@@ -1000,10 +1040,8 @@ void Assets::rebuild_frame_collision_context() const {
                 resolved_type
             });
             FrameCollisionEntry& entry = frame_collision_entries_.back();
-            const world::GridPoint origin = world_grid_.origin();
-            const int spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
-            const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), spacing);
-            const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), spacing);
+            const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), cell_spacing);
+            const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), cell_spacing);
             const world::GridCoord cell{cell_x, cell_z};
             frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
         };
@@ -1029,7 +1067,6 @@ void Assets::rebuild_frame_collision_context() const {
             canonical_type == asset_types::boundary ||
             canonical_type == asset_types::enemy ||
             canonical_type == asset_types::npc ||
-            asset->isMovementEnabled() ||
             !asset->info->passable;
         if (!impassable || canonical_type == asset_types::player) {
             continue;
@@ -1057,12 +1094,26 @@ void Assets::query_impassable_entries(const Asset& self,
         return;
     }
 
-    const int radius = std::max(0, search_radius);
+    const int radius = (search_radius > 0)
+        ? std::min(search_radius, kAggressiveMaxCollisionSearchRadiusPx)
+        : 0;
     const std::int64_t radius_sq = static_cast<std::int64_t>(radius) * static_cast<std::int64_t>(radius);
     const SDL_Point self_center = self.world_xz_point();
-    const int index_layer = world_grid_.grid_resolution();
+    const FrameCollisionQueryKey cache_key{
+        frame_collision_context_version_,
+        &self,
+        self_center.x,
+        self_center.y,
+        radius
+    };
+    if (const auto cache_it = frame_collision_query_cache_.find(cache_key);
+        cache_it != frame_collision_query_cache_.end()) {
+        out = cache_it->second;
+        return;
+    }
+
     const world::GridPoint origin = world_grid_.origin();
-    const int cell_spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
+    const int cell_spacing = runtime_collision_index_cell_spacing_world(map_grid_settings_);
     const int self_cell_x = vibble::math::floor_div(self_center.x - origin.world_x(), cell_spacing);
     const int self_cell_z = vibble::math::floor_div(self_center.y - origin.world_z(), cell_spacing);
     const world::GridCoord self_cell{self_cell_x, self_cell_z};
@@ -1083,6 +1134,13 @@ void Assets::query_impassable_entries(const Asset& self,
     };
 
     out.reserve(frame_collision_entries_.size());
+    auto cache_results = [&]() {
+        constexpr std::size_t kMaxCachedCollisionQueries = 4096;
+        if (frame_collision_query_cache_.size() >= kMaxCachedCollisionQueries) {
+            frame_collision_query_cache_.clear();
+        }
+        frame_collision_query_cache_[cache_key] = out;
+    };
 
     if (radius <= 0) {
         for (const auto& bucket : frame_collision_index_) {
@@ -1090,6 +1148,7 @@ void Assets::query_impassable_entries(const Asset& self,
                 consider_entry(entry);
             }
         }
+        cache_results();
         return;
     }
 
@@ -1107,6 +1166,8 @@ void Assets::query_impassable_entries(const Asset& self,
             }
         }
     }
+
+    cache_results();
 }
 
 void Assets::refresh_filtered_active_assets() {
@@ -3364,9 +3425,8 @@ void Assets::rebuild_active_from_screen_grid() {
         }
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
+        mark_collision_context_dirty();
     }
-
-    mark_collision_context_dirty();
 
     // Update scale values for ALL active assets after grid rebuild
     // to ensure scales reflect current perspective (fixes single-frame asset scaling)

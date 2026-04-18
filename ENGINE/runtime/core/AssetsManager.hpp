@@ -122,7 +122,10 @@ public:
     void query_impassable_entries(const Asset& self,
                                   int search_radius,
                                   std::vector<const FrameCollisionEntry*>& out) const;
-    void mark_collision_context_dirty() { frame_collision_context_dirty_ = true; }
+    void mark_collision_context_dirty() {
+        frame_collision_context_dirty_ = true;
+        frame_collision_query_cache_.clear();
+    }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
     float frame_delta_seconds_clamped() const;
@@ -332,8 +335,40 @@ private:
     bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
+    struct FrameCollisionQueryKey {
+        std::uint64_t context_version = 0;
+        const Asset* self_asset = nullptr;
+        int self_world_x = 0;
+        int self_world_z = 0;
+        int radius = 0;
+
+        bool operator==(const FrameCollisionQueryKey& other) const {
+            return context_version == other.context_version &&
+                   self_asset == other.self_asset &&
+                   self_world_x == other.self_world_x &&
+                   self_world_z == other.self_world_z &&
+                   radius == other.radius;
+        }
+    };
+    struct FrameCollisionQueryKeyHash {
+        std::size_t operator()(const FrameCollisionQueryKey& key) const {
+            std::size_t seed = std::hash<std::uint64_t>{}(key.context_version);
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<const void*>{}(static_cast<const void*>(key.self_asset)));
+            mix(std::hash<int>{}(key.self_world_x));
+            mix(std::hash<int>{}(key.self_world_z));
+            mix(std::hash<int>{}(key.radius));
+            return seed;
+        }
+    };
     mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
     mutable std::unordered_map<std::uint64_t, std::vector<const FrameCollisionEntry*>> frame_collision_index_;
+    mutable std::unordered_map<FrameCollisionQueryKey,
+                               std::vector<const FrameCollisionEntry*>,
+                               FrameCollisionQueryKeyHash> frame_collision_query_cache_;
+    mutable std::uint64_t frame_collision_context_version_ = 1;
     mutable std::uint32_t frame_collision_context_frame_id_ = 0;
     mutable bool frame_collision_context_dirty_ = true;
     std::vector<Asset*> removal_queue;

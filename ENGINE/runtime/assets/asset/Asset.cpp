@@ -1088,6 +1088,9 @@ void Asset::set_current_animation(const std::string& name)
 void Asset::update() {
     if (!info) return;
 
+    const SDL_Point collision_world_start = world_xz_point();
+    const int collision_layer_start = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
+
 #if !defined(NDEBUG)
     const SDL_Point anchor_debug_start_world{world_x(), world_y()};
     const int anchor_debug_start_world_z = world_z();
@@ -1096,7 +1099,7 @@ void Asset::update() {
 #endif
 
     // Detect external transform/frame changes before we do any work so bound children can react immediately.
-    const bool external_world_changed = update_anchor_basis_if_needed();
+    update_anchor_basis_if_needed();
 
     const bool controller_suppressed_for_frame_editor =
         assets_ && assets_->is_frame_editor_target_active(this);
@@ -1153,9 +1156,15 @@ void Asset::update() {
     }
 
     // Re-check anchor basis after any movement/animation/scale changes we just applied.
-    const bool post_world_changed = update_anchor_basis_if_needed();
+    update_anchor_basis_if_needed();
 
-    if (assets_ && (external_world_changed || post_world_changed)) {
+    const SDL_Point collision_world_end = world_xz_point();
+    const int collision_layer_end = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
+    const bool collision_transform_changed =
+        collision_world_start.x != collision_world_end.x ||
+        collision_world_start.y != collision_world_end.y ||
+        collision_layer_start != collision_layer_end;
+    if (assets_ && affects_collision_context() && collision_transform_changed) {
         assets_->mark_collision_context_dirty();
     }
 
@@ -1214,6 +1223,57 @@ bool Asset::isAttackBoxEnabled() const {
 
 bool Asset::isFloorBoxesEnabled() const {
     return info && info->is_floor_boxes_enabled();
+}
+
+bool Asset::affects_collision_context() const {
+    if (!info || dead) {
+        return false;
+    }
+
+    const std::string canonical_type = asset_types::canonicalize(info->type);
+    if (canonical_type == asset_types::player) {
+        return false;
+    }
+
+    if (canonical_type == asset_types::boundary ||
+        canonical_type == asset_types::enemy ||
+        canonical_type == asset_types::npc ||
+        !info->passable) {
+        return true;
+    }
+
+    auto floor_box_contributes_boundary = [](bool enabled,
+                                             bool boundary_tag,
+                                             float width,
+                                             float depth) {
+        return enabled && boundary_tag &&
+               std::isfinite(width) && std::isfinite(depth) &&
+               width > 0.0f && depth > 0.0f;
+    };
+
+    for (const RuntimeFloorBox& floor_box : floor_boxes_) {
+        if (floor_box_contributes_boundary(floor_box.enabled,
+                                           floor_box.has_boundary_tag(),
+                                           floor_box.width,
+                                           floor_box.depth)) {
+            return true;
+        }
+    }
+
+    if (isFloorBoxesEnabled()) {
+        for (const AssetInfo::FloorBox& authored : info->floor_boxes_payload()) {
+            const bool boundary_tag =
+                std::find(authored.tags.begin(), authored.tags.end(), "boundary") != authored.tags.end();
+            if (floor_box_contributes_boundary(authored.enabled,
+                                               boundary_tag,
+                                               authored.width,
+                                               authored.depth)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 const std::vector<Asset::RuntimeFloorBox>& Asset::getFloorBoxes() const {
@@ -2633,6 +2693,10 @@ void Asset::move_to_world_position(int world_x,
         previous_world_y != this->world_y() ||
         previous_world_z != this->world_z() ||
         previous_layer != grid_resolution;
+    const bool collision_transform_changed =
+        previous_world_x != this->world_x() ||
+        previous_world_z != this->world_z() ||
+        previous_layer != grid_resolution;
 
     if (point_changed) {
         mark_composite_dirty();
@@ -2640,7 +2704,9 @@ void Asset::move_to_world_position(int world_x,
     }
 
     mark_anchors_dirty();
-    assets_->mark_collision_context_dirty();
+    if (collision_transform_changed && affects_collision_context()) {
+        assets_->mark_collision_context_dirty();
+    }
 }
 
 

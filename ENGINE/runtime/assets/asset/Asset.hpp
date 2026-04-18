@@ -366,6 +366,7 @@ class Asset {
     bool isHitboxEnabled() const;
     bool isAttackBoxEnabled() const;
     bool isFloorBoxesEnabled() const;
+    bool affects_collision_context() const;
     const std::vector<RuntimeFloorBox>& getFloorBoxes() const;
 
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }

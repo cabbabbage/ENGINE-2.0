@@ -35,6 +35,7 @@ std::unique_ptr<Asset> make_pathing_test_asset() {
     info->animations["a_left"] = make_single_path_animation(-10, 0);
     info->animations["b_right"] = make_single_path_animation(10, 0);
     info->start_animation = "a_left";
+    info->movement_enabled = true;
 
     Area spawn_area("auto_move_zero_stride_recovery_area", 0);
     auto asset = std::make_unique<Asset>(info,

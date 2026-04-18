@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <limits>
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
@@ -463,6 +464,16 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
         return;
     }
 
+    const std::uint32_t plan_frame_id = resolve_plan_frame_id();
+    if (planning_retry_cooldown_active(plan_frame_id)) {
+        active_plan_mode_ = ActivePlanMode::None;
+        if (self_) {
+            self_->target_reached = false;
+            self_->needs_target = true;
+        }
+        return;
+    }
+
     if (self_) {
         self_->target_reached = false;
     }
@@ -564,6 +575,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
                         animation_update::detail::kDefaultAnimation,
                         true,
                         override_non_locked);
+                clear_plan_retry_cooldown();
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
@@ -583,6 +595,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move_3d plan produced no strides for asset=" + asset_name);
         }
+        arm_plan_retry_cooldown(plan_frame_id);
         active_plan_mode_ = ActivePlanMode::None;
         if (self_) {
             self_->needs_target = true;
@@ -595,6 +608,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
 
     active_plan_mode_ = ActivePlanMode::Plan3D;
+    clear_plan_retry_cooldown();
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
@@ -616,6 +630,17 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
         clear_movement_plan();
         return;
     }
+
+    const std::uint32_t plan_frame_id = resolve_plan_frame_id();
+    if (planning_retry_cooldown_active(plan_frame_id)) {
+        active_plan_mode_ = ActivePlanMode::None;
+        if (self_) {
+            self_->target_reached = false;
+            self_->needs_target = true;
+        }
+        return;
+    }
+
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const int resolution = effective_grid_resolution(checkpoint_resolution);
     visited_thresh_      = std::max(0, visited_thresh_px);
@@ -698,6 +723,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                      animation_update::detail::kDefaultAnimation,
                      true,
                      override_non_locked);
+                clear_plan_retry_cooldown();
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
@@ -717,6 +743,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move plan produced no strides for asset=" + asset_name);
         }
+        arm_plan_retry_cooldown(plan_frame_id);
         active_plan_mode_ = ActivePlanMode::None;
         if (self_) {
             self_->needs_target = true;
@@ -729,6 +756,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     active_plan_mode_ = ActivePlanMode::Plan2D;
+    clear_plan_retry_cooldown();
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
@@ -757,6 +785,7 @@ void AnimationUpdate::move(SDL_Point delta,
     pending_move_.override_non_locked = override_non_locked;
     move_pending_              = true;
     input_event_               = true;
+    clear_plan_retry_cooldown();
 }
 
 void AnimationUpdate::move_3d(const axis::WorldPos& delta,
@@ -781,6 +810,7 @@ void AnimationUpdate::move_3d(const axis::WorldPos& delta,
     pending_move_3d_.override_non_locked = override_non_locked;
     move_pending_3d_ = true;
     input_event_ = true;
+    clear_plan_retry_cooldown();
 }
 
 void AnimationUpdate::begin_reverse_current_animation_until_stop() {
@@ -832,6 +862,7 @@ void AnimationUpdate::clear_movement_plan() {
 
     active_plan_mode_ = ActivePlanMode::None;
     input_event_ = true;
+    clear_plan_retry_cooldown();
 
     if (debug_logging) {
         std::ostringstream oss;
@@ -890,6 +921,36 @@ void AnimationUpdate::set_debug_enabled(bool enabled) {
 
 bool AnimationUpdate::debug_enabled() const {
     return debug_enabled_;
+}
+
+std::uint32_t AnimationUpdate::resolve_plan_frame_id() {
+    if (assets_owner_) {
+        return assets_owner_->frame_id();
+    }
+    ++local_plan_frame_counter_;
+    if (local_plan_frame_counter_ == 0) {
+        ++local_plan_frame_counter_;
+    }
+    return local_plan_frame_counter_;
+}
+
+bool AnimationUpdate::planning_retry_cooldown_active(std::uint32_t frame_id) const {
+    return next_plan_retry_frame_ != 0 && frame_id < next_plan_retry_frame_;
+}
+
+void AnimationUpdate::arm_plan_retry_cooldown(std::uint32_t frame_id) {
+    if (frame_id == std::numeric_limits<std::uint32_t>::max()) {
+        next_plan_retry_frame_ = frame_id;
+        return;
+    }
+    const std::uint64_t next =
+        static_cast<std::uint64_t>(frame_id) + static_cast<std::uint64_t>(kPlanRetryCooldownFrames) + 1ULL;
+    next_plan_retry_frame_ = static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(next, std::numeric_limits<std::uint32_t>::max()));
+}
+
+void AnimationUpdate::clear_plan_retry_cooldown() {
+    next_plan_retry_frame_ = 0;
 }
 
 vibble::grid::Grid& AnimationUpdate::grid() const {

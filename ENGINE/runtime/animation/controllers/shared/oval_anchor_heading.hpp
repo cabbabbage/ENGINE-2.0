@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <string>
@@ -11,6 +12,28 @@
 namespace oval_anchor_heading {
 
 inline constexpr float kPi = 3.14159265358979323846f;
+inline constexpr float kTwoPi = 2.0f * kPi;
+
+inline float normalize_radians(float radians) {
+    if (!std::isfinite(radians)) {
+        return 0.0f;
+    }
+    float normalized = std::fmod(radians, kTwoPi);
+    if (normalized < 0.0f) {
+        normalized += kTwoPi;
+    }
+    if (normalized >= kTwoPi) {
+        normalized -= kTwoPi;
+    }
+    return normalized;
+}
+
+inline float sanitize_oval_radius_offset_degrees(float value) {
+    if (!std::isfinite(value)) {
+        return 0.0f;
+    }
+    return std::clamp(value, 0.0f, 360.0f);
+}
 
 inline void append_unique_center_anchor_name(std::vector<std::string>& out_names,
                                              std::unordered_set<std::string>& seen_names,
@@ -49,7 +72,10 @@ inline std::optional<float> resolve_effective_oval_heading_radians(Asset* owner_
         const auto resolved = owner_asset->anchor_state(center_name,
                                                         anchor_points::GridMaterialization::None,
                                                         Asset::AnchorResolveMode::ForceRecompute);
-        if (!resolved.has_value() || !resolved->is_active()) {
+        if (!resolved.has_value() || !resolved->exists) {
+            continue;
+        }
+        if (!std::isfinite(resolved->world_exact_pos_2d.x) || !std::isfinite(resolved->world_exact_z)) {
             continue;
         }
         center_anchor = resolved;
@@ -63,9 +89,33 @@ inline std::optional<float> resolve_effective_oval_heading_radians(Asset* owner_
         ? center_anchor->world_exact_z
         : (static_cast<float>(owner_asset->world_z()) + owner_asset->world_z_offset());
 
+    enum class HeadingSource {
+        None,
+        RadiusVector,
+        DirectionalTarget,
+        DirectionalHeading,
+    };
+
     float base_heading_radians = 0.0f;
     bool has_base_heading = false;
-    if (owner_asset->has_directional_target_world_xz()) {
+    HeadingSource heading_source = HeadingSource::None;
+
+    // Primary source: resolved oval radius angle on the floor plane (X/Z).
+    {
+        const float radius_dx = parent_anchor.world_exact_pos_2d.x - center_x;
+        const float radius_dz = parent_anchor.world_exact_z - center_z;
+        const float radius_len_sq = radius_dx * radius_dx + radius_dz * radius_dz;
+        if (std::isfinite(radius_dx) &&
+            std::isfinite(radius_dz) &&
+            radius_len_sq > 1e-6f) {
+            base_heading_radians = std::atan2(radius_dz, radius_dx);
+            has_base_heading = true;
+            heading_source = HeadingSource::RadiusVector;
+        }
+    }
+
+    // Fallbacks: directional target/heading when radius vector is unavailable.
+    if (!has_base_heading && owner_asset->has_directional_target_world_xz()) {
         const float target_x = owner_asset->directional_target_world_x();
         const float target_z = owner_asset->directional_target_world_z();
         const float heading_dx = target_x - center_x;
@@ -76,6 +126,7 @@ inline std::optional<float> resolve_effective_oval_heading_radians(Asset* owner_
             heading_len_sq > 1e-6f) {
             base_heading_radians = std::atan2(heading_dz, heading_dx);
             has_base_heading = true;
+            heading_source = HeadingSource::DirectionalTarget;
         }
     }
     if (!has_base_heading && owner_asset->has_directional_heading_radians()) {
@@ -83,21 +134,24 @@ inline std::optional<float> resolve_effective_oval_heading_radians(Asset* owner_
         if (std::isfinite(heading_radians)) {
             base_heading_radians = heading_radians;
             has_base_heading = true;
+            heading_source = HeadingSource::DirectionalHeading;
         }
     }
     if (!has_base_heading) {
         return std::nullopt;
     }
 
-    const float offset_degrees = std::isfinite(mapping->radius_offset_degrees)
-        ? mapping->radius_offset_degrees
-        : 0.0f;
-    const float offset_radians = offset_degrees * (kPi / 180.0f);
-    const float effective_heading_radians = base_heading_radians + offset_radians;
-    if (!std::isfinite(effective_heading_radians)) {
+    // If heading comes from directional input, apply mapping radius offset exactly like oval anchor
+    // interpolation. Radius-vector heading already includes the offset via resolved anchor position.
+    if (heading_source != HeadingSource::RadiusVector && mapping) {
+        const float offset_degrees = sanitize_oval_radius_offset_degrees(mapping->radius_offset_degrees);
+        base_heading_radians += offset_degrees * (kPi / 180.0f);
+    }
+
+    if (!std::isfinite(base_heading_radians)) {
         return std::nullopt;
     }
-    return effective_heading_radians;
+    return normalize_radians(base_heading_radians);
 }
 
 inline void rotate_xz_about_world_y(float angle_radians, float& x, float& z) {
@@ -113,4 +167,3 @@ inline void rotate_xz_about_world_y(float angle_radians, float& x, float& z) {
 }
 
 } // namespace oval_anchor_heading
-

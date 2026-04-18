@@ -16,6 +16,7 @@
 #include "utils/AnchorPointResolver.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/anchored_child_placement.hpp"
+#include "animation/controllers/shared/oval_anchor_heading.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -37,6 +38,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -1227,6 +1229,32 @@ void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& 
         }
     }
 
+    std::unordered_map<const Asset*, std::optional<float>> oval_child_headings_by_asset;
+    oval_child_headings_by_asset.reserve(visible_assets.size());
+    {
+        const auto bindings =
+            anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().debug_bindings_snapshot();
+        for (const auto& binding : bindings) {
+            if (!binding.owner || !binding.child_asset || !binding.owner->info || binding.anchor_name.empty()) {
+                continue;
+            }
+            if (!binding.owner->info->find_oval_anchor_mapping(binding.anchor_name, true)) {
+                continue;
+            }
+
+            // Oval-bound children are dynamic with mouse heading/radius state, so movement debug paths
+            // are rebuilt every frame for these assets.
+            std::optional<float> heading{};
+            const auto anchor = binding.owner->anchor_state(binding.anchor_name,
+                                                            anchor_points::GridMaterialization::None,
+                                                            Asset::AnchorResolveMode::ForceRecompute);
+            if (anchor.has_value() && anchor->exists) {
+                heading = oval_anchor_heading::resolve_effective_oval_heading_radians(binding.owner, *anchor);
+            }
+            oval_child_headings_by_asset[binding.child_asset] = heading;
+        }
+    }
+
     for (Asset* asset : visible_assets) {
         if (!asset || asset->dead || !asset->info || !asset->current_frame) {
             continue;
@@ -1247,8 +1275,13 @@ void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& 
             loop_trigger = previous.frame_is_last && previous.animation_id == current_animation && current_is_first;
             end_trigger = previous.frame_is_last && previous.animation_id != current_animation;
         }
+        const auto oval_heading_it = oval_child_headings_by_asset.find(asset);
+        const bool is_oval_bound_child = oval_heading_it != oval_child_headings_by_asset.end();
+        const std::optional<float> oval_heading_radians = is_oval_bound_child
+            ? oval_heading_it->second
+            : std::optional<float>{};
 
-        if (!has_snapshot || loop_trigger || end_trigger) {
+        if (!has_snapshot || loop_trigger || end_trigger || is_oval_bound_child) {
             render_debug::MovementDebugAssetSnapshot snapshot{};
             const SDL_Point origin = asset->world_xz_point();
             for (const auto& [animation_id, animation] : asset->info->animations) {
@@ -1263,16 +1296,26 @@ void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& 
                     path_snapshot.world_points.reserve(movement_path.size() + 1);
                     path_snapshot.world_points.push_back(origin);
 
-                    int world_x = origin.x;
-                    int world_z = origin.y;
+                    float world_x = static_cast<float>(origin.x);
+                    float world_z = static_cast<float>(origin.y);
                     bool has_movement = false;
                     for (const AnimationFrame& frame : movement_path) {
                         if (frame.dx != 0 || frame.dz != 0) {
                             has_movement = true;
                         }
-                        world_x += frame.dx;
-                        world_z += frame.dz;
-                        const SDL_Point next{world_x, world_z};
+                        float step_x = static_cast<float>(frame.dx);
+                        float step_z = static_cast<float>(frame.dz);
+                        if (oval_heading_radians.has_value()) {
+                            oval_anchor_heading::rotate_xz_about_world_y(
+                                *oval_heading_radians,
+                                step_x,
+                                step_z);
+                        }
+                        world_x += step_x;
+                        world_z += step_z;
+                        const SDL_Point next{
+                            static_cast<int>(std::lround(world_x)),
+                            static_cast<int>(std::lround(world_z))};
                         if (path_snapshot.world_points.empty() ||
                             next.x != path_snapshot.world_points.back().x ||
                             next.y != path_snapshot.world_points.back().y) {

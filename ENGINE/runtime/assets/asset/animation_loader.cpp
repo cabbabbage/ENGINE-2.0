@@ -855,12 +855,14 @@ bool bind_frame_data(Animation&                                                 
         animation.total_dx = 0;
         animation.total_dy = 0;
         animation.total_dz = 0;
+        animation.total_dr = 0.0f;
         if (animation.movement_path_count() > 0) {
                 const auto& primary = animation.movement_path(0);
                 for (const auto& frame : primary) {
                         animation.total_dx += frame.dx;
                         animation.total_dy += frame.dy;
                         animation.total_dz += frame.dz;
+                        animation.total_dr += frame.rotation_degrees;
                         if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
                                 any_motion = true;
                         }
@@ -1126,6 +1128,7 @@ void AnimationLoader::load(Animation& animation,
         animation.total_dx = 0;
         animation.total_dy = 0;
         animation.total_dz = 0;
+        animation.total_dr = 0.0f;
         animation.movement_paths_.clear();
         animation.audio_clip = Animation::AudioClip{};
         const bool movement_enabled = info.is_movement_enabled();
@@ -1220,8 +1223,13 @@ void AnimationLoader::load(Animation& animation,
                                 fm.dx = dx;
                                 fm.dy = height_y;
                                 fm.dz = depth_z;
+                                fm.rotation_degrees = read_float_field_like(mv, "rotation_degrees", 0.0f);
                                 fm.z_resort = read_bool_field_like(mv, "resort_z", false);
-                                if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
+                                if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 ||
+                                    std::abs(fm.rotation_degrees) > 1e-5f ||
+                                    mv.contains("resort_z")) {
+                                        specified = true;
+                                }
                                 dest.push_back(std::move(fm));
                                 continue;
                         }
@@ -1254,8 +1262,19 @@ void AnimationLoader::load(Animation& animation,
 
                                 if (mv.size() > 2 && mv[2].is_boolean()) {
                                         fm.z_resort = mv[2].get<bool>();
-                                } else if (mv.size() > 3 && mv[3].is_boolean()) {
-                                        fm.z_resort = mv[3].get<bool>();
+                                }
+                                if (mv.size() > 3 && mv[3].is_number()) {
+                                        try {
+                                                fm.rotation_degrees = static_cast<float>(mv[3].get<double>());
+                                        } catch (...) {
+                                                fm.rotation_degrees = 0.0f;
+                                        }
+                                }
+                                for (std::size_t bool_index = 3; bool_index < mv.size(); ++bool_index) {
+                                        if (mv[bool_index].is_boolean()) {
+                                                fm.z_resort = mv[bool_index].get<bool>();
+                                                break;
+                                        }
                                 }
                         }
 
@@ -1272,7 +1291,9 @@ void AnimationLoader::load(Animation& animation,
                                 }
                         }
 
-                        if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.size() >= 3) {
+                        if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 ||
+                            std::abs(fm.rotation_degrees) > 1e-5f ||
+                            mv.size() >= 3) {
                                 specified = true;
                         }
                         dest.push_back(std::move(fm));

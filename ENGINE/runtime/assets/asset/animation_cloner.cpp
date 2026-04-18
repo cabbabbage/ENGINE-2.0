@@ -123,6 +123,7 @@ void recompute_movement_totals(Animation& animation) {
     animation.total_dx = 0;
     animation.total_dy = 0;
     animation.total_dz = 0;
+    animation.total_dr = 0.0f;
     animation.movment = false;
 
     if (animation.movement_path_count() == 0) {
@@ -134,6 +135,7 @@ void recompute_movement_totals(Animation& animation) {
         animation.total_dx += frame.dx;
         animation.total_dy += frame.dy;
         animation.total_dz += frame.dz;
+        animation.total_dr += frame.rotation_degrees;
         if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
             animation.movment = true;
         }

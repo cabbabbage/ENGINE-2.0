@@ -20,6 +20,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
+#include "movement_rotation.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "movement_target_utils.hpp"
 #include "core/AssetsManager.hpp"
@@ -243,8 +244,7 @@ SDL_Point frame_world_delta(const AnimationFrame& frame,
                             const vibble::grid::Grid& grid) {
     (void)asset;
     (void)grid;
-
-    return SDL_Point{ frame.dx, frame.dz };
+    return animation_update::movement_rotation::frame_floor_delta_absolute_yaw(frame);
 }
 
 axis::WorldPos frame_world_delta_3d(const AnimationFrame& frame,
@@ -252,7 +252,7 @@ axis::WorldPos frame_world_delta_3d(const AnimationFrame& frame,
                                     const vibble::grid::Grid& grid) {
     (void)asset;
     (void)grid;
-    return axis::WorldPos{ frame.dx, frame.dy, frame.dz };
+    return animation_update::movement_rotation::frame_world_delta_absolute_yaw(frame);
 }
 
 bool bottom_point_inside_playable_area(const Assets* assets, const world::GridPoint& bottom_point) {

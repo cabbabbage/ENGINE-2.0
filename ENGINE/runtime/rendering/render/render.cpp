@@ -17,6 +17,7 @@
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "animation/controllers/shared/oval_anchor_heading.hpp"
+#include "animation/movement_rotation.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -1303,8 +1304,10 @@ void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& 
                         if (frame.dx != 0 || frame.dz != 0) {
                             has_movement = true;
                         }
-                        float step_x = static_cast<float>(frame.dx);
-                        float step_z = static_cast<float>(frame.dz);
+                        SDL_Point step_delta =
+                            animation_update::movement_rotation::frame_floor_delta_absolute_yaw(frame);
+                        float step_x = static_cast<float>(step_delta.x);
+                        float step_z = static_cast<float>(step_delta.y);
                         if (oval_heading_radians.has_value()) {
                             oval_anchor_heading::rotate_xz_about_world_y(
                                 *oval_heading_radians,

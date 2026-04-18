@@ -17,6 +17,7 @@ public:
     int dx = 0;
     int dy = 0;
     int dz = 0;
+    float rotation_degrees = 0.0f;
     bool z_resort = true;
     SDL_Color rgb{255, 255, 255, 255};
     int frame_index = -1;

@@ -46,6 +46,7 @@
 #include "animation/controllers/shared/attack_payload.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/anchored_child_placement.hpp"
+#include "animation/movement_rotation.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_builder.hpp"
@@ -722,6 +723,7 @@ movement_frames_from_runtime_animation(const Animation& animation) {
         frame.dx = static_cast<float>(runtime_frame->dx);
         frame.dy = static_cast<float>(runtime_frame->dy);
         frame.dz = static_cast<float>(runtime_frame->dz);
+        frame.rotation_degrees = runtime_frame->rotation_degrees;
         frame.resort_z = runtime_frame->z_resort;
     }
     return frames;
@@ -2626,6 +2628,7 @@ if (auto selected = library_ui_->consume_selection()) {
         movement_tools_panel_->set_visible(movement_mode_active());
         movement_tools_panel_->set_smooth_enabled(movement_edit_.smooth_enabled);
         movement_tools_panel_->set_curve_enabled(movement_edit_.curve_enabled);
+        sync_movement_panel_frame_values();
     }
     if (hitbox_tools_panel_) {
         hitbox_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -4205,11 +4208,40 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 if (!project_movement_point(static_cast<std::size_t>(i), screen)) {
                     continue;
                 }
+                SDL_FPoint floor_screen = screen;
+                if (movement_edit_.target_asset &&
+                    static_cast<std::size_t>(i) < movement_edit_.rel_positions.size() &&
+                    static_cast<std::size_t>(i) < movement_edit_.rel_positions_z.size()) {
+                    const SDL_Point anchor = movement_asset_anchor_world();
+                    SDL_FPoint floor_world_xy{
+                        movement_edit_.rel_positions[static_cast<std::size_t>(i)].x +
+                            static_cast<float>(anchor.x),
+                        movement_base_world_z()};
+                    const float floor_world_z =
+                        movement_edit_.rel_positions[static_cast<std::size_t>(i)].y +
+                        static_cast<float>(anchor.y);
+                    if (!cam.project_world_point(floor_world_xy, floor_world_z, floor_screen)) {
+                        floor_screen = cam.map_to_screen_f(SDL_FPoint{
+                            floor_world_xy.x,
+                            floor_world_z});
+                    }
+                }
                 const bool selected = movement_edit_.selected_point_active && i == movement_edit_.frame_index;
                 const bool hovered = i == movement_edit_.hovered_point_index;
                 const int cx = static_cast<int>(std::lround(screen.x));
                 const int cy = static_cast<int>(std::lround(screen.y));
                 const int radius = selected ? 7 : 5;
+
+                const int floor_cx = static_cast<int>(std::lround(floor_screen.x));
+                const int floor_cy = static_cast<int>(std::lround(floor_screen.y));
+                SDL_SetRenderDrawColor(renderer, 70, 220, 255, 140);
+                SDL_Rect floor_rect{floor_cx - 3, floor_cy - 3, 7, 7};
+                sdl_render::FillRect(renderer, &floor_rect);
+                if (std::abs(cy - floor_cy) > 1 || std::abs(cx - floor_cx) > 1) {
+                    SDL_SetRenderDrawColor(renderer, 70, 220, 255, 120);
+                    SDL_RenderLine(renderer, floor_cx, floor_cy, cx, cy);
+                }
+
                 SDL_Color color{255, 165, 0, 235};
                 if (selected) {
                     color = SDL_Color{255, 255, 255, 255};
@@ -13776,6 +13808,41 @@ float RoomEditor::movement_base_world_z() const {
     return movement_edit_.target_asset ? movement_edit_.target_asset->world_z_offset() : 0.0f;
 }
 
+axis::WorldPos RoomEditor::movement_relative_position_for_frame(std::size_t frame_index) const {
+    axis::WorldPos rel{0, 0, 0};
+    if (!movement_edit_.has_frames()) {
+        return rel;
+    }
+    const std::size_t limit = std::min(frame_index + 1, movement_edit_.frame_count());
+    for (std::size_t i = 1; i < limit; ++i) {
+        const auto& frame = movement_edit_.frames[i];
+        AnimationFrame runtime_frame{};
+        runtime_frame.dx = static_cast<int>(std::lround(frame.dx));
+        runtime_frame.dy = static_cast<int>(std::lround(frame.dy));
+        runtime_frame.dz = static_cast<int>(std::lround(frame.dz));
+        runtime_frame.rotation_degrees = frame.rotation_degrees;
+        const axis::WorldPos delta =
+            animation_update::movement_rotation::frame_world_delta_absolute_yaw(runtime_frame);
+        rel.x += delta.x;
+        rel.y += delta.y;
+        rel.z += delta.z;
+    }
+    return rel;
+}
+
+void RoomEditor::apply_movement_preview_pose_to_target() {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return;
+    }
+    const int index = std::clamp(
+        movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
+    const axis::WorldPos rel = movement_relative_position_for_frame(static_cast<std::size_t>(index));
+    const int base_x = movement_edit_.anchor_snap_active ? movement_edit_.original_world_x : movement_edit_.target_asset->world_x();
+    const int base_y = movement_edit_.anchor_snap_active ? movement_edit_.original_world_y : movement_edit_.target_asset->world_y();
+    const int base_z = movement_edit_.anchor_snap_active ? movement_edit_.original_world_z : movement_edit_.target_asset->world_z();
+    movement_edit_.target_asset->move_to_world_position(base_x + rel.x, base_y + rel.y, base_z + rel.z);
+}
+
 void RoomEditor::rebuild_movement_rel_positions() {
     movement_edit_.rel_positions.assign(movement_edit_.frame_count(), SDL_FPoint{0.0f, 0.0f});
     movement_edit_.rel_positions_z.assign(movement_edit_.frame_count(), 0.0f);
@@ -13785,9 +13852,17 @@ void RoomEditor::rebuild_movement_rel_positions() {
     // Frame 0 is the movement origin and must remain fixed at zero.
     movement_edit_.rel_positions_z[0] = 0.0f;
     for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
-        movement_edit_.rel_positions[i].x = movement_edit_.rel_positions[i - 1].x + movement_edit_.frames[i].dx;
-        movement_edit_.rel_positions[i].y = movement_edit_.rel_positions[i - 1].y + movement_edit_.frames[i].dz;
-        movement_edit_.rel_positions_z[i] = movement_edit_.frames[i].dy;
+        const auto& frame = movement_edit_.frames[i];
+        AnimationFrame runtime_frame{};
+        runtime_frame.dx = static_cast<int>(std::lround(frame.dx));
+        runtime_frame.dy = static_cast<int>(std::lround(frame.dy));
+        runtime_frame.dz = static_cast<int>(std::lround(frame.dz));
+        runtime_frame.rotation_degrees = frame.rotation_degrees;
+        const axis::WorldPos delta =
+            animation_update::movement_rotation::frame_world_delta_absolute_yaw(runtime_frame);
+        movement_edit_.rel_positions[i].x = movement_edit_.rel_positions[i - 1].x + static_cast<float>(delta.x);
+        movement_edit_.rel_positions[i].y = movement_edit_.rel_positions[i - 1].y + static_cast<float>(delta.z);
+        movement_edit_.rel_positions_z[i] = movement_edit_.rel_positions_z[i - 1] + static_cast<float>(delta.y);
     }
 }
 
@@ -13798,12 +13873,16 @@ void RoomEditor::rebuild_movement_frames_from_positions() {
     movement_edit_.frames[0].dx = 0.0f;
     movement_edit_.frames[0].dy = 0.0f;
     movement_edit_.frames[0].dz = 0.0f;
+    movement_edit_.frames[0].rotation_degrees = 0.0f;
     for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
         const SDL_FPoint prev = movement_edit_.rel_positions[i - 1];
         const SDL_FPoint curr = movement_edit_.rel_positions[i];
         movement_edit_.frames[i].dx = std::round(curr.x - prev.x);
-        movement_edit_.frames[i].dy =
-            std::round(i < movement_edit_.rel_positions_z.size() ? movement_edit_.rel_positions_z[i] : 0.0f);
+        const float prev_h =
+            (i - 1 < movement_edit_.rel_positions_z.size()) ? movement_edit_.rel_positions_z[i - 1] : 0.0f;
+        const float curr_h =
+            (i < movement_edit_.rel_positions_z.size()) ? movement_edit_.rel_positions_z[i] : 0.0f;
+        movement_edit_.frames[i].dy = std::round(curr_h - prev_h);
         movement_edit_.frames[i].dz = std::round(curr.y - prev.y);
     }
 }
@@ -13844,6 +13923,7 @@ void RoomEditor::refresh_movement_runtime_animation() {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
+    float total_dr = 0.0f;
     for (std::size_t i = 0; i < movement_edit_.frame_count(); ++i) {
         AnimationFrame* frame = animation.primary_frame_at(i);
         if (!frame) {
@@ -13853,16 +13933,20 @@ void RoomEditor::refresh_movement_runtime_animation() {
         frame->dx = static_cast<int>(std::lround(movement_frame.dx));
         frame->dy = static_cast<int>(std::lround(movement_frame.dy));
         frame->dz = static_cast<int>(std::lround(movement_frame.dz));
+        frame->rotation_degrees = movement_frame.rotation_degrees;
         frame->z_resort = movement_frame.resort_z;
         if (i > 0) {
             total_dx += frame->dx;
             total_dy += frame->dy;
             total_dz += frame->dz;
+            total_dr += frame->rotation_degrees;
         }
     }
     animation.total_dx = total_dx;
     animation.total_dy = total_dy;
     animation.total_dz = total_dz;
+    animation.total_dr = total_dr;
+    apply_movement_preview_pose_to_target();
     movement_edit_.target_asset->refresh_frame_texture_bindings();
     if (assets_) {
         assets_->mark_active_assets_dirty();
@@ -14191,6 +14275,52 @@ bool RoomEditor::set_floor_box_system_enabled(bool enabled) {
     return true;
 }
 
+void RoomEditor::sync_movement_panel_frame_values() {
+    if (!movement_mode_active() || !movement_tools_panel_ || !movement_edit_.has_frames()) {
+        return;
+    }
+    const int idx = std::clamp(
+        movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
+    const auto& frame = movement_edit_.frames[static_cast<std::size_t>(idx)];
+    RoomMovementToolsPanel::NumericValues values{};
+    values.dx = frame.dx;
+    values.dy = frame.dy;
+    values.dz = frame.dz;
+    values.rotation_degrees = frame.rotation_degrees;
+    movement_tools_panel_->set_numeric_values(values);
+}
+
+bool RoomEditor::apply_movement_panel_numeric_edits() {
+    if (!movement_mode_active() || !movement_tools_panel_ || !movement_edit_.point_selected ||
+        !movement_edit_.has_frames()) {
+        return false;
+    }
+    const int idx = std::clamp(
+        movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
+    if (idx <= 0) {
+        return false;
+    }
+    const RoomMovementToolsPanel::NumericValues values = movement_tools_panel_->numeric_values();
+    auto& frame = movement_edit_.frames[static_cast<std::size_t>(idx)];
+    const bool changed =
+        std::abs(frame.dx - values.dx) > 1e-5f ||
+        std::abs(frame.dy - values.dy) > 1e-5f ||
+        std::abs(frame.dz - values.dz) > 1e-5f ||
+        std::abs(frame.rotation_degrees - values.rotation_degrees) > 1e-5f;
+    if (!changed) {
+        return false;
+    }
+
+    frame.dx = values.dx;
+    frame.dy = values.dy;
+    frame.dz = values.dz;
+    frame.rotation_degrees = values.rotation_degrees;
+    rebuild_rel_positions();
+    refresh_movement_runtime_animation();
+    movement_edit_.dirty_since_last_flush = true;
+    return true;
+}
+
 void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
     if (!movement_mode_active()) {
         return;
@@ -14208,6 +14338,7 @@ void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
     if (reset_drag_state) {
         movement_edit_.dragging_point = false;
     }
+    sync_movement_panel_frame_values();
 }
 
 bool RoomEditor::project_movement_point(std::size_t index, SDL_FPoint& out_screen) const {
@@ -14415,6 +14546,7 @@ bool RoomEditor::apply_movement_animation_and_frame(const std::string& animation
     movement_edit_.animation_id = selection.resolved_animation_id;
     movement_edit_.frame_index = resolved_index;
     refresh_movement_editor_selection(true);
+    apply_movement_preview_pose_to_target();
     if (assets_) {
         assets_->mark_active_assets_dirty();
     }
@@ -14796,6 +14928,23 @@ bool RoomEditor::enter_movement_edit_mode() {
     movement_edit_.had_static_frame_before = true;
     movement_edit_.static_frame_before = target->static_frame;
     movement_edit_.animation_id = selection.resolved_animation_id;
+    movement_edit_.original_world_x = target->world_x();
+    movement_edit_.original_world_y = target->world_y();
+    movement_edit_.original_world_z = target->world_z();
+
+    const int resolution = current_grid_resolution();
+    const SDL_Point current_anchor =
+        animation_update::detail::bottom_middle_for(*target, target->world_xz_point());
+    const SDL_Point snapped_anchor = vibble::grid::snap_world_to_vertex(current_anchor, resolution);
+    const int snap_dx = snapped_anchor.x - current_anchor.x;
+    const int snap_dz = snapped_anchor.y - current_anchor.y;
+    if (snap_dx != 0 || snap_dz != 0) {
+        target->move_to_world_position(target->world_x() + snap_dx, target->world_y(), target->world_z() + snap_dz);
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
+    }
+    movement_edit_.anchor_snap_active = true;
 
     movement_edit_.frames = resolve_room_movement_frames_for_animation(target, movement_edit_.animation_id);
     if (!movement_edit_.has_frames()) {
@@ -14975,6 +15124,15 @@ void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
 
     if (target_live && movement_edit_.target_asset && movement_edit_.had_static_frame_before) {
         movement_edit_.target_asset->static_frame = movement_edit_.static_frame_before;
+    }
+    if (target_live && movement_edit_.target_asset && movement_edit_.anchor_snap_active) {
+        movement_edit_.target_asset->move_to_world_position(
+            movement_edit_.original_world_x,
+            movement_edit_.original_world_y,
+            movement_edit_.original_world_z);
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
     }
 
     editor_mode_ = EditorMode::Normal;
@@ -16431,6 +16589,7 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     if (movement_tools_panel_) {
         movement_edit_.smooth_enabled = movement_tools_panel_->smooth_enabled();
         movement_edit_.curve_enabled = movement_tools_panel_->curve_enabled();
+        (void)apply_movement_panel_numeric_edits();
     }
 
     const SDL_Point screen_pt{input.getX(), input.getY()};

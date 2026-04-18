@@ -623,6 +623,7 @@ void MovementFrameEditor::copy_movement_fields(MovementFrame& dest, const Moveme
     dest.dx = src.dx;
     dest.dy = src.dy;
     dest.dz = src.dz;
+    dest.rotation_degrees = src.rotation_degrees;
     dest.resort_z = src.resort_z;
     dest.children = src.children;
 }

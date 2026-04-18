@@ -27,6 +27,7 @@
 #include "devtools/room_selection_filter_utils.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "animation/combat_geometry.hpp"
+#include "core/axis_convention.hpp"
 #include "utils/input.hpp"
 
 class Asset;
@@ -577,8 +578,12 @@ private:
     bool set_attack_box_system_enabled(bool enabled);
     bool set_floor_box_system_enabled(bool enabled);
     void refresh_movement_editor_selection(bool reset_drag_state);
+    void sync_movement_panel_frame_values();
+    bool apply_movement_panel_numeric_edits();
     int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
     bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;
+    axis::WorldPos movement_relative_position_for_frame(std::size_t frame_index) const;
+    void apply_movement_preview_pose_to_target();
     bool handle_movement_mode_mouse_input(const Input& input);
     void apply_movement_linear_smoothing(int adjusted_index,
                                          std::vector<SDL_FPoint>& redistributed_xy,
@@ -878,6 +883,10 @@ private:
         bool dirty_since_last_flush = false;
         bool smooth_enabled = false;
         bool curve_enabled = false;
+        bool anchor_snap_active = false;
+        int original_world_x = 0;
+        int original_world_y = 0;
+        int original_world_z = 0;
         std::vector<devmode::room_movement_payload::MovementFrame> frames;
         std::vector<SDL_FPoint> rel_positions;
         std::vector<float> rel_positions_z;

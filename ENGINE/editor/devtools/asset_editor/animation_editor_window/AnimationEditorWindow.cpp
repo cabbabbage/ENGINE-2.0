@@ -291,6 +291,7 @@ nlohmann::json build_movement_total(const nlohmann::json& movement) {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
+    float total_dr = 0.0f;
     if (movement.is_array()) {
         for (std::size_t i = 0; i < movement.size(); ++i) {
             const auto& entry = movement[i];
@@ -306,12 +307,16 @@ nlohmann::json build_movement_total(const nlohmann::json& movement) {
             if (entry.size() > 2 && entry[2].is_number()) {
                 total_dz += static_cast<int>(std::lround(entry[2].get<double>()));
             }
+            if (entry.size() > 3 && entry[3].is_number()) {
+                total_dr += static_cast<float>(entry[3].get<double>());
+            }
         }
     }
     return nlohmann::json::object({
         {"dx", total_dx},
         {"dy", total_dy},
         {"dz", total_dz},
+        {"dr", total_dr},
     });
 }
 

@@ -1,6 +1,7 @@
 #include "room_movement_tools_panel.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <utility>
 
@@ -16,7 +17,7 @@ namespace {
 constexpr int kPanelMargin = 12;
 constexpr int kTopOffset = 56;
 constexpr int kPanelWidth = 320;
-constexpr int kPanelHeight = 184;
+constexpr int kPanelHeight = 340;
 constexpr int kPanelPadding = 12;
 constexpr int kSectionGap = 10;
 
@@ -26,6 +27,10 @@ RoomMovementToolsPanel::RoomMovementToolsPanel() {
     enabled_checkbox_ = std::make_unique<DMCheckbox>("Movement Enabled", false);
     smooth_checkbox_ = std::make_unique<DMCheckbox>("Smooth interpolation", false);
     curve_checkbox_ = std::make_unique<DMCheckbox>("Curve interpolation", false);
+    dx_box_ = std::make_unique<DMTextBox>("DX", "0");
+    dy_box_ = std::make_unique<DMTextBox>("DY", "0");
+    dz_box_ = std::make_unique<DMTextBox>("DZ", "0");
+    rot_box_ = std::make_unique<DMTextBox>("Rotation", "0");
 }
 
 RoomMovementToolsPanel::~RoomMovementToolsPanel() = default;
@@ -101,6 +106,51 @@ bool RoomMovementToolsPanel::system_enabled() const {
     return enabled_checkbox_ ? enabled_checkbox_->value() : false;
 }
 
+void RoomMovementToolsPanel::set_numeric_values(const NumericValues& values) {
+    if (dx_box_ && !dx_box_->is_editing()) {
+        dx_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dx))));
+    }
+    if (dy_box_ && !dy_box_->is_editing()) {
+        dy_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dy))));
+    }
+    if (dz_box_ && !dz_box_->is_editing()) {
+        dz_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dz))));
+    }
+    if (rot_box_ && !rot_box_->is_editing()) {
+        rot_box_->set_value(std::to_string(values.rotation_degrees));
+    }
+}
+
+RoomMovementToolsPanel::NumericValues RoomMovementToolsPanel::numeric_values() const {
+    auto parse_or = [](const DMTextBox* box, float fallback) {
+        if (!box) {
+            return fallback;
+        }
+        try {
+            return std::stof(box->value());
+        } catch (...) {
+            return fallback;
+        }
+    };
+
+    NumericValues values{};
+    values.dx = parse_or(dx_box_.get(), 0.0f);
+    values.dy = parse_or(dy_box_.get(), 0.0f);
+    values.dz = parse_or(dz_box_.get(), 0.0f);
+    values.rotation_degrees = parse_or(rot_box_.get(), 0.0f);
+    if (!std::isfinite(values.rotation_degrees)) {
+        values.rotation_degrees = 0.0f;
+    }
+    return values;
+}
+
+bool RoomMovementToolsPanel::any_numeric_editing() const {
+    return (dx_box_ && dx_box_->is_editing()) ||
+           (dy_box_ && dy_box_->is_editing()) ||
+           (dz_box_ && dz_box_->is_editing()) ||
+           (rot_box_ && rot_box_->is_editing());
+}
+
 void RoomMovementToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCallback callback) {
     on_system_enabled_toggle_ = std::move(callback);
 }
@@ -129,20 +179,32 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
             return true;
         }
     } else {
-    if (smooth_checkbox_ && smooth_checkbox_->handle_event(event)) {
-        handled = true;
-    }
-    if (curve_checkbox_ && curve_checkbox_->handle_event(event)) {
-        handled = true;
-    }
+        if (smooth_checkbox_ && smooth_checkbox_->handle_event(event)) {
+            handled = true;
+        }
+        if (curve_checkbox_ && curve_checkbox_->handle_event(event)) {
+            handled = true;
+        }
+        if (dx_box_ && dx_box_->handle_event(event)) {
+            handled = true;
+        }
+        if (dy_box_ && dy_box_->handle_event(event)) {
+            handled = true;
+        }
+        if (dz_box_ && dz_box_->handle_event(event)) {
+            handled = true;
+        }
+        if (rot_box_ && rot_box_->handle_event(event)) {
+            handled = true;
+        }
 
-    if (!smooth_enabled()) {
-        set_curve_enabled(false);
-    }
+        if (!smooth_enabled()) {
+            set_curve_enabled(false);
+        }
 
-    if (handled) {
-        return true;
-    }
+        if (handled) {
+            return true;
+        }
     }
 
     SDL_Point pointer{0, 0};
@@ -204,6 +266,18 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
     if (curve_checkbox_) {
         curve_checkbox_->render(renderer);
     }
+    if (dx_box_) {
+        dx_box_->render(renderer);
+    }
+    if (dy_box_) {
+        dy_box_->render(renderer);
+    }
+    if (dz_box_) {
+        dz_box_->render(renderer);
+    }
+    if (rot_box_) {
+        rot_box_->render(renderer);
+    }
 }
 
 bool RoomMovementToolsPanel::is_point_inside(int x, int y) const {
@@ -233,6 +307,10 @@ void RoomMovementToolsPanel::update_layout() const {
     hint_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, enabled_rect_.y + enabled_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, 40};
     smooth_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, hint_rect_.y + 48, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
     curve_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, smooth_rect_.y + smooth_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
+    dx_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, curve_rect_.y + curve_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
+    dy_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, dx_rect_.y + dx_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
+    dz_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, dy_rect_.y + dy_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
+    rot_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, dz_rect_.y + dz_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
 
     if (enabled_checkbox_) {
         enabled_checkbox_->set_rect(enabled_rect_);
@@ -242,6 +320,18 @@ void RoomMovementToolsPanel::update_layout() const {
     }
     if (curve_checkbox_) {
         curve_checkbox_->set_rect(curve_rect_);
+    }
+    if (dx_box_) {
+        dx_box_->set_rect(dx_rect_);
+    }
+    if (dy_box_) {
+        dy_box_->set_rect(dy_rect_);
+    }
+    if (dz_box_) {
+        dz_box_->set_rect(dz_rect_);
+    }
+    if (rot_box_) {
+        rot_box_->set_rect(rot_rect_);
     }
 
     layout_dirty_ = false;

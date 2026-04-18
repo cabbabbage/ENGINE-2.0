@@ -323,6 +323,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -335,7 +336,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -346,14 +348,16 @@
       "can_invert": false,
       "floor_boxes": [
         {
-          "depth": 128.0,
+          "depth": 79.0,
           "enabled": true,
           "id": "floor_box",
           "name": "Floor Box",
-          "position_x": 0.0,
-          "position_z": 0.0,
-          "tags": [],
-          "width": 128.0
+          "position_x": -3.5,
+          "position_z": -28.5,
+          "tags": [
+            "boundary"
+          ],
+          "width": 95.0
         }
       ],
       "floor_boxes_enabled": true,
@@ -15910,7 +15914,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16557,7 +16561,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16621,7 +16625,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16685,7 +16689,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16749,7 +16753,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16813,7 +16817,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16877,7 +16881,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16941,7 +16945,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17005,7 +17009,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17460,7 +17464,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17524,7 +17528,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17588,7 +17592,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17652,7 +17656,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17716,7 +17720,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17780,7 +17784,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17844,7 +17848,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17908,7 +17912,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -18037,14 +18041,14 @@
       "asset_name": "vibble",
       "asset_type": "player",
       "attack_box_enabled": true,
-      "floor_boxes_enabled": false,
+      "floor_boxes_enabled": true,
       "hitbox_enabled": true,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [
         {
           "asset_name": "vibble",
-          "height_radius_z": 30.0,
+          "height_radius_z": 10.0,
           "legacy_names": [],
           "name": "eyes",
           "points": [
@@ -18070,7 +18074,7 @@
               "scaling_method": "parent",
               "tags": [],
               "texture_x": 0,
-              "texture_y": 30
+              "texture_y": 10
             },
             {
               "angle_degrees": 180.0,
@@ -18094,7 +18098,7 @@
               "scaling_method": "parent",
               "tags": [],
               "texture_x": 0,
-              "texture_y": -30
+              "texture_y": -10
             }
           ],
           "radius_offset_degrees": 0.0,
@@ -19241,9 +19245,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
+            114,
             242,
-            115,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -19644,9 +19648,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
             204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,

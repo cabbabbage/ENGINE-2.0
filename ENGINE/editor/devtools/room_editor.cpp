@@ -4664,14 +4664,34 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 const int box_index = static_cast<int>(i);
                 const bool selected = (floor_box_edit_.selected_box_index == box_index);
                 const bool hovered = (floor_box_edit_.hovered_box_index == box_index);
-                SDL_Color edge{96, 208, 246, box.enabled ? 236 : 140};
-                SDL_Color fill{96, 208, 246, box.enabled ? 80 : 44};
+                SDL_Color edge{
+                    static_cast<Uint8>(96),
+                    static_cast<Uint8>(208),
+                    static_cast<Uint8>(246),
+                    static_cast<Uint8>(box.enabled ? 236 : 140)};
+                SDL_Color fill{
+                    static_cast<Uint8>(96),
+                    static_cast<Uint8>(208),
+                    static_cast<Uint8>(246),
+                    static_cast<Uint8>(box.enabled ? 80 : 44)};
                 if (selected) {
                     edge = SDL_Color{255, 190, 76, 255};
-                    fill = SDL_Color{255, 190, 76, box.enabled ? 104 : 68};
+                    fill = SDL_Color{
+                        static_cast<Uint8>(255),
+                        static_cast<Uint8>(190),
+                        static_cast<Uint8>(76),
+                        static_cast<Uint8>(box.enabled ? 104 : 68)};
                 } else if (hovered) {
-                    edge = SDL_Color{255, 227, 132, box.enabled ? 245 : 165};
-                    fill = SDL_Color{255, 227, 132, box.enabled ? 92 : 58};
+                    edge = SDL_Color{
+                        static_cast<Uint8>(255),
+                        static_cast<Uint8>(227),
+                        static_cast<Uint8>(132),
+                        static_cast<Uint8>(box.enabled ? 245 : 165)};
+                    fill = SDL_Color{
+                        static_cast<Uint8>(255),
+                        static_cast<Uint8>(227),
+                        static_cast<Uint8>(132),
+                        static_cast<Uint8>(box.enabled ? 92 : 58)};
                 }
 
                 SDL_Vertex vertices[4]{};
@@ -4740,7 +4760,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 const SDL_FPoint center_world = floor_box_world_center(*floor_box_edit_.target_asset, box);
                 const SDL_FPoint center_screen = cam.map_to_screen_f(center_world);
                 if (std::isfinite(center_screen.x) && std::isfinite(center_screen.y)) {
-                    SDL_Color center_color{240, 240, 240, box.enabled ? 235 : 145};
+                    SDL_Color center_color{
+                        static_cast<Uint8>(240),
+                        static_cast<Uint8>(240),
+                        static_cast<Uint8>(240),
+                        static_cast<Uint8>(box.enabled ? 235 : 145)};
                     int center_radius = 5;
                     if (hovered && floor_box_edit_.hovered_corner_index == kFloorBoxCenterHandleHoverIndex) {
                         center_color = SDL_Color{255, 255, 255, 255};

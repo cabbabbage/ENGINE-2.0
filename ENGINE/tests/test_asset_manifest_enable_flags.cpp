@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <unordered_set>
@@ -68,7 +69,7 @@ TEST_CASE("AssetInfo does not infer enable flags from payload presence") {
     CHECK_FALSE(default_anim.contains("attack_boxes"));
 }
 
-TEST_CASE("AssetInfo floor boxes normalize canonical fields and single-boundary invariant") {
+TEST_CASE("AssetInfo floor boxes normalize canonical fields and tags") {
     const nlohmann::json metadata = {
         {"movement_enabled", false},
         {"attack_box_enabled", false},
@@ -76,8 +77,8 @@ TEST_CASE("AssetInfo floor boxes normalize canonical fields and single-boundary 
         {"floor_boxes_enabled", true},
         {"floor_boxes",
          nlohmann::json::array({
-             {{"id", "Boundary Box"}, {"name", "Boundary"}, {"is_boundary", true}, {"position_x", 1.0}, {"position_z", 2.0}, {"width", 16.0}, {"depth", 8.0}, {"rotation_degrees", 0.0}, {"enabled", true}},
-             {{"id", "second-boundary"}, {"name", "Boundary 2"}, {"is_boundary", true}, {"position_x", 5.0}, {"position_z", 6.0}, {"width", 10.0}, {"depth", 6.0}, {"rotation_degrees", 45.0}, {"enabled", true}},
+             {{"id", "Boundary Box"}, {"name", "Boundary"}, {"is_boundary", true}, {"position_x", 1.0}, {"position_z", 2.0}, {"width", 16.0}, {"depth", 8.0}, {"enabled", true}},
+             {{"id", "second-boundary"}, {"name", "Boundary 2"}, {"tags", nlohmann::json::array({"enemy_block", "Boundary", "enemy_block"})}, {"position_x", 5.0}, {"position_z", 6.0}, {"width", 10.0}, {"depth", 6.0}, {"enabled", true}},
          })},
     };
 
@@ -88,23 +89,27 @@ TEST_CASE("AssetInfo floor boxes normalize canonical fields and single-boundary 
     REQUIRE(payload["floor_boxes"].is_array());
     REQUIRE(payload["floor_boxes"].size() == 2);
 
-    std::size_t boundary_count = 0;
     for (const auto& floor_box : payload["floor_boxes"]) {
         REQUIRE(floor_box.is_object());
         CHECK(floor_box.contains("id"));
         CHECK(floor_box.contains("name"));
-        CHECK(floor_box.contains("is_boundary"));
         CHECK(floor_box.contains("position_x"));
         CHECK(floor_box.contains("position_z"));
         CHECK(floor_box.contains("width"));
         CHECK(floor_box.contains("depth"));
-        CHECK(floor_box.contains("rotation_degrees"));
         CHECK(floor_box.contains("enabled"));
-        if (floor_box.value("is_boundary", false)) {
-            ++boundary_count;
-        }
+        CHECK(floor_box.contains("tags"));
+        CHECK(floor_box["tags"].is_array());
+        CHECK_FALSE(floor_box.contains("is_boundary"));
+        CHECK_FALSE(floor_box.contains("rotation_degrees"));
     }
-    CHECK(boundary_count == 1);
+
+    const auto& first_tags = payload["floor_boxes"][0]["tags"];
+    CHECK(std::find(first_tags.begin(), first_tags.end(), "boundary") != first_tags.end());
+
+    const auto& second_tags = payload["floor_boxes"][1]["tags"];
+    CHECK(std::find(second_tags.begin(), second_tags.end(), "enemy_block") != second_tags.end());
+    CHECK(std::find(second_tags.begin(), second_tags.end(), "boundary") != second_tags.end());
 }
 
 TEST_CASE("AssetInfo omits floor boxes payload when disabled") {
@@ -115,7 +120,7 @@ TEST_CASE("AssetInfo omits floor boxes payload when disabled") {
         {"floor_boxes_enabled", false},
         {"floor_boxes",
          nlohmann::json::array({
-             {{"id", "floor_1"}, {"name", "box"}, {"is_boundary", false}, {"position_x", 0.0}, {"position_z", 0.0}, {"width", 1.0}, {"depth", 1.0}, {"rotation_degrees", 0.0}, {"enabled", true}},
+             {{"id", "floor_1"}, {"name", "box"}, {"tags", nlohmann::json::array({"boundary"})}, {"position_x", 0.0}, {"position_z", 0.0}, {"width", 1.0}, {"depth", 1.0}, {"enabled", true}},
          })},
     };
 
@@ -151,49 +156,47 @@ TEST_CASE("AssetInfo save-time floor box sanitization applies defaults and canon
     };
 
     AssetInfo info("floor_boxes_save_sanitize_test_asset", metadata);
-    info.floor_boxes = {
-        AssetInfo::FloorBox{
-            "",
-            "   ",
-            true,
-            std::numeric_limits<float>::quiet_NaN(),
-            std::numeric_limits<float>::infinity(),
-            -32.0f,
-            std::numeric_limits<float>::quiet_NaN(),
-            std::numeric_limits<float>::infinity(),
-            true,
-        },
-        AssetInfo::FloorBox{
-            "",
-            "",
-            true,
-            2.0f,
-            -3.0f,
-            10.0f,
-            4.0f,
-            45.0f,
-            false,
-        },
-    };
+    AssetInfo::FloorBox first{};
+    first.id = "";
+    first.name = "   ";
+    first.position_x = std::numeric_limits<float>::quiet_NaN();
+    first.position_z = std::numeric_limits<float>::infinity();
+    first.width = -32.0f;
+    first.depth = std::numeric_limits<float>::quiet_NaN();
+    first.enabled = true;
+    first.tags = {"", "  ", "boundary", "Boundary", "enemy_block"};
+
+    AssetInfo::FloorBox second{};
+    second.id = "";
+    second.name = "";
+    second.position_x = 2.0f;
+    second.position_z = -3.0f;
+    second.width = 10.0f;
+    second.depth = 4.0f;
+    second.enabled = false;
+    second.tags = {"enemy_block", "enemy_block", "ally_block"};
+
+    info.floor_boxes = {first, second};
 
     const nlohmann::json payload = info.manifest_payload();
     REQUIRE(payload.contains("floor_boxes"));
     REQUIRE(payload["floor_boxes"].is_array());
     REQUIRE(payload["floor_boxes"].size() == 2);
 
-    std::size_t boundary_count = 0;
     std::unordered_set<std::string> ids;
     for (const auto& floor_box : payload["floor_boxes"]) {
         REQUIRE(floor_box.is_object());
         CHECK(floor_box.contains("id"));
         CHECK(floor_box.contains("name"));
-        CHECK(floor_box.contains("is_boundary"));
         CHECK(floor_box.contains("position_x"));
         CHECK(floor_box.contains("position_z"));
         CHECK(floor_box.contains("width"));
         CHECK(floor_box.contains("depth"));
-        CHECK(floor_box.contains("rotation_degrees"));
         CHECK(floor_box.contains("enabled"));
+        CHECK(floor_box.contains("tags"));
+        CHECK(floor_box["tags"].is_array());
+        CHECK_FALSE(floor_box.contains("is_boundary"));
+        CHECK_FALSE(floor_box.contains("rotation_degrees"));
 
         REQUIRE(floor_box["id"].is_string());
         REQUIRE(floor_box["name"].is_string());
@@ -205,18 +208,19 @@ TEST_CASE("AssetInfo save-time floor box sanitization applies defaults and canon
         REQUIRE(floor_box["position_z"].is_number());
         REQUIRE(floor_box["width"].is_number());
         REQUIRE(floor_box["depth"].is_number());
-        REQUIRE(floor_box["rotation_degrees"].is_number());
         CHECK(std::isfinite(floor_box["position_x"].get<float>()));
         CHECK(std::isfinite(floor_box["position_z"].get<float>()));
         CHECK(std::isfinite(floor_box["width"].get<float>()));
         CHECK(std::isfinite(floor_box["depth"].get<float>()));
-        CHECK(std::isfinite(floor_box["rotation_degrees"].get<float>()));
         CHECK(floor_box["width"].get<float>() >= 0.0f);
         CHECK(floor_box["depth"].get<float>() >= 0.0f);
-
-        if (floor_box.value("is_boundary", false)) {
-            ++boundary_count;
-        }
     }
-    CHECK(boundary_count == 1);
+
+    const auto& first_tags = payload["floor_boxes"][0]["tags"];
+    CHECK(std::find(first_tags.begin(), first_tags.end(), "boundary") != first_tags.end());
+    CHECK(std::find(first_tags.begin(), first_tags.end(), "enemy_block") != first_tags.end());
+
+    const auto& second_tags = payload["floor_boxes"][1]["tags"];
+    CHECK(std::find(second_tags.begin(), second_tags.end(), "enemy_block") != second_tags.end());
+    CHECK(std::find(second_tags.begin(), second_tags.end(), "ally_block") != second_tags.end());
 }

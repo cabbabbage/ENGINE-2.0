@@ -8659,6 +8659,235 @@ bool RoomEditor::should_show_asset_editor_navigation() const {
            asset_editor_subview_ != AssetEditorSubview::AnimationEditor;
 }
 
+std::string RoomEditor::asset_editor_subview_label(AssetEditorSubview subview) const {
+    switch (subview) {
+        case AssetEditorSubview::AssetInfo: return "Asset";
+        case AssetEditorSubview::Anchor: return "Anchor";
+        case AssetEditorSubview::Light: return "Light";
+        case AssetEditorSubview::OvalAnchor: return "Oval";
+        case AssetEditorSubview::Movement: return "Move";
+        case AssetEditorSubview::Hitbox: return "Hitbox";
+        case AssetEditorSubview::AttackBox: return "Attack";
+        case AssetEditorSubview::FloorBoxes: return "Floor";
+        case AssetEditorSubview::AnimationEditor: return "Anim Editor";
+    }
+    return "Asset";
+}
+
+void RoomEditor::sync_shared_footer_navigation() {
+    if (!shared_footer_bar_) {
+        return;
+    }
+
+    constexpr int kCompactFooterHeight = 48;
+    constexpr int kEditorFooterHeight = 136;
+    const bool navigation_visible = enabled_ && asset_editor_tab_scope_active();
+    shared_footer_bar_->set_editor_navigation_enabled(navigation_visible);
+    shared_footer_bar_->set_height(navigation_visible ? kEditorFooterHeight : kCompactFooterHeight);
+
+    if (!navigation_visible) {
+        shared_footer_bar_->clear_editor_navigation();
+        shared_footer_bar_->set_bounds(screen_w_, screen_h_);
+        return;
+    }
+
+    auto add_tab = [&](AssetEditorSubview subview, std::vector<DevFooterBar::EditorTab>& tabs) {
+        DevFooterBar::EditorTab tab{};
+        tab.id = asset_editor_subview_label(subview);
+        tab.label = asset_editor_subview_label(subview);
+        tab.active = (asset_editor_subview_ == subview);
+        const bool enterable = can_enter_asset_editor_subview(subview);
+        tab.enabled = enterable || tab.active;
+        tab.on_select = [this, subview]() {
+            if (!can_enter_asset_editor_subview(subview)) {
+                return;
+            }
+            set_asset_editor_subview(subview, true);
+        };
+        tabs.push_back(std::move(tab));
+    };
+
+    std::vector<DevFooterBar::EditorTab> tabs;
+    tabs.reserve(9);
+    add_tab(AssetEditorSubview::AssetInfo, tabs);
+    add_tab(AssetEditorSubview::Anchor, tabs);
+    add_tab(AssetEditorSubview::Light, tabs);
+    add_tab(AssetEditorSubview::OvalAnchor, tabs);
+    add_tab(AssetEditorSubview::Movement, tabs);
+    add_tab(AssetEditorSubview::Hitbox, tabs);
+    add_tab(AssetEditorSubview::AttackBox, tabs);
+    add_tab(AssetEditorSubview::FloorBoxes, tabs);
+    add_tab(AssetEditorSubview::AnimationEditor, tabs);
+    shared_footer_bar_->set_editor_tabs(std::move(tabs));
+
+    auto frame_count_for = [](Asset* target, const std::string& animation_id) -> int {
+        if (!target || !target->info || animation_id.empty()) {
+            return 0;
+        }
+        auto anim_it = target->info->animations.find(animation_id);
+        if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
+            return 0;
+        }
+        return static_cast<int>(anim_it->second.frame_count());
+    };
+
+    DevFooterBar::EditorFrameNavigation frame_nav{};
+    frame_nav.animation_clickable = can_enter_asset_editor_subview(AssetEditorSubview::AnimationEditor);
+    frame_nav.on_activate_animation = [this]() {
+        if (!can_enter_asset_editor_subview(AssetEditorSubview::AnimationEditor)) {
+            return;
+        }
+        set_asset_editor_subview(AssetEditorSubview::AnimationEditor, true);
+    };
+
+    if ((anchor_mode_active() || light_mode_active()) &&
+        is_asset_pointer_live(anchor_edit_.target_asset) &&
+        anchor_edit_.target_asset &&
+        anchor_edit_.target_asset->info) {
+        frame_nav.visible = true;
+        frame_nav.animation_label = anchor_edit_.animation_id.empty() ? "No Animation" : anchor_edit_.animation_id;
+        frame_nav.frame_count = frame_count_for(anchor_edit_.target_asset, anchor_edit_.animation_id);
+        frame_nav.selected_frame = resolve_anchor_mode_frame_index();
+        frame_nav.on_prev_animation = [this]() { navigate_anchor_animation(-1); };
+        frame_nav.on_next_animation = [this]() { navigate_anchor_animation(1); };
+        frame_nav.on_prev_frame = [this]() { navigate_anchor_frame(-1); };
+        frame_nav.on_next_frame = [this]() { navigate_anchor_frame(1); };
+        const std::string animation_id = anchor_edit_.animation_id;
+        frame_nav.on_select_frame = [this, animation_id](int frame_index) {
+            if (apply_anchor_animation_and_frame(animation_id, frame_index)) {
+                refresh_anchor_mode_handles();
+            }
+        };
+    } else if (oval_mode_active() &&
+               is_asset_pointer_live(oval_edit_.target_asset) &&
+               oval_edit_.target_asset &&
+               oval_edit_.target_asset->info) {
+        frame_nav.visible = true;
+        frame_nav.animation_label = oval_edit_.animation_id.empty() ? "No Animation" : oval_edit_.animation_id;
+        frame_nav.frame_count = frame_count_for(oval_edit_.target_asset, oval_edit_.animation_id);
+        frame_nav.selected_frame = resolve_oval_mode_frame_index();
+        frame_nav.on_prev_animation = [this]() { navigate_oval_animation(-1); };
+        frame_nav.on_next_animation = [this]() { navigate_oval_animation(1); };
+        frame_nav.on_prev_frame = [this]() { navigate_oval_frame(-1); };
+        frame_nav.on_next_frame = [this]() { navigate_oval_frame(1); };
+        const std::string animation_id = oval_edit_.animation_id;
+        frame_nav.on_select_frame = [this, animation_id](int frame_index) {
+            (void)apply_oval_animation_and_frame(animation_id, frame_index);
+        };
+    } else if (movement_mode_active() &&
+               is_asset_pointer_live(movement_edit_.target_asset) &&
+               movement_edit_.target_asset &&
+               movement_edit_.target_asset->info) {
+        frame_nav.visible = true;
+        frame_nav.animation_label = movement_edit_.animation_id.empty() ? "No Animation" : movement_edit_.animation_id;
+        frame_nav.frame_count = frame_count_for(movement_edit_.target_asset, movement_edit_.animation_id);
+        frame_nav.selected_frame = resolve_movement_mode_frame_index();
+        frame_nav.on_prev_animation = [this]() { navigate_movement_animation(-1); };
+        frame_nav.on_next_animation = [this]() { navigate_movement_animation(1); };
+        frame_nav.on_prev_frame = [this]() { navigate_movement_frame(-1); };
+        frame_nav.on_next_frame = [this]() { navigate_movement_frame(1); };
+        const std::string animation_id = movement_edit_.animation_id;
+        frame_nav.on_select_frame = [this, animation_id](int frame_index) {
+            if (apply_movement_animation_and_frame(animation_id, frame_index)) {
+                refresh_movement_editor_selection(true);
+            }
+        };
+    } else if (hitbox_mode_active() &&
+               is_asset_pointer_live(hitbox_edit_.target_asset) &&
+               hitbox_edit_.target_asset &&
+               hitbox_edit_.target_asset->info) {
+        frame_nav.visible = true;
+        frame_nav.animation_label = hitbox_edit_.animation_id.empty() ? "No Animation" : hitbox_edit_.animation_id;
+        frame_nav.frame_count = frame_count_for(hitbox_edit_.target_asset, hitbox_edit_.animation_id);
+        frame_nav.selected_frame = resolve_hitbox_mode_frame_index();
+        frame_nav.on_prev_animation = [this]() { navigate_hitbox_animation(-1); };
+        frame_nav.on_next_animation = [this]() { navigate_hitbox_animation(1); };
+        frame_nav.on_prev_frame = [this]() { navigate_hitbox_frame(-1); };
+        frame_nav.on_next_frame = [this]() { navigate_hitbox_frame(1); };
+        const std::string animation_id = hitbox_edit_.animation_id;
+        frame_nav.on_select_frame = [this, animation_id](int frame_index) {
+            if (apply_hitbox_animation_and_frame(animation_id, frame_index)) {
+                sync_hitbox_tools_panel();
+            }
+        };
+    } else if (attack_box_mode_active() &&
+               is_asset_pointer_live(attack_box_edit_.target_asset) &&
+               attack_box_edit_.target_asset &&
+               attack_box_edit_.target_asset->info) {
+        frame_nav.visible = true;
+        frame_nav.animation_label = attack_box_edit_.animation_id.empty() ? "No Animation" : attack_box_edit_.animation_id;
+        frame_nav.frame_count = frame_count_for(attack_box_edit_.target_asset, attack_box_edit_.animation_id);
+        frame_nav.selected_frame = resolve_attack_box_mode_frame_index();
+        frame_nav.on_prev_animation = [this]() { navigate_attack_box_animation(-1); };
+        frame_nav.on_next_animation = [this]() { navigate_attack_box_animation(1); };
+        frame_nav.on_prev_frame = [this]() { navigate_attack_box_frame(-1); };
+        frame_nav.on_next_frame = [this]() { navigate_attack_box_frame(1); };
+        const std::string animation_id = attack_box_edit_.animation_id;
+        frame_nav.on_select_frame = [this, animation_id](int frame_index) {
+            if (apply_attack_box_animation_and_frame(animation_id, frame_index)) {
+                sync_attack_box_tools_panel();
+            }
+        };
+    } else if (asset_editor_subview_ == AssetEditorSubview::AssetInfo) {
+        Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+        if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
+            target = selected_assets_.front();
+        }
+        const auto selection =
+            resolve_file_sourced_animation_selection_for_target(target, target ? target->current_animation : std::string{});
+        frame_nav.visible = true;
+        frame_nav.animation_label = selection.resolved_animation_id.empty() ? "No Animation" : selection.resolved_animation_id;
+        frame_nav.frame_count = frame_count_for(target, selection.resolved_animation_id);
+        frame_nav.selected_frame = 0;
+        if (target && target->info && frame_nav.frame_count > 0) {
+            auto anim_it = target->info->animations.find(selection.resolved_animation_id);
+            if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
+                for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+                    if (anim_it->second.primary_frame_at(i) == target->current_frame) {
+                        frame_nav.selected_frame = static_cast<int>(i);
+                        break;
+                    }
+                }
+            }
+        }
+        frame_nav.on_prev_animation = [this]() { navigate_asset_info_preview_animation(-1); };
+        frame_nav.on_next_animation = [this]() { navigate_asset_info_preview_animation(1); };
+        frame_nav.on_prev_frame = [this]() { navigate_asset_info_preview_frame(-1); };
+        frame_nav.on_next_frame = [this]() { navigate_asset_info_preview_frame(1); };
+        frame_nav.on_select_frame = [this](int frame_index) {
+            Asset* target_asset = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+            if ((!target_asset || !is_asset_pointer_live(target_asset)) && selected_assets_.size() == 1) {
+                target_asset = selected_assets_.front();
+            }
+            if (!is_asset_pointer_live(target_asset) || !target_asset || !target_asset->info) {
+                return;
+            }
+            const auto selection_local = resolve_file_sourced_animation_selection_for_target(
+                target_asset,
+                target_asset->current_animation);
+            if (!selection_local.has_selection()) {
+                return;
+            }
+            if (apply_asset_preview_animation_and_frame(target_asset, selection_local.resolved_animation_id, frame_index)) {
+                update_asset_editor_layout();
+            }
+        };
+    } else if (asset_editor_subview_ == AssetEditorSubview::AnimationEditor) {
+        frame_nav.visible = false;
+        frame_nav.animation_label = "Animation Editor";
+    } else if (floor_box_mode_active()) {
+        frame_nav.visible = false;
+        frame_nav.animation_label = "Floor Box Editor";
+    }
+
+    if (frame_nav.visible && frame_nav.frame_count <= 0) {
+        frame_nav.visible = false;
+    }
+
+    shared_footer_bar_->set_editor_frame_navigation(std::move(frame_nav));
+    shared_footer_bar_->set_bounds(screen_w_, screen_h_);
+}
+
 RoomEditor::AssetEditorSubview RoomEditor::next_asset_editor_subview(AssetEditorSubview subview) const {
     switch (subview) {
         case AssetEditorSubview::AssetInfo: return AssetEditorSubview::Anchor;
@@ -16866,6 +17095,7 @@ void RoomEditor::configure_shared_panel() {
     if (!shared_footer_bar_) {
         return;
     }
+    sync_shared_footer_navigation();
     shared_footer_bar_->set_bounds(screen_w_, screen_h_);
 }
 

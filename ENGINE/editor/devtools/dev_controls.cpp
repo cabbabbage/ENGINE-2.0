@@ -3034,7 +3034,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool asset_stack_editor_active = room_editor_ && room_editor_->is_asset_stack_editor_active();
     if (map_mode_ui_) {
         DevFooterBar* footer = map_mode_ui_->get_footer_bar();
-        if (footer && footer->visible() && !asset_stack_editor_active) {
+        if (footer && footer->visible()) {
             footer_rect = footer->rect();
         }
     }
@@ -3171,7 +3171,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
     if (map_mode_ui_) {
         if (DevFooterBar* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !frame_editor_active && !asset_stack_editor_active) {
+            if (footer->visible() && !frame_editor_active) {
                 const bool pointer_in_footer = pointer_relevant && footer->contains(pointer.x, pointer.y);
                 if (consume_if_handled(footer->handle_event(event), pointer_in_footer)) {
                     return;
@@ -4123,7 +4123,7 @@ void DevControls::apply_header_suppression() {
         map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            const bool footer_enabled = !frame_editor_active && !asset_stack_editor_active && !shift_block_headers_footers_;
+            const bool footer_enabled = !frame_editor_active && !shift_block_headers_footers_;
             footer->set_visible(footer_enabled);
             footer->set_input_enabled(footer_enabled);
         }
@@ -4161,7 +4161,7 @@ void DevControls::update_header_and_footer_bounds() {
     }
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !asset_stack_editor_active && !shift_block_headers_footers_) {
+            if (footer->visible() && !shift_block_headers_footers_) {
                 last_footer_rect_ = footer->rect();
             } else {
                 last_footer_rect_ = SDL_Rect{0, 0, 0, 0};

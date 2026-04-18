@@ -24,8 +24,8 @@ constexpr int kFooterButtonMinWidth = 110;
 constexpr int kFooterHideButtonWidth = 32;
 constexpr int kEditorTabGap = 8;
 constexpr int kEditorFrameRowGap = 6;
-constexpr int kEditorFrameStripHeight = 34;
-constexpr int kEditorFrameChipWidth = 46;
+constexpr int kEditorFrameStripHeight = 46;
+constexpr int kEditorFrameChipWidth = 56;
 constexpr int kEditorFrameChipGap = 8;
 constexpr int kEditorFrameNavButtonWidth = 56;
 constexpr int kEditorAnimationLabelHeight = 20;
@@ -776,8 +776,13 @@ void DevFooterBar::layout_editor_navigation() {
     const int tab_height = DMButton::height();
     if (!editor_tabs_.empty()) {
         const int tab_count = static_cast<int>(editor_tabs_.size());
-        const int total_gap = std::max(0, tab_count - 1) * kEditorTabGap;
-        const int tab_width = std::max(74, (available_width - total_gap) / std::max(1, tab_count));
+        const int min_tab_width = 32;
+        const int max_tab_gap = kEditorTabGap;
+        const int tab_gap = (tab_count > 1)
+            ? std::clamp((available_width - (tab_count * min_tab_width)) / (tab_count - 1), 2, max_tab_gap)
+            : 0;
+        const int total_gap = std::max(0, tab_count - 1) * tab_gap;
+        const int tab_width = std::max(min_tab_width, (available_width - total_gap) / std::max(1, tab_count));
         int x = left;
         for (auto& tab : editor_tabs_) {
             if (!tab.widget) {
@@ -785,7 +790,7 @@ void DevFooterBar::layout_editor_navigation() {
             }
             tab.widget->set_style(editor_tab_style_for(tab));
             tab.widget->set_rect(SDL_Rect{x, y, tab_width, tab_height});
-            x += tab_width + kEditorTabGap;
+            x += tab_width + tab_gap;
         }
         editor_tabs_row_rect_ = SDL_Rect{left, y, available_width, tab_height};
         y += tab_height + kEditorFrameRowGap;
@@ -845,16 +850,21 @@ void DevFooterBar::layout_editor_navigation() {
     const int button_h = DMButton::height();
     const int button_y = y + (kEditorFrameStripHeight - button_h) / 2;
     const int button_gap = 6;
-    const int left_cluster_w = (kEditorFrameNavButtonWidth * 2) + button_gap;
+    const int min_strip_w = 120;
+    const int desired_nav_button_w = kEditorFrameNavButtonWidth;
+    const int reserved_for_buttons = std::max(0, available_width - min_strip_w - 20);
+    const int cluster_budget = reserved_for_buttons / 2;
+    const int nav_button_w = std::clamp((cluster_budget - button_gap) / 2, 34, desired_nav_button_w);
+    const int left_cluster_w = (nav_button_w * 2) + button_gap;
     const int right_cluster_w = left_cluster_w;
 
-    const SDL_Rect anim_prev_rect{left, button_y, kEditorFrameNavButtonWidth, button_h};
-    const SDL_Rect anim_next_rect{left + kEditorFrameNavButtonWidth + button_gap, button_y, kEditorFrameNavButtonWidth, button_h};
-    const SDL_Rect frame_prev_rect{right - right_cluster_w, button_y, kEditorFrameNavButtonWidth, button_h};
+    const SDL_Rect anim_prev_rect{left, button_y, nav_button_w, button_h};
+    const SDL_Rect anim_next_rect{left + nav_button_w + button_gap, button_y, nav_button_w, button_h};
+    const SDL_Rect frame_prev_rect{right - right_cluster_w, button_y, nav_button_w, button_h};
     const SDL_Rect frame_next_rect{
-        right - kEditorFrameNavButtonWidth,
+        right - nav_button_w,
         button_y,
-        kEditorFrameNavButtonWidth,
+        nav_button_w,
         button_h};
 
     editor_prev_animation_button_->set_rect(anim_prev_rect);
@@ -1120,13 +1130,52 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
         const SDL_Color border = hovered ? DMStyles::HighlightColor() : DMStyles::Border();
         dm_draw::DrawRoundedOutline(renderer, chip, 7, 1, border);
 
+        const int preview_pad = 3;
+        SDL_Rect preview_rect{
+            chip.x + preview_pad,
+            chip.y + preview_pad,
+            std::max(0, chip.w - preview_pad * 2),
+            std::max(0, chip.h - preview_pad * 2)
+        };
+        if (editor_frame_navigation_.frame_texture_provider) {
+            if (SDL_Texture* frame_texture = editor_frame_navigation_.frame_texture_provider(i)) {
+                float tex_w = 0.0f;
+                float tex_h = 0.0f;
+                if (SDL_GetTextureSize(frame_texture, &tex_w, &tex_h) &&
+                    tex_w > 1.0f && tex_h > 1.0f &&
+                    preview_rect.w > 1 && preview_rect.h > 1) {
+                    const float scale = std::min(
+                        static_cast<float>(preview_rect.w) / tex_w,
+                        static_cast<float>(preview_rect.h) / tex_h);
+                    const int draw_w = std::max(1, static_cast<int>(std::lround(tex_w * scale)));
+                    const int draw_h = std::max(1, static_cast<int>(std::lround(tex_h * scale)));
+                    SDL_FRect dst{
+                        static_cast<float>(preview_rect.x + (preview_rect.w - draw_w) / 2),
+                        static_cast<float>(preview_rect.y + (preview_rect.h - draw_h) / 2),
+                        static_cast<float>(draw_w),
+                        static_cast<float>(draw_h)
+                    };
+                    sdl_render::Texture(renderer, frame_texture, nullptr, &dst);
+                }
+            }
+        }
+
+        const SDL_Rect label_bg{
+            chip.x + 2,
+            chip.y + 2,
+            std::max(14, chip.w / 3),
+            14
+        };
+        SDL_Color label_bg_color = dm_draw::DarkenColor(chip_bg, 0.28f);
+        label_bg_color.a = 210;
+        dm_draw::DrawRoundedSolidRect(renderer, label_bg, 5, label_bg_color);
         DMLabelStyle frame_style = DMStyles::Label();
-        frame_style.font_size = 13;
+        frame_style.font_size = 11;
         frame_style.color = selected ? SDL_Color{255, 255, 255, 255} : DMStyles::Label().color;
         const std::string label = std::to_string(i + 1);
         const SDL_Point size = DMFontCache::instance().measure_text(frame_style, label);
-        const int text_x = chip.x + std::max(0, (chip.w - size.x) / 2);
-        const int text_y = chip.y + std::max(0, (chip.h - size.y) / 2);
+        const int text_x = label_bg.x + std::max(0, (label_bg.w - size.x) / 2);
+        const int text_y = label_bg.y + std::max(0, (label_bg.h - size.y) / 2);
         DMFontCache::instance().draw_text(renderer, frame_style, label, text_x, text_y);
     }
 

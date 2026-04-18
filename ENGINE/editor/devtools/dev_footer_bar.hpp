@@ -51,6 +51,7 @@ public:
         bool animation_clickable = false;
         int frame_count = 0;
         int selected_frame = 0;
+        std::function<SDL_Texture*(int)> frame_texture_provider;
         std::function<void()> on_prev_animation;
         std::function<void()> on_next_animation;
         std::function<void()> on_prev_frame;

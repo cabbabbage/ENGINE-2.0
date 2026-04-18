@@ -36,6 +36,29 @@ public:
         std::unique_ptr<DMButton> widget;
 };
 
+    struct EditorTab {
+        std::string id;
+        std::string label;
+        bool active = false;
+        bool enabled = true;
+        std::function<void()> on_select;
+        std::unique_ptr<DMButton> widget;
+    };
+
+    struct EditorFrameNavigation {
+        bool visible = false;
+        std::string animation_label;
+        bool animation_clickable = false;
+        int frame_count = 0;
+        int selected_frame = 0;
+        std::function<void()> on_prev_animation;
+        std::function<void()> on_next_animation;
+        std::function<void()> on_prev_frame;
+        std::function<void()> on_next_frame;
+        std::function<void(int)> on_select_frame;
+        std::function<void()> on_activate_animation;
+    };
+
     explicit DevFooterBar(std::string title);
 
     void set_title(const std::string& title);
@@ -56,6 +79,11 @@ public:
     void activate_button(const std::string& id);
     void set_active_button(const std::string& id, bool trigger_callback = false);
     void set_button_active_state(const std::string& id, bool active);
+    void set_editor_navigation_enabled(bool enabled);
+    bool editor_navigation_enabled() const { return editor_navigation_enabled_; }
+    void set_editor_tabs(std::vector<EditorTab> tabs);
+    void set_editor_frame_navigation(EditorFrameNavigation navigation);
+    void clear_editor_navigation();
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -82,9 +110,16 @@ private:
     void layout_content();
     void layout_hide_button();
     void layout_buttons();
+    void layout_editor_navigation();
     void layout_grid_controls();
     void layout_title_region();
     void update_title_width();
+    void clamp_editor_frame_scroll();
+    void ensure_editor_frame_visible(int frame_index);
+    int editor_frame_index_at_point(const SDL_Point& point) const;
+    SDL_Rect editor_frame_chip_rect(int frame_index) const;
+    bool handle_editor_navigation_event(const SDL_Event& e);
+    void render_editor_navigation(SDL_Renderer* renderer) const;
     int content_start_x() const;
     int shown_y() const;
     int hidden_y() const;
@@ -133,5 +168,19 @@ private:
     std::function<void(int, bool)> on_grid_resolution_change_;
     int grid_controls_right_ = 0;
     std::vector<int> button_group_dividers_;
+
+    bool editor_navigation_enabled_ = false;
+    std::vector<EditorTab> editor_tabs_;
+    EditorFrameNavigation editor_frame_navigation_{};
+    std::unique_ptr<DMButton> editor_prev_animation_button_;
+    std::unique_ptr<DMButton> editor_next_animation_button_;
+    std::unique_ptr<DMButton> editor_prev_frame_button_;
+    std::unique_ptr<DMButton> editor_next_frame_button_;
+    SDL_Rect editor_tabs_row_rect_{0, 0, 0, 0};
+    SDL_Rect editor_animation_label_rect_{0, 0, 0, 0};
+    SDL_Rect editor_frame_strip_rect_{0, 0, 0, 0};
+    float editor_frame_scroll_offset_ = 0.0f;
+    int editor_hovered_frame_index_ = -1;
+    int editor_pressed_frame_index_ = -1;
 };
 

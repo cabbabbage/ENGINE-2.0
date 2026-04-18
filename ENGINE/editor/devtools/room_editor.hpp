@@ -441,6 +441,8 @@ private:
     void ensure_floor_box_editor_widgets();
     void ensure_attack_payload_editor_widget();
     void update_asset_editor_layout();
+    void sync_shared_footer_navigation();
+    std::string asset_editor_subview_label(AssetEditorSubview subview) const;
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
     bool light_mode_active() const;

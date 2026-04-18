@@ -4,6 +4,7 @@
 #include "utils/ttf_render_utils.hpp"
 
 #include "draw_utils.hpp"
+#include "font_cache.hpp"
 #include "utils/input.hpp"
 
 #include <SDL3/SDL.h>
@@ -21,10 +22,18 @@ constexpr int kFooterGroupGap = 24;
 constexpr int kFooterButtonSpacing = 14;
 constexpr int kFooterButtonMinWidth = 110;
 constexpr int kFooterHideButtonWidth = 32;
+constexpr int kEditorTabGap = 8;
+constexpr int kEditorFrameRowGap = 6;
+constexpr int kEditorFrameStripHeight = 34;
+constexpr int kEditorFrameChipWidth = 46;
+constexpr int kEditorFrameChipGap = 8;
+constexpr int kEditorFrameNavButtonWidth = 56;
+constexpr int kEditorAnimationLabelHeight = 20;
 constexpr Uint64 kFooterSlideDurationMs = 88;
 constexpr Uint64 kFooterZoneDebounceMs = 36;
 constexpr float kFooterShowZoneRatio = 0.90f;
 constexpr float kFooterUnlockZoneRatio = 0.80f;
+constexpr SDL_Color kEditorFrameSelectedColor{255, 140, 0, 236};
 
 const DMButtonStyle* default_group_style(FooterButtonGroup group) {
     switch (group) {
@@ -61,6 +70,17 @@ const DMButtonStyle* button_style_for(const DevFooterBar::Button& btn) {
         return active_style ? active_style : base_style;
     }
     return base_style ? base_style : &DMStyles::HeaderButton();
+}
+
+const DMButtonStyle* editor_tab_style_for(const DevFooterBar::EditorTab& tab) {
+    if (!tab.enabled) {
+        return &DMStyles::SecondaryButton();
+    }
+    return tab.active ? &DMStyles::AccentButton() : &DMStyles::ListButton();
+}
+
+const DMButtonStyle* editor_nav_button_style(bool enabled) {
+    return enabled ? &DMStyles::SecondaryButton() : &DMStyles::ListButton();
 }
 
 void draw_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
@@ -229,6 +249,87 @@ void DevFooterBar::set_button_active_state(const std::string& id, bool active) {
     }
 }
 
+void DevFooterBar::set_editor_navigation_enabled(bool enabled) {
+    if (editor_navigation_enabled_ == enabled) {
+        return;
+    }
+    editor_navigation_enabled_ = enabled;
+    if (!editor_navigation_enabled_) {
+        editor_hovered_frame_index_ = -1;
+        editor_pressed_frame_index_ = -1;
+        editor_frame_scroll_offset_ = 0.0f;
+    }
+    layout_content();
+}
+
+void DevFooterBar::set_editor_tabs(std::vector<EditorTab> tabs) {
+    editor_tabs_ = std::move(tabs);
+    for (auto& tab : editor_tabs_) {
+        tab.widget = std::make_unique<DMButton>(tab.label, editor_tab_style_for(tab), 120, DMButton::height());
+    }
+    layout_content();
+}
+
+void DevFooterBar::set_editor_frame_navigation(EditorFrameNavigation navigation) {
+    editor_frame_navigation_ = std::move(navigation);
+    editor_frame_navigation_.frame_count = std::max(0, editor_frame_navigation_.frame_count);
+    if (editor_frame_navigation_.frame_count <= 0) {
+        editor_frame_navigation_.selected_frame = 0;
+        editor_frame_navigation_.visible = false;
+    } else {
+        editor_frame_navigation_.selected_frame = std::clamp(editor_frame_navigation_.selected_frame,
+                                                             0,
+                                                             editor_frame_navigation_.frame_count - 1);
+    }
+
+    if (!editor_prev_animation_button_) {
+        editor_prev_animation_button_ =
+            std::make_unique<DMButton>("Anim -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+    if (!editor_next_animation_button_) {
+        editor_next_animation_button_ =
+            std::make_unique<DMButton>("Anim +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+    if (!editor_prev_frame_button_) {
+        editor_prev_frame_button_ =
+            std::make_unique<DMButton>("Frame -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+    if (!editor_next_frame_button_) {
+        editor_next_frame_button_ =
+            std::make_unique<DMButton>("Frame +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+
+    if (editor_prev_animation_button_) {
+        editor_prev_animation_button_->set_style(editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_animation)));
+    }
+    if (editor_next_animation_button_) {
+        editor_next_animation_button_->set_style(editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_next_animation)));
+    }
+    if (editor_prev_frame_button_) {
+        editor_prev_frame_button_->set_style(editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_frame)));
+    }
+    if (editor_next_frame_button_) {
+        editor_next_frame_button_->set_style(editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_next_frame)));
+    }
+
+    editor_hovered_frame_index_ = -1;
+    editor_pressed_frame_index_ = -1;
+    ensure_editor_frame_visible(editor_frame_navigation_.selected_frame);
+    layout_content();
+}
+
+void DevFooterBar::clear_editor_navigation() {
+    editor_tabs_.clear();
+    editor_frame_navigation_ = EditorFrameNavigation{};
+    editor_tabs_row_rect_ = SDL_Rect{0, 0, 0, 0};
+    editor_animation_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    editor_frame_strip_rect_ = SDL_Rect{0, 0, 0, 0};
+    editor_frame_scroll_offset_ = 0.0f;
+    editor_hovered_frame_index_ = -1;
+    editor_pressed_frame_index_ = -1;
+    layout_content();
+}
+
 void DevFooterBar::update(const Input& input) {
     if (!visible_ || screen_h_ <= 0) {
         return;
@@ -282,50 +383,54 @@ bool DevFooterBar::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (settings_controls_visible_) {
-        if (movement_debug_checkbox_ && movement_debug_checkbox_->handle_event(e)) {
-            used = true;
-            movement_debug_enabled_ = movement_debug_checkbox_->value();
-            if (on_movement_debug_toggle_) {
-                on_movement_debug_toggle_(movement_debug_enabled_);
+    if (editor_navigation_enabled_) {
+        used = handle_editor_navigation_event(e) || used;
+    } else {
+        if (settings_controls_visible_) {
+            if (movement_debug_checkbox_ && movement_debug_checkbox_->handle_event(e)) {
+                used = true;
+                movement_debug_enabled_ = movement_debug_checkbox_->value();
+                if (on_movement_debug_toggle_) {
+                    on_movement_debug_toggle_(movement_debug_enabled_);
+                }
+            }
+
+            if (grid_checkbox_ && grid_checkbox_->handle_event(e)) {
+                used = true;
+                grid_overlay_enabled_ = grid_checkbox_->value();
+                if (on_grid_overlay_toggle_) {
+                    on_grid_overlay_toggle_(grid_overlay_enabled_);
+                }
+            }
+
+            if (grid_stepper_ && grid_stepper_->handle_event(e)) {
+                used = true;
+                grid_resolution_ = grid_stepper_->value();
+                if (on_grid_resolution_change_) {
+                    on_grid_resolution_change_(grid_resolution_, true);
+                }
             }
         }
 
-        if (grid_checkbox_ && grid_checkbox_->handle_event(e)) {
-            used = true;
-            grid_overlay_enabled_ = grid_checkbox_->value();
-            if (on_grid_overlay_toggle_) {
-                on_grid_overlay_toggle_(grid_overlay_enabled_);
-            }
-        }
-
-        if (grid_stepper_ && grid_stepper_->handle_event(e)) {
-            used = true;
-            grid_resolution_ = grid_stepper_->value();
-            if (on_grid_resolution_change_) {
-                on_grid_resolution_change_(grid_resolution_, true);
-            }
-        }
-    }
-
-    for (auto& btn : buttons_) {
-        if (!btn.widget) continue;
-        if (btn.widget->handle_event(e)) {
-            used = true;
-            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-                if (btn.momentary) {
-                    if (btn.on_toggle) btn.on_toggle(true);
-                    btn.active = false;
-                    if (btn.widget) {
-                        btn.widget->set_style(button_style_for(btn));
-                    }
-                } else {
-                    if (btn.active) {
+        for (auto& btn : buttons_) {
+            if (!btn.widget) continue;
+            if (btn.widget->handle_event(e)) {
+                used = true;
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+                    if (btn.momentary) {
+                        if (btn.on_toggle) btn.on_toggle(true);
                         btn.active = false;
-                        if (btn.on_toggle) btn.on_toggle(false);
-                        btn.widget->set_style(button_style_for(btn));
+                        if (btn.widget) {
+                            btn.widget->set_style(button_style_for(btn));
+                        }
                     } else {
-                        set_active_button(btn.id, true);
+                        if (btn.active) {
+                            btn.active = false;
+                            if (btn.on_toggle) btn.on_toggle(false);
+                            btn.widget->set_style(button_style_for(btn));
+                        } else {
+                            set_active_button(btn.id, true);
+                        }
                     }
                 }
             }
@@ -356,7 +461,10 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawColor(renderer, highlight.r, highlight.g, highlight.b, highlight.a);
     SDL_RenderLine(renderer, rect_.x, rect_.y, rect_.x + rect_.w - 1, rect_.y);
 
-    const bool draw_separator = settings_controls_visible_ && (grid_checkbox_ && grid_stepper_) && (title_bounds_.w > 0 || !buttons_.empty());
+    const bool draw_separator = !editor_navigation_enabled_ &&
+        settings_controls_visible_ &&
+        (grid_checkbox_ && grid_stepper_) &&
+        (title_bounds_.w > 0 || !buttons_.empty());
     if (draw_separator) {
         SDL_Color separator = DMStyles::Border();
         separator.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(separator.a * 0.8f), 0, 255));
@@ -376,6 +484,15 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
         }
     }
 
+    if (hide_button_) {
+        hide_button_->render(renderer);
+    }
+
+    if (editor_navigation_enabled_) {
+        render_editor_navigation(renderer);
+        return;
+    }
+
     if (settings_controls_visible_) {
         if (movement_debug_checkbox_) {
             movement_debug_checkbox_->render(renderer);
@@ -387,10 +504,6 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
         if (grid_stepper_) {
             grid_stepper_->render(renderer);
         }
-    }
-
-    if (hide_button_) {
-        hide_button_->render(renderer);
     }
 
     if (title_bounds_.w > 0 && !title_.empty()) {
@@ -455,6 +568,10 @@ void DevFooterBar::layout_content() {
     layout_hide_button();
     grid_controls_right_ = content_start_x();
     title_bounds_ = SDL_Rect{0, 0, 0, 0};
+    if (editor_navigation_enabled_) {
+        layout_editor_navigation();
+        return;
+    }
     layout_grid_controls();
     layout_title_region();
     layout_buttons();
@@ -629,6 +746,385 @@ void DevFooterBar::layout_buttons() {
 
     if (!button_group_dividers_.empty()) {
         std::sort(button_group_dividers_.begin(), button_group_dividers_.end());
+    }
+}
+
+void DevFooterBar::layout_editor_navigation() {
+    button_group_dividers_.clear();
+    title_bounds_ = SDL_Rect{0, 0, 0, 0};
+    editor_tabs_row_rect_ = SDL_Rect{0, 0, 0, 0};
+    editor_animation_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    editor_frame_strip_rect_ = SDL_Rect{0, 0, 0, 0};
+
+    if (movement_debug_checkbox_) movement_debug_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+    if (grid_checkbox_) grid_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+    if (grid_stepper_) grid_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
+    for (auto& btn : buttons_) {
+        if (btn.widget) {
+            btn.widget->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+    }
+
+    const int left = content_start_x();
+    const int right = rect_.x + rect_.w - kFooterHorizontalPadding;
+    const int available_width = std::max(0, right - left);
+    if (available_width <= 0) {
+        return;
+    }
+
+    int y = rect_.y + kFooterVerticalPadding;
+    const int tab_height = DMButton::height();
+    if (!editor_tabs_.empty()) {
+        const int tab_count = static_cast<int>(editor_tabs_.size());
+        const int total_gap = std::max(0, tab_count - 1) * kEditorTabGap;
+        const int tab_width = std::max(74, (available_width - total_gap) / std::max(1, tab_count));
+        int x = left;
+        for (auto& tab : editor_tabs_) {
+            if (!tab.widget) {
+                tab.widget = std::make_unique<DMButton>(tab.label, editor_tab_style_for(tab), tab_width, tab_height);
+            }
+            tab.widget->set_style(editor_tab_style_for(tab));
+            tab.widget->set_rect(SDL_Rect{x, y, tab_width, tab_height});
+            x += tab_width + kEditorTabGap;
+        }
+        editor_tabs_row_rect_ = SDL_Rect{left, y, available_width, tab_height};
+        y += tab_height + kEditorFrameRowGap;
+    } else {
+        for (auto& tab : editor_tabs_) {
+            if (tab.widget) {
+                tab.widget->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+        }
+    }
+
+    if (!editor_frame_navigation_.visible) {
+        if (editor_prev_animation_button_) editor_prev_animation_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (editor_next_animation_button_) editor_next_animation_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (editor_prev_frame_button_) editor_prev_frame_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (editor_next_frame_button_) editor_next_frame_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        return;
+    }
+
+    editor_animation_label_rect_ = SDL_Rect{left, y, available_width, kEditorAnimationLabelHeight};
+    y += kEditorAnimationLabelHeight + kEditorFrameRowGap;
+
+    if (!editor_prev_animation_button_) {
+        editor_prev_animation_button_ =
+            std::make_unique<DMButton>("Anim -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+    if (!editor_next_animation_button_) {
+        editor_next_animation_button_ =
+            std::make_unique<DMButton>("Anim +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+    if (!editor_prev_frame_button_) {
+        editor_prev_frame_button_ =
+            std::make_unique<DMButton>("Frame -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+    if (!editor_next_frame_button_) {
+        editor_next_frame_button_ =
+            std::make_unique<DMButton>("Frame +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
+    }
+
+    if (editor_prev_animation_button_) {
+        editor_prev_animation_button_->set_style(
+            editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_animation)));
+    }
+    if (editor_next_animation_button_) {
+        editor_next_animation_button_->set_style(
+            editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_next_animation)));
+    }
+    if (editor_prev_frame_button_) {
+        editor_prev_frame_button_->set_style(
+            editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_frame)));
+    }
+    if (editor_next_frame_button_) {
+        editor_next_frame_button_->set_style(
+            editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_next_frame)));
+    }
+
+    const int button_h = DMButton::height();
+    const int button_y = y + (kEditorFrameStripHeight - button_h) / 2;
+    const int button_gap = 6;
+    const int left_cluster_w = (kEditorFrameNavButtonWidth * 2) + button_gap;
+    const int right_cluster_w = left_cluster_w;
+
+    const SDL_Rect anim_prev_rect{left, button_y, kEditorFrameNavButtonWidth, button_h};
+    const SDL_Rect anim_next_rect{left + kEditorFrameNavButtonWidth + button_gap, button_y, kEditorFrameNavButtonWidth, button_h};
+    const SDL_Rect frame_prev_rect{right - right_cluster_w, button_y, kEditorFrameNavButtonWidth, button_h};
+    const SDL_Rect frame_next_rect{
+        right - kEditorFrameNavButtonWidth,
+        button_y,
+        kEditorFrameNavButtonWidth,
+        button_h};
+
+    editor_prev_animation_button_->set_rect(anim_prev_rect);
+    editor_next_animation_button_->set_rect(anim_next_rect);
+    editor_prev_frame_button_->set_rect(frame_prev_rect);
+    editor_next_frame_button_->set_rect(frame_next_rect);
+
+    const int strip_x = anim_next_rect.x + anim_next_rect.w + 10;
+    const int strip_right = frame_prev_rect.x - 10;
+    editor_frame_strip_rect_ = SDL_Rect{
+        strip_x,
+        y,
+        std::max(0, strip_right - strip_x),
+        kEditorFrameStripHeight};
+
+    clamp_editor_frame_scroll();
+    ensure_editor_frame_visible(editor_frame_navigation_.selected_frame);
+}
+
+void DevFooterBar::clamp_editor_frame_scroll() {
+    if (editor_frame_navigation_.frame_count <= 0 || editor_frame_strip_rect_.w <= 0) {
+        editor_frame_scroll_offset_ = 0.0f;
+        return;
+    }
+    const float stride = static_cast<float>(kEditorFrameChipWidth + kEditorFrameChipGap);
+    const float total_width =
+        static_cast<float>(editor_frame_navigation_.frame_count) * stride - static_cast<float>(kEditorFrameChipGap);
+    const float max_scroll = std::max(0.0f, total_width - static_cast<float>(editor_frame_strip_rect_.w));
+    editor_frame_scroll_offset_ = std::clamp(editor_frame_scroll_offset_, 0.0f, max_scroll);
+}
+
+void DevFooterBar::ensure_editor_frame_visible(int frame_index) {
+    if (editor_frame_navigation_.frame_count <= 0 || editor_frame_strip_rect_.w <= 0) {
+        editor_frame_scroll_offset_ = 0.0f;
+        return;
+    }
+    const int clamped_index = std::clamp(frame_index, 0, editor_frame_navigation_.frame_count - 1);
+    const float stride = static_cast<float>(kEditorFrameChipWidth + kEditorFrameChipGap);
+    const float frame_start = static_cast<float>(clamped_index) * stride;
+    const float frame_end = frame_start + static_cast<float>(kEditorFrameChipWidth);
+    const float view_start = editor_frame_scroll_offset_;
+    const float view_end = view_start + static_cast<float>(editor_frame_strip_rect_.w);
+    if (frame_start < view_start) {
+        editor_frame_scroll_offset_ = std::max(0.0f, frame_start - static_cast<float>(kEditorFrameChipGap));
+    } else if (frame_end > view_end) {
+        editor_frame_scroll_offset_ = frame_end - static_cast<float>(editor_frame_strip_rect_.w) +
+            static_cast<float>(kEditorFrameChipGap);
+    }
+    clamp_editor_frame_scroll();
+}
+
+int DevFooterBar::editor_frame_index_at_point(const SDL_Point& point) const {
+    if (editor_frame_navigation_.frame_count <= 0 || editor_frame_strip_rect_.w <= 0 ||
+        !SDL_PointInRect(&point, &editor_frame_strip_rect_)) {
+        return -1;
+    }
+    const float stride = static_cast<float>(kEditorFrameChipWidth + kEditorFrameChipGap);
+    const float relative_x = static_cast<float>(point.x - editor_frame_strip_rect_.x) + editor_frame_scroll_offset_;
+    if (relative_x < 0.0f) {
+        return -1;
+    }
+    const int index = static_cast<int>(relative_x / stride);
+    if (index < 0 || index >= editor_frame_navigation_.frame_count) {
+        return -1;
+    }
+    const float tile_offset = relative_x - (static_cast<float>(index) * stride);
+    if (tile_offset > static_cast<float>(kEditorFrameChipWidth)) {
+        return -1;
+    }
+    return index;
+}
+
+SDL_Rect DevFooterBar::editor_frame_chip_rect(int frame_index) const {
+    const float stride = static_cast<float>(kEditorFrameChipWidth + kEditorFrameChipGap);
+    const float x = static_cast<float>(editor_frame_strip_rect_.x) +
+        static_cast<float>(frame_index) * stride - editor_frame_scroll_offset_;
+    return SDL_Rect{
+        static_cast<int>(std::lround(x)),
+        editor_frame_strip_rect_.y + (editor_frame_strip_rect_.h - (kEditorFrameStripHeight - 6)) / 2,
+        kEditorFrameChipWidth,
+        kEditorFrameStripHeight - 6};
+}
+
+bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
+    bool used = false;
+
+    auto trigger_button = [&](DMButton* button, const std::function<void()>& callback) {
+        if (!button) {
+            return false;
+        }
+        if (!button->handle_event(e)) {
+            return false;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            e.button.button == SDL_BUTTON_LEFT &&
+            callback) {
+            callback();
+        }
+        return true;
+    };
+
+    for (auto& tab : editor_tabs_) {
+        if (!tab.widget) {
+            continue;
+        }
+        if (tab.widget->handle_event(e)) {
+            used = true;
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                e.button.button == SDL_BUTTON_LEFT &&
+                tab.enabled &&
+                tab.on_select) {
+                tab.on_select();
+            }
+        }
+    }
+
+    used = trigger_button(editor_prev_animation_button_.get(), editor_frame_navigation_.on_prev_animation) || used;
+    used = trigger_button(editor_next_animation_button_.get(), editor_frame_navigation_.on_next_animation) || used;
+    used = trigger_button(editor_prev_frame_button_.get(), editor_frame_navigation_.on_prev_frame) || used;
+    used = trigger_button(editor_next_frame_button_.get(), editor_frame_navigation_.on_next_frame) || used;
+
+    if (!editor_frame_navigation_.visible || editor_frame_navigation_.frame_count <= 0) {
+        return used;
+    }
+
+    SDL_Point pointer{0, 0};
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        pointer = SDL_Point{e.motion.x, e.motion.y};
+        editor_hovered_frame_index_ = editor_frame_index_at_point(pointer);
+        const bool over_label = SDL_PointInRect(&pointer, &editor_animation_label_rect_);
+        used = used || over_label || editor_hovered_frame_index_ >= 0;
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        pointer = SDL_Point{e.button.x, e.button.y};
+        editor_pressed_frame_index_ = editor_frame_index_at_point(pointer);
+        editor_hovered_frame_index_ = editor_pressed_frame_index_;
+        if (editor_pressed_frame_index_ >= 0) {
+            used = true;
+        }
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        pointer = SDL_Point{e.button.x, e.button.y};
+        const int released_index = editor_frame_index_at_point(pointer);
+        if (released_index >= 0 && released_index == editor_pressed_frame_index_) {
+            editor_frame_navigation_.selected_frame = released_index;
+            ensure_editor_frame_visible(released_index);
+            if (editor_frame_navigation_.on_select_frame) {
+                editor_frame_navigation_.on_select_frame(released_index);
+            }
+            used = true;
+        } else if (editor_frame_navigation_.animation_clickable &&
+                   SDL_PointInRect(&pointer, &editor_animation_label_rect_)) {
+            if (editor_frame_navigation_.on_activate_animation) {
+                editor_frame_navigation_.on_activate_animation();
+            }
+            used = true;
+        }
+        editor_pressed_frame_index_ = -1;
+        editor_hovered_frame_index_ = released_index;
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
+        if (SDL_PointInRect(&pointer, &editor_frame_strip_rect_)) {
+            int delta_x = e.wheel.x;
+            int delta_y = e.wheel.y;
+            if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                delta_x = -delta_x;
+                delta_y = -delta_y;
+            }
+            const int steps = (delta_x != 0) ? delta_x : delta_y;
+            const float stride = static_cast<float>(kEditorFrameChipWidth + kEditorFrameChipGap);
+            editor_frame_scroll_offset_ = editor_frame_scroll_offset_ - static_cast<float>(steps) * stride;
+            clamp_editor_frame_scroll();
+            used = true;
+        }
+    }
+
+    return used;
+}
+
+void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
+    if (!renderer) {
+        return;
+    }
+
+    for (const auto& tab : editor_tabs_) {
+        if (!tab.widget) {
+            continue;
+        }
+        tab.widget->render(renderer);
+    }
+
+    if (!editor_frame_navigation_.visible) {
+        return;
+    }
+
+    DMLabelStyle animation_style = DMStyles::Label();
+    animation_style.font_size = 14;
+    animation_style.color = editor_frame_navigation_.animation_clickable
+        ? DMStyles::ButtonFocusOutline()
+        : DMStyles::Label().color;
+    const SDL_Point animation_text_size =
+        DMFontCache::instance().measure_text(animation_style, editor_frame_navigation_.animation_label);
+    const int animation_text_x = editor_animation_label_rect_.x +
+        std::max(0, (editor_animation_label_rect_.w - animation_text_size.x) / 2);
+    const int animation_text_y = editor_animation_label_rect_.y +
+        std::max(0, (editor_animation_label_rect_.h - animation_text_size.y) / 2);
+    DMFontCache::instance().draw_text(renderer,
+                                      animation_style,
+                                      editor_frame_navigation_.animation_label,
+                                      animation_text_x,
+                                      animation_text_y);
+
+    if (editor_frame_navigation_.animation_clickable &&
+        editor_animation_label_rect_.w > 0 &&
+        editor_animation_label_rect_.h > 0) {
+        SDL_Color underline = DMStyles::ButtonFocusOutline();
+        underline.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(underline.a * 0.85f), 0, 255));
+        SDL_SetRenderDrawColor(renderer, underline.r, underline.g, underline.b, underline.a);
+        const int y = editor_animation_label_rect_.y + editor_animation_label_rect_.h - 2;
+        SDL_RenderLine(renderer,
+                       editor_animation_label_rect_.x + 4,
+                       y,
+                       editor_animation_label_rect_.x + editor_animation_label_rect_.w - 4,
+                       y);
+    }
+
+    if (editor_prev_animation_button_) editor_prev_animation_button_->render(renderer);
+    if (editor_next_animation_button_) editor_next_animation_button_->render(renderer);
+    if (editor_prev_frame_button_) editor_prev_frame_button_->render(renderer);
+    if (editor_next_frame_button_) editor_next_frame_button_->render(renderer);
+
+    if (editor_frame_strip_rect_.w <= 0 || editor_frame_strip_rect_.h <= 0 || editor_frame_navigation_.frame_count <= 0) {
+        return;
+    }
+
+    SDL_Color strip_bg = dm_draw::DarkenColor(DMStyles::PanelBG(), 0.08f);
+    dm_draw::DrawRoundedSolidRect(renderer, editor_frame_strip_rect_, 8, strip_bg);
+    dm_draw::DrawRoundedOutline(renderer, editor_frame_strip_rect_, 8, 1, DMStyles::Border());
+
+    SDL_Rect previous_clip{};
+    SDL_GetRenderClipRect(renderer, &previous_clip);
+    const bool clipping_enabled = SDL_RenderClipEnabled(renderer);
+    SDL_SetRenderClipRect(renderer, &editor_frame_strip_rect_);
+
+    for (int i = 0; i < editor_frame_navigation_.frame_count; ++i) {
+        SDL_Rect chip = editor_frame_chip_rect(i);
+        if (chip.x + chip.w < editor_frame_strip_rect_.x ||
+            chip.x > editor_frame_strip_rect_.x + editor_frame_strip_rect_.w) {
+            continue;
+        }
+
+        const bool selected = i == editor_frame_navigation_.selected_frame;
+        const bool hovered = i == editor_hovered_frame_index_;
+        SDL_Color chip_bg = selected ? kEditorFrameSelectedColor : dm_draw::DarkenColor(DMStyles::PanelHeader(), 0.04f);
+        dm_draw::DrawRoundedSolidRect(renderer, chip, 7, chip_bg);
+        const SDL_Color border = hovered ? DMStyles::HighlightColor() : DMStyles::Border();
+        dm_draw::DrawRoundedOutline(renderer, chip, 7, 1, border);
+
+        DMLabelStyle frame_style = DMStyles::Label();
+        frame_style.font_size = 13;
+        frame_style.color = selected ? SDL_Color{255, 255, 255, 255} : DMStyles::Label().color;
+        const std::string label = std::to_string(i + 1);
+        const SDL_Point size = DMFontCache::instance().measure_text(frame_style, label);
+        const int text_x = chip.x + std::max(0, (chip.w - size.x) / 2);
+        const int text_y = chip.y + std::max(0, (chip.h - size.y) / 2);
+        DMFontCache::instance().draw_text(renderer, frame_style, label, text_x, text_y);
+    }
+
+    if (clipping_enabled) {
+        SDL_SetRenderClipRect(renderer, &previous_clip);
+    } else {
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 

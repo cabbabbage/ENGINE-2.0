@@ -996,6 +996,52 @@ SDL_FPoint sample_quadratic_point(const SDL_FPoint& p0,
     return lerp(a, b, clamped_t);
 }
 
+float remap_to_quadratic_arclength_t(const SDL_FPoint& p0,
+                                     const SDL_FPoint& p1,
+                                     const SDL_FPoint& p2,
+                                     float ratio) {
+    constexpr int kSamples = 32;
+    const float target_ratio = std::clamp(ratio, 0.0f, 1.0f);
+    if (target_ratio <= 0.0f) {
+        return 0.0f;
+    }
+    if (target_ratio >= 1.0f) {
+        return 1.0f;
+    }
+
+    std::array<float, kSamples + 1> cumulative{};
+    SDL_FPoint prev = sample_quadratic_point(p0, p1, p2, 0.0f);
+    cumulative[0] = 0.0f;
+    float total_length = 0.0f;
+    for (int i = 1; i <= kSamples; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(kSamples);
+        const SDL_FPoint current = sample_quadratic_point(p0, p1, p2, t);
+        const float dx = current.x - prev.x;
+        const float dy = current.y - prev.y;
+        total_length += std::sqrt(dx * dx + dy * dy);
+        cumulative[static_cast<std::size_t>(i)] = total_length;
+        prev = current;
+    }
+    if (total_length <= 1e-5f) {
+        return target_ratio;
+    }
+
+    const float target_length = target_ratio * total_length;
+    for (int i = 1; i <= kSamples; ++i) {
+        const float segment_end = cumulative[static_cast<std::size_t>(i)];
+        if (target_length > segment_end) {
+            continue;
+        }
+        const float segment_start = cumulative[static_cast<std::size_t>(i - 1)];
+        const float segment_len = std::max(1e-5f, segment_end - segment_start);
+        const float local = (target_length - segment_start) / segment_len;
+        const float t0 = static_cast<float>(i - 1) / static_cast<float>(kSamples);
+        const float t1 = static_cast<float>(i) / static_cast<float>(kSamples);
+        return t0 + (t1 - t0) * local;
+    }
+    return 1.0f;
+}
+
 constexpr std::array<std::array<int, 2>, 12> kBoxVolumeEdges{{
     {{0, 1}}, {{1, 2}}, {{2, 3}}, {{3, 0}},
     {{4, 5}}, {{5, 6}}, {{6, 7}}, {{7, 4}},
@@ -13877,13 +13923,21 @@ void RoomEditor::rebuild_movement_frames_from_positions() {
     for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
         const SDL_FPoint prev = movement_edit_.rel_positions[i - 1];
         const SDL_FPoint curr = movement_edit_.rel_positions[i];
-        movement_edit_.frames[i].dx = std::round(curr.x - prev.x);
+        float world_step_x = std::round(curr.x - prev.x);
+        float world_step_z = std::round(curr.y - prev.y);
+        const float yaw_degrees = movement_edit_.frames[i].rotation_degrees;
+        if (std::abs(yaw_degrees) > 1e-5f && std::isfinite(yaw_degrees)) {
+            const float yaw_radians =
+                yaw_degrees * static_cast<float>(3.14159265358979323846 / 180.0);
+            oval_anchor_heading::rotate_xz_about_world_y(-yaw_radians, world_step_x, world_step_z);
+        }
+        movement_edit_.frames[i].dx = std::round(world_step_x);
         const float prev_h =
             (i - 1 < movement_edit_.rel_positions_z.size()) ? movement_edit_.rel_positions_z[i - 1] : 0.0f;
         const float curr_h =
             (i < movement_edit_.rel_positions_z.size()) ? movement_edit_.rel_positions_z[i] : 0.0f;
         movement_edit_.frames[i].dy = std::round(curr_h - prev_h);
-        movement_edit_.frames[i].dz = std::round(curr.y - prev.y);
+        movement_edit_.frames[i].dz = std::round(world_step_z);
     }
 }
 
@@ -14463,14 +14517,20 @@ void RoomEditor::apply_movement_curved_smoothing(int adjusted_index,
         }
         SDL_FPoint p0 = redistributed_xy[first_idx];
         SDL_FPoint p2 = redistributed_xy[second_idx];
-        SDL_FPoint control = original_xy[std::clamp(first_idx + segment_count / 2, first_idx + 1, second_idx - 1)];
+        const int control_index = std::clamp(first_idx + segment_count / 2, first_idx + 1, second_idx - 1);
+        SDL_FPoint control = original_xy[control_index];
+        // Strengthen curve shape so adjusted-point edits produce a visible arc.
+        const SDL_FPoint midpoint{(p0.x + p2.x) * 0.5f, (p0.y + p2.y) * 0.5f};
+        control.x = midpoint.x + (control.x - midpoint.x) * 1.35f;
+        control.y = midpoint.y + (control.y - midpoint.y) * 1.35f;
         clamp_control(p0, p2, control);
 
         const float z0 = redistributed_z[first_idx];
-        const float z1 = original_z[std::clamp(first_idx + segment_count / 2, first_idx + 1, second_idx - 1)];
+        const float z1 = original_z[control_index];
         const float z2 = redistributed_z[second_idx];
         for (int i = first_idx + 1; i < second_idx; ++i) {
-            const float t = static_cast<float>(i - first_idx) / static_cast<float>(segment_count);
+            const float progression = static_cast<float>(i - first_idx) / static_cast<float>(segment_count);
+            const float t = remap_to_quadratic_arclength_t(p0, control, p2, progression);
             redistributed_xy[i] = sample_quadratic_point(p0, control, p2, t);
             redistributed_z[i] = ((1.0f - t) * (1.0f - t) * z0) + (2.0f * (1.0f - t) * t * z1) + (t * t * z2);
         }

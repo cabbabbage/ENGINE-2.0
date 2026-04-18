@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -39,13 +40,58 @@ SDL_FPoint sample_quadratic_by_arclen(const SDL_FPoint& p0,
                                       const SDL_FPoint& p1,
                                       const SDL_FPoint& p2,
                                       float ratio) {
-    const float t = std::clamp(ratio, 0.0f, 1.0f);
-    auto lerp = [](const SDL_FPoint& a, const SDL_FPoint& b, float t) {
-        return SDL_FPoint{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t};
+    auto sample = [](const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoint& c, float t) {
+        const float clamped = std::clamp(t, 0.0f, 1.0f);
+        auto lerp = [](const SDL_FPoint& lhs, const SDL_FPoint& rhs, float t_val) {
+            return SDL_FPoint{lhs.x + (rhs.x - lhs.x) * t_val, lhs.y + (rhs.y - lhs.y) * t_val};
+        };
+        const SDL_FPoint p01 = lerp(a, b, clamped);
+        const SDL_FPoint p12 = lerp(b, c, clamped);
+        return lerp(p01, p12, clamped);
     };
-    SDL_FPoint a = lerp(p0, p1, t);
-    SDL_FPoint b = lerp(p1, p2, t);
-    return lerp(a, b, t);
+
+    constexpr int kSamples = 32;
+    const float target_ratio = std::clamp(ratio, 0.0f, 1.0f);
+    if (target_ratio <= 0.0f) {
+        return p0;
+    }
+    if (target_ratio >= 1.0f) {
+        return p2;
+    }
+
+    std::array<float, kSamples + 1> cumulative{};
+    SDL_FPoint prev = sample(p0, p1, p2, 0.0f);
+    float total = 0.0f;
+    cumulative[0] = 0.0f;
+    for (int i = 1; i <= kSamples; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(kSamples);
+        const SDL_FPoint current = sample(p0, p1, p2, t);
+        const float dx = current.x - prev.x;
+        const float dy = current.y - prev.y;
+        total += std::sqrt(dx * dx + dy * dy);
+        cumulative[static_cast<std::size_t>(i)] = total;
+        prev = current;
+    }
+    if (total <= 1e-5f) {
+        return sample(p0, p1, p2, target_ratio);
+    }
+
+    const float target = target_ratio * total;
+    float resolved_t = target_ratio;
+    for (int i = 1; i <= kSamples; ++i) {
+        const float end = cumulative[static_cast<std::size_t>(i)];
+        if (target > end) {
+            continue;
+        }
+        const float start = cumulative[static_cast<std::size_t>(i - 1)];
+        const float segment = std::max(1e-5f, end - start);
+        const float local = (target - start) / segment;
+        const float t0 = static_cast<float>(i - 1) / static_cast<float>(kSamples);
+        const float t1 = static_cast<float>(i) / static_cast<float>(kSamples);
+        resolved_t = t0 + (t1 - t0) * local;
+        break;
+    }
+    return sample(p0, p1, p2, resolved_t);
 }
 
 }  // namespace
@@ -587,6 +633,9 @@ void MovementFrameEditor::apply_curved_smoothing(int adjusted_index,
                 control = original[mid_index];
             }
         }
+        const SDL_FPoint midpoint{(p0.x + p2.x) * 0.5f, (p0.y + p2.y) * 0.5f};
+        control.x = midpoint.x + (control.x - midpoint.x) * 1.35f;
+        control.y = midpoint.y + (control.y - midpoint.y) * 1.35f;
         clamp_control(p0, p2, control);
         for (int j = first_idx + 1; j < second_idx; ++j) {
             const float ratio = static_cast<float>(j - first_idx) / static_cast<float>(segment_count);

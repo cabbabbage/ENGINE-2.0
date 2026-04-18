@@ -10260,7 +10260,7 @@ void RoomEditor::sync_oval_tools_panel() {
 
     oval_tools_panel_->set_visible(true);
     if (oval_point_child_editor_panel_) {
-        oval_point_child_editor_panel_->set_visible(true);
+        oval_point_child_editor_panel_->set_visible(false);
     }
     std::vector<std::string> oval_names;
     if (!oval_edit_.target_asset || !oval_edit_.target_asset->info) {
@@ -10271,6 +10271,7 @@ void RoomEditor::sync_oval_tools_panel() {
         oval_tools_panel_->set_asset_binding_status(RoomOvalToolsPanel::AssetBindingStatus{});
         oval_tools_panel_->set_center_selected(false);
         if (oval_point_child_editor_panel_) {
+            oval_point_child_editor_panel_->set_visible(false);
             oval_point_child_editor_panel_->set_point_selected(false);
             oval_point_child_editor_panel_->set_resolved_asset_name({});
             oval_point_child_editor_panel_->set_recommendation_pool({});
@@ -10511,6 +10512,7 @@ void RoomEditor::sync_oval_tools_panel() {
             values.scaling_method = point.scaling_method;
             oval_tools_panel_->set_point_detail_values(values);
             if (oval_point_child_editor_panel_) {
+                oval_point_child_editor_panel_->set_visible(true);
                 RoomOvalPointChildEditorPanel::PointDetailValues point_values{};
                 point_values.rotation_degrees = point.rotation_degrees;
                 point_values.hidden = point.hidden;
@@ -10525,6 +10527,7 @@ void RoomEditor::sync_oval_tools_panel() {
                 oval_point_child_editor_panel_->set_point_detail_values(point_values);
             }
         } else if (oval_point_child_editor_panel_) {
+            oval_point_child_editor_panel_->set_visible(false);
             oval_point_child_editor_panel_->set_point_selected(false);
             oval_point_child_editor_panel_->set_resolved_asset_name(resolved_child_asset_name);
             oval_point_child_editor_panel_->set_recommendation_pool(
@@ -10541,6 +10544,7 @@ void RoomEditor::sync_oval_tools_panel() {
         oval_tools_panel_->set_point_count(0);
         oval_tools_panel_->set_selected_point_index(-1);
         if (oval_point_child_editor_panel_) {
+            oval_point_child_editor_panel_->set_visible(false);
             oval_point_child_editor_panel_->set_point_selected(false);
             oval_point_child_editor_panel_->set_resolved_asset_name({});
             oval_point_child_editor_panel_->set_recommendation_pool({});

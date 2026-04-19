@@ -112,6 +112,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -165,6 +166,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -200,6 +202,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -354,14 +357,13 @@
           "name": "Floor Box",
           "position_x": -3.5,
           "position_z": -28.5,
-          "tags": [
-            "boundary"
-          ],
+          "tags": [],
           "width": 95.0
         }
       ],
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -393,6 +395,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -415,6 +418,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -439,6 +443,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -489,6 +494,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9187,6 +9193,7 @@
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -9223,6 +9230,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -9245,6 +9253,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -9267,6 +9276,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -9308,6 +9318,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9358,6 +9369,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9410,6 +9422,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9459,6 +9472,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9496,6 +9510,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9528,6 +9543,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9560,6 +9576,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9590,6 +9607,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -9612,6 +9630,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -9634,6 +9653,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -9856,6 +9876,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -9979,6 +10000,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -10699,6 +10721,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -10731,6 +10754,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -10888,9 +10912,7 @@
           "name": "Floor Box",
           "position_x": 2.5,
           "position_z": -183.0,
-          "tags": [
-            "boundary"
-          ],
+          "tags": [],
           "width": 1059.0
         },
         {
@@ -10900,14 +10922,50 @@
           "name": "Floor Box 2",
           "position_x": 4.5,
           "position_z": -75.0,
-          "tags": [
-            "boundary"
-          ],
+          "tags": [],
           "width": 257.0
         }
       ],
       "floor_boxes_enabled": true,
       "hitbox_enabled": false,
+      "impassable_box_enabled": true,
+      "impassable_boxes": [
+        {
+          "anchor_link": "",
+          "corners": [
+            {
+              "texture_x": 0,
+              "texture_y": 351
+            },
+            {
+              "texture_x": 1045,
+              "texture_y": 351
+            },
+            {
+              "texture_x": 1045,
+              "texture_y": 848
+            },
+            {
+              "texture_x": 0,
+              "texture_y": 848
+            }
+          ],
+          "enabled": true,
+          "extrusion_amount": 10,
+          "id": "hit_box_id",
+          "name": "hit_box",
+          "position": {
+            "x": 0,
+            "y": 351
+          },
+          "rotation_degrees": 0.0,
+          "size": {
+            "h": 497,
+            "w": 1045
+          },
+          "type": "impassable_box"
+        }
+      ],
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -10940,6 +10998,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -10990,6 +11049,7 @@
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -11708,6 +11768,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -11772,6 +11833,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -12315,6 +12377,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -12370,6 +12433,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -12429,6 +12493,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -12484,6 +12549,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -12542,6 +12608,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -13269,14 +13336,13 @@
           "name": "Floor Box 2",
           "position_x": 1.5,
           "position_z": -15.5,
-          "tags": [
-            "boundary"
-          ],
+          "tags": [],
           "width": 175.0
         }
       ],
       "floor_boxes_enabled": true,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -13324,6 +13390,7 @@
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -13378,6 +13445,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -13430,6 +13498,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -13463,6 +13532,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13485,6 +13555,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13507,6 +13578,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13529,6 +13601,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13551,6 +13624,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13573,6 +13647,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13595,6 +13670,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13738,6 +13814,7 @@
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -13796,6 +13873,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -13831,6 +13909,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13853,6 +13932,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13875,6 +13955,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13897,6 +13978,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13919,6 +14001,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13941,6 +14024,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13963,6 +14047,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -13985,6 +14070,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14007,6 +14093,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14048,6 +14135,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -14103,6 +14191,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -14138,6 +14227,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14160,6 +14250,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14182,6 +14273,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14204,6 +14296,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14226,6 +14319,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14248,6 +14342,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -14270,6 +14365,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15533,6 +15629,7 @@
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 513,
       "movement_enabled": true,
@@ -15567,6 +15664,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15589,6 +15687,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15611,6 +15710,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15633,6 +15733,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15655,6 +15756,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15677,6 +15779,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15699,6 +15802,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15740,6 +15844,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -15793,6 +15898,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -15826,6 +15932,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -15867,6 +15974,7 @@
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -18070,6 +18178,7 @@
       "attack_box_enabled": true,
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [
@@ -18892,6 +19001,7 @@
       "attack_box_enabled": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -18919,6 +19029,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -18959,6 +19070,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -18989,6 +19101,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -19011,6 +19124,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     },
@@ -19033,6 +19147,7 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "movement_enabled": false,
       "start": "default"
     }
@@ -19070,7 +19185,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 1.2699999809265137,
+        "radial_blur_px": 1.7300000190734863,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -19226,7 +19341,7 @@
           "display_color": [
             242,
             36,
-            44,
+            54,
             255
           ],
           "edge_smoothness": 2,
@@ -19620,16 +19735,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -869,
-          "camera_center_dz": -284,
-          "camera_height_px": 421,
-          "camera_tilt_deg": 34.26126480102539,
+          "camera_center_dx": -1278,
+          "camera_center_dz": -226,
+          "camera_height_px": 148,
+          "camera_tilt_deg": 22.861265182495117,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
             36,
             242,
-            242,
+            226,
             255
           ],
           "edge_smoothness": 101,

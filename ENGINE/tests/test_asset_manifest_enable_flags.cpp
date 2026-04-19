@@ -55,10 +55,12 @@ TEST_CASE("AssetInfo does not infer enable flags from payload presence") {
     CHECK(payload.contains("movement_enabled"));
     CHECK(payload.contains("attack_box_enabled"));
     CHECK(payload.contains("hitbox_enabled"));
+    CHECK(payload.contains("impassable_box_enabled"));
     CHECK(payload.contains("floor_boxes_enabled"));
     CHECK_FALSE(payload.value("movement_enabled", true));
     CHECK_FALSE(payload.value("attack_box_enabled", true));
     CHECK_FALSE(payload.value("hitbox_enabled", true));
+    CHECK_FALSE(payload.value("impassable_box_enabled", true));
     CHECK_FALSE(payload.value("floor_boxes_enabled", true));
 
     const nlohmann::json default_anim = info.animation_payload("default");
@@ -106,11 +108,11 @@ TEST_CASE("AssetInfo floor boxes normalize canonical fields and tags") {
     }
 
     const auto& first_tags = payload["floor_boxes"][0]["tags"];
-    CHECK(std::find(first_tags.begin(), first_tags.end(), "boundary") != first_tags.end());
+    CHECK(std::find(first_tags.begin(), first_tags.end(), "boundary") == first_tags.end());
 
     const auto& second_tags = payload["floor_boxes"][1]["tags"];
     CHECK(std::find(second_tags.begin(), second_tags.end(), "enemy_block") != second_tags.end());
-    CHECK(std::find(second_tags.begin(), second_tags.end(), "boundary") != second_tags.end());
+    CHECK(std::find(second_tags.begin(), second_tags.end(), "boundary") == second_tags.end());
 }
 
 TEST_CASE("AssetInfo omits floor boxes payload when disabled") {
@@ -218,7 +220,7 @@ TEST_CASE("AssetInfo save-time floor box sanitization applies defaults and canon
     }
 
     const auto& first_tags = payload["floor_boxes"][0]["tags"];
-    CHECK(std::find(first_tags.begin(), first_tags.end(), "boundary") != first_tags.end());
+    CHECK(std::find(first_tags.begin(), first_tags.end(), "boundary") == first_tags.end());
     CHECK(std::find(first_tags.begin(), first_tags.end(), "enemy_block") != first_tags.end());
 
     const auto& second_tags = payload["floor_boxes"][1]["tags"];
@@ -226,16 +228,111 @@ TEST_CASE("AssetInfo save-time floor box sanitization applies defaults and canon
     CHECK(std::find(second_tags.begin(), second_tags.end(), "ally_block") != second_tags.end());
 }
 
-TEST_CASE("Runtime floor box boundary lookup uses cached boundary flag") {
+TEST_CASE("Runtime floor box tag lookup uses canonical tag vector") {
     Asset::RuntimeFloorBox box{};
-    box.boundary_tag = true;
-    CHECK(box.has_tag("boundary"));
-
-    box.boundary_tag = false;
     box.tags = {"enemy_block"};
     CHECK_FALSE(box.has_tag("boundary"));
     CHECK(box.has_tag("enemy_block"));
 
     box.tags.push_back("boundary");
     CHECK(box.has_tag("boundary"));
+}
+
+TEST_CASE("AssetInfo omits impassable boxes payload when disabled") {
+    const nlohmann::json metadata = {
+        {"impassable_box_enabled", false},
+        {"impassable_boxes",
+         nlohmann::json::array({
+             {{"id", "imp_box_1"},
+              {"name", "Impassable Box 1"},
+              {"enabled", true},
+              {"extrusion_amount", 12},
+              {"position", {{"x", 4}, {"y", 8}}},
+              {"size", {{"w", 20}, {"h", 10}}}}
+         })},
+    };
+
+    AssetInfo info("impassable_boxes_disabled_test_asset", metadata);
+    const nlohmann::json payload = info.manifest_payload();
+    CHECK(payload.contains("impassable_box_enabled"));
+    CHECK_FALSE(payload.value("impassable_box_enabled", true));
+    CHECK_FALSE(payload.contains("impassable_boxes"));
+}
+
+TEST_CASE("AssetInfo omits impassable boxes payload when enabled but empty") {
+    const nlohmann::json metadata = {
+        {"impassable_box_enabled", true},
+        {"impassable_boxes", nlohmann::json::array()},
+    };
+
+    AssetInfo info("impassable_boxes_enabled_empty_test_asset", metadata);
+    info.impassable_boxes.clear();
+    const nlohmann::json payload = info.manifest_payload();
+    CHECK(payload.contains("impassable_box_enabled"));
+    CHECK(payload.value("impassable_box_enabled", false));
+    CHECK_FALSE(payload.contains("impassable_boxes"));
+}
+
+TEST_CASE("AssetInfo impassable boxes normalize canonical fields") {
+    const nlohmann::json metadata = {
+        {"impassable_box_enabled", true},
+        {"impassable_boxes",
+         nlohmann::json::array({
+             {{"id", "Box A"},
+              {"name", "Impassable"},
+              {"enabled", true},
+              {"extrusion_amount", -5},
+              {"anchor_link", "root_anchor"},
+              {"rotation_degrees", 450.0},
+              {"position", {{"x", 10}, {"y", 20}}},
+              {"size", {{"w", 32}, {"h", 16}}}},
+             {{"id", "Box A"},
+              {"name", "Impassable"},
+              {"enabled", false},
+              {"extrusion_amount", 3},
+              {"corners",
+               nlohmann::json::array({
+                   {{"texture_x", 50}, {"texture_y", 70}},
+                   {{"texture_x", 90}, {"texture_y", 70}},
+                   {{"texture_x", 90}, {"texture_y", 100}},
+                   {{"texture_x", 50}, {"texture_y", 100}},
+               })}}
+         })},
+    };
+
+    AssetInfo info("impassable_boxes_normalize_test_asset", metadata);
+    const nlohmann::json payload = info.manifest_payload();
+    CHECK(payload.contains("impassable_box_enabled"));
+    CHECK(payload.value("impassable_box_enabled", false));
+    REQUIRE(payload.contains("impassable_boxes"));
+    REQUIRE(payload["impassable_boxes"].is_array());
+    REQUIRE(payload["impassable_boxes"].size() == 2);
+
+    std::unordered_set<std::string> ids;
+    std::unordered_set<std::string> names;
+    for (const auto& imp_box : payload["impassable_boxes"]) {
+        REQUIRE(imp_box.is_object());
+        CHECK(imp_box.contains("id"));
+        CHECK(imp_box.contains("type"));
+        CHECK(imp_box.contains("name"));
+        CHECK(imp_box.contains("enabled"));
+        CHECK(imp_box.contains("extrusion_amount"));
+        CHECK(imp_box.contains("anchor_link"));
+        CHECK(imp_box.contains("rotation_degrees"));
+        CHECK(imp_box.contains("position"));
+        CHECK(imp_box.contains("size"));
+        CHECK(imp_box.contains("corners"));
+        CHECK(imp_box["type"] == "impassable_box");
+        CHECK(imp_box["extrusion_amount"].get<int>() >= 0);
+        CHECK(imp_box["position"].is_object());
+        CHECK(imp_box["size"].is_object());
+        CHECK(imp_box["corners"].is_array());
+
+        REQUIRE(imp_box["id"].is_string());
+        REQUIRE(imp_box["name"].is_string());
+        CHECK_FALSE(imp_box["id"].get<std::string>().empty());
+        CHECK_FALSE(imp_box["name"].get<std::string>().empty());
+        CHECK(ids.insert(imp_box["id"].get<std::string>()).second);
+        CHECK(names.insert(imp_box["name"].get<std::string>()).second);
+    }
 }

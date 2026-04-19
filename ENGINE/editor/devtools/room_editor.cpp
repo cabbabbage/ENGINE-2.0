@@ -5162,6 +5162,9 @@ void RoomEditor::close_asset_info_editor() {
     if (impassable_box_mode_active()) {
         exit_impassable_box_edit_mode(true);
     }
+    if (floor_box_mode_active()) {
+        exit_floor_box_edit_mode(true);
+    }
     clear_focus();
     if (info_ui_) info_ui_->close();
     if (info_ui_) info_ui_->clear_panel_bounds_override();
@@ -9666,6 +9669,9 @@ void RoomEditor::apply_asset_editor_subview_change(AssetEditorSubview subview, b
     if (previous == AssetEditorSubview::AttackBox && subview != AssetEditorSubview::AttackBox) {
         exit_attack_box_edit_mode(true);
     }
+    if (previous == AssetEditorSubview::ImpassableBox && subview != AssetEditorSubview::ImpassableBox) {
+        exit_impassable_box_edit_mode(true);
+    }
     if (previous == AssetEditorSubview::FloorBoxes && subview != AssetEditorSubview::FloorBoxes) {
         exit_floor_box_edit_mode(true);
     }
@@ -9702,6 +9708,10 @@ void RoomEditor::apply_asset_editor_subview_change(AssetEditorSubview subview, b
         if (!enter_attack_box_edit_mode()) {
             enter_success = false;
         }
+    } else if (subview == AssetEditorSubview::ImpassableBox) {
+        if (!enter_impassable_box_edit_mode()) {
+            enter_success = false;
+        }
     } else if (subview == AssetEditorSubview::FloorBoxes) {
         if (!enter_floor_box_edit_mode()) {
             enter_success = false;
@@ -9732,6 +9742,8 @@ void RoomEditor::apply_asset_editor_subview_change(AssetEditorSubview subview, b
             (void)enter_hitbox_edit_mode();
         } else if (previous == AssetEditorSubview::AttackBox) {
             (void)enter_attack_box_edit_mode();
+        } else if (previous == AssetEditorSubview::ImpassableBox) {
+            (void)enter_impassable_box_edit_mode();
         } else if (previous == AssetEditorSubview::FloorBoxes) {
             (void)enter_floor_box_edit_mode();
         }
@@ -9910,6 +9922,7 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     ensure_movement_editor_widgets();
     ensure_hitbox_editor_widgets();
     ensure_attack_box_editor_widgets();
+    ensure_impassable_box_editor_widgets();
     ensure_floor_box_editor_widgets();
     ensure_attack_payload_editor_widget();
     if (anchor_tools_panel_) {
@@ -9958,6 +9971,14 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
             attack_box_tools_panel_->clear_panel_bounds_override();
         }
     }
+    if (impassable_box_tools_panel_) {
+        if (impassable_box_mode_active() || asset_editor_transition_.active) {
+            impassable_box_tools_panel_->set_panel_bounds_override(
+                place_rect(AssetEditorSubview::ImpassableBox, left_panel_rect));
+        } else {
+            impassable_box_tools_panel_->clear_panel_bounds_override();
+        }
+    }
     if (floor_box_tools_panel_) {
         if (floor_box_mode_active() || asset_editor_transition_.active) {
             floor_box_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::FloorBoxes, left_panel_rect));
@@ -9980,6 +10001,7 @@ void RoomEditor::update_asset_editor_layout() {
     ensure_movement_editor_widgets();
     ensure_hitbox_editor_widgets();
     ensure_attack_box_editor_widgets();
+    ensure_impassable_box_editor_widgets();
     ensure_floor_box_editor_widgets();
 
     apply_asset_editor_panel_overrides();
@@ -10016,6 +10038,11 @@ void RoomEditor::update_asset_editor_layout() {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
         attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
+    }
+    if (impassable_box_tools_panel_) {
+        impassable_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        impassable_box_tools_panel_->set_visible(impassable_box_mode_active());
+        impassable_box_tools_panel_->set_onion_skin_enabled(impassable_box_edit_.onion_skin_enabled);
     }
     if (floor_box_tools_panel_) {
         floor_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -19148,6 +19175,8 @@ void RoomEditor::validate_focus_state() {
             stack_target = hitbox_edit_.target_asset;
         } else if (attack_box_mode_active()) {
             stack_target = attack_box_edit_.target_asset;
+        } else if (impassable_box_mode_active()) {
+            stack_target = impassable_box_edit_.target_asset;
         } else if (floor_box_mode_active()) {
             stack_target = floor_box_edit_.target_asset;
         }
@@ -21556,13 +21585,38 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
                 if (!asset || asset->dead) {
                     continue;
                 }
-                Area impassable = asset->get_area("impassable");
-                if (!impassable.get_points().empty() && impassable.contains_point(point)) {
-                    return false;
+                const auto& impassable_volumes = asset->current_impassable_box_volumes();
+                for (const auto& volume : impassable_volumes) {
+                    if (!volume.enabled || !volume.valid) {
+                        continue;
+                    }
+                    float min_x = std::numeric_limits<float>::max();
+                    float max_x = std::numeric_limits<float>::lowest();
+                    float min_z = std::numeric_limits<float>::max();
+                    float max_z = std::numeric_limits<float>::lowest();
+                    for (const auto& world_point : volume.world_points) {
+                        if (!std::isfinite(world_point.x) || !std::isfinite(world_point.y)) {
+                            continue;
+                        }
+                        min_x = std::min(min_x, world_point.x);
+                        max_x = std::max(max_x, world_point.x);
+                        min_z = std::min(min_z, world_point.y);
+                        max_z = std::max(max_z, world_point.y);
+                    }
+                    if (!std::isfinite(min_x) || !std::isfinite(max_x) ||
+                        !std::isfinite(min_z) || !std::isfinite(max_z)) {
+                        continue;
+                    }
+                    if (static_cast<float>(point.x) >= min_x &&
+                        static_cast<float>(point.x) <= max_x &&
+                        static_cast<float>(point.y) >= min_z &&
+                        static_cast<float>(point.y) <= max_z) {
+                        return false;
+                    }
                 }
             }
             return true;
-};
+        };
 
         auto bounds = current_room_->room_area->get_bounds();
         int minx = std::get<0>(bounds);

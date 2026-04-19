@@ -25,55 +25,67 @@ std::shared_ptr<AssetInfo> make_info(const std::string& name) {
     info->passable = true;
     info->movement_enabled = false;
     info->floor_boxes_enabled = false;
+    info->impassable_box_enabled = false;
     return info;
 }
 
-} // namespace
+animation_update::FrameHitBox make_impassable_box(const std::string& id,
+                                                   const std::string& name,
+                                                   bool enabled = true) {
+    animation_update::FrameHitBox box{};
+    box.id = id;
+    box.name = name;
+    box.type = "impassable_box";
+    box.enabled = enabled;
+    box.set_rect(animation_update::FrameBoxRect{0, 0, 64, 64});
+    return box;
+}
 
-TEST_CASE("affects_collision_context excludes player and passable static objects") {
+}  // namespace
+
+TEST_CASE("affects_collision_context excludes players even with authored impassable boxes") {
     auto player_info = make_info("collision_policy_player");
     player_info->type = "player";
+    player_info->impassable_box_enabled = true;
+    player_info->impassable_boxes = {make_impassable_box("player_box", "Player Box")};
     const auto player = make_asset_for_collision_policy(player_info);
     REQUIRE(player != nullptr);
     CHECK_FALSE(player->affects_collision_context());
-
-    auto decorative_info = make_info("collision_policy_decorative");
-    decorative_info->type = "decorative";
-    decorative_info->passable = true;
-    decorative_info->movement_enabled = false;
-    const auto decorative = make_asset_for_collision_policy(decorative_info);
-    REQUIRE(decorative != nullptr);
-    CHECK_FALSE(decorative->affects_collision_context());
 }
 
-TEST_CASE("affects_collision_context includes explicit blocking types and solid blockers") {
+TEST_CASE("affects_collision_context depends only on impassable box system data") {
+    auto disabled_info = make_info("collision_policy_impassable_disabled");
+    disabled_info->impassable_box_enabled = false;
+    disabled_info->impassable_boxes = {make_impassable_box("disabled_box", "Disabled Box")};
+    const auto disabled_asset = make_asset_for_collision_policy(disabled_info);
+    REQUIRE(disabled_asset != nullptr);
+    CHECK_FALSE(disabled_asset->affects_collision_context());
+
+    auto empty_info = make_info("collision_policy_impassable_empty");
+    empty_info->impassable_box_enabled = true;
+    empty_info->impassable_boxes.clear();
+    const auto empty_asset = make_asset_for_collision_policy(empty_info);
+    REQUIRE(empty_asset != nullptr);
+    CHECK_FALSE(empty_asset->affects_collision_context());
+
+    auto valid_info = make_info("collision_policy_impassable_valid");
+    valid_info->impassable_box_enabled = true;
+    valid_info->impassable_boxes = {make_impassable_box("imp_box_1", "Impassable Box 1")};
+    const auto valid_asset = make_asset_for_collision_policy(valid_info);
+    REQUIRE(valid_asset != nullptr);
+    CHECK(valid_asset->affects_collision_context());
+}
+
+TEST_CASE("affects_collision_context ignores boundary type and floor-box boundary tags") {
     auto boundary_info = make_info("collision_policy_boundary");
     boundary_info->type = "boundary";
-    const auto boundary = make_asset_for_collision_policy(boundary_info);
-    REQUIRE(boundary != nullptr);
-    CHECK(boundary->affects_collision_context());
+    const auto boundary_asset = make_asset_for_collision_policy(boundary_info);
+    REQUIRE(boundary_asset != nullptr);
+    CHECK_FALSE(boundary_asset->affects_collision_context());
 
-    auto mover_info = make_info("collision_policy_mover");
-    mover_info->type = "object";
-    mover_info->movement_enabled = true;
-    mover_info->passable = true;
-    const auto mover = make_asset_for_collision_policy(mover_info);
-    REQUIRE(mover != nullptr);
-    CHECK_FALSE(mover->affects_collision_context());
-
-    auto solid_info = make_info("collision_policy_solid");
-    solid_info->type = "object";
-    solid_info->passable = false;
-    const auto solid = make_asset_for_collision_policy(solid_info);
-    REQUIRE(solid != nullptr);
-    CHECK(solid->affects_collision_context());
-}
-
-TEST_CASE("affects_collision_context includes only boundary-tagged floor boxes") {
-    auto boundary_floor_info = make_info("collision_policy_floor_boundary");
-    boundary_floor_info->type = "object";
-    boundary_floor_info->floor_boxes_enabled = true;
-    boundary_floor_info->floor_boxes = {
+    auto floor_boundary_info = make_info("collision_policy_floor_boundary");
+    floor_boundary_info->floor_boxes_enabled = true;
+    floor_boundary_info->floor_boxes = {
         AssetInfo::FloorBox{
             "floor_box_boundary",
             "floor_box_boundary",
@@ -85,26 +97,7 @@ TEST_CASE("affects_collision_context includes only boundary-tagged floor boxes")
             std::vector<std::string>{"boundary"}
         }
     };
-    const auto boundary_floor_asset = make_asset_for_collision_policy(boundary_floor_info);
-    REQUIRE(boundary_floor_asset != nullptr);
-    CHECK(boundary_floor_asset->affects_collision_context());
-
-    auto non_boundary_floor_info = make_info("collision_policy_floor_non_boundary");
-    non_boundary_floor_info->type = "object";
-    non_boundary_floor_info->floor_boxes_enabled = true;
-    non_boundary_floor_info->floor_boxes = {
-        AssetInfo::FloorBox{
-            "floor_box_non_boundary",
-            "floor_box_non_boundary",
-            0.0f,
-            0.0f,
-            64.0f,
-            64.0f,
-            true,
-            std::vector<std::string>{"walkable_hint"}
-        }
-    };
-    const auto non_boundary_floor_asset = make_asset_for_collision_policy(non_boundary_floor_info);
-    REQUIRE(non_boundary_floor_asset != nullptr);
-    CHECK_FALSE(non_boundary_floor_asset->affects_collision_context());
+    const auto floor_boundary_asset = make_asset_for_collision_policy(floor_boundary_info);
+    REQUIRE(floor_boundary_asset != nullptr);
+    CHECK_FALSE(floor_boundary_asset->affects_collision_context());
 }

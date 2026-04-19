@@ -314,6 +314,28 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
     }
 }
 
+bool apply_manifest_asset_defaults(nlohmann::json& manifest_json) {
+    auto assets_it = manifest_json.find("assets");
+    if (assets_it == manifest_json.end() || !assets_it->is_object()) {
+        return false;
+    }
+
+    bool mutated = false;
+    for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+
+        auto& asset = it.value();
+        if (!asset.contains("impassable_box_enabled")) {
+            const bool inferred_enabled = asset.contains("impassable_boxes");
+            asset["impassable_box_enabled"] = inferred_enabled;
+            mutated = true;
+        }
+    }
+    return mutated;
+}
+
 } // namespace
 
 std::string manifest_path() {
@@ -349,8 +371,12 @@ ManifestData load_manifest() {
     }
 
     validate_manifest_json(manifest_json, path);
+    const bool manifest_mutated = apply_manifest_asset_defaults(manifest_json);
     validate_manifest_grid_settings_schema(manifest_json, path);
     validate_manifest_asset_schema(manifest_json, path);
+    if (manifest_mutated) {
+        write_manifest_file(path, manifest_json);
+    }
     return make_manifest_data(std::move(manifest_json));
 }
 

@@ -26,20 +26,6 @@ public:
                                                  SDL_FPoint optical_center);
 
 private:
-    enum class AtmosphereSide {
-        Background,
-        Foreground
-    };
-
-    struct AtmosphereParams {
-        float amount = 0.0f;
-        float desaturation = 0.0f;
-        float lift = 0.0f;
-        Uint8 tint_r = 255;
-        Uint8 tint_g = 255;
-        Uint8 tint_b = 255;
-    };
-
     bool ensure_targets();
     bool ensure_target(SDL_Texture*& texture);
     void destroy_targets();
@@ -55,10 +41,6 @@ private:
                    float radial_blur_px,
                    float quality_scale) const;
 
-    bool apply_atmosphere_to_texture(SDL_Texture* src,
-                                     SDL_Texture* dst,
-                                     const AtmosphereParams& params) const;
-
     static std::vector<int> build_repeat_schedule(std::size_t chain_size, int total_pass_budget);
     static int compute_total_pass_budget(std::size_t chain_size,
                                          float blur_px,
@@ -67,10 +49,6 @@ private:
                                        int screen_height,
                                        float blur_px,
                                        float radial_blur_px);
-
-    static AtmosphereParams compute_atmosphere_params(int chain_step_index,
-                                                      int chain_size,
-                                                      AtmosphereSide side);
 
     bool compose_chain(const std::vector<int>& chain,
                        const std::vector<SDL_Texture*>& layer_textures,
@@ -82,7 +60,6 @@ private:
                        float radial_blur_px,
                        SDL_FPoint optical_center,
                        float blur_quality_scale,
-                       AtmosphereSide atmosphere_side,
                        bool& out_has_content) const;
 
     SDL_Renderer* renderer_ = nullptr;

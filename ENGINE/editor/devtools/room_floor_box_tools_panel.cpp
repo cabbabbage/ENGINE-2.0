@@ -26,7 +26,6 @@ constexpr int kSectionGap = 10;
 constexpr int kHeaderHeight = 24;
 constexpr int kLineHeight = 18;
 constexpr int kChipWidth = 130;
-constexpr const char* kBoundaryTag = "boundary";
 
 std::vector<std::string> sorted_set_values(const std::set<std::string>& values) {
     return std::vector<std::string>(values.begin(), values.end());
@@ -45,7 +44,7 @@ RoomFloorBoxToolsPanel::RoomFloorBoxToolsPanel() {
     depth_textbox_ = std::make_unique<DMTextBox>("Depth", "0");
     tag_search_textbox_ = std::make_unique<DMTextBox>("Find Tag", "");
     system_enabled_checkbox_ = std::make_unique<DMCheckbox>("Floor Boxes Enabled", false);
-    set_recommendation_pool({kBoundaryTag});
+    set_recommendation_pool({});
 }
 
 RoomFloorBoxToolsPanel::~RoomFloorBoxToolsPanel() = default;
@@ -150,7 +149,6 @@ void RoomFloorBoxToolsPanel::set_recommendation_pool(const std::vector<std::stri
             deduped.insert(normalized);
         }
     }
-    deduped.insert(std::string(kBoundaryTag));
     const std::vector<std::string> normalized_pool(deduped.begin(), deduped.end());
     if (recommendation_pool_ == normalized_pool) {
         return;

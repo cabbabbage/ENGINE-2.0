@@ -589,6 +589,7 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_name_to_index_.clear();
         current_hit_box_volumes_.clear();
         current_attack_box_volumes_.clear();
+        current_impassable_box_volumes_.clear();
         floor_boxes_.clear();
         runtime_hit_box_lookup_.clear();
         runtime_attack_box_lookup_.clear();
@@ -1221,6 +1222,10 @@ bool Asset::isAttackBoxEnabled() const {
     return info && info->is_attack_box_enabled();
 }
 
+bool Asset::isImpassableBoxEnabled() const {
+    return info && info->is_impassable_box_enabled();
+}
+
 bool Asset::isFloorBoxesEnabled() const {
     return info && info->is_floor_boxes_enabled();
 }
@@ -1230,49 +1235,25 @@ bool Asset::affects_collision_context() const {
         return false;
     }
 
-    const std::string canonical_type = asset_types::canonicalize(info->type);
-    if (canonical_type == asset_types::player) {
+    if (asset_types::canonicalize(info->type) == asset_types::player) {
         return false;
     }
 
-    if (canonical_type == asset_types::boundary ||
-        canonical_type == asset_types::enemy ||
-        canonical_type == asset_types::npc ||
-        !info->passable) {
-        return true;
+    if (!isImpassableBoxEnabled()) {
+        return false;
     }
 
-    auto floor_box_contributes_boundary = [](bool enabled,
-                                             bool boundary_tag,
-                                             float width,
-                                             float depth) {
-        return enabled && boundary_tag &&
-               std::isfinite(width) && std::isfinite(depth) &&
-               width > 0.0f && depth > 0.0f;
-    };
-
-    for (const RuntimeFloorBox& floor_box : floor_boxes_) {
-        if (floor_box_contributes_boundary(floor_box.enabled,
-                                           floor_box.has_boundary_tag(),
-                                           floor_box.width,
-                                           floor_box.depth)) {
+    for (const RuntimeBoxVolume& volume : current_impassable_box_volumes_) {
+        if (volume.valid && volume.enabled) {
             return true;
         }
     }
 
-    if (isFloorBoxesEnabled()) {
-        for (const AssetInfo::FloorBox& authored : info->floor_boxes_payload()) {
-            const bool boundary_tag =
-                std::find(authored.tags.begin(), authored.tags.end(), "boundary") != authored.tags.end();
-            if (floor_box_contributes_boundary(authored.enabled,
-                                               boundary_tag,
-                                               authored.width,
-                                               authored.depth)) {
-                return true;
-            }
+    for (const auto& box : info->impassable_boxes_payload()) {
+        if (box.enabled && box.is_valid()) {
+            return true;
         }
     }
-
     return false;
 }
 
@@ -1281,9 +1262,6 @@ const std::vector<Asset::RuntimeFloorBox>& Asset::getFloorBoxes() const {
 }
 
 bool Asset::RuntimeFloorBox::has_tag(const std::string& tag) const {
-    if (tag == "boundary") {
-        return boundary_tag || std::find(tags.begin(), tags.end(), tag) != tags.end();
-    }
     return std::find(tags.begin(), tags.end(), tag) != tags.end();
 }
 
@@ -1303,8 +1281,6 @@ void Asset::refresh_runtime_floor_boxes_cache() {
         box.width = authored.width;
         box.depth = authored.depth;
         box.enabled = authored.enabled;
-        box.boundary_tag =
-            std::find(authored.tags.begin(), authored.tags.end(), "boundary") != authored.tags.end();
         box.tags = authored.tags;
         if (box.id.empty() || box.name.empty()) {
             continue;
@@ -1316,6 +1292,7 @@ void Asset::refresh_runtime_floor_boxes_cache() {
 void Asset::refresh_runtime_box_cache_from_frame() {
     current_hit_box_volumes_.clear();
     current_attack_box_volumes_.clear();
+    current_impassable_box_volumes_.clear();
     runtime_hit_box_lookup_.clear();
     runtime_attack_box_lookup_.clear();
 
@@ -1488,6 +1465,35 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         }
     }
 
+    if (isImpassableBoxEnabled()) {
+        const auto& boxes = info->impassable_boxes_payload();
+        current_impassable_box_volumes_.reserve(boxes.size());
+        for (const auto& box : boxes) {
+            if (!box.is_valid() || !box.enabled) {
+                continue;
+            }
+            RuntimeBoxVolume volume{};
+            const auto runtime_corners = box.to_runtime_clockwise_points();
+            if (!build_volume(box.name,
+                              box.id,
+                              box.type.empty() ? std::string{"impassable_box"} : box.type,
+                              box.enabled,
+                              box.frame_start,
+                              box.frame_end,
+                              box.anchor_link,
+                              box.extrusion_amount,
+                              0,
+                              std::string{},
+                              "{}",
+                              animation_update::make_default_attack_payload(),
+                              runtime_corners,
+                              volume)) {
+                continue;
+            }
+            current_impassable_box_volumes_.push_back(std::move(volume));
+        }
+    }
+
     if (vibble_box_trace_enabled()) {
         const std::string asset_name = info ? info->name : std::string{"<unknown>"};
         const int frame_index = current_frame ? current_frame->frame_index : -1;
@@ -1498,6 +1504,11 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                 runtime_box_ids_csv(current_hit_box_volumes_).c_str(),
                 current_attack_box_volumes_.size(),
                 runtime_box_ids_csv(current_attack_box_volumes_).c_str());
+        SDL_Log("[BoxFlow][runtime_cache] asset=%s frame=%d impassable_count=%zu impassable_ids=%s",
+                asset_name.c_str(),
+                frame_index,
+                current_impassable_box_volumes_.size(),
+                runtime_box_ids_csv(current_impassable_box_volumes_).c_str());
     }
 }
 

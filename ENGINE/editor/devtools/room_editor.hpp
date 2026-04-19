@@ -440,6 +440,7 @@ private:
     void ensure_movement_editor_widgets();
     void ensure_hitbox_editor_widgets();
     void ensure_attack_box_editor_widgets();
+    void ensure_impassable_box_editor_widgets();
     void ensure_floor_box_editor_widgets();
     void ensure_attack_payload_editor_widget();
     void update_asset_editor_layout();
@@ -452,6 +453,7 @@ private:
     bool movement_mode_active() const;
     bool hitbox_mode_active() const;
     bool attack_box_mode_active() const;
+    bool impassable_box_mode_active() const;
     bool floor_box_mode_active() const;
     bool is_asset_pointer_live(const Asset* asset) const;
     Asset* selected_anchor_mode_asset() const;
@@ -478,6 +480,8 @@ private:
     void exit_hitbox_edit_mode(bool persist_changes);
     bool enter_attack_box_edit_mode();
     void exit_attack_box_edit_mode(bool persist_changes);
+    bool enter_impassable_box_edit_mode();
+    void exit_impassable_box_edit_mode(bool persist_changes);
     bool enter_floor_box_edit_mode();
     void exit_floor_box_edit_mode(bool persist_changes);
     void validate_anchor_edit_target();
@@ -485,12 +489,14 @@ private:
     void validate_movement_edit_target();
     void validate_hitbox_edit_target();
     void validate_attack_box_edit_target();
+    void validate_impassable_box_edit_target();
     void validate_floor_box_edit_target();
     bool is_anchor_ui_blocking_point(int x, int y) const;
     bool is_oval_ui_blocking_point(int x, int y) const;
     bool is_movement_ui_blocking_point(int x, int y) const;
     bool is_hitbox_ui_blocking_point(int x, int y) const;
     bool is_attack_box_ui_blocking_point(int x, int y) const;
+    bool is_impassable_box_ui_blocking_point(int x, int y) const;
     bool is_floor_box_ui_blocking_point(int x, int y) const;
     struct EditorInteractionState {
         bool has_selected_editable = false;
@@ -514,6 +520,8 @@ private:
     void navigate_hitbox_frame(int delta);
     void navigate_attack_box_animation(int delta);
     void navigate_attack_box_frame(int delta);
+    void navigate_impassable_box_animation(int delta);
+    void navigate_impassable_box_frame(int delta);
     void navigate_asset_info_preview_animation(int delta);
     void navigate_asset_info_preview_frame(int delta);
     bool apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index);
@@ -521,17 +529,20 @@ private:
     bool apply_movement_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_hitbox_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_impassable_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_asset_preview_animation_and_frame(Asset* target, const std::string& animation_id, int frame_index);
     std::vector<std::string> anchor_mode_animation_names() const;
     std::vector<std::string> oval_mode_animation_names() const;
     std::vector<std::string> movement_mode_animation_names() const;
     std::vector<std::string> hitbox_mode_animation_names() const;
     std::vector<std::string> attack_box_mode_animation_names() const;
+    std::vector<std::string> impassable_box_mode_animation_names() const;
     int resolve_anchor_mode_frame_index() const;
     int resolve_oval_mode_frame_index() const;
     int resolve_movement_mode_frame_index() const;
     int resolve_hitbox_mode_frame_index() const;
     int resolve_attack_box_mode_frame_index() const;
+    int resolve_impassable_box_mode_frame_index() const;
     void refresh_anchor_mode_handles();
     void sync_anchor_tools_panel();
     void sync_oval_tools_panel();
@@ -561,6 +572,7 @@ private:
                                                                bool& changed);
     void sync_hitbox_tools_panel();
     void sync_attack_box_tools_panel();
+    void sync_impassable_box_tools_panel();
     void sync_attack_payload_editor();
     void sync_floor_box_tools_panel();
     void ensure_anchor_selection_valid();
@@ -583,6 +595,7 @@ private:
     bool set_movement_system_enabled(bool enabled);
     bool set_hitbox_system_enabled(bool enabled);
     bool set_attack_box_system_enabled(bool enabled);
+    bool set_impassable_box_system_enabled(bool enabled);
     bool set_floor_box_system_enabled(bool enabled);
     void refresh_movement_editor_selection(bool reset_drag_state);
     void sync_movement_panel_frame_values();
@@ -666,42 +679,60 @@ private:
                                                int radius_px,
                                                int& out_corner_index,
                                                int& out_point_index) const;
+    int find_impassable_box_corner_at_screen_point(SDL_Point screen_point,
+                                                   int radius_px,
+                                                   int& out_corner_index,
+                                                   int& out_point_index) const;
     int find_hitbox_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
+    int find_impassable_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_hitbox_body_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_body_at_screen_point(SDL_Point screen_point) const;
+    int find_impassable_box_body_at_screen_point(SDL_Point screen_point) const;
     int find_floor_box_corner_at_screen_point(SDL_Point screen_point,
                                               int radius_px,
                                               int& out_corner_index) const;
     int find_floor_box_body_at_screen_point(SDL_Point screen_point) const;
     bool handle_hitbox_mode_mouse_input(const Input& input);
     bool handle_attack_box_mode_mouse_input(const Input& input);
+    bool handle_impassable_box_mode_mouse_input(const Input& input);
     bool handle_floor_box_mode_mouse_input(const Input& input);
     bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
                                      devmode::core::DevSaveCoordinator::Priority priority);
     bool mutate_attack_box_current_frame(const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
                                          devmode::core::DevSaveCoordinator::Priority priority);
+    bool mutate_impassable_boxes(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
+                                 devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool persist_impassable_boxes(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_specific_attack_box_frame(int frame_index, devmode::core::DevSaveCoordinator::Priority priority);
     bool drag_hitbox_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool drag_attack_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
+    bool drag_impassable_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);
     bool begin_attack_box_drag(int box_index, SDL_Point screen_point);
+    bool begin_impassable_box_drag(int box_index, SDL_Point screen_point);
     bool begin_hitbox_rotation_drag(int box_index, SDL_Point screen_point);
     bool begin_attack_box_rotation_drag(int box_index, SDL_Point screen_point);
+    bool begin_impassable_box_rotation_drag(int box_index, SDL_Point screen_point);
     bool drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point);
     bool drag_attack_box_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_impassable_box_to_screen(int box_index, SDL_Point screen_point);
     bool drag_hitbox_rotation_to_screen(int box_index, SDL_Point screen_point);
     bool drag_attack_box_rotation_to_screen(int box_index, SDL_Point screen_point);
+    bool drag_impassable_box_rotation_to_screen(int box_index, SDL_Point screen_point);
     bool add_hitbox_in_current_frame();
     bool add_attack_box_in_current_frame();
+    bool add_impassable_box();
     bool delete_selected_hitbox_in_current_frame();
     bool delete_selected_attack_box_in_current_frame();
+    bool delete_selected_impassable_box();
     bool apply_hitbox_current_frame_to_scope(EditorFramePropagationScope scope);
     bool apply_attack_box_current_frame_to_scope(EditorFramePropagationScope scope);
     bool apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
     bool apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
+    bool apply_impassable_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
     bool apply_attack_payload_editor_update(const animation_update::AttackPayload& payload);
     bool add_floor_box();
     bool delete_selected_floor_box();
@@ -768,6 +799,7 @@ private:
         MovementEdit,
         HitBoxEdit,
         AttackBoxEdit,
+        ImpassableBoxEdit,
         FloorBoxEdit,
     };
 
@@ -780,6 +812,7 @@ private:
         Movement,
         Hitbox,
         AttackBox,
+        ImpassableBox,
         FloorBoxes,
     };
 
@@ -796,6 +829,7 @@ private:
     std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
     std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;
+    std::unique_ptr<RoomBoxToolsPanel> impassable_box_tools_panel_;
     std::unique_ptr<RoomFloorBoxToolsPanel> floor_box_tools_panel_;
     std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
@@ -942,6 +976,7 @@ private:
     };
     BoxEditState hitbox_edit_;
     BoxEditState attack_box_edit_;
+    BoxEditState impassable_box_edit_;
 
     struct FloorBoxEditState {
         Asset* target_asset = nullptr;

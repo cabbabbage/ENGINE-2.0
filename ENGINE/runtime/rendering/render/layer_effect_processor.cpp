@@ -598,7 +598,6 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
     double layer_depth_max,
     const LayerLightingParams& lighting_params,
     const std::vector<RuntimeLight>& lights,
-    const LayerFogParams& fog_params,
     const LayerScratchTextures& scratch_textures) {
     LayerProcessResult result{};
     result.final_texture = composited_output_texture;
@@ -758,7 +757,6 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
 
     (void)layer_depth_min;
     (void)layer_depth_max;
-    (void)fog_params;
 
     restore_state_and_target();
     return result;

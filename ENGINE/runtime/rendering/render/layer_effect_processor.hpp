@@ -33,20 +33,9 @@ public:
         SDL_Texture* dark_mask_texture = nullptr;
     };
 
-    struct LayerFogParams {
-        bool enabled = false;
-        float normalized_depth = 0.0f;
-        float bottom_y_px = 0.0f;
-        float thickness = 0.0f;
-        int layer_cycle_index = 0;
-        float bottom_opacity_curve = 1.0f;
-        SDL_Color tint{0, 0, 0, 0};
-    };
-
     struct LayerProcessResult {
         SDL_Texture* final_texture = nullptr;
         bool lighting_applied = false;
-        bool fog_applied = false;
     };
 
     explicit LayerEffectProcessor(SDL_Renderer* renderer = nullptr)
@@ -74,7 +63,6 @@ public:
                                      double layer_depth_max,
                                      const LayerLightingParams& lighting_params,
                                      const std::vector<RuntimeLight>& lights,
-                                     const LayerFogParams& fog_params,
                                      const LayerScratchTextures& scratch_textures);
 
 private:

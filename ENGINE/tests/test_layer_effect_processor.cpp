@@ -343,7 +343,6 @@ TEST_CASE("LayerEffectProcessor preserves dark-mask alpha from base layer") {
         10.0,
         lighting,
         std::vector<LayerEffectProcessor::RuntimeLight>{light},
-        LayerEffectProcessor::LayerFogParams{},
         scratch);
     CHECK(result.lighting_applied);
 
@@ -409,7 +408,6 @@ TEST_CASE("LayerEffectProcessor attenuates lights behind a layer") {
                                 120.0,
                                 lighting,
                                 std::vector<LayerEffectProcessor::RuntimeLight>{light},
-                                LayerEffectProcessor::LayerFogParams{},
                                 scratch);
 
         SDL_Color center{};
@@ -471,7 +469,6 @@ TEST_CASE("LayerEffectProcessor behind attenuation is monotonic as depth increas
                                 120.0,
                                 lighting,
                                 std::vector<LayerEffectProcessor::RuntimeLight>{light},
-                                LayerEffectProcessor::LayerFogParams{},
                                 scratch);
 
         SDL_Color center{};
@@ -487,341 +484,6 @@ TEST_CASE("LayerEffectProcessor behind attenuation is monotonic as depth increas
     CHECK(value_mildly_behind >= value_far_behind);
 
     SDL_DestroyTexture(dark_mask);
-    SDL_DestroyTexture(output);
-    SDL_DestroyTexture(base);
-}
-
-TEST_CASE("LayerEffectProcessor fog pass does not mutate dark-mask texture") {
-    ScopedRenderer renderer_scope;
-    REQUIRE(renderer_scope.ready());
-    if (!supports_alpha_preserving_pipeline_blends()) {
-        return;
-    }
-
-    SDL_Renderer* renderer = renderer_scope.get();
-    REQUIRE(renderer != nullptr);
-
-    constexpr int kW = 24;
-    constexpr int kH = 24;
-    SDL_Texture* base = create_target_texture(renderer, kW, kH);
-    SDL_Texture* output = create_target_texture(renderer, kW, kH);
-    SDL_Texture* dark_mask = create_target_texture(renderer, kW, kH);
-    REQUIRE(base != nullptr);
-    REQUIRE(output != nullptr);
-    REQUIRE(dark_mask != nullptr);
-
-    REQUIRE(clear_texture(renderer, base, SDL_Color{0, 0, 0, 0}));
-    REQUIRE(fill_texture_rect(renderer, base, 0, 0, 12, 24, SDL_Color{255, 255, 255, 180}));
-    REQUIRE(fill_texture_rect(renderer, base, 12, 0, 12, 24, SDL_Color{255, 255, 255, 255}));
-
-    LayerEffectProcessor processor(renderer);
-    LayerEffectProcessor::LayerLightingParams lighting{};
-    lighting.enabled = true;
-    lighting.ambient_color = SDL_Color{8, 8, 10, 255};
-
-    LayerEffectProcessor::RuntimeLight light{};
-    light.screen_center = SDL_FPoint{12.0f, 12.0f};
-    light.color = SDL_Color{255, 245, 220, 255};
-    light.intensity = 0.75f;
-    light.radius_px = 10.0f;
-    light.falloff = 1.6f;
-    light.world_z = 40.0f;
-
-    LayerEffectProcessor::LayerScratchTextures scratch{};
-    scratch.dark_mask_texture = dark_mask;
-
-    processor.process_layer(base,
-                            output,
-                            20.0,
-                            60.0,
-                            lighting,
-                            std::vector<LayerEffectProcessor::RuntimeLight>{light},
-                            LayerEffectProcessor::LayerFogParams{},
-                            scratch);
-
-    std::vector<SDL_Color> without_fog_mask{};
-    REQUIRE(capture_texture_pixels(renderer, dark_mask, kW, kH, without_fog_mask));
-
-    LayerEffectProcessor::LayerFogParams fog{};
-    fog.enabled = true;
-    fog.normalized_depth = 0.85f;
-    fog.bottom_y_px = static_cast<float>(kH);
-    fog.tint = SDL_Color{225, 234, 242, 255};
-
-    const LayerEffectProcessor::LayerProcessResult with_fog = processor.process_layer(
-        base,
-        output,
-        20.0,
-        60.0,
-        lighting,
-        std::vector<LayerEffectProcessor::RuntimeLight>{light},
-        fog,
-        scratch);
-    CHECK(with_fog.fog_applied);
-
-    std::vector<SDL_Color> with_fog_mask{};
-    REQUIRE(capture_texture_pixels(renderer, dark_mask, kW, kH, with_fog_mask));
-    REQUIRE(without_fog_mask.size() == with_fog_mask.size());
-    for (std::size_t i = 0; i < without_fog_mask.size(); ++i) {
-        CHECK(without_fog_mask[i].r == with_fog_mask[i].r);
-        CHECK(without_fog_mask[i].g == with_fog_mask[i].g);
-        CHECK(without_fog_mask[i].b == with_fog_mask[i].b);
-        CHECK(without_fog_mask[i].a == with_fog_mask[i].a);
-    }
-
-    SDL_DestroyTexture(dark_mask);
-    SDL_DestroyTexture(output);
-    SDL_DestroyTexture(base);
-}
-
-TEST_CASE("LayerEffectProcessor fog never draws below bottom_y_px") {
-    ScopedRenderer renderer_scope;
-    REQUIRE(renderer_scope.ready());
-
-    SDL_Renderer* renderer = renderer_scope.get();
-    REQUIRE(renderer != nullptr);
-
-    constexpr int kW = 48;
-    constexpr int kH = 48;
-    constexpr int kFogBottom = 22;
-    SDL_Texture* base = create_target_texture(renderer, kW, kH);
-    SDL_Texture* output = create_target_texture(renderer, kW, kH);
-    REQUIRE(base != nullptr);
-    REQUIRE(output != nullptr);
-    REQUIRE(clear_texture(renderer, base, SDL_Color{0, 0, 0, 0}));
-
-    LayerEffectProcessor processor(renderer);
-    LayerEffectProcessor::LayerLightingParams lighting{};
-    lighting.enabled = false;
-
-    LayerEffectProcessor::LayerFogParams fog{};
-    fog.enabled = true;
-    fog.normalized_depth = 1.0f;
-    fog.bottom_y_px = static_cast<float>(kFogBottom);
-    fog.thickness = 1.8f;
-    fog.tint = SDL_Color{225, 234, 242, 255};
-
-    const LayerEffectProcessor::LayerProcessResult result = processor.process_layer(
-        base,
-        output,
-        -10.0,
-        10.0,
-        lighting,
-        {},
-        fog,
-        LayerEffectProcessor::LayerScratchTextures{});
-    CHECK(result.fog_applied);
-
-    std::vector<SDL_Color> pixels{};
-    REQUIRE(capture_texture_pixels(renderer, output, kW, kH, pixels));
-    REQUIRE(pixels.size() == static_cast<std::size_t>(kW * kH));
-
-    const auto row_has_alpha = [&](int y) {
-        int alpha_sum = 0;
-        for (int x = 0; x < kW; ++x) {
-            alpha_sum += pixels[static_cast<std::size_t>(y * kW + x)].a;
-        }
-        return alpha_sum > 0;
-    };
-
-    CHECK(row_has_alpha(kFogBottom - 2));
-    for (int y = kFogBottom; y < kH; ++y) {
-        CHECK_FALSE(row_has_alpha(y));
-    }
-
-    SDL_DestroyTexture(output);
-    SDL_DestroyTexture(base);
-}
-
-TEST_CASE("LayerEffectProcessor fog bottom edge uses a soft cutoff profile") {
-    ScopedRenderer renderer_scope;
-    REQUIRE(renderer_scope.ready());
-
-    SDL_Renderer* renderer = renderer_scope.get();
-    REQUIRE(renderer != nullptr);
-
-    constexpr int kW = 64;
-    constexpr int kH = 80;
-    constexpr int kFogBottom = 60;
-    SDL_Texture* base = create_target_texture(renderer, kW, kH);
-    SDL_Texture* output = create_target_texture(renderer, kW, kH);
-    REQUIRE(base != nullptr);
-    REQUIRE(output != nullptr);
-    REQUIRE(clear_texture(renderer, base, SDL_Color{0, 0, 0, 0}));
-
-    LayerEffectProcessor processor(renderer);
-    LayerEffectProcessor::LayerLightingParams lighting{};
-    lighting.enabled = false;
-
-    LayerEffectProcessor::LayerFogParams fog{};
-    fog.enabled = true;
-    fog.normalized_depth = 1.0f;
-    fog.bottom_y_px = static_cast<float>(kFogBottom);
-    fog.thickness = 1.8f;
-    fog.tint = SDL_Color{225, 234, 242, 255};
-
-    const LayerEffectProcessor::LayerProcessResult result = processor.process_layer(
-        base,
-        output,
-        -10.0,
-        10.0,
-        lighting,
-        {},
-        fog,
-        LayerEffectProcessor::LayerScratchTextures{});
-    CHECK(result.fog_applied);
-
-    std::vector<SDL_Color> pixels{};
-    REQUIRE(capture_texture_pixels(renderer, output, kW, kH, pixels));
-    REQUIRE(pixels.size() == static_cast<std::size_t>(kW * kH));
-
-    const auto row_mean_alpha = [&](int y) -> float {
-        int alpha_sum = 0;
-        for (int x = 0; x < kW; ++x) {
-            alpha_sum += pixels[static_cast<std::size_t>(y * kW + x)].a;
-        }
-        return static_cast<float>(alpha_sum) / static_cast<float>(kW);
-    };
-
-    const float mid_alpha = row_mean_alpha(40);
-    const float near_bottom_alpha = row_mean_alpha(kFogBottom - 2);
-    const float below_bottom_alpha = row_mean_alpha(kFogBottom);
-
-    CHECK(mid_alpha > near_bottom_alpha);
-    CHECK(near_bottom_alpha > 0.0f);
-    CHECK(below_bottom_alpha == 0.0f);
-
-    SDL_DestroyTexture(output);
-    SDL_DestroyTexture(base);
-}
-
-TEST_CASE("LayerEffectProcessor fog cycle reuses variants with per-layer offset diversity") {
-    ScopedRenderer renderer_scope;
-    REQUIRE(renderer_scope.ready());
-
-    SDL_Renderer* renderer = renderer_scope.get();
-    REQUIRE(renderer != nullptr);
-
-    constexpr int kW = 64;
-    constexpr int kH = 72;
-    constexpr int kFogBottom = 52;
-    SDL_Texture* base = create_target_texture(renderer, kW, kH);
-    SDL_Texture* output = create_target_texture(renderer, kW, kH);
-    REQUIRE(base != nullptr);
-    REQUIRE(output != nullptr);
-    REQUIRE(clear_texture(renderer, base, SDL_Color{0, 0, 0, 0}));
-
-    LayerEffectProcessor processor(renderer);
-    LayerEffectProcessor::LayerLightingParams lighting{};
-    lighting.enabled = false;
-
-    auto render_fog_pixels = [&](int layer_cycle_index) -> std::vector<SDL_Color> {
-        LayerEffectProcessor::LayerFogParams fog{};
-        fog.enabled = true;
-        fog.normalized_depth = 1.0f;
-        fog.bottom_y_px = static_cast<float>(kFogBottom);
-        fog.thickness = 1.8f;
-        fog.layer_cycle_index = layer_cycle_index;
-        fog.bottom_opacity_curve = 1.0f;
-        fog.tint = SDL_Color{225, 234, 242, 255};
-
-        const LayerEffectProcessor::LayerProcessResult result = processor.process_layer(
-            base,
-            output,
-            -10.0,
-            10.0,
-            lighting,
-            {},
-            fog,
-            LayerEffectProcessor::LayerScratchTextures{});
-        CHECK(result.fog_applied);
-
-        std::vector<SDL_Color> pixels{};
-        REQUIRE(capture_texture_pixels(renderer, output, kW, kH, pixels));
-        return pixels;
-    };
-
-    const std::vector<SDL_Color> cycle0 = render_fog_pixels(0);
-    const std::vector<SDL_Color> cycle1 = render_fog_pixels(1);
-    const std::vector<SDL_Color> cycle6 = render_fog_pixels(6);
-    REQUIRE(cycle0.size() == cycle1.size());
-    REQUIRE(cycle0.size() == cycle6.size());
-
-    int diff_count_0_1 = 0;
-    int diff_count_0_6 = 0;
-    for (std::size_t i = 0; i < cycle0.size(); ++i) {
-        if (cycle0[i].a != cycle1[i].a || cycle0[i].r != cycle1[i].r || cycle0[i].g != cycle1[i].g || cycle0[i].b != cycle1[i].b) {
-            ++diff_count_0_1;
-        }
-        if (cycle0[i].a != cycle6[i].a || cycle0[i].r != cycle6[i].r || cycle0[i].g != cycle6[i].g || cycle0[i].b != cycle6[i].b) {
-            ++diff_count_0_6;
-        }
-    }
-
-    CHECK(diff_count_0_1 > (kW * kH) / 32);
-    CHECK(diff_count_0_6 > (kW * kH) / 32);
-
-    SDL_DestroyTexture(output);
-    SDL_DestroyTexture(base);
-}
-
-TEST_CASE("LayerEffectProcessor fog bottom curve controls opacity ramp rate") {
-    ScopedRenderer renderer_scope;
-    REQUIRE(renderer_scope.ready());
-
-    SDL_Renderer* renderer = renderer_scope.get();
-    REQUIRE(renderer != nullptr);
-
-    constexpr int kW = 64;
-    constexpr int kH = 96;
-    constexpr int kFogBottom = 70;
-    SDL_Texture* base = create_target_texture(renderer, kW, kH);
-    SDL_Texture* output = create_target_texture(renderer, kW, kH);
-    REQUIRE(base != nullptr);
-    REQUIRE(output != nullptr);
-    REQUIRE(clear_texture(renderer, base, SDL_Color{0, 0, 0, 0}));
-
-    LayerEffectProcessor processor(renderer);
-    LayerEffectProcessor::LayerLightingParams lighting{};
-    lighting.enabled = false;
-
-    auto render_and_row_alpha = [&](float bottom_curve, int y) -> float {
-        LayerEffectProcessor::LayerFogParams fog{};
-        fog.enabled = true;
-        fog.normalized_depth = 1.0f;
-        fog.bottom_y_px = static_cast<float>(kFogBottom);
-        fog.thickness = 1.8f;
-        fog.layer_cycle_index = 2;
-        fog.bottom_opacity_curve = bottom_curve;
-        fog.tint = SDL_Color{225, 234, 242, 255};
-
-        const LayerEffectProcessor::LayerProcessResult result = processor.process_layer(
-            base,
-            output,
-            -10.0,
-            10.0,
-            lighting,
-            {},
-            fog,
-            LayerEffectProcessor::LayerScratchTextures{});
-        CHECK(result.fog_applied);
-
-        std::vector<SDL_Color> pixels{};
-        REQUIRE(capture_texture_pixels(renderer, output, kW, kH, pixels));
-        int alpha_sum = 0;
-        for (int x = 0; x < kW; ++x) {
-            alpha_sum += pixels[static_cast<std::size_t>(y * kW + x)].a;
-        }
-        return static_cast<float>(alpha_sum) / static_cast<float>(kW);
-    };
-
-    const float low_curve_near_bottom = render_and_row_alpha(0.35f, kFogBottom - 2);
-    const float high_curve_near_bottom = render_and_row_alpha(2.5f, kFogBottom - 2);
-
-    CHECK(low_curve_near_bottom > high_curve_near_bottom);
-    CHECK(low_curve_near_bottom > 0.0f);
-    CHECK(high_curve_near_bottom >= 0.0f);
-
     SDL_DestroyTexture(output);
     SDL_DestroyTexture(base);
 }
@@ -970,7 +632,7 @@ TEST_CASE("LayerEffectProcessor zero blur radii copy the source exactly") {
     SDL_DestroyTexture(source);
 }
 
-TEST_CASE("LayerEffectProcessor applies lighting and fog") {
+TEST_CASE("LayerEffectProcessor applies lighting") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
     if (!supports_alpha_preserving_pipeline_blends()) {
@@ -1003,12 +665,6 @@ TEST_CASE("LayerEffectProcessor applies lighting and fog") {
     light.falloff = 1.7f;
     light.world_z = 20.0f;
 
-    LayerEffectProcessor::LayerFogParams fog{};
-    fog.enabled = true;
-    fog.normalized_depth = 1.0f;
-    fog.bottom_y_px = static_cast<float>(kH);
-    fog.tint = SDL_Color{225, 234, 242, 255};
-
     LayerEffectProcessor::LayerScratchTextures scratch{};
     scratch.dark_mask_texture = dark_mask;
 
@@ -1019,11 +675,9 @@ TEST_CASE("LayerEffectProcessor applies lighting and fog") {
         40.0,
         lighting,
         std::vector<LayerEffectProcessor::RuntimeLight>{light},
-        fog,
         scratch);
 
     CHECK(result.lighting_applied);
-    CHECK(result.fog_applied);
 
     SDL_Color center{};
     REQUIRE(read_pixel(renderer, output, 12, 12, center));

@@ -94,36 +94,36 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
     return (world_z - anchor_world_z) * sign;
 }
 
-bool runtime_floor_box_contributes_boundary(const Asset::RuntimeFloorBox& floor_box) {
-    return floor_box.enabled &&
-           floor_box.has_boundary_tag() &&
-           std::isfinite(floor_box.width) &&
-           std::isfinite(floor_box.depth) &&
-           floor_box.width > 0.0f &&
-           floor_box.depth > 0.0f;
+bool runtime_impassable_volume_contributes(const Asset::RuntimeBoxVolume& volume) {
+    return volume.enabled && volume.valid;
 }
 
-bool build_boundary_floor_box_area_for_box(const Asset& asset,
-                                           const Asset::RuntimeFloorBox& boundary_box,
-                                           Area& out_area) {
-    if (!runtime_floor_box_contributes_boundary(boundary_box)) {
+bool build_impassable_area_for_volume(const Asset& asset,
+                                      const Asset::RuntimeBoxVolume& volume,
+                                      Area& out_area) {
+    if (!runtime_impassable_volume_contributes(volume)) {
         return false;
     }
 
-    const float width = boundary_box.width;
-    const float depth = boundary_box.depth;
-    if (!std::isfinite(width) || !std::isfinite(depth) || width <= 0.0f || depth <= 0.0f) {
-        return false;
+    float min_x = std::numeric_limits<float>::max();
+    float max_x = std::numeric_limits<float>::lowest();
+    float min_z = std::numeric_limits<float>::max();
+    float max_z = std::numeric_limits<float>::lowest();
+    for (const auto& point : volume.world_points) {
+        if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
+            continue;
+        }
+        min_x = std::min(min_x, point.x);
+        max_x = std::max(max_x, point.x);
+        min_z = std::min(min_z, point.y);
+        max_z = std::max(max_z, point.y);
     }
 
-    const double half_w = static_cast<double>(width) * 0.5;
-    const double half_d = static_cast<double>(depth) * 0.5;
-    const double center_x = static_cast<double>(asset.world_x()) + static_cast<double>(boundary_box.position_x);
-    const double center_z = static_cast<double>(asset.world_z()) + static_cast<double>(boundary_box.position_z);
-    const double min_x = center_x - half_w;
-    const double max_x = center_x + half_w;
-    const double min_z = center_z - half_d;
-    const double max_z = center_z + half_d;
+    if (!std::isfinite(min_x) || !std::isfinite(max_x) ||
+        !std::isfinite(min_z) || !std::isfinite(max_z) ||
+        max_x <= min_x || max_z <= min_z) {
+        return false;
+    }
 
     std::vector<Area::Point> points;
     points.reserve(4);
@@ -137,7 +137,6 @@ bool build_boundary_floor_box_area_for_box(const Asset& asset,
     }
 
     out_area = Area("impassable", points, asset.grid_resolution);
-    out_area.set_type(std::string(asset_types::boundary));
     return true;
 }
 
@@ -990,16 +989,12 @@ void Assets::rebuild_frame_collision_context() const {
         if (!asset || asset->dead || !asset->info || !asset->affects_collision_context()) {
             continue;
         }
-
-        std::size_t boundary_floor_box_count = 0;
-        if (asset->isFloorBoxesEnabled()) {
-            for (const auto& floor_box : asset->getFloorBoxes()) {
-                if (runtime_floor_box_contributes_boundary(floor_box)) {
-                    ++boundary_floor_box_count;
-                }
+        const auto& impassable_volumes = asset->current_impassable_box_volumes();
+        for (const auto& volume : impassable_volumes) {
+            if (runtime_impassable_volume_contributes(volume)) {
+                ++estimated_entry_count;
             }
         }
-        estimated_entry_count += boundary_floor_box_count > 0 ? boundary_floor_box_count : 1;
     }
 
     frame_collision_entries_.clear();
@@ -1019,8 +1014,6 @@ void Assets::rebuild_frame_collision_context() const {
         if (!asset || asset->dead || !asset->info || !asset->affects_collision_context()) {
             continue;
         }
-
-        const std::string canonical_type = asset_types::canonicalize(asset->info->type);
 
         auto push_collision_entry = [&](Area collision, const std::string& resolved_type, SDL_Point world_center) {
             if (collision.get_points().empty()) {
@@ -1046,38 +1039,15 @@ void Assets::rebuild_frame_collision_context() const {
             frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
         };
 
-        bool has_floor_boundary_area = false;
-        if (asset->isFloorBoxesEnabled()) {
-            for (const auto& floor_box : asset->getFloorBoxes()) {
-                Area area{"impassable"};
-                if (!build_boundary_floor_box_area_for_box(*asset, floor_box, area)) {
-                    continue;
-                }
-                has_floor_boundary_area = true;
-                const SDL_Point center = area.get_center();
-                push_collision_entry(std::move(area), std::string(asset_types::boundary), center);
+        const auto& impassable_volumes = asset->current_impassable_box_volumes();
+        for (const auto& volume : impassable_volumes) {
+            Area area{"impassable"};
+            if (!build_impassable_area_for_volume(*asset, volume, area)) {
+                continue;
             }
+            const SDL_Point center = area.get_center();
+            push_collision_entry(std::move(area), std::string("impassable_box"), center);
         }
-
-        if (has_floor_boundary_area) {
-            continue;
-        }
-
-        const bool impassable =
-            canonical_type == asset_types::boundary ||
-            canonical_type == asset_types::enemy ||
-            canonical_type == asset_types::npc ||
-            !asset->info->passable;
-        if (!impassable || canonical_type == asset_types::player) {
-            continue;
-        }
-
-        Area collision = asset->get_area("impassable");
-        if (collision.get_points().empty()) {
-            collision = asset->get_area("collision_area");
-        }
-        const SDL_Point world_center = asset->world_xz_point();
-        push_collision_entry(std::move(collision), canonical_type, world_center);
     }
 
     frame_collision_context_frame_id_ = frame_id_;

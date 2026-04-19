@@ -66,6 +66,8 @@ constexpr const char* kOvalCenterSuffix = "_oval_center";
 constexpr const char* kMovementEnabledKey = "movement_enabled";
 constexpr const char* kAttackBoxEnabledKey = "attack_box_enabled";
 constexpr const char* kHitboxEnabledKey = "hitbox_enabled";
+constexpr const char* kImpassableBoxEnabledKey = "impassable_box_enabled";
+constexpr const char* kImpassableBoxesKey = "impassable_boxes";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
 constexpr const char* kBoundaryTag = "boundary";
@@ -124,6 +126,18 @@ std::vector<std::string> parse_normalized_tag_list(const nlohmann::json& payload
         raw.push_back(payload.get<std::string>());
     }
     return normalize_tag_list(raw);
+}
+
+std::vector<std::string> strip_floor_boundary_tag(const std::vector<std::string>& tags) {
+    std::vector<std::string> filtered;
+    filtered.reserve(tags.size());
+    for (const auto& tag : tags) {
+        if (tag == kBoundaryTag) {
+            continue;
+        }
+        filtered.push_back(tag);
+    }
+    return filtered;
 }
 
 std::string sanitize_floor_box_token(std::string value) {
@@ -192,10 +206,7 @@ std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json&
         box.depth = std::max(0.0f, sanitize_finite_float(entry.value("depth", 0.0f), 0.0f));
         box.enabled = entry.value("enabled", true);
         box.tags = parse_normalized_tag_list(entry.value("tags", nlohmann::json::array()));
-        if (entry.value("is_boundary", false)) {
-            box.tags.push_back(std::string(kBoundaryTag));
-            box.tags = normalize_tag_list(box.tags);
-        }
+        box.tags = strip_floor_boundary_tag(box.tags);
 
         boxes.push_back(std::move(box));
     }
@@ -228,7 +239,7 @@ AssetInfo::FloorBox sanitize_floor_box_for_save(const AssetInfo::FloorBox& raw_b
     sanitized.width = std::max(0.0f, sanitize_finite_float(raw_box.width, 0.0f));
     sanitized.depth = std::max(0.0f, sanitize_finite_float(raw_box.depth, 0.0f));
     sanitized.enabled = raw_box.enabled;
-    sanitized.tags = normalize_tag_list(raw_box.tags);
+    sanitized.tags = strip_floor_boundary_tag(normalize_tag_list(raw_box.tags));
     return sanitized;
 }
 
@@ -249,6 +260,200 @@ nlohmann::json encode_floor_boxes_payload(const std::vector<AssetInfo::FloorBox>
         entry["enabled"] = box.enabled;
         entry["tags"] = box.tags;
         payload.push_back(std::move(entry));
+    }
+    return payload;
+}
+
+int read_impassable_box_int(const nlohmann::json& node, const char* key, int fallback) {
+    if (!node.is_object() || !node.contains(key)) {
+        return fallback;
+    }
+    const auto& value = node[key];
+    if (value.is_number_integer()) {
+        return value.get<int>();
+    }
+    if (value.is_number_float()) {
+        return static_cast<int>(std::lround(value.get<double>()));
+    }
+    return fallback;
+}
+
+int read_impassable_box_int_from_path(const nlohmann::json& node,
+                                      const char* outer_key,
+                                      const char* inner_key,
+                                      int fallback) {
+    if (!node.is_object() || !node.contains(outer_key) || !node[outer_key].is_object()) {
+        return fallback;
+    }
+    return read_impassable_box_int(node[outer_key], inner_key, fallback);
+}
+
+animation_update::FrameBoxRect parse_impassable_box_rect(const nlohmann::json& node) {
+    if (!node.is_object()) {
+        return animation_update::FrameBoxRect{};
+    }
+
+    const bool has_position = node.contains("position") && node["position"].is_object();
+    const bool has_size = node.contains("size") && node["size"].is_object();
+    if (has_position && has_size) {
+        const int x = read_impassable_box_int_from_path(node, "position", "x", 0);
+        const int y = read_impassable_box_int_from_path(node, "position", "y", 0);
+        const int w = std::max(0, read_impassable_box_int_from_path(node, "size", "w", 0));
+        const int h = std::max(0, read_impassable_box_int_from_path(node, "size", "h", 0));
+        return animation_update::FrameBoxRect{x, y, x + w, y + h}.normalized_clamped();
+    }
+
+    std::vector<animation_update::FrameBoxCorner> corners;
+    if (node.contains("corners") && node["corners"].is_array()) {
+        corners.reserve(node["corners"].size());
+        for (const auto& corner_node : node["corners"]) {
+            if (!corner_node.is_object()) {
+                continue;
+            }
+            corners.push_back(animation_update::FrameBoxCorner{
+                std::max(0, read_impassable_box_int(corner_node, "texture_x", 0)),
+                std::max(0, read_impassable_box_int(corner_node, "texture_y", 0)),
+            });
+        }
+    }
+    if (!corners.empty()) {
+        return animation_update::FrameBoxRect::from_points(corners);
+    }
+    return animation_update::FrameBoxRect{};
+}
+
+std::string default_impassable_box_id(std::size_t index) {
+    return std::string("impassable_box_") + std::to_string(index + 1);
+}
+
+std::string default_impassable_box_name(std::size_t index) {
+    return std::string("Impassable Box ") + std::to_string(index + 1);
+}
+
+std::vector<animation_update::FrameHitBox> parse_impassable_boxes_payload(const nlohmann::json& payload) {
+    std::vector<animation_update::FrameHitBox> boxes;
+    if (!payload.is_array()) {
+        return boxes;
+    }
+
+    std::unordered_set<std::string> used_ids;
+    std::unordered_set<std::string> used_names;
+    boxes.reserve(payload.size());
+    for (std::size_t index = 0; index < payload.size(); ++index) {
+        const auto& entry = payload[index];
+        if (!entry.is_object()) {
+            continue;
+        }
+
+        animation_update::FrameHitBox box{};
+        std::string id = sanitize_floor_box_token(entry.value("id", std::string{}));
+        if (id.empty()) {
+            id = default_impassable_box_id(index);
+        }
+        std::string unique_id = id;
+        for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
+            unique_id = id + "_" + std::to_string(suffix);
+        }
+        box.id = unique_id;
+
+        std::string name = trim_copy(entry.value("name", std::string{}));
+        if (name.empty()) {
+            name = default_impassable_box_name(index);
+        }
+        std::string unique_name = name;
+        for (int suffix = 2; !used_names.insert(unique_name).second; ++suffix) {
+            unique_name = name + " " + std::to_string(suffix);
+        }
+        box.name = unique_name;
+
+        box.type = "impassable_box";
+        box.enabled = entry.value("enabled", true);
+        box.extrusion_amount = std::max(0, read_impassable_box_int(entry, "extrusion_amount", 0));
+        box.anchor_link = trim_copy(entry.value("anchor_link", std::string{}));
+        box.set_rotation_degrees(sanitize_finite_float(entry.value("rotation_degrees", 0.0f), 0.0f));
+        box.frame_start = 0;
+        box.frame_end = 0;
+        box.set_rect(parse_impassable_box_rect(entry));
+
+        if (box.is_valid()) {
+            boxes.push_back(std::move(box));
+        }
+    }
+    return boxes;
+}
+
+animation_update::FrameHitBox sanitize_impassable_box_for_save(
+    const animation_update::FrameHitBox& raw_box,
+    std::size_t index,
+    std::unordered_set<std::string>& used_ids,
+    std::unordered_set<std::string>& used_names) {
+    animation_update::FrameHitBox sanitized = raw_box;
+    sanitized.type = "impassable_box";
+    sanitized.enabled = raw_box.enabled;
+    sanitized.extrusion_amount = std::max(0, raw_box.extrusion_amount);
+    sanitized.anchor_link = trim_copy(raw_box.anchor_link);
+    sanitized.set_rotation_degrees(raw_box.rotation_degrees);
+    sanitized.frame_start = 0;
+    sanitized.frame_end = 0;
+    sanitized.set_rect(raw_box.rect);
+
+    std::string id = sanitize_floor_box_token(trim_copy(raw_box.id));
+    if (id.empty()) {
+        id = default_impassable_box_id(index);
+    }
+    std::string unique_id = id;
+    for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
+        unique_id = id + "_" + std::to_string(suffix);
+    }
+    sanitized.id = unique_id;
+
+    std::string name = trim_copy(raw_box.name);
+    if (name.empty()) {
+        name = default_impassable_box_name(index);
+    }
+    std::string unique_name = name;
+    for (int suffix = 2; !used_names.insert(unique_name).second; ++suffix) {
+        unique_name = name + " " + std::to_string(suffix);
+    }
+    sanitized.name = unique_name;
+
+    return sanitized;
+}
+
+nlohmann::json encode_impassable_boxes_payload(const std::vector<animation_update::FrameHitBox>& boxes) {
+    nlohmann::json payload = nlohmann::json::array();
+    std::unordered_set<std::string> used_ids;
+    std::unordered_set<std::string> used_names;
+    used_ids.reserve(boxes.size());
+    used_names.reserve(boxes.size());
+    for (std::size_t index = 0; index < boxes.size(); ++index) {
+        const auto box = sanitize_impassable_box_for_save(boxes[index], index, used_ids, used_names);
+        nlohmann::json node = nlohmann::json::object();
+        node["id"] = box.id;
+        node["type"] = "impassable_box";
+        node["name"] = box.name;
+        node["enabled"] = box.enabled;
+        node["extrusion_amount"] = box.extrusion_amount;
+        node["anchor_link"] = box.anchor_link;
+        node["rotation_degrees"] = box.normalized_rotation_degrees();
+        node["position"] = nlohmann::json::object({
+            {"x", box.rect.left},
+            {"y", box.rect.top},
+        });
+        node["size"] = nlohmann::json::object({
+            {"w", std::max(0, box.rect.width())},
+            {"h", std::max(0, box.rect.height())},
+        });
+        nlohmann::json corners = nlohmann::json::array();
+        const auto runtime_corners = box.to_runtime_clockwise_points();
+        for (const auto& corner : runtime_corners) {
+            corners.push_back(nlohmann::json::object({
+                {"texture_x", std::max(0, corner.texture_x)},
+                {"texture_y", std::max(0, corner.texture_y)},
+            }));
+        }
+        node["corners"] = std::move(corners);
+        payload.push_back(std::move(node));
     }
     return payload;
 }
@@ -2086,6 +2291,7 @@ nlohmann::json AssetInfo::manifest_payload() const {
         payload[kMovementEnabledKey] = movement_enabled;
         payload[kAttackBoxEnabledKey] = attack_box_enabled;
         payload[kHitboxEnabledKey] = hitbox_enabled;
+        payload[kImpassableBoxEnabledKey] = impassable_box_enabled;
         payload[kFloorBoxesEnabledKey] = floor_boxes_enabled;
         if (floor_boxes_enabled) {
                 const nlohmann::json floor_payload = encode_floor_boxes_payload(floor_boxes);
@@ -2096,6 +2302,16 @@ nlohmann::json AssetInfo::manifest_payload() const {
                 }
         } else {
                 payload.erase(kFloorBoxesKey);
+        }
+        if (impassable_box_enabled) {
+                const nlohmann::json impassable_payload = encode_impassable_boxes_payload(impassable_boxes);
+                if (!impassable_payload.empty()) {
+                        payload[kImpassableBoxesKey] = impassable_payload;
+                } else {
+                        payload.erase(kImpassableBoxesKey);
+                }
+        } else {
+                payload.erase(kImpassableBoxesKey);
         }
         payload["weight_kg"] = weight_kg;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
@@ -2532,12 +2748,16 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         hitbox_enabled = data.contains(kHitboxEnabledKey) && data[kHitboxEnabledKey].is_boolean()
             ? data[kHitboxEnabledKey].get<bool>()
             : false;
+        impassable_box_enabled = data.contains(kImpassableBoxEnabledKey) && data[kImpassableBoxEnabledKey].is_boolean()
+            ? data[kImpassableBoxEnabledKey].get<bool>()
+            : false;
         floor_boxes_enabled = data.contains(kFloorBoxesEnabledKey) && data[kFloorBoxesEnabledKey].is_boolean()
             ? data[kFloorBoxesEnabledKey].get<bool>()
             : false;
         info_json_[kMovementEnabledKey] = movement_enabled;
         info_json_[kAttackBoxEnabledKey] = attack_box_enabled;
         info_json_[kHitboxEnabledKey] = hitbox_enabled;
+        info_json_[kImpassableBoxEnabledKey] = impassable_box_enabled;
         info_json_[kFloorBoxesEnabledKey] = floor_boxes_enabled;
 
         floor_boxes.clear();
@@ -2551,6 +2771,18 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 }
         } else {
                 info_json_.erase(kFloorBoxesKey);
+        }
+        impassable_boxes.clear();
+        if (impassable_box_enabled && data.contains(kImpassableBoxesKey) && data[kImpassableBoxesKey].is_array()) {
+                impassable_boxes = parse_impassable_boxes_payload(data[kImpassableBoxesKey]);
+                const nlohmann::json impassable_payload = encode_impassable_boxes_payload(impassable_boxes);
+                if (!impassable_payload.empty()) {
+                        info_json_[kImpassableBoxesKey] = impassable_payload;
+                } else {
+                        info_json_.erase(kImpassableBoxesKey);
+                }
+        } else {
+                info_json_.erase(kImpassableBoxesKey);
         }
         if (data.contains(kAnchorPointChildCandidatesKey)) {
                 set_anchor_point_child_candidates_payload(data[kAnchorPointChildCandidatesKey]);
@@ -3585,12 +3817,19 @@ bool AssetInfo::reload_animations_from_disk() {
         hitbox_enabled = payload.contains(kHitboxEnabledKey) && payload[kHitboxEnabledKey].is_boolean()
             ? payload[kHitboxEnabledKey].get<bool>()
             : false;
+        impassable_box_enabled = payload.contains(kImpassableBoxEnabledKey) && payload[kImpassableBoxEnabledKey].is_boolean()
+            ? payload[kImpassableBoxEnabledKey].get<bool>()
+            : false;
         floor_boxes_enabled = payload.contains(kFloorBoxesEnabledKey) && payload[kFloorBoxesEnabledKey].is_boolean()
             ? payload[kFloorBoxesEnabledKey].get<bool>()
             : false;
         floor_boxes.clear();
         if (floor_boxes_enabled && payload.contains(kFloorBoxesKey) && payload[kFloorBoxesKey].is_array()) {
             floor_boxes = parse_floor_boxes_payload(payload[kFloorBoxesKey]);
+        }
+        impassable_boxes.clear();
+        if (impassable_box_enabled && payload.contains(kImpassableBoxesKey) && payload[kImpassableBoxesKey].is_array()) {
+            impassable_boxes = parse_impassable_boxes_payload(payload[kImpassableBoxesKey]);
         }
 
         load_animations(payload);
@@ -3614,6 +3853,7 @@ bool AssetInfo::reload_animations_from_disk() {
         info_json_[kMovementEnabledKey] = movement_enabled;
         info_json_[kAttackBoxEnabledKey] = attack_box_enabled;
         info_json_[kHitboxEnabledKey] = hitbox_enabled;
+        info_json_[kImpassableBoxEnabledKey] = impassable_box_enabled;
         info_json_[kFloorBoxesEnabledKey] = floor_boxes_enabled;
         if (floor_boxes_enabled) {
             const nlohmann::json floor_payload = encode_floor_boxes_payload(floor_boxes);
@@ -3624,6 +3864,16 @@ bool AssetInfo::reload_animations_from_disk() {
             }
         } else {
             info_json_.erase(kFloorBoxesKey);
+        }
+        if (impassable_box_enabled) {
+            const nlohmann::json impassable_payload = encode_impassable_boxes_payload(impassable_boxes);
+            if (!impassable_payload.empty()) {
+                info_json_[kImpassableBoxesKey] = impassable_payload;
+            } else {
+                info_json_.erase(kImpassableBoxesKey);
+            }
+        } else {
+            info_json_.erase(kImpassableBoxesKey);
         }
         info_json_["start"] = start_animation;
         return true;

@@ -16,6 +16,7 @@ public:
     enum class Kind {
         HitBox,
         AttackBox,
+        ImpassableBox,
     };
 
     enum class PropagationScope {
@@ -57,6 +58,7 @@ public:
     bool onion_skin_enabled() const;
     void set_system_enabled(bool enabled);
     bool system_enabled() const;
+    void set_propagation_visible(bool visible);
 
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
@@ -79,6 +81,7 @@ private:
 
 private:
     Kind kind_ = Kind::HitBox;
+    bool propagation_visible_ = true;
     bool visible_ = false;
     int screen_w_ = 0;
     int screen_h_ = 0;

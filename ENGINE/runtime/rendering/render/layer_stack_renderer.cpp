@@ -266,8 +266,6 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
     lighting_params.enabled = runtime_lighting_enabled;
     lighting_params.ambient_color = SDL_Color{18, 20, 24, 255};
 
-    LayerEffectProcessor::LayerFogParams fog_params{};
-
     for (int layer_index : build.non_empty_layers) {
         if (layer_index < 0 || layer_index >= build.layer_count) {
             continue;
@@ -302,7 +300,6 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             depth_max,
             lighting_params,
             biased_lights,
-            fog_params,
             scratch);
 
 

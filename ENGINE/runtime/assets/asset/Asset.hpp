@@ -355,22 +355,22 @@ class Asset {
         float width = 0.0f;
         float depth = 0.0f;
         bool enabled = true;
-        bool boundary_tag = false;
         std::vector<std::string> tags;
 
         bool has_tag(const std::string& tag) const;
-        bool has_boundary_tag() const { return boundary_tag; }
     };
 
     bool isMovementEnabled() const;
     bool isHitboxEnabled() const;
     bool isAttackBoxEnabled() const;
+    bool isImpassableBoxEnabled() const;
     bool isFloorBoxesEnabled() const;
     bool affects_collision_context() const;
     const std::vector<RuntimeFloorBox>& getFloorBoxes() const;
 
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
     const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
+    const std::vector<RuntimeBoxVolume>& current_impassable_box_volumes() const { return current_impassable_box_volumes_; }
     void test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     void test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     const RuntimeBoxVolume* find_hit_box_volume(const std::string& name) const;
@@ -574,6 +574,7 @@ private:
     std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
     std::vector<RuntimeBoxVolume> current_hit_box_volumes_;
     std::vector<RuntimeBoxVolume> current_attack_box_volumes_;
+    std::vector<RuntimeBoxVolume> current_impassable_box_volumes_;
     std::vector<RuntimeFloorBox> floor_boxes_;
     std::unordered_map<std::string, std::size_t> runtime_hit_box_lookup_;
     std::unordered_map<std::string, std::size_t> runtime_attack_box_lookup_;

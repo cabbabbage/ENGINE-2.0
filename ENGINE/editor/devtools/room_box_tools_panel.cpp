@@ -40,7 +40,23 @@ const char* corner_label_for_index(int index) {
 
 RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     : kind_(kind) {
-    add_button_ = std::make_unique<DMButton>(kind_ == Kind::HitBox ? "Add Hit Box" : "Add Attack Box",
+    const char* add_label = "Add Hit Box";
+    const char* enabled_label = "Hit Boxes Enabled";
+    switch (kind_) {
+        case Kind::HitBox:
+            add_label = "Add Hit Box";
+            enabled_label = "Hit Boxes Enabled";
+            break;
+        case Kind::AttackBox:
+            add_label = "Add Attack Box";
+            enabled_label = "Attack Boxes Enabled";
+            break;
+        case Kind::ImpassableBox:
+            add_label = "Add Impassable Box";
+            enabled_label = "Impassable Boxes Enabled";
+            break;
+    }
+    add_button_ = std::make_unique<DMButton>(add_label,
                                              &DMStyles::CreateButton(),
                                              180,
                                              DMButton::height());
@@ -51,9 +67,7 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     name_textbox_ = std::make_unique<DMTextBox>("Name", "");
     extrusion_textbox_ = std::make_unique<DMTextBox>("Extrusion", "0");
     damage_textbox_ = std::make_unique<DMTextBox>("Damage", "0");
-    system_enabled_checkbox_ = std::make_unique<DMCheckbox>(
-        kind_ == Kind::HitBox ? "Hit Boxes Enabled" : "Attack Boxes Enabled",
-        false);
+    system_enabled_checkbox_ = std::make_unique<DMCheckbox>(enabled_label, false);
     onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
 }
 
@@ -157,6 +171,14 @@ void RoomBoxToolsPanel::set_system_enabled(bool enabled) {
 
 bool RoomBoxToolsPanel::system_enabled() const {
     return system_enabled_checkbox_ ? system_enabled_checkbox_->value() : false;
+}
+
+void RoomBoxToolsPanel::set_propagation_visible(bool visible) {
+    if (propagation_visible_ == visible) {
+        return;
+    }
+    propagation_visible_ = visible;
+    layout_dirty_ = true;
 }
 
 void RoomBoxToolsPanel::set_on_select(SelectCallback callback) {
@@ -306,30 +328,32 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    if (apply_next_frame_button_ && apply_next_frame_button_->handle_event(event)) {
-        handled = true;
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            event.button.button == SDL_BUTTON_LEFT &&
-            on_propagate_) {
-            on_propagate_(PropagationScope::NextFrame);
+    if (propagation_visible_) {
+        if (apply_next_frame_button_ && apply_next_frame_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                event.button.button == SDL_BUTTON_LEFT &&
+                on_propagate_) {
+                on_propagate_(PropagationScope::NextFrame);
+            }
         }
-    }
 
-    if (apply_animation_button_ && apply_animation_button_->handle_event(event)) {
-        handled = true;
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            event.button.button == SDL_BUTTON_LEFT &&
-            on_propagate_) {
-            on_propagate_(PropagationScope::Animation);
+        if (apply_animation_button_ && apply_animation_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                event.button.button == SDL_BUTTON_LEFT &&
+                on_propagate_) {
+                on_propagate_(PropagationScope::Animation);
+            }
         }
-    }
 
-    if (apply_asset_button_ && apply_asset_button_->handle_event(event)) {
-        handled = true;
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            event.button.button == SDL_BUTTON_LEFT &&
-            on_propagate_) {
-            on_propagate_(PropagationScope::Asset);
+        if (apply_asset_button_ && apply_asset_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                event.button.button == SDL_BUTTON_LEFT &&
+                on_propagate_) {
+                on_propagate_(PropagationScope::Asset);
+            }
         }
     }
 
@@ -388,11 +412,19 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     dm_draw::DrawRoundedOutline(renderer, panel_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
 
     const DMLabelStyle& label_style = DMStyles::Label();
-    DMFontCache::instance().draw_text(renderer,
-                                      label_style,
-                                      kind_ == Kind::HitBox ? "Hit Box Editor" : "Attack Box Editor",
-                                      header_rect_.x,
-                                      header_rect_.y);
+    const char* title = "Hit Box Editor";
+    switch (kind_) {
+        case Kind::HitBox:
+            title = "Hit Box Editor";
+            break;
+        case Kind::AttackBox:
+            title = "Attack Box Editor";
+            break;
+        case Kind::ImpassableBox:
+            title = "Impassable Box Editor";
+            break;
+    }
+    DMFontCache::instance().draw_text(renderer, label_style, title, header_rect_.x, header_rect_.y);
     const std::string subtitle = selected_box_index_ >= 0 && selected_box_index_ < static_cast<int>(box_names_.size())
                                      ? box_names_[static_cast<std::size_t>(selected_box_index_)]
                                      : "No box selected";
@@ -451,14 +483,16 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
             damage_textbox_->render(renderer);
         }
     }
-    if (apply_next_frame_button_) {
-        apply_next_frame_button_->render(renderer);
-    }
-    if (apply_animation_button_) {
-        apply_animation_button_->render(renderer);
-    }
-    if (apply_asset_button_) {
-        apply_asset_button_->render(renderer);
+    if (propagation_visible_) {
+        if (apply_next_frame_button_) {
+            apply_next_frame_button_->render(renderer);
+        }
+        if (apply_animation_button_) {
+            apply_animation_button_->render(renderer);
+        }
+        if (apply_asset_button_) {
+            apply_asset_button_->render(renderer);
+        }
     }
 }
 
@@ -572,11 +606,13 @@ void RoomBoxToolsPanel::update_layout() const {
     } else {
         controls_height += kSectionGap;
     }
-    controls_height += DMButton::height();                               // copy next
-    controls_height += row_gap;
-    controls_height += DMButton::height();                               // copy animation
-    controls_height += row_gap;
-    controls_height += DMButton::height();                               // copy asset
+    if (propagation_visible_) {
+        controls_height += DMButton::height();                           // copy next
+        controls_height += row_gap;
+        controls_height += DMButton::height();                           // copy animation
+        controls_height += row_gap;
+        controls_height += DMButton::height();                           // copy asset
+    }
 
     const int list_top = subtitle_rect_.y + 22;
     const int available_list_height =
@@ -630,16 +666,28 @@ void RoomBoxToolsPanel::update_layout() const {
         }
     }
 
-    if (apply_next_frame_button_) {
-        apply_next_frame_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
-    }
-    y += DMButton::height() + row_gap;
-    if (apply_animation_button_) {
-        apply_animation_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
-    }
-    y += DMButton::height() + row_gap;
-    if (apply_asset_button_) {
-        apply_asset_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+    if (propagation_visible_) {
+        if (apply_next_frame_button_) {
+            apply_next_frame_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+        }
+        y += DMButton::height() + row_gap;
+        if (apply_animation_button_) {
+            apply_animation_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+        }
+        y += DMButton::height() + row_gap;
+        if (apply_asset_button_) {
+            apply_asset_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+        }
+    } else {
+        if (apply_next_frame_button_) {
+            apply_next_frame_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (apply_animation_button_) {
+            apply_animation_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (apply_asset_button_) {
+            apply_asset_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
     }
 
     layout_box_buttons();

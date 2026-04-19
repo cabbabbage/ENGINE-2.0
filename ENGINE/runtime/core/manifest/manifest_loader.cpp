@@ -192,6 +192,7 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
             "movement_enabled",
             "attack_box_enabled",
             "hitbox_enabled",
+            "impassable_box_enabled",
             "floor_boxes_enabled",
         };
         for (const char* key : bool_keys) {
@@ -201,6 +202,39 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
                 oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
                     << "' key '" << key << "' must be present and boolean.";
                 throw std::runtime_error(oss.str());
+            }
+        }
+
+        auto impassable_boxes_it = asset.find("impassable_boxes");
+        const bool impassable_box_enabled = asset["impassable_box_enabled"].get<bool>();
+        if (!impassable_box_enabled) {
+            if (impassable_boxes_it != asset.end()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' must omit 'impassable_boxes' when 'impassable_box_enabled' is false.";
+                throw std::runtime_error(oss.str());
+            }
+        } else if (impassable_boxes_it != asset.end()) {
+            if (!impassable_boxes_it->is_array()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' key 'impassable_boxes' must be an array.";
+                throw std::runtime_error(oss.str());
+            }
+            for (const auto& box : *impassable_boxes_it) {
+                if (!box.is_object()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' contains non-object impassable box entry.";
+                    throw std::runtime_error(oss.str());
+                }
+                if (!box.contains("id") || !box["id"].is_string() ||
+                    !box.contains("name") || !box["name"].is_string()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' impassable box keys 'id' and 'name' must be strings.";
+                    throw std::runtime_error(oss.str());
+                }
             }
         }
 

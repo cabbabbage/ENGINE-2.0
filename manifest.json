@@ -10859,6 +10859,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -10871,14 +10872,41 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/church",
       "asset_name": "church",
       "attack_box_enabled": false,
-      "floor_boxes_enabled": false,
+      "floor_boxes": [
+        {
+          "depth": 302.0,
+          "enabled": true,
+          "id": "floor_box",
+          "name": "Floor Box",
+          "position_x": 2.5,
+          "position_z": -183.0,
+          "tags": [
+            "boundary"
+          ],
+          "width": 1059.0
+        },
+        {
+          "depth": 124.0,
+          "enabled": true,
+          "id": "floor_box_1",
+          "name": "Floor Box 2",
+          "position_x": 4.5,
+          "position_z": -75.0,
+          "tags": [
+            "boundary"
+          ],
+          "width": 257.0
+        }
+      ],
+      "floor_boxes_enabled": true,
       "hitbox_enabled": false,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
@@ -11871,6 +11899,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -11883,7 +11912,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         },
         "down": {
           "anchor_points": [
@@ -12288,7 +12318,7 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
+      "neighbor_search_distance": 194,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
@@ -13210,6 +13240,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -13232,24 +13263,16 @@
       "attack_box_enabled": false,
       "floor_boxes": [
         {
-          "depth": 128.0,
-          "enabled": true,
-          "id": "floor_box",
-          "name": "Floor Box",
-          "position_x": 0.0,
-          "position_z": 0.0,
-          "tags": [],
-          "width": 128.0
-        },
-        {
-          "depth": 128.0,
+          "depth": 85.0,
           "enabled": true,
           "id": "floor_box_1",
           "name": "Floor Box 2",
-          "position_x": 0.0,
-          "position_z": 0.0,
-          "tags": [],
-          "width": 128.0
+          "position_x": 1.5,
+          "position_z": -15.5,
+          "tags": [
+            "boundary"
+          ],
+          "width": 175.0
         }
       ],
       "floor_boxes_enabled": true,
@@ -19186,54 +19209,6 @@
               "required_children": []
             }
           ]
-        },
-        {
-          "bounding_extent": 2330.3252991803524,
-          "level": 1,
-          "max_rooms": 2,
-          "min_rooms": 1,
-          "name": "layer_1",
-          "ring_radius": 15159.0,
-          "rooms": [
-            {
-              "max_instances": 2,
-              "min_instances": 1,
-              "name": "NewRoom",
-              "required_children": []
-            }
-          ]
-        },
-        {
-          "bounding_extent": 2330.3252991803524,
-          "level": 2,
-          "max_rooms": 15,
-          "min_rooms": 8,
-          "name": "layer_2",
-          "ring_radius": 35362.15790073287,
-          "rooms": [
-            {
-              "max_instances": 15,
-              "min_instances": 8,
-              "name": "NewRoom",
-              "required_children": []
-            }
-          ]
-        },
-        {
-          "bounding_extent": 2330.3252991803524,
-          "level": 3,
-          "max_rooms": 25,
-          "min_rooms": 10,
-          "name": "layer_3",
-          "ring_radius": 58543.6893598971,
-          "rooms": [
-            {
-              "max_instances": 25,
-              "min_instances": 10,
-              "name": "NewRoom",
-              "required_children": []
-            }
-          ]
         }
       ],
       "map_layers_settings": {
@@ -19249,9 +19224,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
             242,
-            115,
+            36,
+            44,
             255
           ],
           "edge_smoothness": 2,
@@ -19645,16 +19620,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -797,
-          "camera_center_dz": 148,
-          "camera_height_px": 216,
-          "camera_tilt_deg": 14.861263275146484,
+          "camera_center_dx": -869,
+          "camera_center_dz": -284,
+          "camera_height_px": 421,
+          "camera_tilt_deg": 34.26126480102539,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,

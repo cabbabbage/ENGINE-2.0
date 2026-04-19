@@ -209,6 +209,67 @@ TEST_CASE("AnimationRuntime applies queued reverse command after move-triggered 
     CHECK(asset->current_frame == &up_path.back());
 }
 
+TEST_CASE("AnimationUpdate resolve_animation_by_tags matches required tags") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    REQUIRE(asset->info != nullptr);
+
+    asset->info->animations["left"].tags = {"break", "heavy"};
+    asset->info->animations["up"].tags = {"break", "air"};
+
+    AnimationUpdate updater(asset.get(), nullptr);
+    const std::optional<std::string> resolved =
+        updater.resolve_animation_by_tags({"  BREAK  "}, {});
+    REQUIRE(resolved.has_value());
+    CHECK((*resolved == "left" || *resolved == "up"));
+}
+
+TEST_CASE("AnimationUpdate resolve_animation_by_tags excludes blocked tags") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    REQUIRE(asset->info != nullptr);
+
+    asset->info->animations["left"].tags = {"break", "heavy"};
+    asset->info->animations["up"].tags = {"break", "air"};
+
+    AnimationUpdate updater(asset.get(), nullptr);
+    const std::optional<std::string> resolved =
+        updater.resolve_animation_by_tags({"break"}, {"HEAVY"});
+    REQUIRE(resolved.has_value());
+    CHECK(*resolved == "up");
+}
+
+TEST_CASE("AnimationUpdate set_animation_by_tags keeps animation unchanged when no match") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    REQUIRE(asset->info != nullptr);
+    asset->info->animations["left"].tags = {"idle"};
+    asset->info->animations["up"].tags = {"jump"};
+
+    AnimationRuntime runtime(asset.get(), nullptr);
+    AnimationUpdate updater(asset.get(), nullptr);
+    runtime.set_planner(&updater);
+    const std::string before = asset->current_animation;
+
+    CHECK_FALSE(updater.set_animation_by_tags({"break"}, {}));
+    CHECK(asset->current_animation == before);
+}
+
+TEST_CASE("AnimationUpdate resolve_animation_by_tags multiple matches stay in valid set") {
+    auto asset = make_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    REQUIRE(asset->info != nullptr);
+
+    asset->info->animations["left"].tags = {"break"};
+    asset->info->animations["up"].tags = {"break"};
+
+    AnimationUpdate updater(asset.get(), nullptr);
+    const std::optional<std::string> resolved =
+        updater.resolve_animation_by_tags({"break"}, {});
+    REQUIRE(resolved.has_value());
+    CHECK((*resolved == "left" || *resolved == "up"));
+}
+
 TEST_CASE("RuntimeWorldContext rebuilds room view and tracks topology generation") {
     RuntimeWorldContext context;
     CHECK(context.topology_generation() == 0);

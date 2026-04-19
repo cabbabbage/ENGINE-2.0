@@ -12,6 +12,9 @@ public:
         bool flip_horizontal = false;
         bool flip_vertical   = false;
         bool reverse_frames  = false;
+        bool invert_movement_x = false;
+        bool invert_movement_y = false;
+        bool invert_movement_z = false;
         bool inherit_on_end_from_source = false;
 };
 

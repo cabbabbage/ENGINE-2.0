@@ -2,8 +2,8 @@
 
 #include <limits>
 
-#include "assets/asset/Asset.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_projection.hpp"
 
 namespace {

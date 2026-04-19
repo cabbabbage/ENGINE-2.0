@@ -779,12 +779,23 @@ void update_payload_movement_total(nlohmann::json& payload) {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
+    float total_dr = 0.0f;
     for (std::size_t i = 0; i < movement.size(); ++i) {
         total_dx += read_movement_component(movement[i], 0);
         total_dy += read_movement_component(movement[i], 1);
         total_dz += read_movement_component(movement[i], 2);
+        if (movement[i].is_array() &&
+            movement[i].size() > 3 &&
+            movement[i][3].is_number()) {
+            total_dr += static_cast<float>(movement[i][3].get<double>());
+        } else if (movement[i].is_object() &&
+                   movement[i].contains("rotation_degrees") &&
+                   movement[i]["rotation_degrees"].is_number()) {
+            total_dr += static_cast<float>(movement[i]["rotation_degrees"].get<double>());
+        }
     }
-    payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
+    payload["movement_total"] =
+        nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
 }
 
 void materialize_inherited_geometry(const animation_editor::AnimationDocument* document,

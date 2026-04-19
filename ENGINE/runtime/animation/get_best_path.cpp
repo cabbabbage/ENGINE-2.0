@@ -78,7 +78,7 @@ struct AnimationDescriptor {
 
 std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
     std::vector<AnimationDescriptor> result;
-    if (!self.info) {
+    if (!self.info || !self.isMovementEnabled()) {
         return result;
     }
 
@@ -148,6 +148,9 @@ Plan GetBestPath::operator()(const Asset& self,
     plan.world_start = cursor.to_sdl_point();
 
     if (!self.info) {
+        return plan;
+    }
+    if (!self.isMovementEnabled()) {
         return plan;
     }
 

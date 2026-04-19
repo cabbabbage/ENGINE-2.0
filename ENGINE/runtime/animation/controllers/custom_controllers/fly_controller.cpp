@@ -11,6 +11,7 @@
 #include "fly_controller.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "gameplay/map_generation/room.hpp"
 #include "utils/input.hpp"
 
 namespace {
@@ -42,8 +43,7 @@ fly_controller::fly_controller(Asset* self)
 void fly_controller::on_update(const Input& in) {
     orbit_behavior_.set_config(game_context().fly_orbit_behavior_config());
     if(orbiting) {
-        
-        orbit_behavior_.tick(in, !orbiting);
+        orbit_behavior_.tick(in);
     }
     else{
         if (self_ptr()->needs_target) {
@@ -63,9 +63,16 @@ void fly_controller::on_process_pending_attacks(Asset& self_ref) {
 
     for (const auto& attack : pending_attacks) {
         if (attack.attacker_asset_name == "vibble_attack_1" || attack.attacker_asset_name == "vibble") {
+            if (Assets* owner_assets = self_ref.get_assets()) {
+                std::string room_name = self_ref.owning_room_name();
+                if (room_name.empty()) {
+                    if (Room* room = owner_assets->current_room()) {
+                        room_name = room->room_name;
+                    }
+                }
+                owner_assets->mutable_game_context().set_room_fly_aggression(room_name, 20.0f);
+            }
 
-        
-            
             std::cout<<"fly_controller::on_process_pending_attacks called, transitioning to non-orbiting state."<<std::endl;
 
 

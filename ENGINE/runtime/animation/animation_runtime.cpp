@@ -107,6 +107,20 @@ int resolve_effective_grid_resolution(const Asset* self,
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
     : self_(self), assets_owner_(assets), grid_service_(&vibble::grid::global_grid()) {}
 
+bool AnimationRuntime::consume_replan_attempt_budget() {
+    const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
+    const std::uint32_t frame_id = assets ? assets->frame_id() : 0;
+    if (replan_budget_frame_id_ != frame_id) {
+        replan_budget_frame_id_ = frame_id;
+        replan_attempts_this_frame_ = 0;
+    }
+    if (replan_attempts_this_frame_ >= kMaxReplanAttemptsPerFrame) {
+        return false;
+    }
+    ++replan_attempts_this_frame_;
+    return true;
+}
+
 void AnimationRuntime::set_planner(AnimationUpdate* planner) {
     if (planner_iface_ && planner_iface_ != planner) {
         planner_iface_->set_runtime(nullptr);
@@ -208,8 +222,9 @@ void AnimationRuntime::update() {
         assets_owner_ && assets_owner_->is_frame_editor_target_active(self_);
     const bool movement_blocked_for_dev_mode =
         assets_owner_ && !runtime::dev_mode_policy::should_allow_movement_for_asset(assets_owner_->is_dev_mode());
+    const bool movement_disabled_for_asset = !self_->isMovementEnabled();
 
-    if (freeze_for_frame_editor || movement_blocked_for_dev_mode) {
+    if (freeze_for_frame_editor || movement_blocked_for_dev_mode || movement_disabled_for_asset) {
         const bool has_plan_2d =
             planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D &&
             !planner_iface_->plan_.strides.empty();
@@ -226,11 +241,11 @@ void AnimationRuntime::update() {
         }
     }
 
-    if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode) {
+    if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode && !movement_disabled_for_asset) {
         (void)planner_iface_->consume_input_event();
     }
 
-    if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode) {
+    if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode && !movement_disabled_for_asset) {
         if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D &&
             planner_iface_->plan_.strides.empty()) {
             planner_iface_->active_plan_mode_ = AnimationUpdate::ActivePlanMode::None;
@@ -1042,8 +1057,13 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     if (tail.empty() || !same_point(tail.back(), planner_iface_->final_dest)) {
         tail.push_back(planner_iface_->final_dest);
     }
+    bool budget_exhausted = false;
     auto try_plan_with_targets = [&](const std::vector<SDL_Point>& targets) {
         if (targets.empty()) return false;
+        if (!consume_replan_attempt_budget()) {
+            budget_exhausted = true;
+            return false;
+        }
         auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_);
         if (sanitized.empty()) return false;
         Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
@@ -1075,6 +1095,9 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
             attempt_targets.insert(attempt_targets.end(), it_begin, tail.end());
             if (try_plan_with_targets(attempt_targets)) {
                 return true;
+            }
+            if (budget_exhausted) {
+                return false;
             }
         }
     }
@@ -1174,8 +1197,13 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
         tail.push_back(planner_iface_->final_dest_3d);
     }
 
+    bool budget_exhausted = false;
     auto try_plan_with_targets = [&](const std::vector<axis::WorldPos>& targets) {
         if (targets.empty()) {
+            return false;
+        }
+        if (!consume_replan_attempt_budget()) {
+            budget_exhausted = true;
             return false;
         }
         auto sanitized = sanitizer_3d_.sanitize(*self_, targets, planner_iface_->visited_thresh_);
@@ -1228,6 +1256,9 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
             attempt_targets.insert(attempt_targets.end(), it_begin, tail.end());
             if (try_plan_with_targets(attempt_targets)) {
                 return true;
+            }
+            if (budget_exhausted) {
+                return false;
             }
         }
     }
@@ -1298,6 +1329,9 @@ bool AnimationRuntime::replan_to_destination() {
     if (checkpoints.empty() || !same_point(checkpoints.back(), planner_iface_->final_dest)) {
         checkpoints.push_back(planner_iface_->final_dest);
     }
+    if (!consume_replan_attempt_budget()) {
+        return false;
+    }
     auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
     if (sanitized.empty()) {
         return false;
@@ -1345,6 +1379,9 @@ bool AnimationRuntime::replan_to_destination_3d() {
         checkpoints.push_back(planner_iface_->final_dest_3d);
     }
 
+    if (!consume_replan_attempt_budget()) {
+        return false;
+    }
     auto sanitized = sanitizer_3d_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
     if (sanitized.empty()) {
         return false;

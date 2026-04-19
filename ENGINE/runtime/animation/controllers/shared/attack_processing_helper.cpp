@@ -15,12 +15,11 @@ namespace {
 constexpr float kZeroTolerance = 1e-4f;
 constexpr char kHitAnimationId[] = "hit";
 constexpr char kDieAnimationId[] = "die";
-constexpr char kBreakAnimationId[] = "break";
 
 } // namespace
 
 bool AttackProcessingHelper::try_play_death_animation(Asset& self) {
-    if (!self.info) {
+    if (!self.info || !self.anim_) {
         return false;
     }
 
@@ -28,14 +27,14 @@ bool AttackProcessingHelper::try_play_death_animation(Asset& self) {
         if (self.info->animations.find(animation_id) == self.info->animations.end()) {
             return false;
         }
-        self.set_current_animation(animation_id);
-        return true;
+        self.anim_->set_animation(animation_id);
+        return self.current_animation == animation_id;
     };
 
     if (try_animation(kDieAnimationId)) {
         return true;
     }
-    return try_animation(kBreakAnimationId);
+    return self.anim_->set_animation_by_tags({"break"}, {});
 }
 
 bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,

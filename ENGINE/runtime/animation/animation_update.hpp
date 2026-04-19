@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <cstdint>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -86,6 +87,10 @@ public:
     void move_3d(const axis::WorldPos& delta, const std::string& animation, bool resort_z = true, bool override_non_locked = true);
 
     void set_animation(const std::string& animation_id);
+    std::optional<std::string> resolve_animation_by_tags(const std::vector<std::string>& required_tags,
+                                                         const std::vector<std::string>& excluded_tags) const;
+    bool set_animation_by_tags(const std::vector<std::string>& required_tags,
+                               const std::vector<std::string>& excluded_tags);
     void begin_reverse_current_animation_until_stop();
     void begin_reverse_current_animation_to_default();
     void stop_reverse_current_animation();
@@ -151,6 +156,14 @@ private:
     MoveRequest3D pending_move_3d_{};
     ReversePlaybackCommand pending_reverse_command_ = ReversePlaybackCommand::None;
     bool        debug_enabled_ = false;
+    std::uint32_t next_plan_retry_frame_ = 0;
+    std::uint32_t local_plan_frame_counter_ = 0;
+    static constexpr std::uint32_t kPlanRetryCooldownFrames = 4;
+
+    std::uint32_t resolve_plan_frame_id();
+    bool planning_retry_cooldown_active(std::uint32_t frame_id) const;
+    void arm_plan_retry_cooldown(std::uint32_t frame_id);
+    void clear_plan_retry_cooldown();
 
     vibble::grid::Grid& grid() const;
     int effective_grid_resolution(std::optional<int> override_resolution) const;

@@ -90,8 +90,12 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     AnimationFrame* frame = self->current_frame;
     SDL_Point        from  = self->world_xz_point();
     SDL_Point        delta{0, 0};
+    int delta_y = 0;
     if (!up.suppress_root_motion_active()) {
-        delta = animation_update::detail::frame_world_delta(*frame, *self, up.grid());
+        const axis::WorldPos frame_delta =
+            animation_update::detail::frame_world_delta_3d(*frame, *self, up.grid());
+        delta = SDL_Point{frame_delta.x, frame_delta.z};
+        delta_y = frame_delta.y;
     }
     SDL_Point        to{ from.x + delta.x, from.y + delta.y };
 
@@ -107,8 +111,10 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     }
 
     if (delta.x != 0 || delta.y != 0) {
-        self->move_to_world_position(to.x, self->world_y(), to.y);
+        self->move_to_world_position(to.x, self->world_y() + delta_y, to.y);
         up.mark_progress_toward_checkpoints();
+    } else if (delta_y != 0) {
+        self->move_to_world_position(self->world_x(), self->world_y() + delta_y, self->world_z());
     }
 
     ++stride_frame_counter;

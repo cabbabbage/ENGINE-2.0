@@ -24,7 +24,7 @@
 #include "asset_controller.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/attack.hpp"
-#include "rendering/render/render.hpp"
+#include "rendering/render/scaling_logic.hpp"
 
 class WarpedScreenGrid;
 class Assets;
@@ -38,49 +38,10 @@ namespace world { class WorldGrid; }
 
 using world::GridPoint;
 
-struct RenderObject {
-    SDL_Texture* texture = nullptr;
-    SDL_Rect screen_rect{};
-    float world_anchor_x = std::numeric_limits<float>::quiet_NaN();
-    float world_anchor_y = std::numeric_limits<float>::quiet_NaN();
-    SDL_Color color_mod{255, 255, 255, 255};
-    SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
-    double angle = 0.0;
-    SDL_Point center{0, 0};
-    bool use_custom_center = false;
-    SDL_FlipMode flip = SDL_FLIP_NONE;
-    int texture_w = 0;
-    int texture_h = 0;
-    bool has_texture_size = false;
-    float world_z_offset = 0.0f;
-    bool has_src_rect = false;
-    SDL_Rect src_rect{0, 0, 0, 0};
-    int atlas_w = 0;
-    int atlas_h = 0;
-    bool has_atlas_size = false;
-    SDL_Texture* dimension_cache_texture = nullptr;
-    std::array<SDL_Vertex, 4> cached_vertices{};
-    std::array<int, 6> cached_indices{0, 1, 2, 0, 2, 3};
-    SDL_FPoint cached_position{0.0f, 0.0f};
-    float cached_world_z = 0.0f;
-    float cached_scale = 0.0f;
-    std::int64_t cached_position_key_x = 0;
-    std::int64_t cached_position_key_y = 0;
-    std::int64_t cached_world_z_key = 0;
-    std::int64_t cached_scale_key = 0;
-    bool cached_projection_key_valid = false;
-    std::uint64_t cached_camera_state_version = 0;
-    SDL_Texture* cached_mesh_texture = nullptr;
-    bool has_cached_mesh = false;
-    bool mesh_dirty = true;
-    SDL_FPoint projection_anchor_uv{0.5f, 1.0f};
-};
-
-using RenderCompositePackage = std::vector<RenderObject>;
-
 struct RuntimeCameraMetrics {
     std::uint64_t frame_id = 0;
     std::uint64_t camera_state_version = 0;
+    std::uint64_t anchor_revision = 0;
     bool valid = false;
     float planar_dx = 0.0f;
     float planar_dz = 0.0f;
@@ -97,8 +58,6 @@ struct RuntimeCameraMetrics {
 class Asset {
 
         public:
-    RenderCompositePackage render_package;
-
     struct TilingInfo {
         bool      enabled      = false;
         SDL_Point grid_origin{0, 0};
@@ -145,6 +104,14 @@ class Asset {
     int world_z() const {
         SDL_assert(grid_point_ != nullptr);
         return grid_point_ ? grid_point_->world_z() : 0;
+    }
+    std::uint64_t anchor_world_revision() const { return anchor_world_revision_; }
+    bool has_fresh_runtime_camera_metrics(std::uint64_t frame_id,
+                                          std::uint64_t camera_state_version) const {
+        return runtime_camera_metrics.valid &&
+               runtime_camera_metrics.frame_id == frame_id &&
+               runtime_camera_metrics.camera_state_version == camera_state_version &&
+               runtime_camera_metrics.anchor_revision == anchor_world_revision_;
     }
     SDL_Point world_xz_point() const { return SDL_Point{world_x(), world_z()}; }
     SDL_Point world_xy_point() const { return SDL_Point{world_x(), world_y()}; }
@@ -275,6 +242,8 @@ class Asset {
     bool set_directional_target_world_xz(float world_x, float world_z);
     void clear_directional_target_world_xz();
     bool has_directional_target_world_xz() const { return directional_target_valid_; }
+    float directional_target_world_x() const { return directional_target_world_x_; }
+    float directional_target_world_z() const { return directional_target_world_z_; }
     void set_render_anchor_offset(float x, float y, float z);
     void clear_render_anchor_offset();
     float render_anchor_offset_x() const { return render_anchor_offset_x_; }
@@ -378,8 +347,30 @@ class Asset {
         bool valid = false;
     };
 
+    struct RuntimeFloorBox {
+        std::string id;
+        std::string name;
+        float position_x = 0.0f;
+        float position_z = 0.0f;
+        float width = 0.0f;
+        float depth = 0.0f;
+        bool enabled = true;
+        std::vector<std::string> tags;
+
+        bool has_tag(const std::string& tag) const;
+    };
+
+    bool isMovementEnabled() const;
+    bool isHitboxEnabled() const;
+    bool isAttackBoxEnabled() const;
+    bool isImpassableBoxEnabled() const;
+    bool isFloorBoxesEnabled() const;
+    bool affects_collision_context() const;
+    const std::vector<RuntimeFloorBox>& getFloorBoxes() const;
+
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
     const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
+    const std::vector<RuntimeBoxVolume>& current_impassable_box_volumes() const { return current_impassable_box_volumes_; }
     void test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     void test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     const RuntimeBoxVolume* find_hit_box_volume(const std::string& name) const;
@@ -477,6 +468,7 @@ class Asset {
                                     const DisplacedAssetAnchorPoint* frame_anchor) const;
     void refresh_anchor_point_cache_from_frame();
     void refresh_runtime_box_cache_from_frame();
+    void refresh_runtime_floor_boxes_cache();
     void mark_anchors_dirty();
     void invalidate_anchor_registry();
     bool update_anchor_basis_if_needed();
@@ -582,6 +574,8 @@ private:
     std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
     std::vector<RuntimeBoxVolume> current_hit_box_volumes_;
     std::vector<RuntimeBoxVolume> current_attack_box_volumes_;
+    std::vector<RuntimeBoxVolume> current_impassable_box_volumes_;
+    std::vector<RuntimeFloorBox> floor_boxes_;
     std::unordered_map<std::string, std::size_t> runtime_hit_box_lookup_;
     std::unordered_map<std::string, std::size_t> runtime_attack_box_lookup_;
     bool anchors_initialized_ = false;

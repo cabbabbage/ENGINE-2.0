@@ -3,6 +3,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
+#include "core/game_runtime_context.hpp"
 #include "core/runtime_game_config.hpp"
 #include "utils/map_grid_settings.hpp"
 #include <SDL3/SDL.h>
@@ -121,7 +122,10 @@ public:
     void query_impassable_entries(const Asset& self,
                                   int search_radius,
                                   std::vector<const FrameCollisionEntry*>& out) const;
-    void mark_collision_context_dirty() { frame_collision_context_dirty_ = true; }
+    void mark_collision_context_dirty() {
+        frame_collision_context_dirty_ = true;
+        frame_collision_query_cache_.clear();
+    }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
     float frame_delta_seconds_clamped() const;
@@ -231,6 +235,8 @@ public:
     const RuntimeWorldContext* runtime_world_context() const;
     runtime::config::RuntimeGameConfig& runtime_game_config();
     const runtime::config::RuntimeGameConfig& runtime_game_config() const;
+    const runtime::context::GameRuntimeContext& game_context() const { return game_context_; }
+    runtime::context::GameRuntimeContext& mutable_game_context() { return game_context_; }
 
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();
@@ -329,8 +335,40 @@ private:
     bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
+    struct FrameCollisionQueryKey {
+        std::uint64_t context_version = 0;
+        const Asset* self_asset = nullptr;
+        int self_world_x = 0;
+        int self_world_z = 0;
+        int radius = 0;
+
+        bool operator==(const FrameCollisionQueryKey& other) const {
+            return context_version == other.context_version &&
+                   self_asset == other.self_asset &&
+                   self_world_x == other.self_world_x &&
+                   self_world_z == other.self_world_z &&
+                   radius == other.radius;
+        }
+    };
+    struct FrameCollisionQueryKeyHash {
+        std::size_t operator()(const FrameCollisionQueryKey& key) const {
+            std::size_t seed = std::hash<std::uint64_t>{}(key.context_version);
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<const void*>{}(static_cast<const void*>(key.self_asset)));
+            mix(std::hash<int>{}(key.self_world_x));
+            mix(std::hash<int>{}(key.self_world_z));
+            mix(std::hash<int>{}(key.radius));
+            return seed;
+        }
+    };
     mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
     mutable std::unordered_map<std::uint64_t, std::vector<const FrameCollisionEntry*>> frame_collision_index_;
+    mutable std::unordered_map<FrameCollisionQueryKey,
+                               std::vector<const FrameCollisionEntry*>,
+                               FrameCollisionQueryKeyHash> frame_collision_query_cache_;
+    mutable std::uint64_t frame_collision_context_version_ = 1;
     mutable std::uint32_t frame_collision_context_frame_id_ = 0;
     mutable bool frame_collision_context_dirty_ = true;
     std::vector<Asset*> removal_queue;
@@ -372,7 +410,6 @@ private:
         std::uint64_t processed_anchor_revision = 0;
         std::uint64_t processed_camera_state_version = 0;
         int processed_frame_index = std::numeric_limits<int>::min();
-        std::uint32_t last_audio_frame_id = 0;
         std::uint32_t non_player_update_visit_epoch = 0;
     };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
@@ -385,7 +422,7 @@ private:
     std::uint32_t non_player_update_visit_epoch_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
-    std::uint32_t last_post_flush_refresh_frame_id_ = std::numeric_limits<std::uint32_t>::max();
+    std::uint32_t last_runtime_convergence_warning_frame_id_ = std::numeric_limits<std::uint32_t>::max();
     std::uint32_t frame_rebuild_metrics_frame_ = 0;
     std::uint32_t frame_rebuild_request_count_ = 0;
     std::uint32_t frame_rebuild_execution_count_ = 0;
@@ -447,7 +484,7 @@ private:
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
     std::uint64_t next_anchor_invalidation_version();
-    void run_active_runtime_single_pass(bool include_audio_update = true);
+    bool run_active_runtime_single_pass(bool include_audio_update = true);
     void run_active_runtime_single_pass_for_asset(Asset* asset,
                                                   const SDL_Point& camera_focus,
                                                   std::uint64_t camera_state_version,
@@ -491,4 +528,5 @@ private:
     Asset* focus_filter_asset_ = nullptr;
     std::string focus_filter_spawn_id_;
     std::uint64_t focus_filter_version_ = 0;
+    runtime::context::GameRuntimeContext game_context_{};
 };

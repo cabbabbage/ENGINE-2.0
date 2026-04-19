@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "rendering/render/render.hpp"
+#include "rendering/render/scene_composite_pass.hpp"
 
 namespace {
 
@@ -160,7 +161,7 @@ bool read_pixel(SDL_Renderer* renderer, SDL_Texture* texture, int x, int y, SDL_
 
 } // namespace
 
-TEST_CASE("DoF layer composite helper writes to gameplay target even when current target differs") {
+TEST_CASE("Scene composite pass writes layer stack to gameplay target even when current target differs") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
 
@@ -187,10 +188,14 @@ TEST_CASE("DoF layer composite helper writes to gameplay target even when curren
 
     const std::vector<SDL_Texture*> final_layer_textures{layer0, layer1};
     const std::vector<int> non_empty_layers{0, 1};
-    const bool ok = render_internal::composite_dof_layers_to_gameplay_target(renderer,
-                                                                              gameplay_target,
-                                                                              final_layer_textures,
-                                                                              non_empty_layers);
+    SceneCompositePass composite_pass(renderer);
+    render_pipeline::LayerRenderResult layer_render{};
+    layer_render.valid = true;
+    layer_render.layer_count = 2;
+    layer_render.non_empty_layers = non_empty_layers;
+    layer_render.final_layer_textures = final_layer_textures;
+    render_pipeline::BlurCompositeResult blur_result{};
+    const bool ok = composite_pass.compose(gameplay_target, layer_render, blur_result);
     CHECK(ok);
     CHECK(SDL_GetRenderTarget(renderer) == gameplay_target);
 
@@ -227,10 +232,13 @@ TEST_CASE("Scene mid-layer composite draws foreground over background") {
     REQUIRE(fill_texture(renderer, background_mid, SDL_Color{25, 80, 210, 255}));
     REQUIRE(fill_texture(renderer, foreground_mid, SDL_Color{220, 35, 35, 255}));
 
-    const bool ok = render_internal::composite_scene_mid_layers(renderer,
-                                                                gameplay_target,
-                                                                background_mid,
-                                                                foreground_mid);
+    SceneCompositePass composite_pass(renderer);
+    render_pipeline::LayerRenderResult layer_render{};
+    render_pipeline::BlurCompositeResult blur_result{};
+    blur_result.valid = true;
+    blur_result.background_mid = background_mid;
+    blur_result.foreground_mid = foreground_mid;
+    const bool ok = composite_pass.compose(gameplay_target, layer_render, blur_result);
     CHECK(ok);
 
     SDL_Color gameplay_pixel{};

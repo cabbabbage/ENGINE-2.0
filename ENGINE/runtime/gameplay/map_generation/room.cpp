@@ -460,7 +460,6 @@ nlohmann::json encode_points(const std::vector<SDL_Point>& points, axis::WorldPo
 }
 
 }
-
 Room::Room(Point origin,
            std::string type_,
            const std::string& room_def_name,
@@ -475,191 +474,231 @@ Room::Room(Point origin,
            nlohmann::json* map_info_root,
            devmode::core::ManifestStore* manifest_store,
            std::string manifest_map_id,
-           Room::ManifestWriter manifest_writer)
+           Room::ManifestWriter manifest_writer,
+           bool auto_populate_assets)
     : map_origin(origin),
-parent(parent),
-room_name(room_def_name),
-room_directory(manifest_context.empty() ? data_section : manifest_context + "::" + data_section),
-json_path((manifest_context.empty() ? data_section : manifest_context + "::" + data_section) + "::" + room_def_name),
-room_area(nullptr),
-type(type_),
-room_data_ptr_(room_data),
-map_grid_settings_(grid_settings),
-manifest_context_(manifest_context),
-data_section_(data_section),
-manifest_writer_(std::move(manifest_writer))
-{
+      parent(parent),
+      room_name(room_def_name),
+      room_directory(manifest_context.empty() ? data_section : manifest_context + "::" + data_section),
+      json_path((manifest_context.empty() ? data_section : manifest_context + "::" + data_section) + "::" + room_def_name),
+      room_area(nullptr),
+      type(type_),
+      room_data_ptr_(room_data),
+      map_grid_settings_(grid_settings),
+      manifest_context_(manifest_context),
+      data_section_(data_section),
+      manifest_writer_(std::move(manifest_writer)) {
+    if (testing) {
+        std::cout << "[Room] Created room: " << room_name
+                  << " at (" << origin.first << ", " << origin.second << ")"
+                  << (parent ? " with parent\n" : " (no parent)\n");
+    }
+
+    if (!manifest_map_id.empty()) {
+        manifest_map_id_ = std::move(manifest_map_id);
+    }
+    manifest_store_ = manifest_store;
+    map_info_root_ = map_info_root;
+
+    if (room_data_ptr_) {
+        if (room_data_ptr_->is_null()) {
+            *room_data_ptr_ = json::object();
+        }
+        if (room_data_ptr_->is_object()) {
+            assets_json = *room_data_ptr_;
+        }
+    }
+    if (!assets_json.is_object()) {
+        assets_json = json::object();
+    }
+
+    inherits_map_assets_ = assets_json.value("inherits_map_assets", false);
+
+    const nlohmann::json* map_camera_settings = nullptr;
+    if (map_info_root_ && map_info_root_->is_object()) {
+        auto it = map_info_root_->find("camera_settings");
+        if (it != map_info_root_->end() && it->is_object()) {
+            map_camera_settings = &(*it);
+        }
+    }
+
+    auto read_number = [](const nlohmann::json* src, const char* key, double fallback) {
+        if (!src || !src->is_object()) {
+            return fallback;
+        }
+        auto it = src->find(key);
+        if (it == src->end() || !it->is_number()) {
+            return fallback;
+        }
+        const double value = it->get<double>();
+        if (!std::isfinite(value)) {
+            return fallback;
+        }
+        return value;
+    };
+
+    const int default_camera_height =
+        std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_height_px", 1000.0))), 1, 2000);
+    const float default_camera_tilt =
+        std::clamp(static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 360.0f);
+
+    auto read_room_int = [&](const char* key, int fallback) {
+        return static_cast<int>(std::lround(read_number(&assets_json, key, static_cast<double>(fallback))));
+    };
+    auto read_room_float = [&](const char* key, float fallback) {
+        return static_cast<float>(read_number(&assets_json, key, static_cast<double>(fallback)));
+    };
+
+    camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
+    camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 360.0f);
+    camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
+    camera_center_dx = read_room_int("camera_center_dx", 0);
+    camera_center_dz = read_room_int("camera_center_dz", 0);
+
+    load_named_areas_from_json();
+
+    int map_radius_int = static_cast<int>(std::round(map_radius));
+    if (map_radius_int < 0) {
+        map_radius_int = 0;
+    }
+    const int map_w = map_radius_int * 2;
+    const int map_h = map_radius_int * 2;
+
+    if (precomputed_area) {
         if (testing) {
-                std::cout << "[Room] Created room: " << room_name
-                << " at (" << origin.first << ", " << origin.second << ")"
-                << (parent ? " with parent\n" : " (no parent)\n");
+            std::cout << "[Room] Using precomputed area for: " << room_name << "\n";
         }
-        if (!manifest_map_id.empty()) {
-                manifest_map_id_ = std::move(manifest_map_id);
+        room_area = std::make_unique<Area>(room_name, precomputed_area->get_points(), 3);
+        if (room_area) {
+            room_area->set_type("room");
         }
-        manifest_store_ = manifest_store;
-        map_info_root_ = map_info_root;
-        if (room_data_ptr_) {
-                if (room_data_ptr_->is_null()) {
-                        *room_data_ptr_ = json::object();
-                }
-                if (room_data_ptr_->is_object()) {
-                        assets_json = *room_data_ptr_;
-                }
-        }
-        if (!assets_json.is_object()) {
-                assets_json = json::object();
+    } else {
+        int min_w = assets_json.value("min_width", 64);
+        int max_w = assets_json.value("max_width", min_w);
+        int min_h = assets_json.value("min_height", 64);
+        int max_h = assets_json.value("max_height", min_h);
+        int edge_smoothness = assets_json.value("edge_smoothness", 2);
+        std::string geometry = assets_json.value("geometry", "square");
+        if (!geometry.empty()) {
+            geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
         }
 
-        inherits_map_assets_ = assets_json.value("inherits_map_assets", false);
+        std::string lowered_geometry = geometry;
+        std::transform(lowered_geometry.begin(),
+                       lowered_geometry.end(),
+                       lowered_geometry.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
-        const nlohmann::json* map_camera_settings = nullptr;
-        if (map_info_root_ && map_info_root_->is_object()) {
-                auto it = map_info_root_->find("camera_settings");
-                if (it != map_info_root_->end() && it->is_object()) {
-                        map_camera_settings = &(*it);
-                }
-        }
-        auto read_number = [](const nlohmann::json* src, const char* key, double fallback) {
-                if (!src || !src->is_object()) {
-                        return fallback;
-                }
-                auto it = src->find(key);
-                if (it == src->end() || !it->is_number()) {
-                        return fallback;
-                }
-                const double value = it->get<double>();
-                if (!std::isfinite(value)) {
-                        return fallback;
-                }
-                return value;
-        };
-        const int default_camera_height =
-                std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_height_px", 1000.0))), 1, 2000);
-        const float default_camera_tilt = std::clamp(
-                static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 360.0f);
-
-        auto read_room_int = [&](const char* key, int fallback) {
-                return static_cast<int>(std::lround(read_number(&assets_json, key, static_cast<double>(fallback))));
-        };
-        auto read_room_float = [&](const char* key, float fallback) {
-                return static_cast<float>(read_number(&assets_json, key, static_cast<double>(fallback)));
-        };
-
-        camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
-        camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 360.0f);
-        camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
-        camera_center_dx = read_room_int("camera_center_dx", 0);
-        camera_center_dz = read_room_int("camera_center_dz", 0);
-
-        load_named_areas_from_json();
-        int map_radius_int = static_cast<int>(std::round(map_radius));
-        if (map_radius_int < 0) map_radius_int = 0;
-        int map_w = map_radius_int * 2;
-        int map_h = map_radius_int * 2;
-        if (precomputed_area) {
-                if (testing) {
-                        std::cout << "[Room] Using precomputed area for: " << room_name << "\n";
-                }
-                room_area = std::make_unique<Area>(room_name, precomputed_area->get_points(), 3);
-                if (room_area) room_area->set_type("room");
+        if (lowered_geometry == "circle") {
+            migrate_legacy_radius_bounds_if_needed(assets_json, min_w, max_w, min_h, max_h);
+            sanitize_dimension_bounds(min_w, max_w);
+            sanitize_dimension_bounds(min_h, max_h);
+            min_w = max_w = sample_dimension_inclusive(min_w, max_w);
+            min_h = max_h = sample_dimension_inclusive(min_h, max_h);
         } else {
-                int min_w = assets_json.value("min_width", 64);
-                int max_w = assets_json.value("max_width", min_w);
-                int min_h = assets_json.value("min_height", 64);
-                int max_h = assets_json.value("max_height", min_h);
-                int edge_smoothness = assets_json.value("edge_smoothness", 2);
-                std::string geometry = assets_json.value("geometry", "square");
-                if (!geometry.empty()) geometry[0] = std::toupper(geometry[0]);
-                std::string lowered_geometry = geometry;
-                std::transform(lowered_geometry.begin(), lowered_geometry.end(), lowered_geometry.begin(), [](unsigned char ch) {
-                        return static_cast<char>(std::tolower(ch));
-                });
-                if (lowered_geometry == "circle") {
-                        migrate_legacy_radius_bounds_if_needed(assets_json, min_w, max_w, min_h, max_h);
-                        sanitize_dimension_bounds(min_w, max_w);
-                        sanitize_dimension_bounds(min_h, max_h);
-                        min_w = max_w = sample_dimension_inclusive(min_w, max_w);
-                        min_h = max_h = sample_dimension_inclusive(min_h, max_h);
-                } else {
-                        sanitize_dimension_bounds(min_w, max_w);
-                        sanitize_dimension_bounds(min_h, max_h);
-                }
-                int width = std::max(min_w, max_w);
-                int height = std::max(min_h, max_h);
-                if (testing) {
-                        std::cout << "[Room] Creating area from JSON: " << room_name
-                        << " (" << width << "x" << height << ")"
-                        << " at (" << map_origin.first << ", " << map_origin.second << ")"
-                        << ", geometry: " << geometry
-			<< ", map radius: " << map_radius << "\n";
-		}
-                room_area = std::make_unique<Area>(room_name, SDL_Point{map_origin.first, map_origin.second}, width, height, geometry, edge_smoothness, map_w, map_h, 3);
-                if (room_area) room_area->set_type("room");
-	}
-        std::vector<json> json_sources;
-        std::vector<AssetSpawnPlanner::SourceContext> source_contexts;
+            sanitize_dimension_bounds(min_w, max_w);
+            sanitize_dimension_bounds(min_h, max_h);
+        }
 
-        auto push_payload = [this](const std::function<void(nlohmann::json&)>& mutate) {
-                if (!mutate) {
-                        return;
-                }
-                if (map_info_root_) {
-                        if (!map_info_root_->is_object()) {
-                                *map_info_root_ = nlohmann::json::object();
-                        }
-                        mutate(*map_info_root_);
-                }
-                auto apply_mutation = [&](nlohmann::json payload) {
-                        if (!payload.is_object()) {
-                                payload = nlohmann::json::object();
-                        }
-                        mutate(payload);
-                        return payload;
-};
-                if (manifest_writer_ && !manifest_map_id_.empty()) {
-                        nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
-                        payload = apply_mutation(std::move(payload));
-                        manifest_writer_(manifest_map_id_, payload);
-                } else if (manifest_store_ && !manifest_map_id_.empty()) {
-                        nlohmann::json payload;
-                        if (map_info_root_) {
-                                payload = *map_info_root_;
-                        } else if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
-                                payload = *entry;
-                        }
-                        payload = apply_mutation(std::move(payload));
-                        devmode::core::ManifestStore::MapPersistOptions options;
-                        options.flush = false;
-                        options.guard_reason = "Room::push_payload";
-                        bool ok = manifest_store_->persist_map_entry(manifest_map_id_, payload, options);
-                        if (!ok) {
-                                std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
-                        }
-                }
-};
+        const int width = std::max(min_w, max_w);
+        const int height = std::max(min_h, max_h);
 
-        json_sources.push_back(assets_json);
-        AssetSpawnPlanner::SourceContext room_context;
-        room_context.persist = [this, push_payload](const nlohmann::json& updated) {
-                assets_json = updated;
-                if (room_data_ptr_) {
-                        *room_data_ptr_ = assets_json;
-                }
-                push_payload([&](nlohmann::json& payload) {
-                        nlohmann::json& section = payload[data_section_];
-                        if (!section.is_object()) {
-                                section = nlohmann::json::object();
-                        }
-                        section[room_name] = assets_json;
-                });
-};
-        source_contexts.push_back(room_context);
+        if (testing) {
+            std::cout << "[Room] Creating area from JSON: " << room_name
+                      << " (" << width << "x" << height << ")"
+                      << " at (" << map_origin.first << ", " << map_origin.second << ")"
+                      << ", geometry: " << geometry
+                      << ", map radius: " << map_radius << "\n";
+        }
 
-        planner = std::make_unique<AssetSpawnPlanner>( json_sources, *room_area, *asset_lib, source_contexts );
-        std::vector<Area> exclusion;
-        AssetSpawner spawner(asset_lib, exclusion);
-        spawner.spawn(*this);
+        room_area = std::make_unique<Area>(
+            room_name,
+            SDL_Point{map_origin.first, map_origin.second},
+            width,
+            height,
+            geometry,
+            edge_smoothness,
+            map_w,
+            map_h,
+            3);
+
+        if (room_area) {
+            room_area->set_type("room");
+        }
+    }
+
+    if (!auto_populate_assets || !asset_lib || !room_area) {
+        return;
+    }
+
+    std::vector<json> json_sources;
+    std::vector<AssetSpawnPlanner::SourceContext> source_contexts;
+
+    auto push_payload = [this](const std::function<void(nlohmann::json&)>& mutate) {
+        if (!mutate) {
+            return;
+        }
+
+        if (map_info_root_) {
+            if (!map_info_root_->is_object()) {
+                *map_info_root_ = nlohmann::json::object();
+            }
+            mutate(*map_info_root_);
+        }
+
+        auto apply_mutation = [&](nlohmann::json payload) {
+            if (!payload.is_object()) {
+                payload = nlohmann::json::object();
+            }
+            mutate(payload);
+            return payload;
+        };
+
+        if (manifest_writer_ && !manifest_map_id_.empty()) {
+            nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
+            payload = apply_mutation(std::move(payload));
+            manifest_writer_(manifest_map_id_, payload);
+        } else if (manifest_store_ && !manifest_map_id_.empty()) {
+            nlohmann::json payload;
+            if (map_info_root_) {
+                payload = *map_info_root_;
+            } else if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
+                payload = *entry;
+            }
+            payload = apply_mutation(std::move(payload));
+            devmode::core::ManifestStore::MapPersistOptions options;
+            options.flush = false;
+            options.guard_reason = "Room::push_payload";
+            const bool ok = manifest_store_->persist_map_entry(manifest_map_id_, payload, options);
+            if (!ok) {
+                std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
+            }
+        }
+    };
+
+    json_sources.push_back(assets_json);
+
+    AssetSpawnPlanner::SourceContext room_context;
+    room_context.persist = [this, push_payload](const nlohmann::json& updated) {
+        assets_json = updated;
+        if (room_data_ptr_) {
+            *room_data_ptr_ = assets_json;
+        }
+        push_payload([&](nlohmann::json& payload) {
+            nlohmann::json& section = payload[data_section_];
+            if (!section.is_object()) {
+                section = nlohmann::json::object();
+            }
+            section[room_name] = assets_json;
+        });
+    };
+    source_contexts.push_back(room_context);
+
+    planner = std::make_unique<AssetSpawnPlanner>(json_sources, *room_area, *asset_lib, source_contexts);
+
+    std::vector<Area> exclusion;
+    AssetSpawner spawner(asset_lib, exclusion);
+    spawner.spawn(*this);
 }
 
 void Room::set_sibling_left(Room* left_room) {

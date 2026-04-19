@@ -1,13 +1,17 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include <SDL3/SDL.h>
+#include <nlohmann/json.hpp>
 
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_cloner.hpp"
+#include "assets/asset/animation_loader.hpp"
 #include "assets/asset/asset_info.hpp"
 
 namespace {
@@ -19,6 +23,41 @@ Animation make_single_frame_animation() {
     std::vector<Animation::FrameCache> caches;
     caches.push_back(std::move(cache));
     animation.adopt_prebuilt_frames(std::move(caches), {1.0f});
+    return animation;
+}
+
+Animation make_animation_with_movement(const std::vector<SDL_Point>& horizontal_vertical,
+                                       const std::vector<int>& z_values) {
+    Animation animation;
+    if (horizontal_vertical.size() != z_values.size()) {
+        return animation;
+    }
+    std::vector<Animation::FrameCache> caches(horizontal_vertical.size());
+    for (auto& cache : caches) {
+        cache.resize(1);
+    }
+    animation.adopt_prebuilt_frames(std::move(caches), {1.0f});
+
+    std::vector<AnimationFrame> path(horizontal_vertical.size());
+    int total_dx = 0;
+    int total_dy = 0;
+    int total_dz = 0;
+    bool any_motion = false;
+    for (std::size_t i = 0; i < horizontal_vertical.size(); ++i) {
+        path[i].dx = horizontal_vertical[i].x;
+        path[i].dy = horizontal_vertical[i].y;
+        path[i].dz = z_values[i];
+        total_dx += path[i].dx;
+        total_dy += path[i].dy;
+        total_dz += path[i].dz;
+        any_motion = any_motion || path[i].dx != 0 || path[i].dy != 0 || path[i].dz != 0;
+    }
+    animation.replace_movement_paths({path});
+    animation.total_dx = total_dx;
+    animation.total_dy = total_dy;
+    animation.total_dz = total_dz;
+    animation.movment = any_motion;
+    animation.synchronize_runtime_frames();
     return animation;
 }
 
@@ -170,6 +209,21 @@ TEST_CASE("AnimationCloner inherits source on_end and directive when enabled") {
     CHECK(destination.on_end_behavior == Animation::OnEndDirective::Animation);
 }
 
+TEST_CASE("AnimationCloner preserves destination tags and does not inherit source tags") {
+    Animation source = make_single_frame_animation();
+    Animation destination = make_single_frame_animation();
+
+    source.tags = {"source_only", "shared"};
+    destination.tags = {"derived_only", "shared"};
+
+    AssetInfo info("test_asset");
+    AnimationCloner::Options options{};
+
+    REQUIRE(AnimationCloner::Clone(source, destination, options, sentinel_renderer(), info));
+    CHECK(destination.tags == std::vector<std::string>{"derived_only", "shared"});
+    CHECK(std::find(destination.tags.begin(), destination.tags.end(), "source_only") == destination.tags.end());
+}
+
 TEST_CASE("AnimationCloner preserves source base texture dimensions") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
@@ -207,4 +261,135 @@ TEST_CASE("AnimationCloner preserves source base texture dimensions") {
     REQUIRE(query_texture_size(cloned.textures[0], base_w, base_h));
     CHECK(base_w == 4);
     CHECK(base_h == 4);
+}
+
+TEST_CASE("AnimationCloner applies movement reverse and inversion options to cloned movement and totals") {
+    Animation source = make_animation_with_movement({SDL_Point{1, 2}, SDL_Point{-4, 5}, SDL_Point{7, -8}},
+                                                    {3, -6, 9});
+    Animation destination = make_single_frame_animation();
+
+    AssetInfo info("test_asset");
+    AnimationCloner::Options options{};
+    options.reverse_frames = true;
+    options.invert_movement_x = true;
+    options.invert_movement_z = true;
+
+    REQUIRE(AnimationCloner::Clone(source, destination, options, sentinel_renderer(), info));
+    REQUIRE(destination.movement_path_count() == 1);
+    REQUIRE(destination.frame_count() == 3);
+
+    const auto& frames = destination.movement_path(0);
+    REQUIRE(frames.size() == 3);
+    CHECK(frames[0].dx == -7);
+    CHECK(frames[0].dy == -8);
+    CHECK(frames[0].dz == -9);
+    CHECK(frames[1].dx == 4);
+    CHECK(frames[1].dy == 5);
+    CHECK(frames[1].dz == 6);
+    CHECK(frames[2].dx == -1);
+    CHECK(frames[2].dy == 2);
+    CHECK(frames[2].dz == -3);
+
+    CHECK(destination.total_dx == -4);
+    CHECK(destination.total_dy == -1);
+    CHECK(destination.total_dz == -6);
+    CHECK(destination.movment);
+}
+
+TEST_CASE("AnimationLoader applies sourced movement inversion only when inherit_data is enabled") {
+    AssetInfo info("loader_inherit_policy_asset");
+    info.movement_enabled = true;
+    info.animations["base"] = make_animation_with_movement({SDL_Point{1, 2}, SDL_Point{-4, 5}, SDL_Point{7, -8}},
+                                                           {3, -6, 9});
+
+    nlohmann::json inherit_payload = {
+        {"source", {{"kind", "animation"}, {"path", "base"}, {"name", "base"}}},
+        {"number_of_frames", 3},
+        {"inherit_data", true},
+        {"reverse_source", true},
+        {"invert_x", true},
+        {"invert_y", false},
+        {"invert_z", true},
+    };
+
+    SDL_Texture* base_sprite = nullptr;
+    int scaled_w = 0;
+    int scaled_h = 0;
+    int canvas_w = 0;
+    int canvas_h = 0;
+    AnimationLoader::load(info.animations["derived_inherit"],
+                          "derived_inherit",
+                          inherit_payload,
+                          info,
+                          ".",
+                          "cache",
+                          1.0f,
+                          sentinel_renderer(),
+                          base_sprite,
+                          scaled_w,
+                          scaled_h,
+                          canvas_w,
+                          canvas_h,
+                          false);
+
+    const auto& inherited_frames = info.animations["derived_inherit"].movement_path(0);
+    REQUIRE(inherited_frames.size() == 3);
+    CHECK(inherited_frames[0].dx == -7);
+    CHECK(inherited_frames[0].dy == -8);
+    CHECK(inherited_frames[0].dz == -9);
+    CHECK(inherited_frames[1].dx == 4);
+    CHECK(inherited_frames[1].dy == 5);
+    CHECK(inherited_frames[1].dz == 6);
+    CHECK(inherited_frames[2].dx == -1);
+    CHECK(inherited_frames[2].dy == 2);
+    CHECK(inherited_frames[2].dz == -3);
+    CHECK(info.animations["derived_inherit"].total_dx == -4);
+    CHECK(info.animations["derived_inherit"].total_dy == -1);
+    CHECK(info.animations["derived_inherit"].total_dz == -6);
+
+    nlohmann::json local_payload = {
+        {"source", {{"kind", "animation"}, {"path", "base"}, {"name", "base"}}},
+        {"number_of_frames", 3},
+        {"inherit_data", false},
+        {"reverse_source", true},
+        {"invert_x", true},
+        {"invert_y", true},
+        {"invert_z", true},
+        {"movement",
+         nlohmann::json::array({
+             nlohmann::json::array({5, 6, 7}),
+             nlohmann::json::array({8, 9, 10}),
+             nlohmann::json::array({11, 12, 13}),
+         })},
+    };
+
+    AnimationLoader::load(info.animations["derived_local"],
+                          "derived_local",
+                          local_payload,
+                          info,
+                          ".",
+                          "cache",
+                          1.0f,
+                          sentinel_renderer(),
+                          base_sprite,
+                          scaled_w,
+                          scaled_h,
+                          canvas_w,
+                          canvas_h,
+                          false);
+
+    const auto& local_frames = info.animations["derived_local"].movement_path(0);
+    REQUIRE(local_frames.size() == 3);
+    CHECK(local_frames[0].dx == 5);
+    CHECK(local_frames[0].dy == 6);
+    CHECK(local_frames[0].dz == 7);
+    CHECK(local_frames[1].dx == 8);
+    CHECK(local_frames[1].dy == 9);
+    CHECK(local_frames[1].dz == 10);
+    CHECK(local_frames[2].dx == 11);
+    CHECK(local_frames[2].dy == 12);
+    CHECK(local_frames[2].dz == 13);
+    CHECK(info.animations["derived_local"].total_dx == 24);
+    CHECK(info.animations["derived_local"].total_dy == 27);
+    CHECK(info.animations["derived_local"].total_dz == 30);
 }

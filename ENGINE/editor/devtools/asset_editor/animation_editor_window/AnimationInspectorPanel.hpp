@@ -24,6 +24,7 @@ struct SDL_Renderer;
 #include "OnEndSelector.hpp"
 #include "PlaybackSettingsPanel.hpp"
 #include "SourceConfigPanel.hpp"
+#include "AnimationTagsPanel.hpp"
 
 namespace devmode::core {
 class ManifestStore;
@@ -40,6 +41,7 @@ class SourceConfigPanel;
 class PlaybackSettingsPanel;
 class OnEndSelector;
 class AudioPanel;
+class AnimationTagsPanel;
 class PreviewProvider;
 class AsyncTaskQueue;
 class AudioImporter;
@@ -138,6 +140,7 @@ class AnimationInspectorPanel {
     std::unique_ptr<SourceConfigPanel> source_config_;
     std::unique_ptr<PlaybackSettingsPanel> playback_settings_;
     std::unique_ptr<OnEndSelector> on_end_selector_;
+    std::unique_ptr<AnimationTagsPanel> tags_panel_;
     std::unique_ptr<AudioPanel> audio_panel_;
     std::unique_ptr<DMTextBox> name_box_;
     std::unique_ptr<DMButton> start_button_;
@@ -155,17 +158,22 @@ class AnimationInspectorPanel {
     mutable SDL_Rect playback_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect on_end_section_rect_{0, 0, 0, 0};
     mutable SDL_Rect on_end_header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect tags_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect tags_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect audio_section_rect_{0, 0, 0, 0};
     mutable SDL_Rect audio_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect preview_rect_{0, 0, 0, 0};
     mutable SDL_Rect source_rect_{0, 0, 0, 0};
     mutable SDL_Rect playback_rect_{0, 0, 0, 0};
     mutable SDL_Rect on_end_rect_{0, 0, 0, 0};
+    mutable SDL_Rect tags_rect_{0, 0, 0, 0};
     mutable SDL_Rect audio_rect_{0, 0, 0, 0};
     mutable SDL_Rect scrollbar_track_{0, 0, 0, 0};
     mutable SDL_Rect scrollbar_thumb_{0, 0, 0, 0};
     mutable bool layout_dirty_ = true;
     mutable bool scrollbar_visible_ = false;
+    bool scrollbar_dragging_ = false;
+    int scrollbar_drag_offset_y_ = 0;
     mutable std::string preview_signature_;
     mutable bool preview_reverse_ = false;
     bool rename_pending_ = false;
@@ -173,6 +181,7 @@ class AnimationInspectorPanel {
     int focus_index_ = -1;
     FocusTarget current_focus_target_ = FocusTarget::kNone;
     bool source_uses_animation_ = false;
+    std::string source_config_animation_id_;
     bool on_end_section_visible_cache_ = true;
     std::string notified_payload_animation_id_;
     std::string notified_payload_signature_;

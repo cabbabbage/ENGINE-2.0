@@ -1,7 +1,8 @@
 #pragma once
 
 #include <SDL3/SDL.h>
-#include <cstdint>
+
+#include <array>
 #include <unordered_map>
 #include <vector>
 
@@ -9,33 +10,23 @@ class LayerEffectProcessor {
 public:
     struct RuntimeLight {
         SDL_FPoint screen_center{0.0f, 0.0f};
-        SDL_FPoint floor_screen_center{0.0f, 0.0f};
         SDL_Color color{255, 255, 255, 255};
-        float intensity = 1.0f;
-        float opacity = 50.0f;
-        float radius_px = 220.0f;
+        float intensity = 0.0f;
+        float opacity = 0.0f;
+        float radius_px = 0.0f;
         float radius_world = 0.0f;
-        float falloff = 1.8f;
+        float falloff = 1.0f;
         float world_z = 0.0f;
         float floor_world_x = 0.0f;
         float floor_world_z = 0.0f;
         float world_height = 0.0f;
+        SDL_FPoint floor_screen_center{0.0f, 0.0f};
         bool has_floor_projection = false;
     };
 
     struct LayerLightingParams {
-        bool enabled = true;
-        SDL_Color ambient_color{18, 20, 24, 255};
-    };
-
-    struct LayerFogParams {
         bool enabled = false;
-        float normalized_depth = 0.0f;
-        float bottom_y_px = 0.0f;
-        float thickness = 1.35f;
-        int layer_cycle_index = 0;
-        float bottom_opacity_curve = 1.0f;
-        SDL_Color tint{222, 232, 242, 255};
+        SDL_Color ambient_color{0, 0, 0, 255};
     };
 
     struct LayerScratchTextures {
@@ -45,24 +36,16 @@ public:
     struct LayerProcessResult {
         SDL_Texture* final_texture = nullptr;
         bool lighting_applied = false;
-        bool fog_applied = false;
     };
 
-    explicit LayerEffectProcessor(SDL_Renderer* renderer = nullptr) : renderer_(renderer) {}
+    explicit LayerEffectProcessor(SDL_Renderer* renderer = nullptr)
+        : renderer_(renderer) {}
     ~LayerEffectProcessor();
+
     LayerEffectProcessor(const LayerEffectProcessor&) = delete;
     LayerEffectProcessor& operator=(const LayerEffectProcessor&) = delete;
 
     void set_renderer(SDL_Renderer* renderer);
-
-    LayerProcessResult process_layer(SDL_Texture* base_layer_texture,
-                                     SDL_Texture* composited_output_texture,
-                                     double layer_depth_min,
-                                     double layer_depth_max,
-                                     const LayerLightingParams& lighting_params,
-                                     const std::vector<RuntimeLight>& lights,
-                                     const LayerFogParams& fog_params,
-                                     const LayerScratchTextures& scratch_textures);
 
     bool apply_lens_blur(SDL_Texture* src,
                          SDL_Texture* dst,
@@ -72,24 +55,52 @@ public:
                          float radius_px,
                          const SDL_FPoint& optical_center,
                          float radial_radius_px,
-                         float quality_scale = 1.0f) const;
+                         float quality_scale) const;
+
+    LayerProcessResult process_layer(SDL_Texture* base_layer_texture,
+                                     SDL_Texture* composited_output_texture,
+                                     double layer_depth_min,
+                                     double layer_depth_max,
+                                     const LayerLightingParams& lighting_params,
+                                     const std::vector<RuntimeLight>& lights,
+                                     const LayerScratchTextures& scratch_textures);
 
 private:
+    struct BlurKernelCache {
+        int kernel_radius = -1;
+        float sigma = -1.0f;
+        std::vector<float> offsets;
+        std::vector<Uint8> alphas;
+        Uint8 center_alpha = 255;
+    };
+
     void destroy_owned_resources();
     void destroy_lighting_resources();
+
     SDL_Texture* ensure_light_falloff_texture(float falloff);
 
+    SDL_BlendMode sum_blend_mode() const;
     SDL_BlendMode alpha_copy_blend_mode();
     SDL_BlendMode light_add_rgb_preserve_alpha_blend_mode();
     SDL_BlendMode alpha_masked_multiply_blend_mode();
+
     bool supports_strict_dark_mask_pipeline();
+
+    void ensure_blur_kernel_cache(int kernel_radius, float sigma) const;
 
     SDL_Renderer* renderer_ = nullptr;
     std::unordered_map<int, SDL_Texture*> light_falloff_textures_;
 
+    mutable BlurKernelCache blur_kernel_cache_{};
+
+    mutable SDL_BlendMode sum_blend_mode_ = SDL_BLENDMODE_INVALID;
+    mutable bool sum_blend_mode_ready_ = false;
+
+
     SDL_BlendMode alpha_copy_blend_mode_ = SDL_BLENDMODE_INVALID;
     SDL_BlendMode light_add_rgb_preserve_alpha_blend_mode_ = SDL_BLENDMODE_INVALID;
     SDL_BlendMode alpha_masked_multiply_blend_mode_ = SDL_BLENDMODE_INVALID;
+
     bool alpha_copy_blend_mode_ready_ = false;
     bool light_add_rgb_preserve_alpha_blend_mode_ready_ = false;
     bool alpha_masked_multiply_blend_mode_ready_ = false;

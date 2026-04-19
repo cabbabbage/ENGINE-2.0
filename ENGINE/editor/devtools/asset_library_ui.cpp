@@ -1609,6 +1609,10 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         nlohmann::json manifest_entry = {
             {"asset_name", name},
             {"asset_type", "Object"},
+            {"movement_enabled", false},
+            {"attack_box_enabled", false},
+            {"hitbox_enabled", false},
+            {"floor_boxes_enabled", false},
             {"animations", nlohmann::json{{"default", default_anim}}},
             {"start", "default"},
             {"asset_directory", asset_dir_str}

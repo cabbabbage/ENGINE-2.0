@@ -211,11 +211,13 @@ public:
     double current_focus_depth() const { return runtime_focus_depth_; }
     double current_focus_ndc_offset() const { return runtime_focus_ndc_offset_; }
     float current_depth_offset_px() const { return runtime_depth_offset_px_; }
-    double current_anchor_world_z() const { return runtime_anchor_world_z_; }
+    double current_focus_plane_world_z() const { return runtime_anchor_world_z_; }
+    double current_anchor_world_z() const { return current_focus_plane_world_z(); }
     double current_pitch_radians() const { return runtime_pitch_rad_; }
     float current_pitch_degrees() const { return runtime_pitch_deg_; }
 
     double view_height_world() const;
+    double focus_plane_world_z() const;
     double anchor_world_z() const;
     SDL_FPoint get_view_center_f() const;
     SDL_Point get_screen_center() const {
@@ -289,7 +291,8 @@ public:
     std::uint64_t camera_state_version() const;
     std::uint64_t projection_state_version() const { return camera_state_version(); }
     const std::vector<VisibleTraversalEntry>& visible_traversal_entries() const { return visible_traversal_entries_; }
-
+    SDL_FPoint WarpedScreenGrid::getAnchorPoint();
+    
 private:
     struct ProjectionFingerprint {
         std::int64_t center_x_q = 0;

@@ -276,6 +276,8 @@ add_executable(engine_tests
     ENGINE/tests/test_animation_document_geometry.cpp
     ENGINE/tests/test_animation_editor_defaults.cpp
     ENGINE/tests/test_animation_source_navigation.cpp
+    ENGINE/tests/test_animation_loader_tags.cpp
+    ENGINE/tests/test_animation_tags_panel.cpp
     ENGINE/tests/test_combat_box_geometry.cpp
     ENGINE/tests/test_combat_attack_pipeline.cpp
     ENGINE/tests/test_map_data.cpp
@@ -295,6 +297,7 @@ add_executable(engine_tests
     ENGINE/tests/test_asset_perspective_sample.cpp
     ENGINE/tests/test_animation_runtime_ownership.cpp
     ENGINE/tests/test_animation_cloner_on_end.cpp
+    ENGINE/tests/test_source_config_panel_regressions.cpp
     ENGINE/tests/test_auto_move_zero_stride_recovery.cpp
     ENGINE/tests/test_auto_move_3d_pathing.cpp
     ENGINE/tests/test_scaling_logic_variants.cpp
@@ -308,10 +311,12 @@ add_executable(engine_tests
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
     ENGINE/tests/test_layer_effect_processor.cpp
     ENGINE/tests/test_render_dof_composite_target.cpp
+    ENGINE/tests/test_layer_submission_player_split.cpp
     ENGINE/tests/test_floor_light_mask.cpp
+    ENGINE/tests/test_asset_manifest_enable_flags.cpp
+    ENGINE/tests/test_asset_collision_context_policy.cpp
     ENGINE/tests/test_dynamic_boundary_size_variation.cpp
-    ENGINE/tests/test_generate_trails_geometry.cpp
-  )
+)
 
 target_include_directories(engine_tests
       PRIVATE

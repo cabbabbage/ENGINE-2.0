@@ -151,7 +151,7 @@ void RandomOrbit3DControllerBehavior::set_config(RandomOrbit3DControllerBehavior
     }
 }
 
-void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in, bool mad) {
+void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in) {
     if (!controller_) {
         return;
     }
@@ -163,9 +163,6 @@ void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in, boo
     }
 
     const auto& ctx = controller_->game_context();
-    if (mad && !ctx.Flies_mad) {
-        ctx.set_flies_mad();
-    }
     const axis::WorldPos self_pos{ self->world_x(), self->world_y(), self->world_z() };
 
 

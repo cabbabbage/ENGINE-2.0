@@ -16,6 +16,7 @@ public:
     enum class Kind {
         HitBox,
         AttackBox,
+        ImpassableBox,
     };
 
     enum class PropagationScope {
@@ -36,6 +37,7 @@ public:
     using ApplyCallback = std::function<void(const DetailValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
     using OnionSkinToggleCallback = std::function<void(bool)>;
+    using SystemEnabledToggleCallback = std::function<void(bool)>;
 
     explicit RoomBoxToolsPanel(Kind kind);
     ~RoomBoxToolsPanel();
@@ -54,6 +56,9 @@ public:
     void set_detail_values(const DetailValues& values);
     void set_onion_skin_enabled(bool enabled);
     bool onion_skin_enabled() const;
+    void set_system_enabled(bool enabled);
+    bool system_enabled() const;
+    void set_propagation_visible(bool visible);
 
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
@@ -61,6 +66,7 @@ public:
     void set_on_apply(ApplyCallback callback);
     void set_on_propagate(PropagateCallback callback);
     void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
+    void set_on_system_enabled_toggle(SystemEnabledToggleCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -75,6 +81,7 @@ private:
 
 private:
     Kind kind_ = Kind::HitBox;
+    bool propagation_visible_ = true;
     bool visible_ = false;
     int screen_w_ = 0;
     int screen_h_ = 0;
@@ -84,6 +91,7 @@ private:
     SDL_Rect panel_bounds_override_{0, 0, 0, 0};
     mutable SDL_Rect panel_rect_{12, 56, 320, 520};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect enabled_toggle_rect_{0, 0, 0, 0};
     mutable SDL_Rect subtitle_rect_{0, 0, 0, 0};
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
     mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
@@ -105,6 +113,7 @@ private:
     std::unique_ptr<DMTextBox> name_textbox_;
     std::unique_ptr<DMTextBox> extrusion_textbox_;
     std::unique_ptr<DMTextBox> damage_textbox_;
+    std::unique_ptr<DMCheckbox> system_enabled_checkbox_;
     std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
 
     SelectCallback on_select_;
@@ -113,4 +122,5 @@ private:
     ApplyCallback on_apply_;
     PropagateCallback on_propagate_;
     OnionSkinToggleCallback on_onion_skin_toggle_;
+    SystemEnabledToggleCallback on_system_enabled_toggle_;
 };

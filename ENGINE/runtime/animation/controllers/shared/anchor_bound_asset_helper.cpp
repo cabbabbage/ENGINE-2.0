@@ -1,10 +1,16 @@
 #include "anchor_bound_asset_helper.hpp"
 
+#include "animation/controllers/shared/anchor_binding_order.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation_frame.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <optional>
+#include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace anchor_bound_asset_helper {
@@ -16,6 +22,25 @@ int child_frame_index(const Asset* child_asset) {
     }
     const AnimationFrame* frame = child_asset->current_animation_frame();
     return frame ? frame->frame_index : -1;
+}
+
+void hash_append_bytes(std::uint64_t& hash, const void* data, std::size_t size) {
+    constexpr std::uint64_t kFnvPrime = 1099511628211ull;
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (std::size_t index = 0; index < size; ++index) {
+        hash ^= static_cast<std::uint64_t>(bytes[index]);
+        hash *= kFnvPrime;
+    }
+}
+
+void hash_append_string(std::uint64_t& hash, std::string_view value) {
+    hash_append_bytes(hash, value.data(), value.size());
+    const unsigned char separator = 0xFFu;
+    hash_append_bytes(hash, &separator, sizeof(separator));
+}
+
+void hash_append_int(std::uint64_t& hash, int value) {
+    hash_append_bytes(hash, &value, sizeof(value));
 }
 
 } // namespace
@@ -121,18 +146,108 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
 
     flush_in_progress_ = true;
     bool changed = false;
-    std::vector<ChildAsset*> to_update;
-    to_update.reserve(pending_children_.size());
-    for (ChildAsset* child : pending_children_) {
-        if (child) {
-            to_update.push_back(child);
-        }
-    }
-    pending_children_.clear();
-    std::sort(to_update.begin(), to_update.end());
+    while (!pending_children_.empty()) {
+        auto deterministic_sort_key = [&](const BindingRecord& record) {
+            std::uint64_t hash = 1469598103934665603ull;
+            hash_append_string(hash, record.anchor_name);
 
-    for (ChildAsset* child : to_update) {
-        changed = child->update() || changed;
+            if (record.owner) {
+                hash_append_string(hash, record.owner->spawn_id);
+                if (record.owner->info) {
+                    hash_append_string(hash, record.owner->info->name);
+                }
+                hash_append_int(hash, record.owner->world_x());
+                hash_append_int(hash, record.owner->world_y());
+                hash_append_int(hash, record.owner->world_z());
+                hash_append_int(hash, record.owner->grid_resolution);
+            }
+
+            if (record.child_asset) {
+                hash_append_string(hash, record.child_asset->spawn_id);
+                if (record.child_asset->info) {
+                    hash_append_string(hash, record.child_asset->info->name);
+                }
+                hash_append_int(hash, record.child_asset->world_x());
+                hash_append_int(hash, record.child_asset->world_y());
+                hash_append_int(hash, record.child_asset->world_z());
+                hash_append_int(hash, record.child_asset->grid_resolution);
+            }
+
+            return hash;
+        };
+
+        std::vector<ChildAsset*> wave;
+        wave.reserve(pending_children_.size());
+        for (ChildAsset* child : pending_children_) {
+            if (child) {
+                wave.push_back(child);
+            }
+        }
+        pending_children_.clear();
+
+        std::unordered_set<ChildAsset*> wave_lookup;
+        wave_lookup.reserve(wave.size() * 2);
+        for (ChildAsset* child : wave) {
+            if (child) {
+                wave_lookup.insert(child);
+            }
+        }
+
+        std::unordered_map<ChildAsset*, const BindingRecord*> record_by_child;
+        record_by_child.reserve(bindings_.size() * 2);
+        std::unordered_map<Asset*, ChildAsset*> child_by_asset;
+        child_by_asset.reserve(bindings_.size() * 2);
+        for (const auto& [child_asset, record] : bindings_) {
+            (void)child_asset;
+            if (!record.child) {
+                continue;
+            }
+            record_by_child[record.child] = &record;
+            if (record.child_asset) {
+                child_by_asset[record.child_asset] = record.child;
+            }
+        }
+
+        std::vector<anchor_binding_order::Node> nodes;
+        nodes.reserve(wave.size());
+        std::unordered_map<std::uintptr_t, ChildAsset*> child_by_id;
+        child_by_id.reserve(wave.size() * 2);
+        for (ChildAsset* child : wave) {
+            if (!child) {
+                continue;
+            }
+            const auto record_it = record_by_child.find(child);
+            if (record_it == record_by_child.end()) {
+                continue;
+            }
+            const BindingRecord* record = record_it->second;
+            std::optional<std::uintptr_t> depends_on{};
+            if (record->owner) {
+                const auto owner_child_it = child_by_asset.find(record->owner);
+                if (owner_child_it != child_by_asset.end() &&
+                    owner_child_it->second &&
+                    owner_child_it->second != child &&
+                    wave_lookup.count(owner_child_it->second) > 0) {
+                    depends_on = reinterpret_cast<std::uintptr_t>(owner_child_it->second);
+                }
+            }
+
+            const std::uintptr_t id = reinterpret_cast<std::uintptr_t>(child);
+            nodes.push_back(anchor_binding_order::Node{
+                id,
+                depends_on,
+                deterministic_sort_key(*record)});
+            child_by_id[id] = child;
+        }
+
+        const anchor_binding_order::Result order = anchor_binding_order::compute(nodes);
+        for (std::uintptr_t id : order.ordered_ids) {
+            const auto child_it = child_by_id.find(id);
+            if (child_it == child_by_id.end() || !child_it->second) {
+                continue;
+            }
+            changed = child_it->second->update() || changed;
+        }
     }
 
     for (auto& [child_asset, record] : bindings_) {

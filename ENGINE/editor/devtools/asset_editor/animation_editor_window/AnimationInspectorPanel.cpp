@@ -350,6 +350,7 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     if (should_show_on_end_section(document_.get(), animation_id_)) {
         add_section(on_end_selector_.get());
     }
+    add_section(tags_panel_.get());
     add_section(audio_panel_.get());
 
     total += padding;
@@ -387,12 +388,18 @@ void AnimationInspectorPanel::update() {
 
     if (playback_settings_) playback_settings_->update();
     if (on_end_selector_ && show_on_end) on_end_selector_->update();
+    if (tags_panel_) tags_panel_->update();
     if (audio_panel_) audio_panel_->update();
     notify_payload_change_if_needed();
 }
 
 void AnimationInspectorPanel::apply_dropdown_selections() {
     if (source_config_) {
+        if (source_config_animation_id_ != animation_id_) {
+            source_config_->set_document(document_);
+            source_config_->set_animation_id(animation_id_);
+            source_config_animation_id_ = animation_id_;
+        }
         source_config_->commit_animation_dropdown_selection();
     }
     notify_payload_change_if_needed();
@@ -442,6 +449,10 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
         if (on_end_selector_ && should_show_on_end_section(document_.get(), animation_id_)) {
             draw_section_header(renderer, on_end_header_rect_, "On End");
             on_end_selector_->render(renderer);
+        }
+        if (tags_panel_) {
+            draw_section_header(renderer, tags_header_rect_, "Tags");
+            tags_panel_->render(renderer);
         }
         if (audio_panel_) {
             draw_section_header(renderer, audio_header_rect_, "Audio");
@@ -550,16 +561,40 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
 
     if (scrollbar_visible_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        if (SDL_PointInRect(&p, &scrollbar_track_)) {
+        if (SDL_PointInRect(&p, &scrollbar_thumb_)) {
+            scrollbar_dragging_ = true;
+            scrollbar_drag_offset_y_ = p.y - scrollbar_thumb_.y;
+            handled = true;
+        } else if (SDL_PointInRect(&p, &scrollbar_track_)) {
             const int track_range = std::max(0, scrollbar_track_.h - scrollbar_thumb_.h);
             int relative = std::clamp(p.y - scrollbar_track_.y - scrollbar_thumb_.h / 2, 0, track_range);
             float ratio = (track_range > 0) ? static_cast<float>(relative) / static_cast<float>(track_range) : 0.0f;
-            int max_scroll = std::max(0, content_height_ - bounds_.h);
+            int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
             int new_scroll = static_cast<int>(std::round(ratio * max_scroll));
             scroll_controller_.set_scroll(new_scroll);
             layout_dirty_ = true;
             handled = true;
         }
+    }
+
+    if (scrollbar_dragging_ && e.type == SDL_EVENT_MOUSE_MOTION) {
+        const int track_range = std::max(0, scrollbar_track_.h - scrollbar_thumb_.h);
+        const int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
+        const int mouse_y = static_cast<int>(std::lround(e.motion.y));
+        int relative = std::clamp(mouse_y - scrollbar_track_.y - scrollbar_drag_offset_y_, 0, track_range);
+        float ratio = (track_range > 0) ? static_cast<float>(relative) / static_cast<float>(track_range) : 0.0f;
+        int new_scroll = static_cast<int>(std::round(ratio * max_scroll));
+        if (new_scroll != scroll_controller_.scroll()) {
+            scroll_controller_.set_scroll(new_scroll);
+            layout_dirty_ = true;
+        }
+        handled = true;
+    }
+
+    if (scrollbar_dragging_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        scrollbar_dragging_ = false;
+        scrollbar_drag_offset_y_ = 0;
+        handled = true;
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -589,6 +624,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
     if (on_end_selector_ &&
         should_show_on_end_section(document_.get(), animation_id_) &&
         on_end_selector_->handle_event(e)) handled = true;
+    if (tags_panel_ && tags_panel_->handle_event(e)) handled = true;
     if (audio_panel_ && audio_panel_->handle_event(e)) handled = true;
 
     if (was_editing && name_box_ && !name_box_->is_editing()) {
@@ -604,6 +640,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
 
 void AnimationInspectorPanel::rebuild_widgets() {
     widget_registry_.reset();
+    source_config_animation_id_.clear();
 
     if (!document_ || animation_id_.empty()) {
         return;
@@ -654,6 +691,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
     }
     source_config_->set_document(document_);
     source_config_->set_animation_id(animation_id_);
+    source_config_animation_id_ = animation_id_;
     source_uses_animation_ = source_config_->use_animation_reference();
 
     if (!source_frames_button_) {
@@ -709,6 +747,15 @@ void AnimationInspectorPanel::rebuild_widgets() {
     }
     audio_panel_->set_document(document_);
     audio_panel_->set_animation_id(animation_id_);
+
+    if (!tags_panel_) {
+        tags_panel_ = std::make_unique<AnimationTagsPanel>();
+    }
+    tags_panel_->set_document(document_);
+    tags_panel_->set_animation_id(animation_id_);
+    tags_panel_->set_on_tags_changed([this](const std::vector<std::string>&) {
+        notify_payload_change_if_needed(true);
+    });
 
     rename_pending_ = false;
     refresh_start_indicator();
@@ -855,6 +902,7 @@ void AnimationInspectorPanel::layout_widgets() const {
             on_end_selector_->set_bounds(self->on_end_rect_);
         }
     }
+    place_static_section(tags_panel_.get(), self->tags_header_rect_, self->tags_rect_, self->tags_section_rect_);
     place_static_section(audio_panel_.get(), self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
 
     self->content_height_ = cursor.logical_y + padding - content_top;
@@ -994,10 +1042,14 @@ void AnimationInspectorPanel::update_scrollbar_geometry() const {
     self->scrollbar_thumb_ = SDL_Rect{0, 0, 0, 0};
 
     if (scrollable_bounds_.h <= 0) {
+        self->scrollbar_dragging_ = false;
+        self->scrollbar_drag_offset_y_ = 0;
         return;
     }
     const int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
     if (max_scroll <= 0) {
+        self->scrollbar_dragging_ = false;
+        self->scrollbar_drag_offset_y_ = 0;
         return;
     }
 
@@ -1007,6 +1059,8 @@ void AnimationInspectorPanel::update_scrollbar_geometry() const {
                    kScrollbarWidth,
                    std::max(0, scrollable_bounds_.h - inset * 2)};
     if (track.h <= 0 || track.w <= 0) {
+        self->scrollbar_dragging_ = false;
+        self->scrollbar_drag_offset_y_ = 0;
         return;
     }
 
@@ -1107,6 +1161,9 @@ void AnimationInspectorPanel::apply_dependencies() {
     if (audio_panel_) {
         audio_panel_->set_importer(audio_importer_);
         audio_panel_->set_file_picker(audio_file_picker_);
+    }
+    if (tags_panel_) {
+        tags_panel_->set_status_callback(status_callback_);
     }
 
     notify_payload_change_if_needed(true);

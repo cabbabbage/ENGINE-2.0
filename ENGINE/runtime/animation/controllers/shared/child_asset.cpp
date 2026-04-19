@@ -1,18 +1,38 @@
 #include "child_asset.hpp"
 
 #include "animation/controllers/shared/anchored_child_placement.hpp"
+#include "animation/controllers/shared/oval_anchor_heading.hpp"
 #include "assets/asset/Asset.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
+#include "utils/string_utils.hpp"
 
 #include <cmath>
 #include <optional>
+#include <unordered_set>
 #include <utility>
 
 namespace {
+
+std::vector<std::string> normalize_tag_list(const std::vector<std::string>& values) {
+    std::vector<std::string> normalized;
+    normalized.reserve(values.size());
+    std::unordered_set<std::string> seen;
+    seen.reserve(values.size());
+    for (const std::string& raw : values) {
+        std::string token = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw));
+        if (token.empty()) {
+            continue;
+        }
+        if (seen.insert(token).second) {
+            normalized.push_back(std::move(token));
+        }
+    }
+    return normalized;
+}
 
 double desired_render_depth_bias(const AnchorPoint& anchor, int quantized_world_z) {
     return render_depth::bias_for_quantized_depth(anchor.world_depth,
@@ -20,6 +40,7 @@ double desired_render_depth_bias(const AnchorPoint& anchor, int quantized_world_
 }
 
 anchor_points::AnchorWorldPoint3 child_anchor_world_displacement(const AnchorPoint& parent_anchor,
+                                                                  Asset* owner_asset,
                                                                   const Asset* child_asset) {
     anchor_points::AnchorWorldPoint3 displacement{};
     if (!child_asset) {
@@ -34,12 +55,20 @@ anchor_points::AnchorWorldPoint3 child_anchor_world_displacement(const AnchorPoi
 
     float displacement_x = cumulative.dx;
     float displacement_y = cumulative.dy;
-    const float displacement_z = cumulative.dz;
+    float displacement_z = cumulative.dz;
+
+    // Preserve existing operation ordering: movement sampling -> flip parity -> optional oval heading
+    // rotation around world Y (XZ plane only).
     if (parent_anchor.flip_horizontal) {
         displacement_x = -displacement_x;
     }
     if (parent_anchor.flip_vertical) {
         displacement_y = -displacement_y;
+    }
+    const std::optional<float> heading_radians =
+        oval_anchor_heading::resolve_effective_oval_heading_radians(owner_asset, parent_anchor);
+    if (heading_radians.has_value()) {
+        oval_anchor_heading::rotate_xz_about_world_y(*heading_radians, displacement_x, displacement_z);
     }
 
     displacement = anchor_points::AnchorWorldPoint3{
@@ -307,6 +336,24 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
         return changed;
     }
 
+    const std::vector<std::string> required_tags = normalize_tag_list(parent_anchor.tags);
+    const std::vector<std::string> excluded_tags = normalize_tag_list(parent_anchor.anti_tags);
+    const bool has_tag_criteria = !required_tags.empty() || !excluded_tags.empty();
+    if (!has_tag_criteria) {
+        last_tag_criteria_initialized_ = false;
+        last_required_tags_.clear();
+        last_excluded_tags_.clear();
+    } else if (!last_tag_criteria_initialized_ ||
+               required_tags != last_required_tags_ ||
+               excluded_tags != last_excluded_tags_) {
+        if (child_ && child_->anim_) {
+            (void)child_->anim_->set_animation_by_tags(required_tags, excluded_tags);
+        }
+        last_required_tags_ = required_tags;
+        last_excluded_tags_ = excluded_tags;
+        last_tag_criteria_initialized_ = true;
+    }
+
     anchored_child_placement::PlacementInput placement_input{};
     placement_input.parent.world_x = owner_ ? static_cast<float>(owner_->world_x()) : 0.0f;
     placement_input.parent.world_y = owner_ ? static_cast<float>(owner_->world_y()) : 0.0f;
@@ -315,7 +362,7 @@ bool ChildAsset::apply_anchor_solution_internal(const AnchorPoint& parent_anchor
         (owner_ && owner_->grid_point()) ? owner_->grid_point()->resolution_layer() : child_->grid_resolution;
     placement_input.anchor_definition.anchor = parent_anchor;
     const anchor_points::AnchorWorldPoint3 anchor_displacement =
-        child_anchor_world_displacement(parent_anchor, child_);
+        child_anchor_world_displacement(parent_anchor, owner_, child_);
     if (anchor_displacement.valid) {
         placement_input.anchor_world_displacement.x = anchor_displacement.x;
         placement_input.anchor_world_displacement.y = anchor_displacement.y;
@@ -585,6 +632,9 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     auto_hidden_for_anchor_ = other.auto_hidden_for_anchor_;
     has_successful_sync_ = other.has_successful_sync_;
     spawn_warning_logged_ = other.spawn_warning_logged_;
+    last_tag_criteria_initialized_ = other.last_tag_criteria_initialized_;
+    last_required_tags_ = std::move(other.last_required_tags_);
+    last_excluded_tags_ = std::move(other.last_excluded_tags_);
     other.asset_name_.clear();
     other.owner_ = nullptr;
     other.assets_ = nullptr;
@@ -595,6 +645,9 @@ void ChildAsset::move_from(ChildAsset&& other) noexcept {
     other.auto_hidden_for_anchor_ = true;
     other.has_successful_sync_ = false;
     other.spawn_warning_logged_ = false;
+    other.last_tag_criteria_initialized_ = false;
+    other.last_required_tags_.clear();
+    other.last_excluded_tags_.clear();
     if (bound_) {
         register_anchor_binding();
     }

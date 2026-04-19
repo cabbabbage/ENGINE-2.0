@@ -24,6 +24,7 @@
 #include <chrono>
 #include <limits>
 #include <memory>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <iterator>
@@ -88,6 +89,55 @@ std::string source_animation_id(const Animation& animation) {
 
 bool animation_inherits_data(const Animation& animation) {
         return animation.inherit_data && !source_animation_id(animation).empty();
+}
+
+std::string normalize_tag_value(std::string_view raw) {
+        const auto begin = std::find_if_not(raw.begin(), raw.end(), [](unsigned char ch) {
+                return std::isspace(ch) != 0;
+        });
+        const auto end = std::find_if_not(raw.rbegin(), raw.rend(), [](unsigned char ch) {
+                return std::isspace(ch) != 0;
+        }).base();
+        if (begin >= end) {
+                return {};
+        }
+
+        std::string normalized(begin, end);
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+        });
+        return normalized;
+}
+
+std::vector<std::string> parse_animation_tags(const nlohmann::json& payload) {
+        std::vector<std::string> tags;
+        std::unordered_set<std::string> seen;
+        if (!payload.is_object() || !payload.contains("tags")) {
+                return tags;
+        }
+
+        auto append_tag = [&](const nlohmann::json& node) {
+                if (!node.is_string()) {
+                        return;
+                }
+                std::string normalized = normalize_tag_value(node.get<std::string>());
+                if (normalized.empty()) {
+                        return;
+                }
+                if (seen.insert(normalized).second) {
+                        tags.push_back(std::move(normalized));
+                }
+        };
+
+        const nlohmann::json& tag_node = payload["tags"];
+        if (tag_node.is_array()) {
+                for (const auto& entry : tag_node) {
+                        append_tag(entry);
+                }
+        } else {
+                append_tag(tag_node);
+        }
+        return tags;
 }
 
 void apply_movement_transforms(std::vector<std::vector<AnimationFrame>>& paths,
@@ -747,15 +797,11 @@ void apply_frame_boxes(std::vector<std::vector<AnimationFrame>>& paths,
         for (auto& path : paths) {
                 for (std::size_t idx = 0; idx < path.size(); ++idx) {
                         AnimationFrame& frame = path[idx];
-                        if (idx < hit_boxes.size()) {
+                        if (!hit_boxes.empty() && idx < hit_boxes.size()) {
                                 frame.set_hit_boxes(hit_boxes[idx]);
-                        } else {
-                                frame.set_hit_boxes({});
                         }
-                        if (idx < attack_boxes.size()) {
+                        if (!attack_boxes.empty() && idx < attack_boxes.size()) {
                                 frame.set_attack_boxes(attack_boxes[idx]);
-                        } else {
-                                frame.set_attack_boxes({});
                         }
                 }
         }
@@ -778,8 +824,8 @@ bool bind_frame_data(Animation&                                                 
         std::vector<std::vector<animation_update::FrameHitBox>> hit_boxes = hit_box_frames;
         std::vector<std::vector<animation_update::FrameAttackBox>> attack_boxes = attack_box_frames;
         if (anchors.size() < frame_count) anchors.resize(frame_count);
-        if (hit_boxes.size() < frame_count) hit_boxes.resize(frame_count);
-        if (attack_boxes.size() < frame_count) attack_boxes.resize(frame_count);
+        if (!hit_boxes.empty() && hit_boxes.size() < frame_count) hit_boxes.resize(frame_count);
+        if (!attack_boxes.empty() && attack_boxes.size() < frame_count) attack_boxes.resize(frame_count);
 
         bool any_motion = false;
         for (std::size_t path_idx = 0; path_idx < paths.size(); ++path_idx) {
@@ -809,12 +855,14 @@ bool bind_frame_data(Animation&                                                 
         animation.total_dx = 0;
         animation.total_dy = 0;
         animation.total_dz = 0;
+        animation.total_dr = 0.0f;
         if (animation.movement_path_count() > 0) {
                 const auto& primary = animation.movement_path(0);
                 for (const auto& frame : primary) {
                         animation.total_dx += frame.dx;
                         animation.total_dy += frame.dy;
                         animation.total_dz += frame.dz;
+                        animation.total_dr += frame.rotation_degrees;
                         if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
                                 any_motion = true;
                         }
@@ -1035,6 +1083,7 @@ void AnimationLoader::load(Animation& animation,
         const Animation* source_animation_ptr = nullptr;
         animation.clear_texture_cache();
         animation.variant_steps_.clear();
+        animation.tags.clear();
         enforce_canonical_variant_layout(animation.variant_steps_);
         (void)root_cache;
 
@@ -1050,6 +1099,7 @@ void AnimationLoader::load(Animation& animation,
                         animation.source.name = read_string_field_like(s, "name", std::string{});
                 } catch (...) { animation.source.name.clear(); }
         }
+        animation.tags = parse_animation_tags(anim_json);
 
         if (animation.source.kind == "animation" && !animation.source.name.empty()) {
                 auto it = info.animations.find(animation.source.name);
@@ -1078,27 +1128,35 @@ void AnimationLoader::load(Animation& animation,
         animation.total_dx = 0;
         animation.total_dy = 0;
         animation.total_dz = 0;
+        animation.total_dr = 0.0f;
         animation.movement_paths_.clear();
         animation.audio_clip = Animation::AudioClip{};
-        bool movement_specified = false;
+        const bool movement_enabled = info.is_movement_enabled();
+        const bool hitbox_enabled = info.is_hitbox_enabled();
+        const bool attack_box_enabled = info.is_attack_box_enabled();
         nlohmann::json anchor_points_json = nlohmann::json::array();
         const bool has_anchor_points_json = anim_json.contains("anchor_points") && anim_json["anchor_points"].is_array();
         if (has_anchor_points_json) {
                 anchor_points_json = anim_json["anchor_points"];
         }
         nlohmann::json hit_boxes_json = nlohmann::json::array();
-        const bool has_hit_boxes_json = anim_json.contains("hit_boxes") && anim_json["hit_boxes"].is_array();
+        const bool has_hit_boxes_json =
+            hitbox_enabled && anim_json.contains("hit_boxes") && anim_json["hit_boxes"].is_array();
         if (has_hit_boxes_json) {
                 hit_boxes_json = anim_json["hit_boxes"];
         }
         nlohmann::json attack_boxes_json = nlohmann::json::array();
-        const bool has_attack_boxes_json = anim_json.contains("attack_boxes") && anim_json["attack_boxes"].is_array();
+        const bool has_attack_boxes_json =
+            attack_box_enabled && anim_json.contains("attack_boxes") && anim_json["attack_boxes"].is_array();
         if (has_attack_boxes_json) {
                 attack_boxes_json = anim_json["attack_boxes"];
         }
-        const bool has_movement_json = anim_json.contains("movement") && anim_json["movement"].is_array();
+        const bool has_movement_json =
+            movement_enabled && anim_json.contains("movement") && anim_json["movement"].is_array();
+        const bool has_movement_paths_json =
+            movement_enabled && anim_json.contains("movement_paths") && anim_json["movement_paths"].is_array();
         const bool has_any_local_frame_data =
-            has_movement_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
+            has_movement_json || has_movement_paths_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
         const bool legacy_inherit_source_movement =
             read_bool_field_like(anim_json, "inherit_source_movement", (animation.source.kind == "animation"));
         const bool default_inherit_data =
@@ -1165,8 +1223,13 @@ void AnimationLoader::load(Animation& animation,
                                 fm.dx = dx;
                                 fm.dy = height_y;
                                 fm.dz = depth_z;
+                                fm.rotation_degrees = read_float_field_like(mv, "rotation_degrees", 0.0f);
                                 fm.z_resort = read_bool_field_like(mv, "resort_z", false);
-                                if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
+                                if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 ||
+                                    std::abs(fm.rotation_degrees) > 1e-5f ||
+                                    mv.contains("resort_z")) {
+                                        specified = true;
+                                }
                                 dest.push_back(std::move(fm));
                                 continue;
                         }
@@ -1199,8 +1262,19 @@ void AnimationLoader::load(Animation& animation,
 
                                 if (mv.size() > 2 && mv[2].is_boolean()) {
                                         fm.z_resort = mv[2].get<bool>();
-                                } else if (mv.size() > 3 && mv[3].is_boolean()) {
-                                        fm.z_resort = mv[3].get<bool>();
+                                }
+                                if (mv.size() > 3 && mv[3].is_number()) {
+                                        try {
+                                                fm.rotation_degrees = static_cast<float>(mv[3].get<double>());
+                                        } catch (...) {
+                                                fm.rotation_degrees = 0.0f;
+                                        }
+                                }
+                                for (std::size_t bool_index = 3; bool_index < mv.size(); ++bool_index) {
+                                        if (mv[bool_index].is_boolean()) {
+                                                fm.z_resort = mv[bool_index].get<bool>();
+                                                break;
+                                        }
                                 }
                         }
 
@@ -1217,7 +1291,9 @@ void AnimationLoader::load(Animation& animation,
                                 }
                         }
 
-                        if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.size() >= 3) {
+                        if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 ||
+                            std::abs(fm.rotation_degrees) > 1e-5f ||
+                            mv.size() >= 3) {
                                 specified = true;
                         }
                         dest.push_back(std::move(fm));
@@ -1226,23 +1302,21 @@ void AnimationLoader::load(Animation& animation,
 };
 
         std::vector<std::vector<AnimationFrame>> parsed_paths;
-        if (anim_json.contains("movement_paths") && anim_json["movement_paths"].is_array()) {
+        if (has_movement_paths_json) {
                 for (const auto& path_json : anim_json["movement_paths"]) {
                         std::vector<AnimationFrame> path_frames;
-                        bool specified = parse_movement_sequence(path_json, path_frames);
+                        parse_movement_sequence(path_json, path_frames);
                         if (!path_frames.empty()) {
                                 parsed_paths.push_back(std::move(path_frames));
                         } else {
                                 parsed_paths.emplace_back();
                         }
-                        movement_specified = movement_specified || specified;
                 }
         }
 
         std::vector<AnimationFrame> primary_path;
-        if (anim_json.contains("movement") && anim_json["movement"].is_array()) {
-                bool specified = parse_movement_sequence(anim_json["movement"], primary_path);
-                movement_specified = movement_specified || specified;
+        if (has_movement_json) {
+                parse_movement_sequence(anim_json["movement"], primary_path);
         }
 
         if (!primary_path.empty()) {
@@ -1264,6 +1338,9 @@ void AnimationLoader::load(Animation& animation,
                                 opts.flip_horizontal = animation.invert_frames_horizontal;
                                 opts.flip_vertical   = false;
                                 opts.reverse_frames  = animation.reverse_source;
+                                opts.invert_movement_x = animation.inherit_data && animation.invert_x;
+                                opts.invert_movement_y = animation.inherit_data && animation.invert_y;
+                                opts.invert_movement_z = animation.inherit_data && animation.invert_z;
                                 opts.inherit_on_end_from_source = animation.inherit_data;
 
                                 if (!AnimationCloner::Clone(src_anim, animation, opts, renderer, info)) {
@@ -1303,6 +1380,9 @@ void AnimationLoader::load(Animation& animation,
                         opts.flip_horizontal = animation.invert_frames_horizontal;
                         opts.flip_vertical   = false;
                         opts.reverse_frames  = animation.reverse_source;
+                        opts.invert_movement_x = animation.inherit_data && animation.invert_x;
+                        opts.invert_movement_y = animation.inherit_data && animation.invert_y;
+                        opts.invert_movement_z = animation.inherit_data && animation.invert_z;
                         opts.inherit_on_end_from_source = animation.inherit_data;
                         std::cout << "[AnimationLoader] " << info.name << "::" << trigger
                                   << " late-cloning from source animation '" << animation.source.name
@@ -1315,33 +1395,20 @@ void AnimationLoader::load(Animation& animation,
                 }
         }
 
-        const bool derive_from_animation = !source_animation_id(animation).empty();
         const bool use_inherited_data = animation_inherits_data(animation);
-        bool       movement_from_source = false;
-        if (use_inherited_data) {
+        if (movement_enabled && use_inherited_data) {
                 auto it = info.animations.find(source_animation_id(animation));
                 if (it != info.animations.end()) {
-                        animation.movement_paths_ = it->second.movement_paths_;
-                        movement_from_source = true;
-                } else if (!movement_specified) {
-
-                        animation.movement_paths_.assign(1, {});
-                } else {
-                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                  << " source animation '" << animation.source.name
-                                  << "' not available; keeping authored movement\n";
+                        // Post-migration contract: authored movement is authoritative.
+                        (void)it;
                 }
         }
-        if (!movement_from_source) {
+        if (movement_enabled) {
                 animation.movement_paths_ = authored_movement_paths;
+        } else if (!movement_enabled) {
+                animation.movement_paths_.assign(1, {});
         }
-        if (use_inherited_data) {
-                apply_movement_transforms(animation.movement_paths_,
-                                          animation.reverse_source,
-                                          animation.invert_x,
-                                          animation.invert_y,
-                                          animation.invert_z);
-        }
+        // Post-migration contract: movement comes directly from authored payload only.
         const bool has_audio_json = anim_json.contains("audio") && anim_json["audio"].is_object();
         const nlohmann::json* audio_json = has_audio_json ? &anim_json["audio"] : nullptr;
         auto clamp_volume = [](int value) {
@@ -1402,9 +1469,9 @@ void AnimationLoader::load(Animation& animation,
                                         animation.invert_z);
         }
         std::vector<std::vector<animation_update::FrameHitBox>> hit_box_frames;
-        if (has_hit_boxes_json) {
+        if (hitbox_enabled && has_hit_boxes_json) {
                 hit_box_frames = parse_hit_box_frames(hit_boxes_json, frame_count);
-        } else if (source_animation_ptr && use_inherited_data) {
+        } else if (hitbox_enabled && source_animation_ptr && use_inherited_data) {
                 hit_box_frames = collect_hit_box_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_box_transforms(hit_box_frames,
                                      animation.frame_cache_,
@@ -1414,9 +1481,9 @@ void AnimationLoader::load(Animation& animation,
         }
 
         std::vector<std::vector<animation_update::FrameAttackBox>> attack_box_frames;
-        if (has_attack_boxes_json) {
+        if (attack_box_enabled && has_attack_boxes_json) {
                 attack_box_frames = parse_attack_box_frames(attack_boxes_json, frame_count);
-        } else if (source_animation_ptr && use_inherited_data) {
+        } else if (attack_box_enabled && source_animation_ptr && use_inherited_data) {
                 attack_box_frames = collect_attack_box_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_box_transforms(attack_box_frames,
                                      animation.frame_cache_,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -80,6 +81,7 @@ private:
     bool       adjust_next_checkpoint_3d(const std::vector<const Asset*>& blockers);
     bool       replan_to_destination();
     bool       replan_to_destination_3d();
+    bool       consume_replan_attempt_budget();
     float      parent_world_z() const;
 
     void       apply_pending_move();
@@ -114,6 +116,9 @@ private:
     std::string reverse_playback_animation_id_{};
     bool lock_on_end_active_ = false;
     int  suppress_root_motion_frames_ = 0;
+    std::uint32_t replan_budget_frame_id_ = 0;
+    int replan_attempts_this_frame_ = 0;
+    static constexpr int kMaxReplanAttemptsPerFrame = 3;
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }
 };

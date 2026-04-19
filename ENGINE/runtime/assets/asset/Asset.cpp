@@ -3,7 +3,7 @@
 #include "animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/render.hpp"
+#include "rendering/render/scaling_logic.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_payload.hpp"
@@ -268,12 +268,14 @@ std::optional<DisplacedAssetAnchorPoint> interpolate_oval_anchor_point_for_headi
                                                     synthesized.texture_x,
                                                     synthesized.texture_y);
     synthesized.depth_offset = lerp_value(prev.depth_offset, next.depth_offset, blend_t);
-    synthesized.flip_horizontal = nearest.flip_horizontal;
-    synthesized.flip_vertical = nearest.flip_vertical;
+    synthesized.flip_horizontal = true;
+    synthesized.flip_vertical = true;
     synthesized.rotation_degrees = lerp_value(prev.rotation_degrees, next.rotation_degrees, blend_t);
     synthesized.hidden = nearest.hidden;
     synthesized.resolve_x = nearest.resolve_x;
     synthesized.scaling_method = nearest.scaling_method;
+    synthesized.tags = nearest.tags;
+    synthesized.anti_tags = nearest.anti_tags;
     return synthesized;
 }
 
@@ -503,6 +505,7 @@ Asset::Asset(const Asset& o)
         finalized_                = o.finalized_;
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
+        refresh_runtime_floor_boxes_cache();
 }
 
 Asset& Asset::operator=(const Asset& o) {
@@ -586,11 +589,14 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_name_to_index_.clear();
         current_hit_box_volumes_.clear();
         current_attack_box_volumes_.clear();
+        current_impassable_box_volumes_.clear();
+        floor_boxes_.clear();
         runtime_hit_box_lookup_.clear();
         runtime_attack_box_lookup_.clear();
         anchors_initialized_ = false;
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
+        refresh_runtime_floor_boxes_cache();
         return *this;
 }
 
@@ -787,6 +793,7 @@ void Asset::finalize_setup() {
         refresh_cached_dimensions();
         refresh_anchor_point_cache_from_frame();
         refresh_runtime_box_cache_from_frame();
+        refresh_runtime_floor_boxes_cache();
 
         finalized_ = true;
 }
@@ -1071,6 +1078,7 @@ void Asset::set_current_animation(const std::string& name)
 		Animation& anim = it->second;
 		anim.change(current_frame, static_frame);
 		frame_progress = 0.0f;
+                refresh_frame_texture_bindings();
 		refresh_cached_dimensions();
                 mark_anchors_dirty();
                 refresh_anchor_point_cache_from_frame();
@@ -1081,6 +1089,9 @@ void Asset::set_current_animation(const std::string& name)
 void Asset::update() {
     if (!info) return;
 
+    const SDL_Point collision_world_start = world_xz_point();
+    const int collision_layer_start = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
+
 #if !defined(NDEBUG)
     const SDL_Point anchor_debug_start_world{world_x(), world_y()};
     const int anchor_debug_start_world_z = world_z();
@@ -1089,7 +1100,7 @@ void Asset::update() {
 #endif
 
     // Detect external transform/frame changes before we do any work so bound children can react immediately.
-    const bool external_world_changed = update_anchor_basis_if_needed();
+    update_anchor_basis_if_needed();
 
     const bool controller_suppressed_for_frame_editor =
         assets_ && assets_->is_frame_editor_target_active(this);
@@ -1146,9 +1157,15 @@ void Asset::update() {
     }
 
     // Re-check anchor basis after any movement/animation/scale changes we just applied.
-    const bool post_world_changed = update_anchor_basis_if_needed();
+    update_anchor_basis_if_needed();
 
-    if (assets_ && (external_world_changed || post_world_changed)) {
+    const SDL_Point collision_world_end = world_xz_point();
+    const int collision_layer_end = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
+    const bool collision_transform_changed =
+        collision_world_start.x != collision_world_end.x ||
+        collision_world_start.y != collision_world_end.y ||
+        collision_layer_start != collision_layer_end;
+    if (assets_ && affects_collision_context() && collision_transform_changed) {
         assets_->mark_collision_context_dirty();
     }
 
@@ -1193,9 +1210,89 @@ void Asset::refresh_anchor_point_cache_from_frame() {
     }
 }
 
+bool Asset::isMovementEnabled() const {
+    return info && info->is_movement_enabled();
+}
+
+bool Asset::isHitboxEnabled() const {
+    return info && info->is_hitbox_enabled();
+}
+
+bool Asset::isAttackBoxEnabled() const {
+    return info && info->is_attack_box_enabled();
+}
+
+bool Asset::isImpassableBoxEnabled() const {
+    return info && info->is_impassable_box_enabled();
+}
+
+bool Asset::isFloorBoxesEnabled() const {
+    return info && info->is_floor_boxes_enabled();
+}
+
+bool Asset::affects_collision_context() const {
+    if (!info || dead) {
+        return false;
+    }
+
+    if (asset_types::canonicalize(info->type) == asset_types::player) {
+        return false;
+    }
+
+    if (!isImpassableBoxEnabled()) {
+        return false;
+    }
+
+    for (const RuntimeBoxVolume& volume : current_impassable_box_volumes_) {
+        if (volume.valid && volume.enabled) {
+            return true;
+        }
+    }
+
+    for (const auto& box : info->impassable_boxes_payload()) {
+        if (box.enabled && box.is_valid()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const std::vector<Asset::RuntimeFloorBox>& Asset::getFloorBoxes() const {
+    return floor_boxes_;
+}
+
+bool Asset::RuntimeFloorBox::has_tag(const std::string& tag) const {
+    return std::find(tags.begin(), tags.end(), tag) != tags.end();
+}
+
+void Asset::refresh_runtime_floor_boxes_cache() {
+    floor_boxes_.clear();
+    if (!info || !isFloorBoxesEnabled()) {
+        return;
+    }
+
+    floor_boxes_.reserve(info->floor_boxes_payload().size());
+    for (const auto& authored : info->floor_boxes_payload()) {
+        RuntimeFloorBox box{};
+        box.id = authored.id;
+        box.name = authored.name;
+        box.position_x = authored.position_x;
+        box.position_z = authored.position_z;
+        box.width = authored.width;
+        box.depth = authored.depth;
+        box.enabled = authored.enabled;
+        box.tags = authored.tags;
+        if (box.id.empty() || box.name.empty()) {
+            continue;
+        }
+        floor_boxes_.push_back(std::move(box));
+    }
+}
+
 void Asset::refresh_runtime_box_cache_from_frame() {
     current_hit_box_volumes_.clear();
     current_attack_box_volumes_.clear();
+    current_impassable_box_volumes_.clear();
     runtime_hit_box_lookup_.clear();
     runtime_attack_box_lookup_.clear();
 
@@ -1299,69 +1396,102 @@ void Asset::refresh_runtime_box_cache_from_frame() {
     }
 #endif
 
-    current_hit_box_volumes_.reserve(current_frame->hit_boxes.boxes.size());
-    for (const auto& box : current_frame->hit_boxes.boxes) {
-        if (!box.is_valid() || !box.enabled) {
-            continue;
+    if (isHitboxEnabled()) {
+        current_hit_box_volumes_.reserve(current_frame->hit_boxes.boxes.size());
+        for (const auto& box : current_frame->hit_boxes.boxes) {
+            if (!box.is_valid() || !box.enabled) {
+                continue;
+            }
+            RuntimeBoxVolume volume{};
+            const auto runtime_corners = box.to_runtime_clockwise_points();
+            if (!build_volume(box.name,
+                              box.id,
+                              box.type.empty() ? std::string{"hitbox"} : box.type,
+                              box.enabled,
+                              box.frame_start,
+                              box.frame_end,
+                              box.anchor_link,
+                              box.extrusion_amount,
+                              0,
+                              std::string{},
+                              "{}",
+                              animation_update::make_default_attack_payload(),
+                              runtime_corners,
+                              volume)) {
+                continue;
+            }
+            runtime_hit_box_lookup_.emplace(volume.name, current_hit_box_volumes_.size());
+            current_hit_box_volumes_.push_back(std::move(volume));
         }
-        RuntimeBoxVolume volume{};
-        const auto runtime_corners = box.to_runtime_clockwise_points();
-        if (!build_volume(box.name,
-                          box.id,
-                          box.type.empty() ? std::string{"hitbox"} : box.type,
-                          box.enabled,
-                          box.frame_start,
-                          box.frame_end,
-                          box.anchor_link,
-                          box.extrusion_amount,
-                          0,
-                          std::string{},
-                          "{}",
-                          animation_update::make_default_attack_payload(),
-                          runtime_corners,
-                          volume)) {
-            continue;
-        }
-        runtime_hit_box_lookup_.emplace(volume.name, current_hit_box_volumes_.size());
-        current_hit_box_volumes_.push_back(std::move(volume));
     }
 
-    current_attack_box_volumes_.reserve(current_frame->attack_boxes.boxes.size());
-    for (const auto& box : current_frame->attack_boxes.boxes) {
-        if (!box.is_valid() || !box.enabled) {
-            continue;
+    if (isAttackBoxEnabled()) {
+        current_attack_box_volumes_.reserve(current_frame->attack_boxes.boxes.size());
+        for (const auto& box : current_frame->attack_boxes.boxes) {
+            if (!box.is_valid() || !box.enabled) {
+                continue;
+            }
+            animation_update::AttackPayload payload = box.payload;
+            if (payload.payload_id.empty()) {
+                payload = animation_update::attack_payload_from_box(
+                    box.damage_amount,
+                    box.payload_id.empty() ? box.id : box.payload_id,
+                    box.meta_json);
+            }
+            if (payload.payload_id.empty()) {
+                payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
+            }
+            payload.damage_amount = std::max(0, payload.damage_amount);
+            RuntimeBoxVolume volume{};
+            const auto runtime_corners = box.to_runtime_clockwise_points();
+            if (!build_volume(box.name,
+                              box.id,
+                              box.type.empty() ? std::string{"attack_box"} : box.type,
+                              box.enabled,
+                              box.frame_start,
+                              box.frame_end,
+                              box.anchor_link,
+                              box.extrusion_amount,
+                              payload.damage_amount,
+                              payload.payload_id,
+                              box.meta_json,
+                              payload,
+                              runtime_corners,
+                              volume)) {
+                continue;
+            }
+            runtime_attack_box_lookup_.emplace(volume.name, current_attack_box_volumes_.size());
+            current_attack_box_volumes_.push_back(std::move(volume));
         }
-        animation_update::AttackPayload payload = box.payload;
-        if (payload.payload_id.empty()) {
-            payload = animation_update::attack_payload_from_box(
-                box.damage_amount,
-                box.payload_id.empty() ? box.id : box.payload_id,
-                box.meta_json);
+    }
+
+    if (isImpassableBoxEnabled()) {
+        const auto& boxes = info->impassable_boxes_payload();
+        current_impassable_box_volumes_.reserve(boxes.size());
+        for (const auto& box : boxes) {
+            if (!box.is_valid() || !box.enabled) {
+                continue;
+            }
+            RuntimeBoxVolume volume{};
+            const auto runtime_corners = box.to_runtime_clockwise_points();
+            if (!build_volume(box.name,
+                              box.id,
+                              box.type.empty() ? std::string{"impassable_box"} : box.type,
+                              box.enabled,
+                              box.frame_start,
+                              box.frame_end,
+                              box.anchor_link,
+                              box.extrusion_amount,
+                              0,
+                              std::string{},
+                              "{}",
+                              animation_update::make_default_attack_payload(),
+                              runtime_corners,
+                              volume)) {
+                continue;
+            }
+            current_impassable_box_volumes_.push_back(std::move(volume));
         }
-        if (payload.payload_id.empty()) {
-            payload.payload_id = box.payload_id.empty() ? box.id : box.payload_id;
-        }
-        payload.damage_amount = std::max(0, payload.damage_amount);
-        RuntimeBoxVolume volume{};
-        const auto runtime_corners = box.to_runtime_clockwise_points();
-        if (!build_volume(box.name,
-                          box.id,
-                          box.type.empty() ? std::string{"attack_box"} : box.type,
-                          box.enabled,
-                          box.frame_start,
-                          box.frame_end,
-                          box.anchor_link,
-                          box.extrusion_amount,
-                          payload.damage_amount,
-                          payload.payload_id,
-                          box.meta_json,
-                          payload,
-                          runtime_corners,
-                          volume)) {
-            continue;
-        }
-        runtime_attack_box_lookup_.emplace(volume.name, current_attack_box_volumes_.size());
-        current_attack_box_volumes_.push_back(std::move(volume));
     }
 
     if (vibble_box_trace_enabled()) {
@@ -1374,6 +1504,11 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                 runtime_box_ids_csv(current_hit_box_volumes_).c_str(),
                 current_attack_box_volumes_.size(),
                 runtime_box_ids_csv(current_attack_box_volumes_).c_str());
+        SDL_Log("[BoxFlow][runtime_cache] asset=%s frame=%d impassable_count=%zu impassable_ids=%s",
+                asset_name.c_str(),
+                frame_index,
+                current_impassable_box_volumes_.size(),
+                runtime_box_ids_csv(current_impassable_box_volumes_).c_str());
     }
 }
 
@@ -1604,9 +1739,6 @@ void Asset::deactivate() {
 
 void Asset::clear_render_caches() {
     mesh_dirty_ = true;
-    for (auto& obj : render_package) {
-        obj.mesh_dirty = true;
-    }
 }
 
 void Asset::invalidate_downscale_cache() {
@@ -1646,6 +1778,56 @@ void Asset::refresh_cached_dimensions() {
 }
 
 void Asset::refresh_frame_texture_bindings() {
+        Animation* active_animation = nullptr;
+        if (info) {
+                auto animation_it = info->animations.find(current_animation);
+                if (animation_it != info->animations.end()) {
+                        active_animation = &animation_it->second;
+                } else {
+                        auto default_it = info->animations.find("default");
+                        if (default_it != info->animations.end()) {
+                                current_animation = "default";
+                                active_animation = &default_it->second;
+                        } else if (!info->animations.empty()) {
+                                auto fallback_it = info->animations.begin();
+                                current_animation = fallback_it->first;
+                                active_animation = &fallback_it->second;
+                        }
+                }
+        }
+
+        if (active_animation && (!current_frame || active_animation->index_of(current_frame) < 0)) {
+                current_frame = active_animation->get_first_frame();
+                frame_progress = 0.0f;
+        }
+
+        auto ensure_texture_binding = [&]() {
+                if (!current_frame || !active_animation) {
+                        return;
+                }
+                if (get_current_variant_texture()) {
+                        return;
+                }
+                if (current_variant_index != 0 && current_frame->get_base_texture(0)) {
+                        current_variant_index = 0;
+                        return;
+                }
+                for (AnimationFrame* candidate = active_animation->get_first_frame();
+                     candidate != nullptr;
+                     candidate = candidate->next) {
+                        if (candidate->get_base_texture(current_variant_index)) {
+                                current_frame = candidate;
+                                return;
+                        }
+                        if (candidate->get_base_texture(0)) {
+                                current_frame = candidate;
+                                current_variant_index = 0;
+                                return;
+                        }
+                }
+        };
+
+        ensure_texture_binding();
         if (!current_frame) {
                 last_rendered_frame_ = nullptr;
                 return;
@@ -1656,6 +1838,14 @@ void Asset::refresh_frame_texture_bindings() {
         mark_composite_dirty();
         mark_mesh_dirty();
         mark_anchors_dirty();
+#if !defined(NDEBUG)
+        if (get_current_variant_texture() == nullptr) {
+                const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                vibble::log::warn("[AssetRefresh] Missing texture binding for asset '" +
+                                  asset_name + "' animation='" + current_animation +
+                                  "' frame=" + std::to_string(current_frame->frame_index));
+        }
+#endif
 }
 
 float Asset::runtime_scale_remainder() const {
@@ -1912,6 +2102,8 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         resolved.hidden = anchor_present ? frame_anchor->hidden : false;
         resolved.resolve_x = anchor_present ? frame_anchor->resolve_x : true;
         resolved.scaling_method = anchor_present ? frame_anchor->scaling_method : AnchorScalingMethod::Parent;
+        resolved.tags = anchor_present ? frame_anchor->tags : std::vector<std::string>{};
+        resolved.anti_tags = anchor_present ? frame_anchor->anti_tags : std::vector<std::string>{};
 
         if (resolved.exists) {
                 resolved.world_pos_2d = handle.world_exact_pos_2d;
@@ -2114,13 +2306,8 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                         const SDL_FlipMode owner_flip = effective_render_flip();
                         const bool owner_flip_horizontal = (owner_flip & SDL_FLIP_HORIZONTAL) != 0;
                         const bool owner_flip_vertical = (owner_flip & SDL_FLIP_VERTICAL) != 0;
-                        const auto combine_inherit_parity = [](bool parent_axis_flip, bool preserve_parent_axis) {
-                                return preserve_parent_axis ? parent_axis_flip : !parent_axis_flip;
-                        };
-                        const bool runtime_flip_horizontal =
-                            combine_inherit_parity(owner_flip_horizontal, synthesized_anchor->flip_horizontal);
-                        const bool runtime_flip_vertical =
-                            combine_inherit_parity(owner_flip_vertical, synthesized_anchor->flip_vertical);
+                        const bool runtime_flip_horizontal = owner_flip_horizontal;
+                        const bool runtime_flip_vertical = owner_flip_vertical;
                         const float local_rotation = std::isfinite(synthesized_anchor->rotation_degrees)
                             ? synthesized_anchor->rotation_degrees
                             : 0.0f;
@@ -2139,6 +2326,8 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                         resolved.hidden = synthesized_anchor->hidden;
                         resolved.resolve_x = synthesized_anchor->resolve_x;
                         resolved.scaling_method = synthesized_anchor->scaling_method;
+                        resolved.tags = synthesized_anchor->tags;
+                        resolved.anti_tags = synthesized_anchor->anti_tags;
                         resolved.world_pos_2d = Vec2{final_point.x, final_point.y};
                         resolved.world_exact_pos_2d = resolved.world_pos_2d;
                         resolved.flat_world_pos_2d = Vec2{flat_point.x, flat_point.y};
@@ -2515,6 +2704,10 @@ void Asset::move_to_world_position(int world_x,
         previous_world_y != this->world_y() ||
         previous_world_z != this->world_z() ||
         previous_layer != grid_resolution;
+    const bool collision_transform_changed =
+        previous_world_x != this->world_x() ||
+        previous_world_z != this->world_z() ||
+        previous_layer != grid_resolution;
 
     if (point_changed) {
         mark_composite_dirty();
@@ -2522,7 +2715,9 @@ void Asset::move_to_world_position(int world_x,
     }
 
     mark_anchors_dirty();
-    assets_->mark_collision_context_dirty();
+    if (collision_transform_changed && affects_collision_context()) {
+        assets_->mark_collision_context_dirty();
+    }
 }
 
 

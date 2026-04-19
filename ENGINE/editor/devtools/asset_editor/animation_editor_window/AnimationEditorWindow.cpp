@@ -291,6 +291,7 @@ nlohmann::json build_movement_total(const nlohmann::json& movement) {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
+    float total_dr = 0.0f;
     if (movement.is_array()) {
         for (std::size_t i = 0; i < movement.size(); ++i) {
             const auto& entry = movement[i];
@@ -306,12 +307,16 @@ nlohmann::json build_movement_total(const nlohmann::json& movement) {
             if (entry.size() > 2 && entry[2].is_number()) {
                 total_dz += static_cast<int>(std::lround(entry[2].get<double>()));
             }
+            if (entry.size() > 3 && entry[3].is_number()) {
+                total_dr += static_cast<float>(entry[3].get<double>());
+            }
         }
     }
     return nlohmann::json::object({
         {"dx", total_dx},
         {"dy", total_dy},
         {"dz", total_dz},
+        {"dr", total_dr},
     });
 }
 
@@ -1937,8 +1942,6 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
     payload["movement"] = build_movement_sequence(safe_frames, dx, dy, dz);
     payload["movement_total"] = build_movement_total(payload["movement"]);
     payload["anchor_points"] = build_empty_geometry_frames(safe_frames);
-    payload["hit_boxes"] = build_empty_geometry_frames(safe_frames);
-    payload["attack_boxes"] = build_empty_geometry_frames(safe_frames);
     payload["locked"] = false;
     payload["reverse_source"] = false;
     payload["invert_x"] = false;
@@ -1969,8 +1972,6 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
     payload["movement"] = build_movement_sequence(safe_frames, dx, dy, dz);
     payload["movement_total"] = build_movement_total(payload["movement"]);
     payload["anchor_points"] = build_empty_geometry_frames(safe_frames);
-    payload["hit_boxes"] = build_empty_geometry_frames(safe_frames);
-    payload["attack_boxes"] = build_empty_geometry_frames(safe_frames);
     payload["locked"] = false;
     payload["reverse_source"] = false;
     payload["invert_x"] = false;
@@ -2123,6 +2124,11 @@ void AnimationEditorWindow::handle_create_defaults() {
     if (!ok) {
         set_status_message("Failed to create one or more default animations.", 240);
         return;
+    }
+
+    // Movement defaults are intentional authored movement data.
+    if (manifest_store_ && !manifest_asset_key_.empty()) {
+        (void)persist_manifest_payload(nlohmann::json{{"movement_enabled", true}}, false);
     }
 
     if (preview_provider_) {
@@ -2396,6 +2402,18 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     refresh_draft_from_store();
 
     nlohmann::json& draft = manifest_transaction_.data();
+    if (!draft.is_object()) {
+        draft = nlohmann::json::object();
+    }
+    auto ensure_enable_flag = [&](const char* key) {
+        if (!draft.contains(key) || !draft[key].is_boolean()) {
+            draft[key] = false;
+        }
+    };
+    ensure_enable_flag("movement_enabled");
+    ensure_enable_flag("attack_box_enabled");
+    ensure_enable_flag("hitbox_enabled");
+    ensure_enable_flag("floor_boxes_enabled");
     if (payload.is_object()) {
         if (!draft.is_object()) {
             draft = nlohmann::json::object();
@@ -2407,7 +2425,15 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     } else if (!payload.is_null()) {
 
         draft = payload;
+        if (!draft.is_object()) {
+            draft = nlohmann::json::object();
+        }
     }
+
+    ensure_enable_flag("movement_enabled");
+    ensure_enable_flag("attack_box_enabled");
+    ensure_enable_flag("hitbox_enabled");
+    ensure_enable_flag("floor_boxes_enabled");
 
     const nlohmann::json merged_payload = draft;
 

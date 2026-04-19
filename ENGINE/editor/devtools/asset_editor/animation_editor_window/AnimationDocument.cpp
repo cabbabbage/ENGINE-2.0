@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <optional>
+#include <string_view>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
 
@@ -28,6 +29,55 @@ using json_coercion::read_int_like;
 using json_coercion::read_string_like;
 
 namespace fs = std::filesystem;
+
+std::string normalize_tag_value(std::string_view raw) {
+    const auto begin = std::find_if_not(raw.begin(), raw.end(), [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+    });
+    const auto end = std::find_if_not(raw.rbegin(), raw.rend(), [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+    }).base();
+    if (begin >= end) {
+        return {};
+    }
+
+    std::string normalized(begin, end);
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return normalized;
+}
+
+nlohmann::json canonicalize_tags_field(const nlohmann::json& payload) {
+    nlohmann::json tags = nlohmann::json::array();
+    std::unordered_set<std::string> seen;
+
+    auto append_tag = [&](const nlohmann::json& node) {
+        if (!node.is_string()) {
+            return;
+        }
+        std::string normalized = normalize_tag_value(node.get<std::string>());
+        if (normalized.empty()) {
+            return;
+        }
+        if (seen.insert(normalized).second) {
+            tags.push_back(std::move(normalized));
+        }
+    };
+
+    if (payload.contains("tags")) {
+        const auto& tag_node = payload["tags"];
+        if (tag_node.is_array()) {
+            for (const auto& entry : tag_node) {
+                append_tag(entry);
+            }
+        } else {
+            append_tag(tag_node);
+        }
+    }
+
+    return tags;
+}
 
 nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::json& source_payload) {
     nlohmann::json payload = source_payload.is_object() ? source_payload : nlohmann::json::object();
@@ -154,6 +204,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload.erase("speed");
     payload.erase("speed_factor");
     payload.erase("speed_multiplier");
+    payload["tags"] = canonicalize_tags_field(payload);
 
     int frames = read_int_like(payload.contains("number_of_frames") ? payload["number_of_frames"] : nlohmann::json(1), 1);
     if (frames < 1) frames = 1;
@@ -247,13 +298,31 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         int total_dx = 0;
         int total_dy = 0;
         int total_dz = 0;
+        float total_dr = 0.0f;
+        auto read_rotation_component = [](const nlohmann::json& entry) -> float {
+            if (entry.is_array()) {
+                if (entry.size() > 3 && entry[3].is_number()) {
+                    return static_cast<float>(entry[3].get<double>());
+                }
+                return 0.0f;
+            }
+            if (!entry.is_object()) {
+                return 0.0f;
+            }
+            if (entry.contains("rotation_degrees") && entry["rotation_degrees"].is_number()) {
+                return static_cast<float>(entry["rotation_degrees"].get<double>());
+            }
+            return 0.0f;
+        };
         for (std::size_t i = 0; i < movement.size(); ++i) {
             const nlohmann::json& entry = movement[i];
             total_dx += read_component(entry, 0);
             total_dy += read_component(entry, 1);
             total_dz += read_component(entry, 2);
+            total_dr += read_rotation_component(entry);
         }
-        payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
+        payload["movement_total"] =
+            nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
     } else {
         payload.erase("movement");
         payload.erase("movement_total");
@@ -458,11 +527,35 @@ int read_movement_component(const nlohmann::json& entry, int index) {
     return 0;
 }
 
+float read_movement_rotation_component(const nlohmann::json& entry) {
+    auto read_number = [](const nlohmann::json& value) -> float {
+        if (value.is_number()) {
+            return static_cast<float>(value.get<double>());
+        }
+        return 0.0f;
+    };
+
+    if (entry.is_array()) {
+        if (entry.size() > 3 && entry[3].is_number()) {
+            return read_number(entry[3]);
+        }
+        return 0.0f;
+    }
+    if (!entry.is_object()) {
+        return 0.0f;
+    }
+    if (entry.contains("rotation_degrees")) {
+        return read_number(entry["rotation_degrees"]);
+    }
+    return 0.0f;
+}
+
 nlohmann::json canonical_movement_entry(const nlohmann::json& entry) {
     nlohmann::json result = nlohmann::json::array();
     result.push_back(read_movement_component(entry, 0));
     result.push_back(read_movement_component(entry, 1));
     result.push_back(read_movement_component(entry, 2));
+    result.push_back(read_movement_rotation_component(entry));
 
     bool resort_z = false;
     bool has_resort = false;
@@ -549,13 +642,15 @@ void update_payload_movement_total(nlohmann::json& payload) {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
+    float total_dr = 0.0f;
     for (std::size_t i = 0; i < movement.size(); ++i) {
         total_dx += read_movement_component(movement[i], 0);
         total_dy += read_movement_component(movement[i], 1);
         total_dz += read_movement_component(movement[i], 2);
+        total_dr += read_movement_rotation_component(movement[i]);
     }
     payload["movement_total"] =
-        nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
+        nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
 }
 
 std::string serialize_payload(const nlohmann::json& payload) {

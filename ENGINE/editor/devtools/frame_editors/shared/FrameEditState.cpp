@@ -10,6 +10,7 @@ MovementFrame clamp_frame(const MovementFrame& in) {
     if (!std::isfinite(f.dx)) f.dx = 0.0f;
     if (!std::isfinite(f.dy)) f.dy = 0.0f;
     if (!std::isfinite(f.dz)) f.dz = 0.0f;
+    if (!std::isfinite(f.rotation_degrees)) f.rotation_degrees = 0.0f;
     return f;
 }
 
@@ -53,10 +54,14 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
             if (entry.size() > 2 && entry[2].is_number()) {
                 f.dz = static_cast<float>(entry[2].get<double>());
             }
-            if (entry.size() > 2 && entry[2].is_boolean()) {
-                f.resort_z = entry[2].get<bool>();
-            } else if (entry.size() > 3 && entry[3].is_boolean()) {
-                f.resort_z = entry[3].get<bool>();
+            if (entry.size() > 3 && entry[3].is_number()) {
+                f.rotation_degrees = static_cast<float>(entry[3].get<double>());
+            }
+            for (std::size_t i = 3; i < entry.size(); ++i) {
+                if (entry[i].is_boolean()) {
+                    f.resort_z = entry[i].get<bool>();
+                    break;
+                }
             }
         } else if (entry.is_object()) {
             auto read_number = [&](const char* key, float fallback) -> float {
@@ -84,6 +89,7 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
             }
             f.dy = parsed_height;
             f.dz = parsed_depth;
+            f.rotation_degrees = read_number("rotation_degrees", 0.0f);
             f.resort_z = entry.value("resort_z", false);
         }
         frames.push_back(clamp_frame(f));
@@ -148,6 +154,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         entry.push_back(static_cast<int>(std::lround(f.dx)));
         entry.push_back(static_cast<int>(std::lround(f.dy)));
         entry.push_back(static_cast<int>(std::lround(f.dz)));
+        entry.push_back(f.rotation_degrees);
         if (f.resort_z || had_resort) {
             entry.push_back(f.resort_z);
         }
@@ -160,6 +167,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
     int total_dx = 0;
     int total_dy = 0;
     double total_dz = 0.0;
+    double total_dr = 0.0;
     for (std::size_t i = 0; i < movement.size(); ++i) {
         const auto& entry = movement[i];
         if (!entry.is_array()) {
@@ -178,13 +186,17 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         if (entry.size() > 2 && entry[2].is_number()) {
             total_dz += entry[2].get<double>();
         }
+        if (entry.size() > 3 && entry[3].is_number()) {
+            total_dr += entry[3].get<double>();
+        }
     }
 
     if (movement.empty()) {
         movement.push_back(nlohmann::json::array({0, 0, 0}));
     }
     payload["movement"] = std::move(movement);
-    payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
+    payload["movement_total"] =
+        nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
 
     return payload;
 }

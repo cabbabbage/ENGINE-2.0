@@ -2,10 +2,12 @@
 
 #include <filesystem>
 #include <fstream>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -173,6 +175,52 @@ AssetInfo::AnchorChildPointCandidate make_anchor_child_candidate_raw_entry(const
     return entry;
 }
 
+void configure_test_animation_path(Asset& asset,
+                                   const std::vector<std::array<int, 3>>& frame_deltas) {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.reserve(frame_deltas.size());
+    for (const auto& delta : frame_deltas) {
+        AnimationFrame frame{};
+        frame.dx = delta[0];
+        frame.dy = delta[1];
+        frame.dz = delta[2];
+        path.push_back(frame);
+    }
+
+    asset.info->animations.clear();
+    asset.info->animations["default"] = std::move(animation);
+    asset.current_animation = "default";
+
+    Animation& stored_animation = asset.info->animations["default"];
+    auto& stored_path = stored_animation.movement_path(0);
+    for (std::size_t idx = 0; idx < stored_path.size(); ++idx) {
+        AnimationFrame& frame = stored_path[idx];
+        frame.frame_index = static_cast<int>(idx);
+        frame.is_first = (idx == 0);
+        frame.is_last = (idx + 1 == stored_path.size());
+        frame.prev = (idx > 0) ? &stored_path[idx - 1] : nullptr;
+        frame.next = (idx + 1 < stored_path.size()) ? &stored_path[idx + 1] : nullptr;
+    }
+    asset.current_frame = stored_path.empty() ? nullptr : &stored_path.front();
+}
+
+void set_current_frame_index(Asset& asset, std::size_t index) {
+    auto animation_it = asset.info->animations.find(asset.current_animation);
+    if (animation_it == asset.info->animations.end()) {
+        asset.current_frame = nullptr;
+        return;
+    }
+    auto& path = animation_it->second.movement_path(0);
+    if (path.empty()) {
+        asset.current_frame = nullptr;
+        return;
+    }
+    const std::size_t clamped = std::min(index, path.size() - 1);
+    asset.current_frame = &path[clamped];
+}
+
 std::optional<double> normalized_anchor_candidate_chance(const nlohmann::json& normalized_entry,
                                                          const std::string& candidate_name) {
     if (!normalized_entry.is_object()) {
@@ -312,6 +360,88 @@ TEST_CASE("AnchorBoundAssetHelper batches repeated owner anchor dirties and flus
     CHECK(spawned->world_y() == owner->world_y() + 5);
     CHECK(spawned->world_z() == owner->world_z() + 6);
     CHECK(spawned->world_x() == 71);
+}
+
+TEST_CASE("AnchorBoundAssetHelper resolves chained parent and grandchild bindings in the same flush") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 30, 40, 50, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 4, 5, 0, 0, 0.0f, true});
+
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    Asset* child_asset = child.get_asset();
+    REQUIRE(child_asset != nullptr);
+
+    test_child_asset_runtime::set_anchor(*child_asset, AnchorSpec{"hat", 2, 1, 4, 0, 0, 0.0f, true});
+    ChildAsset grandchild(*child_asset, "vibble_eyes");
+    grandchild.bind("hat");
+    Asset* grandchild_asset = grandchild.get_asset();
+    REQUIRE(grandchild_asset != nullptr);
+
+    const int initial_grandchild_x = grandchild_asset->world_x();
+    const int initial_grandchild_y = grandchild_asset->world_y();
+    const int initial_grandchild_z = grandchild_asset->world_z();
+
+    owner->move_to_world_position(70, 80, 90, 0);
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 5, 6, 7, 0, 0, 0.0f, true});
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+
+    CHECK(grandchild_asset->world_x() == initial_grandchild_x);
+    CHECK(grandchild_asset->world_y() == initial_grandchild_y);
+    CHECK(grandchild_asset->world_z() == initial_grandchild_z);
+
+    CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+    CHECK_FALSE(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+
+    CHECK(child_asset->world_x() == owner->world_x() + 5);
+    CHECK(child_asset->world_y() == owner->world_y() + 6);
+    CHECK(child_asset->world_z() == owner->world_z() + 7);
+    CHECK(grandchild_asset->world_x() == child_asset->world_x() + 2);
+    CHECK(grandchild_asset->world_y() == child_asset->world_y() + 1);
+    CHECK(grandchild_asset->world_z() == child_asset->world_z() + 4);
+}
+
+TEST_CASE("AnchorBoundAssetHelper preserves depth bias while moving toward and away from camera across frames") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 20, 30, 40, 0));
+    REQUIRE(owner != nullptr);
+
+    AnchorSpec anchor{};
+    anchor.name = "eyes";
+    anchor.offset_x = 2;
+    anchor.offset_y = 1;
+    anchor.offset_z = 3;
+    anchor.exact_offset_z = 3.4f;
+    anchor.world_depth_offset = 0.5f;
+    anchor.exists = true;
+    test_child_asset_runtime::set_anchor(*owner, anchor);
+
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    Asset* spawned = child.get_asset();
+    REQUIRE(spawned != nullptr);
+
+    const std::vector<int> world_z_sequence{40, 44, 48, 52, 48, 44, 40};
+    for (int world_z : world_z_sequence) {
+        owner->move_to_world_position(owner->world_x(), owner->world_y(), world_z, 0);
+        test_child_asset_runtime::set_anchor(*owner, anchor);
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+        CHECK(anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates());
+
+        const double anchor_world_depth = static_cast<double>(owner->world_z()) + 3.4 + 0.5;
+        const double expected_depth = render_depth::depth_from_anchor(anchor_world_depth,
+                                                                      static_cast<double>(owner->world_z()) + 3.4);
+        const double actual_depth = render_depth::depth_from_anchor(anchor_world_depth,
+                                                                    static_cast<double>(spawned->world_z()),
+                                                                    spawned->render_depth_bias());
+        CHECK(actual_depth == doctest::Approx(expected_depth).epsilon(1e-9));
+    }
 }
 
 TEST_CASE("Queued anchor flush keeps X-axis child placement stable across sequential moves") {
@@ -675,6 +805,99 @@ TEST_CASE("ChildAsset applies anchor flip and rotation overrides to spawned chil
     CHECK(spawned->effective_render_angle() == doctest::Approx(0.0));
 }
 
+TEST_CASE("ChildAsset rotates oval child movement displacement by owner directional heading") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
+    REQUIRE(owner != nullptr);
+
+    owner->info->oval_anchor_mappings.clear();
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "vibble_eyes";
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 2, 3, 4, 0, 0, 0.0f, true});
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    configure_test_animation_path(*spawned,
+                                  {
+                                      std::array<int, 3>{0, 0, 0},
+                                      std::array<int, 3>{4, 2, 1},
+                                  });
+    set_current_frame_index(*spawned, 1);
+
+    constexpr float kPi = 3.14159265358979323846f;
+    REQUIRE(owner->set_directional_heading_radians(kPi * 0.5f));
+    child->update();
+
+    // Anchor world = owner(10,15,20) + offset(2,3,4) => (12,18,24).
+    // Child displacement frame = (dx,dy,dz) = (4,2,1). At +90° yaw, rotated XZ = (-1,4).
+    CHECK(spawned->world_x() == 11);
+    CHECK(spawned->world_y() == 20);
+    CHECK(spawned->world_z() == 28);
+}
+
+TEST_CASE("ChildAsset keeps unrotated displacement when oval heading is unavailable") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 15, 20, 0));
+    REQUIRE(owner != nullptr);
+
+    owner->info->oval_anchor_mappings.clear();
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "vibble_eyes";
+    mapping.points = {
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+    };
+    REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 2, 3, 4, 0, 0, 0.0f, true});
+
+    TestCustomController controller(owner);
+    Input input;
+    controller.schedule_child_creation("vibble_eyes");
+    controller.update(input);
+
+    ChildAsset* child = controller.child();
+    REQUIRE(child != nullptr);
+    child->bind("eyes");
+    Asset* spawned = child->get_asset();
+    REQUIRE(spawned != nullptr);
+
+    configure_test_animation_path(*spawned,
+                                  {
+                                      std::array<int, 3>{0, 0, 0},
+                                      std::array<int, 3>{4, 2, 1},
+                                  });
+    set_current_frame_index(*spawned, 1);
+
+    // No heading set -> preserve previous behavior (no oval displacement rotation).
+    child->update();
+
+    CHECK(spawned->world_x() == 16);
+    CHECK(spawned->world_y() == 20);
+    CHECK(spawned->world_z() == 25);
+}
+
 TEST_CASE("ChildAsset lifecycle controls visibility, one-shot placement, unbind, and deletion") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(
@@ -840,8 +1063,8 @@ TEST_CASE("CustomAssetController falls back to oval mapping asset_name when expl
     mapping.width_radius_x = 18.0f;
     mapping.height_radius_z = 12.0f;
     mapping.points = {
-        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
-        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
     };
     REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
 
@@ -875,8 +1098,8 @@ TEST_CASE("CustomAssetController explicit anchor candidates take precedence over
     mapping.width_radius_x = 10.0f;
     mapping.height_radius_z = 10.0f;
     mapping.points = {
-        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
-        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
     };
     REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
 
@@ -917,8 +1140,8 @@ TEST_CASE("CustomAssetController skips oval fallback when fallback asset is miss
     mapping.width_radius_x = 10.0f;
     mapping.height_radius_z = 10.0f;
     mapping.points = {
-        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
-        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, true, true, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{0.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
+        AssetInfo::OvalAnchorPoint{180.0f, 0, 0, 0.0f, 0.0f, false, true, AnchorScalingMethod::Parent},
     };
     REQUIRE(owner->info->upsert_oval_anchor_mapping(mapping));
 

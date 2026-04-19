@@ -2,7 +2,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "assets/asset/Asset.hpp"
+#include "rendering/render/render_object.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
 
 class WarpedScreenGrid;

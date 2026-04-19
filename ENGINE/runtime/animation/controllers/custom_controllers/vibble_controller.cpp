@@ -16,15 +16,36 @@
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
+#include "utils/string_utils.hpp"
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 #include <string_view>
+#include <vector>
 
 namespace {
 
 constexpr std::string_view kMeleeChildAssetName = "vibble_attack_1";
 constexpr std::string_view kLegacyMeleeChildAssetName = "vibble_attack";
 constexpr std::string_view kMeleeAttackAnimation = "attack";
+constexpr std::string_view kMeleeAnchorName = "melee";
+
+std::vector<std::string> normalize_tag_list(const std::vector<std::string>& values) {
+    std::vector<std::string> normalized;
+    normalized.reserve(values.size());
+    std::unordered_set<std::string> seen;
+    seen.reserve(values.size());
+    for (const std::string& raw : values) {
+        std::string token = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw));
+        if (token.empty()) {
+            continue;
+        }
+        if (seen.insert(token).second) {
+            normalized.push_back(std::move(token));
+        }
+    }
+    return normalized;
+}
 
 int consume_axis(float& accumulator) {
     const int whole = static_cast<int>(accumulator);
@@ -80,13 +101,25 @@ void trigger_melee_child_attack_animation(Asset& owner) {
         return;
     }
 
-    if (melee_child->info &&
-        melee_child->info->animations.find(std::string{kMeleeAttackAnimation}) ==
-            melee_child->info->animations.end()) {
-        return;
+    std::vector<std::string> required_tags;
+    std::vector<std::string> excluded_tags;
+    const auto melee_anchor = owner.anchor_state(std::string{kMeleeAnchorName},
+                                                 anchor_points::GridMaterialization::None,
+                                                 Asset::AnchorResolveMode::ForceRecompute);
+    if (melee_anchor.has_value()) {
+        required_tags = normalize_tag_list(melee_anchor->tags);
+        excluded_tags = normalize_tag_list(melee_anchor->anti_tags);
     }
 
-    melee_child->anim_->set_animation(std::string{kMeleeAttackAnimation});
+    const std::string attack_tag = std::string{kMeleeAttackAnimation};
+    if (std::find(required_tags.begin(), required_tags.end(), attack_tag) == required_tags.end()) {
+        required_tags.push_back(attack_tag);
+    }
+    excluded_tags.erase(
+        std::remove(excluded_tags.begin(), excluded_tags.end(), attack_tag),
+        excluded_tags.end());
+
+    (void)melee_child->anim_->set_animation_by_tags(required_tags, excluded_tags);
 }
 
 }
@@ -204,7 +237,7 @@ void vibble_controller::movement(const Input& input) {
         }
     }
 
-    player->anim_->move(SDL_Point{ dx_, dy_ }, selected_animation);
+
     if (reverse_selected_animation) {
         animation_update::custom_controllers::begin_reverse_current_animation_until_stop(player);
     } else {
@@ -216,9 +249,12 @@ void vibble_controller::movement(const Input& input) {
             player,
             std::string{});
     }
+    player->anim_->move(SDL_Point{ dx_, dy_ }, selected_animation);
 }
 
 void vibble_controller::on_update(const Input& input) {
+    
+    movement(input);
     using namespace std::chrono;
     auto now = steady_clock::now();
 
@@ -262,7 +298,7 @@ void vibble_controller::on_update(const Input& input) {
         isMeleeing = false;
     }
 
-    movement(input);
+
 }
 
 std::string vibble_controller::animation_for_direction(int screen_x, int screen_y) const {

@@ -109,6 +109,11 @@
       "asset_directory": "resources/assets/3_candles",
       "asset_name": "3_candles",
       "asset_type": "object",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -158,6 +163,11 @@
       "asset_directory": "resources/assets/attack_speed",
       "asset_name": "attack_speed",
       "asset_type": "object",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -189,6 +199,11 @@
       },
       "asset_directory": "resources/assets/axe_in_stump",
       "asset_name": "axe_in_stump",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "barrel": {
@@ -311,6 +326,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -323,14 +339,32 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/barrel",
       "asset_name": "barrel",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes": [
+        {
+          "depth": 79.0,
+          "enabled": true,
+          "id": "floor_box",
+          "name": "Floor Box",
+          "position_x": -3.5,
+          "position_z": -28.5,
+          "tags": [],
+          "width": 95.0
+        }
+      ],
+      "floor_boxes_enabled": true,
+      "hitbox_enabled": true,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -358,6 +392,11 @@
       },
       "asset_directory": "resources/assets/bench",
       "asset_name": "bench",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "big_rock": {
@@ -376,6 +415,11 @@
       },
       "asset_directory": "resources/assets/big_rock",
       "asset_name": "big_rock",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "blacksmith": {
@@ -396,6 +440,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/blacksmith",
       "asset_name": "blacksmith",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -441,7 +490,12 @@
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9135,9 +9189,14 @@
       "asset_directory": "resources/assets/bomb",
       "asset_name": "bomb",
       "asset_type": "object",
+      "attack_box_enabled": true,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": true,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -9168,6 +9227,11 @@
       },
       "asset_directory": "resources/assets/bone",
       "asset_name": "bone",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bone_1": {
@@ -9186,6 +9250,11 @@
       },
       "asset_directory": "resources/assets/bone_1",
       "asset_name": "bone_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bone_pile": {
@@ -9204,6 +9273,11 @@
       },
       "asset_directory": "resources/assets/bone_pile",
       "asset_name": "bone_pile",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "book": {
@@ -9240,7 +9314,12 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/book",
       "asset_name": "book",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -9286,7 +9365,12 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/book_1",
       "asset_name": "book_1",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9335,6 +9419,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/book_pile",
       "asset_name": "book_pile",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9379,7 +9468,12 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/booze_1",
       "asset_name": "booze_1",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9413,6 +9507,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/booze_2",
       "asset_name": "booze_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9441,6 +9540,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/box",
       "asset_name": "box",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9469,6 +9573,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/building_1",
       "asset_name": "building_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9495,6 +9604,11 @@
       },
       "asset_directory": "resources/assets/building_2",
       "asset_name": "building_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bush_1_fps_2": {
@@ -9513,6 +9627,11 @@
       },
       "asset_directory": "resources/assets/bush_1_fps_2",
       "asset_name": "bush_1_fps_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "bush_fps_2": {
@@ -9531,6 +9650,11 @@
       },
       "asset_directory": "resources/assets/bush_fps_2",
       "asset_name": "bush_fps_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "candle_fps_12": {
@@ -9749,6 +9873,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/candle_fps_12",
       "asset_name": "candle_fps_12",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -9867,7 +9996,12 @@
       "asset_directory": "resources/assets/car",
       "asset_name": "car",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -9945,18 +10079,6 @@
         },
         {
           "anchor_point_name": "anchor_23",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "anchor_24",
-          "candidates": {
-            "candidates": []
-          }
-        },
-        {
-          "anchor_point_name": "anchor_25",
           "candidates": {
             "candidates": []
           }
@@ -10563,58 +10685,6 @@
                 "scaling_method": "parent",
                 "texture_x": 831,
                 "texture_y": 398
-              },
-              {
-                "depth_offset": 100.0,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": true,
-                  "color": [
-                    255,
-                    236,
-                    196
-                  ],
-                  "enabled": true,
-                  "falloff": 2.1600000858306885,
-                  "intensity": 0.47999998927116394,
-                  "opacity": 0.0,
-                  "radius": 991.0,
-                  "shadow_strength": 0.8199999928474426
-                },
-                "name": "anchor_24",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 464,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 800.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": true,
-                  "color": [
-                    255,
-                    236,
-                    196
-                  ],
-                  "enabled": true,
-                  "falloff": 5.670000076293945,
-                  "intensity": 0.1899999976158142,
-                  "opacity": 0.0,
-                  "radius": 1964.0,
-                  "shadow_strength": 0.8199999928474426
-                },
-                "name": "anchor_25",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 479,
-                "texture_y": 369
               }
             ]
           ],
@@ -10648,6 +10718,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/casino",
       "asset_name": "casino",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10676,6 +10751,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/chest_opening",
       "asset_name": "chest_opening",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10803,6 +10883,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -10815,12 +10896,77 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/church",
       "asset_name": "church",
+      "attack_box_enabled": false,
+      "floor_boxes": [
+        {
+          "depth": 302.0,
+          "enabled": true,
+          "id": "floor_box",
+          "name": "Floor Box",
+          "position_x": 2.5,
+          "position_z": -183.0,
+          "tags": [],
+          "width": 1059.0
+        },
+        {
+          "depth": 124.0,
+          "enabled": true,
+          "id": "floor_box_1",
+          "name": "Floor Box 2",
+          "position_x": 4.5,
+          "position_z": -75.0,
+          "tags": [],
+          "width": 257.0
+        }
+      ],
+      "floor_boxes_enabled": true,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": true,
+      "impassable_boxes": [
+        {
+          "anchor_link": "",
+          "corners": [
+            {
+              "texture_x": 0,
+              "texture_y": 351
+            },
+            {
+              "texture_x": 1045,
+              "texture_y": 351
+            },
+            {
+              "texture_x": 1045,
+              "texture_y": 848
+            },
+            {
+              "texture_x": 0,
+              "texture_y": 848
+            }
+          ],
+          "enabled": true,
+          "extrusion_amount": 10,
+          "id": "hit_box_id",
+          "name": "hit_box",
+          "position": {
+            "x": 0,
+            "y": 351
+          },
+          "rotation_degrees": 0.0,
+          "size": {
+            "h": 497,
+            "w": 1045
+          },
+          "type": "impassable_box"
+        }
+      ],
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10849,6 +10995,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/curse_circle",
       "asset_name": "curse_circle",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -10894,9 +11045,14 @@
       "asset_directory": "resources/assets/dot",
       "asset_name": "dot",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -11608,7 +11764,12 @@
       "asset_directory": "resources/assets/flame_fps_12",
       "asset_name": "flame_fps_12",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -11668,7 +11829,12 @@
       "asset_directory": "resources/assets/flame_no_light",
       "asset_name": "flame_no_light",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -11795,6 +11961,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -11807,7 +11974,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         },
         "down": {
           "anchor_points": [
@@ -12205,14 +12373,19 @@
       "asset_directory": "resources/assets/fly",
       "asset_name": "fly",
       "asset_type": "Object",
+      "attack_box_enabled": true,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": true,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
-      "neighbor_search_distance": 500,
+      "movement_enabled": true,
+      "neighbor_search_distance": 194,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 5.0,
+        "scale_percentage": 21.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -12256,9 +12429,14 @@
       "asset_directory": "resources/assets/fog_1",
       "asset_name": "fog_1",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -12311,9 +12489,14 @@
       "asset_directory": "resources/assets/fog_2",
       "asset_name": "fog_2",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -12362,9 +12545,14 @@
       "asset_directory": "resources/assets/fog_3",
       "asset_name": "fog_3",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -12416,9 +12604,14 @@
       "asset_directory": "resources/assets/fog_4",
       "asset_name": "fog_4",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -13114,6 +13307,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -13126,12 +13320,30 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/fountain",
       "asset_name": "fountain",
+      "attack_box_enabled": false,
+      "floor_boxes": [
+        {
+          "depth": 85.0,
+          "enabled": true,
+          "id": "floor_box_1",
+          "name": "Floor Box 2",
+          "position_x": 1.5,
+          "position_z": -15.5,
+          "tags": [],
+          "width": 175.0
+        }
+      ],
+      "floor_boxes_enabled": true,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -13174,9 +13386,14 @@
       "asset_directory": "resources/assets/frog",
       "asset_name": "frog",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -13224,7 +13441,12 @@
       "asset_directory": "resources/assets/grass_1_fps_2",
       "asset_name": "grass_1_fps_2",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13272,7 +13494,12 @@
       "asset_directory": "resources/assets/grass_fps_2",
       "asset_name": "grass_fps_2",
       "asset_type": "object",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13302,6 +13529,11 @@
       },
       "asset_directory": "resources/assets/grave_1",
       "asset_name": "grave_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "grave_2": {
@@ -13320,6 +13552,11 @@
       },
       "asset_directory": "resources/assets/grave_2",
       "asset_name": "grave_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "grave_3": {
@@ -13338,6 +13575,11 @@
       },
       "asset_directory": "resources/assets/grave_3",
       "asset_name": "grave_3",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "grave_4": {
@@ -13356,6 +13598,11 @@
       },
       "asset_directory": "resources/assets/grave_4",
       "asset_name": "grave_4",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "health": {
@@ -13374,6 +13621,11 @@
       },
       "asset_directory": "resources/assets/health",
       "asset_name": "health",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "health_beer": {
@@ -13392,6 +13644,11 @@
       },
       "asset_directory": "resources/assets/health_beer",
       "asset_name": "health_beer",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "key": {
@@ -13410,6 +13667,11 @@
       },
       "asset_directory": "resources/assets/key",
       "asset_name": "key",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "lamp_left": {
@@ -13548,9 +13810,14 @@
       "asset_directory": "resources/assets/lamp_left",
       "asset_name": "lamp_left",
       "asset_type": "Object",
+      "attack_box_enabled": false,
       "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
@@ -13602,7 +13869,12 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/mana",
       "asset_name": "mana",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13634,6 +13906,11 @@
       },
       "asset_directory": "resources/assets/mana_beer",
       "asset_name": "mana_beer",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "movement_speed": {
@@ -13652,6 +13929,11 @@
       },
       "asset_directory": "resources/assets/movement_speed",
       "asset_name": "movement_speed",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom": {
@@ -13670,6 +13952,11 @@
       },
       "asset_directory": "resources/assets/mushroom",
       "asset_name": "mushroom",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom_1": {
@@ -13688,6 +13975,11 @@
       },
       "asset_directory": "resources/assets/mushroom_1",
       "asset_name": "mushroom_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom_2": {
@@ -13706,6 +13998,11 @@
       },
       "asset_directory": "resources/assets/mushroom_2",
       "asset_name": "mushroom_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "mushroom_3": {
@@ -13724,6 +14021,11 @@
       },
       "asset_directory": "resources/assets/mushroom_3",
       "asset_name": "mushroom_3",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "noose": {
@@ -13742,6 +14044,11 @@
       },
       "asset_directory": "resources/assets/noose",
       "asset_name": "noose",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "path": {
@@ -13760,6 +14067,11 @@
       },
       "asset_directory": "resources/assets/path",
       "asset_name": "path",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "pub": {
@@ -13778,6 +14090,11 @@
       },
       "asset_directory": "resources/assets/pub",
       "asset_name": "pub",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "purple_flower": {
@@ -13814,7 +14131,12 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/purple_flower",
       "asset_name": "purple_flower",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13865,7 +14187,12 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/red_flower",
       "asset_name": "red_flower",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -13897,6 +14224,11 @@
       },
       "asset_directory": "resources/assets/rock",
       "asset_name": "rock",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "sigil_of_fortune": {
@@ -13915,6 +14247,11 @@
       },
       "asset_directory": "resources/assets/sigil_of_fortune",
       "asset_name": "sigil_of_fortune",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "skull": {
@@ -13933,6 +14270,11 @@
       },
       "asset_directory": "resources/assets/skull",
       "asset_name": "skull",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "skull_pile": {
@@ -13951,6 +14293,11 @@
       },
       "asset_directory": "resources/assets/skull_pile",
       "asset_name": "skull_pile",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "skull_pile_1": {
@@ -13969,6 +14316,11 @@
       },
       "asset_directory": "resources/assets/skull_pile_1",
       "asset_name": "skull_pile_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "small_rock": {
@@ -13987,6 +14339,11 @@
       },
       "asset_directory": "resources/assets/small_rock",
       "asset_name": "small_rock",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "small_rock_1": {
@@ -14005,6 +14362,11 @@
       },
       "asset_directory": "resources/assets/small_rock_1",
       "asset_name": "small_rock_1",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "spider": {
@@ -14973,6 +15335,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": -10,
             "dy": 0,
             "dz": -10
@@ -14985,7 +15348,8 @@
             "kind": "folder",
             "name": "",
             "path": "forward_left"
-          }
+          },
+          "tags": []
         },
         "forward_right": {
           "box_schema_version": 1,
@@ -15261,11 +15625,18 @@
       "asset_directory": "resources/assets/spider",
       "asset_name": "spider",
       "asset_type": "object",
+      "attack_box_enabled": true,
       "can_invert": false,
-      "neighbor_search_distance": 500,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": true,
+      "impassable_box_enabled": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 513,
+      "movement_enabled": true,
+      "neighbor_search_distance": 203,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 16.0,
+        "scale_percentage": 18.0,
         "size_variation": 11.0
       },
       "start": "forward_left",
@@ -15290,6 +15661,11 @@
       },
       "asset_directory": "resources/assets/stagecoach",
       "asset_name": "stagecoach",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "store": {
@@ -15308,6 +15684,11 @@
       },
       "asset_directory": "resources/assets/store",
       "asset_name": "store",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "stump": {
@@ -15326,6 +15707,11 @@
       },
       "asset_directory": "resources/assets/stump",
       "asset_name": "stump",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "table": {
@@ -15344,6 +15730,11 @@
       },
       "asset_directory": "resources/assets/table",
       "asset_name": "table",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "tailor": {
@@ -15362,6 +15753,11 @@
       },
       "asset_directory": "resources/assets/tailor",
       "asset_name": "tailor",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "townhall": {
@@ -15380,6 +15776,11 @@
       },
       "asset_directory": "resources/assets/townhall",
       "asset_name": "townhall",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "trail": {
@@ -15398,6 +15799,11 @@
       },
       "asset_directory": "resources/assets/trail",
       "asset_name": "trail",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "tree_dark": {
@@ -15434,7 +15840,12 @@
       "asset_directory": "resources/assets/tree_dark",
       "asset_name": "tree_dark",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -15483,7 +15894,12 @@
       "asset_directory": "resources/assets/tree_darker",
       "asset_name": "tree_darker",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -15513,6 +15929,11 @@
       },
       "asset_directory": "resources/assets/tree_eyes_fps_2",
       "asset_name": "tree_eyes_fps_2",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "tree_fps_2": {
@@ -15549,7 +15970,12 @@
       "asset_directory": "resources/assets/tree_fps_2",
       "asset_name": "tree_fps_2",
       "asset_type": "boundary",
+      "attack_box_enabled": false,
       "can_invert": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -15623,7 +16049,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15698,6 +16124,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -15710,7 +16137,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         },
         "down": {
           "anchor_points": [
@@ -16268,7 +16696,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16332,7 +16760,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16396,7 +16824,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16460,7 +16888,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16524,7 +16952,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16588,7 +17016,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16652,7 +17080,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -16716,7 +17144,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17164,13 +17592,14 @@
             "kind": "animation",
             "name": "left",
             "path": ""
-          }
+          },
+          "tags": []
         },
         "up": {
           "anchor_points": [
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17234,7 +17663,71 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 189,
+                "texture_y": 209
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 135,
+                "texture_y": 322
+              },
+              {
+                "depth_offset": -17.799999237060547,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 195,
+                "texture_y": 379
+              },
+              {
+                "depth_offset": 7.899998664855957,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 3.9700000286102295,
+                  "intensity": 0.28999999165534973,
+                  "opacity": 0.0,
+                  "radius": 505.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 226,
+                "texture_y": 168
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17298,7 +17791,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17362,7 +17855,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17426,7 +17919,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17490,7 +17983,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17554,71 +18047,7 @@
             ],
             [
               {
-                "depth_offset": -13.600000381469727,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "eyes_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 189,
-                "texture_y": 209
-              },
-              {
                 "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 135,
-                "texture_y": 322
-              },
-              {
-                "depth_offset": -17.799999237060547,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 195,
-                "texture_y": 372
-              },
-              {
-                "depth_offset": 7.899998664855957,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": true,
-                  "color": [
-                    255,
-                    236,
-                    196
-                  ],
-                  "enabled": true,
-                  "falloff": 3.9700000286102295,
-                  "intensity": 0.28999999165534973,
-                  "opacity": 0.0,
-                  "radius": 505.0,
-                  "shadow_strength": 0.8199999928474426
-                },
-                "name": "anchor_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 226,
-                "texture_y": 168
-              }
-            ],
-            [
-              {
-                "depth_offset": -13.600000381469727,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -17746,61 +18175,66 @@
       "asset_directory": "resources/assets/vibble",
       "asset_name": "vibble",
       "asset_type": "player",
+      "attack_box_enabled": true,
+      "floor_boxes_enabled": true,
+      "hitbox_enabled": true,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [
         {
           "asset_name": "vibble",
-          "height_radius_z": 30.0,
+          "height_radius_z": 10.0,
           "legacy_names": [],
           "name": "eyes",
           "points": [
             {
               "angle_degrees": 0.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": -18.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 30,
               "texture_y": 0
             },
             {
               "angle_degrees": 90.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
-              "texture_y": 30
+              "texture_y": 10
             },
             {
               "angle_degrees": 180.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 18.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -30,
               "texture_y": 0
             },
             {
               "angle_degrees": 270.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
-              "texture_y": -30
+              "texture_y": -10
             }
           ],
           "radius_offset_degrees": 0.0,
@@ -17814,97 +18248,97 @@
           "points": [
             {
               "angle_degrees": 0.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 20,
               "texture_y": 0
             },
             {
               "angle_degrees": 45.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 14,
               "texture_y": 17
             },
             {
               "angle_degrees": 90.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
               "texture_y": 24
             },
             {
               "angle_degrees": 135.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -14,
               "texture_y": 17
             },
             {
               "angle_degrees": 180.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -20,
               "texture_y": 0
             },
             {
               "angle_degrees": 225.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": -14,
               "texture_y": -17
             },
             {
               "angle_degrees": 270.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 0,
               "texture_y": -24
             },
             {
               "angle_degrees": 315.0,
+              "anti_tags": [],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [],
               "texture_x": 14,
               "texture_y": -17
             }
@@ -17920,51 +18354,132 @@
           "points": [
             {
               "angle_degrees": 0.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
               "texture_x": 50,
               "texture_y": 0
             },
             {
-              "angle_degrees": 90.0,
+              "angle_degrees": 45.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
+              "texture_x": 35,
+              "texture_y": 42
+            },
+            {
+              "angle_degrees": 90.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
               "texture_x": 0,
               "texture_y": 60
             },
             {
-              "angle_degrees": 180.0,
+              "angle_degrees": 135.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
+              "texture_x": -35,
+              "texture_y": 42
+            },
+            {
+              "angle_degrees": 180.0,
+              "anti_tags": [
+                "attack",
+                "right"
+              ],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
               "texture_x": -50,
               "texture_y": 0
             },
             {
-              "angle_degrees": 270.0,
+              "angle_degrees": 225.0,
+              "anti_tags": [
+                "attack"
+              ],
               "depth_offset": 0.0,
-              "flip_horizontal": true,
-              "flip_vertical": true,
               "hidden": false,
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
+              "texture_x": -35,
+              "texture_y": -42
+            },
+            {
+              "angle_degrees": 270.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
               "texture_x": 0,
               "texture_y": -60
+            },
+            {
+              "angle_degrees": 315.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
+              "texture_x": 35,
+              "texture_y": -42
             }
           ],
           "radius_offset_degrees": 288.0,
@@ -18353,35 +18868,35 @@
               0
             ],
             [
+              -16,
               0,
-              0,
-              0
+              39
             ],
             [
+              -17,
               0,
-              0,
-              0
+              21
             ],
             [
+              -19,
               0,
-              0,
-              0
+              -12
             ],
             [
+              -23,
               0,
-              0,
-              0
+              -42
             ],
             [
+              -9,
               0,
-              0,
-              0
+              -66
             ]
           ],
           "movement_total": {
-            "dx": 0,
+            "dx": -84,
             "dy": 0,
-            "dz": 0.0
+            "dz": -60.0
           },
           "number_of_frames": 1,
           "on_end": "reverse",
@@ -18391,7 +18906,35 @@
             "kind": "folder",
             "name": "",
             "path": "attack"
-          }
+          },
+          "tags": [
+            "attack",
+            "right"
+          ]
+        },
+        "attack_left": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": true,
+          "number_of_frames": 1,
+          "on_end": "reverse",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "attack",
+            "path": ""
+          },
+          "tags": [
+            "attack",
+            "left"
+          ]
         },
         "default": {
           "anchor_points": [
@@ -18425,12 +18968,41 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
+        },
+        "left": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "default",
+            "path": ""
+          },
+          "tags": [
+            "left"
+          ]
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/vibble_attack_1",
       "asset_name": "vibble_attack_1",
+      "attack_box_enabled": true,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "start": "default",
@@ -18454,6 +19026,11 @@
       },
       "asset_directory": "resources/assets/vibble_eyes",
       "asset_name": "vibble_eyes",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "vibble_hat": {
@@ -18490,6 +19067,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/vibble_hat",
       "asset_name": "vibble_hat",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -18516,6 +19098,11 @@
       },
       "asset_directory": "resources/assets/vibble_mouth",
       "asset_name": "vibble_mouth",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "vibble_neck": {
@@ -18534,6 +19121,11 @@
       },
       "asset_directory": "resources/assets/vibble_neck",
       "asset_name": "vibble_neck",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     },
     "water": {
@@ -18552,6 +19144,11 @@
       },
       "asset_directory": "resources/assets/water",
       "asset_name": "water",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_box_enabled": false,
+      "movement_enabled": false,
       "start": "default"
     }
   },
@@ -18565,15 +19162,15 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 1.809999942779541,
+        "behind_layer_light_strength_multiplier": 1.2899999618530273,
         "blur_px": 0.0,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 5382,
         "camera_height_min_px": 1,
         "depth_of_field_enabled": true,
-        "front_layer_light_strength_multiplier": 2.819999933242798,
-        "layer_depth_curve": 22.869998931884766,
-        "layer_depth_interval": 32.0,
+        "front_layer_light_strength_multiplier": 2.4099998474121094,
+        "layer_depth_curve": 12.109999656677246,
+        "layer_depth_interval": 34.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -18581,14 +19178,14 @@
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 5718.0,
+        "max_cull_depth": 3588.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 0.20999999344348907,
+        "radial_blur_px": 1.7300000190734863,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -18659,10 +19256,6 @@
                 "name": "null"
               },
               {
-                "chance": 6.25,
-                "name": "fog_1"
-              },
-              {
                 "chance": 7.3125,
                 "display_name": "#tree",
                 "name": "#tree",
@@ -18731,40 +19324,24 @@
               "required_children": []
             }
           ]
-        },
-        {
-          "bounding_extent": 2330.3252991803524,
-          "level": 1,
-          "max_rooms": 2,
-          "min_rooms": 1,
-          "name": "layer_1",
-          "ring_radius": 6159.0,
-          "rooms": [
-            {
-              "max_instances": 2,
-              "min_instances": 1,
-              "name": "NewRoom",
-              "required_children": []
-            }
-          ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 1000
+        "min_edge_distance": 10000
       },
       "map_name": "forrest",
       "rooms_data": {
         "NewRoom": {
-          "camera_center_dx": -558,
-          "camera_center_dz": -535,
-          "camera_height_px": 310,
-          "camera_tilt_deg": 15.72830581665039,
-          "camera_zoom_percent": 82,
+          "camera_center_dx": -7,
+          "camera_center_dz": 75,
+          "camera_height_px": 456,
+          "camera_tilt_deg": 37.47359085083008,
+          "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
             242,
             36,
-            241,
+            54,
             255
           ],
           "edge_smoothness": 2,
@@ -19158,16 +19735,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": 75,
-          "camera_center_dz": 78,
-          "camera_height_px": 624,
-          "camera_tilt_deg": 42.9212646484375,
+          "camera_center_dx": -1278,
+          "camera_center_dz": -226,
+          "camera_height_px": 148,
+          "camera_tilt_deg": 22.861265182495117,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            36,
+            242,
+            226,
             255
           ],
           "edge_smoothness": 101,
@@ -19361,36 +19938,6 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": 356,
-              "dz": 356,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 3856,
-              "origional_width": 3360,
-              "position": "Exact",
-              "priority": 6,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-27b3635086b3"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "barrel"
-                }
-              ],
-              "display_name": "barrel",
               "dx": -1140,
               "dz": -184,
               "enforce_spacing": false,
@@ -19402,7 +19949,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 7,
+              "priority": 6,
               "quantity": 1,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
@@ -19432,7 +19979,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 8,
+              "priority": 7,
               "quantity": 1,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
@@ -19462,7 +20009,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 9,
+              "priority": 8,
               "quantity": 1,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
@@ -19492,7 +20039,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 10,
+              "priority": 9,
               "quantity": 1,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
@@ -19522,7 +20069,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 11,
+              "priority": 10,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19552,7 +20099,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 12,
+              "priority": 11,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19582,7 +20129,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 13,
+              "priority": 12,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19612,7 +20159,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 14,
+              "priority": 13,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19642,7 +20189,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 15,
+              "priority": 14,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19672,6 +20219,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 15,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19701,6 +20249,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 16,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19730,6 +20279,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 17,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -19759,11 +20309,42 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 18,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-75e8a7f4d853"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble_attack_1"
+                }
+              ],
+              "display_name": "vibble_attack_1",
+              "dx": -1894,
+              "dz": 293,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 19,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b20402995c48"
             }
           ]
         }

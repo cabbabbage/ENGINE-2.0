@@ -108,12 +108,12 @@ class AssetInfo {
         int texture_x = 0;
         int texture_y = 0;
         float depth_offset = 0.0f;
-        bool flip_horizontal = true;
-        bool flip_vertical = true;
         float rotation_degrees = 0.0f;
         bool hidden = false;
         bool resolve_x = true;
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
+        std::vector<std::string> tags;
+        std::vector<std::string> anti_tags;
     };
 
     struct OvalAnchorMapping {
@@ -131,7 +131,24 @@ class AssetInfo {
     };
     std::vector<OvalAnchorMapping> oval_anchor_mappings;
 
-    bool moving_asset = false;
+    struct FloorBox {
+        std::string id;
+        std::string name;
+        float position_x = 0.0f;
+        float position_z = 0.0f;
+        float width = 0.0f;
+        float depth = 0.0f;
+        bool enabled = true;
+        std::vector<std::string> tags;
+    };
+
+    bool movement_enabled = false;
+    bool attack_box_enabled = false;
+    bool hitbox_enabled = false;
+    bool impassable_box_enabled = false;
+    bool floor_boxes_enabled = false;
+    std::vector<FloorBox> floor_boxes;
+    std::vector<animation_update::FrameHitBox> impassable_boxes;
     std::vector<float>  scale_variants;
     struct NamedArea {
         struct RenderFrame {
@@ -246,6 +263,15 @@ class AssetInfo {
 
     bool remove_area(const std::string& name);
     bool rename_area(const std::string& old_name, const std::string& new_name);
+    bool is_movement_enabled() const { return movement_enabled; }
+    bool is_hitbox_enabled() const { return hitbox_enabled; }
+    bool is_attack_box_enabled() const { return attack_box_enabled; }
+    bool is_impassable_box_enabled() const { return impassable_box_enabled; }
+    bool is_floor_boxes_enabled() const { return floor_boxes_enabled; }
+    const std::vector<FloorBox>& floor_boxes_payload() const { return floor_boxes; }
+    const std::vector<animation_update::FrameHitBox>& impassable_boxes_payload() const {
+        return impassable_boxes;
+    }
 
     std::vector<std::string> animation_names() const;
 

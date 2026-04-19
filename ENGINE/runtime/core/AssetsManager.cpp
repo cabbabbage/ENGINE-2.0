@@ -46,6 +46,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <utility>
 #include <execution>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
@@ -69,6 +70,10 @@ constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
 constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
 constexpr int kDefaultCameraHeightMinPx = 1;
 constexpr int kDefaultCameraHeightMaxPx = 100000;
+constexpr std::size_t kRuntimeAnchorConvergenceIterationCap = 8;
+constexpr int kCollisionIndexSpacingMinPx = 64;
+constexpr int kCollisionIndexSpacingMaxPx = 256;
+constexpr int kAggressiveMaxCollisionSearchRadiusPx = 320;
 
 float normalize_depth_axis_sign(float sign) {
     if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
@@ -87,6 +92,56 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
     }
     const float sign = normalize_depth_axis_sign(depth_axis_sign);
     return (world_z - anchor_world_z) * sign;
+}
+
+bool runtime_impassable_volume_contributes(const Asset::RuntimeBoxVolume& volume) {
+    return volume.enabled && volume.valid;
+}
+
+bool build_impassable_area_for_volume(const Asset& asset,
+                                      const Asset::RuntimeBoxVolume& volume,
+                                      Area& out_area) {
+    if (!runtime_impassable_volume_contributes(volume)) {
+        return false;
+    }
+
+    float min_x = std::numeric_limits<float>::max();
+    float max_x = std::numeric_limits<float>::lowest();
+    float min_z = std::numeric_limits<float>::max();
+    float max_z = std::numeric_limits<float>::lowest();
+    for (const auto& point : volume.world_points) {
+        if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
+            continue;
+        }
+        min_x = std::min(min_x, point.x);
+        max_x = std::max(max_x, point.x);
+        min_z = std::min(min_z, point.y);
+        max_z = std::max(max_z, point.y);
+    }
+
+    if (!std::isfinite(min_x) || !std::isfinite(max_x) ||
+        !std::isfinite(min_z) || !std::isfinite(max_z) ||
+        max_x <= min_x || max_z <= min_z) {
+        return false;
+    }
+
+    std::vector<Area::Point> points;
+    points.reserve(4);
+    points.push_back(Area::Point{static_cast<int>(std::lround(min_x)), static_cast<int>(std::lround(min_z))});
+    points.push_back(Area::Point{static_cast<int>(std::lround(max_x)), static_cast<int>(std::lround(min_z))});
+    points.push_back(Area::Point{static_cast<int>(std::lround(max_x)), static_cast<int>(std::lround(max_z))});
+    points.push_back(Area::Point{static_cast<int>(std::lround(min_x)), static_cast<int>(std::lround(max_z))});
+
+    if (points.size() != 4) {
+        return false;
+    }
+
+    out_area = Area("impassable", points, asset.grid_resolution);
+    return true;
+}
+
+int runtime_collision_index_cell_spacing_world(const MapGridSettings& settings) {
+    return std::clamp(settings.spacing(), kCollisionIndexSpacingMinPx, kCollisionIndexSpacingMaxPx);
 }
 
 struct AssetWorldBounds {
@@ -228,6 +283,15 @@ Assets::Assets(AssetLibrary& library,
         return nullptr;
 };
     Room* intro_room = current_room();
+    current_room_ = intro_room;
+    game_context_.begin_frame(
+        this,
+        frame_id_,
+        frame_delta_seconds_clamped(),
+        current_room_,
+        player,
+        &camera_,
+        &runtime_game_config());
 
     SDL_Point intro_center{screen_center_x, screen_center_z};
     if (player) {
@@ -772,7 +836,7 @@ void Assets::notify_rooms_changed() {
 
 void Assets::refresh_active_asset_lists() {
     run_frame_rebuild_stage();
-    run_active_runtime_single_pass();
+    run_runtime_effects_stage();
     update_filtered_active_assets();
 }
 
@@ -811,7 +875,7 @@ std::uint64_t Assets::next_anchor_invalidation_version() {
     return anchor_invalidation_version_counter_;
 }
 
-void Assets::run_active_runtime_single_pass(bool include_audio_update) {
+bool Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const SDL_Point camera_focus = camera_.get_screen_center();
     const std::uint64_t camera_state_version = camera_.camera_state_version();
     const float camera_anchor_world_z = static_cast<float>(camera_.anchor_world_z());
@@ -845,11 +909,7 @@ void Assets::run_active_runtime_single_pass(bool include_audio_update) {
         last_audio_engine_update_frame_id_ = frame_id_;
     }
 
-    const bool child_transforms_changed =
-        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
-    if (child_transforms_changed) {
-        run_post_flush_traversal_refresh_once();
-    }
+    return anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
 }
 
 void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
@@ -881,10 +941,6 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         state.processed_frame_index = current_frame_index;
     }
 
-    if (state.last_audio_frame_id == frame_id_) {
-        return;
-    }
-
     const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
     const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
     const float world_z = static_cast<float>(asset->world_z());
@@ -893,6 +949,7 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
     RuntimeCameraMetrics metrics{};
     metrics.frame_id = frame_id_;
     metrics.camera_state_version = camera_state_version;
+    metrics.anchor_revision = asset->anchor_world_revision();
     metrics.valid = true;
     metrics.planar_dx = dx;
     metrics.planar_dz = dz;
@@ -920,66 +977,77 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
     asset->runtime_camera_metrics = metrics;
     asset->distance_from_camera = metrics.planar_distance;
     asset->angle_from_camera = metrics.planar_angle_radians;
-    state.last_audio_frame_id = frame_id_;
 }
 
 void Assets::rebuild_frame_collision_context() const {
-    if (!frame_collision_context_dirty_ && frame_collision_context_frame_id_ == frame_id_) {
+    if (!frame_collision_context_dirty_) {
         return;
     }
 
+    std::size_t estimated_entry_count = 0;
+    for (Asset* asset : active_assets) {
+        if (!asset || asset->dead || !asset->info || !asset->affects_collision_context()) {
+            continue;
+        }
+        const auto& impassable_volumes = asset->current_impassable_box_volumes();
+        for (const auto& volume : impassable_volumes) {
+            if (runtime_impassable_volume_contributes(volume)) {
+                ++estimated_entry_count;
+            }
+        }
+    }
+
     frame_collision_entries_.clear();
-    frame_collision_entries_.reserve(active_assets.size());
+    frame_collision_entries_.reserve(estimated_entry_count);
     frame_collision_index_.clear();
-    frame_collision_index_.reserve(active_assets.size());
-    const int index_layer = world_grid_.grid_resolution();
+    frame_collision_index_.reserve(estimated_entry_count);
+    frame_collision_query_cache_.clear();
+    ++frame_collision_context_version_;
+    if (frame_collision_context_version_ == 0) {
+        ++frame_collision_context_version_;
+    }
+
+    const world::GridPoint origin = world_grid_.origin();
+    const int cell_spacing = runtime_collision_index_cell_spacing_world(map_grid_settings_);
 
     for (Asset* asset : active_assets) {
-        if (!asset || asset->dead || !asset->info) {
+        if (!asset || asset->dead || !asset->info || !asset->affects_collision_context()) {
             continue;
         }
 
-        const std::string canonical_type = asset_types::canonicalize(asset->info->type);
-        const bool impassable =
-            canonical_type == asset_types::boundary ||
-            canonical_type == asset_types::enemy ||
-            canonical_type == asset_types::npc ||
-            asset->info->moving_asset ||
-            !asset->info->passable;
-        if (!impassable || canonical_type == asset_types::player) {
-            continue;
-        }
+        auto push_collision_entry = [&](Area collision, const std::string& resolved_type, SDL_Point world_center) {
+            if (collision.get_points().empty()) {
+                return;
+            }
+            const world::GridPoint center = world::grid_math::from_sdl(
+                world_center,
+                asset->world_y(),
+                asset->grid_resolution);
+            const world::GridPoint bottom_middle =
+                animation_update::detail::bottom_middle_for(*asset, center);
+            frame_collision_entries_.push_back(FrameCollisionEntry{
+                asset,
+                std::move(collision),
+                world_center,
+                bottom_middle,
+                resolved_type
+            });
+            FrameCollisionEntry& entry = frame_collision_entries_.back();
+            const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), cell_spacing);
+            const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), cell_spacing);
+            const world::GridCoord cell{cell_x, cell_z};
+            frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
+        };
 
-        Area collision = asset->get_area("impassable");
-        if (collision.get_points().empty()) {
-            collision = asset->get_area("collision_area");
+        const auto& impassable_volumes = asset->current_impassable_box_volumes();
+        for (const auto& volume : impassable_volumes) {
+            Area area{"impassable"};
+            if (!build_impassable_area_for_volume(*asset, volume, area)) {
+                continue;
+            }
+            const SDL_Point center = area.get_center();
+            push_collision_entry(std::move(area), std::string("impassable_box"), center);
         }
-        if (collision.get_points().empty()) {
-            continue;
-        }
-
-        const SDL_Point world_center = asset->world_xz_point();
-        const world::GridPoint center = world::grid_math::from_sdl(
-            world_center,
-            asset->world_y(),
-            asset->grid_resolution);
-        const world::GridPoint bottom_middle =
-            animation_update::detail::bottom_middle_for(*asset, center);
-
-        frame_collision_entries_.push_back(FrameCollisionEntry{
-            asset,
-            std::move(collision),
-            world_center,
-            bottom_middle,
-            canonical_type
-        });
-        FrameCollisionEntry& entry = frame_collision_entries_.back();
-        const world::GridPoint origin = world_grid_.origin();
-        const int spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
-        const int cell_x = vibble::math::floor_div(world_center.x - origin.world_x(), spacing);
-        const int cell_z = vibble::math::floor_div(world_center.y - origin.world_z(), spacing);
-        const world::GridCoord cell{cell_x, cell_z};
-        frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
     }
 
     frame_collision_context_frame_id_ = frame_id_;
@@ -996,12 +1064,26 @@ void Assets::query_impassable_entries(const Asset& self,
         return;
     }
 
-    const int radius = std::max(0, search_radius);
+    const int radius = (search_radius > 0)
+        ? std::min(search_radius, kAggressiveMaxCollisionSearchRadiusPx)
+        : 0;
     const std::int64_t radius_sq = static_cast<std::int64_t>(radius) * static_cast<std::int64_t>(radius);
     const SDL_Point self_center = self.world_xz_point();
-    const int index_layer = world_grid_.grid_resolution();
+    const FrameCollisionQueryKey cache_key{
+        frame_collision_context_version_,
+        &self,
+        self_center.x,
+        self_center.y,
+        radius
+    };
+    if (const auto cache_it = frame_collision_query_cache_.find(cache_key);
+        cache_it != frame_collision_query_cache_.end()) {
+        out = cache_it->second;
+        return;
+    }
+
     const world::GridPoint origin = world_grid_.origin();
-    const int cell_spacing = std::max(1, world_grid_.grid_spacing_for_layer(index_layer));
+    const int cell_spacing = runtime_collision_index_cell_spacing_world(map_grid_settings_);
     const int self_cell_x = vibble::math::floor_div(self_center.x - origin.world_x(), cell_spacing);
     const int self_cell_z = vibble::math::floor_div(self_center.y - origin.world_z(), cell_spacing);
     const world::GridCoord self_cell{self_cell_x, self_cell_z};
@@ -1022,6 +1104,13 @@ void Assets::query_impassable_entries(const Asset& self,
     };
 
     out.reserve(frame_collision_entries_.size());
+    auto cache_results = [&]() {
+        constexpr std::size_t kMaxCachedCollisionQueries = 4096;
+        if (frame_collision_query_cache_.size() >= kMaxCachedCollisionQueries) {
+            frame_collision_query_cache_.clear();
+        }
+        frame_collision_query_cache_[cache_key] = out;
+    };
 
     if (radius <= 0) {
         for (const auto& bucket : frame_collision_index_) {
@@ -1029,6 +1118,7 @@ void Assets::query_impassable_entries(const Asset& self,
                 consider_entry(entry);
             }
         }
+        cache_results();
         return;
     }
 
@@ -1046,6 +1136,8 @@ void Assets::query_impassable_entries(const Asset& self,
             }
         }
     }
+
+    cache_results();
 }
 
 void Assets::refresh_filtered_active_assets() {
@@ -1308,6 +1400,14 @@ void Assets::set_input(Input* m) {
 }
 
 void Assets::run_idle_frame_pipeline(const Input& input) {
+    game_context_.begin_frame(
+        this,
+        frame_id_,
+        0.0f,
+        current_room_,
+        player,
+        &camera_,
+        &runtime_game_config());
     run_visibility_build_stage();
     run_runtime_effects_stage(false);
     sync_dev_controls_for_frame(input);
@@ -1324,6 +1424,14 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     }
     room_changed = (current_room_ != active_room);
     current_room_ = active_room;
+    game_context_.begin_frame(
+        this,
+        frame_id_,
+        frame_delta_seconds_clamped(),
+        current_room_,
+        player,
+        &camera_,
+        &runtime_game_config());
 
     delta_x_ = delta_z_ = 0;
 
@@ -1463,11 +1571,6 @@ void Assets::run_visibility_build_stage() {
 }
 
 void Assets::run_post_flush_traversal_refresh_once() {
-    if (last_post_flush_refresh_frame_id_ == frame_id_) {
-        return;
-    }
-    last_post_flush_refresh_frame_id_ = frame_id_;
-
     post_runtime_traversal_refresh_pending_ = true;
     note_frame_rebuild_request();
     run_frame_rebuild_stage();
@@ -1475,7 +1578,26 @@ void Assets::run_post_flush_traversal_refresh_once() {
 }
 
 void Assets::run_runtime_effects_stage(bool include_audio_update) {
-    run_active_runtime_single_pass(include_audio_update);
+    bool audio_update_pending = include_audio_update;
+    bool converged = false;
+    std::size_t iteration = 0;
+    for (; iteration < kRuntimeAnchorConvergenceIterationCap; ++iteration) {
+        const bool child_transforms_changed = run_active_runtime_single_pass(audio_update_pending);
+        audio_update_pending = false;
+        if (!child_transforms_changed) {
+            converged = true;
+            break;
+        }
+        run_post_flush_traversal_refresh_once();
+    }
+
+    if (!converged && last_runtime_convergence_warning_frame_id_ != frame_id_) {
+        last_runtime_convergence_warning_frame_id_ = frame_id_;
+        std::cerr << "[Assets] Anchor convergence cap reached ("
+                  << kRuntimeAnchorConvergenceIterationCap
+                  << ") at frame " << frame_id_
+                  << "; deferring remaining anchor reconciliation to next frame.\n";
+    }
 }
 
 void Assets::sync_dev_controls_for_frame(const Input& input) {
@@ -3273,9 +3395,8 @@ void Assets::rebuild_active_from_screen_grid() {
         }
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
+        mark_collision_context_dirty();
     }
-
-    mark_collision_context_dirty();
 
     // Update scale values for ALL active assets after grid rebuild
     // to ensure scales reflect current perspective (fixes single-frame asset scaling)

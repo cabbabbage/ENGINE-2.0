@@ -160,10 +160,7 @@ void SourceConfigPanel::update() {
 
     if (use_animation_reference_ && animation_dropdown_ && !animation_options_.empty()) {
         int idx = std::clamp(animation_dropdown_->selected(), 0, static_cast<int>(animation_options_.size()) - 1);
-
-        std::string current_target = strings::trim_copy(current_source_.name.value_or(current_source_.path));
-        const std::string& desired = animation_options_[idx];
-        if (idx != animation_index_ || strings::trim_copy(desired) != current_target) {
+        if (idx != animation_index_) {
             apply_animation_selection();
         }
     }
@@ -322,6 +319,7 @@ void SourceConfigPanel::set_source_mode(SourceMode mode) {
         }
     } else {
         animation_index_ = -1;
+        animation_dropdown_owner_id_.clear();
         animation_dropdown_.reset();
         pick_animation_button_.reset();
     }
@@ -373,6 +371,7 @@ void SourceConfigPanel::reload_from_document() {
 
     if (!document_ || animation_id_.empty()) {
         animation_ids_revision_.reset();
+        animation_dropdown_owner_id_.clear();
         reloading_ = false;
         return;
     }
@@ -415,6 +414,7 @@ void SourceConfigPanel::reload_from_document() {
     } else {
         animation_index_ = -1;
     }
+    animation_dropdown_owner_id_ = animation_id_;
     layout_controls();
     reloading_ = false;
 }
@@ -433,10 +433,11 @@ void SourceConfigPanel::ensure_payload_loaded() {
 
 void SourceConfigPanel::commit_payload(bool refresh_document) {
     if (!document_ || animation_id_.empty()) return;
+    const std::string commit_animation_id = animation_id_;
     ensure_payload_loaded();
     std::string dump = payload_.dump();
-    document_->replace_animation_payload(animation_id_, dump);
-    if (refresh_document) {
+    document_->replace_animation_payload(commit_animation_id, dump);
+    if (refresh_document && animation_id_ == commit_animation_id) {
         reload_from_document();
     }
 }
@@ -447,26 +448,10 @@ void SourceConfigPanel::apply_source_config(const SourceConfig& config) {
     current_source_ = config;
     payload_["source"] = build_source_json(config);
     update_number_of_frames();
-    if (previous_kind != std::string("animation") && config.kind == std::string("animation")) {
-        clear_derived_fields();
-    }
     commit_payload();
-
     if (previous_kind != std::string("animation") && config.kind == std::string("animation")) {
         clean_output_frames();
     }
-}
-
-void SourceConfigPanel::clear_derived_fields() {
-    ensure_payload_loaded();
-    payload_.erase("movement");
-    payload_.erase("movement_total");
-    payload_.erase("audio");
-    payload_.erase("speed");
-    payload_.erase("speed_factor");
-    payload_.erase("speed_multiplier");
-    payload_.erase("fps");
-    payload_.erase("rnd_start");
 }
 
 void SourceConfigPanel::update_number_of_frames() {
@@ -762,8 +747,7 @@ void SourceConfigPanel::layout_controls() {
                 animation_dropdown_ = std::make_unique<DMDropdown>("Source Animation", animation_options_, std::max(0, idx));
                 animation_index_ = animation_dropdown_->selected();
             } else {
-
-                int idx = animation_dropdown_->selected();
+                int idx = animation_index_;
                 if (!animation_options_.empty()) {
                     idx = std::clamp(idx, 0, static_cast<int>(animation_options_.size()) - 1);
                 } else {
@@ -772,6 +756,7 @@ void SourceConfigPanel::layout_controls() {
                 animation_dropdown_->set_selected(idx);
                 animation_index_ = idx;
             }
+            animation_dropdown_owner_id_ = animation_id_;
 
             animation_dropdown_rect_ = SDL_Rect{x, y, inner_w, DMDropdown::height()};
             if (animation_dropdown_) animation_dropdown_->set_rect(animation_dropdown_rect_);
@@ -796,6 +781,7 @@ void SourceConfigPanel::layout_controls() {
             rect = SDL_Rect{bounds_.x, bounds_.y, 0, 0};
         }
     } else {
+        animation_dropdown_owner_id_.clear();
         animation_dropdown_rect_ = SDL_Rect{bounds_.x, bounds_.y, 0, 0};
         animation_dropdown_.reset();
         pick_animation_button_.reset();
@@ -846,9 +832,19 @@ void SourceConfigPanel::refresh_animation_options() {
     }
 
     if (new_options == animation_options_) {
-
-        if (animation_dropdown_ && !animation_options_.empty()) {
-            animation_index_ = std::clamp(animation_dropdown_->selected(), 0, static_cast<int>(animation_options_.size()) - 1);
+        if (!animation_options_.empty()) {
+            std::string desired = strings::trim_copy(current_source_.name.value_or(current_source_.path));
+            if (desired.empty() && animation_index_ >= 0 && animation_index_ < static_cast<int>(animation_options_.size())) {
+                desired = animation_options_[animation_index_];
+            }
+            auto it = std::find(animation_options_.begin(), animation_options_.end(), desired);
+            if (it != animation_options_.end()) {
+                animation_index_ = static_cast<int>(std::distance(animation_options_.begin(), it));
+            } else {
+                animation_index_ = std::clamp(animation_index_, 0, static_cast<int>(animation_options_.size()) - 1);
+            }
+        } else {
+            animation_index_ = -1;
         }
         return;
     }
@@ -882,15 +878,24 @@ void SourceConfigPanel::refresh_animation_options() {
 }
 
 void SourceConfigPanel::apply_animation_selection() {
-    if (!use_animation_reference_ || !animation_dropdown_ || animation_options_.empty()) return;
+    const std::string expected_animation_id = animation_id_;
+    apply_animation_selection_for_id(expected_animation_id);
+}
+
+bool SourceConfigPanel::apply_animation_selection_for_id(const std::string& expected_animation_id) {
+    if (expected_animation_id.empty() || animation_id_ != expected_animation_id) return false;
+    if (reloading_) return false;
+    if (!use_animation_reference_ || !animation_dropdown_ || animation_options_.empty()) return false;
+    if (!animation_dropdown_owner_id_.empty() && animation_dropdown_owner_id_ != expected_animation_id) return false;
+
     int idx = animation_dropdown_->selected();
     idx = std::clamp(idx, 0, static_cast<int>(animation_options_.size()) - 1);
     const std::string& target = animation_options_[idx];
-    if (target.empty() || target == animation_id_) return;
+    if (target.empty() || target == expected_animation_id) return false;
 
     std::string current_target = strings::trim_copy(current_source_.name.value_or(current_source_.path));
     if (animation_index_ == idx && strings::trim_copy(target) == current_target) {
-        return;
+        return false;
     }
 
     animation_index_ = idx;
@@ -900,13 +905,25 @@ void SourceConfigPanel::apply_animation_selection() {
     config.path.clear();
     config.name = target;
     apply_source_config(config);
+    if (animation_id_ != expected_animation_id) return false;
     animation_start_time_ = SDL_GetTicks();
     update_status("Linked frames from animation '" + target + "'");
-    if (on_source_changed_) on_source_changed_(animation_id_);
+    if (on_source_changed_) on_source_changed_(expected_animation_id);
+    return true;
 }
 
 void SourceConfigPanel::commit_animation_dropdown_selection() {
-    apply_animation_selection();
+    const std::string expected_animation_id = animation_id_;
+    if (expected_animation_id.empty()) return;
+    if (!use_animation_reference_ || !animation_dropdown_ || animation_options_.empty()) return;
+    if (!animation_dropdown_owner_id_.empty() && animation_dropdown_owner_id_ != expected_animation_id) return;
+
+    int idx = std::clamp(animation_dropdown_->selected(), 0, static_cast<int>(animation_options_.size()) - 1);
+    const std::string desired = strings::trim_copy(animation_options_[idx]);
+    const std::string current_target = strings::trim_copy(current_source_.name.value_or(current_source_.path));
+    if (idx == animation_index_ && desired == current_target) return;
+
+    (void)apply_animation_selection_for_id(expected_animation_id);
 }
 
 void SourceConfigPanel::import_from_folder() {

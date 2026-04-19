@@ -87,3 +87,29 @@ TEST_CASE("Asset runtime base scale applies stable per-instance variation and ig
     info->set_tillable(true);
     CHECK(asset.runtime_effective_base_scale() == doctest::Approx(1.5f));
 }
+
+TEST_CASE("Asset runtime camera metrics freshness includes anchor revision guard") {
+    auto info = std::make_shared<AssetInfo>("vibble");
+    Area spawn_area("sample_spawn", 0);
+    Asset asset(info, spawn_area, SDL_Point{0, 0}, 0);
+
+    RuntimeCameraMetrics metrics{};
+    metrics.valid = true;
+    metrics.frame_id = 42;
+    metrics.camera_state_version = 77;
+    metrics.anchor_revision = asset.anchor_world_revision();
+    metrics.world_z_depth_from_anchor = 12.5;
+    asset.runtime_camera_metrics = metrics;
+
+    CHECK(asset.has_fresh_runtime_camera_metrics(42, 77));
+    CHECK_FALSE(asset.has_fresh_runtime_camera_metrics(43, 77));
+    CHECK_FALSE(asset.has_fresh_runtime_camera_metrics(42, 78));
+
+    asset.runtime_camera_metrics.anchor_revision = asset.anchor_world_revision() + 1;
+    CHECK_FALSE(asset.has_fresh_runtime_camera_metrics(42, 77));
+
+    asset.runtime_camera_metrics.anchor_revision = asset.anchor_world_revision();
+    CHECK(asset.has_fresh_runtime_camera_metrics(42, 77));
+    asset.mark_anchors_dirty();
+    CHECK_FALSE(asset.has_fresh_runtime_camera_metrics(42, 77));
+}

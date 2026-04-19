@@ -83,8 +83,6 @@ RoomOvalToolsPanel::RoomOvalToolsPanel() {
     point_rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
     point_hidden_checkbox_ = std::make_unique<DMCheckbox>("Hidden", false);
     advanced_options_button_ = std::make_unique<DMButton>("Advanced Options (Show)", &DMStyles::ListButton(), 180, DMButton::height());
-    point_flip_horizontal_checkbox_ = std::make_unique<DMCheckbox>("Flip Horizontal", true);
-    point_flip_vertical_checkbox_ = std::make_unique<DMCheckbox>("Flip Vertical", true);
     point_resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
     point_scaling_method_dropdown_ = std::make_unique<DMDropdown>("Scaling Method", scaling_method_options(), 0);
 }
@@ -246,12 +244,6 @@ void RoomOvalToolsPanel::set_point_detail_values(const PointDetailValues& values
     if (point_resolve_x_checkbox_) {
         point_resolve_x_checkbox_->set_value(values.resolve_x);
     }
-    if (point_flip_horizontal_checkbox_) {
-        point_flip_horizontal_checkbox_->set_value(values.flip_horizontal);
-    }
-    if (point_flip_vertical_checkbox_) {
-        point_flip_vertical_checkbox_->set_value(values.flip_vertical);
-    }
     if (point_scaling_method_dropdown_) {
         point_scaling_method_dropdown_->set_selected(scaling_method_to_dropdown_index(values.scaling_method));
     }
@@ -326,9 +318,7 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
     const bool has_selected_oval = selected_oval_index_ >= 0 &&
                                    selected_oval_index_ < static_cast<int>(oval_names_.size());
     const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
-    const bool has_selected_point = !has_selected_center &&
-                                    selected_point_index_ >= 0 &&
-                                    selected_point_index_ < point_count_;
+    const bool has_selected_point = false;
 
     layout_oval_buttons();
 
@@ -514,16 +504,6 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
         details_changed = true;
     }
     if (has_selected_point && advanced_options_expanded_ &&
-        point_flip_vertical_checkbox_ && point_flip_vertical_checkbox_->handle_event(event)) {
-        handled = true;
-        details_changed = true;
-    }
-    if (has_selected_point && advanced_options_expanded_ &&
-        point_flip_horizontal_checkbox_ && point_flip_horizontal_checkbox_->handle_event(event)) {
-        handled = true;
-        details_changed = true;
-    }
-    if (has_selected_point && advanced_options_expanded_ &&
         point_scaling_method_dropdown_ && point_scaling_method_dropdown_->handle_event(event)) {
         handled = true;
         details_changed = true;
@@ -555,9 +535,7 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
     const bool has_selected_oval = selected_oval_index_ >= 0 &&
                                    selected_oval_index_ < static_cast<int>(oval_names_.size());
     const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
-    const bool has_selected_point = !has_selected_center &&
-                                    selected_point_index_ >= 0 &&
-                                    selected_point_index_ < point_count_;
+    const bool has_selected_point = false;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color bg = DMStyles::PanelBG();
@@ -694,8 +672,6 @@ void RoomOvalToolsPanel::render(SDL_Renderer* renderer) const {
         if (advanced_options_button_) advanced_options_button_->render(renderer);
         if (advanced_options_expanded_) {
             if (point_resolve_x_checkbox_) point_resolve_x_checkbox_->render(renderer);
-            if (point_flip_vertical_checkbox_) point_flip_vertical_checkbox_->render(renderer);
-            if (point_flip_horizontal_checkbox_) point_flip_horizontal_checkbox_->render(renderer);
             if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->render(renderer);
         }
     }
@@ -762,9 +738,7 @@ void RoomOvalToolsPanel::update_layout() const {
     const bool has_selected_oval = selected_oval_index_ >= 0 &&
                                    selected_oval_index_ < static_cast<int>(oval_names_.size());
     const bool has_selected_center = has_selected_oval && center_selected_ && center_anchor_present_;
-    const bool has_selected_point = !has_selected_center &&
-                                    selected_point_index_ >= 0 &&
-                                    selected_point_index_ < point_count_;
+    const bool has_selected_point = false;
 
     const int safe_w = std::max(screen_w_, 360);
     const int safe_h = std::max(screen_h_, 420);
@@ -893,16 +867,10 @@ void RoomOvalToolsPanel::update_layout() const {
     point_detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
     advanced_card_rect_ = SDL_Rect{0, 0, 0, 0};
     if (has_selected_point) {
-        const int split_gap = DMSpacing::small_gap();
-        const int split_w = std::max(0, content_w - split_gap);
-        const int left_w = split_w / 2;
-        const int right_w = std::max(0, content_w - left_w - split_gap);
         const int rotation_h = point_rotation_slider_ ? point_rotation_slider_->preferred_height(content_w) : DMSlider::height();
         const int hidden_h = point_hidden_checkbox_ ? DMCheckbox::height() : 0;
         const int advanced_h = advanced_options_button_ ? DMButton::height() : 0;
         const int resolve_h = point_resolve_x_checkbox_ ? DMCheckbox::height() : 0;
-        const int flip_h = std::max(point_flip_vertical_checkbox_ ? DMCheckbox::height() : 0,
-                                    point_flip_horizontal_checkbox_ ? DMCheckbox::height() : 0);
         const int scale_h = point_scaling_method_dropdown_
             ? point_scaling_method_dropdown_->preferred_height(content_w)
             : DMDropdown::height();
@@ -932,15 +900,6 @@ void RoomOvalToolsPanel::update_layout() const {
                 point_resolve_x_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, resolve_h});
                 y += resolve_h + kRowGap;
             }
-            if (point_flip_vertical_checkbox_ && point_flip_horizontal_checkbox_) {
-                point_flip_vertical_checkbox_->set_rect(SDL_Rect{content_x, y, left_w, flip_h});
-                point_flip_horizontal_checkbox_->set_rect(SDL_Rect{content_x + left_w + split_gap, y, right_w, flip_h});
-            } else if (point_flip_vertical_checkbox_) {
-                point_flip_vertical_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, flip_h});
-            } else if (point_flip_horizontal_checkbox_) {
-                point_flip_horizontal_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, flip_h});
-            }
-            y += flip_h + kRowGap;
             if (point_scaling_method_dropdown_) {
                 point_scaling_method_dropdown_->set_rect(SDL_Rect{content_x, y, content_w, scale_h});
                 y += scale_h;
@@ -948,8 +907,6 @@ void RoomOvalToolsPanel::update_layout() const {
             advanced_bottom = y;
         } else {
             if (point_resolve_x_checkbox_) point_resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            if (point_flip_vertical_checkbox_) point_flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-            if (point_flip_horizontal_checkbox_) point_flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
             if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
 
@@ -963,8 +920,6 @@ void RoomOvalToolsPanel::update_layout() const {
         if (point_hidden_checkbox_) point_hidden_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (advanced_options_button_) advanced_options_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (point_resolve_x_checkbox_) point_resolve_x_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (point_flip_vertical_checkbox_) point_flip_vertical_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        if (point_flip_horizontal_checkbox_) point_flip_horizontal_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         if (point_scaling_method_dropdown_) point_scaling_method_dropdown_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
 
@@ -1162,8 +1117,6 @@ RoomOvalToolsPanel::PointDetailValues RoomOvalToolsPanel::collect_point_detail_v
     values.rotation_degrees = point_rotation_slider_ ? static_cast<float>(point_rotation_slider_->value()) : 0.0f;
     values.hidden = point_hidden_checkbox_ ? point_hidden_checkbox_->value() : false;
     values.resolve_x = point_resolve_x_checkbox_ ? point_resolve_x_checkbox_->value() : true;
-    values.flip_horizontal = point_flip_horizontal_checkbox_ ? point_flip_horizontal_checkbox_->value() : true;
-    values.flip_vertical = point_flip_vertical_checkbox_ ? point_flip_vertical_checkbox_->value() : true;
     values.scaling_method = dropdown_index_to_scaling_method(
         point_scaling_method_dropdown_ ? point_scaling_method_dropdown_->selected() : 0);
     if (!std::isfinite(values.rotation_degrees)) {

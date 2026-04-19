@@ -94,12 +94,14 @@ public:
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
+    float total_dr = 0.0f;
     bool movment = false;
     bool rnd_start = false;
     std::string on_end_animation;
     OnEndDirective on_end_behavior = OnEndDirective::Default;
     bool randomize = false;
     bool frozen = false;
+    std::vector<std::string> tags;
     SDL_Texture* preview_texture = nullptr;
     bool has_frames(std::size_t path_index = 0) const;
     std::size_t frame_count(std::size_t path_index = 0) const;

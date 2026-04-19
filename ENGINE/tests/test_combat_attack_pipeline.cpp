@@ -1,10 +1,13 @@
 #include <doctest/doctest.h>
+#include <initializer_list>
 #include "assets/asset/Asset.hpp"
 
 #include "animation/attack_validation.hpp"
+#include "animation/animation_runtime.hpp"
 #include "animation/controllers/custom_controllers/davey_controller.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
+#include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
 #include "stubs/asset/child_asset_runtime_test_support.hpp"
 
@@ -47,6 +50,17 @@ Asset::RuntimeBoxVolume make_box(float center_x,
         {center_x - half_extent, center_y + half_extent, center_z + half_extent},
     }};
     return out;
+}
+
+Animation make_single_frame_animation(std::initializer_list<std::string> tags) {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.push_back(AnimationFrame{});
+    path.front().is_first = true;
+    path.front().is_last = true;
+    animation.tags.assign(tags.begin(), tags.end());
+    return animation;
 }
 
 } // namespace
@@ -150,6 +164,58 @@ TEST_CASE("default pending attack processor applies cumulative damage and delete
     AttackProcessingHelper::process_pending_attacks(*self_ptr);
     CHECK(self_ptr->runtime_health == -2);
     CHECK(self_ptr->dead);
+}
+
+TEST_CASE("death processing falls back to break-tagged animation when die is missing") {
+    auto self = test_child_asset_runtime::make_test_asset("target", 0, 0, 0, 0);
+    Asset* self_ptr = self.get();
+    REQUIRE(self_ptr != nullptr);
+    REQUIRE(self_ptr->info != nullptr);
+
+    self_ptr->info->animations["default"] = make_single_frame_animation({});
+    self_ptr->info->animations["shatter_a"] = make_single_frame_animation({"break"});
+    self_ptr->info->animations["shatter_b"] = make_single_frame_animation({"break", "heavy"});
+    self_ptr->info->start_animation = "default";
+
+    AnimationRuntime runtime(self_ptr, nullptr);
+    REQUIRE(self_ptr->anim_ != nullptr);
+    runtime.set_planner(self_ptr->anim_.get());
+
+    self_ptr->runtime_health = 0;
+    animation_update::Attack incoming{};
+    incoming.damage_amount = 1;
+    self_ptr->send_attack(incoming);
+
+    AttackProcessingHelper::process_pending_attacks(*self_ptr);
+
+    CHECK_FALSE(self_ptr->dead);
+    CHECK((self_ptr->current_animation == "shatter_a" || self_ptr->current_animation == "shatter_b"));
+}
+
+TEST_CASE("death processing prefers die animation over break-tagged fallback") {
+    auto self = test_child_asset_runtime::make_test_asset("target", 0, 0, 0, 0);
+    Asset* self_ptr = self.get();
+    REQUIRE(self_ptr != nullptr);
+    REQUIRE(self_ptr->info != nullptr);
+
+    self_ptr->info->animations["default"] = make_single_frame_animation({});
+    self_ptr->info->animations["die"] = make_single_frame_animation({});
+    self_ptr->info->animations["shatter_a"] = make_single_frame_animation({"break"});
+    self_ptr->info->start_animation = "default";
+
+    AnimationRuntime runtime(self_ptr, nullptr);
+    REQUIRE(self_ptr->anim_ != nullptr);
+    runtime.set_planner(self_ptr->anim_.get());
+
+    self_ptr->runtime_health = 0;
+    animation_update::Attack incoming{};
+    incoming.damage_amount = 1;
+    self_ptr->send_attack(incoming);
+
+    AttackProcessingHelper::process_pending_attacks(*self_ptr);
+
+    CHECK_FALSE(self_ptr->dead);
+    CHECK(self_ptr->current_animation == "die");
 }
 
 TEST_CASE("child assets cannot attack their parent assets") {

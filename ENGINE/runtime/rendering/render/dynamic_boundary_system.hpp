@@ -7,6 +7,7 @@
 #include "gameplay/spawn/runtime_candidates.hpp"
 
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -71,6 +72,8 @@ public:
         int                         jitter = 0;
         vibble::spawn::RuntimeCandidates candidates;
         std::unordered_map<std::string, BoundaryAssetRuntime> candidate_runtime_by_asset;
+        std::unordered_set<int> room_trail_excluded_candidate_indices;
+        bool room_trail_exclusions_ready = false;
     };
 
     struct BoundaryKey {
@@ -147,6 +150,8 @@ private:
     std::uint64_t  boundary_regen_seed_ = 0;
 
     std::vector<BoundaryType> boundary_types_;
+    std::unordered_map<std::string, std::shared_ptr<AssetInfo>> room_trail_catalog_storage_;
+    std::size_t room_trail_catalog_signature_ = std::numeric_limits<std::size_t>::max();
     std::unordered_map<BoundaryKey, BoundaryAssignment, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
     std::vector<BoundarySprite> active_boundary_sprites_;
@@ -252,6 +257,8 @@ private:
     static constexpr int kRegionIndexCellSize = 512;
     std::unordered_map<RegionCacheKey, std::vector<IndexedArea>, RegionCacheKeyHash> region_area_index_;
     RegionCacheFingerprint region_cache_fingerprint_;
+    mutable std::size_t cached_rooms_generation_ = std::numeric_limits<std::size_t>::max();
+    mutable std::size_t cached_rooms_topology_hash_ = 0;
 
     void parse_boundary_config(const nlohmann::json& boundary_data);
     void build_candidate_frames(BoundaryAssetRuntime& candidate_runtime,

@@ -47,6 +47,43 @@ TEST_CASE("Anchor binding order reports cycles and appends a stable fallback ord
     CHECK(result.ordered_ids[1] == 200);
 }
 
+TEST_CASE("Anchor binding order is stable regardless input declaration order") {
+    const std::vector<anchor_binding_order::Node> ordered_nodes{
+        anchor_binding_order::Node{10, std::nullopt, 100},
+        anchor_binding_order::Node{20, 10, 200},
+        anchor_binding_order::Node{30, 10, 300},
+        anchor_binding_order::Node{40, 20, 400}
+    };
+    const std::vector<anchor_binding_order::Node> shuffled_nodes{
+        anchor_binding_order::Node{30, 10, 300},
+        anchor_binding_order::Node{40, 20, 400},
+        anchor_binding_order::Node{10, std::nullopt, 100},
+        anchor_binding_order::Node{20, 10, 200}
+    };
+
+    const anchor_binding_order::Result ordered_result = anchor_binding_order::compute(ordered_nodes);
+    const anchor_binding_order::Result shuffled_result = anchor_binding_order::compute(shuffled_nodes);
+
+    CHECK_FALSE(ordered_result.has_cycle);
+    CHECK_FALSE(shuffled_result.has_cycle);
+    CHECK(ordered_result.ordered_ids == shuffled_result.ordered_ids);
+}
+
+TEST_CASE("Anchor binding order ignores missing parents and keeps deterministic sort-key order") {
+    const std::vector<anchor_binding_order::Node> nodes{
+        anchor_binding_order::Node{5, 9999, 50},
+        anchor_binding_order::Node{6, 9999, 40},
+        anchor_binding_order::Node{7, std::nullopt, 60}
+    };
+
+    const anchor_binding_order::Result result = anchor_binding_order::compute(nodes);
+    CHECK_FALSE(result.has_cycle);
+    REQUIRE(result.ordered_ids.size() == 3);
+    CHECK(result.ordered_ids[0] == 6);
+    CHECK(result.ordered_ids[1] == 5);
+    CHECK(result.ordered_ids[2] == 7);
+}
+
 TEST_CASE("Quantized depth bias restores exact render ordering") {
     constexpr double anchor_depth = 100.0;
     constexpr double exact_object_depth = 12.25;

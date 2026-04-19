@@ -191,6 +191,10 @@ bool DynamicBoundarySystem::initialize(SDL_Renderer* renderer, AssetLibrary* ass
     initialized_ = true;
     config_dirty_ = true;
     boundary_types_.clear();
+    room_trail_catalog_storage_.clear();
+    room_trail_catalog_signature_ = std::numeric_limits<std::size_t>::max();
+    cached_rooms_generation_ = std::numeric_limits<std::size_t>::max();
+    cached_rooms_topology_hash_ = 0;
     clear_runtime_caches();
     return true;
 }
@@ -242,8 +246,20 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const std::vector<Room*>& rooms = assets->rooms();
     const auto& asset_catalog = asset_library_->all();
     const vibble::spawn::RuntimeCandidates::AssetCatalogView boundary_catalog{&asset_catalog, true};
-    const auto room_trail_catalog_storage = build_non_boundary_asset_catalog(asset_catalog);
-    const vibble::spawn::RuntimeCandidates::AssetCatalogView room_trail_catalog{&room_trail_catalog_storage, true};
+    bool room_trail_catalog_rebuilt = false;
+    const std::size_t asset_catalog_signature = asset_catalog.size();
+    if (room_trail_catalog_storage_.empty() || room_trail_catalog_signature_ != asset_catalog_signature) {
+        room_trail_catalog_storage_ = build_non_boundary_asset_catalog(asset_catalog);
+        room_trail_catalog_signature_ = asset_catalog_signature;
+        room_trail_catalog_rebuilt = true;
+    }
+    if (room_trail_catalog_rebuilt) {
+        static_assignment_fingerprint_ = {};
+        for (auto& btype : boundary_types_) {
+            btype.room_trail_exclusions_ready = false;
+        }
+    }
+    const vibble::spawn::RuntimeCandidates::AssetCatalogView room_trail_catalog{&room_trail_catalog_storage_, true};
     const std::size_t rooms_hash = compute_rooms_topology_hash(assets);
     ensure_region_cache_valid(grid, rooms, rooms_hash, spacing_multiplier);
 
@@ -265,8 +281,13 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         static_assignments_.clear();
         for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
             BoundaryType& btype = boundary_types_[type_idx];
-            const std::unordered_set<int> room_trail_excluded_candidate_indices =
-                collect_room_trail_excluded_candidate_indices(btype, boundary_catalog, room_trail_catalog_storage);
+            if (!btype.room_trail_exclusions_ready || room_trail_catalog_rebuilt) {
+                btype.room_trail_excluded_candidate_indices =
+                    collect_room_trail_excluded_candidate_indices(btype, boundary_catalog, room_trail_catalog_storage_);
+                btype.room_trail_exclusions_ready = true;
+            }
+            const std::unordered_set<int>& room_trail_excluded_candidate_indices =
+                btype.room_trail_excluded_candidate_indices;
             const int resolution_layer = vibble::grid::clamp_resolution(btype.grid_resolution);
             const int base_spacing = render_overlay::spacing_for_resolution(resolution_layer);
             if (base_spacing <= 0) {
@@ -496,14 +517,16 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         active_boundary_sprites_.push_back(sprite);
     }
 
-    const double anchor_depth = cam.anchor_world_z();
-    std::sort(active_boundary_sprites_.begin(), active_boundary_sprites_.end(),
-        [anchor_depth](const BoundarySprite& a, const BoundarySprite& b) {
-            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_z));
-            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_z));
-            if (da != db) return da > db;
-            return a.world_pos.x < b.world_pos.x;
-        });
+    if (active_boundary_sprites_.size() > 1) {
+        const double anchor_depth = cam.anchor_world_z();
+        std::sort(active_boundary_sprites_.begin(), active_boundary_sprites_.end(),
+            [anchor_depth](const BoundarySprite& a, const BoundarySprite& b) {
+                const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_z));
+                const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_z));
+                if (da != db) return da > db;
+                return a.world_pos.x < b.world_pos.x;
+            });
+    }
 
 }
 
@@ -772,6 +795,8 @@ void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& boundary
         }
         type.candidates = vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
         type.candidate_runtime_by_asset.clear();
+        type.room_trail_excluded_candidate_indices.clear();
+        type.room_trail_exclusions_ready = false;
         if (!type.candidates.empty()) {
             parsed_types.push_back(std::move(type));
         }
@@ -1048,6 +1073,10 @@ std::size_t DynamicBoundarySystem::compute_rooms_topology_hash(const Assets* ass
     if (!assets) {
         return static_cast<std::size_t>(hash);
     }
+    const std::size_t generation = assets->rooms_generation();
+    if (cached_rooms_generation_ == generation) {
+        return cached_rooms_topology_hash_;
+    }
     hash = mix_uint64(hash, static_cast<std::uint64_t>(assets->rooms_generation()));
     const std::hash<std::string> string_hasher{};
     const auto& rooms = assets->rooms();
@@ -1087,5 +1116,7 @@ std::size_t DynamicBoundarySystem::compute_rooms_topology_hash(const Assets* ass
             }
         }
     }
-    return static_cast<std::size_t>(hash);
+    cached_rooms_generation_ = generation;
+    cached_rooms_topology_hash_ = static_cast<std::size_t>(hash);
+    return cached_rooms_topology_hash_;
 }

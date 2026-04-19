@@ -4,9 +4,13 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <optional>
+#include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <limits>
+#include <unordered_set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -17,11 +21,13 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
+#include "movement_rotation.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "movement_target_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/grid_point.hpp"
+#include "utils/utils/string_utils.hpp"
 #include "utils/grid.hpp"
 #include "utils/area.hpp"
 #include "utils/log.hpp"
@@ -99,6 +105,30 @@ int bounded_step_toward(int delta, int max_step) {
     return (delta > 0) ? magnitude : -magnitude;
 }
 
+std::vector<std::string> normalize_tag_list(const std::vector<std::string>& input) {
+    std::vector<std::string> normalized;
+    normalized.reserve(input.size());
+    std::unordered_set<std::string> seen;
+    seen.reserve(input.size());
+
+    for (const std::string& raw : input) {
+        std::string canonical = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw));
+        if (canonical.empty()) {
+            continue;
+        }
+        if (seen.insert(canonical).second) {
+            normalized.push_back(std::move(canonical));
+        }
+    }
+
+    return normalized;
+}
+
+std::mt19937& tag_selection_rng() {
+    static std::mt19937 rng{std::random_device{}()};
+    return rng;
+}
+
 }
 
 namespace animation_update::detail {
@@ -115,7 +145,7 @@ bool should_consider_overlap(const Asset& self, const Asset& other) {
         return false;
     }
 
-    if (self.info->moving_asset && other.info->moving_asset) {
+    if (self.isMovementEnabled() && other.isMovementEnabled()) {
         return true;
     }
 
@@ -215,8 +245,7 @@ SDL_Point frame_world_delta(const AnimationFrame& frame,
                             const vibble::grid::Grid& grid) {
     (void)asset;
     (void)grid;
-
-    return SDL_Point{ frame.dx, frame.dz };
+    return animation_update::movement_rotation::frame_floor_delta_absolute_yaw(frame);
 }
 
 axis::WorldPos frame_world_delta_3d(const AnimationFrame& frame,
@@ -224,7 +253,7 @@ axis::WorldPos frame_world_delta_3d(const AnimationFrame& frame,
                                     const vibble::grid::Grid& grid) {
     (void)asset;
     (void)grid;
-    return axis::WorldPos{ frame.dx, frame.dy, frame.dz };
+    return animation_update::movement_rotation::frame_world_delta_absolute_yaw(frame);
 }
 
 bool bottom_point_inside_playable_area(const Assets* assets, const world::GridPoint& bottom_point) {
@@ -329,6 +358,10 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
         return;
@@ -347,6 +380,10 @@ void AnimationUpdate::auto_move(Asset* target_asset,
                                 int visited_thresh_px,
                                 bool override_non_locked) {
     if (!self_ || !target_asset) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
         return;
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
@@ -373,6 +410,10 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
                                    std::optional<int> checkpoint_resolution,
                                    bool           override_non_locked) {
     if (!self_) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
         return;
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
@@ -414,8 +455,22 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     if (!self_) {
         return;
     }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
+        return;
+    }
+
+    const std::uint32_t plan_frame_id = resolve_plan_frame_id();
+    if (planning_retry_cooldown_active(plan_frame_id)) {
+        active_plan_mode_ = ActivePlanMode::None;
+        if (self_) {
+            self_->target_reached = false;
+            self_->needs_target = true;
+        }
         return;
     }
 
@@ -520,6 +575,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
                         animation_update::detail::kDefaultAnimation,
                         true,
                         override_non_locked);
+                clear_plan_retry_cooldown();
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
@@ -539,6 +595,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move_3d plan produced no strides for asset=" + asset_name);
         }
+        arm_plan_retry_cooldown(plan_frame_id);
         active_plan_mode_ = ActivePlanMode::None;
         if (self_) {
             self_->needs_target = true;
@@ -551,6 +608,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
 
     active_plan_mode_ = ActivePlanMode::Plan3D;
+    clear_plan_retry_cooldown();
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
@@ -564,10 +622,25 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     if (!self_) {
         return;
     }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
         return;
     }
+
+    const std::uint32_t plan_frame_id = resolve_plan_frame_id();
+    if (planning_retry_cooldown_active(plan_frame_id)) {
+        active_plan_mode_ = ActivePlanMode::None;
+        if (self_) {
+            self_->target_reached = false;
+            self_->needs_target = true;
+        }
+        return;
+    }
+
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const int resolution = effective_grid_resolution(checkpoint_resolution);
     visited_thresh_      = std::max(0, visited_thresh_px);
@@ -650,6 +723,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                      animation_update::detail::kDefaultAnimation,
                      true,
                      override_non_locked);
+                clear_plan_retry_cooldown();
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
@@ -669,6 +743,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move plan produced no strides for asset=" + asset_name);
         }
+        arm_plan_retry_cooldown(plan_frame_id);
         active_plan_mode_ = ActivePlanMode::None;
         if (self_) {
             self_->needs_target = true;
@@ -681,6 +756,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     active_plan_mode_ = ActivePlanMode::Plan2D;
+    clear_plan_retry_cooldown();
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
@@ -694,6 +770,10 @@ void AnimationUpdate::move(SDL_Point delta,
     if (!self_ || !self_->info) {
         return;
     }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
         return;
@@ -705,6 +785,7 @@ void AnimationUpdate::move(SDL_Point delta,
     pending_move_.override_non_locked = override_non_locked;
     move_pending_              = true;
     input_event_               = true;
+    clear_plan_retry_cooldown();
 }
 
 void AnimationUpdate::move_3d(const axis::WorldPos& delta,
@@ -712,6 +793,10 @@ void AnimationUpdate::move_3d(const axis::WorldPos& delta,
                               bool                  resort_z,
                               bool                  override_non_locked) {
     if (!self_ || !self_->info) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
         return;
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
@@ -725,6 +810,7 @@ void AnimationUpdate::move_3d(const axis::WorldPos& delta,
     pending_move_3d_.override_non_locked = override_non_locked;
     move_pending_3d_ = true;
     input_event_ = true;
+    clear_plan_retry_cooldown();
 }
 
 void AnimationUpdate::begin_reverse_current_animation_until_stop() {
@@ -776,6 +862,7 @@ void AnimationUpdate::clear_movement_plan() {
 
     active_plan_mode_ = ActivePlanMode::None;
     input_event_ = true;
+    clear_plan_retry_cooldown();
 
     if (debug_logging) {
         std::ostringstream oss;
@@ -836,6 +923,36 @@ bool AnimationUpdate::debug_enabled() const {
     return debug_enabled_;
 }
 
+std::uint32_t AnimationUpdate::resolve_plan_frame_id() {
+    if (assets_owner_) {
+        return assets_owner_->frame_id();
+    }
+    ++local_plan_frame_counter_;
+    if (local_plan_frame_counter_ == 0) {
+        ++local_plan_frame_counter_;
+    }
+    return local_plan_frame_counter_;
+}
+
+bool AnimationUpdate::planning_retry_cooldown_active(std::uint32_t frame_id) const {
+    return next_plan_retry_frame_ != 0 && frame_id < next_plan_retry_frame_;
+}
+
+void AnimationUpdate::arm_plan_retry_cooldown(std::uint32_t frame_id) {
+    if (frame_id == std::numeric_limits<std::uint32_t>::max()) {
+        next_plan_retry_frame_ = frame_id;
+        return;
+    }
+    const std::uint64_t next =
+        static_cast<std::uint64_t>(frame_id) + static_cast<std::uint64_t>(kPlanRetryCooldownFrames) + 1ULL;
+    next_plan_retry_frame_ = static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(next, std::numeric_limits<std::uint32_t>::max()));
+}
+
+void AnimationUpdate::clear_plan_retry_cooldown() {
+    next_plan_retry_frame_ = 0;
+}
+
 vibble::grid::Grid& AnimationUpdate::grid() const {
     if (grid_service_) {
         return *grid_service_;
@@ -856,4 +973,68 @@ void AnimationUpdate::set_animation(const std::string& animation_id) {
         return;
     }
     runtime_->switch_to(animation_id, path_index_for(animation_id));
+}
+
+std::optional<std::string> AnimationUpdate::resolve_animation_by_tags(
+    const std::vector<std::string>& required_tags,
+    const std::vector<std::string>& excluded_tags) const {
+    if (!self_ || !self_->info) {
+        return std::nullopt;
+    }
+
+    const std::vector<std::string> required = normalize_tag_list(required_tags);
+    const std::vector<std::string> excluded = normalize_tag_list(excluded_tags);
+    std::vector<const std::string*> candidates;
+
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        if (!animation.has_frames()) {
+            continue;
+        }
+
+        bool excluded_match = false;
+        for (const std::string& exclude_tag : excluded) {
+            if (std::find(animation.tags.begin(), animation.tags.end(), exclude_tag) != animation.tags.end()) {
+                excluded_match = true;
+                break;
+            }
+        }
+        if (excluded_match) {
+            continue;
+        }
+
+        bool required_match = true;
+        for (const std::string& required_tag : required) {
+            if (std::find(animation.tags.begin(), animation.tags.end(), required_tag) == animation.tags.end()) {
+                required_match = false;
+                break;
+            }
+        }
+        if (!required_match) {
+            continue;
+        }
+
+        candidates.push_back(&animation_id);
+    }
+
+    if (candidates.empty()) {
+        return std::nullopt;
+    }
+
+    std::uniform_int_distribution<std::size_t> pick(0, candidates.size() - 1);
+    return *candidates[pick(tag_selection_rng())];
+}
+
+bool AnimationUpdate::set_animation_by_tags(const std::vector<std::string>& required_tags,
+                                            const std::vector<std::string>& excluded_tags) {
+    if (!runtime_) {
+        return false;
+    }
+
+    const std::optional<std::string> resolved = resolve_animation_by_tags(required_tags, excluded_tags);
+    if (!resolved.has_value()) {
+        return false;
+    }
+
+    set_animation(*resolved);
+    return true;
 }

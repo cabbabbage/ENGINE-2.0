@@ -207,6 +207,9 @@ std::string stable_asset_name(const Asset& asset) {
 
 std::optional<Attack> AttackValidation::compute_attack_if_hit(const Asset& attacker,
                                                               const Asset& target) {
+    if (!attacker.isAttackBoxEnabled() || !target.isHitboxEnabled()) {
+        return std::nullopt;
+    }
     const auto& attack_volumes = attacker.current_attack_box_volumes();
     const auto& hit_volumes = target.current_hit_box_volumes();
     if (attack_volumes.empty() || hit_volumes.empty()) {

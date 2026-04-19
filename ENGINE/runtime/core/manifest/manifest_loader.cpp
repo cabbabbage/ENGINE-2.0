@@ -172,6 +172,170 @@ void validate_manifest_grid_settings_schema(const nlohmann::json& manifest_json,
     }
 }
 
+void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
+                                    const std::filesystem::path& path) {
+    auto assets_it = manifest_json.find("assets");
+    if (assets_it == manifest_json.end() || !assets_it->is_object()) {
+        return;
+    }
+
+    for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
+        if (!it.value().is_object()) {
+            std::ostringstream oss;
+            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                << "' must be an object.";
+            throw std::runtime_error(oss.str());
+        }
+
+        const auto& asset = it.value();
+        const char* bool_keys[] = {
+            "movement_enabled",
+            "attack_box_enabled",
+            "hitbox_enabled",
+            "impassable_box_enabled",
+            "floor_boxes_enabled",
+        };
+        for (const char* key : bool_keys) {
+            auto flag_it = asset.find(key);
+            if (flag_it == asset.end() || !flag_it->is_boolean()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' key '" << key << "' must be present and boolean.";
+                throw std::runtime_error(oss.str());
+            }
+        }
+
+        auto impassable_boxes_it = asset.find("impassable_boxes");
+        const bool impassable_box_enabled = asset["impassable_box_enabled"].get<bool>();
+        if (!impassable_box_enabled) {
+            if (impassable_boxes_it != asset.end()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' must omit 'impassable_boxes' when 'impassable_box_enabled' is false.";
+                throw std::runtime_error(oss.str());
+            }
+        } else if (impassable_boxes_it != asset.end()) {
+            if (!impassable_boxes_it->is_array()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' key 'impassable_boxes' must be an array.";
+                throw std::runtime_error(oss.str());
+            }
+            for (const auto& box : *impassable_boxes_it) {
+                if (!box.is_object()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' contains non-object impassable box entry.";
+                    throw std::runtime_error(oss.str());
+                }
+                if (!box.contains("id") || !box["id"].is_string() ||
+                    !box.contains("name") || !box["name"].is_string()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' impassable box keys 'id' and 'name' must be strings.";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+        }
+
+        auto floor_boxes_it = asset.find("floor_boxes");
+        const bool floor_boxes_enabled = asset["floor_boxes_enabled"].get<bool>();
+        if (!floor_boxes_enabled) {
+            if (floor_boxes_it != asset.end()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' must omit 'floor_boxes' when 'floor_boxes_enabled' is false.";
+                throw std::runtime_error(oss.str());
+            }
+            continue;
+        }
+
+        if (floor_boxes_it == asset.end()) {
+            continue;
+        }
+        if (!floor_boxes_it->is_array()) {
+            std::ostringstream oss;
+            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                << "' key 'floor_boxes' must be an array.";
+            throw std::runtime_error(oss.str());
+        }
+
+        for (const auto& floor_box : *floor_boxes_it) {
+            if (!floor_box.is_object()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' contains non-object floor box entry.";
+                throw std::runtime_error(oss.str());
+            }
+            const char* string_keys[] = {"id", "name"};
+            for (const char* key : string_keys) {
+                if (!floor_box.contains(key) || !floor_box[key].is_string()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key '" << key << "' must be a string.";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            const char* number_keys[] = {"position_x", "position_z", "width", "depth"};
+            for (const char* key : number_keys) {
+                if (!floor_box.contains(key) || !floor_box[key].is_number()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key '" << key << "' must be numeric.";
+                    throw std::runtime_error(oss.str());
+                }
+            }
+            if (!floor_box.contains("enabled") || !floor_box["enabled"].is_boolean()) {
+                std::ostringstream oss;
+                oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                    << "' floor box key 'enabled' must be boolean.";
+                throw std::runtime_error(oss.str());
+            }
+            if (floor_box.contains("tags")) {
+                const auto& tags = floor_box["tags"];
+                if (!(tags.is_array() || tags.is_string())) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key 'tags' must be an array or string.";
+                    throw std::runtime_error(oss.str());
+                }
+                if (tags.is_array()) {
+                    for (const auto& tag_value : tags) {
+                        if (!tag_value.is_string()) {
+                            std::ostringstream oss;
+                            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                                << "' floor box 'tags' entries must be strings.";
+                            throw std::runtime_error(oss.str());
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+bool apply_manifest_asset_defaults(nlohmann::json& manifest_json) {
+    auto assets_it = manifest_json.find("assets");
+    if (assets_it == manifest_json.end() || !assets_it->is_object()) {
+        return false;
+    }
+
+    bool mutated = false;
+    for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+
+        auto& asset = it.value();
+        if (!asset.contains("impassable_box_enabled")) {
+            const bool inferred_enabled = asset.contains("impassable_boxes");
+            asset["impassable_box_enabled"] = inferred_enabled;
+            mutated = true;
+        }
+    }
+    return mutated;
+}
+
 } // namespace
 
 std::string manifest_path() {
@@ -207,7 +371,12 @@ ManifestData load_manifest() {
     }
 
     validate_manifest_json(manifest_json, path);
+    const bool manifest_mutated = apply_manifest_asset_defaults(manifest_json);
     validate_manifest_grid_settings_schema(manifest_json, path);
+    validate_manifest_asset_schema(manifest_json, path);
+    if (manifest_mutated) {
+        write_manifest_file(path, manifest_json);
+    }
     return make_manifest_data(std::move(manifest_json));
 }
 

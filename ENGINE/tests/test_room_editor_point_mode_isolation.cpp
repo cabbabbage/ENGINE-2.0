@@ -38,8 +38,6 @@ AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_na
     point.rotation_degrees = 0.0f;
     point.hidden = false;
     point.resolve_x = true;
-    point.flip_horizontal = true;
-    point.flip_vertical = true;
     point.scaling_method = AnchorScalingMethod::Parent;
     mapping.points.push_back(point);
     return mapping;

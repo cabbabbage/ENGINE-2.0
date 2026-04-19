@@ -82,7 +82,7 @@ struct AnimationDescriptor3D {
 
 std::vector<AnimationDescriptor3D> gather_movement_animations_3d(const Asset& self) {
     std::vector<AnimationDescriptor3D> result;
-    if (!self.info) {
+    if (!self.info || !self.isMovementEnabled()) {
         return result;
     }
 
@@ -138,6 +138,9 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     plan.final_dest = plan.world_start;
 
     if (!self.info) {
+        return plan;
+    }
+    if (!self.isMovementEnabled()) {
         return plan;
     }
 

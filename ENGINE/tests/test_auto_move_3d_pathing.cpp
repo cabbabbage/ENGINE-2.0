@@ -47,6 +47,7 @@ std::unique_ptr<Asset> make_test_asset(
     }
     info->start_animation = start_animation;
     info->type = "object";
+    info->movement_enabled = true;
 
     Area spawn_area("auto_move_3d_test_area", 0);
     auto asset = std::make_unique<Asset>(info,
@@ -215,4 +216,37 @@ TEST_CASE("2D GetBestPath behavior remains unchanged") {
     REQUIRE_FALSE(plan.strides.empty());
     CHECK(plan.strides.front().animation_id == "b_right");
     CHECK(plan.final_dest.x > asset->world_x());
+}
+
+TEST_CASE("auto_move applies global retry cooldown after zero-target no-stride planning") {
+    auto asset = make_test_asset(
+        {
+            {"default", make_single_path_animation(0, 0, 0)},
+            {"a_left", make_single_path_animation(-8, 0, 0)},
+            {"b_right", make_single_path_animation(8, 0, 0)},
+        },
+        "default");
+    REQUIRE(asset != nullptr);
+
+    AnimationUpdate updater(asset.get(), nullptr);
+    asset->needs_target = true;
+
+    updater.auto_move(std::vector<SDL_Point>{}, 0, std::nullopt, true);
+    CHECK(updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::None);
+    CHECK(asset->needs_target);
+
+    updater.auto_move(std::vector<SDL_Point>{SDL_Point{32, 0}}, 0, std::nullopt, true);
+    CHECK(updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::None);
+    CHECK(asset->needs_target);
+
+    updater.auto_move(std::vector<SDL_Point>{SDL_Point{32, 0}}, 0, std::nullopt, true);
+    updater.auto_move(std::vector<SDL_Point>{SDL_Point{32, 0}}, 0, std::nullopt, true);
+    updater.auto_move(std::vector<SDL_Point>{SDL_Point{32, 0}}, 0, std::nullopt, true);
+
+    updater.auto_move(std::vector<SDL_Point>{SDL_Point{32, 0}}, 0, std::nullopt, true);
+    const bool resumed_with_plan_or_fallback =
+        updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::Plan2D ||
+        updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::None;
+    CHECK(resumed_with_plan_or_fallback);
+    CHECK_FALSE(asset->needs_target);
 }

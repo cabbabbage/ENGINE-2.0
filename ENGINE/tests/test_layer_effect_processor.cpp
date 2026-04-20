@@ -690,7 +690,7 @@ TEST_CASE("LayerEffectProcessor applies lighting") {
     SDL_DestroyTexture(base);
 }
 
-TEST_CASE("LayerStackRenderer preserves overlap hysteresis across frames for stable light ids") {
+TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
     if (!supports_alpha_preserving_pipeline_blends()) {
@@ -709,9 +709,9 @@ TEST_CASE("LayerStackRenderer preserves overlap hysteresis across frames for sta
     build.player_layer_index = 0;
     build.non_empty_layers = {0};
     build.layers.resize(1);
-    build.layers[0].slice_depth_min = -4.0;
-    build.layers[0].slice_depth_max = 4.0;
-    build.layers[0].slice_reference_depth = 0.0;
+    build.layers[0].depth_min = -4.0;
+    build.layers[0].depth_max = 4.0;
+    build.layers[0].representative_depth = 0.0;
     build.layers[0].bounds_min_x = 8.0f;
     build.layers[0].bounds_min_y = 8.0f;
     build.layers[0].bounds_max_x = 24.0f;
@@ -729,16 +729,10 @@ TEST_CASE("LayerStackRenderer preserves overlap hysteresis across frames for sta
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_one_light},
         false,
         1.0f,
-        1.0f,
-        0.0f,
-        0.0f,
-        2,
-        0.0f,
-        false,
-        0.0f);
+        1.0f);
     REQUIRE(frame_one.valid);
-    CHECK(frame_one.strict_overlap_count == 1);
-    CHECK(frame_one.hysteresis_overlap_count == 0);
+    REQUIRE(frame_one.owning_body_lights.size() == 1);
+    CHECK(frame_one.owning_body_lights[0].size() == 1);
 
     LayerEffectProcessor::RuntimeLight frame_two_light = frame_one_light;
     frame_two_light.screen_center = SDL_FPoint{34.0f, 16.0f};
@@ -749,16 +743,10 @@ TEST_CASE("LayerStackRenderer preserves overlap hysteresis across frames for sta
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_light},
         false,
         1.0f,
-        1.0f,
-        0.0f,
-        0.0f,
-        2,
-        0.0f,
-        false,
-        0.0f);
+        1.0f);
     REQUIRE(frame_two_same_id.valid);
-    CHECK(frame_two_same_id.strict_overlap_count == 0);
-    CHECK(frame_two_same_id.hysteresis_overlap_count == 1);
+    REQUIRE(frame_two_same_id.owning_body_lights.size() == 1);
+    CHECK(frame_two_same_id.owning_body_lights[0].empty());
 
     LayerEffectProcessor::RuntimeLight frame_two_changed_id = frame_two_light;
     frame_two_changed_id.stable_light_id = 4242;
@@ -768,14 +756,8 @@ TEST_CASE("LayerStackRenderer preserves overlap hysteresis across frames for sta
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_changed_id},
         false,
         1.0f,
-        1.0f,
-        0.0f,
-        0.0f,
-        2,
-        0.0f,
-        false,
-        0.0f);
+        1.0f);
     REQUIRE(frame_two_new_id.valid);
-    CHECK(frame_two_new_id.strict_overlap_count == 0);
-    CHECK(frame_two_new_id.hysteresis_overlap_count == 0);
+    REQUIRE(frame_two_new_id.owning_body_lights.size() == 1);
+    CHECK(frame_two_new_id.owning_body_lights[0].empty());
 }

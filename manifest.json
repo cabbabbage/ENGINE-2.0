@@ -351,14 +351,35 @@
       "can_invert": false,
       "floor_boxes": [
         {
-          "depth": 139.0,
+          "candidate": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "skull_pile"
+              },
+              {
+                "chance": 4,
+                "name": "#pretty"
+              },
+              {
+                "chance": 4,
+                "name": "barrel"
+              }
+            ],
+            "grid_resolution": 4
+          },
+          "depth": 221.0,
           "enabled": true,
           "id": "floor_box",
           "name": "Floor Box",
-          "position_x": -20.0,
-          "position_z": -55.5,
+          "position_x": -19.5,
+          "position_z": -44.5,
           "tags": [],
-          "width": 198.0
+          "width": 319.0
         }
       ],
       "floor_boxes_enabled": true,
@@ -19128,21 +19149,15 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 1.8700000047683716,
-        "blur_px": 0.0,
+        "behind_layer_light_strength_multiplier": 1.0199999809265137,
+        "blur_px": 1.4299999475479126,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 2692,
         "camera_height_min_px": 25,
-        "dark_mask_temporal_enabled": true,
-        "dark_mask_temporal_prev_weight": 0.6499999761581421,
         "depth_of_field_enabled": true,
-        "front_layer_light_strength_multiplier": 1.0,
+        "front_layer_light_strength_multiplier": 1.5499999523162842,
         "layer_depth_curve": 12.109999656677246,
         "layer_depth_interval": 34.0,
-        "layer_light_depth_padding_world": 18.0,
-        "layer_light_depth_transition_world": 30.0,
-        "layer_light_membership_hold_frames": 4,
-        "layer_light_overlap_padding_px": 24.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -19156,7 +19171,6 @@
         "movement_look_ahead_weight": 0.11999999731779099,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
-        "player_layer_hysteresis_world": 22.0,
         "player_soft_leash_px": 220.0,
         "radial_blur_px": 1.7300000190734863,
         "room_blend_damping_scale": 0.41999998688697815,
@@ -19312,9 +19326,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            124,
             242,
             36,
-            115,
             255
           ],
           "edge_smoothness": 2,
@@ -19715,9 +19729,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
-            36,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,

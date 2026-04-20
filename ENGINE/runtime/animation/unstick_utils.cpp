@@ -170,12 +170,20 @@ bool resolve_destination(const Asset& self,
 
             cursor = std::move(next);
             moved = true;
-            out_destination = cursor;
+            out_destination = world::GridPoint::make_virtual(
+                cursor.world_x(),
+                cursor.world_y(),
+                cursor.world_z(),
+                cursor.resolution_layer());
             return true;
         }
 
         if (moved) {
-            out_destination = cursor;
+            out_destination = world::GridPoint::make_virtual(
+                cursor.world_x(),
+                cursor.world_y(),
+                cursor.world_z(),
+                cursor.resolution_layer());
             return true;
         }
     }

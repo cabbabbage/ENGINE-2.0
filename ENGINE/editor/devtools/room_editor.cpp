@@ -550,6 +550,7 @@ std::vector<Asset::RuntimeBoxVolume> build_runtime_box_overlay_volumes_for_frame
         volume.anchor_link = box.anchor_link;
         volume.frame_index = frame->frame_index;
         volume.extrusion_amount = std::max(0, box.extrusion_amount);
+        volume.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
         volume.damage_amount = damage_of(box);
         volume.meta_json = meta_of(box);
 
@@ -587,19 +588,25 @@ std::vector<Asset::RuntimeBoxVolume> build_runtime_box_overlay_volumes_for_frame
                 break;
             }
 
-            volume.world_points[corner_index] = Asset::RuntimeBoxPoint3{
+            Asset::RuntimeBoxPoint3 near_world{
                 near_point.x,
                 near_point.y,
                 near_point.z,
             };
-            volume.world_points[corner_index + corners.size()] = Asset::RuntimeBoxPoint3{
+            Asset::RuntimeBoxPoint3 far_world{
                 far_point.x,
                 far_point.y,
                 far_point.z,
             };
-            sum_x += near_point.x + far_point.x;
-            sum_y += near_point.y + far_point.y;
-            sum_z += near_point.z + far_point.z;
+            if (volume.flatten_bottom_to_floor && (corner_index == 2 || corner_index == 3)) {
+                near_world.y = 0.0f;
+                far_world.y = 0.0f;
+            }
+            volume.world_points[corner_index] = near_world;
+            volume.world_points[corner_index + corners.size()] = far_world;
+            sum_x += near_world.x + far_world.x;
+            sum_y += near_world.y + far_world.y;
+            sum_z += near_world.z + far_world.z;
         }
 
         if (!valid) {
@@ -8602,6 +8609,7 @@ void RoomEditor::sync_hitbox_tools_panel() {
         const auto& box = frame->hit_boxes.boxes[static_cast<std::size_t>(selected_box)];
         values.name = box.name;
         values.extrusion = box.extrusion_amount;
+        values.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
     }
     hitbox_tools_panel_->set_detail_values(values);
 }
@@ -8657,6 +8665,7 @@ void RoomEditor::sync_attack_box_tools_panel() {
         values.name = box.name;
         values.extrusion = box.extrusion_amount;
         values.damage = box.damage_amount;
+        values.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
     }
     attack_box_tools_panel_->set_detail_values(values);
     sync_attack_payload_editor();
@@ -9035,12 +9044,15 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
         return false;
     }
     std::string normalized_name;
+    std::string selected_box_id;
+    bool flatten_changed = false;
     const bool changed = mutate_hitbox_current_frame(
-        [values, selected, &normalized_name](std::vector<animation_update::FrameHitBox>& boxes) {
+        [values, selected, &normalized_name, &selected_box_id, &flatten_changed](std::vector<animation_update::FrameHitBox>& boxes) {
             if (selected >= static_cast<int>(boxes.size())) {
                 return false;
             }
             auto& box = boxes[static_cast<std::size_t>(selected)];
+            selected_box_id = box.id;
             bool changed = false;
             if (!values.name.empty()) {
                 std::vector<std::string> names;
@@ -9061,13 +9073,74 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
                 box.extrusion_amount = next_extrusion;
                 changed = true;
             }
+            if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
+                box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
+                flatten_changed = true;
+                changed = true;
+            }
             return changed;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
     if (changed && !normalized_name.empty() && hitbox_tools_panel_) {
         hitbox_tools_panel_->set_name_text(normalized_name);
     }
-    return changed;
+
+    bool propagated = false;
+    if (flatten_changed &&
+        !selected_box_id.empty() &&
+        hitbox_mode_active() &&
+        hitbox_edit_.target_asset &&
+        hitbox_edit_.target_asset->info) {
+        Asset* target = hitbox_edit_.target_asset;
+        auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
+        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
+            nlohmann::json payload = target->info->animation_payload(hitbox_edit_.animation_id);
+            const std::size_t frame_count = anim_it->second.frame_count();
+            bool payload_changed = false;
+            bool runtime_changed = false;
+            for (std::size_t idx = 0; idx < frame_count; ++idx) {
+                AnimationFrame* candidate_frame = anim_it->second.primary_frame_at(idx);
+                if (!candidate_frame) {
+                    continue;
+                }
+                std::vector<animation_update::FrameHitBox> updated = candidate_frame->hit_boxes.boxes;
+                bool frame_changed = false;
+                for (auto& box : updated) {
+                    if (box.id == selected_box_id && box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
+                        box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
+                        frame_changed = true;
+                    }
+                }
+                if (!frame_changed) {
+                    continue;
+                }
+                candidate_frame->set_hit_boxes(updated);
+                runtime_changed = true;
+                if (devmode::room_box_payload::write_hit_box_frame_to_payload(payload,
+                                                                               frame_count,
+                                                                               idx,
+                                                                               updated)) {
+                    payload_changed = true;
+                }
+            }
+            if (payload_changed && target->info->upsert_animation(hitbox_edit_.animation_id, payload)) {
+                target->info->mark_dirty();
+                propagated = persist_asset_manifest_from_info(target->info,
+                                                              devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                                              "Hitbox Flatten Bottom Toggle",
+                                                              "room-hitbox-flatten-bottom-toggle",
+                                                              false);
+            }
+            if (runtime_changed) {
+                target->refresh_runtime_box_cache_from_frame();
+                if (assets_) {
+                    assets_->mark_active_assets_dirty();
+                }
+                sync_hitbox_tools_panel();
+            }
+        }
+    }
+    return changed || propagated;
 }
 
 bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values) {
@@ -9076,12 +9149,15 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
         return false;
     }
     std::string normalized_name;
+    std::string selected_box_id;
+    bool flatten_changed = false;
     const bool changed = mutate_attack_box_current_frame(
-        [values, selected, &normalized_name](std::vector<animation_update::FrameAttackBox>& boxes) {
+        [values, selected, &normalized_name, &selected_box_id, &flatten_changed](std::vector<animation_update::FrameAttackBox>& boxes) {
             if (selected >= static_cast<int>(boxes.size())) {
                 return false;
             }
             auto& box = boxes[static_cast<std::size_t>(selected)];
+            selected_box_id = box.id;
             bool changed = false;
             if (!values.name.empty()) {
                 std::vector<std::string> names;
@@ -9100,6 +9176,11 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
             const int next_extrusion = std::max(1, values.extrusion);
             if (box.extrusion_amount != next_extrusion) {
                 box.extrusion_amount = next_extrusion;
+                changed = true;
+            }
+            if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
+                box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
+                flatten_changed = true;
                 changed = true;
             }
             animation_update::AttackPayload payload = payload_from_attack_box(box);
@@ -9122,7 +9203,62 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
     if (changed && !normalized_name.empty() && attack_box_tools_panel_) {
         attack_box_tools_panel_->set_name_text(normalized_name);
     }
-    return changed;
+    bool propagated = false;
+    if (flatten_changed &&
+        !selected_box_id.empty() &&
+        attack_box_mode_active() &&
+        attack_box_edit_.target_asset &&
+        attack_box_edit_.target_asset->info) {
+        Asset* target = attack_box_edit_.target_asset;
+        auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
+        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
+            nlohmann::json payload = target->info->animation_payload(attack_box_edit_.animation_id);
+            const std::size_t frame_count = anim_it->second.frame_count();
+            bool payload_changed = false;
+            bool runtime_changed = false;
+            for (std::size_t idx = 0; idx < frame_count; ++idx) {
+                AnimationFrame* candidate_frame = anim_it->second.primary_frame_at(idx);
+                if (!candidate_frame) {
+                    continue;
+                }
+                std::vector<animation_update::FrameAttackBox> updated = candidate_frame->attack_boxes.boxes;
+                bool frame_changed = false;
+                for (auto& box : updated) {
+                    if (box.id == selected_box_id && box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
+                        box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
+                        frame_changed = true;
+                    }
+                }
+                if (!frame_changed) {
+                    continue;
+                }
+                candidate_frame->set_attack_boxes(updated);
+                runtime_changed = true;
+                if (devmode::room_box_payload::write_attack_box_frame_to_payload(payload,
+                                                                                  frame_count,
+                                                                                  idx,
+                                                                                  updated)) {
+                    payload_changed = true;
+                }
+            }
+            if (payload_changed && target->info->upsert_animation(attack_box_edit_.animation_id, payload)) {
+                target->info->mark_dirty();
+                propagated = persist_asset_manifest_from_info(target->info,
+                                                              devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                                              "Attack Box Flatten Bottom Toggle",
+                                                              "room-attack-box-flatten-bottom-toggle",
+                                                              false);
+            }
+            if (runtime_changed) {
+                target->refresh_runtime_box_cache_from_frame();
+                if (assets_) {
+                    assets_->mark_active_assets_dirty();
+                }
+                sync_attack_box_tools_panel();
+            }
+        }
+    }
+    return changed || propagated;
 }
 
 bool RoomEditor::apply_impassable_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values) {
@@ -9155,6 +9291,10 @@ bool RoomEditor::apply_impassable_box_panel_detail_update(const RoomBoxToolsPane
             const int next_extrusion = std::max(1, values.extrusion);
             if (box.extrusion_amount != next_extrusion) {
                 box.extrusion_amount = next_extrusion;
+                changed = true;
+            }
+            if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
+                box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
                 changed = true;
             }
             return changed;
@@ -16920,6 +17060,7 @@ void RoomEditor::sync_impassable_box_tools_panel() {
         const auto& box = target_info->impassable_boxes[static_cast<std::size_t>(selected_box)];
         values.name = box.name;
         values.extrusion = box.extrusion_amount;
+        values.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
     }
     impassable_box_tools_panel_->set_detail_values(values);
 }

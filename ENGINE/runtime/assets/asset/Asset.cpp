@@ -1308,6 +1308,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                             int frame_end,
                             const std::string& anchor_link,
                             int extrusion_amount,
+                            bool flatten_bottom_to_floor,
                             int damage_amount,
                             const std::string& payload_id,
                             const std::string& meta_json,
@@ -1324,6 +1325,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         out_volume.anchor_link = anchor_link;
         out_volume.frame_index = current_frame ? current_frame->frame_index : -1;
         out_volume.extrusion_amount = std::max(0, extrusion_amount);
+        out_volume.flatten_bottom_to_floor = flatten_bottom_to_floor;
         out_volume.damage_amount = damage_amount;
         out_volume.payload_id = payload_id;
         out_volume.meta_json = meta_json;
@@ -1367,11 +1369,17 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                 far_point.x,
                 far_point.y,
                 far_point.z};
-            out_volume.world_points[corner_index] = near_world;
-            out_volume.world_points[corner_index + corners.size()] = far_world;
-            sum_x += near_world.x + far_world.x;
-            sum_y += near_world.y + far_world.y;
-            sum_z += near_world.z + far_world.z;
+            RuntimeBoxPoint3 near_world_adjusted = near_world;
+            RuntimeBoxPoint3 far_world_adjusted = far_world;
+            if (out_volume.flatten_bottom_to_floor && (corner_index == 2 || corner_index == 3)) {
+                near_world_adjusted.y = 0.0f;
+                far_world_adjusted.y = 0.0f;
+            }
+            out_volume.world_points[corner_index] = near_world_adjusted;
+            out_volume.world_points[corner_index + corners.size()] = far_world_adjusted;
+            sum_x += near_world_adjusted.x + far_world_adjusted.x;
+            sum_y += near_world_adjusted.y + far_world_adjusted.y;
+            sum_z += near_world_adjusted.z + far_world_adjusted.z;
         }
 
         out_volume.centroid = RuntimeBoxPoint3{sum_x / 8.0f, sum_y / 8.0f, sum_z / 8.0f};
@@ -1412,6 +1420,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                               box.frame_end,
                               box.anchor_link,
                               box.extrusion_amount,
+                              box.flatten_bottom_to_floor,
                               0,
                               std::string{},
                               "{}",
@@ -1452,6 +1461,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                               box.frame_end,
                               box.anchor_link,
                               box.extrusion_amount,
+                              box.flatten_bottom_to_floor,
                               payload.damage_amount,
                               payload.payload_id,
                               box.meta_json,
@@ -1482,6 +1492,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                               box.frame_end,
                               box.anchor_link,
                               box.extrusion_amount,
+                              box.flatten_bottom_to_floor,
                               0,
                               std::string{},
                               "{}",

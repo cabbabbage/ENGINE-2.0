@@ -67,6 +67,7 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     name_textbox_ = std::make_unique<DMTextBox>("Name", "");
     extrusion_textbox_ = std::make_unique<DMTextBox>("Extrusion", "0");
     damage_textbox_ = std::make_unique<DMTextBox>("Damage", "0");
+    flatten_bottom_to_floor_checkbox_ = std::make_unique<DMCheckbox>("flatten_bottom_to_floor", false);
     system_enabled_checkbox_ = std::make_unique<DMCheckbox>(enabled_label, false);
     onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
 }
@@ -151,6 +152,9 @@ void RoomBoxToolsPanel::set_detail_values(const DetailValues& values) {
     if (damage_textbox_ && !damage_textbox_->is_editing()) {
         damage_textbox_->set_value(std::to_string(values.damage));
     }
+    if (flatten_bottom_to_floor_checkbox_) {
+        flatten_bottom_to_floor_checkbox_->set_value(values.flatten_bottom_to_floor);
+    }
 }
 
 void RoomBoxToolsPanel::set_onion_skin_enabled(bool enabled) {
@@ -214,6 +218,8 @@ RoomBoxToolsPanel::DetailValues RoomBoxToolsPanel::collect_detail_values() const
     values.name = name_textbox_ ? name_textbox_->value() : std::string{};
     values.extrusion = parse_int_or(extrusion_textbox_ ? extrusion_textbox_->value() : std::string{}, 0);
     values.damage = parse_int_or(damage_textbox_ ? damage_textbox_->value() : std::string{}, 0);
+    values.flatten_bottom_to_floor =
+        flatten_bottom_to_floor_checkbox_ ? flatten_bottom_to_floor_checkbox_->value() : false;
     return values;
 }
 
@@ -371,6 +377,11 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
         details_changed = true;
     }
+    if (has_selected_box && flatten_bottom_to_floor_checkbox_ &&
+        flatten_bottom_to_floor_checkbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
     if (details_changed && on_apply_) {
         on_apply_(collect_detail_values());
         handled = true;
@@ -482,6 +493,9 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
         if (kind_ == Kind::AttackBox && damage_textbox_) {
             damage_textbox_->render(renderer);
         }
+        if (flatten_bottom_to_floor_checkbox_) {
+            flatten_bottom_to_floor_checkbox_->render(renderer);
+        }
     }
     if (propagation_visible_) {
         if (apply_next_frame_button_) {
@@ -547,6 +561,9 @@ void RoomBoxToolsPanel::update_layout() const {
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
+        if (flatten_bottom_to_floor_checkbox_) {
+            flatten_bottom_to_floor_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
         if (add_button_) {
             add_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
@@ -580,6 +597,7 @@ void RoomBoxToolsPanel::update_layout() const {
     const int name_h = name_textbox_ ? name_textbox_->preferred_height(controls_w) : DMTextBox::height();
     const int extrusion_h = extrusion_textbox_ ? extrusion_textbox_->preferred_height(controls_w) : DMTextBox::height();
     const int damage_h = damage_textbox_ ? damage_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int flatten_h = DMCheckbox::height();
     const bool has_selected_box = selected_box_index_ >= 0 &&
                                   selected_box_index_ < static_cast<int>(box_names_.size());
 
@@ -603,6 +621,8 @@ void RoomBoxToolsPanel::update_layout() const {
             controls_height += damage_h;                                 // damage
             controls_height += row_gap;
         }
+        controls_height += flatten_h;                                    // flatten toggle
+        controls_height += row_gap;
     } else {
         controls_height += kSectionGap;
     }
@@ -652,6 +672,10 @@ void RoomBoxToolsPanel::update_layout() const {
             damage_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, damage_h});
             y += damage_h + row_gap;
         }
+        if (flatten_bottom_to_floor_checkbox_) {
+            flatten_bottom_to_floor_checkbox_->set_rect(SDL_Rect{controls_x, y, controls_w, flatten_h});
+        }
+        y += flatten_h + row_gap;
     } else {
         detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
         corner_label_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -663,6 +687,9 @@ void RoomBoxToolsPanel::update_layout() const {
         }
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (flatten_bottom_to_floor_checkbox_) {
+            flatten_bottom_to_floor_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
 

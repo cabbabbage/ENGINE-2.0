@@ -251,6 +251,7 @@ nlohmann::json normalize_impassable_boxes_payload(const nlohmann::json& payload)
                 canonical["name"] = unique_name;
                 canonical["enabled"] = entry.value("enabled", true);
                 canonical["extrusion_amount"] = std::max(0, read_impassable_box_int(entry, "extrusion_amount", 0));
+                canonical["flatten_bottom_to_floor"] = entry.value("flatten_bottom_to_floor", false);
                 canonical["anchor_link"] = entry.value("anchor_link", std::string{});
                 canonical["rotation_degrees"] = finite_or(entry.value("rotation_degrees", 0.0), 0.0);
                 canonical["position"] = nlohmann::json::object({

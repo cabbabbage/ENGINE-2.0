@@ -96,6 +96,7 @@ struct FrameBoxBase {
     int frame_end = -1;
     std::string anchor_link;
     int extrusion_amount = 0;
+    bool flatten_bottom_to_floor = false;
     FrameBoxRect rect{};
     float rotation_degrees = 0.0f;
 

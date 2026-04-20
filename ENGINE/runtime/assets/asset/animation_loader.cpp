@@ -572,6 +572,7 @@ void parse_box_common_fields(TBox& box,
                                           std::string{fallback_name_prefix + std::string{"_"} + std::to_string(ordinal + 1)});
         box.enabled = read_bool_field_like(node, "enabled", true);
         box.extrusion_amount = std::max(0, read_int_field_like(node, "extrusion_amount", 0));
+        box.flatten_bottom_to_floor = read_bool_field_like(node, "flatten_bottom_to_floor", false);
         box.anchor_link = read_string_field_like(node, "anchor_link", std::string{});
         box.set_rotation_degrees(read_float_field_like(node, "rotation_degrees", 0.0f));
         box.frame_start = static_cast<int>(frame_index);

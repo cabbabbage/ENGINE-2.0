@@ -369,6 +369,7 @@ std::vector<animation_update::FrameHitBox> parse_impassable_boxes_payload(const 
         box.type = "impassable_box";
         box.enabled = entry.value("enabled", true);
         box.extrusion_amount = std::max(0, read_impassable_box_int(entry, "extrusion_amount", 0));
+        box.flatten_bottom_to_floor = entry.value("flatten_bottom_to_floor", false);
         box.anchor_link = trim_copy(entry.value("anchor_link", std::string{}));
         box.set_rotation_degrees(sanitize_finite_float(entry.value("rotation_degrees", 0.0f), 0.0f));
         box.frame_start = 0;
@@ -391,6 +392,7 @@ animation_update::FrameHitBox sanitize_impassable_box_for_save(
     sanitized.type = "impassable_box";
     sanitized.enabled = raw_box.enabled;
     sanitized.extrusion_amount = std::max(0, raw_box.extrusion_amount);
+    sanitized.flatten_bottom_to_floor = raw_box.flatten_bottom_to_floor;
     sanitized.anchor_link = trim_copy(raw_box.anchor_link);
     sanitized.set_rotation_degrees(raw_box.rotation_degrees);
     sanitized.frame_start = 0;
@@ -434,6 +436,7 @@ nlohmann::json encode_impassable_boxes_payload(const std::vector<animation_updat
         node["name"] = box.name;
         node["enabled"] = box.enabled;
         node["extrusion_amount"] = box.extrusion_amount;
+        node["flatten_bottom_to_floor"] = box.flatten_bottom_to_floor;
         node["anchor_link"] = box.anchor_link;
         node["rotation_degrees"] = box.normalized_rotation_degrees();
         node["position"] = nlohmann::json::object({

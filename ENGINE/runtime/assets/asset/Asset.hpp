@@ -338,6 +338,7 @@ class Asset {
         std::string anchor_link;
         int frame_index = -1;
         int extrusion_amount = 0;
+        bool flatten_bottom_to_floor = false;
         int damage_amount = 0;
         std::string payload_id;
         std::string meta_json;

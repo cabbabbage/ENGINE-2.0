@@ -29,6 +29,7 @@ public:
         std::string name;
         int extrusion = 0;
         int damage = 0;
+        bool flatten_bottom_to_floor = false;
     };
 
     using SelectCallback = std::function<void(int)>;
@@ -113,6 +114,7 @@ private:
     std::unique_ptr<DMTextBox> name_textbox_;
     std::unique_ptr<DMTextBox> extrusion_textbox_;
     std::unique_ptr<DMTextBox> damage_textbox_;
+    std::unique_ptr<DMCheckbox> flatten_bottom_to_floor_checkbox_;
     std::unique_ptr<DMCheckbox> system_enabled_checkbox_;
     std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
 

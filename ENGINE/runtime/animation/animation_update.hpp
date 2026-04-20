@@ -167,6 +167,7 @@ private:
     PathSanitizer3D sanitizer_3d_{};
     GetBestPath3D   planner_3d_{};
     ActivePlanMode  active_plan_mode_ = ActivePlanMode::None;
+    bool            auto_move_attacking_enabled_ = false;
 
     bool         input_event_ = false;
     bool         move_pending_ = false;
@@ -188,5 +189,4 @@ private:
     vibble::grid::Grid& grid() const;
     int effective_grid_resolution(std::optional<int> override_resolution) const;
     AutoMoveCombatOptions resolve_auto_move_combat_options(AutoMoveCombatOverrides overrides = {}) const;
-    void try_start_attack_animation(const AutoMoveCombatOptions& options);
 };

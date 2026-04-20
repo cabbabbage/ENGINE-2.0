@@ -10,7 +10,9 @@
 #include "assets/asset/animation.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/animation_tag_utils.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "core/AssetsManager.hpp"
@@ -33,6 +35,22 @@ std::uint64_t mix_hash(std::uint64_t seed, std::uint64_t value) {
 
 std::uint64_t hash_signed_int(int value) {
     return static_cast<std::uint64_t>(static_cast<std::int64_t>(value));
+}
+
+bool should_use_auto_move_attack_dispatch(const Asset* self) {
+    if (!self || !self->info) {
+        return false;
+    }
+    if (asset_types::canonicalize(self->info->type) != asset_types::enemy) {
+        return false;
+    }
+    for (const auto& [animation_id, animation] : self->info->animations) {
+        (void)animation_id;
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -235,7 +253,9 @@ void CustomAssetController::on_update(const Input&) {
         }
     }
 
-    if (self && !self->current_attack_box_volumes().empty()) {
+    if (self &&
+        !self->current_attack_box_volumes().empty() &&
+        !should_use_auto_move_attack_dispatch(self)) {
         custom_controllers::AttackDetectionHelper::send_attacks_to_active_targets(self, assets());
     }
 }

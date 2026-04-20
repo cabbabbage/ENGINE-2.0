@@ -436,6 +436,8 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
         clear_movement_plan();
         return;
     }
+    auto_move_attacking_enabled_ =
+        resolve_auto_move_combat_options(combat_overrides).attacking_enabled;
     SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
@@ -464,13 +466,14 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     if (self_) {
         self_->target_reached = false;
     }
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
     const SDL_Point checkpoint = animation_update::movement_targets::world_checkpoint(*target_asset);
     SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         if (self_) {
             self_->target_reached = true;
             self_->needs_target = true;
-            try_start_attack_animation(resolve_auto_move_combat_options(combat_overrides));
         }
         return;
     }
@@ -497,6 +500,8 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
         clear_movement_plan();
         return;
     }
+    auto_move_attacking_enabled_ =
+        resolve_auto_move_combat_options(combat_overrides).attacking_enabled;
 
     const axis::WorldPos delta =
         animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, world_checkpoint);
@@ -530,13 +535,14 @@ void AnimationUpdate::auto_move_3d(Asset* target_asset,
         return;
     }
 
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
     self_->target_reached = false;
     const axis::WorldPos checkpoint = animation_update::movement_targets::world_checkpoint_3d(*target_asset);
     const axis::WorldPos delta = animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, checkpoint);
     if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
         self_->target_reached = true;
         self_->needs_target = true;
-        try_start_attack_animation(resolve_auto_move_combat_options(combat_overrides));
         return;
     }
 
@@ -592,6 +598,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
         self_->target_reached = false;
     }
     const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const int resolution = effective_grid_resolution(checkpoint_resolution);
@@ -645,6 +652,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     plan3d_.world_start = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.override_non_locked = override_non_locked;
     plan3d_.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    plan3d_.attacking_enabled = combat_options.attacking_enabled;
     final_dest_3d = plan3d_.final_dest;
 
     // 3D plan runs in its own mode and must not reuse stale 2D plan state.
@@ -653,6 +661,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     plan_.final_dest = self_->world_xz_point();
     plan_.world_start = self_->world_xz_point();
     plan_.engagement_target_asset_id = std::nullopt;
+    plan_.attacking_enabled = false;
     final_dest = plan_.final_dest;
 
     if (debug_logging) {
@@ -701,7 +710,6 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
-                    try_start_attack_animation(combat_options);
                 }
                 if (debug_logging) {
                     std::ostringstream oss;
@@ -735,7 +743,6 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
-        try_start_attack_animation(combat_options);
     }
 }
 
@@ -768,6 +775,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
     const int resolution = effective_grid_resolution(checkpoint_resolution);
     visited_thresh_      = std::max(0, visited_thresh_px);
     if (resolution > 0) {
@@ -808,6 +816,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
     plan_.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    plan_.attacking_enabled = combat_options.attacking_enabled;
 
     // 2D plan runs in its own mode and must not reuse stale 3D plan state.
     plan3d_.strides.clear();
@@ -815,6 +824,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     plan3d_.final_dest = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.world_start = plan3d_.final_dest;
     plan3d_.engagement_target_asset_id = std::nullopt;
+    plan3d_.attacking_enabled = false;
     final_dest_3d = plan3d_.final_dest;
 
     if (debug_logging) {
@@ -860,7 +870,6 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
-                    try_start_attack_animation(combat_options);
                 }
                 if (debug_logging) {
                     std::ostringstream oss;
@@ -894,7 +903,6 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
-        try_start_attack_animation(combat_options);
     }
 }
 
@@ -985,6 +993,7 @@ void AnimationUpdate::clear_movement_plan() {
     plan_.world_start = plan_.final_dest;
     plan_.engagement_target_asset_id = std::nullopt;
     plan_.override_non_locked = true;
+    plan_.attacking_enabled = false;
     final_dest = plan_.final_dest;
 
     plan3d_.strides.clear();
@@ -995,9 +1004,11 @@ void AnimationUpdate::clear_movement_plan() {
     plan3d_.world_start = plan3d_.final_dest;
     plan3d_.engagement_target_asset_id = std::nullopt;
     plan3d_.override_non_locked = true;
+    plan3d_.attacking_enabled = false;
     final_dest_3d = plan3d_.final_dest;
 
     active_plan_mode_ = ActivePlanMode::None;
+    auto_move_attacking_enabled_ = false;
     input_event_ = true;
     clear_plan_retry_cooldown();
 
@@ -1124,13 +1135,6 @@ AnimationUpdate::AutoMoveCombatOptions AnimationUpdate::resolve_auto_move_combat
     }
 
     return options;
-}
-
-void AnimationUpdate::try_start_attack_animation(const AutoMoveCombatOptions& options) {
-    if (!options.attacking_enabled || !self_ || !self_->info || !self_->target_reached) {
-        return;
-    }
-    (void)set_animation_by_tags({"attack"}, {});
 }
 
 void AnimationUpdate::set_animation(const std::string& animation_id) {

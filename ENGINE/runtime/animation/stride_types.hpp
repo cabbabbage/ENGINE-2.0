@@ -22,6 +22,7 @@ struct Plan {
     SDL_Point              world_start{0, 0};
     std::optional<std::string> engagement_target_asset_id{};
     bool                   override_non_locked = true;
+    bool                   attacking_enabled = false;
 };
 
 struct Plan3D {
@@ -31,4 +32,5 @@ struct Plan3D {
     axis::WorldPos              world_start{0, 0, 0};
     std::optional<std::string>  engagement_target_asset_id{};
     bool                        override_non_locked = true;
+    bool                        attacking_enabled = false;
 };

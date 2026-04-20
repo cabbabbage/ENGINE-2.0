@@ -131,6 +131,39 @@ bool AnimationRuntime::attacking_enabled_for_self() const {
     return false;
 }
 
+bool AnimationRuntime::attacking_enabled_for_active_plan() const {
+    if (!attacking_enabled_for_self()) {
+        return false;
+    }
+    if (!planner_iface_) {
+        return true;
+    }
+    return planner_iface_->auto_move_attacking_enabled_;
+}
+
+Asset* AnimationRuntime::resolve_asset_by_stable_id(const std::string& stable_id) const {
+    if (stable_id.empty() || !assets_owner_) {
+        return nullptr;
+    }
+    for (Asset* candidate : assets_owner_->getActive()) {
+        if (!candidate || candidate == self_ || candidate->dead || !candidate->active) {
+            continue;
+        }
+        if (animation_update::detail::stable_asset_id(*candidate) == stable_id) {
+            return candidate;
+        }
+    }
+    Asset* player = assets_owner_->game_context().player();
+    if (!player) {
+        player = assets_owner_->player;
+    }
+    if (player && player != self_ && player->active && !player->dead &&
+        animation_update::detail::stable_asset_id(*player) == stable_id) {
+        return player;
+    }
+    return nullptr;
+}
+
 std::vector<std::string> AnimationRuntime::attack_animation_candidates() const {
     std::vector<std::string> out;
     if (!self_ || !self_->info) {
@@ -151,6 +184,32 @@ std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
     std::vector<Asset*> out;
     if (!self_ || !assets_owner_) {
         return out;
+    }
+
+    if (planner_iface_ && planner_iface_->pending_engagement_target_asset_id_.has_value()) {
+        if (Asset* engagement_target =
+                resolve_asset_by_stable_id(*planner_iface_->pending_engagement_target_asset_id_)) {
+            if (engagement_target->isHitboxEnabled()) {
+                out.push_back(engagement_target);
+            }
+        }
+    }
+
+    if (planner_iface_) {
+        const std::optional<std::string> engagement_target_id =
+            planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D
+                ? planner_iface_->plan_.engagement_target_asset_id
+                : planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D
+                      ? planner_iface_->plan3d_.engagement_target_asset_id
+                      : std::nullopt;
+        if (engagement_target_id.has_value()) {
+            if (Asset* engagement_target = resolve_asset_by_stable_id(*engagement_target_id)) {
+                if (engagement_target->isHitboxEnabled() &&
+                    std::find(out.begin(), out.end(), engagement_target) == out.end()) {
+                    out.push_back(engagement_target);
+                }
+            }
+        }
     }
 
     Asset* player = assets_owner_->game_context().player();
@@ -174,7 +233,7 @@ std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
 }
 
 bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
-    if (!self_ || !self_->info || !attacking_enabled_for_self()) {
+    if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
         return false;
     }
     const std::uint32_t frame_id = resolve_frame_id_for_cooldown();
@@ -192,33 +251,102 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     }
 
     struct RankedChoice {
-        AttackValidation::AttackWindowScore score = AttackValidation::AttackWindowScore::Miss;
+        animation_update::AttackValidation::AttackWindowScore score =
+            animation_update::AttackValidation::AttackWindowScore::Miss;
         std::string animation_id{};
+        std::string target_asset_id{};
     } best{};
 
     for (Asset* target : targets) {
+        const std::string target_id = animation_update::detail::stable_asset_id(*target);
+        if (target_id.empty()) {
+            continue;
+        }
         for (const std::string& attack_animation_id : attack_candidates) {
             const auto evaluation =
-                AttackValidation::evaluate_attack_window(*self_, *target, attack_animation_id, 8);
+                animation_update::AttackValidation::evaluate_attack_window(
+                    *self_,
+                    *target,
+                    attack_animation_id,
+                    8);
             if (static_cast<int>(evaluation.score) > static_cast<int>(best.score)) {
                 best.score = evaluation.score;
                 best.animation_id = attack_animation_id;
+                best.target_asset_id = target_id;
             }
-            if (best.score == AttackValidation::AttackWindowScore::ClearHit) {
+            if (best.score == animation_update::AttackValidation::AttackWindowScore::ClearHit) {
                 break;
             }
         }
-        if (best.score == AttackValidation::AttackWindowScore::ClearHit) {
+        if (best.score == animation_update::AttackValidation::AttackWindowScore::ClearHit) {
             break;
         }
     }
 
-    if (best.score == AttackValidation::AttackWindowScore::Miss || best.animation_id.empty()) {
+    if (best.score == animation_update::AttackValidation::AttackWindowScore::Miss ||
+        best.animation_id.empty() ||
+        best.target_asset_id.empty()) {
         return false;
     }
+    committed_attack_target_asset_id_ = best.target_asset_id;
+    committed_attack_animation_id_ = best.animation_id;
+    committed_attack_last_dispatched_frame_index_ = -1;
+    committed_attack_last_payload_id_.clear();
     switch_to(best.animation_id, 0);
     next_attack_cycle_eval_frame_ = frame_id + kAttackCycleDebounceFrames;
     return true;
+}
+
+bool AnimationRuntime::current_animation_is_attack() const {
+    if (!self_ || !self_->info) {
+        return false;
+    }
+    const auto it = self_->info->animations.find(self_->current_animation);
+    if (it == self_->info->animations.end()) {
+        return false;
+    }
+    return animation_update::tag_utils::has_normalized_tag(it->second.tags, "attack");
+}
+
+void AnimationRuntime::clear_attack_commitment() {
+    committed_attack_target_asset_id_ = std::nullopt;
+    committed_attack_animation_id_.clear();
+    committed_attack_last_dispatched_frame_index_ = -1;
+    committed_attack_last_payload_id_.clear();
+}
+
+void AnimationRuntime::dispatch_active_attack_payload() {
+    if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
+        clear_attack_commitment();
+        return;
+    }
+    if (!current_animation_is_attack()) {
+        return;
+    }
+    if (!committed_attack_target_asset_id_.has_value()) {
+        return;
+    }
+
+    Asset* target = resolve_asset_by_stable_id(*committed_attack_target_asset_id_);
+    if (!target || !target->active || target->dead || !target->isHitboxEnabled()) {
+        clear_attack_commitment();
+        return;
+    }
+
+    const auto attack_opt = animation_update::AttackValidation::compute_attack_if_hit(*self_, *target);
+    if (!attack_opt.has_value()) {
+        return;
+    }
+
+    const animation_update::Attack& attack = *attack_opt;
+    if (attack.source_frame_index == committed_attack_last_dispatched_frame_index_ &&
+        attack.attack_payload_id == committed_attack_last_payload_id_) {
+        return;
+    }
+
+    target->send_attack(attack);
+    committed_attack_last_dispatched_frame_index_ = attack.source_frame_index;
+    committed_attack_last_payload_id_ = attack.attack_payload_id;
 }
 
 bool AnimationRuntime::committed_attack_execution_active() const {
@@ -253,6 +381,9 @@ void AnimationRuntime::set_planner(AnimationUpdate* planner) {
         planner_iface_->set_runtime(nullptr);
     }
     planner_iface_ = planner;
+    if (!planner_iface_) {
+        clear_attack_commitment();
+    }
     if (planner_iface_) {
         planner_iface_->set_runtime(this);
     }
@@ -398,6 +529,7 @@ void AnimationRuntime::update() {
                 ? executor_.tick_3d(*this, planner_iface_->plan3d_, stride_index_, stride_frame_counter_)
                 : executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_);
             if (consumed) {
+                dispatch_active_attack_payload();
                 return;
             }
         }
@@ -406,6 +538,7 @@ void AnimationRuntime::update() {
             const auto& req = planner_iface_->pending_move_;
             if (!should_defer_for_non_locked(req.override_non_locked)) {
                 apply_pending_move();
+                dispatch_active_attack_payload();
                 return;
             }
         }
@@ -413,12 +546,19 @@ void AnimationRuntime::update() {
             const auto& req3d = planner_iface_->pending_move_3d_;
             if (!should_defer_for_non_locked(req3d.override_non_locked)) {
                 apply_pending_move_3d();
+                dispatch_active_attack_payload();
                 return;
             }
         }
     }
 
-    advance(self_->current_frame);
+    const bool cycle_boundary_before_advance =
+        self_->current_frame && self_->current_frame->next == nullptr;
+    (void)advance(self_->current_frame);
+    if (cycle_boundary_before_advance) {
+        (void)maybe_trigger_attack_on_cycle_boundary();
+    }
+    dispatch_active_attack_payload();
 }
 
 void AnimationRuntime::apply_pending_move() {
@@ -778,6 +918,15 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     AnimationFrame* new_frame = anim.get_first_frame(path_index);
     self_->current_animation = it->first;
     self_->current_frame     = new_frame;
+    const bool switched_to_attack =
+        animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+    if (!switched_to_attack) {
+        clear_attack_commitment();
+    } else if (committed_attack_animation_id_ != self_->current_animation) {
+        committed_attack_animation_id_ = self_->current_animation;
+        committed_attack_last_dispatched_frame_index_ = -1;
+        committed_attack_last_payload_id_.clear();
+    }
     {
         const bool is_player = self_->info && self_->info->type == asset_types::player;
         self_->static_frame  = is_player ? false : (anim.is_frozen() || anim.locked);
@@ -1226,6 +1375,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         if (sanitized.empty()) return false;
         Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
+        new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
         if (new_plan.strides.empty()) return false;
         planner_iface_->plan_ = std::move(new_plan);
         planner_iface_->final_dest = planner_iface_->plan_.final_dest;
@@ -1378,6 +1528,7 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
         Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
         new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+        new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
         if (new_plan.strides.empty()) {
             return false;
         }
@@ -1506,6 +1657,7 @@ bool AnimationRuntime::replan_to_destination() {
     Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
     new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
     new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
     if (new_plan.strides.empty()) {
         return false;
     }
@@ -1560,6 +1712,7 @@ bool AnimationRuntime::replan_to_destination_3d() {
     Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
     new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
     new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+    new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
     if (new_plan.strides.empty()) {
         return false;
     }

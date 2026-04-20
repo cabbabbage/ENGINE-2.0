@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -110,7 +111,14 @@ public:
     int grid_spacing_for_layer(int layer) const;
 
 private:
+    struct Residency {
+        Chunk*      chunk = nullptr;
+        std::size_t index_in_chunk_assets = 0;
+    };
+
     void remove_from_chunk(Asset* a, Chunk* c);
+    void add_to_chunk(Asset* a, Chunk& c);
+    void debug_assert_residency_integrity(Asset* a) const;
     void invalidate_active_cache();
     GridId make_point_id(int grid_x, int grid_depth, int world_y, int resolution_layer, std::uint32_t salt = 0) const;
     void remove_asset_from_point(Asset* a, GridPoint& point);
@@ -131,7 +139,7 @@ private:
     int       max_resolution_layers_ = 0;
 
     ChunkManager chunks_;
-    std::unordered_map<Asset*, Chunk*> residency_;
+    std::unordered_map<Asset*, Residency> residency_;
 
     bool     has_cached_camera_rect_ = false;
     GridBounds last_expanded_camera_{};

@@ -115,7 +115,6 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     flip_vertical_checkbox_ = std::make_unique<DMCheckbox>("Flip Vertical", true);
     resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
     scaling_method_dropdown_ = std::make_unique<DMDropdown>("Scaling Method", scaling_method_options(), 0);
-    light_enabled_checkbox_ = std::make_unique<DMCheckbox>("Light Enabled", true);
     light_color_r_textbox_ = std::make_unique<DMTextBox>("Color R", "255");
     light_color_g_textbox_ = std::make_unique<DMTextBox>("Color G", "236");
     light_color_b_textbox_ = std::make_unique<DMTextBox>("Color B", "196");
@@ -246,9 +245,7 @@ void RoomAnchorToolsPanel::set_light_editor_mode(bool enabled) {
 }
 
 void RoomAnchorToolsPanel::set_light_values(const LightValues& values) {
-    if (light_enabled_checkbox_) {
-        light_enabled_checkbox_->set_value(values.enabled);
-    }
+    (void)values.enabled;
     if (light_color_r_textbox_ && !light_color_r_textbox_->is_editing()) {
         light_color_r_textbox_->set_value(format_color_channel(values.color_r));
     }
@@ -346,7 +343,7 @@ RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values()
 RoomAnchorToolsPanel::LightValues RoomAnchorToolsPanel::collect_light_values() const {
     LightValues values{};
     values.has_light_data = light_editor_mode_;
-    values.enabled = light_enabled_checkbox_ ? light_enabled_checkbox_->value() : false;
+    values.enabled = true;
     values.color_r = std::clamp(parse_int_or(light_color_r_textbox_ ? light_color_r_textbox_->value() : "255", 255), 0, 255);
     values.color_g = std::clamp(parse_int_or(light_color_g_textbox_ ? light_color_g_textbox_->value() : "236", 236), 0, 255);
     values.color_b = std::clamp(parse_int_or(light_color_b_textbox_ ? light_color_b_textbox_->value() : "196", 196), 0, 255);
@@ -525,10 +522,6 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
 
     bool light_changed = false;
     const bool light_controls_visible = light_editor_mode_ && has_selected_anchor;
-    if (light_controls_visible && light_enabled_checkbox_ && light_enabled_checkbox_->handle_event(event)) {
-        handled = true;
-        light_changed = true;
-    }
     if (light_controls_visible && light_color_r_textbox_ && light_color_r_textbox_->handle_event(event)) {
         handled = true;
         light_changed = true;
@@ -759,9 +752,6 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                 dm_draw::DrawRoundedOutline(renderer, light_card_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
             }
             DMFontCache::instance().draw_text(renderer, label_style, "Light Attachment", light_title_rect_.x, light_title_rect_.y);
-            if (light_enabled_checkbox_) {
-                light_enabled_checkbox_->render(renderer);
-            }
             if (light_color_r_textbox_) {
                 light_color_r_textbox_->render(renderer);
             }
@@ -869,7 +859,6 @@ void RoomAnchorToolsPanel::update_layout() const {
         scaling_method_dropdown_ ? scaling_method_dropdown_->preferred_height(controls_width) : DMDropdown::height();
     const int rotation_h = rotation_slider_ ? rotation_slider_->preferred_height(controls_width) : DMSlider::height();
     const int hidden_h = hidden_checkbox_ ? DMCheckbox::height() : 0;
-    const int light_enabled_h = light_enabled_checkbox_ ? DMCheckbox::height() : 0;
     const int light_panel_controls_width = std::max(0, light_panel_rect_.w - kPanelPadding * 2);
     const int light_color_h = light_color_r_textbox_
         ? light_color_r_textbox_->preferred_height(light_panel_controls_width)
@@ -1076,11 +1065,6 @@ void RoomAnchorToolsPanel::update_layout() const {
         light_row_y += kLineHeight + row_gap;
 
         const int light_card_top = light_row_y;
-        if (light_enabled_checkbox_) {
-            light_enabled_checkbox_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_enabled_h});
-            light_row_y += light_enabled_h + row_gap;
-        }
-
         const int split_width = std::max(0, light_controls_w - (kColorTextboxGap * 2));
         const int col_width = split_width / 3;
         const int color_mid_x = light_controls_x + col_width + kColorTextboxGap;
@@ -1133,9 +1117,6 @@ void RoomAnchorToolsPanel::update_layout() const {
     } else {
         light_title_rect_ = SDL_Rect{0, 0, 0, 0};
         light_card_rect_ = SDL_Rect{0, 0, 0, 0};
-        if (light_enabled_checkbox_) {
-            light_enabled_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
         if (light_color_r_textbox_) {
             light_color_r_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }

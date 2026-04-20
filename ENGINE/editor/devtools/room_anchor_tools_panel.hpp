@@ -35,7 +35,7 @@ public:
 
     struct LightValues {
         bool has_light_data = false;
-        bool enabled = false;
+        bool enabled = true; // Deprecated UI field; lights now render based on anchor hidden state.
         int color_r = 255;
         int color_g = 236;
         int color_b = 196;
@@ -135,7 +135,6 @@ private:
     std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> resolve_x_checkbox_;
     std::unique_ptr<DMDropdown> scaling_method_dropdown_;
-    std::unique_ptr<DMCheckbox> light_enabled_checkbox_;
     std::unique_ptr<DMTextBox> light_color_r_textbox_;
     std::unique_ptr<DMTextBox> light_color_g_textbox_;
     std::unique_ptr<DMTextBox> light_color_b_textbox_;

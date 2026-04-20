@@ -412,6 +412,8 @@ private:
         std::uint64_t processed_anchor_revision = 0;
         std::uint64_t processed_camera_state_version = 0;
         int processed_frame_index = std::numeric_limits<int>::min();
+        Asset::RuntimeImpassableGeometrySignature processed_impassable_signature{};
+        bool processed_impassable_signature_initialized = false;
         std::uint32_t non_player_update_visit_epoch = 0;
     };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;

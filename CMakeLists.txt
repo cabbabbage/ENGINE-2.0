@@ -316,6 +316,7 @@ add_executable(engine_tests
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_floor_box_candidate_spawning.cpp
     ENGINE/tests/test_asset_collision_context_policy.cpp
+    ENGINE/tests/test_impassable_geometry_signature.cpp
     ENGINE/tests/test_dynamic_boundary_size_variation.cpp
 )
 

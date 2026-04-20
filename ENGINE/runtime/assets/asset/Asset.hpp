@@ -360,6 +360,24 @@ class Asset {
         bool valid = false;
     };
 
+    struct RuntimeImpassableGeometrySignature {
+        std::size_t point_count = 0;
+        int rounded_centroid_x = 0;
+        int rounded_centroid_z = 0;
+        std::uint64_t floor_points_hash = 0;
+
+        bool operator==(const RuntimeImpassableGeometrySignature& other) const {
+            return point_count == other.point_count &&
+                   rounded_centroid_x == other.rounded_centroid_x &&
+                   rounded_centroid_z == other.rounded_centroid_z &&
+                   floor_points_hash == other.floor_points_hash;
+        }
+
+        bool operator!=(const RuntimeImpassableGeometrySignature& other) const {
+            return !(*this == other);
+        }
+    };
+
     struct RuntimeFloorBox {
         struct CandidatePayload {
             vibble::spawn::RuntimeCandidates candidates;
@@ -391,8 +409,10 @@ class Asset {
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
     const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
     const std::vector<RuntimeImpassableShape>& current_impassable_shapes() const { return current_impassable_shapes_; }
+    RuntimeImpassableGeometrySignature runtime_impassable_geometry_signature() const;
     void test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     void test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> volumes);
+    void test_set_current_impassable_shapes(std::vector<RuntimeImpassableShape> shapes);
     const RuntimeBoxVolume* find_hit_box_volume(const std::string& name) const;
     const RuntimeBoxVolume* find_attack_box_volume(const std::string& name) const;
 

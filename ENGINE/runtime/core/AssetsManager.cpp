@@ -919,10 +919,24 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         asset->update_anchor_basis_if_needed();
         asset->refresh_anchor_point_cache_from_frame();
         asset->refresh_runtime_box_cache_from_frame();
+
+        const Asset::RuntimeImpassableGeometrySignature current_signature =
+            asset->runtime_impassable_geometry_signature();
+        const bool signature_changed =
+            !state.processed_impassable_signature_initialized ||
+            state.processed_impassable_signature != current_signature;
+        const bool runtime_geometry_may_have_changed =
+            anchor_revision_changed || camera_anchor_state_changed || frame_index_changed;
+        if (runtime_geometry_may_have_changed && signature_changed) {
+            mark_collision_context_dirty();
+        }
+
         state.processed_anchor_invalidation_version = state.pending_anchor_invalidation_version;
         state.processed_anchor_revision = asset->anchor_world_revision_;
         state.processed_camera_state_version = camera_state_version;
         state.processed_frame_index = current_frame_index;
+        state.processed_impassable_signature = current_signature;
+        state.processed_impassable_signature_initialized = true;
     }
 
     const float dx = static_cast<float>(asset->world_x() - camera_focus.x);

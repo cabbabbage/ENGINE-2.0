@@ -118,6 +118,21 @@ bool should_emit_scale_trace_for_frame(const Asset& asset, std::uint32_t frame_i
     return true;
 }
 
+
+std::uint64_t fnv1a_mix_u64(std::uint64_t hash, std::uint64_t value) {
+    constexpr std::uint64_t kFnvPrime = 1099511628211ull;
+    for (int i = 0; i < 8; ++i) {
+        hash ^= static_cast<std::uint8_t>((value >> (i * 8)) & 0xffu);
+        hash *= kFnvPrime;
+    }
+    return hash;
+}
+
+std::int64_t quantize_impassable_point(float value) {
+    constexpr float kScale = 100.0f;
+    return static_cast<std::int64_t>(std::llround(static_cast<double>(value) * kScale));
+}
+
 bool vibble_box_trace_enabled() {
     static const bool enabled = [] {
         const char* raw = SDL_getenv("VIBBLE_BOX_TRACE");
@@ -1620,6 +1635,43 @@ void Asset::refresh_runtime_box_cache_from_frame() {
     }
 }
 
+Asset::RuntimeImpassableGeometrySignature Asset::runtime_impassable_geometry_signature() const {
+    RuntimeImpassableGeometrySignature signature{};
+    constexpr std::uint64_t kFnvOffset = 1469598103934665603ull;
+    std::uint64_t hash = kFnvOffset;
+
+    double centroid_sum_x = 0.0;
+    double centroid_sum_z = 0.0;
+
+    for (const RuntimeImpassableShape& shape : current_impassable_shapes_) {
+        if (!shape.valid || !shape.enabled || shape.floor_points.size() < 3) {
+            continue;
+        }
+
+        signature.point_count += shape.floor_points.size();
+        for (const SDL_FPoint& point : shape.floor_points) {
+            const std::int64_t quantized_x = quantize_impassable_point(point.x);
+            const std::int64_t quantized_z = quantize_impassable_point(point.y);
+            hash = fnv1a_mix_u64(hash, static_cast<std::uint64_t>(quantized_x));
+            hash = fnv1a_mix_u64(hash, static_cast<std::uint64_t>(quantized_z));
+            centroid_sum_x += static_cast<double>(point.x);
+            centroid_sum_z += static_cast<double>(point.y);
+        }
+    }
+
+    if (signature.point_count > 0) {
+        const double inv_count = 1.0 / static_cast<double>(signature.point_count);
+        signature.rounded_centroid_x =
+            static_cast<int>(std::lround(centroid_sum_x * inv_count));
+        signature.rounded_centroid_z =
+            static_cast<int>(std::lround(centroid_sum_z * inv_count));
+        hash = fnv1a_mix_u64(hash, static_cast<std::uint64_t>(signature.point_count));
+        signature.floor_points_hash = hash;
+    }
+
+    return signature;
+}
+
 const Asset::RuntimeBoxVolume* Asset::find_hit_box_volume(const std::string& name) const {
     auto it = runtime_hit_box_lookup_.find(name);
     if (it == runtime_hit_box_lookup_.end() || it->second >= current_hit_box_volumes_.size()) {
@@ -1650,6 +1702,10 @@ void Asset::test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> vo
     for (std::size_t i = 0; i < current_attack_box_volumes_.size(); ++i) {
         runtime_attack_box_lookup_.emplace(current_attack_box_volumes_[i].name, i);
     }
+}
+
+void Asset::test_set_current_impassable_shapes(std::vector<RuntimeImpassableShape> shapes) {
+    current_impassable_shapes_ = std::move(shapes);
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }

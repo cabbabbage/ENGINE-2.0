@@ -250,3 +250,47 @@ TEST_CASE("auto_move applies global retry cooldown after zero-target no-stride p
     CHECK(resumed_with_plan_or_fallback);
     CHECK_FALSE(asset->needs_target);
 }
+
+
+TEST_CASE("GetBestPath3D fallback rejects collision-blocked options") {
+    const auto asset = make_test_asset(
+        {
+            {"default", make_single_path_animation(0, 0, 0)},
+            {"right", make_single_path_animation(10, 0, 0)},
+        },
+        "default");
+
+    REQUIRE(asset != nullptr);
+
+    auto blocker_info = std::make_shared<AssetInfo>("blocker_3d_asset");
+    Area blocker_area("blocker_3d_area", 0);
+    Asset blocker(blocker_info,
+                  blocker_area,
+                  SDL_Point{8, 0},
+                  0,
+                  std::string{},
+                  std::string{},
+                  0);
+    blocker.move_to_world_position(8, 0, 0, 0);
+
+    std::vector<Area::Point> points{
+        SDL_Point{4, -4}, SDL_Point{14, -4}, SDL_Point{14, 4}, SDL_Point{4, 4}
+    };
+    Assets::FrameCollisionEntry blocked_entry;
+    blocked_entry.asset = &blocker;
+    blocked_entry.area = Area("blocked_3d", points, 0);
+    blocked_entry.world_center = blocked_entry.area.get_center();
+    blocked_entry.bottom_middle = world::GridPoint::make_virtual(blocked_entry.world_center.x,
+                                                                  0,
+                                                                  blocked_entry.world_center.y,
+                                                                  0);
+
+    CollisionQueryContext context;
+    context.loaded = true;
+    context.entries.push_back(&blocked_entry);
+
+    GetBestPath3D planner;
+    const Plan3D plan = planner(*asset, {axis::WorldPos{20, 0, 0}}, 0, vibble::grid::global_grid(), &context);
+
+    CHECK(plan.strides.empty());
+}

@@ -11,6 +11,7 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "utils/grid.hpp"
+#include "utils/area.hpp"
 
 namespace {
 
@@ -48,6 +49,30 @@ std::unique_ptr<Asset> make_pathing_test_asset() {
                                          0);
     asset->move_to_world_position(0, 0, 0, 0);
     return asset;
+}
+
+
+Assets::FrameCollisionEntry make_collision_entry_rect(const Asset& owner,
+                                                      int min_x,
+                                                      int min_z,
+                                                      int max_x,
+                                                      int max_z) {
+    std::vector<Area::Point> points{
+        SDL_Point{min_x, min_z},
+        SDL_Point{max_x, min_z},
+        SDL_Point{max_x, max_z},
+        SDL_Point{min_x, max_z}
+    };
+    Assets::FrameCollisionEntry entry;
+    entry.asset = &owner;
+    entry.area = Area("collision_entry", points, owner.grid_resolution);
+    entry.world_center = entry.area.get_center();
+    entry.bottom_middle = world::GridPoint::make_virtual(entry.world_center.x,
+                                                         owner.world_y(),
+                                                         entry.world_center.y,
+                                                         owner.grid_resolution);
+    entry.canonical_type = "impassable_shape";
+    return entry;
 }
 
 } // namespace
@@ -109,3 +134,30 @@ TEST_CASE("PathSanitizer marks anchor-equal checkpoints as collapsed") {
                                                                             SDL_Point{11, 20}));
 }
 #endif
+
+
+TEST_CASE("GetBestPath fallback rejects collision-blocked stride candidates") {
+    auto asset = make_pathing_test_asset();
+    REQUIRE(asset != nullptr);
+
+    auto blocker_info = std::make_shared<AssetInfo>("blocker_asset");
+    Area blocker_area("blocker_spawn", 0);
+    Asset blocker(blocker_info,
+                  blocker_area,
+                  SDL_Point{8, 0},
+                  0,
+                  std::string{},
+                  std::string{},
+                  0);
+    blocker.move_to_world_position(8, 0, 0, 0);
+
+    const Assets::FrameCollisionEntry blocked_entry = make_collision_entry_rect(blocker, 4, -4, 14, 4);
+    CollisionQueryContext context;
+    context.loaded = true;
+    context.entries.push_back(&blocked_entry);
+
+    GetBestPath planner;
+    const Plan plan = planner(*asset, {SDL_Point{20, 0}}, 0, vibble::grid::global_grid(), &context);
+
+    CHECK(plan.strides.empty());
+}

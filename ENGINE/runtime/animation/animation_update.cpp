@@ -105,6 +105,28 @@ int bounded_step_toward(int delta, int max_step) {
     return (delta > 0) ? magnitude : -magnitude;
 }
 
+
+int furthest_checkpoint_distance_xz(SDL_Point start, const std::vector<SDL_Point>& checkpoints) {
+    int furthest_sq = 0;
+    for (const SDL_Point& checkpoint : checkpoints) {
+        const int dx = checkpoint.x - start.x;
+        const int dz = checkpoint.y - start.y;
+        furthest_sq = std::max(furthest_sq, dx * dx + dz * dz);
+    }
+    return static_cast<int>(std::lround(std::sqrt(static_cast<double>(furthest_sq))));
+}
+
+int furthest_checkpoint_distance_xz(const axis::WorldPos& start,
+                                    const std::vector<axis::WorldPos>& checkpoints) {
+    int furthest_sq = 0;
+    for (const axis::WorldPos& checkpoint : checkpoints) {
+        const int dx = checkpoint.x - start.x;
+        const int dz = checkpoint.z - start.z;
+        furthest_sq = std::max(furthest_sq, dx * dx + dz * dz);
+    }
+    return static_cast<int>(std::lround(std::sqrt(static_cast<double>(furthest_sq))));
+}
+
 std::vector<std::string> normalize_tag_list(const std::vector<std::string>& input) {
     std::vector<std::string> normalized;
     normalized.reserve(input.size());
@@ -520,6 +542,9 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
 
     const std::vector<axis::WorldPos> requested_absolute = absolute;
     CollisionQueryContext collision_context;
+    collision_context.set_furthest_checkpoint_distance_px(
+        furthest_checkpoint_distance_xz(axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() },
+                                        requested_absolute));
     const std::vector<axis::WorldPos> sanitized_checkpoints =
         sanitizer_3d_.sanitize(*self_, requested_absolute, visited_thresh_);
     plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
@@ -673,6 +698,8 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
 
     const std::vector<SDL_Point> requested_absolute = absolute;
     CollisionQueryContext collision_context;
+    collision_context.set_furthest_checkpoint_distance_px(
+        furthest_checkpoint_distance_xz(self_->world_xz_point(), requested_absolute));
     const std::vector<SDL_Point> sanitized_checkpoints =
         sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_, &collision_context);
     plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);

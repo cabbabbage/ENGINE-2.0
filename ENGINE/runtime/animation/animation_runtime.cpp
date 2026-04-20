@@ -25,6 +25,7 @@
 #include <iostream>
 #include "animation_update.hpp"
 #include "utils/transform_smoothing.hpp"
+#include "unstick_utils.hpp"
 
 namespace {
 template <typename Fn>
@@ -69,26 +70,6 @@ std::string resolve_animation(const Asset& asset, const std::string& requested) 
 
 bool same_point(SDL_Point lhs, SDL_Point rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y;
-}
-
-std::vector<SDL_Point> build_escape_directions(SDL_Point primary) {
-    std::vector<SDL_Point> dirs;
-    dirs.reserve(5);
-    auto add = [&](SDL_Point d) {
-        if (d.x == 0 && d.y == 0) return;
-        for (const auto& e : dirs) { if (e.x == d.x && e.y == d.y) return; }
-        dirs.push_back(d);
-    };
-    if (primary.x == 0 && primary.y == 0) {
-        dirs = {{1,0},{-1,0},{0,1},{0,-1}};
-    } else {
-        add(primary);
-        add({primary.x, 0});
-        add({0, primary.y});
-        add({primary.y, -primary.x});
-        add({-primary.y, primary.x});
-    }
-    return dirs;
 }
 
 int resolve_effective_grid_resolution(const Asset* self,
@@ -799,6 +780,16 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     if (!self_ || !self_->info) {
         return false;
     }
+    const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
+    std::vector<const Assets::FrameCollisionEntry*> runtime_entries;
+    const int search_radius = (self_->info && self_->info->NeighborSearchRadius > 0) ? self_->info->NeighborSearchRadius : 0;
+    if (assets) {
+        assets->query_impassable_entries(*self_, search_radius, runtime_entries);
+        if (blockers.empty() && animation::unstick::push_out_of_impassable(*self_, assets, runtime_entries)) {
+            return true;
+        }
+    }
+
     world::GridPoint bottom_from = animation_update::detail::bottom_middle_for(*self_, from);
     world::GridPoint bottom_to   = animation_update::detail::bottom_middle_for(*self_, to);
     SDL_Point push{0, 0};
@@ -858,7 +849,11 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     }
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    std::vector<SDL_Point> directions = build_escape_directions(primary);
+    std::vector<SDL_Point> directions;
+    directions = {primary, {primary.x, 0}, {0, primary.y}, {primary.y, -primary.x}, {-primary.y, primary.x}};
+    directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
+    directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
+    if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
     const auto inside_disallowed = [&](const world::GridPoint& bottom) {
         bool blocked = false;
         const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
@@ -1049,7 +1044,11 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     }
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    std::vector<SDL_Point> directions = build_escape_directions(primary);
+    std::vector<SDL_Point> directions;
+    directions = {primary, {primary.x, 0}, {0, primary.y}, {primary.y, -primary.x}, {-primary.y, primary.x}};
+    directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
+    directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
+    if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
     std::vector<SDL_Point> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan_.sanitized_checkpoints.size(); ++i) {
         tail.push_back(planner_iface_->plan_.sanitized_checkpoints[i]);
@@ -1188,7 +1187,11 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
 
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    std::vector<SDL_Point> directions = build_escape_directions(primary);
+    std::vector<SDL_Point> directions;
+    directions = {primary, {primary.x, 0}, {0, primary.y}, {primary.y, -primary.x}, {-primary.y, primary.x}};
+    directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
+    directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
+    if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
 
     std::vector<axis::WorldPos> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan3d_.sanitized_checkpoints.size(); ++i) {

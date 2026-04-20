@@ -11,6 +11,7 @@
 #include "assets/asset/asset_types.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/animation_runtime.hpp"
+#include "animation/unstick_utils.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
@@ -888,6 +889,8 @@ bool Assets::run_active_runtime_single_pass(bool include_audio_update) {
                                                  depth_axis_sign);
     }
 
+    run_camera_trap_escape_pass();
+
     if (include_audio_update && last_audio_engine_update_frame_id_ != frame_id_) {
         AudioEngine::instance().update();
         last_audio_engine_update_frame_id_ = frame_id_;
@@ -975,6 +978,74 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
     asset->runtime_camera_metrics = metrics;
     asset->distance_from_camera = metrics.planar_distance;
     asset->angle_from_camera = metrics.planar_angle_radians;
+}
+
+
+void Assets::run_camera_trap_escape_pass() {
+    std::unordered_set<Asset*> seen;
+    seen.reserve(active_assets.size() + 1);
+
+    auto process_asset = [&](Asset* asset) {
+        if (!asset || asset->dead || !asset->info || !asset->isMovementEnabled()) {
+            return;
+        }
+        if (!asset_matches_focus_filter(asset)) {
+            return;
+        }
+        if (!seen.insert(asset).second) {
+            return;
+        }
+
+        const world::GridPoint current = world::GridPoint::make_virtual(
+            asset->world_x(),
+            asset->world_y(),
+            asset->world_z(),
+            asset->grid_resolution);
+        const world::GridPoint bottom = animation_update::detail::bottom_middle_for(*asset, current);
+
+        std::vector<const FrameCollisionEntry*> entries;
+        const int search_radius = (asset->info && asset->info->NeighborSearchRadius > 0)
+            ? asset->info->NeighborSearchRadius
+            : 0;
+        query_impassable_entries(*asset, search_radius, entries);
+
+        bool inside_impassable = false;
+        for (const FrameCollisionEntry* entry : entries) {
+            if (!entry || !entry->asset || entry->asset == asset || !entry->asset->info) {
+                continue;
+            }
+            if (entry->area.contains_point(bottom.to_sdl_point())) {
+                inside_impassable = true;
+                break;
+            }
+        }
+        if (!inside_impassable) {
+            return;
+        }
+
+        world::GridPoint destination = current;
+        if (!animation::unstick::resolve_destination(*asset, this, entries, current, destination)) {
+            return;
+        }
+
+        if (destination.world_x() == current.world_x() && destination.world_z() == current.world_z()) {
+            return;
+        }
+
+        asset->move_to_world_position(destination.world_x(), asset->world_y(), destination.world_z());
+        Asset* moved = world_grid_.move_asset(asset, current, destination);
+        if (moved) {
+            moved->cache_grid_residency(destination);
+            mark_anchor_basis_dirty(moved);
+        }
+        mark_collision_context_dirty();
+        note_frame_rebuild_request();
+    };
+
+    process_asset(player);
+    for (Asset* asset : active_assets) {
+        process_asset(asset);
+    }
 }
 
 void Assets::rebuild_frame_collision_context() const {
@@ -1138,6 +1209,10 @@ void Assets::query_impassable_entries(const Asset& self,
     cache_results();
 }
 
+
+int Assets::max_impassable_query_radius() const {
+    return kAggressiveMaxCollisionSearchRadiusPx;
+}
 void Assets::refresh_filtered_active_assets() {
     update_filtered_active_assets();
 }

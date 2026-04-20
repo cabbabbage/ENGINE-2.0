@@ -72,3 +72,15 @@ TEST_CASE("Collision query context stays reusable for repeated lookup calls") {
 
     CHECK(first.size() == second.size());
 }
+
+
+TEST_CASE("Collision query radius expands with checkpoint extent and respects caps") {
+    const int expanded = CollisionQueryContext::resolve_search_radius(64, 220, 320);
+    CHECK(expanded == 252);
+
+    const int capped = CollisionQueryContext::resolve_search_radius(64, 1000, 320);
+    CHECK(capped == 320);
+
+    const int neighbor_only = CollisionQueryContext::resolve_search_radius(96, 0, 320);
+    CHECK(neighbor_only == 96);
+}

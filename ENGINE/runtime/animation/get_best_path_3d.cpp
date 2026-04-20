@@ -227,12 +227,22 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                     const int min_frames = descriptor.locked ? max_frames : 1;
                     for (int frames = min_frames; frames <= max_frames; ++frames) {
                         axis::WorldPos simulated = cursor;
+                        bool blocked = false;
                         for (int i = 0; i < frames; ++i) {
                             const AnimationFrame& frame = (*descriptor.frames)[i];
                             const axis::WorldPos delta = animation_update::detail::frame_world_delta_3d(frame, self, grid);
-                            simulated.x += delta.x;
-                            simulated.y += delta.y;
-                            simulated.z += delta.z;
+                            const axis::WorldPos next_pos{ simulated.x + delta.x, simulated.y + delta.y, simulated.z + delta.z };
+                            const world::GridPoint simulated_gp = as_grid_point(simulated, resolution_layer);
+                            const world::GridPoint next_gp = as_grid_point(next_pos, resolution_layer);
+                            if (blocked_step(simulated_gp, next_gp, collisions, self, assets)) {
+                                blocked = true;
+                                break;
+                            }
+                            simulated = next_pos;
+                        }
+
+                        if (blocked) {
+                            continue;
                         }
 
                         const long long dist_sq = animation_update::detail::distance_sq_3d(simulated, checkpoint);

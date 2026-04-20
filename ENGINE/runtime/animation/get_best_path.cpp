@@ -247,11 +247,20 @@ Plan GetBestPath::operator()(const Asset& self,
                     const int min_frames = descriptor.locked ? max_frames : 1;
                     for (int frames = min_frames; frames <= max_frames; ++frames) {
                         world::GridPoint simulated = cursor;
+                        bool blocked = false;
                         for (int i = 0; i < frames; ++i) {
                             const AnimationFrame& frame = (*frames_path)[i];
                             SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
                             world::GridPoint next = world::grid_math::offset(simulated, delta);
+                            if (blocked_step(simulated, next, collisions, self, assets)) {
+                                blocked = true;
+                                break;
+                            }
                             copy_position(simulated, next);
+                        }
+
+                        if (blocked) {
+                            continue;
                         }
 
                         const int dist_sq = animation_update::detail::distance_sq(simulated, checkpoint);

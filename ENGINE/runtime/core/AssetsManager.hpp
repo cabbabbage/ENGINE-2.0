@@ -122,6 +122,7 @@ public:
     void query_impassable_entries(const Asset& self,
                                   int search_radius,
                                   std::vector<const FrameCollisionEntry*>& out) const;
+    int max_impassable_query_radius() const;
     void mark_collision_context_dirty() {
         frame_collision_context_dirty_ = true;
         frame_collision_query_cache_.clear();
@@ -494,6 +495,7 @@ private:
                                                   std::uint64_t camera_state_version,
                                                   float camera_anchor_world_z,
                                                   float depth_axis_sign);
+    void run_camera_trap_escape_pass();
     bool capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out_relative_path);
     bool screenshot_create_task_button_active(Uint32 now_ticks) const;
     void render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32 now_ticks);

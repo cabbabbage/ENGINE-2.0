@@ -67,6 +67,7 @@ public:
     void set_debug_enabled(bool enabled);
 
     bool has_active_plan() const;
+    bool maybe_trigger_attack_on_cycle_boundary();
 
 private:
     int        effective_grid_resolution(std::optional<int> override_resolution) const;
@@ -90,6 +91,10 @@ private:
     void       activate_reverse_playback(ReversePlaybackMode mode);
     AnimationFrame* last_frame_for(const Animation& anim, std::size_t path_index) const;
     bool       reverse_mode_applies_to_current_animation() const;
+    bool       attacking_enabled_for_self() const;
+    std::vector<std::string> attack_animation_candidates() const;
+    std::vector<Asset*> attack_candidate_targets() const;
+    std::uint32_t resolve_frame_id_for_cooldown();
 
 private:
     friend class MovementPlanExecutor;
@@ -119,6 +124,9 @@ private:
     std::uint32_t replan_budget_frame_id_ = 0;
     int replan_attempts_this_frame_ = 0;
     static constexpr int kMaxReplanAttemptsPerFrame = 3;
+    std::uint32_t local_runtime_frame_id_ = 0;
+    std::uint32_t next_attack_cycle_eval_frame_ = 0;
+    static constexpr std::uint32_t kAttackCycleDebounceFrames = 8;
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }
 };

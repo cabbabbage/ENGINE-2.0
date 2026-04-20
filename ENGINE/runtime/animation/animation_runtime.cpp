@@ -24,6 +24,8 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include <iostream>
 #include "animation_update.hpp"
+#include "animation/animation_tag_utils.hpp"
+#include "animation/attack_validation.hpp"
 #include "utils/transform_smoothing.hpp"
 #include "unstick_utils.hpp"
 
@@ -99,6 +101,123 @@ bool AnimationRuntime::consume_replan_attempt_budget() {
         return false;
     }
     ++replan_attempts_this_frame_;
+    return true;
+}
+
+std::uint32_t AnimationRuntime::resolve_frame_id_for_cooldown() {
+    if (assets_owner_) {
+        return assets_owner_->frame_id();
+    }
+    ++local_runtime_frame_id_;
+    if (local_runtime_frame_id_ == 0) {
+        ++local_runtime_frame_id_;
+    }
+    return local_runtime_frame_id_;
+}
+
+bool AnimationRuntime::attacking_enabled_for_self() const {
+    if (!self_ || !self_->info) {
+        return false;
+    }
+    if (asset_types::canonicalize(self_->info->type) != asset_types::enemy) {
+        return false;
+    }
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        (void)animation_id;
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::string> AnimationRuntime::attack_animation_candidates() const {
+    std::vector<std::string> out;
+    if (!self_ || !self_->info) {
+        return out;
+    }
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        if (!animation.has_frames()) {
+            continue;
+        }
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            out.push_back(animation_id);
+        }
+    }
+    return out;
+}
+
+std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
+    std::vector<Asset*> out;
+    if (!self_ || !assets_owner_) {
+        return out;
+    }
+
+    Asset* player = assets_owner_->game_context().player();
+    if (!player) {
+        player = assets_owner_->player;
+    }
+    if (player && player != self_ && player->active && !player->dead && player->isHitboxEnabled()) {
+        out.push_back(player);
+    }
+
+    for (Asset* candidate : assets_owner_->getActive()) {
+        if (!candidate || candidate == self_ || candidate->dead || !candidate->active || !candidate->isHitboxEnabled()) {
+            continue;
+        }
+        if (std::find(out.begin(), out.end(), candidate) != out.end()) {
+            continue;
+        }
+        out.push_back(candidate);
+    }
+    return out;
+}
+
+bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
+    if (!self_ || !self_->info || !attacking_enabled_for_self()) {
+        return false;
+    }
+    const std::uint32_t frame_id = resolve_frame_id_for_cooldown();
+    if (next_attack_cycle_eval_frame_ != 0 && frame_id < next_attack_cycle_eval_frame_) {
+        return false;
+    }
+
+    const auto targets = attack_candidate_targets();
+    if (targets.empty()) {
+        return false;
+    }
+    const auto attack_candidates = attack_animation_candidates();
+    if (attack_candidates.empty()) {
+        return false;
+    }
+
+    struct RankedChoice {
+        AttackValidation::AttackWindowScore score = AttackValidation::AttackWindowScore::Miss;
+        std::string animation_id{};
+    } best{};
+
+    for (Asset* target : targets) {
+        for (const std::string& attack_animation_id : attack_candidates) {
+            const auto evaluation =
+                AttackValidation::evaluate_attack_window(*self_, *target, attack_animation_id, 8);
+            if (static_cast<int>(evaluation.score) > static_cast<int>(best.score)) {
+                best.score = evaluation.score;
+                best.animation_id = attack_animation_id;
+            }
+            if (best.score == AttackValidation::AttackWindowScore::ClearHit) {
+                break;
+            }
+        }
+        if (best.score == AttackValidation::AttackWindowScore::ClearHit) {
+            break;
+        }
+    }
+
+    if (best.score == AttackValidation::AttackWindowScore::Miss || best.animation_id.empty()) {
+        return false;
+    }
+    switch_to(best.animation_id, 0);
+    next_attack_cycle_eval_frame_ = frame_id + kAttackCycleDebounceFrames;
     return true;
 }
 

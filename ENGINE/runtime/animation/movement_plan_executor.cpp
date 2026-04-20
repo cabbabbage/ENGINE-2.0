@@ -124,14 +124,32 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
         if (!up.advance(self->current_frame)) {
             stride_complete = true;
             self->current_frame = anim.get_first_frame(current_path);
+            if (up.maybe_trigger_attack_on_cycle_boundary()) {
+                plan.strides.clear();
+                stride_index = 0;
+                stride_frame_counter = 0;
+                return false;
+            }
         }
     } else {
         if (!up.advance(self->current_frame)) {
             self->current_frame = anim.get_first_frame(current_path);
+            if (up.maybe_trigger_attack_on_cycle_boundary()) {
+                plan.strides.clear();
+                stride_index = 0;
+                stride_frame_counter = 0;
+                return false;
+            }
         }
     }
 
     if (stride_complete) {
+        if (up.maybe_trigger_attack_on_cycle_boundary()) {
+            plan.strides.clear();
+            stride_index = 0;
+            stride_frame_counter = 0;
+            return false;
+        }
         ++stride_index;
         stride_frame_counter = 0;
         if (stride_index >= plan.strides.size()) {
@@ -267,14 +285,32 @@ bool MovementPlanExecutor::tick_3d(AnimationRuntime& up, Plan3D& plan,
         if (!up.advance(self->current_frame)) {
             stride_complete = true;
             self->current_frame = anim.get_first_frame(current_path);
+            if (up.maybe_trigger_attack_on_cycle_boundary()) {
+                plan.strides.clear();
+                stride_index = 0;
+                stride_frame_counter = 0;
+                return false;
+            }
         }
     } else {
         if (!up.advance(self->current_frame)) {
             self->current_frame = anim.get_first_frame(current_path);
+            if (up.maybe_trigger_attack_on_cycle_boundary()) {
+                plan.strides.clear();
+                stride_index = 0;
+                stride_frame_counter = 0;
+                return false;
+            }
         }
     }
 
     if (stride_complete) {
+        if (up.maybe_trigger_attack_on_cycle_boundary()) {
+            plan.strides.clear();
+            stride_index = 0;
+            stride_frame_counter = 0;
+            return false;
+        }
         ++stride_index;
         stride_frame_counter = 0;
         if (stride_index >= plan.strides.size()) {

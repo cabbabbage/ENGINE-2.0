@@ -64,18 +64,22 @@ float floor_light_height_spread_scale(float world_height, float base_radius_worl
 float floor_light_footprint_radius(float base_radius_px, float world_height);
 float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
                                                 float front_multiplier,
-                                                float behind_multiplier);
+                                                float behind_multiplier,
+                                                float transition_world = 0.0f);
 float apply_layer_light_strength_bias(float intensity,
                                       double depth_from_camera_plane,
                                       float front_multiplier,
-                                      float behind_multiplier);
+                                      float behind_multiplier,
+                                      float transition_world = 0.0f);
 bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
                                 double layer_depth_min,
                                 double layer_depth_max,
                                 float layer_bounds_min_x,
                                 float layer_bounds_min_y,
                                 float layer_bounds_max_x,
-                                float layer_bounds_max_y);
+                                float layer_bounds_max_y,
+                                float screen_padding_px = 0.0f,
+                                float depth_padding_world = 0.0f);
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px);
@@ -231,4 +235,6 @@ private:
     std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
     int runtime_light_rendered_count_ = 0;
     int runtime_light_culled_count_ = 0;
+    int previous_player_layer_index_ = -1;
+    int previous_player_layer_count_ = 0;
 };

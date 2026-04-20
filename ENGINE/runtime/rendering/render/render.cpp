@@ -37,6 +37,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -452,21 +453,37 @@ float floor_light_footprint_radius(float base_radius_px, float world_height) {
 }
 
 float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
-                                                float front_multiplier,
-                                                float behind_multiplier) {
+                                                 float front_multiplier,
+                                                 float behind_multiplier,
+                                                 float transition_world) {
     const float safe_front = std::clamp(std::isfinite(front_multiplier) ? front_multiplier : 1.0f, 0.0f, 4.0f);
     const float safe_behind = std::clamp(std::isfinite(behind_multiplier) ? behind_multiplier : 1.0f, 0.0f, 4.0f);
-    return (!std::isfinite(depth_from_camera_plane) || depth_from_camera_plane <= 0.0) ? safe_front : safe_behind;
+    const float safe_transition = std::max(0.0f, transition_world);
+    if (!std::isfinite(depth_from_camera_plane)) {
+        return safe_front;
+    }
+    if (safe_transition <= 1.0e-4f) {
+        return (depth_from_camera_plane <= 0.0) ? safe_front : safe_behind;
+    }
+    const float t = std::clamp(
+        static_cast<float>((depth_from_camera_plane + static_cast<double>(safe_transition)) /
+                           (2.0 * static_cast<double>(safe_transition))),
+        0.0f,
+        1.0f);
+    const float smooth_t = t * t * (3.0f - 2.0f * t);
+    return safe_front + ((safe_behind - safe_front) * smooth_t);
 }
 
 float apply_layer_light_strength_bias(float intensity,
                                       double depth_from_camera_plane,
                                       float front_multiplier,
-                                      float behind_multiplier) {
+                                      float behind_multiplier,
+                                      float transition_world) {
     const float safe_intensity = (std::isfinite(intensity) && intensity > 0.0f) ? intensity : 0.0f;
     return safe_intensity * layer_light_strength_multiplier_for_depth(depth_from_camera_plane,
                                                                       front_multiplier,
-                                                                      behind_multiplier);
+                                                                      behind_multiplier,
+                                                                      transition_world);
 }
 
 bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
@@ -475,7 +492,9 @@ bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
                                 float layer_bounds_min_x,
                                 float layer_bounds_min_y,
                                 float layer_bounds_max_x,
-                                float layer_bounds_max_y) {
+                                float layer_bounds_max_y,
+                                float screen_padding_px,
+                                float depth_padding_world) {
     if (!std::isfinite(layer_depth_min) || !std::isfinite(layer_depth_max) || layer_depth_min > layer_depth_max ||
         !std::isfinite(layer_bounds_min_x) || !std::isfinite(layer_bounds_min_y) ||
         !std::isfinite(layer_bounds_max_x) || !std::isfinite(layer_bounds_max_y) ||
@@ -490,20 +509,23 @@ bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
         return false;
     }
 
-    const double depth_radius = static_cast<double>(has_world_radius ? light.radius_world : light.radius_px);
+    const double safe_depth_padding = static_cast<double>(std::max(0.0f, depth_padding_world));
+    const float safe_screen_padding = std::max(0.0f, screen_padding_px);
+    const double depth_radius = static_cast<double>(has_world_radius ? light.radius_world : light.radius_px) + safe_depth_padding;
     const double light_depth_min = static_cast<double>(light.world_z) - depth_radius;
     const double light_depth_max = static_cast<double>(light.world_z) + depth_radius;
-    if (light_depth_max < layer_depth_min || light_depth_min > layer_depth_max) {
+    if (light_depth_max < (layer_depth_min - safe_depth_padding) ||
+        light_depth_min > (layer_depth_max + safe_depth_padding)) {
         return false;
     }
     if (!std::isfinite(light.screen_center.x) || !std::isfinite(light.screen_center.y)) {
         return false;
     }
 
-    const bool center_inside = light.screen_center.x >= layer_bounds_min_x &&
-                               light.screen_center.x <= layer_bounds_max_x &&
-                               light.screen_center.y >= layer_bounds_min_y &&
-                               light.screen_center.y <= layer_bounds_max_y;
+    const bool center_inside = light.screen_center.x >= (layer_bounds_min_x - safe_screen_padding) &&
+                               light.screen_center.x <= (layer_bounds_max_x + safe_screen_padding) &&
+                               light.screen_center.y >= (layer_bounds_min_y - safe_screen_padding) &&
+                               light.screen_center.y <= (layer_bounds_max_y + safe_screen_padding);
     if (center_inside) {
         return true;
     }
@@ -511,14 +533,15 @@ bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
         return false;
     }
 
-    const float min_x = light.screen_center.x - light.radius_px;
-    const float min_y = light.screen_center.y - light.radius_px;
-    const float max_x = light.screen_center.x + light.radius_px;
-    const float max_y = light.screen_center.y + light.radius_px;
-    return max_x >= layer_bounds_min_x &&
-           min_x <= layer_bounds_max_x &&
-           max_y >= layer_bounds_min_y &&
-           min_y <= layer_bounds_max_y;
+    const float padded_radius = light.radius_px + safe_screen_padding;
+    const float min_x = light.screen_center.x - padded_radius;
+    const float min_y = light.screen_center.y - padded_radius;
+    const float max_x = light.screen_center.x + padded_radius;
+    const float max_y = light.screen_center.y + padded_radius;
+    return max_x >= (layer_bounds_min_x - safe_screen_padding) &&
+           min_x <= (layer_bounds_max_x + safe_screen_padding) &&
+           max_y >= (layer_bounds_min_y - safe_screen_padding) &&
+           min_y <= (layer_bounds_max_y + safe_screen_padding);
 }
 
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
@@ -1154,6 +1177,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             }
 
             LayerEffectProcessor::RuntimeLight& instance = cache_entry.instance;
+            instance.stable_light_id = static_cast<std::uint64_t>(std::hash<std::string>{}(light_key));
             instance.screen_center = screen;
             instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
             instance.intensity = effective_intensity;
@@ -1174,6 +1198,8 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             instance.floor_world_z = floor_contact.world_z;
             instance.world_height = floor_contact.world_height;
             instance.has_floor_projection = false;
+            instance.retained_by_hysteresis = false;
+            instance.depth_blended = false;
             if (floor_contact.valid) {
                 SDL_FPoint floor_screen{};
                 if (render_internal::project_floor_contact_to_screen(cam, floor_contact, floor_screen)) {
@@ -1406,9 +1432,36 @@ void SceneRenderer::render() {
         render_texture_utils::draw_fullscreen_texture(renderer_, floor_texture);
     }
 
-    const render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
+    render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
         ? layer_submission_builder_->build(*geometry_batcher_, cam, player_split_world_z, max_cull_depth)
         : render_pipeline::LayerBuildResult{};
+    if (layer_build.valid && layer_build.layer_count > 0) {
+        const double player_depth_from_anchor = depth_anchor_world_z - player_split_world_z;
+        const float hysteresis_world = std::max(0.0f, realism.player_layer_hysteresis_world);
+        if (previous_player_layer_index_ >= 0 &&
+            previous_player_layer_count_ == layer_build.layer_count &&
+            previous_player_layer_index_ < layer_build.layer_count &&
+            layer_build.player_layer_index >= 0 &&
+            layer_build.player_layer_index < layer_build.layer_count &&
+            layer_build.player_layer_index != previous_player_layer_index_) {
+            const render_pipeline::LayerSubmission& previous_player_layer =
+                layer_build.layers[static_cast<std::size_t>(previous_player_layer_index_)];
+            const double hold_min = previous_player_layer.slice_depth_min - static_cast<double>(hysteresis_world);
+            const double hold_max = previous_player_layer.slice_depth_max + static_cast<double>(hysteresis_world);
+            if (std::isfinite(player_depth_from_anchor) &&
+                std::isfinite(hold_min) &&
+                std::isfinite(hold_max) &&
+                player_depth_from_anchor >= hold_min &&
+                player_depth_from_anchor <= hold_max) {
+                layer_build.player_layer_index = previous_player_layer_index_;
+            }
+        }
+        previous_player_layer_index_ = layer_build.player_layer_index;
+        previous_player_layer_count_ = layer_build.layer_count;
+    } else {
+        previous_player_layer_index_ = -1;
+        previous_player_layer_count_ = 0;
+    }
 
     bool composed = false;
     if (layer_build.valid && !layer_build.non_empty_layers.empty() && layer_stack_renderer_ && scene_composite_pass_) {
@@ -1419,7 +1472,13 @@ void SceneRenderer::render() {
                                           runtime_lights,
                                           runtime_lighting_enabled,
                                           front_mult,
-                                          behind_mult);
+                                          behind_mult,
+                                          realism.layer_light_overlap_padding_px,
+                                          realism.layer_light_depth_padding_world,
+                                          realism.layer_light_membership_hold_frames,
+                                          realism.layer_light_depth_transition_world,
+                                          realism.dark_mask_temporal_enabled,
+                                          realism.dark_mask_temporal_prev_weight);
 
         SDL_Point screen_center = cam.get_focus_override_point();
         const SDL_FPoint optical_center{

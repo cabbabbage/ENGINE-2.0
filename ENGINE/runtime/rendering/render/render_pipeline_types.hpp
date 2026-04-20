@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -19,6 +20,9 @@ struct GeometryLayerDrawItem {
 struct LayerSubmission {
     std::vector<GeometryLayerDrawItem> draws;
     double representative_depth = 0.0;
+    double slice_depth_min = 0.0;
+    double slice_depth_max = 0.0;
+    double slice_reference_depth = 0.0;
     double depth_min = 0.0;
     double depth_max = 0.0;
     float bounds_min_x = 0.0f;
@@ -42,6 +46,10 @@ struct LayerRenderResult {
     std::vector<int> non_empty_layers;
     std::vector<SDL_Texture*> final_layer_textures;
     std::vector<std::vector<LayerEffectProcessor::RuntimeLight>> owning_body_lights;
+    std::uint32_t strict_overlap_count = 0;
+    std::uint32_t hysteresis_overlap_count = 0;
+    std::uint32_t depth_blended_light_count = 0;
+    std::uint32_t temporal_merge_count = 0;
 };
 
 struct BlurCompositeResult {

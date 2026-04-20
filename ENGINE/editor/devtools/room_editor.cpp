@@ -5265,11 +5265,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         radius = 6;
                     }
                     const SDL_FPoint handle = projection.anchor_screen_points[point_index];
-                    const SDL_Rect handle_rect{
-                        static_cast<int>(std::lround(handle.x)) - radius,
-                        static_cast<int>(std::lround(handle.y)) - radius,
-                        radius * 2 + 1,
-                        radius * 2 + 1};
+                    const SDL_FRect handle_rect{
+                        handle.x - static_cast<float>(radius),
+                        handle.y - static_cast<float>(radius),
+                        static_cast<float>(radius * 2 + 1),
+                        static_cast<float>(radius * 2 + 1)};
                     SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, point_color.a);
                     SDL_RenderFillRect(renderer, &handle_rect);
                 }

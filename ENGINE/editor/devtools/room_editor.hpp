@@ -26,6 +26,7 @@
 #include "devtools/room_oval_tools_panel.hpp"
 #include "devtools/room_selection_filter_utils.hpp"
 #include "assets/asset/anchor_point.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "animation/combat_geometry.hpp"
 #include "core/axis_convention.hpp"
 #include "utils/input.hpp"

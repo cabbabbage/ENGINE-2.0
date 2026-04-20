@@ -22,7 +22,8 @@ AnchorPointOwner owner_from_light_mode(bool light_mode) {
 }
 
 bool anchor_owned_by_mode(const DisplacedAssetAnchorPoint& anchor, AnchorPointOwner owner) {
-    return owner == AnchorPointOwner::Light ? anchor.has_light_data : !anchor.has_light_data;
+    (void)owner;
+    return anchor.is_valid();
 }
 
 bool anchor_visible_in_mode(const DisplacedAssetAnchorPoint& anchor,

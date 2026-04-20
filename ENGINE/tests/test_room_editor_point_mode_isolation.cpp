@@ -45,7 +45,7 @@ AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_na
 
 }  // namespace
 
-TEST_CASE("Anchor and light mode mutations stay isolated by point ownership") {
+TEST_CASE("Anchor and light mode mutations operate on shared point ownership") {
     std::vector<DisplacedAssetAnchorPoint> points{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
@@ -66,25 +66,25 @@ TEST_CASE("Anchor and light mode mutations stay isolated by point ownership") {
         devmode::room_anchor_mode::AnchorPointOwner::Light,
         is_reserved));
 
-    CHECK(points[0].name == "shared");
+    CHECK(points[0].name == "light_shared");
     CHECK(points[1].name == "light_shared");
 
     REQUIRE(devmode::room_anchor_mode::delete_anchor_in_mode(
         points,
-        "shared",
+        "light_shared",
         devmode::room_anchor_mode::AnchorPointOwner::NonLight,
         is_reserved));
 
     CHECK(devmode::room_anchor_mode::find_anchor_in_mode(
               points,
-              "shared",
+              "light_shared",
               devmode::room_anchor_mode::AnchorPointOwner::NonLight,
               is_reserved) == nullptr);
     CHECK(devmode::room_anchor_mode::find_anchor_in_mode(
               points,
               "light_shared",
               devmode::room_anchor_mode::AnchorPointOwner::Light,
-              is_reserved) != nullptr);
+              is_reserved) == nullptr);
 }
 
 TEST_CASE("Hitbox and attack box payload writers keep unrelated editor keys untouched") {

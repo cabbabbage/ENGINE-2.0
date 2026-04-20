@@ -1116,7 +1116,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                        screen.x - radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
                                        screen.y + radius_px >= -kCullingMargin &&
                                        screen.y - radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
-            const bool enabled_and_overlapping = anchor.light.enabled && overlaps_view;
+            const bool enabled_and_overlapping = !anchor.hidden && overlaps_view;
             if (!enabled_and_overlapping) {
                 ++runtime_light_culled_count_;
             }
@@ -1125,25 +1125,26 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             light_key.push_back('|');
             light_key.append(anchor.name);
             seen_light_keys.insert(light_key);
-            RuntimeLightFadeState& fade_state = runtime_light_fade_states_[light_key];
-            const bool first_seen = fade_state.last_seen_frame == 0;
-            fade_state.last_seen_frame = frame_token;
+            RuntimeLightCacheEntry& cache_entry = runtime_light_cache_[light_key];
+            const bool first_seen = cache_entry.last_seen_frame == 0;
+            cache_entry.last_seen_frame = frame_token;
+            cache_entry.fade.last_seen_frame = frame_token;
 
             const float target_intensity = enabled_and_overlapping ? light.intensity : 0.0f;
             if (!fade_smoothing_enabled) {
-                fade_state.intensity_current = target_intensity;
+                cache_entry.fade.intensity_current = target_intensity;
             } else {
                 if (first_seen) {
-                    fade_state.intensity_current = 0.0f;
+                    cache_entry.fade.intensity_current = 0.0f;
                 }
-                const float duration = target_intensity > fade_state.intensity_current
+                const float duration = target_intensity > cache_entry.fade.intensity_current
                     ? std::max(0.0001f, fade_in_seconds)
                     : std::max(0.0001f, fade_out_seconds);
                 const float alpha = std::clamp(dt_seconds / duration, 0.0f, 1.0f);
-                fade_state.intensity_current += (target_intensity - fade_state.intensity_current) * alpha;
+                cache_entry.fade.intensity_current += (target_intensity - cache_entry.fade.intensity_current) * alpha;
             }
 
-            const float effective_intensity = std::max(0.0f, fade_state.intensity_current);
+            const float effective_intensity = std::max(0.0f, cache_entry.fade.intensity_current);
             const bool renderable = effective_intensity > 0.0005f && overlaps_view;
             if (realism.light_culling_debug_overlay) {
                 runtime_light_debug_overlay_.push_back(render_debug::RuntimeLightDebugOverlayEntry{screen, radius_px, renderable});
@@ -1152,7 +1153,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                 continue;
             }
 
-            LayerEffectProcessor::RuntimeLight instance{};
+            LayerEffectProcessor::RuntimeLight& instance = cache_entry.instance;
             instance.screen_center = screen;
             instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
             instance.intensity = effective_intensity;
@@ -1180,14 +1181,14 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                     instance.has_floor_projection = true;
                 }
             }
-            out_lights.push_back(instance);
+            out_lights.push_back(cache_entry.instance);
             ++runtime_light_rendered_count_;
         }
     }
 
-    for (auto it = runtime_light_fade_states_.begin(); it != runtime_light_fade_states_.end();) {
+    for (auto it = runtime_light_cache_.begin(); it != runtime_light_cache_.end();) {
         if (seen_light_keys.find(it->first) == seen_light_keys.end() && frame_token > it->second.last_seen_frame + 120) {
-            it = runtime_light_fade_states_.erase(it);
+            it = runtime_light_cache_.erase(it);
         } else {
             ++it;
         }

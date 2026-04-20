@@ -12818,58 +12818,92 @@ bool RoomEditor::apply_anchor_panel_light_update(const RoomAnchorToolsPanel::Lig
     const auto is_reserved_anchor_name = [this](const std::string& anchor_name) {
         return is_valid_oval_center_anchor_name(anchor_name);
     };
-    const bool changed = mutate_anchor_current_frame(
-        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
-            DisplacedAssetAnchorPoint* it = devmode::room_anchor_mode::find_anchor_in_mode_mutable(
-                anchors,
+    Asset* target = anchor_edit_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+
+    AnchorLightData next_light{};
+    next_light.enabled = values.enabled;
+    next_light.color_r = static_cast<std::uint8_t>(std::clamp(values.color_r, 0, 255));
+    next_light.color_g = static_cast<std::uint8_t>(std::clamp(values.color_g, 0, 255));
+    next_light.color_b = static_cast<std::uint8_t>(std::clamp(values.color_b, 0, 255));
+    next_light.opacity = values.opacity;
+    next_light.intensity = values.intensity;
+    next_light.radius = values.radius;
+    next_light.falloff = values.falloff;
+    next_light.shadow_strength = values.shadow_strength;
+    next_light.cast_shadows = values.cast_shadows;
+    next_light.sanitize();
+
+    bool changed = false;
+    const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
+    for (const std::string& animation_id : eligible_ids) {
+        auto anim_it = target_info->animations.find(animation_id);
+        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+            continue;
+        }
+
+        nlohmann::json payload = target_info->animation_payload(animation_id);
+        const std::size_t frame_count = anim_it->second.frame_count();
+        bool payload_changed = false;
+        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+            if (!frame) {
+                continue;
+            }
+            DisplacedAssetAnchorPoint* selected_anchor = devmode::room_anchor_mode::find_anchor_in_mode_mutable(
+                frame->anchor_points,
                 anchor_edit_.selected_anchor_name,
                 owner,
                 is_reserved_anchor_name);
-            if (!it) {
-                return false;
+            if (!selected_anchor) {
+                continue;
             }
-
-            AnchorLightData next_light = it->light;
-            next_light.enabled = values.enabled;
-            next_light.color_r = static_cast<std::uint8_t>(std::clamp(values.color_r, 0, 255));
-            next_light.color_g = static_cast<std::uint8_t>(std::clamp(values.color_g, 0, 255));
-            next_light.color_b = static_cast<std::uint8_t>(std::clamp(values.color_b, 0, 255));
-            next_light.opacity = values.opacity;
-            next_light.intensity = values.intensity;
-            next_light.radius = values.radius;
-            next_light.falloff = values.falloff;
-            next_light.shadow_strength = values.shadow_strength;
-            next_light.cast_shadows = values.cast_shadows;
-            next_light.sanitize();
-
             const bool light_payload_changed =
-                it->light.enabled != next_light.enabled ||
-                it->light.color_r != next_light.color_r ||
-                it->light.color_g != next_light.color_g ||
-                it->light.color_b != next_light.color_b ||
-                std::fabs(it->light.opacity - next_light.opacity) > 1e-4f ||
-                std::fabs(it->light.intensity - next_light.intensity) > 1e-4f ||
-                std::fabs(it->light.radius - next_light.radius) > 1e-4f ||
-                std::fabs(it->light.falloff - next_light.falloff) > 1e-4f ||
-                std::fabs(it->light.shadow_strength - next_light.shadow_strength) > 1e-4f ||
-                it->light.cast_shadows != next_light.cast_shadows;
-            const bool next_has_light_data = true;
-            if (it->has_light_data == next_has_light_data && !light_payload_changed) {
+                !selected_anchor->has_light_data ||
+                selected_anchor->light.enabled != next_light.enabled ||
+                selected_anchor->light.color_r != next_light.color_r ||
+                selected_anchor->light.color_g != next_light.color_g ||
+                selected_anchor->light.color_b != next_light.color_b ||
+                std::fabs(selected_anchor->light.opacity - next_light.opacity) > 1e-4f ||
+                std::fabs(selected_anchor->light.intensity - next_light.intensity) > 1e-4f ||
+                std::fabs(selected_anchor->light.radius - next_light.radius) > 1e-4f ||
+                std::fabs(selected_anchor->light.falloff - next_light.falloff) > 1e-4f ||
+                std::fabs(selected_anchor->light.shadow_strength - next_light.shadow_strength) > 1e-4f ||
+                selected_anchor->light.cast_shadows != next_light.cast_shadows;
+            if (!light_payload_changed) {
+                continue;
+            }
+            selected_anchor->has_light_data = true;
+            selected_anchor->light = next_light;
+            selected_anchor->light.sanitize();
+            frame->rebuild_anchor_lookup();
+            if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                          frame_count,
+                                                                          frame_index,
+                                                                          frame->anchor_points)) {
                 return false;
             }
+            payload_changed = true;
+            changed = true;
+        }
+        if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+    }
 
-            it->has_light_data = next_has_light_data;
-            it->light = next_light;
-            if (!it->has_light_data) {
-                it->light.enabled = false;
-            }
-            return true;
-        },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (changed &&
+        !commit_anchor_bulk_edit(target,
+                                 target_info,
+                                 devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Anchor Light Update",
+                                 "room-anchor-light-update")) {
+        return false;
+    }
 
-    if (changed && anchor_edit_.target_asset) {
+    if (changed && target) {
         anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
-            anchor_edit_.target_asset,
+            target,
             anchor_edit_.selected_anchor_name);
     }
     return changed;
@@ -13012,6 +13046,7 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
 
     std::set<std::string> canonical_names;
     std::unordered_map<std::string, bool> canonical_has_light_data;
+    std::unordered_map<std::string, AnchorLightData> canonical_light_data;
     for (const std::string& animation_id : eligible_ids) {
         auto anim_it = target_info->animations.find(animation_id);
         if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
@@ -13030,10 +13065,6 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
             deduped.reserve(frame->anchor_points.size());
             bool frame_changed = false;
             for (const auto& anchor : frame->anchor_points) {
-                if (!devmode::room_anchor_mode::anchor_owned_by_mode(anchor, owner)) {
-                    deduped.push_back(anchor);
-                    continue;
-                }
                 if (!devmode::room_anchor_mode::anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
                     frame_changed = true;
                     continue;
@@ -13043,9 +13074,18 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
                     continue;
                 }
                 canonical_names.insert(anchor.name);
-                auto [owner_it, inserted] = canonical_has_light_data.emplace(anchor.name, anchor.has_light_data);
-                if (!inserted && anchor.has_light_data) {
-                    owner_it->second = true;
+                auto has_light_it = canonical_has_light_data.find(anchor.name);
+                if (frame_index == 0) {
+                    if (has_light_it == canonical_has_light_data.end()) {
+                        canonical_has_light_data.emplace(anchor.name, anchor.has_light_data);
+                    }
+                    if (anchor.has_light_data) {
+                        AnchorLightData canonical_light = anchor.light;
+                        canonical_light.sanitize();
+                        canonical_light_data[anchor.name] = canonical_light;
+                    }
+                } else if (has_light_it == canonical_has_light_data.end()) {
+                    canonical_has_light_data.emplace(anchor.name, false);
                 }
                 deduped.push_back(anchor);
             }
@@ -13092,6 +13132,50 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
             }
             std::vector<DisplacedAssetAnchorPoint> updated = frame->anchor_points;
             bool frame_changed = false;
+            for (auto& anchor : updated) {
+                if (!devmode::room_anchor_mode::anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
+                    continue;
+                }
+                const auto owner_it = canonical_has_light_data.find(anchor.name);
+                const bool has_canonical_light = owner_it != canonical_has_light_data.end() && owner_it->second;
+                if (!has_canonical_light) {
+                    if (anchor.has_light_data) {
+                        anchor.has_light_data = false;
+                        anchor.light.enabled = false;
+                        frame_changed = true;
+                    }
+                    continue;
+                }
+                auto light_it = canonical_light_data.find(anchor.name);
+                if (light_it == canonical_light_data.end()) {
+                    if (anchor.has_light_data) {
+                        anchor.has_light_data = false;
+                        anchor.light.enabled = false;
+                        frame_changed = true;
+                    }
+                    continue;
+                }
+                const AnchorLightData& desired_light = light_it->second;
+                const bool light_changed =
+                    !anchor.has_light_data ||
+                    anchor.light.enabled != desired_light.enabled ||
+                    anchor.light.color_r != desired_light.color_r ||
+                    anchor.light.color_g != desired_light.color_g ||
+                    anchor.light.color_b != desired_light.color_b ||
+                    std::fabs(anchor.light.opacity - desired_light.opacity) > 1e-4f ||
+                    std::fabs(anchor.light.intensity - desired_light.intensity) > 1e-4f ||
+                    std::fabs(anchor.light.radius - desired_light.radius) > 1e-4f ||
+                    std::fabs(anchor.light.falloff - desired_light.falloff) > 1e-4f ||
+                    std::fabs(anchor.light.shadow_strength - desired_light.shadow_strength) > 1e-4f ||
+                    anchor.light.cast_shadows != desired_light.cast_shadows;
+                if (!light_changed) {
+                    continue;
+                }
+                anchor.has_light_data = true;
+                anchor.light = desired_light;
+                anchor.light.sanitize();
+                frame_changed = true;
+            }
             for (const std::string& name : canonical_names) {
                 if (present_names.find(name) != present_names.end()) {
                     continue;
@@ -13102,8 +13186,11 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
                 const auto owner_it = canonical_has_light_data.find(name);
                 if (owner_it != canonical_has_light_data.end() && owner_it->second) {
                     new_anchor.has_light_data = true;
+                    auto light_it = canonical_light_data.find(name);
+                    if (light_it != canonical_light_data.end()) {
+                        new_anchor.light = light_it->second;
+                    }
                     new_anchor.light.sanitize();
-                    new_anchor.light.enabled = true;
                 }
                 updated.push_back(std::move(new_anchor));
                 frame_changed = true;

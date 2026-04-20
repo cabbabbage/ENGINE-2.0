@@ -79,11 +79,13 @@ bool traversal_contains_asset(const WarpedScreenGrid& camera_grid, const Asset* 
 
 std::unique_ptr<AnimationFrame> make_light_anchor_frame(float radius_world,
                                                         bool enabled = true,
-                                                        float intensity = 1.0f) {
+                                                        float intensity = 1.0f,
+                                                        bool hidden = false) {
     auto frame = std::make_unique<AnimationFrame>();
     DisplacedAssetAnchorPoint anchor{"light_anchor", 0, 0, 0.0f};
     anchor.has_light_data = true;
     anchor.light.enabled = enabled;
+    anchor.hidden = hidden;
     anchor.light.radius = radius_world;
     anchor.light.intensity = intensity;
     anchor.light.sanitize();
@@ -531,6 +533,30 @@ TEST_CASE("WarpedScreenGrid min on-screen culling uses light radius when enabled
 
     settings.min_visible_uses_light_radius = false;
     camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 2);
+    CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
+}
+
+TEST_CASE("WarpedScreenGrid min on-screen culling ignores light enabled and uses hidden only") {
+    world::WorldGrid grid;
+    Asset* tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(tiny_asset != nullptr);
+    tiny_asset->info->original_canvas_width = 1;
+    tiny_asset->info->original_canvas_height = 1;
+
+    std::unique_ptr<AnimationFrame> disabled_light_frame = make_light_anchor_frame(900.0f, false, 1.0f, false);
+    tiny_asset->current_frame = disabled_light_frame.get();
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.05f;
+    settings.min_visible_uses_light_radius = true;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, tiny_asset));
+
+    std::unique_ptr<AnimationFrame> hidden_light_frame = make_light_anchor_frame(900.0f, true, 1.0f, true);
+    tiny_asset->current_frame = hidden_light_frame.get();
     camera_grid.rebuild_grid(grid, 0.016f, 2);
     CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
 }

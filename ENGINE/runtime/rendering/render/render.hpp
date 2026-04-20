@@ -171,6 +171,11 @@ private:
         float intensity_current = 0.0f;
         std::uint64_t last_seen_frame = 0;
     };
+    struct RuntimeLightCacheEntry {
+        LayerEffectProcessor::RuntimeLight instance{};
+        RuntimeLightFadeState fade{};
+        std::uint64_t last_seen_frame = 0;
+    };
 
     struct PrevalidatedTag {};
 
@@ -222,7 +227,7 @@ private:
     std::unordered_map<const Asset*, render_debug::MovementDebugObservedState> movement_debug_observed_state_;
     std::vector<render_debug::RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
 
-    std::unordered_map<std::string, RuntimeLightFadeState> runtime_light_fade_states_;
+    std::unordered_map<std::string, RuntimeLightCacheEntry> runtime_light_cache_;
     std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
     int runtime_light_rendered_count_ = 0;
     int runtime_light_culled_count_ = 0;

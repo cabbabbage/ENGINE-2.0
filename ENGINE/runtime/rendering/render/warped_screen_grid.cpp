@@ -1963,7 +1963,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
 
         float max_diameter = 0.0f;
         for (const DisplacedAssetAnchorPoint& frame_anchor : asset->current_frame->anchor_points) {
-            if (!frame_anchor.is_valid() || !frame_anchor.has_light_data || !frame_anchor.light.enabled) {
+            if (!frame_anchor.is_valid() || !frame_anchor.has_light_data || frame_anchor.hidden) {
                 continue;
             }
 

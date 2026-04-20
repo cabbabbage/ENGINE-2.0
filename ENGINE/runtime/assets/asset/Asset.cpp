@@ -622,7 +622,6 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_name_to_index_.clear();
         current_hit_box_volumes_.clear();
         current_attack_box_volumes_.clear();
-        current_impassable_box_volumes_.clear();
         current_impassable_shapes_.clear();
         floor_boxes_.clear();
         runtime_hit_box_lookup_.clear();
@@ -1344,7 +1343,6 @@ void Asset::refresh_runtime_floor_boxes_cache() {
 void Asset::refresh_runtime_box_cache_from_frame() {
     current_hit_box_volumes_.clear();
     current_attack_box_volumes_.clear();
-    current_impassable_box_volumes_.clear();
     current_impassable_shapes_.clear();
     runtime_hit_box_lookup_.clear();
     runtime_attack_box_lookup_.clear();

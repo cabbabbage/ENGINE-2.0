@@ -390,7 +390,6 @@ class Asset {
 
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
     const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
-    const std::vector<RuntimeBoxVolume>& current_impassable_box_volumes() const { return current_impassable_box_volumes_; }
     const std::vector<RuntimeImpassableShape>& current_impassable_shapes() const { return current_impassable_shapes_; }
     void test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     void test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> volumes);
@@ -595,7 +594,6 @@ private:
     std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
     std::vector<RuntimeBoxVolume> current_hit_box_volumes_;
     std::vector<RuntimeBoxVolume> current_attack_box_volumes_;
-    std::vector<RuntimeBoxVolume> current_impassable_box_volumes_;
     std::vector<RuntimeImpassableShape> current_impassable_shapes_;
     std::vector<RuntimeFloorBox> floor_boxes_;
     std::unordered_map<std::string, std::size_t> runtime_hit_box_lookup_;

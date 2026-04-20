@@ -52,8 +52,8 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
             enabled_label = "Attack Boxes Enabled";
             break;
         case Kind::ImpassableBox:
-            add_label = "Add Impassable Box";
-            enabled_label = "Impassable Boxes Enabled";
+            add_label = "Add Impassable Shape";
+            enabled_label = "Impassable Shapes Enabled";
             break;
     }
     add_button_ = std::make_unique<DMButton>(add_label,
@@ -529,7 +529,8 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     const bool has_selected_box = selected_box_index_ >= 0 &&
                                   selected_box_index_ < static_cast<int>(box_names_.size());
     if (has_selected_box) {
-        DMFontCache::instance().draw_text(renderer, label_style, "Box Properties", detail_title_rect_.x, detail_title_rect_.y);
+        const std::string detail_label = (kind_ == Kind::ImpassableBox) ? "Shape Properties" : "Box Properties";
+        DMFontCache::instance().draw_text(renderer, label_style, detail_label, detail_title_rect_.x, detail_title_rect_.y);
         if (kind_ != Kind::ImpassableBox) {
             DMFontCache::instance().draw_text(renderer,
                                               label_style,

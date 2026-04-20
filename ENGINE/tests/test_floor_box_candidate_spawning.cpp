@@ -32,7 +32,7 @@ nlohmann::json make_base_metadata() {
         {"movement_enabled", false},
         {"attack_box_enabled", false},
         {"hitbox_enabled", false},
-        {"impassable_box_enabled", false},
+        {"impassable_enabled", false},
         {"floor_boxes_enabled", false}
     });
 }

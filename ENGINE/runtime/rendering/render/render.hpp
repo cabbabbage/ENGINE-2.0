@@ -171,6 +171,23 @@ public:
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
 private:
+    struct LightKey {
+        Asset* asset = nullptr;
+        std::uint32_t anchor_name_hash = 0;
+    };
+    struct LightKeyHash {
+        std::size_t operator()(const LightKey& key) const noexcept {
+            const std::size_t asset_hash = std::hash<Asset*>{}(key.asset);
+            const std::size_t anchor_hash = static_cast<std::size_t>(key.anchor_name_hash);
+            return asset_hash ^ (anchor_hash + 0x9e3779b97f4a7c15ULL + (asset_hash << 6U) + (asset_hash >> 2U));
+        }
+    };
+    struct LightKeyEqual {
+        bool operator()(const LightKey& lhs, const LightKey& rhs) const noexcept {
+            return lhs.asset == rhs.asset && lhs.anchor_name_hash == rhs.anchor_name_hash;
+        }
+    };
+
     struct RuntimeLightFadeState {
         float intensity_current = 0.0f;
         std::uint64_t last_seen_frame = 0;
@@ -231,7 +248,7 @@ private:
     std::unordered_map<const Asset*, render_debug::MovementDebugObservedState> movement_debug_observed_state_;
     std::vector<render_debug::RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
 
-    std::unordered_map<std::string, RuntimeLightCacheEntry> runtime_light_cache_;
+    std::unordered_map<LightKey, RuntimeLightCacheEntry, LightKeyHash, LightKeyEqual> runtime_light_cache_;
     std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
     int runtime_light_rendered_count_ = 0;
     int runtime_light_culled_count_ = 0;

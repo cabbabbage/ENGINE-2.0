@@ -1091,8 +1091,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
     out_lights.reserve(candidate_assets.size());
 
     constexpr float kCullingMargin = 128.0f;
-    std::unordered_set<std::string> seen_light_keys;
+    std::unordered_set<SceneRenderer::LightKey, SceneRenderer::LightKeyHash, SceneRenderer::LightKeyEqual> seen_light_keys;
     seen_light_keys.reserve(candidate_assets.size() * 2);
+    const SceneRenderer::LightKeyHash key_hasher{};
     const std::uint64_t gather_start_ticks = SDL_GetTicks();
 
     for (Asset* asset : candidate_assets) {
@@ -1144,9 +1145,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                 ++runtime_light_culled_count_;
             }
 
-            std::string light_key = std::to_string(reinterpret_cast<std::uintptr_t>(asset));
-            light_key.push_back('|');
-            light_key.append(anchor.name);
+            const std::uint32_t anchor_name_hash = static_cast<std::uint32_t>(
+                std::hash<std::string>{}(anchor.name));
+            const SceneRenderer::LightKey light_key{asset, anchor_name_hash};
             seen_light_keys.insert(light_key);
             RuntimeLightCacheEntry& cache_entry = runtime_light_cache_[light_key];
             const bool first_seen = cache_entry.last_seen_frame == 0;
@@ -1177,7 +1178,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             }
 
             LayerEffectProcessor::RuntimeLight& instance = cache_entry.instance;
-            instance.stable_light_id = static_cast<std::uint64_t>(std::hash<std::string>{}(light_key));
+            instance.stable_light_id = static_cast<std::uint64_t>(key_hasher(light_key));
             instance.screen_center = screen;
             instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
             instance.intensity = effective_intensity;

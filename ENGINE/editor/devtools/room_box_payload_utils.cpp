@@ -238,7 +238,7 @@ TBox make_default_box_with_name(const std::string& name, int frame_width, int fr
     box.frame_start = -1;
     box.frame_end = -1;
     box.anchor_link.clear();
-    box.extrusion_amount = 0;
+    box.extrusion_amount = 1;
     const int max_x = std::max(0, frame_width - 1);
     const int max_y = std::max(0, frame_height - 1);
     box.set_rect(animation_update::FrameBoxRect{0, 0, max_x, max_y});

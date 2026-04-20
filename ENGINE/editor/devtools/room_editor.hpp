@@ -948,6 +948,11 @@ private:
     MovementEditState movement_edit_;
 
     struct BoxEditState {
+        enum class ExtrusionHandleSide {
+            None,
+            Front,
+            Back,
+        };
         Asset* target_asset = nullptr;
         std::string animation_id;
         int frame_index = 0;
@@ -961,7 +966,10 @@ private:
         bool dragging_corner = false;
         bool dragging_box = false;
         bool dragging_rotation = false;
+        bool dragging_extrusion_handle = false;
         bool hovered_rotation_handle = false;
+        ExtrusionHandleSide hovered_extrusion_handle = ExtrusionHandleSide::None;
+        ExtrusionHandleSide dragging_extrusion_handle_side = ExtrusionHandleSide::None;
         bool onion_skin_enabled = false;
         int drag_reference_point_index = -1;
         int drag_reference_corner_index = -1;
@@ -970,6 +978,12 @@ private:
         SDL_FPoint rotation_drag_center_screen{0.0f, 0.0f};
         float rotation_drag_start_angle_degrees = 0.0f;
         float rotation_drag_start_box_rotation_degrees = 0.0f;
+        int extrusion_drag_start_value = 1;
+        float extrusion_drag_start_axis_center_x = 0.0f;
+        float extrusion_drag_start_axis_center_y = 0.0f;
+        float extrusion_drag_axis_unit_x = 0.0f;
+        float extrusion_drag_axis_unit_y = 1.0f;
+        float extrusion_drag_start_half_separation = 0.0f;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;

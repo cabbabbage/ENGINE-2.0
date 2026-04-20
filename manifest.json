@@ -10932,24 +10932,6 @@
       "impassable_boxes": [
         {
           "anchor_link": "",
-          "corners": [
-            {
-              "texture_x": 0,
-              "texture_y": 351
-            },
-            {
-              "texture_x": 1045,
-              "texture_y": 351
-            },
-            {
-              "texture_x": 1045,
-              "texture_y": 848
-            },
-            {
-              "texture_x": 0,
-              "texture_y": 848
-            }
-          ],
           "enabled": true,
           "extrusion_amount": 10,
           "id": "hit_box_id",
@@ -19339,9 +19321,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            132,
             242,
             36,
-            54,
             255
           ],
           "edge_smoothness": 2,
@@ -19742,9 +19724,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            226,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,

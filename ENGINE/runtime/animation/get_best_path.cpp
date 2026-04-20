@@ -1,6 +1,7 @@
 #include "get_best_path.hpp"
 
 #include <limits>
+#include <span>
 #include <string>
 
 #include "assets/asset/Asset.hpp"
@@ -14,24 +15,11 @@
 #include "gameplay/world/grid_point.hpp"
 
 namespace {
-using CollisionEntryRef = const Assets::FrameCollisionEntry*;
-
-std::vector<CollisionEntryRef> gather_collision_entries(const Asset& self) {
-    std::vector<CollisionEntryRef> entries;
-    const Assets* assets = self.get_assets();
-    if (!assets) {
-        return entries;
-    }
-    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
-        ? self.info->NeighborSearchRadius
-        : 0;
-    assets->query_impassable_entries(self, search_radius, entries);
-    return entries;
-}
+using CollisionEntryRef = CollisionQueryContext::CollisionEntryRef;
 
 bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
-                  const std::vector<CollisionEntryRef>& collisions,
+                  std::span<const CollisionEntryRef> collisions,
                   const Asset& self,
                   const Assets* assets_owner) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
@@ -131,7 +119,8 @@ void copy_position(world::GridPoint& dst, const world::GridPoint& src) {
 Plan GetBestPath::operator()(const Asset& self,
                              const std::vector<SDL_Point>& sanitized_checkpoints,
                              int visited_thresh_px,
-                             const vibble::grid::Grid& grid) const {
+                             const vibble::grid::Grid& grid,
+                             CollisionQueryContext* collision_context) const {
     Plan plan;
     plan.sanitized_checkpoints = sanitized_checkpoints;
 
@@ -154,7 +143,9 @@ Plan GetBestPath::operator()(const Asset& self,
         return plan;
     }
 
-    const auto collisions  = gather_collision_entries(self);
+    CollisionQueryContext local_collision_context;
+    CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
+    const std::span<const CollisionEntryRef> collisions = context.collisions_for(self);
     const Assets* assets   = self.get_assets();
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
     auto movement_anims    = gather_movement_animations(self);

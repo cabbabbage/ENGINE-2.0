@@ -519,9 +519,10 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
 
     const std::vector<axis::WorldPos> requested_absolute = absolute;
+    CollisionQueryContext collision_context;
     const std::vector<axis::WorldPos> sanitized_checkpoints =
         sanitizer_3d_.sanitize(*self_, requested_absolute, visited_thresh_);
-    plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid());
+    plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
     plan3d_.world_start = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.override_non_locked = override_non_locked;
     final_dest_3d = plan3d_.final_dest;
@@ -671,8 +672,10 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     const std::vector<SDL_Point> requested_absolute = absolute;
-    const std::vector<SDL_Point> sanitized_checkpoints = sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_);
-    plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid());
+    CollisionQueryContext collision_context;
+    const std::vector<SDL_Point> sanitized_checkpoints =
+        sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_, &collision_context);
+    plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
     final_dest = plan_.final_dest;
     plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;

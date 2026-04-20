@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <span>
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
@@ -9,22 +10,9 @@
 #include "core/AssetsManager.hpp"
 #include "utils/area.hpp"
 
-using CollisionAreaRef = const Assets::FrameCollisionEntry*;
+using CollisionAreaRef = CollisionQueryContext::CollisionEntryRef;
 
-static std::vector<CollisionAreaRef> gather_collision_areas(const Asset& self) {
-    std::vector<CollisionAreaRef> result;
-    const Assets* assets = self.get_assets();
-    if (!assets) {
-        return result;
-    }
-    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
-        ? self.info->NeighborSearchRadius
-        : 0;
-    assets->query_impassable_entries(self, search_radius, result);
-    return result;
-}
-
-static bool segment_hits_any(SDL_Point from, SDL_Point to, const std::vector<CollisionAreaRef>& areas) {
+static bool segment_hits_any(SDL_Point from, SDL_Point to, std::span<const CollisionAreaRef> areas) {
     for (const CollisionAreaRef entry : areas) {
         if (!entry) {
             continue;
@@ -59,7 +47,7 @@ static SDL_Point nudge_outside(SDL_Point pt, const Area& area) {
 
 static SDL_Point walk_back_to_perimeter(SDL_Point start,
                                   SDL_Point target,
-                                  const std::vector<CollisionAreaRef>& areas) {
+                                  std::span<const CollisionAreaRef> areas) {
     const int steps = std::max(std::abs(target.x - start.x), std::abs(target.y - start.y));
     if (steps == 0) {
         return target;
@@ -99,13 +87,16 @@ bool checkpoint_collapses_to_anchor(SDL_Point anchor, SDL_Point candidate) {
 
 std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
                                                const std::vector<SDL_Point>& absolute_checkpoints,
-                                               int visited_thresh_px) const {
+                                               int visited_thresh_px,
+                                               CollisionQueryContext* collision_context) const {
     std::vector<SDL_Point> sanitized;
     if (absolute_checkpoints.empty()) {
         return sanitized;
     }
 
-    const auto collision_areas = gather_collision_areas(self);
+    CollisionQueryContext local_collision_context;
+    CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
+    const std::span<const CollisionAreaRef> collision_areas = context.collisions_for(self);
     const SDL_Point origin     = self.world_xz_point();
     const int       thresh_sq  = visited_thresh_px * visited_thresh_px;
     const Assets*   assets     = self.get_assets();

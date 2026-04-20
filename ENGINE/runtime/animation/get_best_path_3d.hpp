@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "collision_query_context.hpp"
 #include "core/axis_convention.hpp"
 #include "stride_types.hpp"
 #include "utils/grid.hpp"
@@ -13,5 +14,6 @@ public:
     Plan3D operator()(const Asset& self,
                       const std::vector<axis::WorldPos>& sanitized_checkpoints,
                       int visited_thresh_px,
-                      const vibble::grid::Grid& grid) const;
+                      const vibble::grid::Grid& grid,
+                      CollisionQueryContext* collision_context = nullptr) const;
 };

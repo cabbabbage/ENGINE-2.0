@@ -1,6 +1,7 @@
 #include "get_best_path_3d.hpp"
 
 #include <limits>
+#include <span>
 #include <string>
 
 #include "animation_update.hpp"
@@ -15,21 +16,7 @@
 
 namespace {
 
-using CollisionEntryRef3D = const Assets::FrameCollisionEntry*;
-
-std::vector<CollisionEntryRef3D> gather_collision_entries(const Asset& self) {
-    std::vector<CollisionEntryRef3D> entries;
-    const Assets* assets = self.get_assets();
-    if (!assets) {
-        return entries;
-    }
-
-    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
-        ? self.info->NeighborSearchRadius
-        : 0;
-    assets->query_impassable_entries(self, search_radius, entries);
-    return entries;
-}
+using CollisionEntryRef3D = CollisionQueryContext::CollisionEntryRef;
 
 world::GridPoint as_grid_point(const axis::WorldPos& pos, int resolution_layer) {
     return world::GridPoint::make_virtual(pos.x, pos.y, pos.z, resolution_layer);
@@ -37,7 +24,7 @@ world::GridPoint as_grid_point(const axis::WorldPos& pos, int resolution_layer) 
 
 bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
-                  const std::vector<CollisionEntryRef3D>& collisions,
+                  std::span<const CollisionEntryRef3D> collisions,
                   const Asset& self,
                   const Assets* assets_owner) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
@@ -131,7 +118,8 @@ struct CandidateStride3D {
 Plan3D GetBestPath3D::operator()(const Asset& self,
                                  const std::vector<axis::WorldPos>& sanitized_checkpoints,
                                  int visited_thresh_px,
-                                 const vibble::grid::Grid& grid) const {
+                                 const vibble::grid::Grid& grid,
+                                 CollisionQueryContext* collision_context) const {
     Plan3D plan;
     plan.sanitized_checkpoints = sanitized_checkpoints;
     plan.world_start = axis::WorldPos{ self.world_x(), self.world_y(), self.world_z() };
@@ -145,7 +133,9 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     }
 
     const int resolution_layer = self.grid_resolution;
-    const auto collisions = gather_collision_entries(self);
+    CollisionQueryContext local_collision_context;
+    CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
+    const std::span<const CollisionEntryRef3D> collisions = context.collisions_for(self);
     const Assets* assets = self.get_assets();
     const long long visited_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const auto movement_anims = gather_movement_animations_3d(self);

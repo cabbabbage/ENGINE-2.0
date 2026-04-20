@@ -1064,9 +1064,10 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
             budget_exhausted = true;
             return false;
         }
-        auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_);
+        CollisionQueryContext collision_context;
+        auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_, &collision_context);
         if (sanitized.empty()) return false;
-        Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+        Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
         if (new_plan.strides.empty()) return false;
         planner_iface_->plan_ = std::move(new_plan);
@@ -1332,11 +1333,12 @@ bool AnimationRuntime::replan_to_destination() {
     if (!consume_replan_attempt_budget()) {
         return false;
     }
-    auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
+    CollisionQueryContext collision_context;
+    auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_, &collision_context);
     if (sanitized.empty()) {
         return false;
     }
-    Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+    Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
     new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
     if (new_plan.strides.empty()) {
         return false;

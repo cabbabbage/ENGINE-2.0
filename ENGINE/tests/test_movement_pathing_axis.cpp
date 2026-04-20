@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "animation/collision_query_context.hpp"
 #include "animation/movement_target_utils.hpp"
 #include "assets/asset/Asset.hpp"
 #include "utils/range_util.hpp"
@@ -60,4 +61,14 @@ TEST_CASE("Asset world X/Z plane keeps depth separate from world height") {
     CHECK(asset->world_xy_point().y == 11);
     CHECK(asset->world_xz_point().x == 42);
     CHECK(asset->world_xz_point().y == 333);
+}
+
+TEST_CASE("Collision query context stays reusable for repeated lookup calls") {
+    const auto asset = make_test_asset(42, 11, 333, 1);
+    CollisionQueryContext context;
+
+    const auto first = context.collisions_for(*asset);
+    const auto second = context.collisions_for(*asset);
+
+    CHECK(first.size() == second.size());
 }

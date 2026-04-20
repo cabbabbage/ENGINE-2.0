@@ -10906,7 +10906,32 @@
       "attack_box_enabled": false,
       "floor_boxes_enabled": true,
       "hitbox_enabled": false,
-      "impassable_enabled": false,
+      "impassable_enabled": true,
+      "impassable_shapes": [
+        {
+          "enabled": true,
+          "id": "impassable_shape_1_1",
+          "name": "Impassable Shape",
+          "points": [
+            {
+              "x": 63,
+              "y": 661
+            },
+            {
+              "x": 993,
+              "y": 663
+            },
+            {
+              "x": 1030,
+              "y": 795
+            },
+            {
+              "x": 23,
+              "y": 803
+            }
+          ]
+        }
+      ],
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -19287,9 +19312,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            209,
             242,
             36,
-            125,
             255
           ],
           "edge_smoothness": 2,
@@ -19690,9 +19715,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            64,
+            36,
             242,
-            242,
-            61,
             255
           ],
           "edge_smoothness": 101,

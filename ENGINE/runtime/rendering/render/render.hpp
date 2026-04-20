@@ -235,6 +235,4 @@ private:
     std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
     int runtime_light_rendered_count_ = 0;
     int runtime_light_culled_count_ = 0;
-    int previous_player_layer_index_ = -1;
-    int previous_player_layer_count_ = 0;
 };

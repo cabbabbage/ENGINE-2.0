@@ -756,31 +756,31 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         std::min(settings_.behind_layer_light_strength_multiplier, 4.0f);
     if (!std::isfinite(settings_.layer_light_overlap_padding_px) ||
         settings_.layer_light_overlap_padding_px < 0.0f) {
-        settings_.layer_light_overlap_padding_px = 24.0f;
+        settings_.layer_light_overlap_padding_px = 14.0f;
     }
     settings_.layer_light_overlap_padding_px =
         std::min(settings_.layer_light_overlap_padding_px, 1024.0f);
     if (!std::isfinite(settings_.layer_light_depth_padding_world) ||
         settings_.layer_light_depth_padding_world < 0.0f) {
-        settings_.layer_light_depth_padding_world = 18.0f;
+        settings_.layer_light_depth_padding_world = 10.0f;
     }
     settings_.layer_light_depth_padding_world =
         std::min(settings_.layer_light_depth_padding_world, 2000.0f);
     settings_.layer_light_membership_hold_frames = std::clamp(settings_.layer_light_membership_hold_frames, 0, 120);
     if (!std::isfinite(settings_.layer_light_depth_transition_world) ||
         settings_.layer_light_depth_transition_world < 0.0f) {
-        settings_.layer_light_depth_transition_world = 30.0f;
+        settings_.layer_light_depth_transition_world = 18.0f;
     }
     settings_.layer_light_depth_transition_world =
         std::min(settings_.layer_light_depth_transition_world, 2000.0f);
     if (!std::isfinite(settings_.dark_mask_temporal_prev_weight)) {
-        settings_.dark_mask_temporal_prev_weight = 0.65f;
+        settings_.dark_mask_temporal_prev_weight = 0.5f;
     }
     settings_.dark_mask_temporal_prev_weight =
         std::clamp(settings_.dark_mask_temporal_prev_weight, 0.0f, 0.98f);
     if (!std::isfinite(settings_.player_layer_hysteresis_world) ||
         settings_.player_layer_hysteresis_world < 0.0f) {
-        settings_.player_layer_hysteresis_world = 22.0f;
+        settings_.player_layer_hysteresis_world = 0.0f;
     }
     settings_.player_layer_hysteresis_world =
         std::min(settings_.player_layer_hysteresis_world, 2000.0f);

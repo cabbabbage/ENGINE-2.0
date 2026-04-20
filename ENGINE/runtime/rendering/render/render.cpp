@@ -1432,36 +1432,9 @@ void SceneRenderer::render() {
         render_texture_utils::draw_fullscreen_texture(renderer_, floor_texture);
     }
 
-    render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
+    const render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
         ? layer_submission_builder_->build(*geometry_batcher_, cam, player_split_world_z, max_cull_depth)
         : render_pipeline::LayerBuildResult{};
-    if (layer_build.valid && layer_build.layer_count > 0) {
-        const double player_depth_from_anchor = depth_anchor_world_z - player_split_world_z;
-        const float hysteresis_world = std::max(0.0f, realism.player_layer_hysteresis_world);
-        if (previous_player_layer_index_ >= 0 &&
-            previous_player_layer_count_ == layer_build.layer_count &&
-            previous_player_layer_index_ < layer_build.layer_count &&
-            layer_build.player_layer_index >= 0 &&
-            layer_build.player_layer_index < layer_build.layer_count &&
-            layer_build.player_layer_index != previous_player_layer_index_) {
-            const render_pipeline::LayerSubmission& previous_player_layer =
-                layer_build.layers[static_cast<std::size_t>(previous_player_layer_index_)];
-            const double hold_min = previous_player_layer.slice_depth_min - static_cast<double>(hysteresis_world);
-            const double hold_max = previous_player_layer.slice_depth_max + static_cast<double>(hysteresis_world);
-            if (std::isfinite(player_depth_from_anchor) &&
-                std::isfinite(hold_min) &&
-                std::isfinite(hold_max) &&
-                player_depth_from_anchor >= hold_min &&
-                player_depth_from_anchor <= hold_max) {
-                layer_build.player_layer_index = previous_player_layer_index_;
-            }
-        }
-        previous_player_layer_index_ = layer_build.player_layer_index;
-        previous_player_layer_count_ = layer_build.layer_count;
-    } else {
-        previous_player_layer_index_ = -1;
-        previous_player_layer_count_ = 0;
-    }
 
     bool composed = false;
     if (layer_build.valid && !layer_build.non_empty_layers.empty() && layer_stack_renderer_ && scene_composite_pass_) {

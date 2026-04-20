@@ -10904,28 +10904,6 @@
       "asset_directory": "resources/assets/church",
       "asset_name": "church",
       "attack_box_enabled": false,
-      "floor_boxes": [
-        {
-          "depth": 302.0,
-          "enabled": true,
-          "id": "floor_box",
-          "name": "Floor Box",
-          "position_x": 2.5,
-          "position_z": -183.0,
-          "tags": [],
-          "width": 1059.0
-        },
-        {
-          "depth": 124.0,
-          "enabled": true,
-          "id": "floor_box_1",
-          "name": "Floor Box 2",
-          "position_x": 4.5,
-          "position_z": -75.0,
-          "tags": [],
-          "width": 257.0
-        }
-      ],
       "floor_boxes_enabled": true,
       "hitbox_enabled": false,
       "impassable_box_enabled": true,
@@ -10934,35 +10912,35 @@
           "anchor_link": "",
           "corners": [
             {
-              "texture_x": 916,
-              "texture_y": 849
+              "texture_x": 1,
+              "texture_y": 147
             },
             {
-              "texture_x": 70,
-              "texture_y": 957
+              "texture_x": 981,
+              "texture_y": 147
             },
             {
-              "texture_x": 70,
-              "texture_y": 957
+              "texture_x": 981,
+              "texture_y": 680
             },
             {
-              "texture_x": 916,
-              "texture_y": 849
+              "texture_x": 1,
+              "texture_y": 680
             }
           ],
           "enabled": true,
-          "extrusion_amount": 107622768,
-          "flatten_bottom_to_floor": false,
+          "extrusion_amount": 1,
+          "flatten_bottom_to_floor": true,
           "id": "hit_box_id",
           "name": "hit_box",
           "position": {
-            "x": 67,
-            "y": 903
+            "x": 1,
+            "y": 147
           },
-          "rotation_degrees": 172.66180419921875,
+          "rotation_degrees": 0.0,
           "size": {
-            "h": 0,
-            "w": 852
+            "h": 533,
+            "w": 980
           },
           "type": "impassable_box"
         }
@@ -19340,9 +19318,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            209,
             242,
             36,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -19743,9 +19721,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            64,
-            36,
             242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 101,

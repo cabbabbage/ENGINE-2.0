@@ -1128,24 +1128,35 @@ void Assets::refresh_filtered_active_assets() {
     update_filtered_active_assets();
 }
 
-namespace {
+void Assets::rebuild_focus_filter_closure() {
+    focus_filter_closure_.clear();
+    focus_filter_closure_dirty_ = false;
 
-bool asset_is_focus_descendant(const Asset* owner, const Asset* candidate) {
-    if (!owner) {
-        return false;
+    if (!focus_filter_active_ || !focus_filter_asset_ || focus_filter_asset_->dead) {
+        return;
     }
-    for (const Asset* child : owner->children()) {
-        if (child == candidate) {
-            return true;
+
+    std::vector<const Asset*> stack;
+    stack.push_back(focus_filter_asset_);
+
+    while (!stack.empty()) {
+        const Asset* current = stack.back();
+        stack.pop_back();
+        if (!current || current->dead) {
+            continue;
         }
-        if (asset_is_focus_descendant(child, candidate)) {
-            return true;
+        if (!focus_filter_closure_.insert(current).second) {
+            continue;
+        }
+        for (const Asset* child : current->children()) {
+            stack.push_back(child);
         }
     }
-    return false;
 }
 
-} // namespace
+void Assets::mark_focus_filter_closure_dirty() {
+    focus_filter_closure_dirty_ = true;
+}
 
 bool Assets::asset_matches_focus_filter(const Asset* asset) const {
     if (!focus_filter_active_) {
@@ -1155,10 +1166,7 @@ bool Assets::asset_matches_focus_filter(const Asset* asset) const {
         return false;
     }
     if (focus_filter_asset_) {
-        if (asset == focus_filter_asset_) {
-            return true;
-        }
-        return asset_is_focus_descendant(focus_filter_asset_, asset);
+        return focus_filter_closure_.find(asset) != focus_filter_closure_.end();
     }
     if (!focus_filter_spawn_id_.empty()) {
         return asset->spawn_id == focus_filter_spawn_id_;
@@ -1173,12 +1181,17 @@ void Assets::set_focus_filter(Asset* asset, const std::string& spawn_id) {
         focus_filter_asset_ == asset &&
         focus_filter_spawn_id_ == (asset ? std::string{} : spawn_id);
     if (same_state) {
+        if (focus_filter_closure_dirty_) {
+            rebuild_focus_filter_closure();
+        }
         return;
     }
 
     focus_filter_active_ = next_active;
     focus_filter_asset_ = asset;
     focus_filter_spawn_id_ = asset ? std::string{} : spawn_id;
+    mark_focus_filter_closure_dirty();
+    rebuild_focus_filter_closure();
     ++focus_filter_version_;
     if (focus_filter_version_ == 0) {
         ++focus_filter_version_;
@@ -1551,6 +1564,9 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
 
 void Assets::run_visibility_build_stage() {
     run_frame_rebuild_stage();
+    if (focus_filter_closure_dirty_) {
+        rebuild_focus_filter_closure();
+    }
     refresh_visible_asset_scaling_only();
 }
 
@@ -1558,6 +1574,9 @@ void Assets::run_post_flush_traversal_refresh_once() {
     post_runtime_traversal_refresh_pending_ = true;
     note_frame_rebuild_request();
     run_frame_rebuild_stage();
+    if (focus_filter_closure_dirty_) {
+        rebuild_focus_filter_closure();
+    }
     refresh_visible_asset_scaling_only();
 }
 
@@ -2161,6 +2180,9 @@ std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
     extracted->set_provisional_grid_point(detached_pos);
     extracted->cache_grid_residency(detached_pos);
     runtime_traversal_state_.erase(extracted.get());
+    if (focus_filter_asset_) {
+        mark_focus_filter_closure_dirty();
+    }
     return extracted;
 }
 
@@ -2207,6 +2229,9 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     queue_asset_dimension_update(raw);
     mark_grid_dirty();
     mark_active_assets_dirty();
+    if (focus_filter_asset_) {
+        mark_focus_filter_closure_dirty();
+    }
     mark_anchor_basis_dirty(raw);
     mark_non_player_update_buffer_dirty();
 
@@ -2478,6 +2503,9 @@ void Assets::rebuild_all_assets_from_grid() {
     cached_height_level_ = camera_scale;
     max_asset_dimensions_dirty_ = false;
     finalize_max_asset_dimensions(max_width, max_height);
+    if (focus_filter_asset_) {
+        mark_focus_filter_closure_dirty();
+    }
 }
 
 bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const {
@@ -2656,6 +2684,9 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
         if (!asset || unique_removals.find(asset) == unique_removals.end()) {
             continue;
         }
+        if (asset == focus_filter_asset_) {
+            clear_focus_filter();
+        }
         remove_asset_dimension_cache(asset);
         runtime_traversal_state_.erase(asset);
         asset->clear_grid_residency_cache();
@@ -2668,6 +2699,9 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     moving_assets_for_grid_.clear();
     pending_static_grid_registration_.clear();
     runtime_traversal_state_.clear();
+    if (focus_filter_asset_) {
+        mark_focus_filter_closure_dirty();
+    }
     mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();

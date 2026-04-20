@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include "fly_controller.hpp"
+#include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"

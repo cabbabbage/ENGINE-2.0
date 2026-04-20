@@ -2,8 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <span>
-
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation_update.hpp"
@@ -12,7 +10,7 @@
 
 using CollisionAreaRef = CollisionQueryContext::CollisionEntryRef;
 
-static bool segment_hits_any(SDL_Point from, SDL_Point to, std::span<const CollisionAreaRef> areas) {
+static bool segment_hits_any(SDL_Point from, SDL_Point to, const std::vector<CollisionAreaRef>& areas) {
     for (const CollisionAreaRef entry : areas) {
         if (!entry) {
             continue;
@@ -47,7 +45,7 @@ static SDL_Point nudge_outside(SDL_Point pt, const Area& area) {
 
 static SDL_Point walk_back_to_perimeter(SDL_Point start,
                                   SDL_Point target,
-                                  std::span<const CollisionAreaRef> areas) {
+                                  const std::vector<CollisionAreaRef>& areas) {
     const int steps = std::max(std::abs(target.x - start.x), std::abs(target.y - start.y));
     if (steps == 0) {
         return target;
@@ -96,7 +94,7 @@ std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
 
     CollisionQueryContext local_collision_context;
     CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
-    const std::span<const CollisionAreaRef> collision_areas = context.collisions_for(self);
+    const auto& collision_areas = context.collisions_for(self);
     const SDL_Point origin     = self.world_xz_point();
     const int       thresh_sq  = visited_thresh_px * visited_thresh_px;
     const Assets*   assets     = self.get_assets();

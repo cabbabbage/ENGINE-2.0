@@ -23,7 +23,6 @@
 #include "utils/transform_smoothing.hpp"
 
 #include "asset_controller.hpp"
-#include "animation/animation_update.hpp"
 #include "animation/attack.hpp"
 #include "rendering/render/scaling_logic.hpp"
 
@@ -32,6 +31,7 @@ class Assets;
 class Input;
 class AnimationFrame;
 class Animation;
+class AnimationUpdate;
 class AssetInfoUI;
 class RenderAsset;
 

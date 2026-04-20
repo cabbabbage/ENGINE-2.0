@@ -1,7 +1,6 @@
 #include "get_best_path.hpp"
 
 #include <limits>
-#include <span>
 #include <string>
 
 #include "assets/asset/Asset.hpp"
@@ -19,7 +18,7 @@ using CollisionEntryRef = CollisionQueryContext::CollisionEntryRef;
 
 bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
-                  std::span<const CollisionEntryRef> collisions,
+                  const std::vector<CollisionEntryRef>& collisions,
                   const Asset& self,
                   const Assets* assets_owner) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
@@ -145,7 +144,7 @@ Plan GetBestPath::operator()(const Asset& self,
 
     CollisionQueryContext local_collision_context;
     CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
-    const std::span<const CollisionEntryRef> collisions = context.collisions_for(self);
+    const auto& collisions = context.collisions_for(self);
     const Assets* assets   = self.get_assets();
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
     auto movement_anims    = gather_movement_animations(self);

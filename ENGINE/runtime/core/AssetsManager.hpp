@@ -294,6 +294,8 @@ private:
     void addAsset(const std::string& name, SDL_Point g);
     void update_filtered_active_assets();
     bool asset_matches_focus_filter(const Asset* asset) const;
+    void rebuild_focus_filter_closure();
+    void mark_focus_filter_closure_dirty();
     void ensure_dev_controls();
     void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
@@ -527,6 +529,8 @@ private:
     bool focus_filter_active_ = false;
     Asset* focus_filter_asset_ = nullptr;
     std::string focus_filter_spawn_id_;
+    std::unordered_set<const Asset*> focus_filter_closure_;
+    bool focus_filter_closure_dirty_ = true;
     std::uint64_t focus_filter_version_ = 0;
     runtime::context::GameRuntimeContext game_context_{};
 };

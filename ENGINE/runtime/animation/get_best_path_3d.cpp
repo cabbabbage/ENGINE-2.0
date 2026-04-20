@@ -1,7 +1,6 @@
 #include "get_best_path_3d.hpp"
 
 #include <limits>
-#include <span>
 #include <string>
 
 #include "animation_update.hpp"
@@ -24,7 +23,7 @@ world::GridPoint as_grid_point(const axis::WorldPos& pos, int resolution_layer) 
 
 bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
-                  std::span<const CollisionEntryRef3D> collisions,
+                  const std::vector<CollisionEntryRef3D>& collisions,
                   const Asset& self,
                   const Assets* assets_owner) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
@@ -135,7 +134,7 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     const int resolution_layer = self.grid_resolution;
     CollisionQueryContext local_collision_context;
     CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
-    const std::span<const CollisionEntryRef3D> collisions = context.collisions_for(self);
+    const auto& collisions = context.collisions_for(self);
     const Assets* assets = self.get_assets();
     const long long visited_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const auto movement_anims = gather_movement_animations_3d(self);

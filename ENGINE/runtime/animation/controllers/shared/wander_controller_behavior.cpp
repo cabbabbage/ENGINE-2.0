@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/controllers/shared/custom_asset_controller.hpp"
 #include "assets/asset/Asset.hpp"
 #include "utils/range_util.hpp"

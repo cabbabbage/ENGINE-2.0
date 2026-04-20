@@ -1,5 +1,6 @@
 #include "davey_controller.hpp"
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 
 davey_controller::davey_controller(Asset* self)

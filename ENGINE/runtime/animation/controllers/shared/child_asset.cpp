@@ -2,6 +2,7 @@
 
 #include "animation/controllers/shared/anchored_child_placement.hpp"
 #include "animation/controllers/shared/oval_anchor_heading.hpp"
+#include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "core/AssetsManager.hpp"

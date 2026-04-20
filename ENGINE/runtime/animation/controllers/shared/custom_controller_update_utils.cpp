@@ -1,6 +1,7 @@
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
 
 #include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/controllers/shared/controller_game_context.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"

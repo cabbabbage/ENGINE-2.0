@@ -1,5 +1,6 @@
 #include "frog_controller.hpp"
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/animation_update.hpp"
 
 #include "animation/controllers/shared/controller_path_utils.hpp"
 #include "animation/controllers/shared/controller_visit_threshold.hpp"

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <span>
 #include <vector>
 
 #include "assets/asset/Asset.hpp"
@@ -13,7 +12,7 @@ struct CollisionQueryContext {
     std::vector<CollisionEntryRef> entries{};
     bool loaded = false;
 
-    std::span<const CollisionEntryRef> collisions_for(const Asset& self) {
+    const std::vector<CollisionEntryRef>& collisions_for(const Asset& self) {
         if (!loaded) {
             loaded = true;
             const Assets* assets = self.get_assets();
@@ -27,7 +26,7 @@ struct CollisionQueryContext {
         return entries;
     }
 
-    std::span<const CollisionEntryRef> collisions_if_loaded() const {
+    const std::vector<CollisionEntryRef>& collisions_if_loaded() const {
         return entries;
     }
 };

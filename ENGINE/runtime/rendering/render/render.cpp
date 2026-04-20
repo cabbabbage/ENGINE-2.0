@@ -1133,7 +1133,12 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                     registry_entry.anchor_world_y,
                                     registry_entry.anchor_world_z,
                                     broadphase_scale);
-        const float broadphase_radius_px = std::max(4.0f, registry_entry.radius_world * std::max(0.05f, broadphase_scale));
+        const float broadphase_height_spread = render_internal::floor_light_height_spread_scale(
+            registry_entry.anchor_world_y,
+            registry_entry.radius_world);
+        const float broadphase_radius_px = std::max(
+            4.0f,
+            registry_entry.radius_world * std::max(0.05f, broadphase_scale) * std::max(1.0f, broadphase_height_spread));
         const bool broadphase_overlap = broadphase_screen.x + broadphase_radius_px >= -kCullingMargin &&
                                         broadphase_screen.x - broadphase_radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
                                         broadphase_screen.y + broadphase_radius_px >= -kCullingMargin &&
@@ -1212,10 +1217,13 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         const AnchorLightData& light = registry_entry.light;
         const float radius_world = registry_entry.radius_world;
         const float radius_px = std::max(4.0f, radius_world * sampled_scale);
-        const bool overlaps_view = screen.x + radius_px >= -kCullingMargin &&
-                                   screen.x - radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
-                                   screen.y + radius_px >= -kCullingMargin &&
-                                   screen.y - radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
+        const float floor_spread_radius_px = radius_px * std::max(
+            1.0f,
+            render_internal::floor_light_height_spread_scale(resolved->world_exact_pos_2d.y, radius_world));
+        const bool overlaps_view = screen.x + floor_spread_radius_px >= -kCullingMargin &&
+                                   screen.x - floor_spread_radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
+                                   screen.y + floor_spread_radius_px >= -kCullingMargin &&
+                                   screen.y - floor_spread_radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
         const bool enabled_and_overlapping = !registry_entry.hidden && overlaps_view;
         if (!enabled_and_overlapping) {
             ++runtime_light_culled_count_;
@@ -1546,6 +1554,15 @@ void SceneRenderer::update_runtime_light_registry_incremental(std::uint64_t fram
     runtime_light_dirty_queue_.clear();
     runtime_light_dirty_set_.clear();
     prune_removed_runtime_lights(frame_token);
+    float max_radius_world = AnchorLightData::kMinRadius;
+    for (std::size_t i = 1; i < runtime_light_registry_entries_.size(); ++i) {
+        const RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[i];
+        if (!entry.valid) {
+            continue;
+        }
+        max_radius_world = std::max(max_radius_world, std::max(AnchorLightData::kMinRadius, entry.radius_world));
+    }
+    runtime_light_max_radius_world_ = max_radius_world;
 }
 
 SceneRenderer::RuntimeLightSpatialCell SceneRenderer::runtime_light_cell_for_world(float world_x, float world_z) const {
@@ -1600,10 +1617,18 @@ void SceneRenderer::runtime_light_query_visible_cells(const WarpedScreenGrid& ca
         return;
     }
 
+    const float max_light_radius_world = std::max(AnchorLightData::kMinRadius, runtime_light_max_radius_world_);
     const RuntimeLightSpatialCell min_cell = runtime_light_cell_for_world(world_min_x, world_min_z);
     const RuntimeLightSpatialCell max_cell = runtime_light_cell_for_world(world_max_x, world_max_z);
-    for (int cell_x = min_cell.x; cell_x <= max_cell.x; ++cell_x) {
-        for (int cell_z = min_cell.z; cell_z <= max_cell.z; ++cell_z) {
+    const int cell_padding = std::max(
+        1,
+        static_cast<int>(std::ceil(max_light_radius_world / static_cast<float>(std::max(1, runtime_light_spatial_cell_size_)))));
+    const int query_min_x = min_cell.x - cell_padding;
+    const int query_max_x = max_cell.x + cell_padding;
+    const int query_min_z = min_cell.z - cell_padding;
+    const int query_max_z = max_cell.z + cell_padding;
+    for (int cell_x = query_min_x; cell_x <= query_max_x; ++cell_x) {
+        for (int cell_z = query_min_z; cell_z <= query_max_z; ++cell_z) {
             const RuntimeLightSpatialCell cell{cell_x, cell_z};
             const auto it = runtime_light_spatial_index_.find(cell);
             if (it == runtime_light_spatial_index_.end()) {

@@ -321,6 +321,7 @@ private:
     std::vector<RuntimeLightCacheEntry> runtime_light_cache_;
     std::uint32_t runtime_light_next_id_ = 1;
     int runtime_light_spatial_cell_size_ = 256;
+    float runtime_light_max_radius_world_ = AnchorLightData::kMinRadius;
     std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
     int runtime_light_rendered_count_ = 0;
     int runtime_light_culled_count_ = 0;

@@ -4623,15 +4623,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
-        auto project_volume_point = [&](const Asset::RuntimeBoxPoint3& point, SDL_FPoint& out_screen) {
-            SDL_FPoint world_xy{point.x, point.y};
-            if (cam.project_world_point(world_xy, point.z, out_screen)) {
-                return true;
-            }
-            out_screen = cam.map_to_screen_f(SDL_FPoint{point.x, point.y});
-            return true;
-        };
-
         auto render_box_editor = [&](const std::vector<Asset::RuntimeBoxVolume>& volumes,
                                      int selected_box,
                                      int selected_point,
@@ -4650,6 +4641,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 bool hovered = false;
                 bool flatten_bottom_to_floor = false;
                 std::array<SDL_FPoint, 8> points{};
+                BoxExtrusionHandleProjection extrusion_projection{};
             };
 
             std::vector<ProjectedBoxOverlay> projected;
@@ -4669,9 +4661,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 entry.hovered = render_handles && (entry.box_index == hovered_box);
                 entry.flatten_bottom_to_floor = volume.flatten_bottom_to_floor;
                 for (int point_index = 0; point_index < 8; ++point_index) {
-                    project_volume_point(volume.world_points[static_cast<std::size_t>(point_index)],
-                                         entry.points[static_cast<std::size_t>(point_index)]);
+                    project_runtime_box_point_to_screen(volume.world_points[static_cast<std::size_t>(point_index)],
+                                                        cam,
+                                                        entry.points[static_cast<std::size_t>(point_index)]);
                 }
+                entry.extrusion_projection = project_extrusion_floor_handles(volume, cam);
                 projected.push_back(entry);
             }
 
@@ -4777,6 +4771,14 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     if (highlighted) {
                         segment_color = SDL_Color{255, 255, 255, 255};
                     }
+                    SDL_SetRenderDrawColor(renderer, 16, 16, 16, 250);
+                    for (int offset = -2; offset <= 2; ++offset) {
+                        SDL_RenderLine(renderer,
+                                       static_cast<int>(std::lround(a.x)),
+                                       static_cast<int>(std::lround(a.y + static_cast<float>(offset))),
+                                       static_cast<int>(std::lround(b.x)),
+                                       static_cast<int>(std::lround(b.y + static_cast<float>(offset))));
+                    }
                     SDL_SetRenderDrawColor(renderer, segment_color.r, segment_color.g, segment_color.b, segment_color.a);
                     for (int offset = -1; offset <= 1; ++offset) {
                         SDL_RenderLine(renderer,
@@ -4785,15 +4787,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                        static_cast<int>(std::lround(b.x)),
                                        static_cast<int>(std::lround(b.y + static_cast<float>(offset))));
                     }
-                    SDL_SetRenderDrawColor(renderer, 18, 18, 18, 235);
-                    SDL_RenderLine(renderer,
-                                   static_cast<int>(std::lround(a.x)),
-                                   static_cast<int>(std::lround(a.y)),
-                                   static_cast<int>(std::lround(b.x)),
-                                   static_cast<int>(std::lround(b.y)));
                 };
-                render_extrusion_segment(box.points[3], box.points[2], front_hovered);
-                render_extrusion_segment(box.points[7], box.points[6], back_hovered);
+                if (box.extrusion_projection.valid) {
+                    render_extrusion_segment(box.extrusion_projection.front_a, box.extrusion_projection.front_b, front_hovered);
+                    render_extrusion_segment(box.extrusion_projection.back_a, box.extrusion_projection.back_b, back_hovered);
+                }
                 if (box.flatten_bottom_to_floor) {
                     continue;
                 }
@@ -18032,7 +18030,7 @@ bool RoomEditor::drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point
                     out_screen = projected;
                     return true;
                 }
-                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.z});
                 if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
                     return false;
                 }
@@ -18175,7 +18173,7 @@ bool RoomEditor::drag_hitbox_corner_to_screen(int box_index, int point_index, SD
                     out_screen = projected;
                     return true;
                 }
-                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.z});
                 if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
                     return false;
                 }
@@ -18295,7 +18293,7 @@ bool RoomEditor::drag_attack_box_to_screen(int box_index, SDL_Point screen_point
                     out_screen = projected;
                     return true;
                 }
-                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.z});
                 if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
                     return false;
                 }
@@ -18405,7 +18403,7 @@ bool RoomEditor::drag_attack_box_corner_to_screen(int box_index, int point_index
                     out_screen = projected;
                     return true;
                 }
-                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.z});
                 if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
                     return false;
                 }
@@ -18662,7 +18660,7 @@ bool RoomEditor::drag_impassable_box_to_screen(int box_index, SDL_Point screen_p
                     out_screen = projected;
                     return true;
                 }
-                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.z});
                 if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
                     return false;
                 }
@@ -18805,7 +18803,7 @@ bool RoomEditor::drag_impassable_box_corner_to_screen(int box_index, int point_i
                     out_screen = projected;
                     return true;
                 }
-                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.y});
+                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.z});
                 if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
                     return false;
                 }

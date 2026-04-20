@@ -156,6 +156,16 @@ std::mt19937& tag_selection_rng() {
 
 namespace animation_update::detail {
 
+std::string stable_asset_id(const Asset& asset) {
+    if (!asset.spawn_id.empty()) {
+        return asset.spawn_id;
+    }
+    if (asset.info) {
+        return asset.info->name;
+    }
+    return std::string{};
+}
+
 bool should_consider_overlap(const Asset& self, const Asset& other) {
     if (!self.info || !other.info) {
         return false;
@@ -185,6 +195,42 @@ bool should_consider_overlap(const Asset& self, const Asset& other) {
     }
 
     return false;
+}
+
+int overlap_distance_sq_for_pair(const Asset& self,
+                                 const Asset& other,
+                                 const PathBlockingContext& context) {
+    if (!should_consider_overlap(self, other)) {
+        return 0;
+    }
+
+    constexpr int kEnemyEnemySpacingPx = 56;
+    constexpr int kEnemyNpcSpacingPx = 44;
+    constexpr int kDefaultSpacingPx = 40;
+    constexpr int kEngagementTargetSpacingPx = 18;
+
+    const std::string self_type = self.info ? asset_types::canonicalize(self.info->type) : std::string{};
+    const std::string other_type = other.info ? asset_types::canonicalize(other.info->type) : std::string{};
+
+    if (context.engagement_target_asset_id.has_value()) {
+        const std::string other_id = stable_asset_id(other);
+        if (!other_id.empty() && other_id == *context.engagement_target_asset_id) {
+            if (context.allow_engagement_target_overlap) {
+                return 0;
+            }
+            return kEngagementTargetSpacingPx * kEngagementTargetSpacingPx;
+        }
+    }
+
+    if (self_type == asset_types::enemy && other_type == asset_types::enemy) {
+        return kEnemyEnemySpacingPx * kEnemyEnemySpacingPx;
+    }
+    if ((self_type == asset_types::enemy && other_type == asset_types::npc) ||
+        (self_type == asset_types::npc && other_type == asset_types::enemy)) {
+        return kEnemyNpcSpacingPx * kEnemyNpcSpacingPx;
+    }
+
+    return kDefaultSpacingPx * kDefaultSpacingPx;
 }
 
 int distance_sq(const world::GridPoint& a, const world::GridPoint& b) {
@@ -428,7 +474,11 @@ void AnimationUpdate::auto_move(Asset* target_asset,
         }
         return;
     }
+    const std::string target_asset_id = animation_update::detail::stable_asset_id(*target_asset);
+    pending_engagement_target_asset_id_ =
+        target_asset_id.empty() ? std::nullopt : std::make_optional(target_asset_id);
     auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked, combat_overrides);
+    pending_engagement_target_asset_id_ = std::nullopt;
 }
 
 void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
@@ -490,7 +540,11 @@ void AnimationUpdate::auto_move_3d(Asset* target_asset,
         return;
     }
 
+    const std::string target_asset_id = animation_update::detail::stable_asset_id(*target_asset);
+    pending_engagement_target_asset_id_ =
+        target_asset_id.empty() ? std::nullopt : std::make_optional(target_asset_id);
     auto_move_3d(checkpoint, visited_thresh_px, std::nullopt, override_non_locked, combat_overrides);
+    pending_engagement_target_asset_id_ = std::nullopt;
 }
 
 void AnimationUpdate::auto_move_3d_relative(axis::WorldPos rel_delta,
@@ -581,6 +635,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
 
     const std::vector<axis::WorldPos> requested_absolute = absolute;
     CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
     collision_context.set_furthest_checkpoint_distance_px(
         furthest_checkpoint_distance_xz(axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() },
                                         requested_absolute));
@@ -589,6 +644,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
     plan3d_.world_start = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.override_non_locked = override_non_locked;
+    plan3d_.engagement_target_asset_id = pending_engagement_target_asset_id_;
     final_dest_3d = plan3d_.final_dest;
 
     // 3D plan runs in its own mode and must not reuse stale 2D plan state.
@@ -596,6 +652,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     plan_.sanitized_checkpoints.clear();
     plan_.final_dest = self_->world_xz_point();
     plan_.world_start = self_->world_xz_point();
+    plan_.engagement_target_asset_id = std::nullopt;
     final_dest = plan_.final_dest;
 
     if (debug_logging) {
@@ -741,6 +798,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
 
     const std::vector<SDL_Point> requested_absolute = absolute;
     CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
     collision_context.set_furthest_checkpoint_distance_px(
         furthest_checkpoint_distance_xz(self_->world_xz_point(), requested_absolute));
     const std::vector<SDL_Point> sanitized_checkpoints =
@@ -749,12 +807,14 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     final_dest = plan_.final_dest;
     plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
+    plan_.engagement_target_asset_id = pending_engagement_target_asset_id_;
 
     // 2D plan runs in its own mode and must not reuse stale 3D plan state.
     plan3d_.strides.clear();
     plan3d_.sanitized_checkpoints.clear();
     plan3d_.final_dest = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.world_start = plan3d_.final_dest;
+    plan3d_.engagement_target_asset_id = std::nullopt;
     final_dest_3d = plan3d_.final_dest;
 
     if (debug_logging) {
@@ -923,6 +983,7 @@ void AnimationUpdate::clear_movement_plan() {
     plan_.sanitized_checkpoints.clear();
     plan_.final_dest = self_ ? self_->world_xz_point() : SDL_Point{ 0, 0 };
     plan_.world_start = plan_.final_dest;
+    plan_.engagement_target_asset_id = std::nullopt;
     plan_.override_non_locked = true;
     final_dest = plan_.final_dest;
 
@@ -932,6 +993,7 @@ void AnimationUpdate::clear_movement_plan() {
         ? axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() }
         : axis::WorldPos{ 0, 0, 0 };
     plan3d_.world_start = plan3d_.final_dest;
+    plan3d_.engagement_target_asset_id = std::nullopt;
     plan3d_.override_non_locked = true;
     final_dest_3d = plan3d_.final_dest;
 

@@ -221,6 +221,33 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     return true;
 }
 
+bool AnimationRuntime::committed_attack_execution_active() const {
+    if (!self_ || !self_->info) {
+        return false;
+    }
+    const auto it = self_->info->animations.find(self_->current_animation);
+    if (it == self_->info->animations.end()) {
+        return false;
+    }
+    const Animation& anim = it->second;
+    return anim.locked && animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+}
+
+animation_update::detail::PathBlockingContext AnimationRuntime::active_path_blocking_context() const {
+    animation_update::detail::PathBlockingContext context;
+    if (!planner_iface_) {
+        return context;
+    }
+    if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D) {
+        context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    } else if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D) {
+        context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+    }
+    context.allow_engagement_target_overlap =
+        context.engagement_target_asset_id.has_value() && committed_attack_execution_active();
+    return context;
+}
+
 void AnimationRuntime::set_planner(AnimationUpdate* planner) {
     if (planner_iface_ && planner_iface_ != planner) {
         planner_iface_->set_runtime(nullptr);
@@ -404,8 +431,9 @@ void AnimationRuntime::apply_pending_move() {
     const SDL_Point to{ from.x + world_delta.x, from.y + world_delta.y };
 
     SDL_Point final_position = from;
+    const auto block_context = active_path_blocking_context();
     if (world_delta.x != 0 || world_delta.y != 0) {
-        if (!path_blocked(from, to, self_, nullptr)) {
+        if (!path_blocked(from, to, self_, nullptr, block_context)) {
             final_position = to;
         } else {
             const int steps = std::max(std::abs(world_delta.x), std::abs(world_delta.y));
@@ -420,7 +448,7 @@ void AnimationRuntime::apply_pending_move() {
                     accum_y += step_y;
                     SDL_Point candidate{ static_cast<int>(std::round(accum_x)), static_cast<int>(std::round(accum_y)) };
                     if (candidate.x == current.x && candidate.y == current.y) continue;
-                    if (path_blocked(current, candidate, self_, nullptr)) break;
+                    if (path_blocked(current, candidate, self_, nullptr, block_context)) break;
                     final_position = candidate;
                     current        = candidate;
                 }
@@ -485,10 +513,11 @@ void AnimationRuntime::apply_pending_move_3d() {
     };
 
     axis::WorldPos final_position = from;
+    const auto block_context = active_path_blocking_context();
     if (world_delta.x != 0 || world_delta.y != 0 || world_delta.z != 0) {
         const world::GridPoint gp_from = world::GridPoint::make_virtual(from.x, from.y, from.z, self_->grid_resolution);
         const world::GridPoint gp_to = world::GridPoint::make_virtual(to.x, to.y, to.z, self_->grid_resolution);
-        if (!path_blocked(gp_from, gp_to, self_, nullptr)) {
+        if (!path_blocked(gp_from, gp_to, self_, nullptr, block_context)) {
             final_position = to;
         } else {
             const int steps = std::max({ std::abs(world_delta.x), std::abs(world_delta.y), std::abs(world_delta.z) });
@@ -516,7 +545,7 @@ void AnimationRuntime::apply_pending_move_3d() {
                         world::GridPoint::make_virtual(current.x, current.y, current.z, self_->grid_resolution);
                     const world::GridPoint candidate_gp =
                         world::GridPoint::make_virtual(candidate.x, candidate.y, candidate.z, self_->grid_resolution);
-                    if (path_blocked(current_gp, candidate_gp, self_, nullptr)) {
+                    if (path_blocked(current_gp, candidate_gp, self_, nullptr, block_context)) {
                         break;
                     }
                     final_position = candidate;
@@ -835,7 +864,8 @@ bool AnimationRuntime::point_in_impassable(SDL_Point pt, const Asset* ignored) c
 bool AnimationRuntime::path_blocked(const world::GridPoint& from,
                                     const world::GridPoint& to,
                                     const Asset* ignored,
-                                    std::vector<const Asset*>* blockers) const {
+                                    std::vector<const Asset*>* blockers,
+                                    const animation_update::detail::PathBlockingContext& context) const {
     if (!self_ || !self_->info) {
         return false;
     }
@@ -858,14 +888,20 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         }
         const bool contains_from = area.contains_point(bottom_from.to_sdl_point());
         const bool contains_to   = area.contains_point(dest_bottom.to_sdl_point());
-        const bool touches_segment = animation_update::detail::segment_hits_area(from, to, area);
+        const std::string neighbor_id = animation_update::detail::stable_asset_id(*neighbor);
+        const bool is_engagement_target =
+            context.allow_engagement_target_overlap &&
+            context.engagement_target_asset_id.has_value() &&
+            !neighbor_id.empty() &&
+            neighbor_id == *context.engagement_target_asset_id;
+        const bool touches_segment =
+            !is_engagement_target && animation_update::detail::segment_hits_area(from, to, area);
         bool overlaps = false;
         if (!contains_from && !contains_to && !touches_segment) {
-            const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-            if (overlap_check) {
-                overlaps = animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) <
-                           animation_update::detail::kOverlapDistanceSq;
-            }
+            const int overlap_distance_sq =
+                animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, context);
+            overlaps = overlap_distance_sq > 0 &&
+                       animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) < overlap_distance_sq;
         }
         if (!(contains_from || contains_to || touches_segment || overlaps)) {
             return false;
@@ -885,12 +921,13 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
 bool AnimationRuntime::path_blocked(SDL_Point from,
                                     SDL_Point to,
                                     const Asset* ignored,
-                                    std::vector<const Asset*>* blockers) const {
+                                    std::vector<const Asset*>* blockers,
+                                    const animation_update::detail::PathBlockingContext& context) const {
     const int world_y = self_ ? self_->world_y() : 0;
     const int layer = self_ ? self_->grid_resolution : 0;
     const world::GridPoint gp_from = world::grid_math::from_sdl(from, world_y, layer);
     const world::GridPoint gp_to   = world::grid_math::from_sdl(to, world_y, layer);
-    return path_blocked(gp_from, gp_to, ignored, blockers);
+    return path_blocked(gp_from, gp_to, ignored, blockers, context);
 }
 
 bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
@@ -911,6 +948,7 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
 
     world::GridPoint bottom_from = animation_update::detail::bottom_middle_for(*self_, from);
     world::GridPoint bottom_to   = animation_update::detail::bottom_middle_for(*self_, to);
+    const auto block_context = active_path_blocking_context();
     SDL_Point push{0, 0};
     std::vector<const Asset*> blocking_neighbors = blockers;
     if (blocking_neighbors.empty()) {
@@ -926,11 +964,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             const bool touches_segment = animation_update::detail::segment_hits_area(from, to, area);
             bool overlaps = false;
             if (!contains_from && !contains_to && !touches_segment) {
-                const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-                if (overlap_check) {
-                    overlaps = animation_update::detail::distance_sq(bottom_from, neighbor_bottom) <
-                               animation_update::detail::kOverlapDistanceSq;
-                }
+                const int overlap_distance_sq =
+                    animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, block_context);
+                overlaps = overlap_distance_sq > 0 &&
+                           animation_update::detail::distance_sq(bottom_from, neighbor_bottom) < overlap_distance_sq;
             }
             if (!(contains_from || contains_to || touches_segment || overlaps)) {
                 return false;
@@ -1112,6 +1149,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     world::GridPoint target = world::grid_math::from_sdl(target_sdl, world_y, layer);
     world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
     const world::GridPoint start_point = world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer);
+    const auto block_context = active_path_blocking_context();
     SDL_Point push{0, 0};
     std::vector<const Asset*> influencing_neighbors;
     auto consider_neighbor = [&](const Asset* neighbor,
@@ -1121,10 +1159,10 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         bool relevant = area.contains_point(bottom_target.to_sdl_point()) ||
                         animation_update::detail::segment_hits_area(start_point, target, area);
         if (!relevant) {
-            const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-            if (overlap_check) {
-                relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < animation_update::detail::kOverlapDistanceSq;
-            }
+            const int overlap_distance_sq =
+                animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, block_context);
+            relevant = overlap_distance_sq > 0 &&
+                       animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < overlap_distance_sq;
         }
         if (!relevant) return;
         SDL_Point center = area.get_center();
@@ -1183,6 +1221,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
             return false;
         }
         CollisionQueryContext collision_context;
+        collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
         auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_, &collision_context);
         if (sanitized.empty()) return false;
         Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
@@ -1245,6 +1284,7 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
     world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
     const world::GridPoint start_point =
         world::GridPoint::make_virtual(self_->world_x(), self_->world_y(), self_->world_z(), self_->grid_resolution);
+    const auto block_context = active_path_blocking_context();
 
     SDL_Point push{ 0, 0 };
     std::vector<const Asset*> influencing_neighbors;
@@ -1258,11 +1298,10 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
         bool relevant = area.contains_point(bottom_target.to_sdl_point()) ||
                         animation_update::detail::segment_hits_area(start_point, target, area);
         if (!relevant) {
-            const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-            if (overlap_check) {
-                relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) <
-                           animation_update::detail::kOverlapDistanceSq;
-            }
+            const int overlap_distance_sq =
+                animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, block_context);
+            relevant = overlap_distance_sq > 0 &&
+                       animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < overlap_distance_sq;
         }
         if (!relevant) {
             return;
@@ -1334,8 +1373,11 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
             return false;
         }
 
-        Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+        CollisionQueryContext collision_context;
+        collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+        Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
+        new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
         if (new_plan.strides.empty()) {
             return false;
         }
@@ -1456,12 +1498,14 @@ bool AnimationRuntime::replan_to_destination() {
         return false;
     }
     CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
     auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_, &collision_context);
     if (sanitized.empty()) {
         return false;
     }
     Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
     new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
+    new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
     if (new_plan.strides.empty()) {
         return false;
     }
@@ -1506,13 +1550,16 @@ bool AnimationRuntime::replan_to_destination_3d() {
     if (!consume_replan_attempt_budget()) {
         return false;
     }
+    CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
     auto sanitized = sanitizer_3d_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
     if (sanitized.empty()) {
         return false;
     }
 
-    Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+    Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
     new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
+    new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
     if (new_plan.strides.empty()) {
         return false;
     }

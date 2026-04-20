@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "assets/asset/Asset.hpp"
@@ -16,6 +18,7 @@ struct CollisionQueryContext {
     std::vector<CollisionEntryRef> entries{};
     bool loaded = false;
     int furthest_checkpoint_distance_px = 0;
+    std::optional<std::string> engagement_target_asset_id = std::nullopt;
 
     void set_furthest_checkpoint_distance_px(int extent_px) {
         furthest_checkpoint_distance_px = std::max(0, extent_px);

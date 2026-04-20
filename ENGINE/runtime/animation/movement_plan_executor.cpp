@@ -101,7 +101,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
 
     if (delta.x != 0 || delta.y != 0) {
         std::vector<const Asset*> blockers;
-        if (up.path_blocked(from, to, self, &blockers)) {
+        if (up.path_blocked(from, to, self, &blockers, up.active_path_blocking_context())) {
             if (up.handle_blocked_path(from, to, blockers)) {
                 return true;
             }
@@ -264,7 +264,7 @@ bool MovementPlanExecutor::tick_3d(AnimationRuntime& up, Plan3D& plan,
         const world::GridPoint from_gp = world::GridPoint::make_virtual(from.x, from.y, from.z, self->grid_resolution);
         const world::GridPoint to_gp = world::GridPoint::make_virtual(to.x, to.y, to.z, self->grid_resolution);
         std::vector<const Asset*> blockers;
-        if (up.path_blocked(from_gp, to_gp, self, &blockers)) {
+        if (up.path_blocked(from_gp, to_gp, self, &blockers, up.active_path_blocking_context())) {
             if (up.handle_blocked_path(from_gp, to_gp, blockers)) {
                 return true;
             }

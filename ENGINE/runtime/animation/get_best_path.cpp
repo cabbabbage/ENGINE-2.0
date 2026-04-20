@@ -21,7 +21,8 @@ bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
                   const std::vector<CollisionEntryRef>& collisions,
                   const Asset& self,
-                  const Assets* assets_owner) {
+                  const Assets* assets_owner,
+                  const animation_update::detail::PathBlockingContext& context) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
     const world::GridPoint dest_bottom  = animation_update::detail::bottom_middle_for(self, to);
 
@@ -38,17 +39,22 @@ bool blocked_step(const world::GridPoint& from,
             continue;
         }
 
-        if (animation_update::detail::segment_hits_area(from, to, entry->area)) {
+        const std::string other_id = animation_update::detail::stable_asset_id(*other);
+        const bool is_engagement_target =
+            context.allow_engagement_target_overlap &&
+            context.engagement_target_asset_id.has_value() &&
+            !other_id.empty() &&
+            other_id == *context.engagement_target_asset_id;
+
+        if (!is_engagement_target && animation_update::detail::segment_hits_area(from, to, entry->area)) {
             return true;
         }
 
-        bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
-
-        if (overlap_check) {
-            if (animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) <
-                animation_update::detail::kOverlapDistanceSq) {
-                return true;
-            }
+        const int overlap_distance_sq =
+            animation_update::detail::overlap_distance_sq_for_pair(self, *other, context);
+        if (overlap_distance_sq > 0 &&
+            animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) < overlap_distance_sq) {
+            return true;
         }
     }
 
@@ -157,6 +163,10 @@ Plan GetBestPath::operator()(const Asset& self,
     CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
     const auto& collisions = context.collisions_for(self);
     const Assets* assets   = self.get_assets();
+    const animation_update::detail::PathBlockingContext blocking_context{
+        context.engagement_target_asset_id,
+        false
+    };
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
     const MovementAnimationBuckets animation_buckets = gather_movement_animations(self);
     const auto& movement_anims = animation_buckets.locomotion;
@@ -196,7 +206,7 @@ Plan GetBestPath::operator()(const Asset& self,
                         const AnimationFrame& frame = (*frames_path)[i];
                         SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
                         world::GridPoint next = world::grid_math::offset(simulated, delta);
-                        if (blocked_step(simulated, next, collisions, self, assets)) {
+                        if (blocked_step(simulated, next, collisions, self, assets, blocking_context)) {
                             blocked = true;
                             break;
                         }
@@ -264,7 +274,7 @@ Plan GetBestPath::operator()(const Asset& self,
                             const AnimationFrame& frame = (*frames_path)[i];
                             SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
                             world::GridPoint next = world::grid_math::offset(simulated, delta);
-                            if (blocked_step(simulated, next, collisions, self, assets)) {
+                            if (blocked_step(simulated, next, collisions, self, assets, blocking_context)) {
                                 blocked = true;
                                 break;
                             }

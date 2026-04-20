@@ -49,8 +49,16 @@ public:
     std::size_t path_index_for(const std::string& anim_id) const;
 
     vibble::grid::Grid& grid() const;
-    bool path_blocked(const world::GridPoint& from, const world::GridPoint& to, const Asset* ignored, std::vector<const Asset*>* blockers = nullptr) const;
-    bool path_blocked(SDL_Point from, SDL_Point to, const Asset* ignored, std::vector<const Asset*>* blockers = nullptr) const;
+    bool path_blocked(const world::GridPoint& from,
+                      const world::GridPoint& to,
+                      const Asset* ignored,
+                      std::vector<const Asset*>* blockers = nullptr,
+                      const animation_update::detail::PathBlockingContext& context = {}) const;
+    bool path_blocked(SDL_Point from,
+                      SDL_Point to,
+                      const Asset* ignored,
+                      std::vector<const Asset*>* blockers = nullptr,
+                      const animation_update::detail::PathBlockingContext& context = {}) const;
     bool handle_blocked_path(const world::GridPoint& from, const world::GridPoint& to, const std::vector<const Asset*>& blockers);
     bool handle_blocked_path(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     void mark_progress_toward_checkpoints();
@@ -83,6 +91,8 @@ private:
     bool       replan_to_destination();
     bool       replan_to_destination_3d();
     bool       consume_replan_attempt_budget();
+    animation_update::detail::PathBlockingContext active_path_blocking_context() const;
+    bool       committed_attack_execution_active() const;
     float      parent_world_z() const;
 
     void       apply_pending_move();

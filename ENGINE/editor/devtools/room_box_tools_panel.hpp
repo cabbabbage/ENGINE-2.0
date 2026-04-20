@@ -10,6 +10,7 @@
 class DMButton;
 class DMTextBox;
 class DMCheckbox;
+class DMNumericStepper;
 
 class RoomBoxToolsPanel {
 public:
@@ -39,6 +40,8 @@ public:
     using PropagateCallback = std::function<void(PropagationScope)>;
     using OnionSkinToggleCallback = std::function<void(bool)>;
     using SystemEnabledToggleCallback = std::function<void(bool)>;
+    using IncrementPointCountCallback = std::function<void()>;
+    using DecrementPointCountCallback = std::function<void()>;
 
     explicit RoomBoxToolsPanel(Kind kind);
     ~RoomBoxToolsPanel();
@@ -60,6 +63,7 @@ public:
     void set_system_enabled(bool enabled);
     bool system_enabled() const;
     void set_propagation_visible(bool visible);
+    void set_point_count(int count);
 
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
@@ -68,6 +72,8 @@ public:
     void set_on_propagate(PropagateCallback callback);
     void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
     void set_on_system_enabled_toggle(SystemEnabledToggleCallback callback);
+    void set_on_increment_point_count(IncrementPointCountCallback callback);
+    void set_on_decrement_point_count(DecrementPointCountCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -97,6 +103,7 @@ private:
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
     mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
     mutable SDL_Rect corner_label_rect_{0, 0, 0, 0};
+    mutable SDL_Rect point_count_rect_{0, 0, 0, 0};
     mutable int content_height_ = 0;
     mutable int max_scroll_ = 0;
     mutable int scroll_offset_ = 0;
@@ -114,9 +121,12 @@ private:
     std::unique_ptr<DMTextBox> name_textbox_;
     std::unique_ptr<DMTextBox> extrusion_textbox_;
     std::unique_ptr<DMTextBox> damage_textbox_;
+    std::unique_ptr<DMNumericStepper> point_count_stepper_;
     std::unique_ptr<DMCheckbox> flatten_bottom_to_floor_checkbox_;
     std::unique_ptr<DMCheckbox> system_enabled_checkbox_;
     std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
+
+    int point_count_ = 0;
 
     SelectCallback on_select_;
     AddCallback on_add_;
@@ -125,4 +135,6 @@ private:
     PropagateCallback on_propagate_;
     OnionSkinToggleCallback on_onion_skin_toggle_;
     SystemEnabledToggleCallback on_system_enabled_toggle_;
+    IncrementPointCountCallback on_increment_point_count_;
+    DecrementPointCountCallback on_decrement_point_count_;
 };

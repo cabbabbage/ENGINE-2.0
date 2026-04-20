@@ -94,45 +94,29 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
     return (world_z - anchor_world_z) * sign;
 }
 
-bool runtime_impassable_volume_contributes(const Asset::RuntimeBoxVolume& volume) {
-    return volume.enabled && volume.valid;
+bool runtime_impassable_shape_contributes(const Asset::RuntimeImpassableShape& shape) {
+    return shape.enabled && shape.valid && shape.floor_points.size() >= 3;
 }
 
-bool build_impassable_area_for_volume(const Asset& asset,
-                                      const Asset::RuntimeBoxVolume& volume,
-                                      Area& out_area) {
-    if (!runtime_impassable_volume_contributes(volume)) {
-        return false;
-    }
-
-    float min_x = std::numeric_limits<float>::max();
-    float max_x = std::numeric_limits<float>::lowest();
-    float min_z = std::numeric_limits<float>::max();
-    float max_z = std::numeric_limits<float>::lowest();
-    for (const auto& point : volume.world_points) {
-        if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
-            continue;
-        }
-        min_x = std::min(min_x, point.x);
-        max_x = std::max(max_x, point.x);
-        min_z = std::min(min_z, point.y);
-        max_z = std::max(max_z, point.y);
-    }
-
-    if (!std::isfinite(min_x) || !std::isfinite(max_x) ||
-        !std::isfinite(min_z) || !std::isfinite(max_z) ||
-        max_x <= min_x || max_z <= min_z) {
+bool build_impassable_area_for_shape(const Asset& asset,
+                                     const Asset::RuntimeImpassableShape& shape,
+                                     Area& out_area) {
+    if (!runtime_impassable_shape_contributes(shape)) {
         return false;
     }
 
     std::vector<Area::Point> points;
-    points.reserve(4);
-    points.push_back(Area::Point{static_cast<int>(std::lround(min_x)), static_cast<int>(std::lround(min_z))});
-    points.push_back(Area::Point{static_cast<int>(std::lround(max_x)), static_cast<int>(std::lround(min_z))});
-    points.push_back(Area::Point{static_cast<int>(std::lround(max_x)), static_cast<int>(std::lround(max_z))});
-    points.push_back(Area::Point{static_cast<int>(std::lround(min_x)), static_cast<int>(std::lround(max_z))});
+    points.reserve(shape.floor_points.size());
+    for (const auto& floor_point : shape.floor_points) {
+        if (!std::isfinite(floor_point.x) || !std::isfinite(floor_point.y)) {
+            continue;
+        }
+        points.push_back(Area::Point{
+            static_cast<int>(std::lround(floor_point.x)),
+            static_cast<int>(std::lround(floor_point.y))});
+    }
 
-    if (points.size() != 4) {
+    if (points.size() < 3) {
         return false;
     }
 
@@ -989,9 +973,9 @@ void Assets::rebuild_frame_collision_context() const {
         if (!asset || asset->dead || !asset->info || !asset->affects_collision_context()) {
             continue;
         }
-        const auto& impassable_volumes = asset->current_impassable_box_volumes();
-        for (const auto& volume : impassable_volumes) {
-            if (runtime_impassable_volume_contributes(volume)) {
+        const auto& impassable_shapes = asset->current_impassable_shapes();
+        for (const auto& shape : impassable_shapes) {
+            if (runtime_impassable_shape_contributes(shape)) {
                 ++estimated_entry_count;
             }
         }
@@ -1039,14 +1023,14 @@ void Assets::rebuild_frame_collision_context() const {
             frame_collision_index_[hash_grid_cell(cell)].push_back(&entry);
         };
 
-        const auto& impassable_volumes = asset->current_impassable_box_volumes();
-        for (const auto& volume : impassable_volumes) {
+        const auto& impassable_shapes = asset->current_impassable_shapes();
+        for (const auto& shape : impassable_shapes) {
             Area area{"impassable"};
-            if (!build_impassable_area_for_volume(*asset, volume, area)) {
+            if (!build_impassable_area_for_shape(*asset, shape, area)) {
                 continue;
             }
             const SDL_Point center = area.get_center();
-            push_collision_entry(std::move(area), std::string("impassable_box"), center);
+            push_collision_entry(std::move(area), std::string("impassable_shape"), center);
         }
     }
 

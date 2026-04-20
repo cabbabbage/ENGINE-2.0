@@ -145,6 +145,39 @@ std::string runtime_box_ids_csv(const std::vector<Asset::RuntimeBoxVolume>& volu
     return out.str();
 }
 
+std::string runtime_shape_ids_csv(const std::vector<Asset::RuntimeImpassableShape>& shapes) {
+    std::ostringstream out;
+    for (std::size_t i = 0; i < shapes.size(); ++i) {
+        if (i > 0) {
+            out << ",";
+        }
+        out << shapes[i].id;
+    }
+    return out.str();
+}
+
+bool intersect_camera_ray_on_ground_plane(const render_projection::CameraRay& ray,
+                                          render_projection::WorldPoint3& out_world_point) {
+    out_world_point = render_projection::WorldPoint3{};
+    if (!ray.valid || !ray.origin.valid || !ray.direction.valid) {
+        return false;
+    }
+    if (std::abs(ray.direction.y) <= 1e-6f) {
+        return false;
+    }
+    const float t = -ray.origin.y / ray.direction.y;
+    if (!std::isfinite(t) || t <= 0.0f) {
+        return false;
+    }
+    out_world_point.x = ray.origin.x + ray.direction.x * t;
+    out_world_point.y = 0.0f;
+    out_world_point.z = ray.origin.z + ray.direction.z * t;
+    out_world_point.valid = std::isfinite(out_world_point.x) &&
+                            std::isfinite(out_world_point.y) &&
+                            std::isfinite(out_world_point.z);
+    return out_world_point.valid;
+}
+
 constexpr float kPi = 3.14159265358979323846f;
 
 float normalize_degrees(float degrees) {
@@ -590,6 +623,7 @@ Asset& Asset::operator=(const Asset& o) {
         current_hit_box_volumes_.clear();
         current_attack_box_volumes_.clear();
         current_impassable_box_volumes_.clear();
+        current_impassable_shapes_.clear();
         floor_boxes_.clear();
         runtime_hit_box_lookup_.clear();
         runtime_attack_box_lookup_.clear();
@@ -1243,14 +1277,14 @@ bool Asset::affects_collision_context() const {
         return false;
     }
 
-    for (const RuntimeBoxVolume& volume : current_impassable_box_volumes_) {
-        if (volume.valid && volume.enabled) {
+    for (const RuntimeImpassableShape& shape : current_impassable_shapes_) {
+        if (shape.valid && shape.enabled) {
             return true;
         }
     }
 
-    for (const auto& box : info->impassable_boxes_payload()) {
-        if (box.enabled && box.is_valid()) {
+    for (const auto& shape : info->impassable_shapes_payload()) {
+        if (shape.enabled && shape.points.size() >= 3) {
             return true;
         }
     }
@@ -1311,6 +1345,7 @@ void Asset::refresh_runtime_box_cache_from_frame() {
     current_hit_box_volumes_.clear();
     current_attack_box_volumes_.clear();
     current_impassable_box_volumes_.clear();
+    current_impassable_shapes_.clear();
     runtime_hit_box_lookup_.clear();
     runtime_attack_box_lookup_.clear();
 
@@ -1494,32 +1529,78 @@ void Asset::refresh_runtime_box_cache_from_frame() {
     }
 
     if (isImpassableBoxEnabled()) {
-        const auto& boxes = info->impassable_boxes_payload();
-        current_impassable_box_volumes_.reserve(boxes.size());
-        for (const auto& box : boxes) {
-            if (!box.is_valid() || !box.enabled) {
+        const auto& authored_shapes = info->impassable_shapes_payload();
+        current_impassable_shapes_.reserve(authored_shapes.size());
+        const float default_prism_height = 100.0f;
+        float prism_height = anchor_points::anchor_height_px(*this);
+        if (!std::isfinite(prism_height) || prism_height <= 0.0f) {
+            prism_height = default_prism_height;
+        }
+        WarpedScreenGrid* cam = assets_ ? &assets_->getView() : window;
+        if (!cam) {
+            return;
+        }
+
+        for (const auto& authored_shape : authored_shapes) {
+            if (!authored_shape.enabled || authored_shape.points.size() < 3) {
                 continue;
             }
-            RuntimeBoxVolume volume{};
-            const auto runtime_corners = box.to_runtime_clockwise_points();
-            if (!build_volume(box.name,
-                              box.id,
-                              box.type.empty() ? std::string{"impassable_box"} : box.type,
-                              box.enabled,
-                              box.frame_start,
-                              box.frame_end,
-                              box.anchor_link,
-                              box.extrusion_amount,
-                              box.flatten_bottom_to_floor,
-                              0,
-                              std::string{},
-                              "{}",
-                              animation_update::make_default_attack_payload(),
-                              runtime_corners,
-                              volume)) {
+
+            RuntimeImpassableShape runtime_shape{};
+            runtime_shape.id = authored_shape.id;
+            runtime_shape.name = authored_shape.name;
+            runtime_shape.enabled = authored_shape.enabled;
+            runtime_shape.floor_points.reserve(authored_shape.points.size());
+            runtime_shape.bottom_ring.reserve(authored_shape.points.size());
+            runtime_shape.top_ring.reserve(authored_shape.points.size());
+
+            bool valid_shape = true;
+            float sum_x = 0.0f;
+            float sum_z = 0.0f;
+            for (const auto& point : authored_shape.points) {
+                DisplacedAssetAnchorPoint sample_anchor{};
+                sample_anchor.name = "__impassable_shape_point";
+                sample_anchor.texture_x = std::max(0, point.x);
+                sample_anchor.texture_y = std::max(0, point.y);
+                sample_anchor.depth_offset = 0;
+
+                const auto sample =
+                    anchor_points::resolve_frame_anchor_sample(*this,
+                                                               sample_anchor,
+                                                               anchor_points::GridMaterialization::None);
+                if (sample.resolved.missing || !sample.has_flat_screen_px) {
+                    valid_shape = false;
+                    break;
+                }
+
+                render_projection::CameraRay ray{};
+                if (!cam->build_camera_ray_from_screen(sample.flat_screen_px, ray)) {
+                    valid_shape = false;
+                    break;
+                }
+                render_projection::WorldPoint3 floor_point{};
+                if (!intersect_camera_ray_on_ground_plane(ray, floor_point)) {
+                    valid_shape = false;
+                    break;
+                }
+
+                runtime_shape.floor_points.push_back(SDL_FPoint{floor_point.x, floor_point.z});
+                runtime_shape.bottom_ring.push_back(RuntimeBoxPoint3{floor_point.x, 0.0f, floor_point.z});
+                runtime_shape.top_ring.push_back(RuntimeBoxPoint3{floor_point.x, prism_height, floor_point.z});
+                sum_x += floor_point.x;
+                sum_z += floor_point.z;
+            }
+
+            if (!valid_shape || runtime_shape.floor_points.size() < 3) {
                 continue;
             }
-            current_impassable_box_volumes_.push_back(std::move(volume));
+            const float inv_count = 1.0f / static_cast<float>(runtime_shape.floor_points.size());
+            runtime_shape.centroid = RuntimeBoxPoint3{
+                sum_x * inv_count,
+                prism_height * 0.5f,
+                sum_z * inv_count};
+            runtime_shape.valid = true;
+            current_impassable_shapes_.push_back(std::move(runtime_shape));
         }
     }
 
@@ -1536,8 +1617,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         SDL_Log("[BoxFlow][runtime_cache] asset=%s frame=%d impassable_count=%zu impassable_ids=%s",
                 asset_name.c_str(),
                 frame_index,
-                current_impassable_box_volumes_.size(),
-                runtime_box_ids_csv(current_impassable_box_volumes_).c_str());
+                current_impassable_shapes_.size(),
+                runtime_shape_ids_csv(current_impassable_shapes_).c_str());
     }
 }
 

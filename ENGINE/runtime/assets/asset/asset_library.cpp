@@ -57,8 +57,8 @@ bool is_reserved_animation_name(const std::string& raw_name) {
 constexpr const char* kMovementEnabledKey = "movement_enabled";
 constexpr const char* kAttackBoxEnabledKey = "attack_box_enabled";
 constexpr const char* kHitboxEnabledKey = "hitbox_enabled";
-constexpr const char* kImpassableBoxEnabledKey = "impassable_box_enabled";
-constexpr const char* kImpassableBoxesKey = "impassable_boxes";
+constexpr const char* kImpassableEnabledKey = "impassable_enabled";
+constexpr const char* kImpassableShapesKey = "impassable_shapes";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
 constexpr const char* kBoundaryTag = "boundary";
@@ -185,7 +185,7 @@ nlohmann::json normalize_floor_boxes_payload(const nlohmann::json& payload) {
         return normalized;
 }
 
-int read_impassable_box_int(const nlohmann::json& node, const char* key, int fallback) {
+int read_impassable_int(const nlohmann::json& node, const char* key, int fallback) {
         if (!node.is_object() || !node.contains(key)) {
                 return fallback;
         }
@@ -199,17 +199,21 @@ int read_impassable_box_int(const nlohmann::json& node, const char* key, int fal
         return fallback;
 }
 
-int read_impassable_box_int_from_path(const nlohmann::json& node,
-                                      const char* outer_key,
-                                      const char* inner_key,
-                                      int fallback) {
-        if (!node.is_object() || !node.contains(outer_key) || !node[outer_key].is_object()) {
-                return fallback;
+long long shape_signed_area_twice(const std::vector<std::pair<int, int>>& points) {
+        if (points.size() < 3) {
+                return 0;
         }
-        return read_impassable_box_int(node[outer_key], inner_key, fallback);
+        long long area2 = 0;
+        for (std::size_t i = 0; i < points.size(); ++i) {
+                const auto& a = points[i];
+                const auto& b = points[(i + 1) % points.size()];
+                area2 += static_cast<long long>(a.first) * static_cast<long long>(b.second) -
+                         static_cast<long long>(b.first) * static_cast<long long>(a.second);
+        }
+        return area2;
 }
 
-nlohmann::json normalize_impassable_boxes_payload(const nlohmann::json& payload) {
+nlohmann::json normalize_impassable_shapes_payload(const nlohmann::json& payload) {
         nlohmann::json normalized = nlohmann::json::array();
         if (!payload.is_array()) {
                 return normalized;
@@ -225,7 +229,7 @@ nlohmann::json normalize_impassable_boxes_payload(const nlohmann::json& payload)
 
                 std::string id = sanitize_floor_box_token(entry.value("id", std::string{}));
                 if (id.empty()) {
-                        id = std::string("impassable_box_") + std::to_string(index + 1);
+                        id = std::string("impassable_shape_") + std::to_string(index + 1);
                 }
                 std::string unique_id = id;
                 for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
@@ -234,68 +238,43 @@ nlohmann::json normalize_impassable_boxes_payload(const nlohmann::json& payload)
 
                 std::string name = entry.value("name", std::string{});
                 if (name.empty()) {
-                        name = std::string("Impassable Box ") + std::to_string(index + 1);
+                        name = std::string("Impassable Shape ") + std::to_string(index + 1);
                 }
                 std::string unique_name = name;
                 for (int suffix = 2; !used_names.insert(unique_name).second; ++suffix) {
                         unique_name = name + " " + std::to_string(suffix);
                 }
 
-                const auto finite_or = [](double value, double fallback) {
-                        return std::isfinite(value) ? value : fallback;
-                };
-
-                int left = 0;
-                int top = 0;
-                int width = 0;
-                int height = 0;
-                if (entry.contains("position") && entry["position"].is_object() &&
-                    entry.contains("size") && entry["size"].is_object()) {
-                        left = read_impassable_box_int_from_path(entry, "position", "x", 0);
-                        top = read_impassable_box_int_from_path(entry, "position", "y", 0);
-                        width = std::max(0, read_impassable_box_int_from_path(entry, "size", "w", 0));
-                        height = std::max(0, read_impassable_box_int_from_path(entry, "size", "h", 0));
-                } else if (entry.contains("corners") && entry["corners"].is_array() && !entry["corners"].empty()) {
-                        int min_x = std::numeric_limits<int>::max();
-                        int min_y = std::numeric_limits<int>::max();
-                        int max_x = 0;
-                        int max_y = 0;
-                        for (const auto& corner : entry["corners"]) {
-                                if (!corner.is_object()) {
+                std::vector<std::pair<int, int>> points;
+                if (entry.contains("points") && entry["points"].is_array()) {
+                        for (const auto& point_node : entry["points"]) {
+                                if (!point_node.is_object()) {
                                         continue;
                                 }
-                                const int x = std::max(0, read_impassable_box_int(corner, "texture_x", 0));
-                                const int y = std::max(0, read_impassable_box_int(corner, "texture_y", 0));
-                                min_x = std::min(min_x, x);
-                                min_y = std::min(min_y, y);
-                                max_x = std::max(max_x, x);
-                                max_y = std::max(max_y, y);
+                                const int x = read_impassable_int(point_node, "x", 0);
+                                const int y = read_impassable_int(point_node, "y", 0);
+                                points.emplace_back(x, y);
                         }
-                        if (min_x != std::numeric_limits<int>::max()) {
-                                left = min_x;
-                                top = min_y;
-                                width = std::max(0, max_x - min_x);
-                                height = std::max(0, max_y - min_y);
-                        }
+                }
+                if (points.size() < 3) {
+                        continue;
+                }
+                if (shape_signed_area_twice(points) < 0) {
+                        std::reverse(points.begin(), points.end());
                 }
 
                 nlohmann::json canonical = nlohmann::json::object();
                 canonical["id"] = unique_id;
-                canonical["type"] = "impassable_box";
                 canonical["name"] = unique_name;
                 canonical["enabled"] = entry.value("enabled", true);
-                canonical["extrusion_amount"] = std::max(0, read_impassable_box_int(entry, "extrusion_amount", 0));
-                canonical["flatten_bottom_to_floor"] = entry.value("flatten_bottom_to_floor", false);
-                canonical["anchor_link"] = entry.value("anchor_link", std::string{});
-                canonical["rotation_degrees"] = finite_or(entry.value("rotation_degrees", 0.0), 0.0);
-                canonical["position"] = nlohmann::json::object({
-                    {"x", left},
-                    {"y", top},
-                });
-                canonical["size"] = nlohmann::json::object({
-                    {"w", width},
-                    {"h", height},
-                });
+                nlohmann::json normalized_points = nlohmann::json::array();
+                for (const auto& point : points) {
+                        normalized_points.push_back(nlohmann::json::object({
+                            {"x", point.first},
+                            {"y", point.second},
+                        }));
+                }
+                canonical["points"] = std::move(normalized_points);
                 normalized.push_back(std::move(canonical));
         }
         return normalized;
@@ -567,13 +546,13 @@ bool ensure_manifest_entry_shape(const std::string& asset_name,
         mutated = ensure_bool_field(metadata, kMovementEnabledKey, false) || mutated;
         mutated = ensure_bool_field(metadata, kAttackBoxEnabledKey, false) || mutated;
         mutated = ensure_bool_field(metadata, kHitboxEnabledKey, false) || mutated;
-        mutated = ensure_bool_field(metadata, kImpassableBoxEnabledKey, false) || mutated;
+        mutated = ensure_bool_field(metadata, kImpassableEnabledKey, false) || mutated;
         mutated = ensure_bool_field(metadata, kFloorBoxesEnabledKey, false) || mutated;
 
         const bool movement_enabled = metadata.value(kMovementEnabledKey, false);
         const bool attack_box_enabled = metadata.value(kAttackBoxEnabledKey, false);
         const bool hitbox_enabled = metadata.value(kHitboxEnabledKey, false);
-        const bool impassable_box_enabled = metadata.value(kImpassableBoxEnabledKey, false);
+        const bool impassable_enabled = metadata.value(kImpassableEnabledKey, false);
         const bool floor_boxes_enabled = metadata.value(kFloorBoxesEnabledKey, false);
 
         if (floor_boxes_enabled) {
@@ -589,17 +568,19 @@ bool ensure_manifest_entry_shape(const std::string& asset_name,
                 mutated = metadata.erase(kFloorBoxesKey) > 0 || mutated;
         }
 
-        if (impassable_box_enabled) {
-                const nlohmann::json normalized_impassable_boxes =
-                    normalize_impassable_boxes_payload(metadata.value(kImpassableBoxesKey, nlohmann::json::array()));
-                if (normalized_impassable_boxes.empty()) {
-                        mutated = metadata.erase(kImpassableBoxesKey) > 0 || mutated;
-                } else if (!metadata.contains(kImpassableBoxesKey) || metadata[kImpassableBoxesKey] != normalized_impassable_boxes) {
-                        metadata[kImpassableBoxesKey] = normalized_impassable_boxes;
+        mutated = metadata.erase("impassable_box_enabled") > 0 || mutated;
+        mutated = metadata.erase("impassable_boxes") > 0 || mutated;
+        if (impassable_enabled) {
+                const nlohmann::json normalized_impassable_shapes =
+                    normalize_impassable_shapes_payload(metadata.value(kImpassableShapesKey, nlohmann::json::array()));
+                if (normalized_impassable_shapes.empty()) {
+                        mutated = metadata.erase(kImpassableShapesKey) > 0 || mutated;
+                } else if (!metadata.contains(kImpassableShapesKey) || metadata[kImpassableShapesKey] != normalized_impassable_shapes) {
+                        metadata[kImpassableShapesKey] = normalized_impassable_shapes;
                         mutated = true;
                 }
         } else {
-                mutated = metadata.erase(kImpassableBoxesKey) > 0 || mutated;
+                mutated = metadata.erase(kImpassableShapesKey) > 0 || mutated;
         }
 
         mutated |= ensure_animation_metadata(asset_name, metadata, assets_root);

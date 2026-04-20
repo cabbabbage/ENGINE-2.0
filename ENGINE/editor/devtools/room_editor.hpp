@@ -720,6 +720,8 @@ private:
                                          devmode::core::DevSaveCoordinator::Priority priority);
     bool mutate_impassable_boxes(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
                                  devmode::core::DevSaveCoordinator::Priority priority);
+    bool mutate_impassable_shapes(const std::function<bool(std::vector<AssetInfo::ImpassableShape>&)>& mutator,
+                                  devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_impassable_boxes(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
@@ -742,6 +744,8 @@ private:
     bool add_hitbox_in_current_frame();
     bool add_attack_box_in_current_frame();
     bool add_impassable_box();
+    bool increment_selected_impassable_point_count();
+    bool decrement_selected_impassable_point_count();
     bool delete_selected_hitbox_in_current_frame();
     bool delete_selected_attack_box_in_current_frame();
     bool delete_selected_impassable_box();

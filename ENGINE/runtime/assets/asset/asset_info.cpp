@@ -66,8 +66,8 @@ constexpr const char* kOvalCenterSuffix = "_oval_center";
 constexpr const char* kMovementEnabledKey = "movement_enabled";
 constexpr const char* kAttackBoxEnabledKey = "attack_box_enabled";
 constexpr const char* kHitboxEnabledKey = "hitbox_enabled";
-constexpr const char* kImpassableBoxEnabledKey = "impassable_box_enabled";
-constexpr const char* kImpassableBoxesKey = "impassable_boxes";
+constexpr const char* kImpassableEnabledKey = "impassable_enabled";
+constexpr const char* kImpassableShapesKey = "impassable_shapes";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
 constexpr const char* kBoundaryTag = "boundary";
@@ -331,7 +331,7 @@ nlohmann::json encode_floor_boxes_payload(const std::vector<AssetInfo::FloorBox>
     return payload;
 }
 
-int read_impassable_box_int(const nlohmann::json& node, const char* key, int fallback) {
+int read_impassable_int(const nlohmann::json& node, const char* key, int fallback) {
     if (!node.is_object() || !node.contains(key)) {
         return fallback;
     }
@@ -345,184 +345,228 @@ int read_impassable_box_int(const nlohmann::json& node, const char* key, int fal
     return fallback;
 }
 
-int read_impassable_box_int_from_path(const nlohmann::json& node,
-                                      const char* outer_key,
-                                      const char* inner_key,
-                                      int fallback) {
-    if (!node.is_object() || !node.contains(outer_key) || !node[outer_key].is_object()) {
-        return fallback;
-    }
-    return read_impassable_box_int(node[outer_key], inner_key, fallback);
+std::string default_impassable_shape_id(std::size_t index) {
+    return std::string("impassable_shape_") + std::to_string(index + 1);
 }
 
-animation_update::FrameBoxRect parse_impassable_box_rect(const nlohmann::json& node) {
-    if (!node.is_object()) {
-        return animation_update::FrameBoxRect{};
-    }
+std::string default_impassable_shape_name(std::size_t index) {
+    return std::string("Impassable Shape ") + std::to_string(index + 1);
+}
 
-    const bool has_position = node.contains("position") && node["position"].is_object();
-    const bool has_size = node.contains("size") && node["size"].is_object();
-    if (has_position && has_size) {
-        const int x = read_impassable_box_int_from_path(node, "position", "x", 0);
-        const int y = read_impassable_box_int_from_path(node, "position", "y", 0);
-        const int w = std::max(0, read_impassable_box_int_from_path(node, "size", "w", 0));
-        const int h = std::max(0, read_impassable_box_int_from_path(node, "size", "h", 0));
-        return animation_update::FrameBoxRect{x, y, x + w, y + h}.normalized_clamped();
+long long polygon_signed_area_twice(const std::vector<AssetInfo::ImpassableShapePoint>& points) {
+    if (points.size() < 3) {
+        return 0;
     }
+    long long area2 = 0;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const auto& a = points[i];
+        const auto& b = points[(i + 1) % points.size()];
+        area2 += static_cast<long long>(a.x) * static_cast<long long>(b.y) -
+                 static_cast<long long>(b.x) * static_cast<long long>(a.y);
+    }
+    return area2;
+}
 
-    std::vector<animation_update::FrameBoxCorner> corners;
-    if (node.contains("corners") && node["corners"].is_array()) {
-        corners.reserve(node["corners"].size());
-        for (const auto& corner_node : node["corners"]) {
-            if (!corner_node.is_object()) {
+long long segment_orientation(const AssetInfo::ImpassableShapePoint& a,
+                              const AssetInfo::ImpassableShapePoint& b,
+                              const AssetInfo::ImpassableShapePoint& c) {
+    return (static_cast<long long>(b.x) - static_cast<long long>(a.x)) *
+               (static_cast<long long>(c.y) - static_cast<long long>(a.y)) -
+           (static_cast<long long>(b.y) - static_cast<long long>(a.y)) *
+               (static_cast<long long>(c.x) - static_cast<long long>(a.x));
+}
+
+bool point_on_segment(const AssetInfo::ImpassableShapePoint& a,
+                      const AssetInfo::ImpassableShapePoint& b,
+                      const AssetInfo::ImpassableShapePoint& p) {
+    if (segment_orientation(a, b, p) != 0) {
+        return false;
+    }
+    const int min_x = std::min(a.x, b.x);
+    const int max_x = std::max(a.x, b.x);
+    const int min_y = std::min(a.y, b.y);
+    const int max_y = std::max(a.y, b.y);
+    return p.x >= min_x && p.x <= max_x && p.y >= min_y && p.y <= max_y;
+}
+
+bool segments_intersect_inclusive(const AssetInfo::ImpassableShapePoint& a1,
+                                  const AssetInfo::ImpassableShapePoint& a2,
+                                  const AssetInfo::ImpassableShapePoint& b1,
+                                  const AssetInfo::ImpassableShapePoint& b2) {
+    const long long o1 = segment_orientation(a1, a2, b1);
+    const long long o2 = segment_orientation(a1, a2, b2);
+    const long long o3 = segment_orientation(b1, b2, a1);
+    const long long o4 = segment_orientation(b1, b2, a2);
+
+    if (((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+        ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))) {
+        return true;
+    }
+    if (o1 == 0 && point_on_segment(a1, a2, b1)) {
+        return true;
+    }
+    if (o2 == 0 && point_on_segment(a1, a2, b2)) {
+        return true;
+    }
+    if (o3 == 0 && point_on_segment(b1, b2, a1)) {
+        return true;
+    }
+    if (o4 == 0 && point_on_segment(b1, b2, a2)) {
+        return true;
+    }
+    return false;
+}
+
+bool impassable_polygon_self_intersects(const std::vector<AssetInfo::ImpassableShapePoint>& points) {
+    const std::size_t n = points.size();
+    if (n < 4) {
+        return false;
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t i2 = (i + 1) % n;
+        for (std::size_t j = i + 1; j < n; ++j) {
+            const std::size_t j2 = (j + 1) % n;
+            if (i == j || i == j2 || i2 == j || i2 == j2) {
                 continue;
             }
-            corners.push_back(animation_update::FrameBoxCorner{
-                std::max(0, read_impassable_box_int(corner_node, "texture_x", 0)),
-                std::max(0, read_impassable_box_int(corner_node, "texture_y", 0)),
-            });
+            if (segments_intersect_inclusive(points[i], points[i2], points[j], points[j2])) {
+                return true;
+            }
         }
     }
-    if (!corners.empty()) {
-        return animation_update::FrameBoxRect::from_points(corners);
+    return false;
+}
+
+void normalize_impassable_shape_points(std::vector<AssetInfo::ImpassableShapePoint>& points) {
+    if (points.size() < 3) {
+        return;
     }
-    return animation_update::FrameBoxRect{};
+    if (polygon_signed_area_twice(points) < 0) {
+        std::reverse(points.begin(), points.end());
+    }
 }
 
-std::string default_impassable_box_id(std::size_t index) {
-    return std::string("impassable_box_") + std::to_string(index + 1);
-}
-
-std::string default_impassable_box_name(std::size_t index) {
-    return std::string("Impassable Box ") + std::to_string(index + 1);
-}
-
-std::vector<animation_update::FrameHitBox> parse_impassable_boxes_payload(const nlohmann::json& payload) {
-    std::vector<animation_update::FrameHitBox> boxes;
+std::vector<AssetInfo::ImpassableShapePoint> parse_impassable_shape_points(const nlohmann::json& payload) {
+    std::vector<AssetInfo::ImpassableShapePoint> points;
     if (!payload.is_array()) {
-        return boxes;
+        return points;
+    }
+    points.reserve(payload.size());
+    for (const auto& point_node : payload) {
+        if (!point_node.is_object()) {
+            continue;
+        }
+        const int x = read_impassable_int(point_node, "x", 0);
+        const int y = read_impassable_int(point_node, "y", 0);
+        points.push_back(AssetInfo::ImpassableShapePoint{x, y});
+    }
+    return points;
+}
+
+AssetInfo::ImpassableShape sanitize_impassable_shape_for_save(const AssetInfo::ImpassableShape& raw_shape,
+                                                              std::size_t index,
+                                                              std::unordered_set<std::string>& used_ids,
+                                                              std::unordered_set<std::string>& used_names) {
+    AssetInfo::ImpassableShape shape{};
+    std::string id = sanitize_floor_box_token(trim_copy(raw_shape.id));
+    if (id.empty()) {
+        id = default_impassable_shape_id(index);
+    }
+    std::string unique_id = id;
+    for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
+        unique_id = id + "_" + std::to_string(suffix);
+    }
+    shape.id = std::move(unique_id);
+
+    std::string name = trim_copy(raw_shape.name);
+    if (name.empty()) {
+        name = default_impassable_shape_name(index);
+    }
+    std::string unique_name = name;
+    for (int suffix = 2; !used_names.insert(unique_name).second; ++suffix) {
+        unique_name = name + " " + std::to_string(suffix);
+    }
+    shape.name = std::move(unique_name);
+    shape.enabled = raw_shape.enabled;
+    shape.points = raw_shape.points;
+    normalize_impassable_shape_points(shape.points);
+    return shape;
+}
+
+std::vector<AssetInfo::ImpassableShape> parse_impassable_shapes_payload(const nlohmann::json& payload) {
+    std::vector<AssetInfo::ImpassableShape> shapes;
+    if (!payload.is_array()) {
+        return shapes;
     }
 
     std::unordered_set<std::string> used_ids;
     std::unordered_set<std::string> used_names;
-    boxes.reserve(payload.size());
+    shapes.reserve(payload.size());
     for (std::size_t index = 0; index < payload.size(); ++index) {
         const auto& entry = payload[index];
         if (!entry.is_object()) {
             continue;
         }
 
-        animation_update::FrameHitBox box{};
-        std::string id = sanitize_floor_box_token(entry.value("id", std::string{}));
-        if (id.empty()) {
-            id = default_impassable_box_id(index);
+        AssetInfo::ImpassableShape shape{};
+        shape.id = sanitize_floor_box_token(entry.value("id", std::string{}));
+        if (shape.id.empty()) {
+            shape.id = default_impassable_shape_id(index);
         }
-        std::string unique_id = id;
+        std::string unique_id = shape.id;
         for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
-            unique_id = id + "_" + std::to_string(suffix);
+            unique_id = shape.id + "_" + std::to_string(suffix);
         }
-        box.id = unique_id;
+        shape.id = std::move(unique_id);
 
-        std::string name = trim_copy(entry.value("name", std::string{}));
-        if (name.empty()) {
-            name = default_impassable_box_name(index);
+        shape.name = trim_copy(entry.value("name", std::string{}));
+        if (shape.name.empty()) {
+            shape.name = default_impassable_shape_name(index);
         }
-        std::string unique_name = name;
+        std::string unique_name = shape.name;
         for (int suffix = 2; !used_names.insert(unique_name).second; ++suffix) {
-            unique_name = name + " " + std::to_string(suffix);
+            unique_name = shape.name + " " + std::to_string(suffix);
         }
-        box.name = unique_name;
+        shape.name = std::move(unique_name);
+        shape.enabled = entry.value("enabled", true);
+        shape.points = parse_impassable_shape_points(entry.value("points", nlohmann::json::array()));
+        normalize_impassable_shape_points(shape.points);
 
-        box.type = "impassable_box";
-        box.enabled = entry.value("enabled", true);
-        box.extrusion_amount = std::max(0, read_impassable_box_int(entry, "extrusion_amount", 0));
-        box.flatten_bottom_to_floor = entry.value("flatten_bottom_to_floor", false);
-        box.anchor_link = trim_copy(entry.value("anchor_link", std::string{}));
-        box.set_rotation_degrees(sanitize_finite_float(entry.value("rotation_degrees", 0.0f), 0.0f));
-        box.frame_start = 0;
-        box.frame_end = 0;
-        box.set_rect(parse_impassable_box_rect(entry));
-
-        if (box.is_valid()) {
-            boxes.push_back(std::move(box));
+        if (shape.points.size() < 3) {
+            continue;
         }
+        if (impassable_polygon_self_intersects(shape.points)) {
+            continue;
+        }
+        shapes.push_back(std::move(shape));
     }
-    return boxes;
+    return shapes;
 }
 
-animation_update::FrameHitBox sanitize_impassable_box_for_save(
-    const animation_update::FrameHitBox& raw_box,
-    std::size_t index,
-    std::unordered_set<std::string>& used_ids,
-    std::unordered_set<std::string>& used_names) {
-    animation_update::FrameHitBox sanitized = raw_box;
-    sanitized.type = "impassable_box";
-    sanitized.enabled = raw_box.enabled;
-    sanitized.extrusion_amount = std::max(0, raw_box.extrusion_amount);
-    sanitized.flatten_bottom_to_floor = raw_box.flatten_bottom_to_floor;
-    sanitized.anchor_link = trim_copy(raw_box.anchor_link);
-    sanitized.set_rotation_degrees(raw_box.rotation_degrees);
-    sanitized.frame_start = 0;
-    sanitized.frame_end = 0;
-    sanitized.set_rect(raw_box.rect);
-
-    std::string id = sanitize_floor_box_token(trim_copy(raw_box.id));
-    if (id.empty()) {
-        id = default_impassable_box_id(index);
-    }
-    std::string unique_id = id;
-    for (int suffix = 2; !used_ids.insert(unique_id).second; ++suffix) {
-        unique_id = id + "_" + std::to_string(suffix);
-    }
-    sanitized.id = unique_id;
-
-    std::string name = trim_copy(raw_box.name);
-    if (name.empty()) {
-        name = default_impassable_box_name(index);
-    }
-    std::string unique_name = name;
-    for (int suffix = 2; !used_names.insert(unique_name).second; ++suffix) {
-        unique_name = name + " " + std::to_string(suffix);
-    }
-    sanitized.name = unique_name;
-
-    return sanitized;
-}
-
-nlohmann::json encode_impassable_boxes_payload(const std::vector<animation_update::FrameHitBox>& boxes) {
+nlohmann::json encode_impassable_shapes_payload(const std::vector<AssetInfo::ImpassableShape>& shapes) {
     nlohmann::json payload = nlohmann::json::array();
     std::unordered_set<std::string> used_ids;
     std::unordered_set<std::string> used_names;
-    used_ids.reserve(boxes.size());
-    used_names.reserve(boxes.size());
-    for (std::size_t index = 0; index < boxes.size(); ++index) {
-        const auto box = sanitize_impassable_box_for_save(boxes[index], index, used_ids, used_names);
+    used_ids.reserve(shapes.size());
+    used_names.reserve(shapes.size());
+    for (std::size_t index = 0; index < shapes.size(); ++index) {
+        AssetInfo::ImpassableShape shape =
+            sanitize_impassable_shape_for_save(shapes[index], index, used_ids, used_names);
+        if (shape.points.size() < 3 || impassable_polygon_self_intersects(shape.points)) {
+            continue;
+        }
         nlohmann::json node = nlohmann::json::object();
-        node["id"] = box.id;
-        node["type"] = "impassable_box";
-        node["name"] = box.name;
-        node["enabled"] = box.enabled;
-        node["extrusion_amount"] = box.extrusion_amount;
-        node["flatten_bottom_to_floor"] = box.flatten_bottom_to_floor;
-        node["anchor_link"] = box.anchor_link;
-        node["rotation_degrees"] = box.normalized_rotation_degrees();
-        node["position"] = nlohmann::json::object({
-            {"x", box.rect.left},
-            {"y", box.rect.top},
-        });
-        node["size"] = nlohmann::json::object({
-            {"w", std::max(0, box.rect.width())},
-            {"h", std::max(0, box.rect.height())},
-        });
-        nlohmann::json corners = nlohmann::json::array();
-        const auto runtime_corners = box.to_runtime_clockwise_points();
-        for (const auto& corner : runtime_corners) {
-            corners.push_back(nlohmann::json::object({
-                {"texture_x", std::max(0, corner.texture_x)},
-                {"texture_y", std::max(0, corner.texture_y)},
+        node["id"] = shape.id;
+        node["name"] = shape.name;
+        node["enabled"] = shape.enabled;
+        nlohmann::json points = nlohmann::json::array();
+        for (const auto& point : shape.points) {
+            points.push_back(nlohmann::json::object({
+                {"x", point.x},
+                {"y", point.y},
             }));
         }
-        node["corners"] = std::move(corners);
+        node["points"] = std::move(points);
         payload.push_back(std::move(node));
     }
     return payload;
@@ -2361,8 +2405,10 @@ nlohmann::json AssetInfo::manifest_payload() const {
         payload[kMovementEnabledKey] = movement_enabled;
         payload[kAttackBoxEnabledKey] = attack_box_enabled;
         payload[kHitboxEnabledKey] = hitbox_enabled;
-        payload[kImpassableBoxEnabledKey] = impassable_box_enabled;
+        payload[kImpassableEnabledKey] = impassable_enabled;
         payload[kFloorBoxesEnabledKey] = floor_boxes_enabled;
+        payload.erase("impassable_box_enabled");
+        payload.erase("impassable_boxes");
         if (floor_boxes_enabled) {
                 const nlohmann::json floor_payload = encode_floor_boxes_payload(floor_boxes);
                 if (!floor_payload.empty()) {
@@ -2373,15 +2419,15 @@ nlohmann::json AssetInfo::manifest_payload() const {
         } else {
                 payload.erase(kFloorBoxesKey);
         }
-        if (impassable_box_enabled) {
-                const nlohmann::json impassable_payload = encode_impassable_boxes_payload(impassable_boxes);
+        if (impassable_enabled) {
+                const nlohmann::json impassable_payload = encode_impassable_shapes_payload(impassable_shapes);
                 if (!impassable_payload.empty()) {
-                        payload[kImpassableBoxesKey] = impassable_payload;
+                        payload[kImpassableShapesKey] = impassable_payload;
                 } else {
-                        payload.erase(kImpassableBoxesKey);
+                        payload.erase(kImpassableShapesKey);
                 }
         } else {
-                payload.erase(kImpassableBoxesKey);
+                payload.erase(kImpassableShapesKey);
         }
         payload["weight_kg"] = weight_kg;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
@@ -2818,17 +2864,20 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         hitbox_enabled = data.contains(kHitboxEnabledKey) && data[kHitboxEnabledKey].is_boolean()
             ? data[kHitboxEnabledKey].get<bool>()
             : false;
-        impassable_box_enabled = data.contains(kImpassableBoxEnabledKey) && data[kImpassableBoxEnabledKey].is_boolean()
-            ? data[kImpassableBoxEnabledKey].get<bool>()
+        impassable_enabled = data.contains(kImpassableEnabledKey) && data[kImpassableEnabledKey].is_boolean()
+            ? data[kImpassableEnabledKey].get<bool>()
             : false;
+        impassable_box_enabled = impassable_enabled;
         floor_boxes_enabled = data.contains(kFloorBoxesEnabledKey) && data[kFloorBoxesEnabledKey].is_boolean()
             ? data[kFloorBoxesEnabledKey].get<bool>()
             : false;
         info_json_[kMovementEnabledKey] = movement_enabled;
         info_json_[kAttackBoxEnabledKey] = attack_box_enabled;
         info_json_[kHitboxEnabledKey] = hitbox_enabled;
-        info_json_[kImpassableBoxEnabledKey] = impassable_box_enabled;
+        info_json_[kImpassableEnabledKey] = impassable_enabled;
         info_json_[kFloorBoxesEnabledKey] = floor_boxes_enabled;
+        info_json_.erase("impassable_box_enabled");
+        info_json_.erase("impassable_boxes");
 
         floor_boxes.clear();
         if (floor_boxes_enabled && data.contains(kFloorBoxesKey) && data[kFloorBoxesKey].is_array()) {
@@ -2842,17 +2891,18 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         } else {
                 info_json_.erase(kFloorBoxesKey);
         }
+        impassable_shapes.clear();
         impassable_boxes.clear();
-        if (impassable_box_enabled && data.contains(kImpassableBoxesKey) && data[kImpassableBoxesKey].is_array()) {
-                impassable_boxes = parse_impassable_boxes_payload(data[kImpassableBoxesKey]);
-                const nlohmann::json impassable_payload = encode_impassable_boxes_payload(impassable_boxes);
+        if (impassable_enabled && data.contains(kImpassableShapesKey) && data[kImpassableShapesKey].is_array()) {
+                impassable_shapes = parse_impassable_shapes_payload(data[kImpassableShapesKey]);
+                const nlohmann::json impassable_payload = encode_impassable_shapes_payload(impassable_shapes);
                 if (!impassable_payload.empty()) {
-                        info_json_[kImpassableBoxesKey] = impassable_payload;
+                        info_json_[kImpassableShapesKey] = impassable_payload;
                 } else {
-                        info_json_.erase(kImpassableBoxesKey);
+                        info_json_.erase(kImpassableShapesKey);
                 }
         } else {
-                info_json_.erase(kImpassableBoxesKey);
+                info_json_.erase(kImpassableShapesKey);
         }
         if (data.contains(kAnchorPointChildCandidatesKey)) {
                 set_anchor_point_child_candidates_payload(data[kAnchorPointChildCandidatesKey]);
@@ -3887,9 +3937,10 @@ bool AssetInfo::reload_animations_from_disk() {
         hitbox_enabled = payload.contains(kHitboxEnabledKey) && payload[kHitboxEnabledKey].is_boolean()
             ? payload[kHitboxEnabledKey].get<bool>()
             : false;
-        impassable_box_enabled = payload.contains(kImpassableBoxEnabledKey) && payload[kImpassableBoxEnabledKey].is_boolean()
-            ? payload[kImpassableBoxEnabledKey].get<bool>()
+        impassable_enabled = payload.contains(kImpassableEnabledKey) && payload[kImpassableEnabledKey].is_boolean()
+            ? payload[kImpassableEnabledKey].get<bool>()
             : false;
+        impassable_box_enabled = impassable_enabled;
         floor_boxes_enabled = payload.contains(kFloorBoxesEnabledKey) && payload[kFloorBoxesEnabledKey].is_boolean()
             ? payload[kFloorBoxesEnabledKey].get<bool>()
             : false;
@@ -3897,9 +3948,10 @@ bool AssetInfo::reload_animations_from_disk() {
         if (floor_boxes_enabled && payload.contains(kFloorBoxesKey) && payload[kFloorBoxesKey].is_array()) {
             floor_boxes = parse_floor_boxes_payload(payload[kFloorBoxesKey]);
         }
+        impassable_shapes.clear();
         impassable_boxes.clear();
-        if (impassable_box_enabled && payload.contains(kImpassableBoxesKey) && payload[kImpassableBoxesKey].is_array()) {
-            impassable_boxes = parse_impassable_boxes_payload(payload[kImpassableBoxesKey]);
+        if (impassable_enabled && payload.contains(kImpassableShapesKey) && payload[kImpassableShapesKey].is_array()) {
+            impassable_shapes = parse_impassable_shapes_payload(payload[kImpassableShapesKey]);
         }
 
         load_animations(payload);
@@ -3923,8 +3975,10 @@ bool AssetInfo::reload_animations_from_disk() {
         info_json_[kMovementEnabledKey] = movement_enabled;
         info_json_[kAttackBoxEnabledKey] = attack_box_enabled;
         info_json_[kHitboxEnabledKey] = hitbox_enabled;
-        info_json_[kImpassableBoxEnabledKey] = impassable_box_enabled;
+        info_json_[kImpassableEnabledKey] = impassable_enabled;
         info_json_[kFloorBoxesEnabledKey] = floor_boxes_enabled;
+        info_json_.erase("impassable_box_enabled");
+        info_json_.erase("impassable_boxes");
         if (floor_boxes_enabled) {
             const nlohmann::json floor_payload = encode_floor_boxes_payload(floor_boxes);
             if (!floor_payload.empty()) {
@@ -3935,15 +3989,15 @@ bool AssetInfo::reload_animations_from_disk() {
         } else {
             info_json_.erase(kFloorBoxesKey);
         }
-        if (impassable_box_enabled) {
-            const nlohmann::json impassable_payload = encode_impassable_boxes_payload(impassable_boxes);
+        if (impassable_enabled) {
+            const nlohmann::json impassable_payload = encode_impassable_shapes_payload(impassable_shapes);
             if (!impassable_payload.empty()) {
-                info_json_[kImpassableBoxesKey] = impassable_payload;
+                info_json_[kImpassableShapesKey] = impassable_payload;
             } else {
-                info_json_.erase(kImpassableBoxesKey);
+                info_json_.erase(kImpassableShapesKey);
             }
         } else {
-            info_json_.erase(kImpassableBoxesKey);
+            info_json_.erase(kImpassableShapesKey);
         }
         info_json_["start"] = start_animation;
         return true;

@@ -148,13 +148,29 @@ class AssetInfo {
         std::optional<CandidatePayload> candidate;
     };
 
+    struct ImpassableShapePoint {
+        int x = 0;
+        int y = 0;
+    };
+
+    struct ImpassableShape {
+        std::string id;
+        std::string name;
+        bool enabled = true;
+        std::vector<ImpassableShapePoint> points;
+
+        bool valid() const { return enabled && points.size() >= 3; }
+    };
+
     bool movement_enabled = false;
     bool attack_box_enabled = false;
     bool hitbox_enabled = false;
-    bool impassable_box_enabled = false;
+    bool impassable_enabled = false;
+    bool impassable_box_enabled = false; // Legacy in-memory flag. Not serialized.
     bool floor_boxes_enabled = false;
     std::vector<FloorBox> floor_boxes;
-    std::vector<animation_update::FrameHitBox> impassable_boxes;
+    std::vector<ImpassableShape> impassable_shapes;
+    std::vector<animation_update::FrameHitBox> impassable_boxes; // Legacy editor cache. Not serialized.
     std::vector<float>  scale_variants;
     struct NamedArea {
         struct RenderFrame {
@@ -272,12 +288,13 @@ class AssetInfo {
     bool is_movement_enabled() const { return movement_enabled; }
     bool is_hitbox_enabled() const { return hitbox_enabled; }
     bool is_attack_box_enabled() const { return attack_box_enabled; }
-    bool is_impassable_box_enabled() const { return impassable_box_enabled; }
+    bool is_impassable_box_enabled() const { return impassable_enabled || impassable_box_enabled; }
     bool is_floor_boxes_enabled() const { return floor_boxes_enabled; }
     const std::vector<FloorBox>& floor_boxes_payload() const { return floor_boxes; }
-    const std::vector<animation_update::FrameHitBox>& impassable_boxes_payload() const {
-        return impassable_boxes;
+    const std::vector<ImpassableShape>& impassable_shapes_payload() const {
+        return impassable_shapes;
     }
+    const std::vector<animation_update::FrameHitBox>& impassable_boxes_payload() const { return impassable_boxes; }
 
     std::vector<std::string> animation_names() const;
 

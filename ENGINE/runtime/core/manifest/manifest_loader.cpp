@@ -192,7 +192,7 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
             "movement_enabled",
             "attack_box_enabled",
             "hitbox_enabled",
-            "impassable_box_enabled",
+            "impassable_enabled",
             "floor_boxes_enabled",
         };
         for (const char* key : bool_keys) {
@@ -205,34 +205,63 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
             }
         }
 
-        auto impassable_boxes_it = asset.find("impassable_boxes");
-        const bool impassable_box_enabled = asset["impassable_box_enabled"].get<bool>();
-        if (!impassable_box_enabled) {
-            if (impassable_boxes_it != asset.end()) {
+        if (asset.contains("impassable_box_enabled") || asset.contains("impassable_boxes")) {
+            std::ostringstream oss;
+            oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                << "' still contains legacy impassable box keys.";
+            throw std::runtime_error(oss.str());
+        }
+
+        auto impassable_shapes_it = asset.find("impassable_shapes");
+        const bool impassable_enabled = asset["impassable_enabled"].get<bool>();
+        if (!impassable_enabled) {
+            if (impassable_shapes_it != asset.end()) {
                 std::ostringstream oss;
                 oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
-                    << "' must omit 'impassable_boxes' when 'impassable_box_enabled' is false.";
+                    << "' must omit 'impassable_shapes' when 'impassable_enabled' is false.";
                 throw std::runtime_error(oss.str());
             }
-        } else if (impassable_boxes_it != asset.end()) {
-            if (!impassable_boxes_it->is_array()) {
+        } else if (impassable_shapes_it != asset.end()) {
+            if (!impassable_shapes_it->is_array()) {
                 std::ostringstream oss;
                 oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
-                    << "' key 'impassable_boxes' must be an array.";
+                    << "' key 'impassable_shapes' must be an array.";
                 throw std::runtime_error(oss.str());
             }
-            for (const auto& box : *impassable_boxes_it) {
-                if (!box.is_object()) {
+            for (const auto& shape : *impassable_shapes_it) {
+                if (!shape.is_object()) {
                     std::ostringstream oss;
                     oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
-                        << "' contains non-object impassable box entry.";
+                        << "' contains non-object impassable shape entry.";
                     throw std::runtime_error(oss.str());
                 }
-                if (!box.contains("id") || !box["id"].is_string() ||
-                    !box.contains("name") || !box["name"].is_string()) {
+                if (!shape.contains("id") || !shape["id"].is_string() ||
+                    !shape.contains("name") || !shape["name"].is_string()) {
                     std::ostringstream oss;
                     oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
-                        << "' impassable box keys 'id' and 'name' must be strings.";
+                        << "' impassable shape keys 'id' and 'name' must be strings.";
+                    throw std::runtime_error(oss.str());
+                }
+                if (!shape.contains("points") || !shape["points"].is_array() || shape["points"].size() < 3) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' impassable shape must include a 'points' array with at least 3 points.";
+                    throw std::runtime_error(oss.str());
+                }
+                for (const auto& point : shape["points"]) {
+                    if (!point.is_object() ||
+                        !point.contains("x") || !point["x"].is_number() ||
+                        !point.contains("y") || !point["y"].is_number()) {
+                        std::ostringstream oss;
+                        oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                            << "' impassable shape points must be objects with numeric 'x'/'y'.";
+                        throw std::runtime_error(oss.str());
+                    }
+                }
+                if (shape.contains("enabled") && !shape["enabled"].is_boolean()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' impassable shape key 'enabled' must be boolean.";
                     throw std::runtime_error(oss.str());
                 }
             }
@@ -357,9 +386,15 @@ bool apply_manifest_asset_defaults(nlohmann::json& manifest_json) {
         }
 
         auto& asset = it.value();
-        if (!asset.contains("impassable_box_enabled")) {
-            const bool inferred_enabled = asset.contains("impassable_boxes");
-            asset["impassable_box_enabled"] = inferred_enabled;
+        if (!asset.contains("impassable_enabled")) {
+            const bool inferred_enabled = asset.contains("impassable_shapes");
+            asset["impassable_enabled"] = inferred_enabled;
+            mutated = true;
+        }
+        if (asset.erase("impassable_box_enabled") > 0) {
+            mutated = true;
+        }
+        if (asset.erase("impassable_boxes") > 0) {
             mutated = true;
         }
     }

@@ -8729,6 +8729,14 @@ void RoomEditor::ensure_floor_box_editor_widgets() {
             floor_box_edit_.selected_box_index = index;
             sync_floor_box_tools_panel();
         });
+        floor_box_tools_panel_->set_on_context_click([this](int index, SDL_Point click_point) {
+            if (!floor_box_mode_active()) {
+                return;
+            }
+            floor_box_edit_.selected_box_index = index;
+            sync_floor_box_tools_panel();
+            open_floor_box_candidate_editor(index, click_point);
+        });
         floor_box_tools_panel_->set_on_add([this]() {
             add_floor_box();
         });

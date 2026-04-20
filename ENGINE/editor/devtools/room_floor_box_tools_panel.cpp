@@ -163,6 +163,10 @@ void RoomFloorBoxToolsPanel::set_on_select(SelectCallback callback) {
     on_select_ = std::move(callback);
 }
 
+void RoomFloorBoxToolsPanel::set_on_context_click(ContextClickCallback callback) {
+    on_context_click_ = std::move(callback);
+}
+
 void RoomFloorBoxToolsPanel::set_on_add(AddCallback callback) {
     on_add_ = std::move(callback);
 }
@@ -260,6 +264,18 @@ bool RoomFloorBoxToolsPanel::handle_event(const SDL_Event& event) {
                                  row_rect.y <= list_clip_rect_.y + list_clip_rect_.h;
         if (!row_visible) {
             continue;
+        }
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_RIGHT &&
+            point_in_rect(pointer_x, pointer_y, row_rect)) {
+            handled = true;
+            selected_box_index_ = static_cast<int>(i);
+            if (on_select_) {
+                on_select_(selected_box_index_);
+            }
+            if (on_context_click_) {
+                on_context_click_(selected_box_index_, SDL_Point{pointer_x, pointer_y});
+            }
         }
         if (button->handle_event(event)) {
             handled = true;

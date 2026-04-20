@@ -26,6 +26,7 @@ public:
     };
 
     using SelectCallback = std::function<void(int)>;
+    using ContextClickCallback = std::function<void(int, SDL_Point)>;
     using AddCallback = std::function<void()>;
     using DeleteCallback = std::function<void()>;
     using ApplyCallback = std::function<void(const DetailValues&)>;
@@ -50,6 +51,7 @@ public:
     void set_recommendation_pool(const std::vector<std::string>& tags);
 
     void set_on_select(SelectCallback callback);
+    void set_on_context_click(ContextClickCallback callback);
     void set_on_add(AddCallback callback);
     void set_on_delete(DeleteCallback callback);
     void set_on_apply(ApplyCallback callback);
@@ -128,6 +130,7 @@ private:
     std::unique_ptr<DMCheckbox> system_enabled_checkbox_;
 
     SelectCallback on_select_;
+    ContextClickCallback on_context_click_;
     AddCallback on_add_;
     DeleteCallback on_delete_;
     ApplyCallback on_apply_;

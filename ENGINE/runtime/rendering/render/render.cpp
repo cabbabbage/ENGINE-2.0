@@ -1161,7 +1161,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
 
         SDL_FPoint screen = resolved->screen_pos_2d;
         if ((!std::isfinite(screen.x) || !std::isfinite(screen.y)) &&
-            (!cam.project_world_point(resolved->world_exact_pos_2d, resolved->world_exact_z, screen) ||
+            (!cam.project_world_point(SDL_FPoint{resolved->world_exact_pos_2d.x, resolved->world_exact_pos_2d.y},
+                                      resolved->world_exact_z,
+                                      screen) ||
              !std::isfinite(screen.x) || !std::isfinite(screen.y))) {
             ++runtime_light_culled_count_;
             continue;

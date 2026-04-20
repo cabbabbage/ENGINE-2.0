@@ -15,6 +15,7 @@
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
+#include "assets/asset/anchor_point.hpp"
 #include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"

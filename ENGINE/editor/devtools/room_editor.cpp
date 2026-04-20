@@ -14497,8 +14497,10 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
     const bool closing_open_candidate_editor =
         anchor_candidate_editor_.open && anchor_candidate_editor_.anchor_name == deleted_name;
     bool normalized_any = false;
-    if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
-        return false;
+    if (!light_mode_active()) {
+        if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
+            return false;
+        }
     }
     const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
     if (eligible_ids.empty()) {

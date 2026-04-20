@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -195,13 +196,15 @@ TEST_CASE("Anchor mode ownership treats anchor identity as shared across modes")
                                   is_reserved_name));
 }
 
-TEST_CASE("Anchor mode rename and delete affect shared anchor identity across modes") {
+TEST_CASE("Anchor mode light delete removes only light-owned entries for selected identity") {
     std::vector<DisplacedAssetAnchorPoint> anchors{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
+        DisplacedAssetAnchorPoint{"shared", 7, 8, 0.0f},
         DisplacedAssetAnchorPoint{"other", 5, 6, 0.0f},
     };
     anchors[1].has_light_data = true;
+    anchors[2].has_light_data = true;
 
     const auto is_reserved_name = [](const std::string&) {
         return false;
@@ -215,20 +218,29 @@ TEST_CASE("Anchor mode rename and delete affect shared anchor identity across mo
 
     CHECK(anchors[0].name == "anchor_renamed");
     CHECK(anchors[1].name == "anchor_renamed");
-    CHECK(anchors[2].name == "other");
+    CHECK(anchors[2].name == "anchor_renamed");
+    CHECK(anchors[3].name == "other");
 
     REQUIRE(delete_anchor_in_mode(anchors,
                                   "anchor_renamed",
                                   devmode::room_anchor_mode::AnchorPointOwner::Light,
                                   is_reserved_name));
 
-    CHECK(anchors.size() == 1);
+    CHECK(anchors.size() == 2);
+    CHECK(anchors[0].name == "anchor_renamed");
+    CHECK(!anchors[0].has_light_data);
+    CHECK(anchors[1].name == "other");
     CHECK(find_anchor_in_mode(anchors,
                               "other",
                               devmode::room_anchor_mode::AnchorPointOwner::NonLight,
                               is_reserved_name) != nullptr);
     CHECK(find_anchor_in_mode(anchors,
                               "anchor_renamed",
-                              devmode::room_anchor_mode::AnchorPointOwner::Light,
-                              is_reserved_name) == nullptr);
+                              devmode::room_anchor_mode::AnchorPointOwner::NonLight,
+                              is_reserved_name) != nullptr);
+    const auto remaining_light_it = std::find_if(
+        anchors.begin(), anchors.end(), [](const DisplacedAssetAnchorPoint& anchor) {
+            return anchor.name == "anchor_renamed" && anchor.has_light_data;
+        });
+    CHECK(remaining_light_it == anchors.end());
 }

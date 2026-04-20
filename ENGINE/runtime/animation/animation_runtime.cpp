@@ -499,6 +499,11 @@ void AnimationRuntime::update() {
         }
     }
 
+    if (freeze_for_frame_editor) {
+        dispatch_active_attack_payload();
+        return;
+    }
+
     if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode && !movement_disabled_for_asset) {
         (void)planner_iface_->consume_input_event();
     }

@@ -105,7 +105,13 @@ bool delete_anchor_in_mode(std::vector<DisplacedAssetAnchorPoint>& anchors,
         anchors.begin(),
         anchors.end(),
         [&](const DisplacedAssetAnchorPoint& anchor) {
-            return anchor.name == name && anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name);
+            if (anchor.name != name || !anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
+                return false;
+            }
+            if (owner == AnchorPointOwner::Light && !anchor.has_light_data) {
+                return false;
+            }
+            return true;
         });
     if (erase_it == anchors.end()) {
         return false;

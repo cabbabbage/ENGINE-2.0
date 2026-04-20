@@ -370,7 +370,7 @@
                 "name": "barrel"
               }
             ],
-            "grid_resolution": 4
+            "grid_resolution": 2
           },
           "depth": 221.0,
           "enabled": true,
@@ -19326,9 +19326,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            124,
             242,
             36,
+            125,
             255
           ],
           "edge_smoothness": 2,
@@ -19729,9 +19729,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            242,
+            242,
+            61,
             255
           ],
           "edge_smoothness": 101,

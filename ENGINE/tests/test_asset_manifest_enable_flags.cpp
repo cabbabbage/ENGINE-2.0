@@ -317,6 +317,7 @@ TEST_CASE("AssetInfo impassable boxes normalize canonical fields") {
         CHECK(imp_box.contains("name"));
         CHECK(imp_box.contains("enabled"));
         CHECK(imp_box.contains("extrusion_amount"));
+        CHECK(imp_box.contains("flatten_bottom_to_floor"));
         CHECK(imp_box.contains("anchor_link"));
         CHECK(imp_box.contains("rotation_degrees"));
         CHECK(imp_box.contains("position"));
@@ -324,6 +325,7 @@ TEST_CASE("AssetInfo impassable boxes normalize canonical fields") {
         CHECK(imp_box.contains("corners"));
         CHECK(imp_box["type"] == "impassable_box");
         CHECK(imp_box["extrusion_amount"].get<int>() >= 0);
+        CHECK(imp_box["flatten_bottom_to_floor"].is_boolean());
         CHECK(imp_box["position"].is_object());
         CHECK(imp_box["size"].is_object());
         CHECK(imp_box["corners"].is_array());

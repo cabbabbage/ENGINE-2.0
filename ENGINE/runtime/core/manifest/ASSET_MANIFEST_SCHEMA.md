@@ -36,6 +36,7 @@ Canonical impassable box fields:
 - `name` (string)
 - `enabled` (bool)
 - `extrusion_amount` (integer)
+- `flatten_bottom_to_floor` (bool)
 - `anchor_link` (string)
 - `rotation_degrees` (number)
 - `position` (object with `x`, `y`)

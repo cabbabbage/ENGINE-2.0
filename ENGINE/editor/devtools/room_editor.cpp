@@ -16349,6 +16349,75 @@ bool RoomEditor::enter_hitbox_edit_mode() {
         hitbox_edit_ = BoxEditState{};
         return false;
     }
+    {
+        auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
+        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
+            std::unordered_map<std::string, bool> desired_flatten_by_id;
+            for (std::size_t idx = 0; idx < anim_it->second.frame_count(); ++idx) {
+                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
+                if (!frame) {
+                    continue;
+                }
+                for (const auto& box : frame->hit_boxes.boxes) {
+                    if (box.id.empty()) {
+                        continue;
+                    }
+                    auto [it, inserted] = desired_flatten_by_id.emplace(box.id, box.flatten_bottom_to_floor);
+                    if (!inserted) {
+                        it->second = it->second || box.flatten_bottom_to_floor;
+                    }
+                }
+            }
+
+            nlohmann::json payload = target->info->animation_payload(hitbox_edit_.animation_id);
+            const std::size_t frame_count = anim_it->second.frame_count();
+            bool payload_changed = false;
+            bool runtime_changed = false;
+            for (std::size_t idx = 0; idx < frame_count; ++idx) {
+                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
+                if (!frame) {
+                    continue;
+                }
+                std::vector<animation_update::FrameHitBox> updated = frame->hit_boxes.boxes;
+                bool frame_changed = false;
+                for (auto& box : updated) {
+                    if (box.id.empty()) {
+                        continue;
+                    }
+                    auto desired_it = desired_flatten_by_id.find(box.id);
+                    if (desired_it == desired_flatten_by_id.end()) {
+                        continue;
+                    }
+                    if (box.flatten_bottom_to_floor != desired_it->second) {
+                        box.flatten_bottom_to_floor = desired_it->second;
+                        frame_changed = true;
+                    }
+                }
+                if (!frame_changed) {
+                    continue;
+                }
+                frame->set_hit_boxes(updated);
+                runtime_changed = true;
+                if (devmode::room_box_payload::write_hit_box_frame_to_payload(payload, frame_count, idx, updated)) {
+                    payload_changed = true;
+                }
+            }
+            if (payload_changed && target->info->upsert_animation(hitbox_edit_.animation_id, payload)) {
+                target->info->mark_dirty();
+                (void)persist_asset_manifest_from_info(target->info,
+                                                       devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                                       "Hitbox Flatten Bottom Normalize",
+                                                       "room-hitbox-flatten-bottom-normalize",
+                                                       false);
+            }
+            if (runtime_changed) {
+                target->refresh_runtime_box_cache_from_frame();
+                if (assets_) {
+                    assets_->mark_active_assets_dirty();
+                }
+            }
+        }
+    }
     (void)mutate_hitbox_current_frame(
         [](std::vector<animation_update::FrameHitBox>& boxes) {
             bool changed = false;
@@ -16396,6 +16465,75 @@ bool RoomEditor::enter_attack_box_edit_mode() {
         editor_mode_ = EditorMode::Normal;
         attack_box_edit_ = BoxEditState{};
         return false;
+    }
+    {
+        auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
+        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
+            std::unordered_map<std::string, bool> desired_flatten_by_id;
+            for (std::size_t idx = 0; idx < anim_it->second.frame_count(); ++idx) {
+                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
+                if (!frame) {
+                    continue;
+                }
+                for (const auto& box : frame->attack_boxes.boxes) {
+                    if (box.id.empty()) {
+                        continue;
+                    }
+                    auto [it, inserted] = desired_flatten_by_id.emplace(box.id, box.flatten_bottom_to_floor);
+                    if (!inserted) {
+                        it->second = it->second || box.flatten_bottom_to_floor;
+                    }
+                }
+            }
+
+            nlohmann::json payload = target->info->animation_payload(attack_box_edit_.animation_id);
+            const std::size_t frame_count = anim_it->second.frame_count();
+            bool payload_changed = false;
+            bool runtime_changed = false;
+            for (std::size_t idx = 0; idx < frame_count; ++idx) {
+                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
+                if (!frame) {
+                    continue;
+                }
+                std::vector<animation_update::FrameAttackBox> updated = frame->attack_boxes.boxes;
+                bool frame_changed = false;
+                for (auto& box : updated) {
+                    if (box.id.empty()) {
+                        continue;
+                    }
+                    auto desired_it = desired_flatten_by_id.find(box.id);
+                    if (desired_it == desired_flatten_by_id.end()) {
+                        continue;
+                    }
+                    if (box.flatten_bottom_to_floor != desired_it->second) {
+                        box.flatten_bottom_to_floor = desired_it->second;
+                        frame_changed = true;
+                    }
+                }
+                if (!frame_changed) {
+                    continue;
+                }
+                frame->set_attack_boxes(updated);
+                runtime_changed = true;
+                if (devmode::room_box_payload::write_attack_box_frame_to_payload(payload, frame_count, idx, updated)) {
+                    payload_changed = true;
+                }
+            }
+            if (payload_changed && target->info->upsert_animation(attack_box_edit_.animation_id, payload)) {
+                target->info->mark_dirty();
+                (void)persist_asset_manifest_from_info(target->info,
+                                                       devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                                       "Attack Box Flatten Bottom Normalize",
+                                                       "room-attack-box-flatten-bottom-normalize",
+                                                       false);
+            }
+            if (runtime_changed) {
+                target->refresh_runtime_box_cache_from_frame();
+                if (assets_) {
+                    assets_->mark_active_assets_dirty();
+                }
+            }
+        }
     }
     (void)mutate_attack_box_current_frame(
         [](std::vector<animation_update::FrameAttackBox>& boxes) {

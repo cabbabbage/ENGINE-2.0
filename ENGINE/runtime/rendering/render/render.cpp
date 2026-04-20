@@ -964,6 +964,8 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
     };
 
     rendered_assets_for_debug.reserve(assets_->active_traversal().size());
+    std::unordered_set<const Asset*> touched_assets;
+    touched_assets.reserve(assets_->active_traversal().size());
 
     std::size_t traversal_index = 0;
     std::size_t boundary_index = 0;
@@ -982,12 +984,43 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
             if (!asset || asset->dead || !assets_->is_asset_in_focus_filter(asset)) {
                 continue;
             }
+            touched_assets.insert(asset);
 
             rendered_assets_for_debug.push_back(asset);
 
-            RenderObject obj{};
-            if (!render_build::build_direct_asset_render_object(asset, obj)) {
+            auto& cache_entry = asset_render_cache_[asset];
+            SDL_Texture* current_texture_identity = asset->get_current_variant_texture();
+            if (!current_texture_identity) {
+                current_texture_identity = asset->get_current_frame();
+            }
+            const bool needs_static_refresh =
+                !cache_entry.initialized ||
+                cache_entry.frame_identity != (asset->current_frame ? asset->current_frame->frame_index : -1) ||
+                cache_entry.variant_identity != asset->current_variant_index ||
+                cache_entry.texture_identity != current_texture_identity;
+            if (needs_static_refresh) {
+                if (!render_build::refresh_direct_asset_render_cache(asset, cache_entry.static_record)) {
+                    cache_entry = AssetRenderCacheEntry{};
+                    continue;
+                }
+                cache_entry.frame_identity = cache_entry.static_record.frame_identity;
+                cache_entry.variant_identity = cache_entry.static_record.variant_identity;
+                cache_entry.texture_identity = cache_entry.static_record.texture_identity;
+                cache_entry.object.mesh_dirty = true;
+                cache_entry.initialized = true;
+            }
+
+            if (!render_build::build_direct_asset_render_object(asset, cache_entry.static_record, cache_entry.object)) {
                 continue;
+            }
+            RenderObject& obj = cache_entry.object;
+            const Uint32 reprojection_identity = render_build::direct_asset_reprojection_identity(asset);
+            if (cache_entry.reprojection_identity != reprojection_identity) {
+                obj.mesh_dirty = true;
+            }
+            cache_entry.reprojection_identity = reprojection_identity;
+            if (asset->is_mesh_dirty()) {
+                obj.mesh_dirty = true;
             }
 
             const Asset::PerspectiveSample perspective_sample = asset->runtime_perspective_sample();
@@ -1008,6 +1041,7 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
             !mesh.valid) {
             continue;
         }
+        asset->clear_mesh_dirty();
 
         // IMPORTANT:
         // Project the quad using the render Z offset so it appears in the right place,
@@ -1024,6 +1058,14 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
 
         if (boundary_index < boundary_sprites.size()) {
             queue_boundary_sprite(boundary_sprites[boundary_index++], boundary_depth);
+        }
+    }
+
+    for (auto it = asset_render_cache_.begin(); it != asset_render_cache_.end();) {
+        if (!it->first || touched_assets.find(it->first) == touched_assets.end()) {
+            it = asset_render_cache_.erase(it);
+        } else {
+            ++it;
         }
     }
 }

@@ -19,6 +19,8 @@
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "rendering/render/debug_overlay_renderer.hpp"
+#include "rendering/render/render_object.hpp"
+#include "rendering/render/render_object_builder.hpp"
 
 class Assets;
 class Asset;
@@ -176,6 +178,15 @@ private:
         RuntimeLightFadeState fade{};
         std::uint64_t last_seen_frame = 0;
     };
+    struct AssetRenderCacheEntry {
+        render_build::DirectAssetRenderCacheRecord static_record{};
+        RenderObject object{};
+        bool initialized = false;
+        int frame_identity = -1;
+        int variant_identity = -1;
+        SDL_Texture* texture_identity = nullptr;
+        Uint32 reprojection_identity = 0;
+    };
 
     struct PrevalidatedTag {};
 
@@ -225,6 +236,7 @@ private:
 
     std::unordered_map<const Asset*, render_debug::MovementDebugAssetSnapshot> movement_debug_snapshots_;
     std::unordered_map<const Asset*, render_debug::MovementDebugObservedState> movement_debug_observed_state_;
+    std::unordered_map<const Asset*, AssetRenderCacheEntry> asset_render_cache_;
     std::vector<render_debug::RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
 
     std::unordered_map<std::string, RuntimeLightCacheEntry> runtime_light_cache_;

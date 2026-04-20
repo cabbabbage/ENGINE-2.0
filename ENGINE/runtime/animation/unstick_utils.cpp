@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "animation_update.hpp"
@@ -152,7 +153,7 @@ bool resolve_destination(const Asset& self,
         world::GridPoint cursor = start;
         bool moved = false;
         for (int step = 0; step < std::max(1, max_steps); ++step) {
-            const world::GridPoint next = world::grid_math::offset(cursor, dir);
+            world::GridPoint next = world::grid_math::offset(cursor, dir);
             if (next.world_x() == cursor.world_x() && next.world_z() == cursor.world_z()) {
                 continue;
             }
@@ -162,12 +163,12 @@ bool resolve_destination(const Asset& self,
                 break;
             }
             if (inside_any(bottom_next)) {
-                cursor = next;
+                cursor = std::move(next);
                 moved = true;
                 continue;
             }
 
-            cursor = next;
+            cursor = std::move(next);
             moved = true;
             out_destination = cursor;
             return true;

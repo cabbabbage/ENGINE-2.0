@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -220,8 +221,18 @@ private:
         float radius_world = AnchorLightData::kMinRadius;
         bool hidden = false;
         bool valid = false;
-        std::uint64_t last_seen_frame = 0;
         RuntimeLightSpatialCell cell{};
+        std::uint64_t last_seen_frame = 0;
+        bool transform_dirty = true;
+        bool frame_dirty = true;
+        bool light_data_dirty = true;
+        bool removed = false;
+    };
+    struct RuntimeLightAssetState {
+        std::uint64_t anchor_revision = 0;
+        int frame_index = std::numeric_limits<int>::min();
+        std::size_t anchor_light_signature = 0;
+        bool alive = true;
     };
     struct RuntimeLightBroadphaseEntry {
         std::uint32_t light_id = 0;
@@ -260,7 +271,11 @@ private:
                             double focus_plane_world_z,
                             const std::vector<Asset*>& rendered_assets,
                             std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
-    void refresh_runtime_light_registry_and_spatial_index(std::uint64_t frame_token);
+    void update_runtime_light_registry_incremental(std::uint64_t frame_token);
+    void enqueue_runtime_light_dirty(std::uint32_t light_id, RuntimeLightRegistryEntry& entry,
+                                     bool transform_dirty, bool frame_dirty, bool light_data_dirty, bool removed);
+    void prune_removed_runtime_lights(std::uint64_t frame_token);
+    void discover_runtime_lights_for_asset(Asset* asset, std::uint64_t frame_token);
     RuntimeLightSpatialCell runtime_light_cell_for_world(float world_x, float world_z) const;
     void runtime_light_query_visible_cells(const WarpedScreenGrid& cam,
                                            float world_z,
@@ -300,10 +315,15 @@ private:
     std::unordered_map<RuntimeLightSpatialCell,
                        std::vector<std::uint32_t>,
                        RuntimeLightSpatialCellHash> runtime_light_spatial_index_;
+    std::unordered_map<Asset*, RuntimeLightAssetState> runtime_light_asset_state_;
+    std::vector<std::uint32_t> runtime_light_dirty_queue_;
+    std::unordered_set<std::uint32_t> runtime_light_dirty_set_;
     std::vector<RuntimeLightCacheEntry> runtime_light_cache_;
     std::uint32_t runtime_light_next_id_ = 1;
     int runtime_light_spatial_cell_size_ = 256;
     std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
     int runtime_light_rendered_count_ = 0;
     int runtime_light_culled_count_ = 0;
+    std::uint64_t runtime_light_observed_active_state_version_ = std::numeric_limits<std::uint64_t>::max();
+    int runtime_light_debug_parity_visible_count_ = 0;
 };

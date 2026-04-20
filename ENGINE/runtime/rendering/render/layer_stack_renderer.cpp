@@ -171,75 +171,6 @@ void LayerStackRenderer::render_layer_base(const render_pipeline::LayerSubmissio
     }
 }
 
-std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::bias_lights_for_layer(
-    const std::vector<LayerEffectProcessor::RuntimeLight>& source_lights,
-    double layer_depth_min,
-    double layer_depth_max,
-    float front_layer_light_strength_multiplier,
-    float behind_layer_light_strength_multiplier) const {
-    std::vector<LayerEffectProcessor::RuntimeLight> result;
-    result.reserve(source_lights.size());
-
-    const double layer_reference_depth = choose_layer_reference_depth(layer_depth_min, layer_depth_max);
-    for (const LayerEffectProcessor::RuntimeLight& light : source_lights) {
-        LayerEffectProcessor::RuntimeLight adjusted = light;
-        const double relative_depth = static_cast<double>(light.world_z) - layer_reference_depth;
-        adjusted.intensity = render_internal::apply_layer_light_strength_bias(
-            adjusted.intensity,
-            relative_depth,
-            front_layer_light_strength_multiplier,
-            behind_layer_light_strength_multiplier);
-        if (adjusted.intensity > 0.0005f) {
-            result.push_back(adjusted);
-        }
-    }
-
-    return result;
-}
-
-std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::collect_layer_lights(
-    const render_pipeline::LayerSubmission& layer,
-    const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights) const {
-    std::vector<LayerEffectProcessor::RuntimeLight> result;
-    result.reserve(runtime_lights.size());
-
-    const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
-    const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
-
-    for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
-        if (render_internal::light_overlaps_layer_slice(light,
-                                                        depth_min,
-                                                        depth_max,
-                                                        layer.bounds_min_x,
-                                                        layer.bounds_min_y,
-                                                        layer.bounds_max_x,
-                                                        layer.bounds_max_y)) {
-            result.push_back(light);
-        }
-    }
-
-    return result;
-}
-
-std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::collect_owner_lights(
-    const render_pipeline::LayerSubmission& layer,
-    const std::vector<LayerEffectProcessor::RuntimeLight>& biased_lights) const {
-    std::vector<LayerEffectProcessor::RuntimeLight> result;
-    result.reserve(biased_lights.size());
-
-    const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
-    const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
-
-    for (const LayerEffectProcessor::RuntimeLight& light : biased_lights) {
-        const double light_depth = static_cast<double>(light.world_z);
-        if (light_depth >= depth_min && light_depth <= depth_max) {
-            result.push_back(light);
-        }
-    }
-
-    return result;
-}
-
 render_pipeline::LayerRenderResult LayerStackRenderer::render(
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
@@ -261,6 +192,42 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 
     out.final_layer_textures.assign(static_cast<std::size_t>(build.layer_count), nullptr);
     out.owning_body_lights.resize(static_cast<std::size_t>(build.layer_count));
+    frame_scratch_.clear_for_frame(static_cast<std::size_t>(build.layer_count));
+
+    for (int layer_index : build.non_empty_layers) {
+        if (layer_index < 0 || layer_index >= build.layer_count) {
+            continue;
+        }
+        const render_pipeline::LayerSubmission& layer = build.layers[static_cast<std::size_t>(layer_index)];
+        const std::size_t li = static_cast<std::size_t>(layer_index);
+        frame_scratch_.layer_depth_min[li] = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
+        frame_scratch_.layer_depth_max[li] = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
+        frame_scratch_.layer_bounds_min_x[li] = layer.bounds_min_x;
+        frame_scratch_.layer_bounds_min_y[li] = layer.bounds_min_y;
+        frame_scratch_.layer_bounds_max_x[li] = layer.bounds_max_x;
+        frame_scratch_.layer_bounds_max_y[li] = layer.bounds_max_y;
+        frame_scratch_.per_layer_light_indices[li].reserve(
+            std::max(frame_scratch_.per_layer_light_indices[li].capacity(), runtime_lights.size() / 2));
+    }
+
+    for (std::uint32_t light_index = 0; light_index < runtime_lights.size(); ++light_index) {
+        const LayerEffectProcessor::RuntimeLight& light = runtime_lights[light_index];
+        for (int layer_index : build.non_empty_layers) {
+            if (layer_index < 0 || layer_index >= build.layer_count) {
+                continue;
+            }
+            const std::size_t li = static_cast<std::size_t>(layer_index);
+            if (render_internal::light_overlaps_layer_slice(light,
+                                                            frame_scratch_.layer_depth_min[li],
+                                                            frame_scratch_.layer_depth_max[li],
+                                                            frame_scratch_.layer_bounds_min_x[li],
+                                                            frame_scratch_.layer_bounds_min_y[li],
+                                                            frame_scratch_.layer_bounds_max_x[li],
+                                                            frame_scratch_.layer_bounds_max_y[li])) {
+                frame_scratch_.per_layer_light_indices[li].push_back(light_index);
+            }
+        }
+    }
 
     LayerEffectProcessor::LayerLightingParams lighting_params{};
     lighting_params.enabled = runtime_lighting_enabled;
@@ -276,19 +243,39 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 
         render_layer_base(layer, targets.base);
 
-        const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
-        const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
+        const std::size_t li = static_cast<std::size_t>(layer_index);
+        const double depth_min = frame_scratch_.layer_depth_min[li];
+        const double depth_max = frame_scratch_.layer_depth_max[li];
+        const double layer_reference_depth = choose_layer_reference_depth(depth_min, depth_max);
 
-        const std::vector<LayerEffectProcessor::RuntimeLight> overlapping_lights =
-            collect_layer_lights(layer, runtime_lights);
-        const std::vector<LayerEffectProcessor::RuntimeLight> biased_lights =
-            bias_lights_for_layer(overlapping_lights,
-                                  depth_min,
-                                  depth_max,
-                                  front_layer_light_strength_multiplier,
-                                  behind_layer_light_strength_multiplier);
-        out.owning_body_lights[static_cast<std::size_t>(layer_index)] =
-            collect_owner_lights(layer, biased_lights);
+        frame_scratch_.layer_light_buffer.clear();
+        frame_scratch_.owner_light_buffer.clear();
+        const std::vector<std::uint32_t>& indices = frame_scratch_.per_layer_light_indices[li];
+        frame_scratch_.layer_light_buffer.reserve(
+            std::max(frame_scratch_.layer_light_buffer.capacity(), indices.size()));
+        frame_scratch_.owner_light_buffer.reserve(
+            std::max(frame_scratch_.owner_light_buffer.capacity(), indices.size()));
+        for (const std::uint32_t light_index : indices) {
+            if (light_index >= runtime_lights.size()) {
+                continue;
+            }
+            LayerEffectProcessor::RuntimeLight adjusted = runtime_lights[light_index];
+            const double relative_depth = static_cast<double>(adjusted.world_z) - layer_reference_depth;
+            adjusted.intensity = render_internal::apply_layer_light_strength_bias(
+                adjusted.intensity,
+                relative_depth,
+                front_layer_light_strength_multiplier,
+                behind_layer_light_strength_multiplier);
+            if (adjusted.intensity <= 0.0005f) {
+                continue;
+            }
+            frame_scratch_.layer_light_buffer.push_back(adjusted);
+            const double light_depth = static_cast<double>(adjusted.world_z);
+            if (light_depth >= depth_min && light_depth <= depth_max) {
+                frame_scratch_.owner_light_buffer.push_back(adjusted);
+            }
+        }
+        out.owning_body_lights[li] = frame_scratch_.owner_light_buffer;
 
         LayerEffectProcessor::LayerScratchTextures scratch{};
         scratch.dark_mask_texture = targets.dark_mask;
@@ -299,7 +286,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             depth_min,
             depth_max,
             lighting_params,
-            biased_lights,
+            frame_scratch_.layer_light_buffer,
             scratch);
 
 

@@ -27,7 +27,34 @@ public:
         float behind_layer_light_strength_multiplier);
 
 private:
+    struct FrameScratchArena {
+        std::vector<std::vector<std::uint32_t>> per_layer_light_indices;
+        std::vector<LayerEffectProcessor::RuntimeLight> layer_light_buffer;
+        std::vector<LayerEffectProcessor::RuntimeLight> owner_light_buffer;
+        std::vector<double> layer_depth_min;
+        std::vector<double> layer_depth_max;
+        std::vector<float> layer_bounds_min_x;
+        std::vector<float> layer_bounds_min_y;
+        std::vector<float> layer_bounds_max_x;
+        std::vector<float> layer_bounds_max_y;
 
+        void clear_for_frame(std::size_t layer_count) {
+            if (per_layer_light_indices.size() < layer_count) {
+                per_layer_light_indices.resize(layer_count);
+            }
+            for (std::size_t i = 0; i < layer_count; ++i) {
+                per_layer_light_indices[i].clear();
+            }
+            layer_light_buffer.clear();
+            owner_light_buffer.clear();
+            layer_depth_min.resize(layer_count);
+            layer_depth_max.resize(layer_count);
+            layer_bounds_min_x.resize(layer_count);
+            layer_bounds_min_y.resize(layer_count);
+            layer_bounds_max_x.resize(layer_count);
+            layer_bounds_max_y.resize(layer_count);
+        }
+    };
 
     struct TextureSet {
         SDL_Texture* base = nullptr;
@@ -48,24 +75,10 @@ private:
     void render_layer_base(const render_pipeline::LayerSubmission& layer,
                            SDL_Texture* target) const;
 
-    std::vector<LayerEffectProcessor::RuntimeLight> bias_lights_for_layer(
-        const std::vector<LayerEffectProcessor::RuntimeLight>& source_lights,
-        double layer_depth_min,
-        double layer_depth_max,
-        float front_layer_light_strength_multiplier,
-        float behind_layer_light_strength_multiplier) const;
-
-    std::vector<LayerEffectProcessor::RuntimeLight> collect_layer_lights(
-        const render_pipeline::LayerSubmission& layer,
-        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights) const;
-
-    std::vector<LayerEffectProcessor::RuntimeLight> collect_owner_lights(
-        const render_pipeline::LayerSubmission& layer,
-        const std::vector<LayerEffectProcessor::RuntimeLight>& biased_lights) const;
-
     SDL_Renderer* renderer_ = nullptr;
     int screen_width_ = 0;
     int screen_height_ = 0;
     LayerEffectProcessor layer_effect_processor_;
     std::vector<TextureSet> layer_targets_;
+    FrameScratchArena frame_scratch_;
 };

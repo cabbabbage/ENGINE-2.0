@@ -1093,7 +1093,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
     const std::uint64_t frame_token = static_cast<std::uint64_t>(assets_->frame_id());
 
     constexpr float kCullingMargin = 128.0f;
-    refresh_runtime_light_registry_and_spatial_index(frame_token);
+    update_runtime_light_registry_incremental(frame_token);
     std::vector<std::uint32_t> candidate_light_ids;
     runtime_light_query_visible_cells(cam,
                                       static_cast<float>(focus_plane_world_z),
@@ -1144,6 +1144,33 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         }
         broadphase_entries.push_back(RuntimeLightBroadphaseEntry{light_id, broadphase_screen, broadphase_radius_px});
     }
+#ifndef NDEBUG
+    runtime_light_debug_parity_visible_count_ = 0;
+    for (std::size_t light_id = 1; light_id < runtime_light_registry_entries_.size(); ++light_id) {
+        const RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
+        if (!entry.valid || !entry.asset || entry.asset->dead || !entry.asset->current_frame) {
+            continue;
+        }
+        if (!assets_->is_asset_in_focus_filter(entry.asset)) {
+            continue;
+        }
+        SDL_FPoint debug_screen{};
+        if (!cam.project_world_point(SDL_FPoint{entry.anchor_world_x, entry.anchor_world_y}, entry.anchor_world_z, debug_screen)) {
+            continue;
+        }
+        float debug_scale = 1.0f;
+        sample_world_distance_scale(cam, entry.anchor_world_x, entry.anchor_world_y, entry.anchor_world_z, debug_scale);
+        const float debug_radius_px = std::max(4.0f, entry.radius_world * std::max(0.05f, debug_scale));
+        const bool debug_overlap = debug_screen.x + debug_radius_px >= -kCullingMargin &&
+                                   debug_screen.x - debug_radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
+                                   debug_screen.y + debug_radius_px >= -kCullingMargin &&
+                                   debug_screen.y - debug_radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
+        if (debug_overlap) {
+            ++runtime_light_debug_parity_visible_count_;
+        }
+    }
+    SDL_assert(runtime_light_debug_parity_visible_count_ >= static_cast<int>(broadphase_entries.size()));
+#endif
 
     for (const RuntimeLightBroadphaseEntry& broadphase : broadphase_entries) {
         RuntimeLightRegistryEntry& registry_entry = runtime_light_registry_entries_[broadphase.light_id];
@@ -1279,63 +1306,246 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
     }
 }
 
-void SceneRenderer::refresh_runtime_light_registry_and_spatial_index(std::uint64_t frame_token) {
-    runtime_light_spatial_index_.clear();
+void SceneRenderer::enqueue_runtime_light_dirty(std::uint32_t light_id,
+                                                RuntimeLightRegistryEntry& entry,
+                                                bool transform_dirty,
+                                                bool frame_dirty,
+                                                bool light_data_dirty,
+                                                bool removed) {
+    if (light_id == 0 || light_id >= runtime_light_registry_entries_.size()) {
+        return;
+    }
+    entry.transform_dirty = entry.transform_dirty || transform_dirty;
+    entry.frame_dirty = entry.frame_dirty || frame_dirty;
+    entry.light_data_dirty = entry.light_data_dirty || light_data_dirty;
+    entry.removed = entry.removed || removed;
+    if (runtime_light_dirty_set_.insert(light_id).second) {
+        runtime_light_dirty_queue_.push_back(light_id);
+    }
+}
+
+void SceneRenderer::discover_runtime_lights_for_asset(Asset* asset, std::uint64_t frame_token) {
+    if (!asset || asset->dead || !asset->current_frame) {
+        return;
+    }
+    for (const DisplacedAssetAnchorPoint& anchor : asset->current_frame->anchor_points) {
+        if (!anchor.is_valid() || !anchor.has_light_data) {
+            continue;
+        }
+        RuntimeLightRegistryKey registry_key{asset, anchor.name};
+        auto id_it = runtime_light_registry_ids_.find(registry_key);
+        std::uint32_t light_id = 0;
+        if (id_it == runtime_light_registry_ids_.end()) {
+            light_id = runtime_light_next_id_++;
+            runtime_light_registry_ids_.emplace(std::move(registry_key), light_id);
+            if (light_id >= runtime_light_registry_entries_.size()) {
+                runtime_light_registry_entries_.resize(static_cast<std::size_t>(light_id) + 1);
+            }
+            if (light_id >= runtime_light_cache_.size()) {
+                runtime_light_cache_.resize(static_cast<std::size_t>(light_id) + 1);
+            }
+        } else {
+            light_id = id_it->second;
+        }
+        RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
+        entry.light_id = light_id;
+        entry.asset = asset;
+        entry.anchor_name = anchor.name;
+        entry.last_seen_frame = frame_token;
+        enqueue_runtime_light_dirty(light_id, entry, true, true, true, false);
+    }
+}
+
+void SceneRenderer::prune_removed_runtime_lights(std::uint64_t frame_token) {
+    std::vector<RuntimeLightRegistryKey> erased_keys;
+    for (std::size_t i = 1; i < runtime_light_registry_entries_.size(); ++i) {
+        RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[i];
+        if (entry.light_id == 0 || !entry.asset) {
+            continue;
+        }
+        if (!entry.removed && entry.last_seen_frame + 1 >= frame_token) {
+            continue;
+        }
+        erased_keys.push_back(RuntimeLightRegistryKey{entry.asset, entry.anchor_name});
+        entry = RuntimeLightRegistryEntry{};
+        if (i < runtime_light_cache_.size()) {
+            runtime_light_cache_[i] = RuntimeLightCacheEntry{};
+        }
+    }
+    for (const RuntimeLightRegistryKey& key : erased_keys) {
+        runtime_light_registry_ids_.erase(key);
+    }
+}
+
+void SceneRenderer::update_runtime_light_registry_incremental(std::uint64_t frame_token) {
     if (!assets_) {
         return;
     }
     world::WorldGrid& world_grid = assets_->world_grid();
     runtime_light_spatial_cell_size_ = std::max(32, world_grid.grid_spacing_for_layer(world_grid.default_resolution_layer()));
 
-    for (Asset* asset : assets_->all) {
-        if (!asset || asset->dead || !asset->current_frame) {
+    const std::uint64_t active_state_version = assets_->dev_active_state_version();
+    if (runtime_light_observed_active_state_version_ != active_state_version) {
+        runtime_light_observed_active_state_version_ = active_state_version;
+        for (auto state_it = runtime_light_asset_state_.begin(); state_it != runtime_light_asset_state_.end();) {
+            Asset* state_asset = state_it->first;
+            if (state_asset && assets_->contains_asset(state_asset)) {
+                ++state_it;
+                continue;
+            }
+            for (const auto& [registry_key, light_id] : runtime_light_registry_ids_) {
+                if (registry_key.asset != state_asset || light_id == 0 || light_id >= runtime_light_registry_entries_.size()) {
+                    continue;
+                }
+                RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
+                enqueue_runtime_light_dirty(light_id, entry, false, false, false, true);
+            }
+            state_it = runtime_light_asset_state_.erase(state_it);
+        }
+        for (Asset* asset : assets_->all) {
+            if (!asset) {
+                continue;
+            }
+            auto [state_it, inserted] = runtime_light_asset_state_.try_emplace(asset);
+            if (inserted) {
+                state_it->second.anchor_revision = asset->anchor_world_revision();
+                state_it->second.frame_index = asset->current_frame ? asset->current_frame->frame_index : std::numeric_limits<int>::min();
+                state_it->second.anchor_light_signature = 0;
+                state_it->second.alive = !asset->dead;
+            }
+            discover_runtime_lights_for_asset(asset, frame_token);
+        }
+    }
+
+    for (auto& [asset, state] : runtime_light_asset_state_) {
+        if (!asset || !assets_->contains_asset(asset)) {
             continue;
         }
+        const bool alive = !asset->dead && asset->current_frame;
+        if (!alive && state.alive) {
+            state.alive = false;
+            for (const auto& [registry_key, light_id] : runtime_light_registry_ids_) {
+                if (registry_key.asset != asset || light_id == 0 || light_id >= runtime_light_registry_entries_.size()) {
+                    continue;
+                }
+                RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
+                entry.last_seen_frame = frame_token;
+                enqueue_runtime_light_dirty(light_id, entry, false, false, false, true);
+            }
+            continue;
+        }
+        if (!alive) {
+            continue;
+        }
+
+        std::size_t anchor_signature = 1469598103934665603ull;
         for (const DisplacedAssetAnchorPoint& anchor : asset->current_frame->anchor_points) {
             if (!anchor.is_valid() || !anchor.has_light_data) {
                 continue;
             }
-            RuntimeLightRegistryKey registry_key{asset, anchor.name};
-            auto id_it = runtime_light_registry_ids_.find(registry_key);
-            std::uint32_t light_id = 0;
-            if (id_it == runtime_light_registry_ids_.end()) {
-                light_id = runtime_light_next_id_++;
-                runtime_light_registry_ids_.emplace(std::move(registry_key), light_id);
-                if (light_id >= runtime_light_registry_entries_.size()) {
-                    runtime_light_registry_entries_.resize(static_cast<std::size_t>(light_id) + 1);
+            const std::size_t name_hash = std::hash<std::string>{}(anchor.name);
+            const std::size_t hidden_hash = std::hash<bool>{}(anchor.hidden);
+            const std::size_t radius_hash = std::hash<float>{}(anchor.light.radius);
+            anchor_signature ^= (name_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
+            anchor_signature ^= (hidden_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
+            anchor_signature ^= (radius_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
+        }
+        const std::uint64_t anchor_revision = asset->anchor_world_revision();
+        const int frame_index = asset->current_frame ? asset->current_frame->frame_index : std::numeric_limits<int>::min();
+        const bool transform_dirty = state.anchor_revision != anchor_revision;
+        const bool frame_dirty = state.frame_index != frame_index;
+        const bool light_data_dirty = state.anchor_light_signature != anchor_signature;
+        if (transform_dirty || frame_dirty || light_data_dirty) {
+            discover_runtime_lights_for_asset(asset, frame_token);
+            for (const auto& [registry_key, light_id] : runtime_light_registry_ids_) {
+                if (registry_key.asset != asset || light_id == 0 || light_id >= runtime_light_registry_entries_.size()) {
+                    continue;
                 }
-            } else {
-                light_id = id_it->second;
+                RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
+                entry.last_seen_frame = frame_token;
+                enqueue_runtime_light_dirty(light_id, entry, transform_dirty, frame_dirty, light_data_dirty, false);
             }
-            if (light_id >= runtime_light_registry_entries_.size()) {
-                runtime_light_registry_entries_.resize(static_cast<std::size_t>(light_id) + 1);
-            }
-            RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
-            entry.light_id = light_id;
-            entry.asset = asset;
-            entry.anchor_name = anchor.name;
-            entry.last_seen_frame = frame_token;
-            entry.valid = false;
+        }
+        state.anchor_revision = anchor_revision;
+        state.frame_index = frame_index;
+        state.anchor_light_signature = anchor_signature;
+        state.alive = true;
+    }
 
-            const std::optional<AnchorPoint> resolved = asset->anchor_state(anchor.name,
-                                                                             anchor_points::GridMaterialization::None,
-                                                                             Asset::AnchorResolveMode::Cached);
-            if (!resolved.has_value() || !resolved->exists) {
-                continue;
+    for (const std::uint32_t light_id : runtime_light_dirty_queue_) {
+        if (light_id == 0 || light_id >= runtime_light_registry_entries_.size()) {
+            continue;
+        }
+        RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
+        if (entry.light_id == 0 || !entry.asset) {
+            continue;
+        }
+        if (entry.removed || entry.asset->dead || !entry.asset->current_frame) {
+            auto old_cell_it = runtime_light_spatial_index_.find(entry.cell);
+            if (old_cell_it != runtime_light_spatial_index_.end()) {
+                auto& ids = old_cell_it->second;
+                ids.erase(std::remove(ids.begin(), ids.end(), light_id), ids.end());
+                if (ids.empty()) {
+                    runtime_light_spatial_index_.erase(old_cell_it);
+                }
             }
-            AnchorLightData light = anchor.light;
-            light.sanitize();
-            entry.light = light;
-            entry.anchor_world_x = resolved->world_exact_pos_2d.x;
-            entry.anchor_world_y = resolved->world_exact_pos_2d.y;
-            entry.anchor_world_z = resolved->world_exact_z;
-            entry.hidden = anchor.hidden;
-            entry.radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
-            entry.cell = runtime_light_cell_for_world(entry.anchor_world_x, entry.anchor_world_z);
-            entry.valid = true;
-            runtime_light_spatial_index_[entry.cell].push_back(light_id);
+            entry.valid = false;
+            continue;
+        }
+
+        const std::optional<AnchorPoint> resolved = entry.asset->anchor_state(entry.anchor_name,
+                                                                               anchor_points::GridMaterialization::None,
+                                                                               Asset::AnchorResolveMode::Cached);
+        bool found_anchor = false;
+        DisplacedAssetAnchorPoint source_anchor{};
+        for (const DisplacedAssetAnchorPoint& anchor : entry.asset->current_frame->anchor_points) {
+            if (anchor.name == entry.anchor_name && anchor.is_valid() && anchor.has_light_data) {
+                source_anchor = anchor;
+                found_anchor = true;
+                break;
+            }
+        }
+        if (!found_anchor || !resolved.has_value() || !resolved->exists) {
+            enqueue_runtime_light_dirty(light_id, entry, false, false, false, true);
+            continue;
+        }
+
+        AnchorLightData light = source_anchor.light;
+        light.sanitize();
+        const RuntimeLightSpatialCell new_cell = runtime_light_cell_for_world(resolved->world_exact_pos_2d.x, resolved->world_exact_z);
+        if (entry.valid && (entry.cell.x != new_cell.x || entry.cell.z != new_cell.z)) {
+            auto old_cell_it = runtime_light_spatial_index_.find(entry.cell);
+            if (old_cell_it != runtime_light_spatial_index_.end()) {
+                auto& ids = old_cell_it->second;
+                ids.erase(std::remove(ids.begin(), ids.end(), light_id), ids.end());
+                if (ids.empty()) {
+                    runtime_light_spatial_index_.erase(old_cell_it);
+                }
+            }
+        }
+
+        entry.light = light;
+        entry.anchor_world_x = resolved->world_exact_pos_2d.x;
+        entry.anchor_world_y = resolved->world_exact_pos_2d.y;
+        entry.anchor_world_z = resolved->world_exact_z;
+        entry.hidden = source_anchor.hidden;
+        entry.radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
+        entry.cell = new_cell;
+        entry.valid = true;
+        entry.removed = false;
+        entry.last_seen_frame = frame_token;
+        entry.transform_dirty = false;
+        entry.frame_dirty = false;
+        entry.light_data_dirty = false;
+
+        auto& members = runtime_light_spatial_index_[new_cell];
+        if (std::find(members.begin(), members.end(), light_id) == members.end()) {
+            members.push_back(light_id);
         }
     }
+    runtime_light_dirty_queue_.clear();
+    runtime_light_dirty_set_.clear();
+    prune_removed_runtime_lights(frame_token);
 }
 
 SceneRenderer::RuntimeLightSpatialCell SceneRenderer::runtime_light_cell_for_world(float world_x, float world_z) const {

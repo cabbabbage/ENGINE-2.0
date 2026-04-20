@@ -8,7 +8,6 @@
 
 #include "vibble_controller.hpp"
 #include "animation/animation_update.hpp"
-#include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
@@ -436,69 +435,10 @@ void vibble_controller::start_dash() {
 }
 
 void vibble_controller::on_process_pending_attacks(Asset& self) {
-    using namespace animation_update;
-
-    if (!self.info || !self.current_animation_frame() || self.dead || !self.active) {
-        return;
-    }
-
-    Assets* assets = self.get_assets();
-    if (!assets) {
-        return;
-    }
-
-    const auto& active_assets = assets->getActive();
-
-    for (Asset* target : active_assets) {
-        if (!target || target == &self || !target->info || !target->current_animation_frame() ||
-            target->dead || !target->active) {
-            continue;
-        }
-
-        auto attack_opt = AttackValidation::compute_attack_if_hit(self, *target);
-
-        if (attack_opt.has_value()) {
-            target->send_attack(*attack_opt);
-        }
-    }
-
-    const auto pending_attacks = self.process_pending_attacks();
-    if (pending_attacks.empty()) {
-        return;
-    }
-
-    std::optional<SDL_Point> bump_delta;
-    auto consider_knockback = [&](const animation_update::Attack& attack) {
-        SDL_Point candidate_delta{};
-        if (!animation_update::custom_controllers::AttackProcessingHelper::compute_knockback_delta(self, attack, candidate_delta)) {
-            return;
-        }
-        if (!bump_delta.has_value()) {
-            bump_delta = candidate_delta;
-            return;
-        }
-        const int candidate_sq = candidate_delta.x * candidate_delta.x + candidate_delta.y * candidate_delta.y;
-        const int current_sq = bump_delta->x * bump_delta->x + bump_delta->y * bump_delta->y;
-        if (candidate_sq > current_sq) {
-            bump_delta = candidate_delta;
-        }
-    };
-
-    for (const auto& attack : pending_attacks) {
-        self.runtime_health -= attack.damage_amount;
-        if (attack.attacker_asset_name == "spider") {
-            consider_knockback(attack);
-        }
-    }
-
-    if (self.runtime_health < 0) {
-        if (!animation_update::custom_controllers::AttackProcessingHelper::try_play_death_animation(self)) {
-            self.Delete();
-        }
-        return;
-    }
-
-    if (bump_delta.has_value()) {
-        animation_update::custom_controllers::AttackProcessingHelper::apply_knockback(self, *bump_delta);
-    }
+    animation_update::custom_controllers::AttackProcessingConfig config;
+    config.hit_animation_id = "hit";
+    config.death_animation_id = "die";
+    config.hit_fallback_animation_id = animation_update::detail::kDefaultAnimation;
+    config.death_fallback_tag = "break";
+    animation_update::custom_controllers::AttackProcessingHelper::process_pending_attacks(self, config);
 }

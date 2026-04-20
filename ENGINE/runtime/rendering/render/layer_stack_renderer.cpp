@@ -401,7 +401,8 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         LayerEffectProcessor::LayerScratchTextures scratch{};
         scratch.dark_mask_texture = targets.dark_mask;
         scratch.dark_mask_history_texture = targets.dark_mask_merged;
-        scratch.dark_mask_temporal_enabled = dark_mask_temporal_enabled;
+        const bool is_player_layer = (layer_index == build.player_layer_index);
+        scratch.dark_mask_temporal_enabled = dark_mask_temporal_enabled && !is_player_layer;
         scratch.dark_mask_temporal_prev_weight = dark_mask_temporal_prev_weight;
 
         LayerEffectProcessor::LayerProcessResult result = layer_effect_processor_.process_layer(
@@ -413,7 +414,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             biased_lights,
             scratch);
 
-        if (result.lighting_applied && dark_mask_temporal_enabled) {
+        if (result.lighting_applied && scratch.dark_mask_temporal_enabled) {
             ++out.temporal_merge_count;
         }
 

@@ -84,13 +84,19 @@ TEST_CASE("Path planner and sanitizer produce identical results with shared coll
     const Plan shared_plan =
         planner(*asset, shared_sanitized, 0, vibble::grid::global_grid(), &collision_context);
 
-    CHECK(shared_sanitized == baseline_sanitized);
-    CHECK(shared_plan.final_dest == baseline_plan.final_dest);
+    CHECK(shared_sanitized.size() == baseline_sanitized.size());
+    REQUIRE(shared_sanitized.size() == baseline_sanitized.size());
+    for (std::size_t i = 0; i < shared_sanitized.size(); ++i) {
+        CHECK(shared_sanitized[i].x == baseline_sanitized[i].x);
+        CHECK(shared_sanitized[i].y == baseline_sanitized[i].y);
+    }
+    CHECK(shared_plan.final_dest.x == baseline_plan.final_dest.x);
+    CHECK(shared_plan.final_dest.y == baseline_plan.final_dest.y);
     CHECK(shared_plan.strides.size() == baseline_plan.strides.size());
     REQUIRE(shared_plan.strides.size() == baseline_plan.strides.size());
     for (std::size_t i = 0; i < shared_plan.strides.size(); ++i) {
         CHECK(shared_plan.strides[i].animation_id == baseline_plan.strides[i].animation_id);
-        CHECK(shared_plan.strides[i].frame_count == baseline_plan.strides[i].frame_count);
+        CHECK(shared_plan.strides[i].frames == baseline_plan.strides[i].frames);
         CHECK(shared_plan.strides[i].path_index == baseline_plan.strides[i].path_index);
     }
 }

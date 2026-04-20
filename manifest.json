@@ -10910,19 +10910,37 @@
       "impassable_boxes": [
         {
           "anchor_link": "",
+          "corners": [
+            {
+              "texture_x": 0,
+              "texture_y": 375
+            },
+            {
+              "texture_x": 1026,
+              "texture_y": 375
+            },
+            {
+              "texture_x": 1026,
+              "texture_y": 878
+            },
+            {
+              "texture_x": 0,
+              "texture_y": 878
+            }
+          ],
           "enabled": true,
-          "extrusion_amount": 1,
+          "extrusion_amount": 308,
           "flatten_bottom_to_floor": true,
           "id": "hit_box_id",
           "name": "hit_box",
           "position": {
-            "x": 1,
-            "y": 147
+            "x": 0,
+            "y": 375
           },
           "rotation_degrees": 0.0,
           "size": {
-            "h": 533,
-            "w": 980
+            "h": 503,
+            "w": 1026
           },
           "type": "impassable_box"
         }
@@ -19300,9 +19318,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            124,
             242,
             36,
-            44,
             255
           ],
           "edge_smoothness": 2,
@@ -19696,16 +19714,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1278,
-          "camera_center_dz": -226,
-          "camera_height_px": 148,
-          "camera_tilt_deg": 22.861265182495117,
+          "camera_center_dx": -299,
+          "camera_center_dz": -151,
+          "camera_height_px": 238,
+          "camera_tilt_deg": 37.06126403808594,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,

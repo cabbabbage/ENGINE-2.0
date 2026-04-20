@@ -169,6 +169,36 @@ public:
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
 private:
+    struct RuntimeLightRegistryKey {
+        const Asset* asset = nullptr;
+        std::string anchor_name;
+
+        bool operator==(const RuntimeLightRegistryKey& other) const {
+            return asset == other.asset && anchor_name == other.anchor_name;
+        }
+    };
+    struct RuntimeLightRegistryKeyHash {
+        std::size_t operator()(const RuntimeLightRegistryKey& key) const {
+            const std::size_t asset_hash = std::hash<const Asset*>{}(key.asset);
+            const std::size_t anchor_hash = std::hash<std::string>{}(key.anchor_name);
+            return asset_hash ^ (anchor_hash + 0x9e3779b9u + (asset_hash << 6) + (asset_hash >> 2));
+        }
+    };
+    struct RuntimeLightSpatialCell {
+        int x = 0;
+        int z = 0;
+
+        bool operator==(const RuntimeLightSpatialCell& other) const {
+            return x == other.x && z == other.z;
+        }
+    };
+    struct RuntimeLightSpatialCellHash {
+        std::size_t operator()(const RuntimeLightSpatialCell& cell) const {
+            const std::size_t x_hash = std::hash<int>{}(cell.x);
+            const std::size_t z_hash = std::hash<int>{}(cell.z);
+            return x_hash ^ (z_hash + 0x9e3779b9u + (x_hash << 6) + (x_hash >> 2));
+        }
+    };
     struct RuntimeLightFadeState {
         float intensity_current = 0.0f;
         std::uint64_t last_seen_frame = 0;
@@ -177,6 +207,25 @@ private:
         LayerEffectProcessor::RuntimeLight instance{};
         RuntimeLightFadeState fade{};
         std::uint64_t last_seen_frame = 0;
+    };
+    struct RuntimeLightRegistryEntry {
+        std::uint32_t light_id = 0;
+        Asset* asset = nullptr;
+        std::string anchor_name;
+        AnchorLightData light{};
+        float anchor_world_x = 0.0f;
+        float anchor_world_y = 0.0f;
+        float anchor_world_z = 0.0f;
+        float radius_world = AnchorLightData::kMinRadius;
+        bool hidden = false;
+        bool valid = false;
+        std::uint64_t last_seen_frame = 0;
+        RuntimeLightSpatialCell cell{};
+    };
+    struct RuntimeLightBroadphaseEntry {
+        std::uint32_t light_id = 0;
+        SDL_FPoint screen{0.0f, 0.0f};
+        float radius_px = 0.0f;
     };
     struct AssetRenderCacheEntry {
         render_build::DirectAssetRenderCacheRecord static_record{};
@@ -210,6 +259,12 @@ private:
                             double focus_plane_world_z,
                             const std::vector<Asset*>& rendered_assets,
                             std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
+    void refresh_runtime_light_registry_and_spatial_index(std::uint64_t frame_token);
+    RuntimeLightSpatialCell runtime_light_cell_for_world(float world_x, float world_z) const;
+    void runtime_light_query_visible_cells(const WarpedScreenGrid& cam,
+                                           float world_z,
+                                           float culling_margin,
+                                           std::vector<std::uint32_t>& out_light_ids) const;
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
 
     SDL_Renderer* renderer_ = nullptr;
@@ -239,7 +294,14 @@ private:
     std::unordered_map<const Asset*, AssetRenderCacheEntry> asset_render_cache_;
     std::vector<render_debug::RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
 
-    std::unordered_map<std::string, RuntimeLightCacheEntry> runtime_light_cache_;
+    std::unordered_map<RuntimeLightRegistryKey, std::uint32_t, RuntimeLightRegistryKeyHash> runtime_light_registry_ids_;
+    std::vector<RuntimeLightRegistryEntry> runtime_light_registry_entries_;
+    std::unordered_map<RuntimeLightSpatialCell,
+                       std::vector<std::uint32_t>,
+                       RuntimeLightSpatialCellHash> runtime_light_spatial_index_;
+    std::vector<RuntimeLightCacheEntry> runtime_light_cache_;
+    std::uint32_t runtime_light_next_id_ = 1;
+    int runtime_light_spatial_cell_size_ = 256;
     std::uint64_t runtime_light_profile_last_log_ticks_ = 0;
     int runtime_light_rendered_count_ = 0;
     int runtime_light_culled_count_ = 0;

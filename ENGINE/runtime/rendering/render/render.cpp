@@ -1075,6 +1075,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                           double focus_plane_world_z,
                                           const std::vector<Asset*>& rendered_assets,
                                           std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) {
+    (void)rendered_assets;
     out_lights.clear();
     runtime_light_debug_overlay_.clear();
     runtime_light_rendered_count_ = 0;
@@ -1084,7 +1085,6 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
     }
 
     const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
-    const bool overlap_culling_enabled = realism.light_radius_overlap_culling_enabled;
     const bool fade_smoothing_enabled = realism.light_fade_smoothing_enabled;
     const float min_fade_seconds = std::max(0.0f, realism.light_min_fade_seconds);
     const float fade_in_seconds = std::max(min_fade_seconds, std::max(0.0f, realism.light_fade_in_seconds));
@@ -1092,149 +1092,174 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
     const float dt_seconds = std::clamp(assets_->frame_delta_seconds(), 0.0f, 0.25f);
     const std::uint64_t frame_token = static_cast<std::uint64_t>(assets_->frame_id());
 
-    std::vector<Asset*> candidate_assets;
-    candidate_assets.reserve(rendered_assets.size() + (overlap_culling_enabled ? assets_->all.size() : 0));
-    std::unordered_set<Asset*> seen_assets;
-    seen_assets.reserve(rendered_assets.size() + (overlap_culling_enabled ? assets_->all.size() : 0));
-    for (Asset* asset : rendered_assets) {
-        if (asset && seen_assets.insert(asset).second) {
-            candidate_assets.push_back(asset);
-        }
-    }
-    if (overlap_culling_enabled) {
-        for (Asset* asset : assets_->all) {
-            if (asset && seen_assets.insert(asset).second) {
-                candidate_assets.push_back(asset);
-            }
-        }
-    }
-    out_lights.reserve(candidate_assets.size());
-
     constexpr float kCullingMargin = 128.0f;
-    std::unordered_set<std::string> seen_light_keys;
-    seen_light_keys.reserve(candidate_assets.size() * 2);
+    refresh_runtime_light_registry_and_spatial_index(frame_token);
+    std::vector<std::uint32_t> candidate_light_ids;
+    runtime_light_query_visible_cells(cam,
+                                      static_cast<float>(focus_plane_world_z),
+                                      kCullingMargin,
+                                      candidate_light_ids);
+    out_lights.reserve(candidate_light_ids.size());
+
+    std::unordered_set<std::uint32_t> seen_light_ids;
+    seen_light_ids.reserve(candidate_light_ids.size());
     const std::uint64_t gather_start_ticks = SDL_GetTicks();
 
-    for (Asset* asset : candidate_assets) {
-        if (!asset || asset->dead || !asset->current_frame || !assets_->is_asset_in_focus_filter(asset)) {
+    std::vector<RuntimeLightBroadphaseEntry> broadphase_entries;
+    broadphase_entries.reserve(candidate_light_ids.size());
+    for (const std::uint32_t light_id : candidate_light_ids) {
+        if (light_id == 0 || light_id >= runtime_light_registry_entries_.size() || !seen_light_ids.insert(light_id).second) {
+            continue;
+        }
+        RuntimeLightRegistryEntry& registry_entry = runtime_light_registry_entries_[light_id];
+        if (!registry_entry.valid || !registry_entry.asset || registry_entry.asset->dead || !registry_entry.asset->current_frame) {
+            continue;
+        }
+        if (!assets_->is_asset_in_focus_filter(registry_entry.asset)) {
             continue;
         }
 
-        for (const DisplacedAssetAnchorPoint& anchor : asset->current_frame->anchor_points) {
-            if (!anchor.is_valid() || !anchor.has_light_data) {
-                continue;
-            }
-
-            const std::optional<AnchorPoint> resolved = asset->anchor_state(anchor.name,
-                                                                            anchor_points::GridMaterialization::None,
-                                                                            Asset::AnchorResolveMode::Cached);
-            if (!resolved.has_value() || !resolved->exists) {
-                continue;
-            }
-
-            const float anchor_world_x = resolved->world_exact_pos_2d.x;
-            const float anchor_world_y = resolved->world_exact_pos_2d.y;
-            const float anchor_world_z = resolved->world_exact_z;
-            SDL_FPoint screen = resolved->screen_pos_2d;
-            if ((!std::isfinite(screen.x) || !std::isfinite(screen.y)) &&
-                (!cam.project_world_point(SDL_FPoint{anchor_world_x, anchor_world_y}, anchor_world_z, screen) ||
-                 !std::isfinite(screen.x) || !std::isfinite(screen.y))) {
-                continue;
-            }
-
-            AnchorLightData light = anchor.light;
-            light.sanitize();
-            const float fallback_scale = resolved->has_flat_perspective_scale
-                ? std::max(0.05f, resolved->flat_perspective_scale)
-                : 1.0f;
-            float sampled_scale = fallback_scale;
-            float world_sampled_scale = 1.0f;
-            if (sample_world_distance_scale(cam, anchor_world_x, anchor_world_y, anchor_world_z, world_sampled_scale)) {
-                sampled_scale = std::max(0.05f, world_sampled_scale);
-            }
-
-            const float radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
-            const float radius_px = std::max(4.0f, radius_world * sampled_scale);
-            const bool overlaps_view = screen.x + radius_px >= -kCullingMargin &&
-                                       screen.x - radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
-                                       screen.y + radius_px >= -kCullingMargin &&
-                                       screen.y - radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
-            const bool enabled_and_overlapping = !anchor.hidden && overlaps_view;
-            if (!enabled_and_overlapping) {
-                ++runtime_light_culled_count_;
-            }
-
-            std::string light_key = std::to_string(reinterpret_cast<std::uintptr_t>(asset));
-            light_key.push_back('|');
-            light_key.append(anchor.name);
-            seen_light_keys.insert(light_key);
-            RuntimeLightCacheEntry& cache_entry = runtime_light_cache_[light_key];
-            const bool first_seen = cache_entry.last_seen_frame == 0;
-            cache_entry.last_seen_frame = frame_token;
-            cache_entry.fade.last_seen_frame = frame_token;
-
-            const float target_intensity = enabled_and_overlapping ? light.intensity : 0.0f;
-            if (!fade_smoothing_enabled) {
-                cache_entry.fade.intensity_current = target_intensity;
-            } else {
-                if (first_seen) {
-                    cache_entry.fade.intensity_current = 0.0f;
-                }
-                const float duration = target_intensity > cache_entry.fade.intensity_current
-                    ? std::max(0.0001f, fade_in_seconds)
-                    : std::max(0.0001f, fade_out_seconds);
-                const float alpha = std::clamp(dt_seconds / duration, 0.0f, 1.0f);
-                cache_entry.fade.intensity_current += (target_intensity - cache_entry.fade.intensity_current) * alpha;
-            }
-
-            const float effective_intensity = std::max(0.0f, cache_entry.fade.intensity_current);
-            const bool renderable = effective_intensity > 0.0005f && overlaps_view;
-            if (realism.light_culling_debug_overlay) {
-                runtime_light_debug_overlay_.push_back(render_debug::RuntimeLightDebugOverlayEntry{screen, radius_px, renderable});
-            }
-            if (!renderable) {
-                continue;
-            }
-
-            LayerEffectProcessor::RuntimeLight& instance = cache_entry.instance;
-            instance.stable_light_id = static_cast<std::uint64_t>(std::hash<std::string>{}(light_key));
-            instance.screen_center = screen;
-            instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
-            instance.intensity = effective_intensity;
-            instance.opacity = light.opacity;
-            instance.radius_px = radius_px;
-            instance.radius_world = radius_world;
-            instance.falloff = light.falloff;
-            instance.world_z = static_cast<float>(
-                render_depth::depth_from_anchor(focus_plane_world_z,
-                                                static_cast<double>(anchor_world_z)));
-            const render_internal::FloorLightContact floor_contact = render_internal::resolve_floor_light_contact(
-                resolved->flat_world_exact_pos_2d.x,
-                resolved->flat_world_exact_z,
-                anchor_world_x,
-                anchor_world_z,
-                resolved->world_exact_pos_2d.y);
-            instance.floor_world_x = floor_contact.world_x;
-            instance.floor_world_z = floor_contact.world_z;
-            instance.world_height = floor_contact.world_height;
-            instance.has_floor_projection = false;
-            if (floor_contact.valid) {
-                SDL_FPoint floor_screen{};
-                if (render_internal::project_floor_contact_to_screen(cam, floor_contact, floor_screen)) {
-                    instance.floor_screen_center = floor_screen;
-                    instance.has_floor_projection = true;
-                }
-            }
-            out_lights.push_back(cache_entry.instance);
-            ++runtime_light_rendered_count_;
+        SDL_FPoint broadphase_screen{};
+        if (!cam.project_world_point(SDL_FPoint{registry_entry.anchor_world_x, registry_entry.anchor_world_y},
+                                     registry_entry.anchor_world_z,
+                                     broadphase_screen) ||
+            !std::isfinite(broadphase_screen.x) ||
+            !std::isfinite(broadphase_screen.y)) {
+            continue;
         }
+        float broadphase_scale = 1.0f;
+        sample_world_distance_scale(cam,
+                                    registry_entry.anchor_world_x,
+                                    registry_entry.anchor_world_y,
+                                    registry_entry.anchor_world_z,
+                                    broadphase_scale);
+        const float broadphase_radius_px = std::max(4.0f, registry_entry.radius_world * std::max(0.05f, broadphase_scale));
+        const bool broadphase_overlap = broadphase_screen.x + broadphase_radius_px >= -kCullingMargin &&
+                                        broadphase_screen.x - broadphase_radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
+                                        broadphase_screen.y + broadphase_radius_px >= -kCullingMargin &&
+                                        broadphase_screen.y - broadphase_radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
+        if (!broadphase_overlap) {
+            ++runtime_light_culled_count_;
+            continue;
+        }
+        broadphase_entries.push_back(RuntimeLightBroadphaseEntry{light_id, broadphase_screen, broadphase_radius_px});
     }
 
-    for (auto it = runtime_light_cache_.begin(); it != runtime_light_cache_.end();) {
-        if (seen_light_keys.find(it->first) == seen_light_keys.end() && frame_token > it->second.last_seen_frame + 120) {
-            it = runtime_light_cache_.erase(it);
+    for (const RuntimeLightBroadphaseEntry& broadphase : broadphase_entries) {
+        RuntimeLightRegistryEntry& registry_entry = runtime_light_registry_entries_[broadphase.light_id];
+        Asset* asset = registry_entry.asset;
+        if (!asset) {
+            continue;
+        }
+        const std::optional<AnchorPoint> resolved = asset->anchor_state(registry_entry.anchor_name,
+                                                                         anchor_points::GridMaterialization::None,
+                                                                         Asset::AnchorResolveMode::Cached);
+        if (!resolved.has_value() || !resolved->exists) {
+            ++runtime_light_culled_count_;
+            continue;
+        }
+
+        SDL_FPoint screen = resolved->screen_pos_2d;
+        if ((!std::isfinite(screen.x) || !std::isfinite(screen.y)) &&
+            (!cam.project_world_point(resolved->world_exact_pos_2d, resolved->world_exact_z, screen) ||
+             !std::isfinite(screen.x) || !std::isfinite(screen.y))) {
+            ++runtime_light_culled_count_;
+            continue;
+        }
+
+        const float fallback_scale = resolved->has_flat_perspective_scale
+            ? std::max(0.05f, resolved->flat_perspective_scale)
+            : 1.0f;
+        float sampled_scale = fallback_scale;
+        float world_sampled_scale = fallback_scale;
+        if (sample_world_distance_scale(cam,
+                                        resolved->world_exact_pos_2d.x,
+                                        resolved->world_exact_pos_2d.y,
+                                        resolved->world_exact_z,
+                                        world_sampled_scale)) {
+            sampled_scale = std::max(0.05f, world_sampled_scale);
+        }
+
+        const AnchorLightData& light = registry_entry.light;
+        const float radius_world = registry_entry.radius_world;
+        const float radius_px = std::max(4.0f, radius_world * sampled_scale);
+        const bool overlaps_view = screen.x + radius_px >= -kCullingMargin &&
+                                   screen.x - radius_px <= static_cast<float>(screen_width_) + kCullingMargin &&
+                                   screen.y + radius_px >= -kCullingMargin &&
+                                   screen.y - radius_px <= static_cast<float>(screen_height_) + kCullingMargin;
+        const bool enabled_and_overlapping = !registry_entry.hidden && overlaps_view;
+        if (!enabled_and_overlapping) {
+            ++runtime_light_culled_count_;
+        }
+
+        if (broadphase.light_id >= runtime_light_cache_.size()) {
+            runtime_light_cache_.resize(static_cast<std::size_t>(broadphase.light_id) + 1);
+        }
+        RuntimeLightCacheEntry& cache_entry = runtime_light_cache_[broadphase.light_id];
+        const bool first_seen = cache_entry.last_seen_frame == 0;
+        cache_entry.last_seen_frame = frame_token;
+        cache_entry.fade.last_seen_frame = frame_token;
+
+        const float target_intensity = enabled_and_overlapping ? light.intensity : 0.0f;
+        if (!fade_smoothing_enabled) {
+            cache_entry.fade.intensity_current = target_intensity;
         } else {
-            ++it;
+            if (first_seen) {
+                cache_entry.fade.intensity_current = 0.0f;
+            }
+            const float duration = target_intensity > cache_entry.fade.intensity_current
+                ? std::max(0.0001f, fade_in_seconds)
+                : std::max(0.0001f, fade_out_seconds);
+            const float alpha = std::clamp(dt_seconds / duration, 0.0f, 1.0f);
+            cache_entry.fade.intensity_current += (target_intensity - cache_entry.fade.intensity_current) * alpha;
+        }
+
+        const float effective_intensity = std::max(0.0f, cache_entry.fade.intensity_current);
+        const bool renderable = effective_intensity > 0.0005f && overlaps_view;
+        if (realism.light_culling_debug_overlay) {
+            runtime_light_debug_overlay_.push_back(render_debug::RuntimeLightDebugOverlayEntry{screen, radius_px, renderable});
+        }
+        if (!renderable) {
+            continue;
+        }
+
+        LayerEffectProcessor::RuntimeLight& instance = cache_entry.instance;
+        instance.stable_light_id = broadphase.light_id;
+        instance.screen_center = screen;
+        instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
+        instance.intensity = effective_intensity;
+        instance.opacity = light.opacity;
+        instance.radius_px = radius_px;
+        instance.radius_world = radius_world;
+        instance.falloff = light.falloff;
+        instance.world_z = static_cast<float>(
+            render_depth::depth_from_anchor(focus_plane_world_z,
+                                            static_cast<double>(resolved->world_exact_z)));
+        const render_internal::FloorLightContact floor_contact = render_internal::resolve_floor_light_contact(
+            resolved->flat_world_exact_pos_2d.x,
+            resolved->flat_world_exact_z,
+            resolved->world_exact_pos_2d.x,
+            resolved->world_exact_z,
+            resolved->world_exact_pos_2d.y);
+        instance.floor_world_x = floor_contact.world_x;
+        instance.floor_world_z = floor_contact.world_z;
+        instance.world_height = floor_contact.world_height;
+        instance.has_floor_projection = false;
+        if (floor_contact.valid) {
+            SDL_FPoint floor_screen{};
+            if (render_internal::project_floor_contact_to_screen(cam, floor_contact, floor_screen)) {
+                instance.floor_screen_center = floor_screen;
+                instance.has_floor_projection = true;
+            }
+        }
+        out_lights.push_back(cache_entry.instance);
+        ++runtime_light_rendered_count_;
+    }
+
+    for (std::size_t i = 1; i < runtime_light_cache_.size(); ++i) {
+        RuntimeLightCacheEntry& cache_entry = runtime_light_cache_[i];
+        if (cache_entry.last_seen_frame != 0 && frame_token > cache_entry.last_seen_frame + 120) {
+            cache_entry = RuntimeLightCacheEntry{};
         }
     }
 
@@ -1244,10 +1269,135 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         if (runtime_light_profile_last_log_ticks_ == 0 || now_ticks - runtime_light_profile_last_log_ticks_ >= 1000) {
             runtime_light_profile_last_log_ticks_ = now_ticks;
             vibble::log::debug("[SceneRenderer] light gather profile: candidates=" +
-                               std::to_string(candidate_assets.size()) +
+                               std::to_string(candidate_light_ids.size()) +
                                " rendered=" + std::to_string(runtime_light_rendered_count_) +
                                " culled=" + std::to_string(runtime_light_culled_count_) +
                                " ms=" + std::to_string(ticks_to_seconds(elapsed_ticks) * 1000.0f));
+        }
+    }
+}
+
+void SceneRenderer::refresh_runtime_light_registry_and_spatial_index(std::uint64_t frame_token) {
+    runtime_light_spatial_index_.clear();
+    if (!assets_) {
+        return;
+    }
+    world::WorldGrid& world_grid = assets_->world_grid();
+    runtime_light_spatial_cell_size_ = std::max(32, world_grid.grid_spacing_for_layer(world_grid.default_resolution_layer()));
+
+    for (Asset* asset : assets_->all) {
+        if (!asset || asset->dead || !asset->current_frame) {
+            continue;
+        }
+        for (const DisplacedAssetAnchorPoint& anchor : asset->current_frame->anchor_points) {
+            if (!anchor.is_valid() || !anchor.has_light_data) {
+                continue;
+            }
+            RuntimeLightRegistryKey registry_key{asset, anchor.name};
+            auto id_it = runtime_light_registry_ids_.find(registry_key);
+            std::uint32_t light_id = 0;
+            if (id_it == runtime_light_registry_ids_.end()) {
+                light_id = runtime_light_next_id_++;
+                runtime_light_registry_ids_.emplace(std::move(registry_key), light_id);
+                if (light_id >= runtime_light_registry_entries_.size()) {
+                    runtime_light_registry_entries_.resize(static_cast<std::size_t>(light_id) + 1);
+                }
+            } else {
+                light_id = id_it->second;
+            }
+            if (light_id >= runtime_light_registry_entries_.size()) {
+                runtime_light_registry_entries_.resize(static_cast<std::size_t>(light_id) + 1);
+            }
+            RuntimeLightRegistryEntry& entry = runtime_light_registry_entries_[light_id];
+            entry.light_id = light_id;
+            entry.asset = asset;
+            entry.anchor_name = anchor.name;
+            entry.last_seen_frame = frame_token;
+            entry.valid = false;
+
+            const std::optional<AnchorPoint> resolved = asset->anchor_state(anchor.name,
+                                                                             anchor_points::GridMaterialization::None,
+                                                                             Asset::AnchorResolveMode::Cached);
+            if (!resolved.has_value() || !resolved->exists) {
+                continue;
+            }
+            AnchorLightData light = anchor.light;
+            light.sanitize();
+            entry.light = light;
+            entry.anchor_world_x = resolved->world_exact_pos_2d.x;
+            entry.anchor_world_y = resolved->world_exact_pos_2d.y;
+            entry.anchor_world_z = resolved->world_exact_z;
+            entry.hidden = anchor.hidden;
+            entry.radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
+            entry.cell = runtime_light_cell_for_world(entry.anchor_world_x, entry.anchor_world_z);
+            entry.valid = true;
+            runtime_light_spatial_index_[entry.cell].push_back(light_id);
+        }
+    }
+}
+
+SceneRenderer::RuntimeLightSpatialCell SceneRenderer::runtime_light_cell_for_world(float world_x, float world_z) const {
+    const float cell_size = static_cast<float>(std::max(1, runtime_light_spatial_cell_size_));
+    return RuntimeLightSpatialCell{
+        static_cast<int>(std::floor(world_x / cell_size)),
+        static_cast<int>(std::floor(world_z / cell_size))
+    };
+}
+
+void SceneRenderer::runtime_light_query_visible_cells(const WarpedScreenGrid& cam,
+                                                      float world_z,
+                                                      float culling_margin,
+                                                      std::vector<std::uint32_t>& out_light_ids) const {
+    out_light_ids.clear();
+    if (runtime_light_spatial_index_.empty()) {
+        return;
+    }
+
+    const float left = -culling_margin;
+    const float right = static_cast<float>(screen_width_) + culling_margin;
+    const float top = -culling_margin;
+    const float bottom = static_cast<float>(screen_height_) + culling_margin;
+
+    std::array<SDL_FPoint, 4> samples{
+        SDL_FPoint{left, top},
+        SDL_FPoint{right, top},
+        SDL_FPoint{left, bottom},
+        SDL_FPoint{right, bottom}
+    };
+    float world_min_x = std::numeric_limits<float>::max();
+    float world_max_x = std::numeric_limits<float>::lowest();
+    float world_min_z = std::numeric_limits<float>::max();
+    float world_max_z = std::numeric_limits<float>::lowest();
+    bool has_world_bounds = false;
+    for (const SDL_FPoint& screen_point : samples) {
+        render_projection::WorldPoint3 world_point{};
+        if (!cam.screen_to_world_on_depth_plane(screen_point, world_z, world_point) || !world_point.valid) {
+            continue;
+        }
+        world_min_x = std::min(world_min_x, world_point.x);
+        world_max_x = std::max(world_max_x, world_point.x);
+        world_min_z = std::min(world_min_z, world_point.z);
+        world_max_z = std::max(world_max_z, world_point.z);
+        has_world_bounds = true;
+    }
+
+    if (!has_world_bounds) {
+        for (const auto& cell_entry : runtime_light_spatial_index_) {
+            out_light_ids.insert(out_light_ids.end(), cell_entry.second.begin(), cell_entry.second.end());
+        }
+        return;
+    }
+
+    const RuntimeLightSpatialCell min_cell = runtime_light_cell_for_world(world_min_x, world_min_z);
+    const RuntimeLightSpatialCell max_cell = runtime_light_cell_for_world(world_max_x, world_max_z);
+    for (int cell_x = min_cell.x; cell_x <= max_cell.x; ++cell_x) {
+        for (int cell_z = min_cell.z; cell_z <= max_cell.z; ++cell_z) {
+            const RuntimeLightSpatialCell cell{cell_x, cell_z};
+            const auto it = runtime_light_spatial_index_.find(cell);
+            if (it == runtime_light_spatial_index_.end()) {
+                continue;
+            }
+            out_light_ids.insert(out_light_ids.end(), it->second.begin(), it->second.end());
         }
     }
 }

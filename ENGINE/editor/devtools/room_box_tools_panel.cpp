@@ -483,7 +483,7 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
             title = "Attack Box Editor";
             break;
         case Kind::ImpassableBox:
-            title = "Impassable Box Editor";
+            title = "Impassable Shape Editor";
             break;
     }
     DMFontCache::instance().draw_text(renderer, label_style, title, header_rect_.x, header_rect_.y);

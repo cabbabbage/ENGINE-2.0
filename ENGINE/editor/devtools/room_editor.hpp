@@ -696,16 +696,10 @@ private:
                                                int radius_px,
                                                int& out_corner_index,
                                                int& out_point_index) const;
-    int find_impassable_box_corner_at_screen_point(SDL_Point screen_point,
-                                                   int radius_px,
-                                                   int& out_corner_index,
-                                                   int& out_point_index) const;
     int find_hitbox_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
-    int find_impassable_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_hitbox_body_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_body_at_screen_point(SDL_Point screen_point) const;
-    int find_impassable_box_body_at_screen_point(SDL_Point screen_point) const;
     int find_floor_box_corner_at_screen_point(SDL_Point screen_point,
                                               int radius_px,
                                               int& out_corner_index) const;
@@ -718,8 +712,6 @@ private:
                                      devmode::core::DevSaveCoordinator::Priority priority);
     bool mutate_attack_box_current_frame(const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
                                          devmode::core::DevSaveCoordinator::Priority priority);
-    bool mutate_impassable_boxes(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
-                                 devmode::core::DevSaveCoordinator::Priority priority);
     bool mutate_impassable_shapes(const std::function<bool(std::vector<AssetInfo::ImpassableShape>&)>& mutator,
                                   devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
@@ -731,16 +723,12 @@ private:
     bool drag_impassable_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);
     bool begin_attack_box_drag(int box_index, SDL_Point screen_point);
-    bool begin_impassable_box_drag(int box_index, SDL_Point screen_point);
     bool begin_hitbox_rotation_drag(int box_index, SDL_Point screen_point);
     bool begin_attack_box_rotation_drag(int box_index, SDL_Point screen_point);
-    bool begin_impassable_box_rotation_drag(int box_index, SDL_Point screen_point);
     bool drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point);
     bool drag_attack_box_to_screen(int box_index, SDL_Point screen_point);
-    bool drag_impassable_box_to_screen(int box_index, SDL_Point screen_point);
     bool drag_hitbox_rotation_to_screen(int box_index, SDL_Point screen_point);
     bool drag_attack_box_rotation_to_screen(int box_index, SDL_Point screen_point);
-    bool drag_impassable_box_rotation_to_screen(int box_index, SDL_Point screen_point);
     bool add_hitbox_in_current_frame();
     bool add_attack_box_in_current_frame();
     bool add_impassable_box();

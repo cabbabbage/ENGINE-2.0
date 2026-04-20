@@ -654,20 +654,6 @@ std::vector<Asset::RuntimeBoxVolume> build_attack_box_overlay_volumes_for_frame(
         [](const animation_update::FrameAttackBox& box) { return box.meta_json; });
 }
 
-std::vector<Asset::RuntimeBoxVolume> build_impassable_box_overlay_volumes_for_frame(Asset* target,
-                                                                                     AnimationFrame* frame) {
-    if (!target || !target->info || !frame) {
-        return {};
-    }
-    return build_runtime_box_overlay_volumes_for_frame(
-        target,
-        frame,
-        target->info->impassable_boxes_payload(),
-        "impassable_box",
-        [](const animation_update::FrameHitBox&) { return 0; },
-        [](const animation_update::FrameHitBox&) { return std::string{"{}"}; });
-}
-
 bool box_trace_enabled() {
     static const bool enabled = [] {
         const char* raw = SDL_getenv("VIBBLE_BOX_TRACE");
@@ -2015,6 +2001,30 @@ std::optional<double> ray_segment_distance(SDL_Point origin,
     }
 
     return t * dir_length;
+}
+
+bool point_in_screen_polygon(SDL_FPoint point, const std::vector<SDL_FPoint>& polygon) {
+    if (polygon.size() < 3) {
+        return false;
+    }
+    bool inside = false;
+    for (std::size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+        const SDL_FPoint& pi = polygon[i];
+        const SDL_FPoint& pj = polygon[j];
+        const bool intersects = ((pi.y > point.y) != (pj.y > point.y));
+        if (!intersects) {
+            continue;
+        }
+        const float denominator = (pj.y - pi.y);
+        if (std::fabs(denominator) <= 1e-6f) {
+            continue;
+        }
+        const float x_intersection = ((pj.x - pi.x) * (point.y - pi.y) / denominator) + pi.x;
+        if (point.x < x_intersection) {
+            inside = !inside;
+        }
+    }
+    return inside;
 }
 
 template <typename TState>
@@ -5145,51 +5155,125 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             impassable_box_edit_.target_asset &&
             impassable_box_edit_.target_asset->info &&
             impassable_box_edit_.target_asset->info->is_impassable_box_enabled()) {
-            if (impassable_box_edit_.onion_skin_enabled) {
-                AnimationFrame* prev_frame = adjacent_frame_for_editor(impassable_box_edit_.target_asset,
-                                                                       impassable_box_edit_.animation_id,
-                                                                       impassable_box_edit_.frame_index,
-                                                                       -1);
-                AnimationFrame* next_frame = adjacent_frame_for_editor(impassable_box_edit_.target_asset,
-                                                                       impassable_box_edit_.animation_id,
-                                                                       impassable_box_edit_.frame_index,
-                                                                       1);
-                render_box_editor(build_impassable_box_overlay_volumes_for_frame(impassable_box_edit_.target_asset, prev_frame),
-                                  -1,
-                                  -1,
-                                  -1,
-                                  -1,
-                                  false,
-                                  RoomEditor::BoxEditState::ExtrusionHandleSide::None,
-                                  false,
-                                  SDL_Color{120, 220, 140, 120},
-                                  false,
-                                  false);
-                render_box_editor(build_impassable_box_overlay_volumes_for_frame(impassable_box_edit_.target_asset, next_frame),
-                                  -1,
-                                  -1,
-                                  -1,
-                                  -1,
-                                  false,
-                                  RoomEditor::BoxEditState::ExtrusionHandleSide::None,
-                                  false,
-                                  SDL_Color{150, 236, 170, 120},
-                                  false,
-                                  false);
+            const auto& authored_shapes = impassable_box_edit_.target_asset->info->impassable_shapes_payload();
+            std::vector<ImpassableShapeProjection> projections(authored_shapes.size());
+            std::vector<bool> projected(authored_shapes.size(), false);
+            for (std::size_t shape_index = 0; shape_index < authored_shapes.size(); ++shape_index) {
+                projected[shape_index] = project_impassable_shape(*impassable_box_edit_.target_asset,
+                                                                  authored_shapes[shape_index],
+                                                                  cam,
+                                                                  projections[shape_index]);
             }
 
-            const bool isolate_selected_box = impassable_box_edit_.selected_box_index >= 0;
-            render_box_editor(impassable_box_edit_.target_asset->current_impassable_box_volumes(),
-                              impassable_box_edit_.selected_box_index,
-                              impassable_box_edit_.point_selected ? impassable_box_edit_.selected_point_index : -1,
-                              impassable_box_edit_.hovered_box_index,
-                              impassable_box_edit_.hovered_point_index,
-                              impassable_box_edit_.hovered_rotation_handle || impassable_box_edit_.dragging_rotation,
-                              impassable_box_edit_.hovered_extrusion_handle,
-                              impassable_box_edit_.dragging_extrusion_handle,
-                              SDL_Color{120, 220, 140, 220},
-                              true,
-                              isolate_selected_box);
+            auto to_fcolor = [](SDL_Color color) -> SDL_FColor {
+                return SDL_FColor{
+                    static_cast<float>(color.r) / 255.0f,
+                    static_cast<float>(color.g) / 255.0f,
+                    static_cast<float>(color.b) / 255.0f,
+                    static_cast<float>(color.a) / 255.0f,
+                };
+            };
+
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            for (std::size_t shape_index = 0; shape_index < authored_shapes.size(); ++shape_index) {
+                if (!projected[shape_index]) {
+                    continue;
+                }
+
+                const auto& shape = authored_shapes[shape_index];
+                const auto& projection = projections[shape_index];
+                const bool is_selected = impassable_box_edit_.selected_box_index == static_cast<int>(shape_index);
+                const bool is_hovered = impassable_box_edit_.hovered_box_index == static_cast<int>(shape_index);
+                SDL_Color edge{
+                    static_cast<Uint8>(120),
+                    static_cast<Uint8>(220),
+                    static_cast<Uint8>(140),
+                    static_cast<Uint8>(shape.enabled ? 220 : 140)};
+                SDL_Color fill{
+                    static_cast<Uint8>(120),
+                    static_cast<Uint8>(220),
+                    static_cast<Uint8>(140),
+                    static_cast<Uint8>(shape.enabled ? 74 : 40)};
+                if (is_selected) {
+                    edge = SDL_Color{255, 208, 120, 250};
+                    fill = SDL_Color{
+                        static_cast<Uint8>(255),
+                        static_cast<Uint8>(208),
+                        static_cast<Uint8>(120),
+                        static_cast<Uint8>(shape.enabled ? 112 : 74)};
+                } else if (is_hovered) {
+                    edge = SDL_Color{
+                        static_cast<Uint8>(206),
+                        static_cast<Uint8>(244),
+                        static_cast<Uint8>(186),
+                        static_cast<Uint8>(shape.enabled ? 235 : 170)};
+                    fill = SDL_Color{
+                        static_cast<Uint8>(206),
+                        static_cast<Uint8>(244),
+                        static_cast<Uint8>(186),
+                        static_cast<Uint8>(shape.enabled ? 92 : 58)};
+                }
+
+                if (projection.floor_screen_points.size() >= 3) {
+                    std::vector<SDL_Vertex> vertices(projection.floor_screen_points.size());
+                    for (std::size_t i = 0; i < projection.floor_screen_points.size(); ++i) {
+                        vertices[i].position = projection.floor_screen_points[i];
+                        vertices[i].color = to_fcolor(fill);
+                        vertices[i].tex_coord = SDL_FPoint{0.0f, 0.0f};
+                    }
+                    std::vector<int> indices;
+                    indices.reserve((projection.floor_screen_points.size() - 2) * 3);
+                    for (std::size_t i = 1; i + 1 < projection.floor_screen_points.size(); ++i) {
+                        indices.push_back(0);
+                        indices.push_back(static_cast<int>(i));
+                        indices.push_back(static_cast<int>(i + 1));
+                    }
+                    SDL_RenderGeometry(renderer,
+                                       nullptr,
+                                       vertices.data(),
+                                       static_cast<int>(vertices.size()),
+                                       indices.data(),
+                                       static_cast<int>(indices.size()));
+                }
+
+                SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
+                for (std::size_t i = 0; i < projection.floor_screen_points.size(); ++i) {
+                    const SDL_FPoint a = projection.floor_screen_points[i];
+                    const SDL_FPoint b = projection.floor_screen_points[(i + 1) % projection.floor_screen_points.size()];
+                    SDL_RenderLine(renderer,
+                                   static_cast<int>(std::lround(a.x)),
+                                   static_cast<int>(std::lround(a.y)),
+                                   static_cast<int>(std::lround(b.x)),
+                                   static_cast<int>(std::lround(b.y)));
+                }
+
+                for (std::size_t point_index = 0; point_index < projection.anchor_screen_points.size(); ++point_index) {
+                    SDL_Color point_color = edge;
+                    int radius = 5;
+                    const bool point_selected =
+                        is_selected &&
+                        impassable_box_edit_.point_selected &&
+                        impassable_box_edit_.selected_point_index == static_cast<int>(point_index);
+                    const bool point_hovered =
+                        is_hovered &&
+                        impassable_box_edit_.hovered_point_index == static_cast<int>(point_index);
+                    if (point_selected) {
+                        point_color = SDL_Color{255, 255, 255, 255};
+                        radius = 6;
+                    } else if (point_hovered) {
+                        point_color = SDL_Color{255, 240, 176, 255};
+                        radius = 6;
+                    }
+                    const SDL_FPoint handle = projection.anchor_screen_points[point_index];
+                    const SDL_Rect handle_rect{
+                        static_cast<int>(std::lround(handle.x)) - radius,
+                        static_cast<int>(std::lround(handle.y)) - radius,
+                        radius * 2 + 1,
+                        radius * 2 + 1};
+                    SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, point_color.a);
+                    SDL_RenderFillRect(renderer, &handle_rect);
+                }
+            }
         }
 
         if (!suppress_asset_info_overlays &&
@@ -13174,84 +13258,14 @@ bool RoomEditor::persist_impassable_boxes(devmode::core::DevSaveCoordinator::Pri
 
     if (!persist_asset_manifest_from_info(target_info,
                                           priority,
-                                          "Impassable Box Edit",
-                                          "room-impassable-box-edit",
+                                          "Impassable Shape Edit",
+                                          "room-impassable-shape-edit",
                                           flush_now)) {
         return false;
     }
     if (flush_now) {
         impassable_box_edit_.dirty_since_last_flush = false;
     }
-    return true;
-}
-
-bool RoomEditor::mutate_impassable_boxes(
-    const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
-    devmode::core::DevSaveCoordinator::Priority priority) {
-    if (!impassable_box_mode_active() || !impassable_box_edit_.target_asset || !impassable_box_edit_.target_asset->info) {
-        return false;
-    }
-    if (!impassable_box_edit_.target_asset->info->is_impassable_box_enabled()) {
-        return false;
-    }
-
-    Asset* target = impassable_box_edit_.target_asset;
-    std::shared_ptr<AssetInfo> target_info = target->info;
-    auto anim_it = target_info->animations.find(impassable_box_edit_.animation_id);
-    if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
-        return false;
-    }
-    const int frame_index = devmode::room_anchor_mode::wrap_index(
-        impassable_box_edit_.frame_index,
-        static_cast<int>(anim_it->second.frame_count()));
-    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
-    if (!frame) {
-        return false;
-    }
-
-    if (target->current_animation != impassable_box_edit_.animation_id || target->current_frame != frame) {
-        target->set_current_animation(impassable_box_edit_.animation_id);
-        target->current_frame = frame;
-        target->set_frame_progress(0.0f);
-        target->static_frame = true;
-        target->refresh_frame_texture_bindings();
-    }
-    SDL_assert(target->current_frame == frame);
-
-    std::vector<animation_update::FrameHitBox> updated = target_info->impassable_boxes_payload();
-    if (!mutator(updated)) {
-        return false;
-    }
-
-    std::unordered_set<std::string> used_ids;
-    for (std::size_t i = 0; i < updated.size(); ++i) {
-        auto& box = updated[i];
-        box.id = ensure_unique_box_id(box.id, "impassable_box", frame_index, i, used_ids);
-        box.type = "impassable_box";
-        box.frame_start = 0;
-        box.frame_end = 0;
-    }
-    assert_unique_box_ids(updated, "impassable_box");
-
-    target_info->impassable_boxes = std::move(updated);
-    target_info->mark_dirty();
-    target->refresh_runtime_box_cache_from_frame();
-    if (assets_) {
-        assets_->mark_active_assets_dirty();
-    }
-
-    if (box_trace_enabled()) {
-        SDL_Log("[BoxFlow][mutate] kind=impassable_box asset=%s anim=%s frame=%d count=%zu ids=%s",
-                target->info ? target->info->name.c_str() : "<unknown>",
-                impassable_box_edit_.animation_id.c_str(),
-                frame_index,
-                target_info->impassable_boxes.size(),
-                box_ids_csv(target_info->impassable_boxes).c_str());
-    }
-
-    impassable_box_edit_.dirty_since_last_flush = true;
-    sync_impassable_box_tools_panel();
-    persist_impassable_boxes(priority, false);
     return true;
 }
 
@@ -13295,7 +13309,7 @@ bool RoomEditor::mutate_impassable_shapes(
     }
 
     target_info->impassable_shapes = std::move(updated);
-    target_info->impassable_enabled = target_info->impassable_box_enabled;
+    target_info->impassable_enabled = true;
     target_info->mark_dirty();
     target->refresh_runtime_box_cache_from_frame();
     if (assets_) {
@@ -16410,10 +16424,8 @@ bool RoomEditor::set_impassable_box_system_enabled(bool enabled) {
     }
 
     target_info->impassable_enabled = enabled;
-    target_info->impassable_box_enabled = enabled;
     if (!enabled) {
         target_info->impassable_shapes.clear();
-        target_info->impassable_boxes.clear();
         impassable_box_edit_.selected_box_index = -1;
         impassable_box_edit_.selected_corner_index = 0;
         impassable_box_edit_.selected_point_index = -1;
@@ -16430,8 +16442,8 @@ bool RoomEditor::set_impassable_box_system_enabled(bool enabled) {
 
     if (!persist_asset_manifest_from_info(target_info,
                                           devmode::core::DevSaveCoordinator::Priority::Immediate,
-                                          "Impassable Box Toggle",
-                                          "room-impassable-box-toggle",
+                                          "Impassable Shape Toggle",
+                                          "room-impassable-shape-toggle",
                                           true)) {
         return false;
     }
@@ -17540,22 +17552,34 @@ bool RoomEditor::enter_impassable_box_edit_mode() {
         impassable_box_edit_ = BoxEditState{};
         return false;
     }
-    (void)mutate_impassable_boxes(
-        [](std::vector<animation_update::FrameHitBox>& boxes) {
+    (void)mutate_impassable_shapes(
+        [](std::vector<AssetInfo::ImpassableShape>& shapes) {
             bool changed = false;
-            for (auto& box : boxes) {
-                const int next_extrusion = std::max(1, box.extrusion_amount);
-                if (box.extrusion_amount != next_extrusion) {
-                    box.extrusion_amount = next_extrusion;
+            for (auto& shape : shapes) {
+                if (shape.points.size() < 3) {
+                    shape.enabled = false;
                     changed = true;
+                    continue;
                 }
-                if (box.flatten_bottom_to_floor) {
-                    const float previous_rotation =
-                        animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-                    if (std::fabs(previous_rotation) > 1e-4f) {
-                        box.set_rotation_degrees(0.0f);
-                        changed = true;
+                std::vector<AssetInfo::ImpassableShapePoint> candidate = shape.points;
+                normalize_impassable_shape_winding(candidate);
+                if (impassable_shape_self_intersects(candidate)) {
+                    shape.enabled = false;
+                    changed = true;
+                    continue;
+                }
+                bool same_points = candidate.size() == shape.points.size();
+                if (same_points) {
+                    for (std::size_t i = 0; i < candidate.size(); ++i) {
+                        if (candidate[i].x != shape.points[i].x || candidate[i].y != shape.points[i].y) {
+                            same_points = false;
+                            break;
+                        }
                     }
+                }
+                if (!same_points) {
+                    shape.points = std::move(candidate);
+                    changed = true;
                 }
             }
             return changed;
@@ -18078,62 +18102,6 @@ int RoomEditor::find_attack_box_body_at_screen_point(SDL_Point screen_point) con
     }
     const WarpedScreenGrid& cam = assets_->getView();
     const auto hit = find_box_body_at_screen_point(attack_box_edit_.target_asset->current_attack_box_volumes(), cam, screen_point);
-    return hit ? *hit : -1;
-}
-
-int RoomEditor::find_impassable_box_corner_at_screen_point(SDL_Point screen_point,
-                                                           int radius_px,
-                                                           int& out_corner_index,
-                                                           int& out_point_index) const {
-    if (!impassable_box_edit_.target_asset || !assets_) {
-        out_corner_index = 0;
-        out_point_index = 0;
-        return -1;
-    }
-    const WarpedScreenGrid& cam = assets_->getView();
-    const auto hit = find_box_corner_at_screen_point(impassable_box_edit_.target_asset->current_impassable_box_volumes(),
-                                                     cam,
-                                                     screen_point,
-                                                     radius_px);
-    if (!hit) {
-        out_corner_index = 0;
-        out_point_index = 0;
-        return -1;
-    }
-    out_corner_index = hit->corner_index;
-    out_point_index = hit->point_index;
-    return hit->box_index;
-}
-
-int RoomEditor::find_impassable_box_rotation_handle_at_screen_point(SDL_Point screen_point) const {
-    if (!impassable_box_edit_.target_asset || !assets_) {
-        return -1;
-    }
-    const int selected = impassable_box_edit_.selected_box_index;
-    if (selected < 0) {
-        return -1;
-    }
-    if (impassable_box_edit_.target_asset->info &&
-        selected < static_cast<int>(impassable_box_edit_.target_asset->info->impassable_boxes.size()) &&
-        impassable_box_edit_.target_asset->info->impassable_boxes[static_cast<std::size_t>(selected)].flatten_bottom_to_floor) {
-        return -1;
-    }
-    const WarpedScreenGrid& cam = assets_->getView();
-    const auto hit = find_box_rotation_handle_at_screen_point_for_index(
-        impassable_box_edit_.target_asset->current_impassable_box_volumes(),
-        selected,
-        cam,
-        screen_point,
-        kBoxRotationHandlePickRadiusPx);
-    return hit ? hit->box_index : -1;
-}
-
-int RoomEditor::find_impassable_box_body_at_screen_point(SDL_Point screen_point) const {
-    if (!impassable_box_edit_.target_asset || !assets_) {
-        return -1;
-    }
-    const WarpedScreenGrid& cam = assets_->getView();
-    const auto hit = find_box_body_at_screen_point(impassable_box_edit_.target_asset->current_impassable_box_volumes(), cam, screen_point);
     return hit ? *hit : -1;
 }
 
@@ -19293,268 +19261,6 @@ bool RoomEditor::drag_attack_box_rotation_to_screen(int box_index, SDL_Point scr
         attack_box_edit_.rotation_drag_start_box_rotation_degrees + delta_angle);
     return mutate_attack_box_current_frame(
         [box_index, target_rotation](std::vector<animation_update::FrameAttackBox>& boxes) {
-            if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
-                return false;
-            }
-            auto& box = boxes[static_cast<std::size_t>(box_index)];
-            const float previous_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-            box.set_rotation_degrees(target_rotation);
-            const float updated_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-            return std::fabs(updated_rotation - previous_rotation) > 1e-4f;
-        },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
-}
-
-bool RoomEditor::begin_impassable_box_drag(int box_index, SDL_Point screen_point) {
-    if (!impassable_box_mode_active() || !impassable_box_edit_.target_asset || !assets_) {
-        return false;
-    }
-    Asset* target = impassable_box_edit_.target_asset;
-    if (!target->info) {
-        return false;
-    }
-    auto& boxes = target->info->impassable_boxes;
-    if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
-        return false;
-    }
-    const auto& volumes = target->current_impassable_box_volumes();
-    if (box_index >= static_cast<int>(volumes.size()) || !volumes[static_cast<std::size_t>(box_index)].valid) {
-        return false;
-    }
-
-    const auto& volume = volumes[static_cast<std::size_t>(box_index)];
-    int best_point = 0;
-    float best_dist_sq = std::numeric_limits<float>::max();
-    SDL_FPoint best_projected{};
-    bool found_projected = false;
-    for (int point_index = 0; point_index < 8; ++point_index) {
-        SDL_FPoint projected{};
-        if (!project_runtime_box_point_to_screen(volume.world_points[static_cast<std::size_t>(point_index)],
-                                                 assets_->getView(),
-                                                 projected)) {
-            continue;
-        }
-        const float dx = projected.x - static_cast<float>(screen_point.x);
-        const float dy = projected.y - static_cast<float>(screen_point.y);
-        const float dist_sq = dx * dx + dy * dy;
-        if (dist_sq < best_dist_sq) {
-            best_dist_sq = dist_sq;
-            best_point = point_index;
-            best_projected = projected;
-            found_projected = true;
-        }
-    }
-    if (!found_projected) {
-        return false;
-    }
-
-    const auto& box = boxes[static_cast<std::size_t>(box_index)];
-    impassable_box_edit_.selected_box_index = box_index;
-    impassable_box_edit_.selected_corner_index = editor_corner_from_runtime_corner(best_point % 4);
-    impassable_box_edit_.selected_point_index = best_point;
-    impassable_box_edit_.point_selected = false;
-    impassable_box_edit_.dragging_corner = false;
-    impassable_box_edit_.dragging_box = true;
-    impassable_box_edit_.dragging_rotation = false;
-    impassable_box_edit_.drag_reference_point_index = best_point;
-    impassable_box_edit_.drag_reference_corner_index = best_point % 4;
-    impassable_box_edit_.drag_start_rect = box.rect;
-    impassable_box_edit_.hovered_rotation_handle = false;
-    impassable_box_edit_.drag_reference_screen_offset = SDL_FPoint{
-        static_cast<float>(screen_point.x) - best_projected.x,
-        static_cast<float>(screen_point.y) - best_projected.y};
-    return true;
-}
-
-bool RoomEditor::begin_impassable_box_rotation_drag(int box_index, SDL_Point screen_point) {
-    if (!impassable_box_mode_active() || !impassable_box_edit_.target_asset || !assets_) {
-        return false;
-    }
-    Asset* target = impassable_box_edit_.target_asset;
-    if (!target->info) {
-        return false;
-    }
-    auto& boxes = target->info->impassable_boxes;
-    if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
-        return false;
-    }
-    if (boxes[static_cast<std::size_t>(box_index)].flatten_bottom_to_floor) {
-        return false;
-    }
-    const auto& volumes = target->current_impassable_box_volumes();
-    const auto hit = find_box_rotation_handle_at_screen_point_for_index(
-        volumes,
-        box_index,
-        assets_->getView(),
-        screen_point,
-        kBoxRotationHandlePickRadiusPx);
-    if (!hit.has_value()) {
-        return false;
-    }
-
-    impassable_box_edit_.selected_box_index = box_index;
-    impassable_box_edit_.selected_corner_index = 0;
-    impassable_box_edit_.selected_point_index = 0;
-    impassable_box_edit_.point_selected = false;
-    impassable_box_edit_.dragging_corner = false;
-    impassable_box_edit_.dragging_box = false;
-    impassable_box_edit_.dragging_rotation = true;
-    impassable_box_edit_.hovered_rotation_handle = true;
-    impassable_box_edit_.drag_start_rect = boxes[static_cast<std::size_t>(box_index)].rect;
-    impassable_box_edit_.rotation_drag_center_screen = hit->center_screen;
-    impassable_box_edit_.rotation_drag_start_angle_degrees = screen_angle_degrees(hit->center_screen, screen_point);
-    impassable_box_edit_.rotation_drag_start_box_rotation_degrees =
-        animation_update::FrameBoxBase::sanitize_rotation_degrees(
-            boxes[static_cast<std::size_t>(box_index)].rotation_degrees);
-    return true;
-}
-
-bool RoomEditor::drag_impassable_box_to_screen(int box_index, SDL_Point screen_point) {
-    if (!impassable_box_mode_active() || !impassable_box_edit_.target_asset || !assets_) {
-        return false;
-    }
-    if (!impassable_box_edit_.dragging_box) {
-        return false;
-    }
-    Asset* target = impassable_box_edit_.target_asset;
-    WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
-    if (!cam) {
-        if (Assets* owner = target->get_assets()) {
-            cam = &owner->getView();
-        }
-    }
-    if (!cam) {
-        return false;
-    }
-
-    const int reference_point = std::clamp(impassable_box_edit_.drag_reference_point_index, 0, 7);
-    const int reference_corner = reference_point % 4;
-    const animation_update::FrameBoxRect start_rect = impassable_box_edit_.drag_start_rect;
-    float start_rotation = 0.0f;
-    if (target->info && box_index >= 0 &&
-        box_index < static_cast<int>(target->info->impassable_boxes.size())) {
-        start_rotation = target->info->impassable_boxes[static_cast<std::size_t>(box_index)].rotation_degrees;
-    }
-    const SDL_FPoint desired_screen{
-        static_cast<float>(screen_point.x) - impassable_box_edit_.drag_reference_screen_offset.x,
-        static_cast<float>(screen_point.y) - impassable_box_edit_.drag_reference_screen_offset.y};
-
-    return mutate_impassable_boxes(
-        [target, cam, desired_screen, box_index, reference_point, reference_corner, start_rect, start_rotation](std::vector<animation_update::FrameHitBox>& boxes) {
-            if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
-                return false;
-            }
-            auto& box = boxes[static_cast<std::size_t>(box_index)];
-            animation_update::FrameHitBox start_box = box;
-            start_box.set_rect(start_rect);
-            start_box.set_rotation_degrees(start_rotation);
-            const auto corner_id = animation_update::FrameBoxBase::corner_id_from_runtime_index(
-                static_cast<std::size_t>(reference_corner));
-            const auto base_corner = start_box.corner(corner_id);
-            const int base_x = base_corner.texture_x;
-            const int base_y = base_corner.texture_y;
-            const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
-
-            DisplacedAssetAnchorPoint anchor_template{};
-            anchor_template.name = "__box_corner";
-            anchor_template.texture_x = base_x;
-            anchor_template.texture_y = base_y;
-            anchor_template.depth_offset = 0;
-
-            auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
-                DisplacedAssetAnchorPoint sample_anchor = anchor_template;
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
-                const auto sample = anchor_points::resolve_frame_anchor_sample(
-                    *target,
-                    sample_anchor,
-                    anchor_points::GridMaterialization::None);
-                if (sample.resolved.missing || !sample.flat_relative_pixel_point.valid) {
-                    return false;
-                }
-
-                anchor_points::AnchorWorldPoint3 near_point{};
-                anchor_points::AnchorWorldPoint3 far_point{};
-                if (!anchor_points::build_symmetric_camera_ray_extrusion(
-                        *target,
-                        sample.flat_relative_pixel_point,
-                        extrusion,
-                        near_point,
-                        far_point)) {
-                    return false;
-                }
-                const anchor_points::AnchorWorldPoint3 selected = (reference_point < 4) ? near_point : far_point;
-                if (!selected.valid || !std::isfinite(selected.x) || !std::isfinite(selected.y) || !std::isfinite(selected.z)) {
-                    return false;
-                }
-
-                render_projection::WorldPoint3 world_point{
-                    selected.x,
-                    selected.y,
-                    selected.z,
-                    true};
-                SDL_FPoint projected{};
-                if (render_projection::project_world_to_screen(*cam, world_point, projected) &&
-                    std::isfinite(projected.x) &&
-                    std::isfinite(projected.y)) {
-                    out_screen = projected;
-                    return true;
-                }
-                projected = cam->map_to_screen_f(SDL_FPoint{selected.x, selected.z});
-                if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
-                    return false;
-                }
-                out_screen = projected;
-                return true;
-            };
-
-            int solved_x = base_x;
-            int solved_y = base_y;
-            if (!solve_texture_point_for_screen_target(
-                    base_x,
-                    base_y,
-                    desired_screen,
-                    sample_screen,
-                    solved_x,
-                    solved_y)) {
-                return false;
-            }
-
-            const int delta_x = solved_x - base_x;
-            const int delta_y = solved_y - base_y;
-            const animation_update::FrameBoxRect previous = box.rect;
-            box.set_rect(start_rect);
-            box.set_rotation_degrees(start_rotation);
-            box.translate_clamped(delta_x, delta_y);
-            return previous.left != box.rect.left ||
-                   previous.top != box.rect.top ||
-                   previous.right != box.rect.right ||
-                   previous.bottom != box.rect.bottom;
-        },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
-}
-
-bool RoomEditor::drag_impassable_box_rotation_to_screen(int box_index, SDL_Point screen_point) {
-    if (!impassable_box_mode_active() || !impassable_box_edit_.target_asset) {
-        return false;
-    }
-    if (!impassable_box_edit_.dragging_rotation) {
-        return false;
-    }
-    if (impassable_box_edit_.target_asset->info &&
-        box_index >= 0 &&
-        box_index < static_cast<int>(impassable_box_edit_.target_asset->info->impassable_boxes.size()) &&
-        impassable_box_edit_.target_asset->info->impassable_boxes[static_cast<std::size_t>(box_index)].flatten_bottom_to_floor) {
-        return false;
-    }
-
-    const float current_angle = screen_angle_degrees(impassable_box_edit_.rotation_drag_center_screen, screen_point);
-    const float delta_angle = normalize_angle_delta_degrees(
-        current_angle - impassable_box_edit_.rotation_drag_start_angle_degrees);
-    const float target_rotation = animation_update::FrameBoxBase::sanitize_rotation_degrees(
-        impassable_box_edit_.rotation_drag_start_box_rotation_degrees + delta_angle);
-    return mutate_impassable_boxes(
-        [box_index, target_rotation](std::vector<animation_update::FrameHitBox>& boxes) {
             if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
                 return false;
             }
@@ -23245,37 +22951,42 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
         assets_->player = existing_player;
         player_ = existing_player;
     } else if (!player_asset_name.empty() && current_room_->room_area) {
+        auto point_in_world_polygon = [](SDL_FPoint point, const std::vector<SDL_FPoint>& polygon) -> bool {
+            if (polygon.size() < 3) {
+                return false;
+            }
+            bool inside = false;
+            for (std::size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+                const SDL_FPoint& pi = polygon[i];
+                const SDL_FPoint& pj = polygon[j];
+                const bool intersects = ((pi.y > point.y) != (pj.y > point.y));
+                if (!intersects) {
+                    continue;
+                }
+                const float denominator = (pj.y - pi.y);
+                if (std::fabs(denominator) <= 1e-6f) {
+                    continue;
+                }
+                const float x_intersection = ((pj.x - pi.x) * (point.y - pi.y) / denominator) + pi.x;
+                if (point.x < x_intersection) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        };
         auto is_clear = [&](SDL_Point point) {
             for (Asset* asset : assets_->all) {
                 if (!asset || asset->dead) {
                     continue;
                 }
-                const auto& impassable_volumes = asset->current_impassable_box_volumes();
-                for (const auto& volume : impassable_volumes) {
-                    if (!volume.enabled || !volume.valid) {
+                const auto& impassable_shapes = asset->current_impassable_shapes();
+                for (const auto& shape : impassable_shapes) {
+                    if (!shape.enabled || !shape.valid || shape.floor_points.size() < 3) {
                         continue;
                     }
-                    float min_x = std::numeric_limits<float>::max();
-                    float max_x = std::numeric_limits<float>::lowest();
-                    float min_z = std::numeric_limits<float>::max();
-                    float max_z = std::numeric_limits<float>::lowest();
-                    for (const auto& world_point : volume.world_points) {
-                        if (!std::isfinite(world_point.x) || !std::isfinite(world_point.y)) {
-                            continue;
-                        }
-                        min_x = std::min(min_x, world_point.x);
-                        max_x = std::max(max_x, world_point.x);
-                        min_z = std::min(min_z, world_point.y);
-                        max_z = std::max(max_z, world_point.y);
-                    }
-                    if (!std::isfinite(min_x) || !std::isfinite(max_x) ||
-                        !std::isfinite(min_z) || !std::isfinite(max_z)) {
-                        continue;
-                    }
-                    if (static_cast<float>(point.x) >= min_x &&
-                        static_cast<float>(point.x) <= max_x &&
-                        static_cast<float>(point.y) >= min_z &&
-                        static_cast<float>(point.y) <= max_z) {
+                    if (point_in_world_polygon(SDL_FPoint{static_cast<float>(point.x),
+                                                          static_cast<float>(point.y)},
+                                               shape.floor_points)) {
                         return false;
                     }
                 }

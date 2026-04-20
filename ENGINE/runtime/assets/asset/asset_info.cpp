@@ -2867,7 +2867,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         impassable_enabled = data.contains(kImpassableEnabledKey) && data[kImpassableEnabledKey].is_boolean()
             ? data[kImpassableEnabledKey].get<bool>()
             : false;
-        impassable_box_enabled = impassable_enabled;
         floor_boxes_enabled = data.contains(kFloorBoxesEnabledKey) && data[kFloorBoxesEnabledKey].is_boolean()
             ? data[kFloorBoxesEnabledKey].get<bool>()
             : false;
@@ -2892,7 +2891,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 info_json_.erase(kFloorBoxesKey);
         }
         impassable_shapes.clear();
-        impassable_boxes.clear();
         if (impassable_enabled && data.contains(kImpassableShapesKey) && data[kImpassableShapesKey].is_array()) {
                 impassable_shapes = parse_impassable_shapes_payload(data[kImpassableShapesKey]);
                 const nlohmann::json impassable_payload = encode_impassable_shapes_payload(impassable_shapes);
@@ -3940,7 +3938,6 @@ bool AssetInfo::reload_animations_from_disk() {
         impassable_enabled = payload.contains(kImpassableEnabledKey) && payload[kImpassableEnabledKey].is_boolean()
             ? payload[kImpassableEnabledKey].get<bool>()
             : false;
-        impassable_box_enabled = impassable_enabled;
         floor_boxes_enabled = payload.contains(kFloorBoxesEnabledKey) && payload[kFloorBoxesEnabledKey].is_boolean()
             ? payload[kFloorBoxesEnabledKey].get<bool>()
             : false;
@@ -3949,7 +3946,6 @@ bool AssetInfo::reload_animations_from_disk() {
             floor_boxes = parse_floor_boxes_payload(payload[kFloorBoxesKey]);
         }
         impassable_shapes.clear();
-        impassable_boxes.clear();
         if (impassable_enabled && payload.contains(kImpassableShapesKey) && payload[kImpassableShapesKey].is_array()) {
             impassable_shapes = parse_impassable_shapes_payload(payload[kImpassableShapesKey]);
         }

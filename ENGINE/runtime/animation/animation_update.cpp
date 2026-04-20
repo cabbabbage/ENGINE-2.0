@@ -22,6 +22,7 @@
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
 #include "movement_rotation.hpp"
+#include "animation_tag_utils.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "movement_target_utils.hpp"
 #include "core/AssetsManager.hpp"
@@ -376,7 +377,8 @@ AnimationUpdate::AnimationUpdate(Asset* self, Assets* assets)
 void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
                                 int visited_thresh_px,
                                 std::optional<int> checkpoint_resolution,
-                                bool override_non_locked) {
+                                bool override_non_locked,
+                                AutoMoveCombatOverrides combat_overrides) {
     if (!self_) {
         return;
     }
@@ -395,12 +397,13 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
         return;
     }
     std::vector<SDL_Point> rel{ delta };
-    auto_move(rel, visited_thresh_px, checkpoint_resolution, override_non_locked);
+    auto_move(rel, visited_thresh_px, checkpoint_resolution, override_non_locked, combat_overrides);
 }
 
 void AnimationUpdate::auto_move(Asset* target_asset,
                                 int visited_thresh_px,
-                                bool override_non_locked) {
+                                bool override_non_locked,
+                                AutoMoveCombatOverrides combat_overrides) {
     if (!self_ || !target_asset) {
         return;
     }
@@ -421,16 +424,18 @@ void AnimationUpdate::auto_move(Asset* target_asset,
         if (self_) {
             self_->target_reached = true;
             self_->needs_target = true;
+            try_start_attack_animation(resolve_auto_move_combat_options(combat_overrides));
         }
         return;
     }
-    auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked);
+    auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked, combat_overrides);
 }
 
 void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
                                    int            visited_thresh_px,
                                    std::optional<int> checkpoint_resolution,
-                                   bool           override_non_locked) {
+                                   bool           override_non_locked,
+                                   AutoMoveCombatOverrides combat_overrides) {
     if (!self_) {
         return;
     }
@@ -455,25 +460,58 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
                  true,
                  visited_thresh_px,
                  checkpoint_resolution,
-                 override_non_locked);
+                 override_non_locked,
+                 combat_overrides);
+}
+
+void AnimationUpdate::auto_move_3d(Asset* target_asset,
+                                   int visited_thresh_px,
+                                   bool override_non_locked,
+                                   AutoMoveCombatOverrides combat_overrides) {
+    if (!self_ || !target_asset) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
+        return;
+    }
+
+    self_->target_reached = false;
+    const axis::WorldPos checkpoint = animation_update::movement_targets::world_checkpoint_3d(*target_asset);
+    const axis::WorldPos delta = animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, checkpoint);
+    if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
+        self_->target_reached = true;
+        self_->needs_target = true;
+        try_start_attack_animation(resolve_auto_move_combat_options(combat_overrides));
+        return;
+    }
+
+    auto_move_3d(checkpoint, visited_thresh_px, std::nullopt, override_non_locked, combat_overrides);
 }
 
 void AnimationUpdate::auto_move_3d_relative(axis::WorldPos rel_delta,
                                             int            visited_thresh_px,
                                             std::optional<int> checkpoint_resolution,
-                                            bool           override_non_locked) {
+                                            bool           override_non_locked,
+                                            AutoMoveCombatOverrides combat_overrides) {
     auto_move_3d(std::vector<axis::WorldPos>{ rel_delta },
                  true,
                  visited_thresh_px,
                  checkpoint_resolution,
-                 override_non_locked);
+                 override_non_locked,
+                 combat_overrides);
 }
 
 void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoints,
                                    bool                               relative_checkpoints,
                                    int                                visited_thresh_px,
                                    std::optional<int>                 checkpoint_resolution,
-                                   bool                               override_non_locked) {
+                                   bool                               override_non_locked,
+                                   AutoMoveCombatOverrides            combat_overrides) {
     if (!self_) {
         return;
     }
@@ -499,6 +537,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     if (self_) {
         self_->target_reached = false;
     }
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const int resolution = effective_grid_resolution(checkpoint_resolution);
@@ -605,6 +644,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
+                    try_start_attack_animation(combat_options);
                 }
                 if (debug_logging) {
                     std::ostringstream oss;
@@ -638,13 +678,15 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
+        try_start_attack_animation(combat_options);
     }
 }
 
 void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                                 int visited_thresh_px,
                                 std::optional<int> checkpoint_resolution,
-                                bool override_non_locked) {
+                                bool override_non_locked,
+                                AutoMoveCombatOverrides combat_overrides) {
     if (!self_) {
         return;
     }
@@ -668,6 +710,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
     const int resolution = effective_grid_resolution(checkpoint_resolution);
     visited_thresh_      = std::max(0, visited_thresh_px);
     if (resolution > 0) {
@@ -757,6 +800,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                 active_plan_mode_ = ActivePlanMode::None;
                 if (self_) {
                     self_->needs_target = false;
+                    try_start_attack_animation(combat_options);
                 }
                 if (debug_logging) {
                     std::ostringstream oss;
@@ -790,6 +834,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     input_event_ = true;
     if (self_) {
         self_->needs_target = false;
+        try_start_attack_animation(combat_options);
     }
 }
 
@@ -994,6 +1039,38 @@ int AnimationUpdate::effective_grid_resolution(std::optional<int> override_resol
     return resolve_effective_grid_resolution(self_, grid(), override_resolution);
 }
 
+AnimationUpdate::AutoMoveCombatOptions AnimationUpdate::resolve_auto_move_combat_options(
+    AutoMoveCombatOverrides overrides) const {
+    AutoMoveCombatOptions options;
+    if (!self_ || !self_->info) {
+        return options;
+    }
+
+    bool has_attack_animation = false;
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        (void)animation_id;
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            has_attack_animation = true;
+            break;
+        }
+    }
+
+    const std::string asset_type = asset_types::canonicalize(self_->info->type);
+    options.attacking_enabled = (asset_type == asset_types::enemy && has_attack_animation);
+    if (overrides.attacking_enabled.has_value()) {
+        options.attacking_enabled = *overrides.attacking_enabled;
+    }
+
+    return options;
+}
+
+void AnimationUpdate::try_start_attack_animation(const AutoMoveCombatOptions& options) {
+    if (!options.attacking_enabled || !self_ || !self_->info || !self_->target_reached) {
+        return;
+    }
+    (void)set_animation_by_tags({"attack"}, {});
+}
+
 void AnimationUpdate::set_animation(const std::string& animation_id) {
     if (!self_ || !self_->info || !runtime_) {
         return;
@@ -1020,10 +1097,11 @@ std::optional<std::string> AnimationUpdate::resolve_animation_by_tags(
         if (!animation.has_frames()) {
             continue;
         }
+        const std::vector<std::string> normalized_tags = normalize_tag_list(animation.tags);
 
         bool excluded_match = false;
         for (const std::string& exclude_tag : excluded) {
-            if (std::find(animation.tags.begin(), animation.tags.end(), exclude_tag) != animation.tags.end()) {
+            if (std::find(normalized_tags.begin(), normalized_tags.end(), exclude_tag) != normalized_tags.end()) {
                 excluded_match = true;
                 break;
             }
@@ -1034,7 +1112,7 @@ std::optional<std::string> AnimationUpdate::resolve_animation_by_tags(
 
         bool required_match = true;
         for (const std::string& required_tag : required) {
-            if (std::find(animation.tags.begin(), animation.tags.end(), required_tag) == animation.tags.end()) {
+            if (std::find(normalized_tags.begin(), normalized_tags.end(), required_tag) == normalized_tags.end()) {
                 required_match = false;
                 break;
             }

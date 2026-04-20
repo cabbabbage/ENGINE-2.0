@@ -9,6 +9,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_update.hpp"
+#include "animation_tag_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/area.hpp"
 #include "gameplay/world/grid_point.hpp"
@@ -63,10 +64,15 @@ struct AnimationDescriptor {
     int frame_count = 0;
 };
 
-std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
-    std::vector<AnimationDescriptor> result;
+struct MovementAnimationBuckets {
+    std::vector<AnimationDescriptor> locomotion;
+    std::vector<AnimationDescriptor> attack;
+};
+
+MovementAnimationBuckets gather_movement_animations(const Asset& self) {
+    MovementAnimationBuckets buckets;
     if (!self.info || !self.isMovementEnabled()) {
-        return result;
+        return buckets;
     }
 
     for (const auto& [id, anim] : self.info->animations) {
@@ -92,11 +98,16 @@ std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
                 continue;
             }
 
-            result.push_back(AnimationDescriptor{ id, &anim, path_index, frames, anim.locked, frame_count });
+            AnimationDescriptor descriptor{ id, &anim, path_index, frames, anim.locked, frame_count };
+            if (animation_update::tag_utils::has_normalized_tag(anim.tags, "attack")) {
+                buckets.attack.push_back(std::move(descriptor));
+            } else {
+                buckets.locomotion.push_back(std::move(descriptor));
+            }
         }
     }
 
-    return result;
+    return buckets;
 }
 
 struct CandidateStride {
@@ -147,7 +158,8 @@ Plan GetBestPath::operator()(const Asset& self,
     const auto& collisions = context.collisions_for(self);
     const Assets* assets   = self.get_assets();
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
-    auto movement_anims    = gather_movement_animations(self);
+    const MovementAnimationBuckets animation_buckets = gather_movement_animations(self);
+    const auto& movement_anims = animation_buckets.locomotion;
 
     bool aborted = false;
     for (const world::GridPoint& checkpoint : checkpoints) {
@@ -321,3 +333,23 @@ Plan GetBestPath::operator()(const Asset& self,
 
     return plan;
 }
+
+namespace get_best_path::test_hooks {
+
+AnimationTagBuckets classify_animation_tag_buckets(const Asset& self) {
+    AnimationTagBuckets result;
+    const MovementAnimationBuckets buckets = gather_movement_animations(self);
+    result.locomotion_animation_ids.reserve(buckets.locomotion.size());
+    result.attack_animation_ids.reserve(buckets.attack.size());
+
+    for (const auto& descriptor : buckets.locomotion) {
+        result.locomotion_animation_ids.push_back(descriptor.id);
+    }
+    for (const auto& descriptor : buckets.attack) {
+        result.attack_animation_ids.push_back(descriptor.id);
+    }
+
+    return result;
+}
+
+} // namespace get_best_path::test_hooks

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "animation_update.hpp"
+#include "animation_tag_utils.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -66,10 +67,15 @@ struct AnimationDescriptor3D {
     int frame_count = 0;
 };
 
-std::vector<AnimationDescriptor3D> gather_movement_animations_3d(const Asset& self) {
-    std::vector<AnimationDescriptor3D> result;
+struct MovementAnimationBuckets3D {
+    std::vector<AnimationDescriptor3D> locomotion;
+    std::vector<AnimationDescriptor3D> attack;
+};
+
+MovementAnimationBuckets3D gather_movement_animations_3d(const Asset& self) {
+    MovementAnimationBuckets3D buckets;
     if (!self.info || !self.isMovementEnabled()) {
-        return result;
+        return buckets;
     }
 
     for (const auto& [id, anim] : self.info->animations) {
@@ -95,11 +101,16 @@ std::vector<AnimationDescriptor3D> gather_movement_animations_3d(const Asset& se
                 continue;
             }
 
-            result.push_back(AnimationDescriptor3D{ id, &anim, path_index, frames, anim.locked, frame_count });
+            AnimationDescriptor3D descriptor{ id, &anim, path_index, frames, anim.locked, frame_count };
+            if (animation_update::tag_utils::has_normalized_tag(anim.tags, "attack")) {
+                buckets.attack.push_back(std::move(descriptor));
+            } else {
+                buckets.locomotion.push_back(std::move(descriptor));
+            }
         }
     }
 
-    return result;
+    return buckets;
 }
 
 struct CandidateStride3D {
@@ -137,7 +148,8 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     const auto& collisions = context.collisions_for(self);
     const Assets* assets = self.get_assets();
     const long long visited_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
-    const auto movement_anims = gather_movement_animations_3d(self);
+    const MovementAnimationBuckets3D animation_buckets = gather_movement_animations_3d(self);
+    const auto& movement_anims = animation_buckets.locomotion;
 
     axis::WorldPos cursor = plan.world_start;
     bool aborted = false;
@@ -303,3 +315,23 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
 
     return plan;
 }
+
+namespace get_best_path_3d::test_hooks {
+
+AnimationTagBuckets3D classify_animation_tag_buckets(const Asset& self) {
+    AnimationTagBuckets3D result;
+    const MovementAnimationBuckets3D buckets = gather_movement_animations_3d(self);
+    result.locomotion_animation_ids.reserve(buckets.locomotion.size());
+    result.attack_animation_ids.reserve(buckets.attack.size());
+
+    for (const auto& descriptor : buckets.locomotion) {
+        result.locomotion_animation_ids.push_back(descriptor.id);
+    }
+    for (const auto& descriptor : buckets.attack) {
+        result.attack_animation_ids.push_back(descriptor.id);
+    }
+
+    return result;
+}
+
+} // namespace get_best_path_3d::test_hooks

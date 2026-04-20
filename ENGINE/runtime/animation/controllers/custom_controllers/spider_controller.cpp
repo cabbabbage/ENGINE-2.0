@@ -1,12 +1,8 @@
 #include "spider_controller.hpp"
 #include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "animation/animation_update.hpp"
-#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "assets/asset/Asset.hpp"
-#include "utils/range_util.hpp"
 #include <iostream>
-#include <optional>
-#include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 namespace animation_update::custom_controllers {}
 namespace custom_controllers = animation_update::custom_controllers;
@@ -21,9 +17,7 @@ spider_controller::spider_controller(Asset* self)
     }
 }
 
-void spider_controller::on_update(const Input&) {
-    constexpr int kSpiderStopRadiusPx = 96;
-
+void spider_controller::on_update(const Input& in) {
     const auto& ctx = game_context();
     Asset* self = self_ptr();
     if (!self || !self->anim_ || !ctx.has_assets()) {
@@ -35,16 +29,10 @@ void spider_controller::on_update(const Input&) {
         return;
     }
 
-    const bool in_attack_range = Range::is_in_range(self, player, kSpiderStopRadiusPx);
-    if (in_attack_range) {
-        if (!self->needs_target) {
-            self->anim_->cancel_all_movement();
-        }
-    } else if (self->needs_target) {
+    if (self->needs_target) {
         self->anim_->auto_move(player);
     }
-
-    animation_update::custom_controllers::dispatch_contact_attack(ctx);
+    CustomAssetController::on_update(in);
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {

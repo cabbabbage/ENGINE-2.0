@@ -54,6 +54,14 @@ bool segment_leaves_playable_area(const Assets* assets, SDL_Point from, SDL_Poin
 
 class AnimationUpdate {
 public:
+    struct AutoMoveCombatOptions {
+        bool attacking_enabled = false;
+    };
+
+    struct AutoMoveCombatOverrides {
+        std::optional<bool> attacking_enabled = std::nullopt;
+    };
+
     enum class ReversePlaybackCommand {
         None,
         ReverseUntilStopCurrentAnimation,
@@ -70,16 +78,18 @@ public:
     void set_debug_enabled(bool enabled);
     bool debug_enabled() const;
 
-    void auto_move(const std::vector<SDL_Point>& rel_checkpoints, int visited_thresh_px, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
-    void auto_move(SDL_Point world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
-    void auto_move(Asset* target_asset, int visited_thresh_px = 0, bool override_non_locked = true);
-    void auto_move_3d(axis::WorldPos world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
-    void auto_move_3d_relative(axis::WorldPos rel_delta, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
+    void auto_move(const std::vector<SDL_Point>& rel_checkpoints, int visited_thresh_px, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move(SDL_Point world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move(Asset* target_asset, int visited_thresh_px = 0, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move_3d(axis::WorldPos world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move_3d(Asset* target_asset, int visited_thresh_px = 0, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move_3d_relative(axis::WorldPos rel_delta, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
     void auto_move_3d(const std::vector<axis::WorldPos>& checkpoints,
                       bool                               relative_checkpoints,
                       int                                visited_thresh_px,
                       std::optional<int>                 checkpoint_resolution = std::nullopt,
-                      bool                               override_non_locked   = true);
+                      bool                               override_non_locked   = true,
+                      AutoMoveCombatOverrides            combat_overrides      = {});
 
     int visit_threshold_px() const { return visited_thresh_; }
 
@@ -167,4 +177,6 @@ private:
 
     vibble::grid::Grid& grid() const;
     int effective_grid_resolution(std::optional<int> override_resolution) const;
+    AutoMoveCombatOptions resolve_auto_move_combat_options(AutoMoveCombatOverrides overrides = {}) const;
+    void try_start_attack_animation(const AutoMoveCombatOptions& options);
 };

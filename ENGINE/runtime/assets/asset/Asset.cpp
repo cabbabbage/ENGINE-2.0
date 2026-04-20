@@ -1282,6 +1282,24 @@ void Asset::refresh_runtime_floor_boxes_cache() {
         box.depth = authored.depth;
         box.enabled = authored.enabled;
         box.tags = authored.tags;
+        if (authored.candidate.has_value()) {
+            RuntimeFloorBox::CandidatePayload candidate_payload{};
+            candidate_payload.candidates =
+                vibble::spawn::RuntimeCandidates::from_json(authored.candidate->candidates);
+            candidate_payload.grid_resolution = std::clamp(
+                vibble::grid::clamp_resolution(authored.candidate->grid_resolution),
+                2,
+                8);
+            candidate_payload.has_positive_non_null_candidate = std::any_of(
+                candidate_payload.candidates.entries().begin(),
+                candidate_payload.candidates.entries().end(),
+                [](const vibble::spawn::CandidateEntry& entry) {
+                    return !entry.is_null && entry.weight > 0.0;
+                });
+            box.candidate = std::move(candidate_payload);
+        } else {
+            box.candidate.reset();
+        }
         if (box.id.empty() || box.name.empty()) {
             continue;
         }

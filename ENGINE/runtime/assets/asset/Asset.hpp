@@ -15,6 +15,7 @@
 
 #include "utils/area.hpp"
 #include "asset_info.hpp"
+#include "gameplay/spawn/runtime_candidates.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "anchor_point.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -349,6 +350,12 @@ class Asset {
     };
 
     struct RuntimeFloorBox {
+        struct CandidatePayload {
+            vibble::spawn::RuntimeCandidates candidates;
+            int grid_resolution = 4;
+            bool has_positive_non_null_candidate = false;
+        };
+
         std::string id;
         std::string name;
         float position_x = 0.0f;
@@ -357,6 +364,7 @@ class Asset {
         float depth = 0.0f;
         bool enabled = true;
         std::vector<std::string> tags;
+        std::optional<CandidatePayload> candidate;
 
         bool has_tag(const std::string& tag) const;
     };

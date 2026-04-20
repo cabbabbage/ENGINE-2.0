@@ -110,6 +110,9 @@ constexpr int kBoxCornerPickRadiusPx = 18;
 constexpr int kFloorBoxCornerPickRadiusPx = 18;
 constexpr int kFloorBoxCenterPickRadiusPx = 16;
 constexpr int kFloorBoxCenterHandleHoverIndex = -2;
+constexpr int kFloorBoxCandidateGridResolutionMin = 2;
+constexpr int kFloorBoxCandidateGridResolutionMax = 8;
+constexpr int kFloorBoxCandidateGridResolutionDefault = 4;
 constexpr int kBoxRotationHandlePickRadiusPx = 16;
 constexpr int kBoxExtrusionHandlePickRadiusPx = 12;
 constexpr float kBoxRotationHandleDistancePx = 26.0f;
@@ -895,6 +898,15 @@ SDL_FPoint floor_box_world_center(const Asset& asset, const AssetInfo::FloorBox&
         static_cast<float>(asset.world_x()) + box.position_x,
         static_cast<float>(asset.world_z()) + box.position_z,
     };
+}
+
+nlohmann::json default_floor_box_candidate_entry_json() {
+    nlohmann::json entry = nlohmann::json::object();
+    entry["candidates"] = nlohmann::json::array({
+        nlohmann::json::object({{"name", "null"}, {"chance", 0}})
+    });
+    entry["grid_resolution"] = kFloorBoxCandidateGridResolutionDefault;
+    return entry;
 }
 
 nlohmann::json build_empty_box_frame_array(std::size_t frame_count) {
@@ -2542,6 +2554,15 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
     if (anchor_candidate_editor_.open) {
         layout_anchor_candidate_editor_popup();
     }
+    if (floor_box_candidate_editor_.pie_widget) {
+        floor_box_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+    }
+    if (floor_box_candidate_editor_.panel) {
+        floor_box_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    }
+    if (floor_box_candidate_editor_.open) {
+        layout_floor_box_candidate_editor_popup();
+    }
     update_asset_editor_layout();
 
 }
@@ -2953,6 +2974,7 @@ if (auto selected = library_ui_->consume_selection()) {
         oval_point_child_editor_panel_->set_visible(oval_mode_active() && oval_edit_.selected_point_index >= 0);
     }
     update_anchor_candidate_editor_search(input);
+    update_floor_box_candidate_editor_search(input);
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         movement_tools_panel_->set_visible(movement_mode_active());
@@ -3312,6 +3334,19 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             return result;
         }
         ensure_floor_box_editor_widgets();
+        if (handle_floor_box_candidate_editor_event(event)) {
+            result.handled = true;
+            result.pointer_blocked = true;
+            return result;
+        }
+        if (pointer_based && floor_box_candidate_editor_.open && floor_box_candidate_editor_.pie_widget) {
+            const bool inside_panel = floor_box_candidate_editor_.panel && floor_box_candidate_editor_.panel->is_visible() &&
+                                      floor_box_candidate_editor_.panel->is_point_inside(mx, my);
+            if (inside_panel ||
+                floor_box_candidate_editor_.pie_widget->is_search_point_inside(mx, my)) {
+                result.pointer_blocked = true;
+            }
+        }
         if (floor_box_tools_panel_ && floor_box_tools_panel_->is_visible()) {
             if (floor_box_tools_panel_->handle_event(event)) {
                 result.handled = true;
@@ -5254,6 +5289,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (floor_box_mode_active() && floor_box_tools_panel_ && floor_box_tools_panel_->is_visible()) {
             floor_box_tools_panel_->render(renderer);
         }
+        render_floor_box_candidate_editor(renderer);
     }
     DMDropdown::render_active_options(renderer);
 }
@@ -5411,6 +5447,9 @@ void RoomEditor::set_manifest_store(devmode::core::ManifestStore* store) {
     }
     if (anchor_candidate_editor_.pie_widget) {
         anchor_candidate_editor_.pie_widget->set_manifest_store(manifest_store_);
+    }
+    if (floor_box_candidate_editor_.pie_widget) {
+        floor_box_candidate_editor_.pie_widget->set_manifest_store(manifest_store_);
     }
 }
 
@@ -8548,6 +8587,8 @@ void RoomEditor::sync_floor_box_tools_panel() {
         floor_box_edit_.dragging_corner = false;
         floor_box_edit_.dragging_box = false;
     }
+
+    sync_floor_box_candidate_editor();
 }
 
 std::vector<std::string> RoomEditor::floor_box_recommendation_pool() const {
@@ -8777,6 +8818,11 @@ bool RoomEditor::delete_selected_floor_box() {
     }
 
     target_info->floor_boxes.erase(target_info->floor_boxes.begin() + static_cast<std::size_t>(selected));
+    if (floor_box_candidate_editor_.open &&
+        floor_box_candidate_editor_.target_asset == target &&
+        floor_box_candidate_editor_.box_index == selected) {
+        close_floor_box_candidate_editor();
+    }
     if (target_info->floor_boxes.empty()) {
         floor_box_edit_.selected_box_index = -1;
     } else if (selected >= static_cast<int>(target_info->floor_boxes.size())) {
@@ -11830,6 +11876,10 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
                     if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) {
                         return false;
                     }
+                    if (vibble::spawn_group_codec::is_null_candidate_entry(
+                            candidates[static_cast<std::size_t>(index)])) {
+                        return false;
+                    }
                     auto erase_it = candidates.begin() + static_cast<nlohmann::json::difference_type>(index);
                     candidates.erase(erase_it);
                     return true;
@@ -11845,22 +11895,9 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
                     if (value.empty()) {
                         return false;
                     }
-                    bool had_candidates = false;
-                    if (candidate_entry.is_object() &&
-                        candidate_entry.contains("candidates") &&
-                        candidate_entry["candidates"].is_array()) {
-                        had_candidates = !candidate_entry["candidates"].empty();
-                    }
                     vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
                     auto& candidates = candidate_entry["candidates"];
                     if (!candidates.is_array()) {
-                        candidates = nlohmann::json::array();
-                    }
-                    if (!had_candidates &&
-                        candidates.size() == 1 &&
-                        candidates[0].is_object() &&
-                        candidates[0].value("name", std::string{}) == "null" &&
-                        std::fabs(vibble::spawn_group_codec::read_candidate_chance(candidates[0], 0.0)) < 1e-9) {
                         candidates = nlohmann::json::array();
                     }
 
@@ -12051,6 +12088,497 @@ void RoomEditor::render_anchor_candidate_editor(SDL_Renderer* renderer) const {
         return;
     }
     anchor_candidate_editor_.panel->render(renderer);
+}
+
+int RoomEditor::sanitize_floor_box_candidate_grid_resolution(int value) {
+    const int clamped = vibble::grid::clamp_resolution(value);
+    return std::clamp(clamped, kFloorBoxCandidateGridResolutionMin, kFloorBoxCandidateGridResolutionMax);
+}
+
+nlohmann::json RoomEditor::floor_box_candidate_entry_json_for_index(int box_index) const {
+    nlohmann::json candidate_entry = default_floor_box_candidate_entry_json();
+    if (!floor_box_mode_active() || !floor_box_edit_.target_asset || !floor_box_edit_.target_asset->info) {
+        vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+        candidate_entry["grid_resolution"] =
+            sanitize_floor_box_candidate_grid_resolution(candidate_entry.value("grid_resolution",
+                                                                               kFloorBoxCandidateGridResolutionDefault));
+        return candidate_entry;
+    }
+
+    const auto& boxes = floor_box_edit_.target_asset->info->floor_boxes;
+    if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+        vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+        candidate_entry["grid_resolution"] =
+            sanitize_floor_box_candidate_grid_resolution(candidate_entry.value("grid_resolution",
+                                                                               kFloorBoxCandidateGridResolutionDefault));
+        return candidate_entry;
+    }
+
+    const auto& box = boxes[static_cast<std::size_t>(box_index)];
+    if (box.candidate.has_value()) {
+        candidate_entry = nlohmann::json::object();
+        candidate_entry["candidates"] = box.candidate->candidates;
+        candidate_entry["grid_resolution"] = box.candidate->grid_resolution;
+    }
+
+    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+    candidate_entry["grid_resolution"] =
+        sanitize_floor_box_candidate_grid_resolution(candidate_entry.value("grid_resolution",
+                                                                           kFloorBoxCandidateGridResolutionDefault));
+    return candidate_entry;
+}
+
+void RoomEditor::close_floor_box_candidate_editor() {
+    if (floor_box_candidate_editor_.pie_widget) {
+        floor_box_candidate_editor_.pie_widget->hide_search();
+    }
+    if (floor_box_candidate_editor_.panel) {
+        floor_box_candidate_editor_.panel->close();
+    }
+    floor_box_candidate_editor_.open = false;
+    floor_box_candidate_editor_.target_asset = nullptr;
+    floor_box_candidate_editor_.box_index = -1;
+    floor_box_candidate_editor_.open_point = SDL_Point{0, 0};
+}
+
+bool RoomEditor::floor_box_candidate_editor_mode_active() const {
+    return floor_box_mode_active();
+}
+
+bool RoomEditor::floor_box_candidate_target_exists() const {
+    if (!floor_box_candidate_editor_mode_active() ||
+        !floor_box_candidate_editor_.target_asset ||
+        !floor_box_candidate_editor_.target_asset->info) {
+        return false;
+    }
+    if (floor_box_edit_.target_asset != floor_box_candidate_editor_.target_asset) {
+        return false;
+    }
+    if (floor_box_candidate_editor_.box_index < 0 ||
+        floor_box_candidate_editor_.box_index >=
+            static_cast<int>(floor_box_candidate_editor_.target_asset->info->floor_boxes.size())) {
+        return false;
+    }
+    if (floor_box_edit_.selected_box_index != floor_box_candidate_editor_.box_index) {
+        return false;
+    }
+    return true;
+}
+
+void RoomEditor::layout_floor_box_candidate_editor_popup() {
+    if (!floor_box_candidate_editor_.open || !floor_box_candidate_editor_.pie_widget || !floor_box_candidate_editor_.panel) {
+        return;
+    }
+
+    constexpr int kPopupMargin = 10;
+    constexpr int kPanelPadding = 12;
+    constexpr int kPanelHeaderReserve = 162;
+    const int min_panel_width = 500;
+    const int max_panel_width = 620;
+    int panel_width = 560;
+    if (screen_w_ > 0) {
+        panel_width = std::clamp(panel_width, min_panel_width, std::max(min_panel_width, screen_w_ - (kPopupMargin * 2)));
+        panel_width = std::min(panel_width, max_panel_width);
+    }
+
+    const int pie_width = std::max(320, panel_width - (kPanelPadding * 2));
+    int panel_height = floor_box_candidate_editor_.pie_widget->height_for_width(pie_width) + kPanelHeaderReserve;
+    if (panel_height <= 0) {
+        panel_height = 500;
+    }
+    if (screen_h_ > 0) {
+        panel_height = std::clamp(panel_height, 360, std::max(360, screen_h_ - (kPopupMargin * 2)));
+    }
+
+    int panel_x = kPopupMargin;
+    int panel_y = kPopupMargin;
+    if (screen_w_ > 0) {
+        panel_x = (screen_w_ - panel_width) / 2;
+    }
+    panel_x = std::max(kPopupMargin, panel_x);
+    if (screen_w_ > 0) {
+        panel_x = std::min(panel_x, std::max(kPopupMargin, screen_w_ - kPopupMargin - panel_width));
+    }
+
+    if (screen_h_ > 0) {
+        panel_y = (screen_h_ - panel_height) / 2;
+    }
+    panel_y = std::max(kPopupMargin, panel_y);
+    if (screen_h_ > 0) {
+        panel_y = std::min(panel_y, std::max(kPopupMargin, screen_h_ - kPopupMargin - panel_height));
+    }
+
+    floor_box_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    floor_box_candidate_editor_.panel->set_visible_height(panel_height);
+    floor_box_candidate_editor_.panel->set_rect(SDL_Rect{panel_x, panel_y, panel_width, panel_height});
+}
+
+void RoomEditor::refresh_floor_box_candidate_editor_widget() {
+    if (!floor_box_candidate_editor_.open ||
+        !floor_box_candidate_editor_.pie_widget ||
+        !floor_box_candidate_editor_.panel) {
+        return;
+    }
+    if (!floor_box_candidate_target_exists()) {
+        close_floor_box_candidate_editor();
+        return;
+    }
+
+    const int box_index = floor_box_candidate_editor_.box_index;
+    nlohmann::json candidate_entry = floor_box_candidate_entry_json_for_index(box_index);
+    if (!candidate_entry.is_object()) {
+        candidate_entry = default_floor_box_candidate_entry_json();
+    }
+    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+    const int grid_resolution = sanitize_floor_box_candidate_grid_resolution(
+        candidate_entry.value("grid_resolution", kFloorBoxCandidateGridResolutionDefault));
+    candidate_entry["grid_resolution"] = grid_resolution;
+
+    const auto& box = floor_box_candidate_editor_.target_asset->info->floor_boxes[static_cast<std::size_t>(box_index)];
+    floor_box_candidate_editor_.panel->set_title(box.name + " Candidates");
+    floor_box_candidate_editor_.pie_widget->set_candidates_from_json(candidate_entry);
+    if (floor_box_candidate_editor_.resolution_slider) {
+        floor_box_candidate_editor_.resolution_slider->set_value(grid_resolution);
+    }
+    layout_floor_box_candidate_editor_popup();
+}
+
+void RoomEditor::sync_floor_box_candidate_editor() {
+    if (!floor_box_candidate_editor_.open) {
+        return;
+    }
+    if (!floor_box_candidate_target_exists()) {
+        close_floor_box_candidate_editor();
+        return;
+    }
+    refresh_floor_box_candidate_editor_widget();
+}
+
+void RoomEditor::open_floor_box_candidate_editor(int box_index, SDL_Point click_point) {
+    if (!floor_box_candidate_editor_mode_active() ||
+        !floor_box_edit_.target_asset ||
+        !floor_box_edit_.target_asset->info) {
+        close_floor_box_candidate_editor();
+        return;
+    }
+    if (box_index < 0 || box_index >= static_cast<int>(floor_box_edit_.target_asset->info->floor_boxes.size())) {
+        close_floor_box_candidate_editor();
+        return;
+    }
+
+    if (!floor_box_candidate_editor_.panel) {
+        floor_box_candidate_editor_.panel = std::make_unique<DockableCollapsible>("Floor Box Candidates", true);
+        floor_box_candidate_editor_.panel->set_scroll_enabled(true);
+        floor_box_candidate_editor_.panel->set_floating_content_width(520);
+        floor_box_candidate_editor_.panel->set_cell_width(460);
+        floor_box_candidate_editor_.panel->set_row_gap(10);
+        floor_box_candidate_editor_.panel->set_col_gap(12);
+        floor_box_candidate_editor_.panel->set_padding(12);
+        floor_box_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    }
+
+    if (!floor_box_candidate_editor_.pie_widget) {
+        floor_box_candidate_editor_.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
+        floor_box_candidate_editor_.pie_widget->set_on_request_layout([this]() { layout_floor_box_candidate_editor_popup(); });
+        floor_box_candidate_editor_.pie_widget->set_defer_adjust_until_release(true);
+        floor_box_candidate_editor_.pie_widget->set_on_regenerate({});
+        floor_box_candidate_editor_.pie_widget->set_on_adjust([this](int index, double delta) {
+            mutate_floor_box_candidate_entry(
+                [index, delta](nlohmann::json& candidate_entry) -> bool {
+                    if (index < 0 || std::abs(delta) < 1e-9) {
+                        return false;
+                    }
+                    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                    auto& candidates = candidate_entry["candidates"];
+                    if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) {
+                        return false;
+                    }
+                    auto& candidate = candidates[static_cast<std::size_t>(index)];
+                    if (!candidate.is_object()) {
+                        candidate = nlohmann::json::object();
+                    }
+                    const double current_weight = std::max(0.0, vibble::spawn_group_codec::read_candidate_chance(candidate, 0.0));
+                    const double next_weight = std::max(0.0, current_weight + delta);
+                    if (std::fabs(current_weight - next_weight) < 1e-9) {
+                        return false;
+                    }
+                    if (is_integral_weight(next_weight)) {
+                        candidate["chance"] = static_cast<int>(std::llround(next_weight));
+                    } else {
+                        candidate["chance"] = next_weight;
+                    }
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced,
+                false,
+                "Floor Box Candidate Adjust",
+                "room-floor-box-candidate-adjust");
+        });
+        floor_box_candidate_editor_.pie_widget->set_on_delete([this](int index) {
+            mutate_floor_box_candidate_entry(
+                [index](nlohmann::json& candidate_entry) -> bool {
+                    if (index < 0) {
+                        return false;
+                    }
+                    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                    auto& candidates = candidate_entry["candidates"];
+                    if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) {
+                        return false;
+                    }
+                    if (vibble::spawn_group_codec::is_null_candidate_entry(
+                            candidates[static_cast<std::size_t>(index)])) {
+                        return false;
+                    }
+                    auto erase_it = candidates.begin() + static_cast<nlohmann::json::difference_type>(index);
+                    candidates.erase(erase_it);
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced,
+                false,
+                "Floor Box Candidate Delete",
+                "room-floor-box-candidate-delete");
+        });
+        floor_box_candidate_editor_.pie_widget->set_on_add_candidate([this](const std::string& value) {
+            mutate_floor_box_candidate_entry(
+                [value](nlohmann::json& candidate_entry) -> bool {
+                    if (value.empty()) {
+                        return false;
+                    }
+                    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                    auto& candidates = candidate_entry["candidates"];
+                    if (!candidates.is_array()) {
+                        candidates = nlohmann::json::array();
+                    }
+
+                    double max_weight = 0.0;
+                    for (const auto& candidate : candidates) {
+                        max_weight = std::max(max_weight,
+                                              std::max(0.0, vibble::spawn_group_codec::read_candidate_chance(candidate, 0.0)));
+                    }
+                    double new_weight = max_weight > 0.0 ? max_weight * 0.05 : 5.0;
+                    if (new_weight <= 0.0 || !std::isfinite(new_weight)) {
+                        new_weight = 5.0;
+                    }
+
+                    nlohmann::json new_candidate = nlohmann::json::object();
+                    new_candidate["name"] = value;
+                    if (is_integral_weight(new_weight)) {
+                        new_candidate["chance"] = static_cast<int>(std::llround(new_weight));
+                    } else {
+                        new_candidate["chance"] = new_weight;
+                    }
+                    candidates.push_back(std::move(new_candidate));
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced,
+                false,
+                "Floor Box Candidate Add",
+                "room-floor-box-candidate-add");
+        });
+    }
+
+    if (!floor_box_candidate_editor_.resolution_slider) {
+        floor_box_candidate_editor_.resolution_slider = std::make_unique<DMSlider>(
+            "Grid Resolution",
+            kFloorBoxCandidateGridResolutionMin,
+            kFloorBoxCandidateGridResolutionMax,
+            kFloorBoxCandidateGridResolutionDefault);
+        floor_box_candidate_editor_.resolution_slider->set_on_value_changed([this](int value) {
+            mutate_floor_box_candidate_entry(
+                [value](nlohmann::json& candidate_entry) -> bool {
+                    const int next_resolution = sanitize_floor_box_candidate_grid_resolution(value);
+                    const int current_resolution = sanitize_floor_box_candidate_grid_resolution(
+                        candidate_entry.value("grid_resolution", kFloorBoxCandidateGridResolutionDefault));
+                    if (next_resolution == current_resolution) {
+                        return false;
+                    }
+                    candidate_entry["grid_resolution"] = next_resolution;
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced,
+                false,
+                "Floor Box Candidate Resolution",
+                "room-floor-box-candidate-resolution");
+        });
+    }
+    if (!floor_box_candidate_editor_.resolution_widget) {
+        floor_box_candidate_editor_.resolution_widget =
+            std::make_unique<SliderWidget>(floor_box_candidate_editor_.resolution_slider.get());
+    }
+
+    floor_box_edit_.selected_box_index = box_index;
+    floor_box_edit_.selected_corner_index = -1;
+    sync_floor_box_tools_panel();
+
+    DockableCollapsible::Rows panel_rows;
+    panel_rows.push_back({floor_box_candidate_editor_.resolution_widget.get()});
+    panel_rows.push_back({floor_box_candidate_editor_.pie_widget.get()});
+    floor_box_candidate_editor_.panel->set_rows(panel_rows);
+    floor_box_candidate_editor_.panel->open();
+    floor_box_candidate_editor_.panel->set_visible(true);
+    floor_box_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+
+    floor_box_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+    floor_box_candidate_editor_.pie_widget->set_manifest_store(manifest_store_);
+    floor_box_candidate_editor_.pie_widget->set_assets(assets_);
+    floor_box_candidate_editor_.target_asset = floor_box_edit_.target_asset;
+    floor_box_candidate_editor_.box_index = box_index;
+    floor_box_candidate_editor_.open_point = click_point;
+    floor_box_candidate_editor_.open = true;
+
+    refresh_floor_box_candidate_editor_widget();
+}
+
+bool RoomEditor::mutate_floor_box_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
+                                                  devmode::core::DevSaveCoordinator::Priority priority,
+                                                  bool flush_now,
+                                                  const char* reason,
+                                                  const char* flush_tag) {
+    if (!floor_box_candidate_editor_mode_active() ||
+        !floor_box_candidate_editor_.open ||
+        !floor_box_candidate_editor_.target_asset ||
+        !floor_box_candidate_editor_.target_asset->info ||
+        floor_box_candidate_editor_.box_index < 0) {
+        return false;
+    }
+
+    Asset* target = floor_box_candidate_editor_.target_asset;
+    std::shared_ptr<AssetInfo> target_info = target->info;
+    if (!target_info) {
+        return false;
+    }
+    auto& boxes = target_info->floor_boxes;
+    const int box_index = floor_box_candidate_editor_.box_index;
+    if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
+        return false;
+    }
+
+    nlohmann::json candidate_entry = floor_box_candidate_entry_json_for_index(box_index);
+    if (!candidate_entry.is_object()) {
+        candidate_entry = default_floor_box_candidate_entry_json();
+    }
+    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+    candidate_entry["grid_resolution"] = sanitize_floor_box_candidate_grid_resolution(
+        candidate_entry.value("grid_resolution", kFloorBoxCandidateGridResolutionDefault));
+
+    if (!mutator(candidate_entry)) {
+        return false;
+    }
+
+    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+    const int grid_resolution = sanitize_floor_box_candidate_grid_resolution(
+        candidate_entry.value("grid_resolution", kFloorBoxCandidateGridResolutionDefault));
+    candidate_entry["grid_resolution"] = grid_resolution;
+
+    AssetInfo::FloorBox::CandidatePayload payload{};
+    payload.candidates = candidate_entry["candidates"];
+    payload.grid_resolution = grid_resolution;
+    boxes[static_cast<std::size_t>(box_index)].candidate = std::move(payload);
+
+    target->refresh_runtime_floor_boxes_cache();
+    sync_floor_box_tools_panel();
+    refresh_floor_box_candidate_editor_widget();
+    return persist_floor_boxes(priority, flush_now, reason, flush_tag);
+}
+
+bool RoomEditor::handle_floor_box_candidate_editor_event(const SDL_Event& event) {
+    if (!floor_box_candidate_editor_mode_active() ||
+        !floor_box_candidate_editor_.open ||
+        !floor_box_candidate_editor_.pie_widget ||
+        !floor_box_candidate_editor_.panel) {
+        return false;
+    }
+
+    CandidateEditorPieGraphWidget* widget = floor_box_candidate_editor_.pie_widget.get();
+    DockableCollapsible* panel = floor_box_candidate_editor_.panel.get();
+    if (!widget || !panel) {
+        return false;
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN &&
+        event.key.key == SDLK_ESCAPE &&
+        event.key.repeat == 0) {
+        close_floor_box_candidate_editor();
+        return true;
+    }
+
+    if (widget->is_search_visible() &&
+        (is_pointer_or_wheel_event(event) || is_text_or_key_event(event)) &&
+        widget->handle_event(event)) {
+        return true;
+    }
+
+    if (panel->handle_event(event)) {
+        if (!panel->is_visible()) {
+            close_floor_box_candidate_editor();
+        }
+        return true;
+    }
+
+    if (!panel->is_visible()) {
+        close_floor_box_candidate_editor();
+        return true;
+    }
+
+    if (is_pointer_or_wheel_event(event)) {
+        int pointer_x = 0;
+        int pointer_y = 0;
+        if (event.type == SDL_EVENT_MOUSE_MOTION) {
+            pointer_x = event.motion.x;
+            pointer_y = event.motion.y;
+        } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+            pointer_x = event.button.x;
+            pointer_y = event.button.y;
+        } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+            sdl_mouse_util::GetMouseState(&pointer_x, &pointer_y);
+        }
+
+        if (panel->is_point_inside(pointer_x, pointer_y) || widget->is_search_point_inside(pointer_x, pointer_y)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void RoomEditor::update_floor_box_candidate_editor_search(const Input& input) {
+    if (!floor_box_candidate_editor_.open ||
+        !floor_box_candidate_editor_.pie_widget ||
+        !floor_box_candidate_editor_.panel) {
+        return;
+    }
+    if (!floor_box_candidate_target_exists()) {
+        close_floor_box_candidate_editor();
+        return;
+    }
+
+    floor_box_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+    const int min_visible_height = 360;
+    const int height_margin = 180;
+    int visible_height = min_visible_height;
+    if (screen_h_ > 0) {
+        visible_height = std::max(min_visible_height, screen_h_ - height_margin);
+    }
+    floor_box_candidate_editor_.panel->set_visible_height(visible_height);
+    floor_box_candidate_editor_.panel->update(input, screen_w_, screen_h_);
+    if (!floor_box_candidate_editor_.panel->is_visible()) {
+        close_floor_box_candidate_editor();
+        return;
+    }
+
+    floor_box_candidate_editor_.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
+    floor_box_candidate_editor_.pie_widget->update_search(input);
+    layout_floor_box_candidate_editor_popup();
+}
+
+void RoomEditor::render_floor_box_candidate_editor(SDL_Renderer* renderer) const {
+    if (!renderer ||
+        !floor_box_candidate_editor_mode_active() ||
+        !floor_box_candidate_editor_.open ||
+        !floor_box_candidate_editor_.panel) {
+        return;
+    }
+    floor_box_candidate_editor_.panel->render(renderer);
 }
 
 void RoomEditor::refresh_anchor_mode_handles() {
@@ -15654,6 +16182,7 @@ bool RoomEditor::set_floor_box_system_enabled(bool enabled) {
     target_info->floor_boxes_enabled = enabled;
     if (!enabled) {
         target_info->floor_boxes.clear();
+        close_floor_box_candidate_editor();
         floor_box_edit_.selected_box_index = -1;
         floor_box_edit_.selected_corner_index = -1;
         floor_box_edit_.hovered_box_index = -1;
@@ -16942,6 +17471,8 @@ void RoomEditor::exit_floor_box_edit_mode(bool persist_changes) {
     }
 
     editor_mode_ = EditorMode::Normal;
+    close_floor_box_candidate_editor();
+    close_floor_box_candidate_editor();
     floor_box_edit_ = FloorBoxEditState{};
     sync_floor_box_tools_panel();
     update_asset_editor_layout();
@@ -17112,6 +17643,15 @@ bool RoomEditor::is_floor_box_ui_blocking_point(int x, int y) const {
     if (floor_box_mode_active() && floor_box_tools_panel_ && floor_box_tools_panel_->is_visible() &&
         floor_box_tools_panel_->is_point_inside(x, y)) {
         return true;
+    }
+    if (floor_box_candidate_editor_mode_active() && floor_box_candidate_editor_.open &&
+        floor_box_candidate_editor_.pie_widget) {
+        const bool inside_panel = floor_box_candidate_editor_.panel && floor_box_candidate_editor_.panel->is_visible() &&
+                                  floor_box_candidate_editor_.panel->is_point_inside(x, y);
+        if (inside_panel ||
+            floor_box_candidate_editor_.pie_widget->is_search_point_inside(x, y)) {
+            return true;
+        }
     }
     return false;
 }
@@ -17546,16 +18086,12 @@ bool RoomEditor::drag_floor_box_corner_to_screen(int box_index, int corner_index
         return false;
     }
 
-    const AssetInfo::FloorBox drag_start_box{
-        std::string{},
-        std::string{},
-        floor_box_edit_.drag_start_position_x,
-        floor_box_edit_.drag_start_position_z,
-        std::max(0.0f, floor_box_edit_.drag_start_width),
-        std::max(0.0f, floor_box_edit_.drag_start_depth),
-        true,
-        {},
-    };
+    AssetInfo::FloorBox drag_start_box{};
+    drag_start_box.position_x = floor_box_edit_.drag_start_position_x;
+    drag_start_box.position_z = floor_box_edit_.drag_start_position_z;
+    drag_start_box.width = std::max(0.0f, floor_box_edit_.drag_start_width);
+    drag_start_box.depth = std::max(0.0f, floor_box_edit_.drag_start_depth);
+    drag_start_box.enabled = true;
     const auto start_corners = floor_box_world_corners(*floor_box_edit_.target_asset, drag_start_box);
     const int opposite_corner = (clamped_corner == 0) ? 3 :
                                 (clamped_corner == 1) ? 2 :
@@ -17607,6 +18143,7 @@ bool RoomEditor::handle_floor_box_mode_mouse_input(const Input& input) {
     const bool left_down = input_->isDown(Input::LEFT);
     const bool left_pressed = input_->wasPressed(Input::LEFT);
     const bool left_released = input_->wasReleased(Input::LEFT);
+    const bool right_pressed = input_->wasPressed(Input::RIGHT);
     const bool pointer_blocked = is_floor_box_ui_blocking_point(screen_pt.x, screen_pt.y);
     const int selected_box = floor_box_edit_.selected_box_index;
 
@@ -17621,6 +18158,25 @@ bool RoomEditor::handle_floor_box_mode_mouse_input(const Input& input) {
         const float dy = center_screen.y - static_cast<float>(screen_pt.y);
         return (dx * dx + dy * dy) <= static_cast<float>(kFloorBoxCenterPickRadiusPx * kFloorBoxCenterPickRadiusPx);
     };
+
+    if (right_pressed && !pointer_blocked) {
+        int context_corner = -1;
+        int context_box = find_floor_box_corner_at_screen_point(screen_pt, kFloorBoxCornerPickRadiusPx, context_corner);
+        if (context_box < 0) {
+            context_box = find_floor_box_body_at_screen_point(screen_pt);
+        }
+        if (context_box >= 0) {
+            floor_box_edit_.selected_box_index = context_box;
+            floor_box_edit_.selected_corner_index = -1;
+            floor_box_edit_.hovered_box_index = context_box;
+            floor_box_edit_.hovered_corner_index = context_corner;
+            floor_box_edit_.dragging_corner = false;
+            floor_box_edit_.dragging_box = false;
+            sync_floor_box_tools_panel();
+            open_floor_box_candidate_editor(context_box, screen_pt);
+            return true;
+        }
+    }
 
     if (left_pressed && !pointer_blocked) {
         int corner_idx = -1;

@@ -7,12 +7,14 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include <nlohmann/json.hpp>
 
 #include "utils/grid.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "utils/string_utils.hpp"
 
 namespace vibble::spawn_group_codec {
 
@@ -235,6 +237,28 @@ inline double read_candidate_chance(const nlohmann::json& candidate, double fall
     return fallback;
 }
 
+inline bool is_null_candidate_name(std::string_view name) {
+    const std::string trimmed = vibble::strings::trim_copy(std::string(name));
+    if (trimmed.size() != 4) {
+        return false;
+    }
+    return std::tolower(static_cast<unsigned char>(trimmed[0])) == 'n' &&
+           std::tolower(static_cast<unsigned char>(trimmed[1])) == 'u' &&
+           std::tolower(static_cast<unsigned char>(trimmed[2])) == 'l' &&
+           std::tolower(static_cast<unsigned char>(trimmed[3])) == 'l';
+}
+
+inline bool is_null_candidate_entry(const nlohmann::json& candidate) {
+    if (!candidate.is_object()) {
+        return false;
+    }
+    const auto name_it = candidate.find("name");
+    if (name_it == candidate.end() || !name_it->is_string()) {
+        return false;
+    }
+    return is_null_candidate_name(name_it->get<std::string>());
+}
+
 inline bool sanitize_spawn_group_candidates(nlohmann::json& entry,
                                             const CandidateDefaults& defaults = CandidateDefaults{}) {
     bool changed = false;
@@ -250,6 +274,7 @@ inline bool sanitize_spawn_group_candidates(nlohmann::json& entry,
 
     auto& candidates = entry["candidates"];
     nlohmann::json sanitized = nlohmann::json::array();
+    bool has_null_candidate = false;
     for (auto& candidate : candidates) {
         if (!candidate.is_object()) {
             changed = true;
@@ -257,13 +282,21 @@ inline bool sanitize_spawn_group_candidates(nlohmann::json& entry,
         }
 
         nlohmann::json sanitized_candidate = candidate;
-        std::string name;
+        std::string name = "null";
         if (sanitized_candidate.contains("name") && sanitized_candidate["name"].is_string()) {
             name = sanitized_candidate["name"].get<std::string>();
         }
-        if (name.empty()) {
+        if (is_null_candidate_name(name) || name.empty()) {
+            const bool canonical_name = (name == "null");
             sanitized_candidate["name"] = "null";
-            changed = true;
+            if (has_null_candidate) {
+                changed = true;
+                continue;
+            }
+            has_null_candidate = true;
+            if (!canonical_name || name.empty()) {
+                changed = true;
+            }
         }
 
         const double previous_chance = read_number_field(sanitized_candidate, "chance", std::numeric_limits<double>::quiet_NaN());
@@ -299,6 +332,23 @@ inline bool sanitize_spawn_group_candidates(nlohmann::json& entry,
         }
         sanitized.push_back(std::move(fallback_candidate));
         changed = true;
+    }
+
+    if (!has_null_candidate) {
+        bool found_existing_null = false;
+        for (const auto& candidate : sanitized) {
+            if (is_null_candidate_entry(candidate)) {
+                found_existing_null = true;
+                break;
+            }
+        }
+        if (!found_existing_null) {
+            nlohmann::json null_candidate = nlohmann::json::object();
+            null_candidate["name"] = "null";
+            null_candidate["chance"] = 0;
+            sanitized.push_back(std::move(null_candidate));
+            changed = true;
+        }
     }
 
     if (sanitized != candidates) {

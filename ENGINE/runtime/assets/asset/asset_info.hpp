@@ -132,6 +132,11 @@ class AssetInfo {
     std::vector<OvalAnchorMapping> oval_anchor_mappings;
 
     struct FloorBox {
+        struct CandidatePayload {
+            nlohmann::json candidates = nlohmann::json::array();
+            int grid_resolution = 4;
+        };
+
         std::string id;
         std::string name;
         float position_x = 0.0f;
@@ -140,6 +145,7 @@ class AssetInfo {
         float depth = 0.0f;
         bool enabled = true;
         std::vector<std::string> tags;
+        std::optional<CandidatePayload> candidate;
     };
 
     bool movement_enabled = false;

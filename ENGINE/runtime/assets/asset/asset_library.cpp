@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 #include "utils/log.hpp"
+#include "gameplay/spawn/spawn_group_codec.hpp"
 
 namespace {
 
@@ -61,6 +62,18 @@ constexpr const char* kImpassableBoxesKey = "impassable_boxes";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
 constexpr const char* kBoundaryTag = "boundary";
+constexpr const char* kFloorBoxCandidateKey = "candidate";
+constexpr const char* kFloorBoxCandidateCandidatesKey = "candidates";
+constexpr const char* kFloorBoxCandidateGridResolutionKey = "grid_resolution";
+constexpr int kFloorBoxCandidateGridResolutionMin = 2;
+constexpr int kFloorBoxCandidateGridResolutionMax = 8;
+constexpr int kFloorBoxCandidateGridResolutionDefault = 4;
+
+int sanitize_floor_box_grid_resolution(int value) {
+        int clamped = vibble::grid::clamp_resolution(value);
+        clamped = std::clamp(clamped, kFloorBoxCandidateGridResolutionMin, kFloorBoxCandidateGridResolutionMax);
+        return clamped;
+}
 
 std::string sanitize_floor_box_token(std::string value) {
         std::string out;
@@ -146,6 +159,27 @@ nlohmann::json normalize_floor_boxes_payload(const nlohmann::json& payload) {
                 canonical["depth"] = std::max(0.0, finite_or(entry.value("depth", 0.0), 0.0));
                 canonical["enabled"] = entry.value("enabled", true);
                 canonical["tags"] = normalized_tags;
+                if (entry.contains(kFloorBoxCandidateKey)) {
+                        nlohmann::json candidate = nlohmann::json::object();
+                        const auto& raw_candidate = entry[kFloorBoxCandidateKey];
+                        if (raw_candidate.is_object()) {
+                                if (raw_candidate.contains(kFloorBoxCandidateCandidatesKey)) {
+                                        candidate[kFloorBoxCandidateCandidatesKey] =
+                                            raw_candidate[kFloorBoxCandidateCandidatesKey];
+                                }
+                                candidate[kFloorBoxCandidateGridResolutionKey] =
+                                    sanitize_floor_box_grid_resolution(
+                                        vibble::spawn_group_codec::read_int_field(
+                                            raw_candidate,
+                                            kFloorBoxCandidateGridResolutionKey,
+                                            kFloorBoxCandidateGridResolutionDefault));
+                        } else {
+                                candidate[kFloorBoxCandidateGridResolutionKey] =
+                                    kFloorBoxCandidateGridResolutionDefault;
+                        }
+                        vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate);
+                        canonical[kFloorBoxCandidateKey] = std::move(candidate);
+                }
                 normalized.push_back(std::move(canonical));
         }
         return normalized;

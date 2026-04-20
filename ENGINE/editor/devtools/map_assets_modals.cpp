@@ -197,25 +197,7 @@ constexpr int kMapWidePositionJitterMin = 0;
 constexpr int kMapWidePositionJitterMax = 500;
 
 bool ensure_null_candidate_entry(json& entry) {
-    if (!entry.is_object()) return false;
-    auto it = entry.find("candidates");
-    if (it == entry.end() || !it->is_array()) {
-        entry["candidates"] = json::array();
-        it = entry.find("candidates");
-    }
-    if (it == entry.end() || !it->is_array()) {
-        return false;
-    }
-    for (const auto& candidate : *it) {
-        if (candidate_is_null_entry(candidate)) {
-            return false;
-        }
-    }
-    json null_candidate = json::object();
-    null_candidate["name"] = std::string{kNullCandidateName};
-    null_candidate["chance"] = 0;
-    it->push_back(std::move(null_candidate));
-    return true;
+    return vibble::spawn_group_codec::sanitize_spawn_group_candidates(entry);
 }
 
 bool is_pointer_or_wheel_event(const SDL_Event& e) {
@@ -634,10 +616,16 @@ private:
 
     void remove_candidate(int index) {
         if (!entry_ || index < 0) return;
+        ensure_null_candidate_entry(*entry_);
         auto& candidates = (*entry_)["candidates"];
         if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) return;
+        if (vibble::spawn_group_codec::is_null_candidate_entry(
+                candidates[static_cast<std::size_t>(index)])) {
+            return;
+        }
         auto it = candidates.begin() + static_cast<json::difference_type>(index);
         candidates.erase(it);
+        ensure_null_candidate_entry(*entry_);
         notify_save(true);
     }
 
@@ -1342,10 +1330,16 @@ private:
         PieCallbackGuard guard(this);
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry || index < 0) return;
+        ensure_null_candidate_entry(*entry);
         auto& candidates = (*entry)["candidates"];
         if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) return;
+        if (vibble::spawn_group_codec::is_null_candidate_entry(
+                candidates[static_cast<std::size_t>(index)])) {
+            return;
+        }
         auto it = candidates.begin() + static_cast<json::difference_type>(index);
         candidates.erase(it);
+        ensure_null_candidate_entry(*entry);
         notify_save(false, &spawn_id);
     }
 
@@ -1377,25 +1371,8 @@ private:
             }
         }
 
-        bool has_non_null_candidate = false;
-        std::vector<size_t> null_indices;
-        for (size_t i = 0; i < candidates.size(); ++i) {
-            std::string name = trim_copy(candidate_name_from_json(candidates[i]));
-            if (is_null_candidate_name(name)) {
-                null_indices.push_back(i);
-            } else if (!name.empty()) {
-                has_non_null_candidate = true;
-            }
-        }
-
-        if (!has_non_null_candidate && !null_indices.empty()) {
-            candidates[null_indices.front()] = candidate;
-            for (size_t i = 1; i < null_indices.size(); ++i) {
-                candidates[null_indices[i]] = json::object({{"name", "null"}, {"chance", 0}});
-            }
-        } else {
-            candidates.push_back(std::move(candidate));
-        }
+        candidates.push_back(std::move(candidate));
+        ensure_null_candidate_entry(*entry);
         notify_save(false, &spawn_id);
     }
 

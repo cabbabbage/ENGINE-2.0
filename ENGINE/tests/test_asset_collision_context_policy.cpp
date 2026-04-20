@@ -85,17 +85,17 @@ TEST_CASE("affects_collision_context ignores boundary type and floor-box boundar
 
     auto floor_boundary_info = make_info("collision_policy_floor_boundary");
     floor_boundary_info->floor_boxes_enabled = true;
+    AssetInfo::FloorBox floor_box{};
+    floor_box.id = "floor_box_boundary";
+    floor_box.name = "floor_box_boundary";
+    floor_box.position_x = 0.0f;
+    floor_box.position_z = 0.0f;
+    floor_box.width = 64.0f;
+    floor_box.depth = 64.0f;
+    floor_box.enabled = true;
+    floor_box.tags = {"boundary"};
     floor_boundary_info->floor_boxes = {
-        AssetInfo::FloorBox{
-            "floor_box_boundary",
-            "floor_box_boundary",
-            0.0f,
-            0.0f,
-            64.0f,
-            64.0f,
-            true,
-            std::vector<std::string>{"boundary"}
-        }
+        floor_box
     };
     const auto floor_boundary_asset = make_asset_for_collision_policy(floor_boundary_info);
     REQUIRE(floor_boundary_asset != nullptr);

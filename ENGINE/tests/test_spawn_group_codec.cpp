@@ -77,9 +77,72 @@ TEST_CASE("SpawnGroupCodec supports custom fallback candidate defaults") {
     const bool changed = vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(entry, defaults);
     CHECK(changed);
     REQUIRE(entry["candidates"].is_array());
-    REQUIRE(entry["candidates"].size() == 1);
+    REQUIRE(entry["candidates"].size() == 2);
     CHECK(entry["candidates"][0]["name"] == "Goblin");
     CHECK(entry["candidates"][0]["chance"] == 100);
+    CHECK(entry["candidates"][1]["name"] == "null");
+    CHECK(entry["candidates"][1]["chance"] == 0);
+}
+
+TEST_CASE("SpawnGroupCodec sanitize always preserves a single null candidate entry") {
+    nlohmann::json entry = nlohmann::json::object({
+        {"candidates", nlohmann::json::array({
+            nlohmann::json::object({{"name", "A"}, {"chance", 5}}),
+            nlohmann::json::object({{"name", "NULL"}, {"chance", 2}}),
+            nlohmann::json::object({{"name", "null"}, {"chance", 1}})
+        })}
+    });
+
+    const bool changed = vibble::spawn_group_codec::sanitize_spawn_group_candidates(entry);
+    CHECK(changed);
+    REQUIRE(entry["candidates"].is_array());
+
+    int null_count = 0;
+    for (const auto& candidate : entry["candidates"]) {
+        REQUIRE(candidate.is_object());
+        REQUIRE(candidate.contains("name"));
+        if (candidate["name"] == "null") {
+            ++null_count;
+        }
+    }
+    CHECK(null_count == 1);
+}
+
+TEST_CASE("SpawnGroupCodec sanitize restores null candidate after delete attempt") {
+    nlohmann::json entry = nlohmann::json::object({
+        {"candidates", nlohmann::json::array({
+            nlohmann::json::object({{"name", "null"}, {"chance", 0}}),
+            nlohmann::json::object({{"name", "A"}, {"chance", 10}})
+        })}
+    });
+
+    (void)vibble::spawn_group_codec::sanitize_spawn_group_candidates(entry);
+    REQUIRE(entry["candidates"].size() == 2);
+
+    // Simulate a UI delete path attempting to remove the null row.
+    nlohmann::json after_delete = nlohmann::json::array();
+    for (const auto& candidate : entry["candidates"]) {
+        if (!candidate.is_object()) {
+            continue;
+        }
+        if (candidate.value("name", std::string{}) == "null") {
+            continue;
+        }
+        after_delete.push_back(candidate);
+    }
+    entry["candidates"] = std::move(after_delete);
+
+    CHECK(vibble::spawn_group_codec::sanitize_spawn_group_candidates(entry));
+    REQUIRE(entry["candidates"].is_array());
+
+    bool has_null = false;
+    for (const auto& candidate : entry["candidates"]) {
+        if (candidate.is_object() && candidate.value("name", std::string{}) == "null") {
+            has_null = true;
+            break;
+        }
+    }
+    CHECK(has_null);
 }
 
 TEST_CASE("SpawnGroupCodec sanitizes perimeter and edge field bounds") {

@@ -32,6 +32,7 @@ class AssetSpawner {
         private:
     void run_spawning(AssetSpawnPlanner* planner, const Area& area);
     void run_edge_spawning(const Area& area);
+    void run_floor_box_candidate_spawning();
     std::vector<Area> exclusion_zones;
     AssetLibrary* asset_library_;
     std::mt19937 rng_;

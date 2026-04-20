@@ -7,6 +7,25 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 
+namespace {
+
+bool has_candidate_named(const nlohmann::json& candidates, const std::string& name) {
+    if (!candidates.is_array()) {
+        return false;
+    }
+    for (const auto& candidate : candidates) {
+        if (!candidate.is_object()) {
+            continue;
+        }
+        if (candidate.value("name", std::string{}) == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 TEST_CASE("AssetInfo strips animation payload systems when disabled") {
     const nlohmann::json metadata = {
         {"movement_enabled", false},
@@ -113,6 +132,125 @@ TEST_CASE("AssetInfo floor boxes normalize canonical fields and tags") {
     const auto& second_tags = payload["floor_boxes"][1]["tags"];
     CHECK(std::find(second_tags.begin(), second_tags.end(), "enemy_block") != second_tags.end());
     CHECK(std::find(second_tags.begin(), second_tags.end(), "boundary") == second_tags.end());
+}
+
+TEST_CASE("AssetInfo floor box candidate payload remains absent when authoring omits it") {
+    const nlohmann::json metadata = {
+        {"floor_boxes_enabled", true},
+        {"floor_boxes",
+         nlohmann::json::array({
+             {{"id", "floor_box_1"},
+              {"name", "Floor Box 1"},
+              {"position_x", 0.0},
+              {"position_z", 0.0},
+              {"width", 12.0},
+              {"depth", 10.0},
+              {"enabled", true},
+              {"tags", nlohmann::json::array()}}
+         })}
+    };
+
+    AssetInfo info("floor_boxes_candidate_absent_test_asset", metadata);
+    REQUIRE(info.floor_boxes_payload().size() == 1);
+    CHECK_FALSE(info.floor_boxes_payload()[0].candidate.has_value());
+
+    const nlohmann::json payload = info.manifest_payload();
+    REQUIRE(payload.contains("floor_boxes"));
+    REQUIRE(payload["floor_boxes"].is_array());
+    REQUIRE(payload["floor_boxes"].size() == 1);
+    CHECK_FALSE(payload["floor_boxes"][0].contains("candidate"));
+}
+
+TEST_CASE("AssetInfo floor box candidate payload sanitizes missing and invalid fields") {
+    const nlohmann::json metadata = {
+        {"floor_boxes_enabled", true},
+        {"floor_boxes",
+         nlohmann::json::array({
+             {{"id", "box_missing_resolution"},
+              {"name", "Box Missing Resolution"},
+              {"position_x", 0.0},
+              {"position_z", 0.0},
+              {"width", 16.0},
+              {"depth", 16.0},
+              {"enabled", true},
+              {"tags", nlohmann::json::array()},
+              {"candidate",
+               nlohmann::json::object({
+                   {"candidates", nlohmann::json::array({nlohmann::json::object({{"name", "spawn_a"}, {"chance", 25}})})}
+               })}},
+             {{"id", "box_invalid_payload"},
+              {"name", "Box Invalid Payload"},
+              {"position_x", 0.0},
+              {"position_z", 0.0},
+              {"width", 16.0},
+              {"depth", 16.0},
+              {"enabled", true},
+              {"tags", nlohmann::json::array()},
+              {"candidate",
+               nlohmann::json::object({
+                   {"candidates", "invalid"},
+                   {"grid_resolution", "invalid"}
+               })}},
+             {{"id", "box_high_resolution"},
+              {"name", "Box High Resolution"},
+              {"position_x", 0.0},
+              {"position_z", 0.0},
+              {"width", 16.0},
+              {"depth", 16.0},
+              {"enabled", true},
+              {"tags", nlohmann::json::array()},
+              {"candidate",
+               nlohmann::json::object({
+                   {"candidates", nlohmann::json::array({nlohmann::json::object({{"name", "spawn_b"}, {"chance", 10}})})},
+                   {"grid_resolution", 999}
+               })}},
+             {{"id", "box_low_resolution"},
+              {"name", "Box Low Resolution"},
+              {"position_x", 0.0},
+              {"position_z", 0.0},
+              {"width", 16.0},
+              {"depth", 16.0},
+              {"enabled", true},
+              {"tags", nlohmann::json::array()},
+              {"candidate",
+               nlohmann::json::object({
+                   {"candidates", nlohmann::json::array({nlohmann::json::object({{"name", "spawn_c"}, {"chance", 10}})})},
+                   {"grid_resolution", 1}
+               })}},
+         })}
+    };
+
+    AssetInfo info("floor_boxes_candidate_sanitize_test_asset", metadata);
+    const nlohmann::json payload = info.manifest_payload();
+    REQUIRE(payload.contains("floor_boxes"));
+    REQUIRE(payload["floor_boxes"].is_array());
+    REQUIRE(payload["floor_boxes"].size() == 4);
+
+    const auto& missing_resolution = payload["floor_boxes"][0]["candidate"];
+    REQUIRE(missing_resolution.is_object());
+    REQUIRE(missing_resolution.contains("grid_resolution"));
+    CHECK(missing_resolution["grid_resolution"] == 4);
+    REQUIRE(missing_resolution.contains("candidates"));
+    REQUIRE(missing_resolution["candidates"].is_array());
+    CHECK(has_candidate_named(missing_resolution["candidates"], "null"));
+
+    const auto& invalid_payload = payload["floor_boxes"][1]["candidate"];
+    REQUIRE(invalid_payload.is_object());
+    REQUIRE(invalid_payload.contains("grid_resolution"));
+    CHECK(invalid_payload["grid_resolution"] == 4);
+    REQUIRE(invalid_payload.contains("candidates"));
+    REQUIRE(invalid_payload["candidates"].is_array());
+    CHECK(has_candidate_named(invalid_payload["candidates"], "null"));
+
+    const auto& high_resolution = payload["floor_boxes"][2]["candidate"];
+    REQUIRE(high_resolution.is_object());
+    CHECK(high_resolution["grid_resolution"] == 8);
+    CHECK(has_candidate_named(high_resolution["candidates"], "null"));
+
+    const auto& low_resolution = payload["floor_boxes"][3]["candidate"];
+    REQUIRE(low_resolution.is_object());
+    CHECK(low_resolution["grid_resolution"] == 2);
+    CHECK(has_candidate_named(low_resolution["candidates"], "null"));
 }
 
 TEST_CASE("AssetInfo omits floor boxes payload when disabled") {

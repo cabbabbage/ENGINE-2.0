@@ -310,6 +310,36 @@ void validate_manifest_asset_schema(const nlohmann::json& manifest_json,
                     }
                 }
             }
+            if (floor_box.contains("candidate")) {
+                const auto& candidate = floor_box["candidate"];
+                if (!candidate.is_object()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key 'candidate' must be an object when present.";
+                    throw std::runtime_error(oss.str());
+                }
+                if (candidate.contains("candidates") && !candidate["candidates"].is_array()) {
+                    std::ostringstream oss;
+                    oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                        << "' floor box key 'candidate.candidates' must be an array when present.";
+                    throw std::runtime_error(oss.str());
+                }
+                if (candidate.contains("grid_resolution")) {
+                    if (!candidate["grid_resolution"].is_number_integer()) {
+                        std::ostringstream oss;
+                        oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                            << "' floor box key 'candidate.grid_resolution' must be an integer.";
+                        throw std::runtime_error(oss.str());
+                    }
+                    const int grid_resolution = candidate["grid_resolution"].get<int>();
+                    if (grid_resolution < 2 || grid_resolution > 8) {
+                        std::ostringstream oss;
+                        oss << "manifest: '" << path.string() << "' asset entry '" << it.key()
+                            << "' floor box key 'candidate.grid_resolution' must be in [2, 8].";
+                        throw std::runtime_error(oss.str());
+                    }
+                }
+            }
         }
     }
 }

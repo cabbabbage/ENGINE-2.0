@@ -71,6 +71,12 @@ constexpr const char* kImpassableBoxesKey = "impassable_boxes";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
 constexpr const char* kBoundaryTag = "boundary";
+constexpr const char* kFloorBoxCandidateKey = "candidate";
+constexpr const char* kFloorBoxCandidateCandidatesKey = "candidates";
+constexpr const char* kFloorBoxCandidateGridResolutionKey = "grid_resolution";
+constexpr int kFloorBoxCandidateGridResolutionMin = 2;
+constexpr int kFloorBoxCandidateGridResolutionMax = 8;
+constexpr int kFloorBoxCandidateGridResolutionDefault = 4;
 
 std::string trim_copy(std::string value) {
     const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -169,6 +175,58 @@ float sanitize_finite_float(float value, float fallback = 0.0f) {
     return value;
 }
 
+int sanitize_floor_box_grid_resolution(int resolution) {
+    const int clamped = vibble::grid::clamp_resolution(resolution);
+    return std::clamp(clamped,
+                      kFloorBoxCandidateGridResolutionMin,
+                      kFloorBoxCandidateGridResolutionMax);
+}
+
+std::optional<AssetInfo::FloorBox::CandidatePayload> parse_floor_box_candidate_payload(
+    const nlohmann::json& floor_box_entry) {
+    if (!floor_box_entry.is_object() || !floor_box_entry.contains(kFloorBoxCandidateKey)) {
+        return std::nullopt;
+    }
+
+    const auto& raw_candidate = floor_box_entry[kFloorBoxCandidateKey];
+    nlohmann::json candidate_entry = nlohmann::json::object();
+    int grid_resolution = kFloorBoxCandidateGridResolutionDefault;
+
+    if (raw_candidate.is_object()) {
+        if (raw_candidate.contains(kFloorBoxCandidateCandidatesKey)) {
+            candidate_entry[kFloorBoxCandidateCandidatesKey] =
+                raw_candidate[kFloorBoxCandidateCandidatesKey];
+        }
+        grid_resolution = sanitize_floor_box_grid_resolution(
+            vibble::spawn_group_codec::read_int_field(raw_candidate,
+                                                      kFloorBoxCandidateGridResolutionKey,
+                                                      kFloorBoxCandidateGridResolutionDefault));
+    }
+
+    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+
+    AssetInfo::FloorBox::CandidatePayload payload{};
+    payload.candidates = candidate_entry[kFloorBoxCandidateCandidatesKey];
+    payload.grid_resolution = grid_resolution;
+    return payload;
+}
+
+std::optional<AssetInfo::FloorBox::CandidatePayload> sanitize_floor_box_candidate_for_save(
+    const std::optional<AssetInfo::FloorBox::CandidatePayload>& raw_candidate) {
+    if (!raw_candidate.has_value()) {
+        return std::nullopt;
+    }
+
+    nlohmann::json candidate_entry = nlohmann::json::object();
+    candidate_entry[kFloorBoxCandidateCandidatesKey] = raw_candidate->candidates;
+    vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+
+    AssetInfo::FloorBox::CandidatePayload payload{};
+    payload.candidates = candidate_entry[kFloorBoxCandidateCandidatesKey];
+    payload.grid_resolution = sanitize_floor_box_grid_resolution(raw_candidate->grid_resolution);
+    return payload;
+}
+
 std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json& payload) {
     std::vector<AssetInfo::FloorBox> boxes;
     if (!payload.is_array()) {
@@ -207,6 +265,7 @@ std::vector<AssetInfo::FloorBox> parse_floor_boxes_payload(const nlohmann::json&
         box.enabled = entry.value("enabled", true);
         box.tags = parse_normalized_tag_list(entry.value("tags", nlohmann::json::array()));
         box.tags = strip_floor_boundary_tag(box.tags);
+        box.candidate = parse_floor_box_candidate_payload(entry);
 
         boxes.push_back(std::move(box));
     }
@@ -240,6 +299,7 @@ AssetInfo::FloorBox sanitize_floor_box_for_save(const AssetInfo::FloorBox& raw_b
     sanitized.depth = std::max(0.0f, sanitize_finite_float(raw_box.depth, 0.0f));
     sanitized.enabled = raw_box.enabled;
     sanitized.tags = strip_floor_boundary_tag(normalize_tag_list(raw_box.tags));
+    sanitized.candidate = sanitize_floor_box_candidate_for_save(raw_box.candidate);
     return sanitized;
 }
 
@@ -259,6 +319,13 @@ nlohmann::json encode_floor_boxes_payload(const std::vector<AssetInfo::FloorBox>
         entry["depth"] = box.depth;
         entry["enabled"] = box.enabled;
         entry["tags"] = box.tags;
+        if (box.candidate.has_value()) {
+            nlohmann::json candidate_payload = nlohmann::json::object();
+            candidate_payload[kFloorBoxCandidateCandidatesKey] = box.candidate->candidates;
+            candidate_payload[kFloorBoxCandidateGridResolutionKey] =
+                sanitize_floor_box_grid_resolution(box.candidate->grid_resolution);
+            entry[kFloorBoxCandidateKey] = std::move(candidate_payload);
+        }
         payload.push_back(std::move(entry));
     }
     return payload;

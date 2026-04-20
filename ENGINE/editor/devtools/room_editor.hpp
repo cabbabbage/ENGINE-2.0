@@ -53,6 +53,8 @@ class RoomOvalPointChildEditorPanel;
 class RoomFloorBoxToolsPanel;
 class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
+class DMSlider;
+class SliderWidget;
 class DevFooterBar;
 class DevControls;
 namespace animation_update { struct AttackPayload; }
@@ -567,6 +569,21 @@ private:
                                        bool flush_now,
                                        const char* reason,
                                        const char* flush_tag);
+    void sync_floor_box_candidate_editor();
+    void refresh_floor_box_candidate_editor_widget();
+    void update_floor_box_candidate_editor_search(const Input& input);
+    void layout_floor_box_candidate_editor_popup();
+    void open_floor_box_candidate_editor(int box_index, SDL_Point click_point);
+    void close_floor_box_candidate_editor();
+    bool floor_box_candidate_editor_mode_active() const;
+    bool floor_box_candidate_target_exists() const;
+    bool handle_floor_box_candidate_editor_event(const SDL_Event& event);
+    void render_floor_box_candidate_editor(SDL_Renderer* renderer) const;
+    bool mutate_floor_box_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
+                                          devmode::core::DevSaveCoordinator::Priority priority,
+                                          bool flush_now,
+                                          const char* reason,
+                                          const char* flush_tag);
     std::vector<std::string> canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const;
     bool reconcile_anchor_child_candidates_with_eligible_names(const std::shared_ptr<AssetInfo>& target_info,
                                                                bool& changed);
@@ -744,6 +761,8 @@ private:
     bool drag_floor_box_corner_to_screen(int box_index, int corner_index, SDL_Point screen_point);
     bool begin_floor_box_drag(int box_index, SDL_Point screen_point);
     bool drag_floor_box_to_screen(int box_index, SDL_Point screen_point);
+    nlohmann::json floor_box_candidate_entry_json_for_index(int box_index) const;
+    static int sanitize_floor_box_candidate_grid_resolution(int value);
     std::vector<std::string> floor_box_recommendation_pool() const;
 
     struct AssetSpatialEntry {
@@ -920,6 +939,18 @@ private:
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
     };
     AnchorCandidateEditorState anchor_candidate_editor_;
+
+    struct FloorBoxCandidateEditorState {
+        bool open = false;
+        Asset* target_asset = nullptr;
+        int box_index = -1;
+        SDL_Point open_point{0, 0};
+        std::unique_ptr<DockableCollapsible> panel{};
+        std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
+        std::unique_ptr<DMSlider> resolution_slider{};
+        std::unique_ptr<SliderWidget> resolution_widget{};
+    };
+    FloorBoxCandidateEditorState floor_box_candidate_editor_;
 
     struct MovementEditState {
         Asset* target_asset = nullptr;

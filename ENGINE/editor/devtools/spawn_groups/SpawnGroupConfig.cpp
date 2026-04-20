@@ -1526,6 +1526,10 @@ private:
             auto& arr = (*entry)["candidates"];
             if (!arr.is_array()) return;
             if (index >= static_cast<int>(arr.size())) return;
+            if (vibble::spawn_group_codec::is_null_candidate_entry(
+                    arr[static_cast<std::size_t>(index)])) {
+                return;
+            }
             arr.erase(arr.begin() + index);
             devmode::spawn::sanitize_spawn_group_candidates(*entry);
             update_candidate_graph();

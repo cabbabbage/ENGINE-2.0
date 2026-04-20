@@ -56,11 +56,16 @@ Canonical floor box fields:
 - `depth` (number)
 - `enabled` (bool)
 - `tags` (array of strings)
+- `candidate` (optional object):
+  - `candidates` (candidate array using the shared spawn candidate schema)
+  - `grid_resolution` (integer in `[2, 8]`, defaults to `4`)
 
 Behavior:
 
 - `floor_boxes` are axis-aligned floor rectangles (no per-box rotation).
 - `boundary` is stripped from floor-box tags during normalization and has no runtime behavior.
+- `candidate` is optional. If absent, no floor-box candidate spawning runs for that box.
+- Candidate arrays are sanitized to always include a `null` entry; `null` cannot be removed and may be set to chance `0`.
 
 ## Runtime/Loader Behavior
 

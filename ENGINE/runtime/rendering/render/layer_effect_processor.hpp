@@ -24,8 +24,6 @@ public:
         float world_height = 0.0f;
         SDL_FPoint floor_screen_center{0.0f, 0.0f};
         bool has_floor_projection = false;
-        bool retained_by_hysteresis = false;
-        bool depth_blended = false;
     };
 
     struct LayerLightingParams {
@@ -35,9 +33,6 @@ public:
 
     struct LayerScratchTextures {
         SDL_Texture* dark_mask_texture = nullptr;
-        SDL_Texture* dark_mask_history_texture = nullptr;
-        bool dark_mask_temporal_enabled = false;
-        float dark_mask_temporal_prev_weight = 0.0f;
     };
 
     struct LayerProcessResult {

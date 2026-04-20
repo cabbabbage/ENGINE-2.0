@@ -4,7 +4,6 @@
 
 #include <array>
 #include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 #include "rendering/render/layer_effect_processor.hpp"
@@ -25,13 +24,7 @@ public:
         const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
         bool runtime_lighting_enabled,
         float front_layer_light_strength_multiplier,
-        float behind_layer_light_strength_multiplier,
-        float overlap_padding_px,
-        float overlap_depth_padding_world,
-        int overlap_hold_frames,
-        float depth_transition_world,
-        bool dark_mask_temporal_enabled,
-        float dark_mask_temporal_prev_weight);
+        float behind_layer_light_strength_multiplier);
 
 private:
 
@@ -43,11 +36,6 @@ private:
         SDL_Texture* lit = nullptr;
         std::uint8_t dark_mask_history_write_index = 0;
         std::uint8_t valid_dark_mask_history_count = 0;
-    };
-    struct LayerLightMembershipState {
-        bool active = false;
-        std::uint8_t hold_frames_remaining = 0;
-        std::uint64_t last_seen_frame = 0;
     };
 
     bool ensure_target(SDL_Texture*& texture) const;
@@ -62,34 +50,22 @@ private:
 
     std::vector<LayerEffectProcessor::RuntimeLight> bias_lights_for_layer(
         const std::vector<LayerEffectProcessor::RuntimeLight>& source_lights,
-        double layer_reference_depth,
+        double layer_depth_min,
+        double layer_depth_max,
         float front_layer_light_strength_multiplier,
-        float behind_layer_light_strength_multiplier,
-        float depth_transition_world,
-        std::uint32_t* depth_blended_count) const;
+        float behind_layer_light_strength_multiplier) const;
 
     std::vector<LayerEffectProcessor::RuntimeLight> collect_layer_lights(
-        int layer_index,
         const render_pipeline::LayerSubmission& layer,
-        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-        float overlap_padding_px,
-        float overlap_depth_padding_world,
-        int overlap_hold_frames,
-        std::uint32_t* strict_count,
-        std::uint32_t* hysteresis_count);
+        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights) const;
 
     std::vector<LayerEffectProcessor::RuntimeLight> collect_owner_lights(
         const render_pipeline::LayerSubmission& layer,
         const std::vector<LayerEffectProcessor::RuntimeLight>& biased_lights) const;
-
-    static std::uint64_t membership_key(std::uint64_t light_id, int layer_index);
-    void prune_membership_cache(std::uint64_t frame_token);
 
     SDL_Renderer* renderer_ = nullptr;
     int screen_width_ = 0;
     int screen_height_ = 0;
     LayerEffectProcessor layer_effect_processor_;
     std::vector<TextureSet> layer_targets_;
-    std::unordered_map<std::uint64_t, LayerLightMembershipState> layer_light_membership_cache_;
-    std::uint64_t layer_light_membership_frame_token_ = 0;
 };

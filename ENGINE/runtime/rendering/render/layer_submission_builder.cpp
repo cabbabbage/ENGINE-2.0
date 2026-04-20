@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <utility>
 #include <vector>
 
 namespace {
@@ -87,22 +86,22 @@ int depth_to_layer_index(double depth,
     return std::clamp(idx, 0, total_layer_count - 1);
 }
 
-std::pair<double, double> layer_slice_depth_bounds(int layer_idx,
-                                                    int foreground_layer_count,
-                                                    int total_layer_count,
-                                                    const std::vector<double>& foreground_depth_edges,
-                                                    const std::vector<double>& background_depth_edges) {
+double layer_midpoint_depth(int layer_idx,
+                            int foreground_layer_count,
+                            int total_layer_count,
+                            const std::vector<double>& foreground_depth_edges,
+                            const std::vector<double>& background_depth_edges) {
     const int clamped_idx = std::clamp(layer_idx, 0, total_layer_count - 1);
     if (clamped_idx < foreground_layer_count) {
         const int seg = foreground_layer_count - 1 - clamped_idx;
         const double low_abs = foreground_depth_edges[static_cast<std::size_t>(seg)];
         const double high_abs = foreground_depth_edges[static_cast<std::size_t>(seg + 1)];
-        return std::pair<double, double>{-high_abs, -low_abs};
+        return -0.5 * (low_abs + high_abs);
     }
     const int seg = clamped_idx - foreground_layer_count;
     const double low_abs = background_depth_edges[static_cast<std::size_t>(seg)];
     const double high_abs = background_depth_edges[static_cast<std::size_t>(seg + 1)];
-    return std::pair<double, double>{low_abs, high_abs};
+    return 0.5 * (low_abs + high_abs);
 }
 
 void expand_layer_bounds(render_pipeline::LayerSubmission& layer,
@@ -141,18 +140,6 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
 
     result.layer_count = layer_count;
     result.layers.resize(static_cast<std::size_t>(layer_count));
-    for (int i = 0; i < layer_count; ++i) {
-        auto& layer = result.layers[static_cast<std::size_t>(i)];
-        const auto [slice_depth_min, slice_depth_max] = layer_slice_depth_bounds(i,
-                                                                                  foreground_layer_count,
-                                                                                  layer_count,
-                                                                                  foreground_depth_edges,
-                                                                                  background_depth_edges);
-        layer.slice_depth_min = slice_depth_min;
-        layer.slice_depth_max = slice_depth_max;
-        layer.slice_reference_depth = 0.5 * (slice_depth_min + slice_depth_max);
-        layer.representative_depth = layer.slice_reference_depth;
-    }
 
     const int center_split_layer_index = std::clamp(
         depth_to_layer_index(0.0,
@@ -202,7 +189,12 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
 
         auto& layer = result.layers[static_cast<std::size_t>(layer_idx)];
         if (layer.draws.empty()) {
-            const double midpoint = layer.slice_reference_depth;
+            const double midpoint = layer_midpoint_depth(layer_idx,
+                                                         foreground_layer_count,
+                                                         layer_count,
+                                                         foreground_depth_edges,
+                                                         background_depth_edges);
+            layer.representative_depth = midpoint;
             layer.depth_min = std::isfinite(item.depth) ? item.depth : midpoint;
             layer.depth_max = std::isfinite(item.depth) ? item.depth : midpoint;
             layer.bounds_min_x = std::numeric_limits<float>::infinity();
@@ -234,8 +226,8 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
             continue;
         }
         if (!std::isfinite(layer.depth_min) || !std::isfinite(layer.depth_max)) {
-            layer.depth_min = layer.slice_reference_depth;
-            layer.depth_max = layer.slice_reference_depth;
+            layer.depth_min = layer.representative_depth;
+            layer.depth_max = layer.representative_depth;
         }
         if (!std::isfinite(layer.representative_depth)) {
             layer.representative_depth = 0.5 * (layer.depth_min + layer.depth_max);

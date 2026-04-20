@@ -618,27 +618,14 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                                  query_texture_size(scratch_textures.dark_mask_texture, dark_mask_w, dark_mask_h) &&
                                  dark_mask_w == target_w &&
                                  dark_mask_h == target_h;
-    int dark_mask_history_w = 0;
-    int dark_mask_history_h = 0;
-    const bool dark_mask_history_ready = scratch_textures.dark_mask_history_texture &&
-                                         query_texture_size(scratch_textures.dark_mask_history_texture,
-                                                            dark_mask_history_w,
-                                                            dark_mask_history_h) &&
-                                         dark_mask_history_w == target_w &&
-                                         dark_mask_history_h == target_h &&
-                                         scratch_textures.dark_mask_history_texture != scratch_textures.dark_mask_texture;
 
     SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
 
     const TextureStateSnapshot base_state = capture_texture_state(base_layer_texture);
     const TextureStateSnapshot output_state = capture_texture_state(composited_output_texture);
     TextureStateSnapshot dark_mask_state{};
-    TextureStateSnapshot dark_mask_history_state{};
     if (scratch_textures.dark_mask_texture) {
         dark_mask_state = capture_texture_state(scratch_textures.dark_mask_texture);
-    }
-    if (scratch_textures.dark_mask_history_texture) {
-        dark_mask_history_state = capture_texture_state(scratch_textures.dark_mask_history_texture);
     }
 
     auto restore_state_and_target = [&]() {
@@ -646,9 +633,6 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
         restore_texture_state(composited_output_texture, output_state);
         if (scratch_textures.dark_mask_texture) {
             restore_texture_state(scratch_textures.dark_mask_texture, dark_mask_state);
-        }
-        if (scratch_textures.dark_mask_history_texture) {
-            restore_texture_state(scratch_textures.dark_mask_history_texture, dark_mask_history_state);
         }
         SDL_SetRenderTarget(renderer_, previous_target);
     };
@@ -761,58 +745,11 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                 }
             }
 
-            SDL_Texture* mask_for_composite = scratch_textures.dark_mask_texture;
-            const bool temporal_enabled = scratch_textures.dark_mask_temporal_enabled &&
-                                          dark_mask_history_ready;
-            if (temporal_enabled) {
-                const float prev_weight = std::clamp(scratch_textures.dark_mask_temporal_prev_weight, 0.0f, 0.98f);
-                const float current_weight = 1.0f - prev_weight;
-                const Uint8 prev_alpha = static_cast<Uint8>(std::clamp(
-                    static_cast<int>(std::lround(prev_weight * 255.0f)),
-                    0,
-                    255));
-                const Uint8 current_alpha = static_cast<Uint8>(std::clamp(
-                    static_cast<int>(std::lround(current_weight * 255.0f)),
-                    0,
-                    255));
-
-                clear_target(renderer_, composited_output_texture);
-                SDL_SetTextureBlendMode(scratch_textures.dark_mask_history_texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureAlphaMod(scratch_textures.dark_mask_history_texture, 255);
-                SDL_SetTextureColorMod(scratch_textures.dark_mask_history_texture, 255, 255, 255);
-                SDL_RenderTexture(renderer_, scratch_textures.dark_mask_history_texture, nullptr, nullptr);
-
-                clear_target(renderer_, scratch_textures.dark_mask_history_texture);
-                SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_history_texture);
-                SDL_SetTextureBlendMode(scratch_textures.dark_mask_texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureAlphaMod(scratch_textures.dark_mask_texture, current_alpha);
-                SDL_SetTextureColorMod(scratch_textures.dark_mask_texture, 255, 255, 255);
-                SDL_RenderTexture(renderer_, scratch_textures.dark_mask_texture, nullptr, nullptr);
-
-                SDL_SetTextureBlendMode(composited_output_texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureAlphaMod(composited_output_texture, prev_alpha);
-                SDL_SetTextureColorMod(composited_output_texture, 255, 255, 255);
-                SDL_RenderTexture(renderer_, composited_output_texture, nullptr, nullptr);
-
-                SDL_SetTextureBlendMode(scratch_textures.dark_mask_texture, alpha_copy);
-                SDL_SetTextureAlphaMod(scratch_textures.dark_mask_texture, 255);
-                SDL_SetTextureColorMod(scratch_textures.dark_mask_texture, 255, 255, 255);
-                SDL_RenderTexture(renderer_, scratch_textures.dark_mask_texture, nullptr, nullptr);
-
-                mask_for_composite = scratch_textures.dark_mask_history_texture;
-
-                clear_target(renderer_, composited_output_texture);
-                SDL_SetTextureBlendMode(base_layer_texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureAlphaMod(base_layer_texture, 255);
-                SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
-                SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
-            }
-
             SDL_SetRenderTarget(renderer_, composited_output_texture);
-            SDL_SetTextureBlendMode(mask_for_composite, alpha_masked_multiply);
-            SDL_SetTextureAlphaMod(mask_for_composite, 255);
-            SDL_SetTextureColorMod(mask_for_composite, 255, 255, 255);
-            SDL_RenderTexture(renderer_, mask_for_composite, nullptr, nullptr);
+            SDL_SetTextureBlendMode(scratch_textures.dark_mask_texture, alpha_masked_multiply);
+            SDL_SetTextureAlphaMod(scratch_textures.dark_mask_texture, 255);
+            SDL_SetTextureColorMod(scratch_textures.dark_mask_texture, 255, 255, 255);
+            SDL_RenderTexture(renderer_, scratch_textures.dark_mask_texture, nullptr, nullptr);
 
             result.lighting_applied = true;
         }

@@ -68,8 +68,6 @@ void LayerStackRenderer::reset_targets() {
         set.valid_dark_mask_history_count = 0;
     }
     layer_targets_.clear();
-    layer_light_membership_cache_.clear();
-    layer_light_membership_frame_token_ = 0;
 }
 
 bool LayerStackRenderer::ensure_target(SDL_Texture*& texture) const {
@@ -175,14 +173,14 @@ void LayerStackRenderer::render_layer_base(const render_pipeline::LayerSubmissio
 
 std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::bias_lights_for_layer(
     const std::vector<LayerEffectProcessor::RuntimeLight>& source_lights,
-    double layer_reference_depth,
+    double layer_depth_min,
+    double layer_depth_max,
     float front_layer_light_strength_multiplier,
-    float behind_layer_light_strength_multiplier,
-    float depth_transition_world,
-    std::uint32_t* depth_blended_count) const {
+    float behind_layer_light_strength_multiplier) const {
     std::vector<LayerEffectProcessor::RuntimeLight> result;
     result.reserve(source_lights.size());
 
+    const double layer_reference_depth = choose_layer_reference_depth(layer_depth_min, layer_depth_max);
     for (const LayerEffectProcessor::RuntimeLight& light : source_lights) {
         LayerEffectProcessor::RuntimeLight adjusted = light;
         const double relative_depth = static_cast<double>(light.world_z) - layer_reference_depth;
@@ -190,14 +188,7 @@ std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::bias_lights_
             adjusted.intensity,
             relative_depth,
             front_layer_light_strength_multiplier,
-            behind_layer_light_strength_multiplier,
-            depth_transition_world);
-        adjusted.depth_blended = depth_transition_world > 1.0e-4f &&
-                                 std::isfinite(relative_depth) &&
-                                 std::abs(relative_depth) < static_cast<double>(depth_transition_world);
-        if (adjusted.depth_blended && depth_blended_count) {
-            ++(*depth_blended_count);
-        }
+            behind_layer_light_strength_multiplier);
         if (adjusted.intensity > 0.0005f) {
             result.push_back(adjusted);
         }
@@ -207,87 +198,23 @@ std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::bias_lights_
 }
 
 std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::collect_layer_lights(
-    int layer_index,
     const render_pipeline::LayerSubmission& layer,
-    const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-    float overlap_padding_px,
-    float overlap_depth_padding_world,
-    int overlap_hold_frames,
-    std::uint32_t* strict_count,
-    std::uint32_t* hysteresis_count) {
+    const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights) const {
     std::vector<LayerEffectProcessor::RuntimeLight> result;
     result.reserve(runtime_lights.size());
 
-    const double depth_min = std::isfinite(layer.slice_depth_min) ? layer.slice_depth_min : layer.slice_reference_depth;
-    const double depth_max = std::isfinite(layer.slice_depth_max) ? layer.slice_depth_max : layer.slice_reference_depth;
-    const float safe_padding_px = std::max(0.0f, overlap_padding_px);
-    const float safe_depth_padding = std::max(0.0f, overlap_depth_padding_world);
-    const int safe_hold_frames = std::max(0, overlap_hold_frames);
+    const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
+    const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
 
     for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
-        const std::uint64_t key = membership_key(light.stable_light_id, layer_index);
-        auto state_it = layer_light_membership_cache_.find(key);
-
-        const bool strict_overlap = render_internal::light_overlaps_layer_slice(light,
-                                                                                depth_min,
-                                                                                depth_max,
-                                                                                layer.bounds_min_x,
-                                                                                layer.bounds_min_y,
-                                                                                layer.bounds_max_x,
-                                                                                layer.bounds_max_y,
-                                                                                safe_padding_px,
-                                                                                safe_depth_padding);
-        const bool exit_overlap = render_internal::light_overlaps_layer_slice(light,
-                                                                              depth_min,
-                                                                              depth_max,
-                                                                              layer.bounds_min_x,
-                                                                              layer.bounds_min_y,
-                                                                              layer.bounds_max_x,
-                                                                              layer.bounds_max_y,
-                                                                              safe_padding_px + 12.0f,
-                                                                              safe_depth_padding + 10.0f);
-        LayerEffectProcessor::RuntimeLight adjusted = light;
-        if (strict_overlap) {
-            LayerLightMembershipState& state = layer_light_membership_cache_[key];
-            state.active = true;
-            state.hold_frames_remaining = static_cast<std::uint8_t>(std::min(safe_hold_frames, 255));
-            state.last_seen_frame = layer_light_membership_frame_token_;
-            adjusted.retained_by_hysteresis = false;
-            if (strict_count) {
-                ++(*strict_count);
-            }
-            result.push_back(adjusted);
-            continue;
-        }
-
-        if (state_it != layer_light_membership_cache_.end() && state_it->second.active && exit_overlap) {
-            LayerLightMembershipState& state = state_it->second;
-            state.hold_frames_remaining = static_cast<std::uint8_t>(std::min(safe_hold_frames, 255));
-            state.last_seen_frame = layer_light_membership_frame_token_;
-            adjusted.retained_by_hysteresis = true;
-            if (hysteresis_count) {
-                ++(*hysteresis_count);
-            }
-            result.push_back(adjusted);
-            continue;
-        }
-
-        if (state_it != layer_light_membership_cache_.end() &&
-            state_it->second.active &&
-            state_it->second.hold_frames_remaining > 0) {
-            LayerLightMembershipState& state = state_it->second;
-            --state.hold_frames_remaining;
-            state.last_seen_frame = layer_light_membership_frame_token_;
-            adjusted.retained_by_hysteresis = true;
-            if (hysteresis_count) {
-                ++(*hysteresis_count);
-            }
-            result.push_back(adjusted);
-            continue;
-        }
-
-        if (state_it != layer_light_membership_cache_.end()) {
-            layer_light_membership_cache_.erase(state_it);
+        if (render_internal::light_overlaps_layer_slice(light,
+                                                        depth_min,
+                                                        depth_max,
+                                                        layer.bounds_min_x,
+                                                        layer.bounds_min_y,
+                                                        layer.bounds_max_x,
+                                                        layer.bounds_max_y)) {
+            result.push_back(light);
         }
     }
 
@@ -300,8 +227,8 @@ std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::collect_owne
     std::vector<LayerEffectProcessor::RuntimeLight> result;
     result.reserve(biased_lights.size());
 
-    const double depth_min = std::isfinite(layer.slice_depth_min) ? layer.slice_depth_min : layer.slice_reference_depth;
-    const double depth_max = std::isfinite(layer.slice_depth_max) ? layer.slice_depth_max : layer.slice_reference_depth;
+    const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
+    const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
 
     for (const LayerEffectProcessor::RuntimeLight& light : biased_lights) {
         const double light_depth = static_cast<double>(light.world_z);
@@ -313,34 +240,12 @@ std::vector<LayerEffectProcessor::RuntimeLight> LayerStackRenderer::collect_owne
     return result;
 }
 
-std::uint64_t LayerStackRenderer::membership_key(std::uint64_t light_id, int layer_index) {
-    const std::uint64_t layer_part = static_cast<std::uint64_t>(static_cast<std::uint32_t>(std::max(0, layer_index)));
-    return (light_id << 1u) ^ (layer_part * 0x9E3779B185EBCA87ULL);
-}
-
-void LayerStackRenderer::prune_membership_cache(std::uint64_t frame_token) {
-    for (auto it = layer_light_membership_cache_.begin(); it != layer_light_membership_cache_.end();) {
-        const std::uint64_t age = frame_token - it->second.last_seen_frame;
-        if (age > 240) {
-            it = layer_light_membership_cache_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 render_pipeline::LayerRenderResult LayerStackRenderer::render(
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
     bool runtime_lighting_enabled,
     float front_layer_light_strength_multiplier,
-    float behind_layer_light_strength_multiplier,
-    float overlap_padding_px,
-    float overlap_depth_padding_world,
-    int overlap_hold_frames,
-    float depth_transition_world,
-    bool dark_mask_temporal_enabled,
-    float dark_mask_temporal_prev_weight) {
+    float behind_layer_light_strength_multiplier) {
     render_pipeline::LayerRenderResult out{};
     out.layer_count = build.layer_count;
     out.player_layer_index = build.player_layer_index;
@@ -356,8 +261,6 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 
     out.final_layer_textures.assign(static_cast<std::size_t>(build.layer_count), nullptr);
     out.owning_body_lights.resize(static_cast<std::size_t>(build.layer_count));
-    ++layer_light_membership_frame_token_;
-    prune_membership_cache(layer_light_membership_frame_token_);
 
     LayerEffectProcessor::LayerLightingParams lighting_params{};
     lighting_params.enabled = runtime_lighting_enabled;
@@ -373,37 +276,22 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 
         render_layer_base(layer, targets.base);
 
-        const double depth_min = std::isfinite(layer.slice_depth_min) ? layer.slice_depth_min : layer.slice_reference_depth;
-        const double depth_max = std::isfinite(layer.slice_depth_max) ? layer.slice_depth_max : layer.slice_reference_depth;
-        const double depth_reference = std::isfinite(layer.slice_reference_depth)
-            ? layer.slice_reference_depth
-            : choose_layer_reference_depth(depth_min, depth_max);
+        const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
+        const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
 
         const std::vector<LayerEffectProcessor::RuntimeLight> overlapping_lights =
-            collect_layer_lights(layer_index,
-                                 layer,
-                                 runtime_lights,
-                                 overlap_padding_px,
-                                 overlap_depth_padding_world,
-                                 overlap_hold_frames,
-                                 &out.strict_overlap_count,
-                                 &out.hysteresis_overlap_count);
+            collect_layer_lights(layer, runtime_lights);
         const std::vector<LayerEffectProcessor::RuntimeLight> biased_lights =
             bias_lights_for_layer(overlapping_lights,
-                                  depth_reference,
+                                  depth_min,
+                                  depth_max,
                                   front_layer_light_strength_multiplier,
-                                  behind_layer_light_strength_multiplier,
-                                  depth_transition_world,
-                                  &out.depth_blended_light_count);
+                                  behind_layer_light_strength_multiplier);
         out.owning_body_lights[static_cast<std::size_t>(layer_index)] =
             collect_owner_lights(layer, biased_lights);
 
         LayerEffectProcessor::LayerScratchTextures scratch{};
         scratch.dark_mask_texture = targets.dark_mask;
-        scratch.dark_mask_history_texture = targets.dark_mask_merged;
-        const bool is_player_layer = (layer_index == build.player_layer_index);
-        scratch.dark_mask_temporal_enabled = dark_mask_temporal_enabled && !is_player_layer;
-        scratch.dark_mask_temporal_prev_weight = dark_mask_temporal_prev_weight;
 
         LayerEffectProcessor::LayerProcessResult result = layer_effect_processor_.process_layer(
             targets.base,
@@ -414,9 +302,6 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             biased_lights,
             scratch);
 
-        if (result.lighting_applied && scratch.dark_mask_temporal_enabled) {
-            ++out.temporal_merge_count;
-        }
 
 
         out.final_layer_textures[static_cast<std::size_t>(layer_index)] =

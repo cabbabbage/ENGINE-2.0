@@ -754,36 +754,6 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     }
     settings_.behind_layer_light_strength_multiplier =
         std::min(settings_.behind_layer_light_strength_multiplier, 4.0f);
-    if (!std::isfinite(settings_.layer_light_overlap_padding_px) ||
-        settings_.layer_light_overlap_padding_px < 0.0f) {
-        settings_.layer_light_overlap_padding_px = 14.0f;
-    }
-    settings_.layer_light_overlap_padding_px =
-        std::min(settings_.layer_light_overlap_padding_px, 1024.0f);
-    if (!std::isfinite(settings_.layer_light_depth_padding_world) ||
-        settings_.layer_light_depth_padding_world < 0.0f) {
-        settings_.layer_light_depth_padding_world = 10.0f;
-    }
-    settings_.layer_light_depth_padding_world =
-        std::min(settings_.layer_light_depth_padding_world, 2000.0f);
-    settings_.layer_light_membership_hold_frames = std::clamp(settings_.layer_light_membership_hold_frames, 0, 120);
-    if (!std::isfinite(settings_.layer_light_depth_transition_world) ||
-        settings_.layer_light_depth_transition_world < 0.0f) {
-        settings_.layer_light_depth_transition_world = 18.0f;
-    }
-    settings_.layer_light_depth_transition_world =
-        std::min(settings_.layer_light_depth_transition_world, 2000.0f);
-    if (!std::isfinite(settings_.dark_mask_temporal_prev_weight)) {
-        settings_.dark_mask_temporal_prev_weight = 0.5f;
-    }
-    settings_.dark_mask_temporal_prev_weight =
-        std::clamp(settings_.dark_mask_temporal_prev_weight, 0.0f, 0.98f);
-    if (!std::isfinite(settings_.player_layer_hysteresis_world) ||
-        settings_.player_layer_hysteresis_world < 0.0f) {
-        settings_.player_layer_hysteresis_world = 0.0f;
-    }
-    settings_.player_layer_hysteresis_world =
-        std::min(settings_.player_layer_hysteresis_world, 2000.0f);
     if (!std::isfinite(settings_.light_fade_in_seconds) || settings_.light_fade_in_seconds < 0.0f) {
         settings_.light_fade_in_seconds = 0.0f;
     }
@@ -1526,18 +1496,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
                updated.behind_layer_light_strength_multiplier,
                0.0f,
                4.0f);
-    read_float("layer_light_overlap_padding_px", updated.layer_light_overlap_padding_px, 0.0f, 1024.0f);
-    read_float("layer_light_depth_padding_world", updated.layer_light_depth_padding_world, 0.0f, 2000.0f);
-    {
-        auto it = data.find("layer_light_membership_hold_frames");
-        if (it != data.end() && it->is_number_integer()) {
-            updated.layer_light_membership_hold_frames = std::clamp(it->get<int>(), 0, 120);
-        }
-    }
-    read_float("layer_light_depth_transition_world", updated.layer_light_depth_transition_world, 0.0f, 2000.0f);
-    read_bool("dark_mask_temporal_enabled", updated.dark_mask_temporal_enabled);
-    read_float("dark_mask_temporal_prev_weight", updated.dark_mask_temporal_prev_weight, 0.0f, 0.98f);
-    read_float("player_layer_hysteresis_world", updated.player_layer_hysteresis_world, 0.0f, 2000.0f);
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
     read_bool("light_fade_smoothing_enabled", updated.light_fade_smoothing_enabled);
     read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
@@ -1623,13 +1581,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["layer_depth_curve"] = settings_.layer_depth_curve;
     result["front_layer_light_strength_multiplier"] = settings_.front_layer_light_strength_multiplier;
     result["behind_layer_light_strength_multiplier"] = settings_.behind_layer_light_strength_multiplier;
-    result["layer_light_overlap_padding_px"] = settings_.layer_light_overlap_padding_px;
-    result["layer_light_depth_padding_world"] = settings_.layer_light_depth_padding_world;
-    result["layer_light_membership_hold_frames"] = settings_.layer_light_membership_hold_frames;
-    result["layer_light_depth_transition_world"] = settings_.layer_light_depth_transition_world;
-    result["dark_mask_temporal_enabled"] = settings_.dark_mask_temporal_enabled;
-    result["dark_mask_temporal_prev_weight"] = settings_.dark_mask_temporal_prev_weight;
-    result["player_layer_hysteresis_world"] = settings_.player_layer_hysteresis_world;
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
     result["light_fade_smoothing_enabled"] = settings_.light_fade_smoothing_enabled;
     result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;

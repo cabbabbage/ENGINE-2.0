@@ -351,14 +351,14 @@
       "can_invert": false,
       "floor_boxes": [
         {
-          "depth": 79.0,
+          "depth": 139.0,
           "enabled": true,
           "id": "floor_box",
           "name": "Floor Box",
-          "position_x": -3.5,
-          "position_z": -28.5,
+          "position_x": -20.0,
+          "position_z": -55.5,
           "tags": [],
-          "width": 95.0
+          "width": 198.0
         }
       ],
       "floor_boxes_enabled": true,

@@ -79,13 +79,6 @@ public:
         float layer_depth_curve            = 1.0f;
         float front_layer_light_strength_multiplier = 1.0f;
         float behind_layer_light_strength_multiplier = 1.0f;
-        float layer_light_overlap_padding_px = 14.0f;
-        float layer_light_depth_padding_world = 10.0f;
-        int layer_light_membership_hold_frames = 2;
-        float layer_light_depth_transition_world = 18.0f;
-        bool dark_mask_temporal_enabled = true;
-        float dark_mask_temporal_prev_weight = 0.5f;
-        float player_layer_hysteresis_world = 0.0f;
         bool light_radius_overlap_culling_enabled = true;
         bool light_fade_smoothing_enabled = true;
         float light_fade_in_seconds = 0.08f;

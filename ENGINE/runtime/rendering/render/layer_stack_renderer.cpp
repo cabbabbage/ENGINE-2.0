@@ -210,11 +210,6 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
                          frame_scratch_.layer_metadata[rhs].depth_interval.min;
               });
 
-    frame_scratch_.sorted_layer_depth_starts.reserve(frame_scratch_.layer_order_by_depth_start.size());
-    for (std::size_t li : frame_scratch_.layer_order_by_depth_start) {
-        frame_scratch_.sorted_layer_depth_starts.push_back(frame_scratch_.layer_metadata[li].depth_interval.min);
-    }
-
     for (std::uint32_t light_index = 0; light_index < runtime_lights.size(); ++light_index) {
         const LayerEffectProcessor::RuntimeLight& light = runtime_lights[light_index];
         const std::size_t light_meta_index = static_cast<std::size_t>(light_index);
@@ -225,29 +220,25 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             light.screen_center.x + light.radius_px,
             light.screen_center.y + light.radius_px};
 
-        const render_internal::DepthInterval& light_depth = frame_scratch_.light_metadata[light_meta_index].depth_interval;
-        auto upper = std::upper_bound(frame_scratch_.sorted_layer_depth_starts.begin(),
-                                      frame_scratch_.sorted_layer_depth_starts.end(),
-                                      light_depth.max);
-        const std::size_t candidate_count =
-            static_cast<std::size_t>(std::distance(frame_scratch_.sorted_layer_depth_starts.begin(), upper));
-        for (std::size_t position = 0; position < candidate_count; ++position) {
-            const std::size_t li = frame_scratch_.layer_order_by_depth_start[position];
+        if (!std::isfinite(light.screen_center.x) || !std::isfinite(light.screen_center.y)) {
+            continue;
+        }
+
+        // Assignment is purely coverage-based; depth classification is applied later as front/behind strength.
+        for (const std::size_t li : frame_scratch_.layer_order_by_depth_start) {
             const FrameScratchArena::LayerMetadata& layer_meta = frame_scratch_.layer_metadata[li];
-            if (render_internal::compare_depth_intervals_signed(light_depth, layer_meta.depth_interval) > 0) {
+            const bool bounds_overlap =
+                render_internal::screen_aabb_overlaps(frame_scratch_.light_metadata[light_meta_index].screen_bounds,
+                                                      layer_meta.screen_bounds);
+            const bool center_inside =
+                light.screen_center.x >= layer_meta.screen_bounds.min_x &&
+                light.screen_center.x <= layer_meta.screen_bounds.max_x &&
+                light.screen_center.y >= layer_meta.screen_bounds.min_y &&
+                light.screen_center.y <= layer_meta.screen_bounds.max_y;
+            if (!bounds_overlap && !center_inside) {
                 continue;
             }
-            if (!render_internal::screen_aabb_overlaps(frame_scratch_.light_metadata[light_meta_index].screen_bounds,
-                                                       layer_meta.screen_bounds)) {
-                continue;
-            }
-            if (render_internal::light_overlaps_layer_slice(light,
-                                                            light_depth,
-                                                            layer_meta.depth_interval,
-                                                            frame_scratch_.light_metadata[light_meta_index].screen_bounds,
-                                                            layer_meta.screen_bounds)) {
-                frame_scratch_.per_layer_light_indices[li].push_back(light_index);
-            }
+            frame_scratch_.per_layer_light_indices[li].push_back(light_index);
         }
     }
 

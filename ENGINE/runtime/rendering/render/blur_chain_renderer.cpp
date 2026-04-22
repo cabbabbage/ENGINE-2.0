@@ -420,13 +420,24 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
                     layer_render.player_layer_index),
         background_chain.end());
 
+    SDL_Texture* prepared_background_seed = background_seed;
+    if (background_seed && floor_dark_mask) {
+        if (!copy_texture(background_seed, chain_temp_tex_)) {
+            return result;
+        }
+        if (!composite_texture_modulate_over(floor_dark_mask, chain_temp_tex_)) {
+            return result;
+        }
+        prepared_background_seed = chain_temp_tex_;
+    }
+
     bool background_has_content = false;
     bool foreground_has_content = false;
 
     if (!compose_chain(background_chain,
                        layer_render,
                        layer_render.final_layer_textures,
-                       background_seed,
+                       prepared_background_seed,
                        background_mid_tex_,
                        chain_temp_tex_,
                        blur_enabled,
@@ -436,12 +447,6 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
                        blur_quality_scale,
                        background_has_content)) {
         return result;
-    }
-
-    if (floor_dark_mask && background_has_content) {
-        if (!composite_texture_modulate_over(floor_dark_mask, background_mid_tex_)) {
-            return result;
-        }
     }
 
     // Player-layer handling is composition-only and must never affect lighting bias/assignment semantics.

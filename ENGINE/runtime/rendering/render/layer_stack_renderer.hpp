@@ -44,8 +44,6 @@ private:
         std::vector<LayerMetadata> layer_metadata;
         std::vector<LightMetadata> light_metadata;
         std::vector<std::size_t> layer_order_by_depth_start;
-        std::vector<double> sorted_layer_depth_starts;
-        std::vector<std::size_t> candidate_layer_positions;
 
         void clear_for_frame(std::size_t layer_count) {
             if (per_layer_light_indices.size() < layer_count) {
@@ -59,8 +57,6 @@ private:
             layer_metadata.assign(layer_count, LayerMetadata{});
             light_metadata.clear();
             layer_order_by_depth_start.clear();
-            sorted_layer_depth_starts.clear();
-            candidate_layer_positions.clear();
         }
     };
 

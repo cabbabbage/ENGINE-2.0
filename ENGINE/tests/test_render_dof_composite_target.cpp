@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include "rendering/render/blur_chain_renderer.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/scene_composite_pass.hpp"
 
@@ -273,4 +274,113 @@ TEST_CASE("DoF background chain keeps the player split layer in the blur path") 
 
     CHECK(background_chain == std::vector<int>({3, 2}));
     CHECK(foreground_chain == std::vector<int>({0, 1}));
+}
+
+TEST_CASE("Blur chain applies floor dark mask to floor seed when only player layer exists") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 16;
+    constexpr int kH = 16;
+    SDL_Texture* floor_seed = create_target_texture(renderer, kW, kH);
+    SDL_Texture* floor_dark_mask = create_target_texture(renderer, kW, kH);
+    SDL_Texture* transparent_player_layer = create_target_texture(renderer, kW, kH);
+    REQUIRE(floor_seed != nullptr);
+    REQUIRE(floor_dark_mask != nullptr);
+    REQUIRE(transparent_player_layer != nullptr);
+
+    REQUIRE(fill_texture(renderer, floor_seed, SDL_Color{200, 120, 80, 255}));
+    REQUIRE(fill_texture(renderer, floor_dark_mask, SDL_Color{128, 128, 128, 255}));
+    REQUIRE(fill_texture(renderer, transparent_player_layer, SDL_Color{0, 0, 0, 0}));
+
+    render_pipeline::LayerRenderResult layer_render{};
+    layer_render.valid = true;
+    layer_render.layer_count = 1;
+    layer_render.player_layer_index = 0;
+    layer_render.non_empty_layers = {0};
+    layer_render.final_layer_textures = {transparent_player_layer};
+
+    BlurChainRenderer blur_chain(renderer);
+    blur_chain.set_output_dimensions(kW, kH);
+    const render_pipeline::BlurCompositeResult result = blur_chain.compose(
+        layer_render,
+        floor_seed,
+        floor_dark_mask,
+        false,
+        0.0f,
+        0.0f,
+        SDL_FPoint{8.0f, 8.0f});
+    REQUIRE(result.valid);
+    REQUIRE(result.background_mid != nullptr);
+
+    SDL_Color pixel{};
+    REQUIRE(read_pixel(renderer, result.background_mid, 8, 8, pixel));
+    CHECK(pixel.r <= 102);
+    CHECK(pixel.r >= 98);
+    CHECK(pixel.g <= 62);
+    CHECK(pixel.g >= 58);
+    CHECK(pixel.b <= 42);
+    CHECK(pixel.b >= 38);
+
+    SDL_DestroyTexture(transparent_player_layer);
+    SDL_DestroyTexture(floor_dark_mask);
+    SDL_DestroyTexture(floor_seed);
+}
+
+TEST_CASE("Blur chain floor dark mask does not darken non-floor background layer stack") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 16;
+    constexpr int kH = 16;
+    SDL_Texture* floor_seed = create_target_texture(renderer, kW, kH);
+    SDL_Texture* floor_dark_mask = create_target_texture(renderer, kW, kH);
+    SDL_Texture* background_layer = create_target_texture(renderer, kW, kH);
+    SDL_Texture* transparent_player_layer = create_target_texture(renderer, kW, kH);
+    REQUIRE(floor_seed != nullptr);
+    REQUIRE(floor_dark_mask != nullptr);
+    REQUIRE(background_layer != nullptr);
+    REQUIRE(transparent_player_layer != nullptr);
+
+    REQUIRE(fill_texture(renderer, floor_seed, SDL_Color{200, 200, 200, 255}));
+    REQUIRE(fill_texture(renderer, floor_dark_mask, SDL_Color{128, 128, 128, 255}));
+    REQUIRE(fill_texture(renderer, background_layer, SDL_Color{200, 0, 0, 128}));
+    REQUIRE(fill_texture(renderer, transparent_player_layer, SDL_Color{0, 0, 0, 0}));
+
+    render_pipeline::LayerRenderResult layer_render{};
+    layer_render.valid = true;
+    layer_render.layer_count = 2;
+    layer_render.player_layer_index = 0;
+    layer_render.non_empty_layers = {0, 1};
+    layer_render.final_layer_textures = {transparent_player_layer, background_layer};
+
+    BlurChainRenderer blur_chain(renderer);
+    blur_chain.set_output_dimensions(kW, kH);
+    const render_pipeline::BlurCompositeResult result = blur_chain.compose(
+        layer_render,
+        floor_seed,
+        floor_dark_mask,
+        false,
+        0.0f,
+        0.0f,
+        SDL_FPoint{8.0f, 8.0f});
+    REQUIRE(result.valid);
+    REQUIRE(result.background_mid != nullptr);
+
+    SDL_Color pixel{};
+    REQUIRE(read_pixel(renderer, result.background_mid, 8, 8, pixel));
+    CHECK(pixel.r >= 140);
+    CHECK(pixel.g <= 60);
+    CHECK(pixel.b <= 60);
+
+    SDL_DestroyTexture(transparent_player_layer);
+    SDL_DestroyTexture(background_layer);
+    SDL_DestroyTexture(floor_dark_mask);
+    SDL_DestroyTexture(floor_seed);
 }

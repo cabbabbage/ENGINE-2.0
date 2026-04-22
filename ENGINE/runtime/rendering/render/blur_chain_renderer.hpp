@@ -43,7 +43,9 @@ private:
                    float radial_blur_px,
                    float quality_scale) const;
 
-    static std::vector<int> build_repeat_schedule(std::size_t chain_size, int total_pass_budget);
+    static std::vector<int> build_repeat_schedule(const std::vector<int>& chain,
+                                                  const render_pipeline::LayerRenderResult& layer_render,
+                                                  int total_pass_budget);
     static int compute_total_pass_budget(std::size_t chain_size,
                                          float blur_px,
                                          float radial_blur_px);
@@ -53,6 +55,7 @@ private:
                                        float radial_blur_px);
 
     bool compose_chain(const std::vector<int>& chain,
+                       const render_pipeline::LayerRenderResult& layer_render,
                        const std::vector<SDL_Texture*>& layer_textures,
                        SDL_Texture* seed_texture,
                        SDL_Texture* output_texture,

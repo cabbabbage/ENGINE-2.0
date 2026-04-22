@@ -36,6 +36,18 @@ class SceneCompositePass;
 namespace world { class WorldGrid; }
 
 namespace render_internal {
+struct DepthInterval {
+    double min = 0.0;
+    double max = 0.0;
+};
+
+struct ScreenAabb {
+    float min_x = 0.0f;
+    float min_y = 0.0f;
+    float max_x = 0.0f;
+    float max_y = 0.0f;
+};
+
 struct FloorLightContact {
     float world_x = 0.0f;
     float world_z = 0.0f;
@@ -66,25 +78,31 @@ float floor_light_height_normalized(float world_height, float base_radius_world)
 float floor_light_height_weight(float world_height, float base_radius_world);
 float floor_light_height_spread_scale(float world_height, float base_radius_world);
 float floor_light_footprint_radius(float base_radius_px, float world_height);
-float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
+DepthInterval make_sorted_depth_interval(double depth_min, double depth_max);
+DepthInterval light_depth_interval(const LayerEffectProcessor::RuntimeLight& light);
+int compare_depth_intervals_signed(const DepthInterval& light_interval, const DepthInterval& layer_interval);
+bool screen_aabb_overlaps(const ScreenAabb& lhs, const ScreenAabb& rhs);
+float layer_light_strength_multiplier_for_depth_interval(int signed_depth_separation,
                                                 float front_multiplier,
                                                 float behind_multiplier);
 float apply_layer_light_strength_bias(float intensity,
-                                      double depth_from_camera_plane,
+                                      int signed_depth_separation,
                                       float front_multiplier,
                                       float behind_multiplier);
 bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
-                                double layer_depth_min,
-                                double layer_depth_max,
-                                float layer_bounds_min_x,
-                                float layer_bounds_min_y,
-                                float layer_bounds_max_x,
-                                float layer_bounds_max_y);
+                                const DepthInterval& light_interval,
+                                const DepthInterval& layer_interval,
+                                const ScreenAabb& light_bounds,
+                                const ScreenAabb& layer_bounds);
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px);
 std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_count,
                                                 std::size_t layer_count);
+float dof_quality_scale(int screen_width,
+                        int screen_height,
+                        float blur_px,
+                        float radial_blur_px);
 std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
 std::vector<int> foreground_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index);
 } // namespace render_internal

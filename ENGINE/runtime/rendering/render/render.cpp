@@ -452,74 +452,106 @@ float floor_light_footprint_radius(float base_radius_px, float world_height) {
     return std::max(4.0f, base_radius_px) * floor_light_height_spread_scale(world_height, std::max(4.0f, base_radius_px));
 }
 
-float layer_light_strength_multiplier_for_depth(double depth_from_camera_plane,
-                                                float front_multiplier,
-                                                float behind_multiplier) {
-    const float safe_front = std::clamp(std::isfinite(front_multiplier) ? front_multiplier : 1.0f, 0.0f, 4.0f);
-    const float safe_behind = std::clamp(std::isfinite(behind_multiplier) ? behind_multiplier : 1.0f, 0.0f, 4.0f);
-    return (!std::isfinite(depth_from_camera_plane) || depth_from_camera_plane <= 0.0) ? safe_front : safe_behind;
-}
-
-float apply_layer_light_strength_bias(float intensity,
-                                      double depth_from_camera_plane,
-                                      float front_multiplier,
-                                      float behind_multiplier) {
-    const float safe_intensity = (std::isfinite(intensity) && intensity > 0.0f) ? intensity : 0.0f;
-    return safe_intensity * layer_light_strength_multiplier_for_depth(depth_from_camera_plane,
-                                                                      front_multiplier,
-                                                                      behind_multiplier);
-}
-
-bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
-                                double layer_depth_min,
-                                double layer_depth_max,
-                                float layer_bounds_min_x,
-                                float layer_bounds_min_y,
-                                float layer_bounds_max_x,
-                                float layer_bounds_max_y) {
-    if (!std::isfinite(layer_depth_min) || !std::isfinite(layer_depth_max) || layer_depth_min > layer_depth_max ||
-        !std::isfinite(layer_bounds_min_x) || !std::isfinite(layer_bounds_min_y) ||
-        !std::isfinite(layer_bounds_max_x) || !std::isfinite(layer_bounds_max_y) ||
-        layer_bounds_min_x > layer_bounds_max_x || layer_bounds_min_y > layer_bounds_max_y ||
-        !std::isfinite(light.world_z)) {
-        return false;
+DepthInterval make_sorted_depth_interval(double depth_min, double depth_max) {
+    if (!std::isfinite(depth_min) || !std::isfinite(depth_max)) {
+        return {};
     }
+    if (depth_min <= depth_max) {
+        return DepthInterval{depth_min, depth_max};
+    }
+    return DepthInterval{depth_max, depth_min};
+}
 
+DepthInterval light_depth_interval(const LayerEffectProcessor::RuntimeLight& light) {
+    if (!std::isfinite(light.world_z)) {
+        return {};
+    }
     const bool has_world_radius = std::isfinite(light.radius_world) && light.radius_world > 0.0f;
     const bool has_screen_radius = std::isfinite(light.radius_px) && light.radius_px > 0.0f;
     if (!has_world_radius && !has_screen_radius) {
+        return {};
+    }
+    const double depth_radius = static_cast<double>(has_world_radius ? light.radius_world : light.radius_px);
+    return make_sorted_depth_interval(static_cast<double>(light.world_z) - depth_radius,
+                                      static_cast<double>(light.world_z) + depth_radius);
+}
+
+int compare_depth_intervals_signed(const DepthInterval& light_interval, const DepthInterval& layer_interval) {
+    if (!std::isfinite(light_interval.min) || !std::isfinite(light_interval.max) ||
+        !std::isfinite(layer_interval.min) || !std::isfinite(layer_interval.max) ||
+        light_interval.min > light_interval.max || layer_interval.min > layer_interval.max) {
+        return 0;
+    }
+    if (light_interval.max < layer_interval.min) {
+        return -1;
+    }
+    if (light_interval.min > layer_interval.max) {
+        return 1;
+    }
+    return 0;
+}
+
+bool screen_aabb_overlaps(const ScreenAabb& lhs, const ScreenAabb& rhs) {
+    if (!std::isfinite(lhs.min_x) || !std::isfinite(lhs.min_y) ||
+        !std::isfinite(lhs.max_x) || !std::isfinite(lhs.max_y) ||
+        !std::isfinite(rhs.min_x) || !std::isfinite(rhs.min_y) ||
+        !std::isfinite(rhs.max_x) || !std::isfinite(rhs.max_y) ||
+        lhs.min_x > lhs.max_x || lhs.min_y > lhs.max_y ||
+        rhs.min_x > rhs.max_x || rhs.min_y > rhs.max_y) {
         return false;
     }
 
-    const double depth_radius = static_cast<double>(has_world_radius ? light.radius_world : light.radius_px);
-    const double light_depth_min = static_cast<double>(light.world_z) - depth_radius;
-    const double light_depth_max = static_cast<double>(light.world_z) + depth_radius;
-    if (light_depth_max < layer_depth_min || light_depth_min > layer_depth_max) {
+    return lhs.max_x >= rhs.min_x &&
+           lhs.min_x <= rhs.max_x &&
+           lhs.max_y >= rhs.min_y &&
+           lhs.min_y <= rhs.max_y;
+}
+
+float layer_light_strength_multiplier_for_depth_interval(int signed_depth_separation,
+                                                         float front_multiplier,
+                                                         float behind_multiplier) {
+    const float safe_front = std::clamp(std::isfinite(front_multiplier) ? front_multiplier : 1.0f, 0.0f, 4.0f);
+    const float safe_behind = std::clamp(std::isfinite(behind_multiplier) ? behind_multiplier : 1.0f, 0.0f, 4.0f);
+    return (signed_depth_separation <= 0) ? safe_front : safe_behind;
+}
+
+float apply_layer_light_strength_bias(float intensity,
+                                      int signed_depth_separation,
+                                      float front_multiplier,
+                                      float behind_multiplier) {
+    const float safe_intensity = (std::isfinite(intensity) && intensity > 0.0f) ? intensity : 0.0f;
+    return safe_intensity * layer_light_strength_multiplier_for_depth_interval(signed_depth_separation,
+                                                                               front_multiplier,
+                                                                               behind_multiplier);
+}
+
+bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
+                                const DepthInterval& light_interval,
+                                const DepthInterval& layer_interval,
+                                const ScreenAabb& light_bounds,
+                                const ScreenAabb& layer_bounds) {
+    if (!std::isfinite(light.world_z)) {
+        return false;
+    }
+
+    if (compare_depth_intervals_signed(light_interval, layer_interval) != 0) {
         return false;
     }
     if (!std::isfinite(light.screen_center.x) || !std::isfinite(light.screen_center.y)) {
         return false;
     }
 
-    const bool center_inside = light.screen_center.x >= layer_bounds_min_x &&
-                               light.screen_center.x <= layer_bounds_max_x &&
-                               light.screen_center.y >= layer_bounds_min_y &&
-                               light.screen_center.y <= layer_bounds_max_y;
+    const bool center_inside = light.screen_center.x >= layer_bounds.min_x &&
+                               light.screen_center.x <= layer_bounds.max_x &&
+                               light.screen_center.y >= layer_bounds.min_y &&
+                               light.screen_center.y <= layer_bounds.max_y;
     if (center_inside) {
         return true;
     }
-    if (!has_screen_radius) {
+    if (!(std::isfinite(light.radius_px) && light.radius_px > 0.0f)) {
         return false;
     }
-
-    const float min_x = light.screen_center.x - light.radius_px;
-    const float min_y = light.screen_center.y - light.radius_px;
-    const float max_x = light.screen_center.x + light.radius_px;
-    const float max_y = light.screen_center.y + light.radius_px;
-    return max_x >= layer_bounds_min_x &&
-           min_x <= layer_bounds_max_x &&
-           max_y >= layer_bounds_min_y &&
-           min_y <= layer_bounds_max_y;
+    return screen_aabb_overlaps(light_bounds, layer_bounds);
 }
 
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
@@ -551,6 +583,34 @@ std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_cou
         counts[i] = static_cast<int>(repeats);
     }
     return counts;
+}
+
+float dof_quality_scale(int screen_width,
+                        int screen_height,
+                        float blur_px,
+                        float radial_blur_px) {
+    const float safe_blur_px = std::max(0.0f, std::isfinite(blur_px) ? blur_px : 0.0f);
+    const float safe_radial_blur_px = std::max(0.0f, std::isfinite(radial_blur_px) ? radial_blur_px : 0.0f);
+    const float max_radius = std::max(safe_blur_px, safe_radial_blur_px);
+    const int min_dim = std::max(1, std::min(screen_width, screen_height));
+    if (max_radius <= 2.0f || min_dim <= 540) {
+        return 1.0f;
+    }
+    struct RadiusThreshold {
+        float radius;
+        float quality;
+    };
+    static constexpr std::array<RadiusThreshold, 3> kThresholds{{
+        {6.0f, 0.92f},
+        {12.0f, 0.84f},
+        {24.0f, 0.72f},
+    }};
+    for (const RadiusThreshold& threshold : kThresholds) {
+        if (max_radius <= threshold.radius) {
+            return threshold.quality;
+        }
+    }
+    return (min_dim <= 720) ? 0.62f : 0.54f;
 }
 
 std::vector<int> background_chain_layers(const std::vector<int>& non_empty_layers, int player_layer_index) {

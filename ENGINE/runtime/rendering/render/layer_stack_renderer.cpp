@@ -4,8 +4,6 @@
 #include <cmath>
 #include <cstdint>
 
-#include "rendering/render/render.hpp"
-
 namespace {
 
 void destroy_texture(SDL_Texture*& texture) {
@@ -20,21 +18,6 @@ SDL_BlendMode safe_layer_blend_mode(SDL_BlendMode blend_mode) {
         return SDL_BLENDMODE_BLEND;
     }
     return blend_mode;
-}
-
-double choose_layer_reference_depth(double layer_depth_min, double layer_depth_max) {
-    const bool finite_min = std::isfinite(layer_depth_min);
-    const bool finite_max = std::isfinite(layer_depth_max);
-    if (finite_min && finite_max) {
-        return 0.5 * (layer_depth_min + layer_depth_max);
-    }
-    if (finite_min) {
-        return layer_depth_min;
-    }
-    if (finite_max) {
-        return layer_depth_max;
-    }
-    return 0.0;
 }
 
 } // namespace
@@ -140,8 +123,6 @@ bool LayerStackRenderer::copy_texture(SDL_Texture* src, SDL_Texture* dst) const 
     return true;
 }
 
-
-
 void LayerStackRenderer::clear_target(SDL_Texture* texture) const {
     if (!renderer_ || !texture) {
         return;
@@ -193,6 +174,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
     out.final_layer_textures.assign(static_cast<std::size_t>(build.layer_count), nullptr);
     out.owning_body_lights.resize(static_cast<std::size_t>(build.layer_count));
     frame_scratch_.clear_for_frame(static_cast<std::size_t>(build.layer_count));
+    frame_scratch_.light_metadata.resize(runtime_lights.size());
 
     for (int layer_index : build.non_empty_layers) {
         if (layer_index < 0 || layer_index >= build.layer_count) {
@@ -200,30 +182,70 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         }
         const render_pipeline::LayerSubmission& layer = build.layers[static_cast<std::size_t>(layer_index)];
         const std::size_t li = static_cast<std::size_t>(layer_index);
-        frame_scratch_.layer_depth_min[li] = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
-        frame_scratch_.layer_depth_max[li] = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
-        frame_scratch_.layer_bounds_min_x[li] = layer.bounds_min_x;
-        frame_scratch_.layer_bounds_min_y[li] = layer.bounds_min_y;
-        frame_scratch_.layer_bounds_max_x[li] = layer.bounds_max_x;
-        frame_scratch_.layer_bounds_max_y[li] = layer.bounds_max_y;
+        const double depth_min = std::isfinite(layer.depth_min) ? layer.depth_min : layer.representative_depth;
+        const double depth_max = std::isfinite(layer.depth_max) ? layer.depth_max : layer.representative_depth;
+        frame_scratch_.layer_metadata[li].layer_index = layer_index;
+        frame_scratch_.layer_metadata[li].depth_interval =
+            render_internal::make_sorted_depth_interval(depth_min, depth_max);
+        frame_scratch_.layer_metadata[li].screen_bounds = render_internal::ScreenAabb{
+            layer.bounds_min_x,
+            layer.bounds_min_y,
+            layer.bounds_max_x,
+            layer.bounds_max_y};
+        frame_scratch_.layer_order_by_depth_start.push_back(li);
+    }
+
+    const std::size_t non_empty_layer_count = frame_scratch_.layer_order_by_depth_start.size();
+    const std::size_t expected_lights_per_layer =
+        (non_empty_layer_count > 0) ? ((runtime_lights.size() / non_empty_layer_count) + 2) : 0;
+    for (std::size_t li : frame_scratch_.layer_order_by_depth_start) {
         frame_scratch_.per_layer_light_indices[li].reserve(
-            std::max(frame_scratch_.per_layer_light_indices[li].capacity(), runtime_lights.size() / 2));
+            std::max(frame_scratch_.per_layer_light_indices[li].capacity(), expected_lights_per_layer));
+    }
+
+    std::sort(frame_scratch_.layer_order_by_depth_start.begin(),
+              frame_scratch_.layer_order_by_depth_start.end(),
+              [this](std::size_t lhs, std::size_t rhs) {
+                  return frame_scratch_.layer_metadata[lhs].depth_interval.min <
+                         frame_scratch_.layer_metadata[rhs].depth_interval.min;
+              });
+
+    frame_scratch_.sorted_layer_depth_starts.reserve(frame_scratch_.layer_order_by_depth_start.size());
+    for (std::size_t li : frame_scratch_.layer_order_by_depth_start) {
+        frame_scratch_.sorted_layer_depth_starts.push_back(frame_scratch_.layer_metadata[li].depth_interval.min);
     }
 
     for (std::uint32_t light_index = 0; light_index < runtime_lights.size(); ++light_index) {
         const LayerEffectProcessor::RuntimeLight& light = runtime_lights[light_index];
-        for (int layer_index : build.non_empty_layers) {
-            if (layer_index < 0 || layer_index >= build.layer_count) {
+        const std::size_t light_meta_index = static_cast<std::size_t>(light_index);
+        frame_scratch_.light_metadata[light_meta_index].depth_interval = render_internal::light_depth_interval(light);
+        frame_scratch_.light_metadata[light_meta_index].screen_bounds = render_internal::ScreenAabb{
+            light.screen_center.x - light.radius_px,
+            light.screen_center.y - light.radius_px,
+            light.screen_center.x + light.radius_px,
+            light.screen_center.y + light.radius_px};
+
+        const render_internal::DepthInterval& light_depth = frame_scratch_.light_metadata[light_meta_index].depth_interval;
+        auto upper = std::upper_bound(frame_scratch_.sorted_layer_depth_starts.begin(),
+                                      frame_scratch_.sorted_layer_depth_starts.end(),
+                                      light_depth.max);
+        const std::size_t candidate_count =
+            static_cast<std::size_t>(std::distance(frame_scratch_.sorted_layer_depth_starts.begin(), upper));
+        for (std::size_t position = 0; position < candidate_count; ++position) {
+            const std::size_t li = frame_scratch_.layer_order_by_depth_start[position];
+            const FrameScratchArena::LayerMetadata& layer_meta = frame_scratch_.layer_metadata[li];
+            if (render_internal::compare_depth_intervals_signed(light_depth, layer_meta.depth_interval) > 0) {
                 continue;
             }
-            const std::size_t li = static_cast<std::size_t>(layer_index);
+            if (!render_internal::screen_aabb_overlaps(frame_scratch_.light_metadata[light_meta_index].screen_bounds,
+                                                       layer_meta.screen_bounds)) {
+                continue;
+            }
             if (render_internal::light_overlaps_layer_slice(light,
-                                                            frame_scratch_.layer_depth_min[li],
-                                                            frame_scratch_.layer_depth_max[li],
-                                                            frame_scratch_.layer_bounds_min_x[li],
-                                                            frame_scratch_.layer_bounds_min_y[li],
-                                                            frame_scratch_.layer_bounds_max_x[li],
-                                                            frame_scratch_.layer_bounds_max_y[li])) {
+                                                            light_depth,
+                                                            layer_meta.depth_interval,
+                                                            frame_scratch_.light_metadata[light_meta_index].screen_bounds,
+                                                            layer_meta.screen_bounds)) {
                 frame_scratch_.per_layer_light_indices[li].push_back(light_index);
             }
         }
@@ -240,13 +262,10 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 
         const render_pipeline::LayerSubmission& layer = build.layers[static_cast<std::size_t>(layer_index)];
         TextureSet& targets = layer_targets_[static_cast<std::size_t>(layer_index)];
-
         render_layer_base(layer, targets.base);
 
         const std::size_t li = static_cast<std::size_t>(layer_index);
-        const double depth_min = frame_scratch_.layer_depth_min[li];
-        const double depth_max = frame_scratch_.layer_depth_max[li];
-        const double layer_reference_depth = choose_layer_reference_depth(depth_min, depth_max);
+        const render_internal::DepthInterval& layer_depth = frame_scratch_.layer_metadata[li].depth_interval;
 
         frame_scratch_.layer_light_buffer.clear();
         frame_scratch_.owner_light_buffer.clear();
@@ -260,18 +279,19 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
                 continue;
             }
             LayerEffectProcessor::RuntimeLight adjusted = runtime_lights[light_index];
-            const double relative_depth = static_cast<double>(adjusted.world_z) - layer_reference_depth;
+            const int signed_separation = render_internal::compare_depth_intervals_signed(
+                frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval,
+                layer_depth);
             adjusted.intensity = render_internal::apply_layer_light_strength_bias(
                 adjusted.intensity,
-                relative_depth,
+                signed_separation,
                 front_layer_light_strength_multiplier,
                 behind_layer_light_strength_multiplier);
             if (adjusted.intensity <= 0.0005f) {
                 continue;
             }
             frame_scratch_.layer_light_buffer.push_back(adjusted);
-            const double light_depth = static_cast<double>(adjusted.world_z);
-            if (light_depth >= depth_min && light_depth <= depth_max) {
+            if (signed_separation == 0) {
                 frame_scratch_.owner_light_buffer.push_back(adjusted);
             }
         }
@@ -283,13 +303,11 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         LayerEffectProcessor::LayerProcessResult result = layer_effect_processor_.process_layer(
             targets.base,
             targets.lit,
-            depth_min,
-            depth_max,
+            layer_depth.min,
+            layer_depth.max,
             lighting_params,
             frame_scratch_.layer_light_buffer,
             scratch);
-
-
 
         out.final_layer_textures[static_cast<std::size_t>(layer_index)] =
             result.final_texture ? result.final_texture : targets.lit;

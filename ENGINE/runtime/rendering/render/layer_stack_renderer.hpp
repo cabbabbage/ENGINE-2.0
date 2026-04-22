@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "rendering/render/layer_effect_processor.hpp"
+#include "rendering/render/render.hpp"
 #include "rendering/render/render_pipeline_types.hpp"
 
 class LayerStackRenderer {
@@ -28,15 +29,23 @@ public:
 
 private:
     struct FrameScratchArena {
+        struct LayerMetadata {
+            int layer_index = -1;
+            render_internal::DepthInterval depth_interval{};
+            render_internal::ScreenAabb screen_bounds{};
+        };
+        struct LightMetadata {
+            render_internal::DepthInterval depth_interval{};
+            render_internal::ScreenAabb screen_bounds{};
+        };
         std::vector<std::vector<std::uint32_t>> per_layer_light_indices;
         std::vector<LayerEffectProcessor::RuntimeLight> layer_light_buffer;
         std::vector<LayerEffectProcessor::RuntimeLight> owner_light_buffer;
-        std::vector<double> layer_depth_min;
-        std::vector<double> layer_depth_max;
-        std::vector<float> layer_bounds_min_x;
-        std::vector<float> layer_bounds_min_y;
-        std::vector<float> layer_bounds_max_x;
-        std::vector<float> layer_bounds_max_y;
+        std::vector<LayerMetadata> layer_metadata;
+        std::vector<LightMetadata> light_metadata;
+        std::vector<std::size_t> layer_order_by_depth_start;
+        std::vector<double> sorted_layer_depth_starts;
+        std::vector<std::size_t> candidate_layer_positions;
 
         void clear_for_frame(std::size_t layer_count) {
             if (per_layer_light_indices.size() < layer_count) {
@@ -47,12 +56,11 @@ private:
             }
             layer_light_buffer.clear();
             owner_light_buffer.clear();
-            layer_depth_min.resize(layer_count);
-            layer_depth_max.resize(layer_count);
-            layer_bounds_min_x.resize(layer_count);
-            layer_bounds_min_y.resize(layer_count);
-            layer_bounds_max_x.resize(layer_count);
-            layer_bounds_max_y.resize(layer_count);
+            layer_metadata.assign(layer_count, LayerMetadata{});
+            light_metadata.clear();
+            layer_order_by_depth_start.clear();
+            sorted_layer_depth_starts.clear();
+            candidate_layer_positions.clear();
         }
     };
 

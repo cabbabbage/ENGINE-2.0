@@ -88,13 +88,17 @@ bool displace_along_camera_to_point_ray(const Asset& asset,
     return out_point.valid;
 }
 
-bool build_symmetric_camera_ray_extrusion(const Asset& asset,
-                                          const AnchorWorldPoint3& flat_point,
-                                          float extrusion_amount,
-                                          AnchorWorldPoint3& out_near_point,
-                                          AnchorWorldPoint3& out_far_point,
-                                          AnchorWorldPoint3* out_direction) {
-    if (!std::isfinite(extrusion_amount) || extrusion_amount < 0.0f) {
+bool build_asymmetric_camera_ray_extrusion(const Asset& asset,
+                                           const AnchorWorldPoint3& flat_point,
+                                           float extrusion_backward,
+                                           float extrusion_forward,
+                                           AnchorWorldPoint3& out_near_point,
+                                           AnchorWorldPoint3& out_far_point,
+                                           AnchorWorldPoint3* out_direction) {
+    if (!std::isfinite(extrusion_backward) ||
+        !std::isfinite(extrusion_forward) ||
+        extrusion_backward < 0.0f ||
+        extrusion_forward < 0.0f) {
         return false;
     }
 
@@ -107,14 +111,14 @@ bool build_symmetric_camera_ray_extrusion(const Asset& asset,
     }
 
     out_near_point = AnchorWorldPoint3{
-        flat_point.x - direction.x * extrusion_amount,
-        flat_point.y - direction.y * extrusion_amount,
-        flat_point.z - direction.z * extrusion_amount,
+        flat_point.x - direction.x * extrusion_backward,
+        flat_point.y - direction.y * extrusion_backward,
+        flat_point.z - direction.z * extrusion_backward,
         true};
     out_far_point = AnchorWorldPoint3{
-        flat_point.x + direction.x * extrusion_amount,
-        flat_point.y + direction.y * extrusion_amount,
-        flat_point.z + direction.z * extrusion_amount,
+        flat_point.x + direction.x * extrusion_forward,
+        flat_point.y + direction.y * extrusion_forward,
+        flat_point.z + direction.z * extrusion_forward,
         true};
     const bool valid = std::isfinite(out_near_point.x) &&
                        std::isfinite(out_near_point.y) &&
@@ -507,13 +511,18 @@ bool displace_along_camera_to_point_ray(const Asset& asset,
     return out_point.valid;
 }
 
-bool build_symmetric_camera_ray_extrusion(const Asset& asset,
-                                          const AnchorWorldPoint3& flat_point,
-                                          float extrusion_amount,
-                                          AnchorWorldPoint3& out_near_point,
-                                          AnchorWorldPoint3& out_far_point,
-                                          AnchorWorldPoint3* out_direction) {
-    if (!flat_point.valid || !std::isfinite(extrusion_amount) || extrusion_amount < 0.0f) {
+bool build_asymmetric_camera_ray_extrusion(const Asset& asset,
+                                           const AnchorWorldPoint3& flat_point,
+                                           float extrusion_backward,
+                                           float extrusion_forward,
+                                           AnchorWorldPoint3& out_near_point,
+                                           AnchorWorldPoint3& out_far_point,
+                                           AnchorWorldPoint3* out_direction) {
+    if (!flat_point.valid ||
+        !std::isfinite(extrusion_backward) ||
+        !std::isfinite(extrusion_forward) ||
+        extrusion_backward < 0.0f ||
+        extrusion_forward < 0.0f) {
         return false;
     }
 
@@ -526,14 +535,14 @@ bool build_symmetric_camera_ray_extrusion(const Asset& asset,
     }
 
     out_near_point = AnchorWorldPoint3{
-        flat_point.x - direction.x * extrusion_amount,
-        flat_point.y - direction.y * extrusion_amount,
-        flat_point.z - direction.z * extrusion_amount,
+        flat_point.x - direction.x * extrusion_backward,
+        flat_point.y - direction.y * extrusion_backward,
+        flat_point.z - direction.z * extrusion_backward,
         true};
     out_far_point = AnchorWorldPoint3{
-        flat_point.x + direction.x * extrusion_amount,
-        flat_point.y + direction.y * extrusion_amount,
-        flat_point.z + direction.z * extrusion_amount,
+        flat_point.x + direction.x * extrusion_forward,
+        flat_point.y + direction.y * extrusion_forward,
+        flat_point.z + direction.z * extrusion_forward,
         true};
 
     const bool valid =

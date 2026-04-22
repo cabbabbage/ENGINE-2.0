@@ -1002,7 +1002,8 @@ private:
         SDL_FPoint rotation_drag_center_screen{0.0f, 0.0f};
         float rotation_drag_start_angle_degrees = 0.0f;
         float rotation_drag_start_box_rotation_degrees = 0.0f;
-        int extrusion_drag_start_value = 1;
+        int extrusion_drag_start_forward = 1;
+        int extrusion_drag_start_backward = 1;
         float extrusion_drag_start_axis_center_x = 0.0f;
         float extrusion_drag_start_axis_center_y = 0.0f;
         float extrusion_drag_axis_unit_x = 0.0f;

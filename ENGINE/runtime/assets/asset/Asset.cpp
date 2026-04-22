@@ -1377,7 +1377,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                             int frame_start,
                             int frame_end,
                             const std::string& anchor_link,
-                            int extrusion_amount,
+                            int extrusion_forward,
+                            int extrusion_backward,
                             bool flatten_bottom_to_floor,
                             int damage_amount,
                             const std::string& payload_id,
@@ -1394,7 +1395,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         out_volume.frame_end = frame_end;
         out_volume.anchor_link = anchor_link;
         out_volume.frame_index = current_frame ? current_frame->frame_index : -1;
-        out_volume.extrusion_amount = std::max(0, extrusion_amount);
+        out_volume.extrusion_forward = std::max(1, extrusion_forward);
+        out_volume.extrusion_backward = std::max(1, extrusion_backward);
         out_volume.flatten_bottom_to_floor = flatten_bottom_to_floor;
         out_volume.damage_amount = damage_amount;
         out_volume.payload_id = payload_id;
@@ -1404,7 +1406,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         float sum_x = 0.0f;
         float sum_y = 0.0f;
         float sum_z = 0.0f;
-        const float extrusion = static_cast<float>(out_volume.extrusion_amount);
+        const float extrusion_forward_f = static_cast<float>(out_volume.extrusion_forward);
+        const float extrusion_backward_f = static_cast<float>(out_volume.extrusion_backward);
         for (std::size_t corner_index = 0; corner_index < corners.size(); ++corner_index) {
             const auto& corner = corners[corner_index];
             DisplacedAssetAnchorPoint sample_anchor{};
@@ -1421,11 +1424,12 @@ void Asset::refresh_runtime_box_cache_from_frame() {
 
             anchor_points::AnchorWorldPoint3 near_point{};
             anchor_points::AnchorWorldPoint3 far_point{};
-            if (!anchor_points::build_symmetric_camera_ray_extrusion(*this,
-                                                                     sample.flat_relative_pixel_point,
-                                                                     extrusion,
-                                                                     near_point,
-                                                                     far_point) ||
+            if (!anchor_points::build_asymmetric_camera_ray_extrusion(*this,
+                                                                      sample.flat_relative_pixel_point,
+                                                                      extrusion_backward_f,
+                                                                      extrusion_forward_f,
+                                                                      near_point,
+                                                                      far_point) ||
                 !near_point.valid ||
                 !far_point.valid) {
                 return false;
@@ -1489,7 +1493,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                               box.frame_start,
                               box.frame_end,
                               box.anchor_link,
-                              box.extrusion_amount,
+                              box.extrusion_forward,
+                              box.extrusion_backward,
                               box.flatten_bottom_to_floor,
                               0,
                               std::string{},
@@ -1530,7 +1535,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                               box.frame_start,
                               box.frame_end,
                               box.anchor_link,
-                              box.extrusion_amount,
+                              box.extrusion_forward,
+                              box.extrusion_backward,
                               box.flatten_bottom_to_floor,
                               payload.damage_amount,
                               payload.payload_id,

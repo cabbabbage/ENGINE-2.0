@@ -65,7 +65,8 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
     apply_asset_button_ = std::make_unique<DMButton>("Copy To Asset", &DMStyles::PrimaryButton(), 170, DMButton::height());
     name_textbox_ = std::make_unique<DMTextBox>("Name", "");
-    extrusion_textbox_ = std::make_unique<DMTextBox>("Extrusion", "0");
+    extrusion_forward_textbox_ = std::make_unique<DMTextBox>("Extrusion Forward", "1");
+    extrusion_backward_textbox_ = std::make_unique<DMTextBox>("Extrusion Backward", "1");
     damage_textbox_ = std::make_unique<DMTextBox>("Damage", "0");
     if (kind_ == Kind::ImpassableBox) {
         point_count_stepper_ = std::make_unique<DMNumericStepper>("Points", 3, 4096, 3);
@@ -164,8 +165,11 @@ void RoomBoxToolsPanel::set_detail_values(const DetailValues& values) {
     if (name_textbox_ && !name_textbox_->is_editing()) {
         name_textbox_->set_value(values.name);
     }
-    if (extrusion_textbox_ && !extrusion_textbox_->is_editing()) {
-        extrusion_textbox_->set_value(std::to_string(values.extrusion));
+    if (extrusion_forward_textbox_ && !extrusion_forward_textbox_->is_editing()) {
+        extrusion_forward_textbox_->set_value(std::to_string(values.extrusion_forward));
+    }
+    if (extrusion_backward_textbox_ && !extrusion_backward_textbox_->is_editing()) {
+        extrusion_backward_textbox_->set_value(std::to_string(values.extrusion_backward));
     }
     if (damage_textbox_ && !damage_textbox_->is_editing()) {
         damage_textbox_->set_value(std::to_string(values.damage));
@@ -255,7 +259,10 @@ void RoomBoxToolsPanel::set_on_decrement_point_count(DecrementPointCountCallback
 RoomBoxToolsPanel::DetailValues RoomBoxToolsPanel::collect_detail_values() const {
     DetailValues values;
     values.name = name_textbox_ ? name_textbox_->value() : std::string{};
-    values.extrusion = parse_int_or(extrusion_textbox_ ? extrusion_textbox_->value() : std::string{}, 0);
+    values.extrusion_forward =
+        parse_int_or(extrusion_forward_textbox_ ? extrusion_forward_textbox_->value() : std::string{}, 1);
+    values.extrusion_backward =
+        parse_int_or(extrusion_backward_textbox_ ? extrusion_backward_textbox_->value() : std::string{}, 1);
     values.damage = parse_int_or(damage_textbox_ ? damage_textbox_->value() : std::string{}, 0);
     values.flatten_bottom_to_floor =
         flatten_bottom_to_floor_checkbox_ ? flatten_bottom_to_floor_checkbox_->value() : false;
@@ -409,8 +416,15 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
     }
     if (has_selected_box &&
         kind_ != Kind::ImpassableBox &&
-        extrusion_textbox_ &&
-        extrusion_textbox_->handle_event(event)) {
+        extrusion_forward_textbox_ &&
+        extrusion_forward_textbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_box &&
+        kind_ != Kind::ImpassableBox &&
+        extrusion_backward_textbox_ &&
+        extrusion_backward_textbox_->handle_event(event)) {
         handled = true;
         details_changed = true;
     }
@@ -438,11 +452,13 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
     }
 
     const bool name_editing = name_textbox_ && name_textbox_->is_editing();
-    const bool extrusion_editing =
-        kind_ != Kind::ImpassableBox && extrusion_textbox_ && extrusion_textbox_->is_editing();
+    const bool extrusion_forward_editing =
+        kind_ != Kind::ImpassableBox && extrusion_forward_textbox_ && extrusion_forward_textbox_->is_editing();
+    const bool extrusion_backward_editing =
+        kind_ != Kind::ImpassableBox && extrusion_backward_textbox_ && extrusion_backward_textbox_->is_editing();
     const bool damage_editing = kind_ == Kind::AttackBox && damage_textbox_ && damage_textbox_->is_editing();
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) &&
-        (name_editing || extrusion_editing || damage_editing)) {
+        (name_editing || extrusion_forward_editing || extrusion_backward_editing || damage_editing)) {
         handled = true;
     }
 
@@ -541,8 +557,11 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
         if (name_textbox_) {
             name_textbox_->render(renderer);
         }
-        if (kind_ != Kind::ImpassableBox && extrusion_textbox_) {
-            extrusion_textbox_->render(renderer);
+        if (kind_ != Kind::ImpassableBox && extrusion_forward_textbox_) {
+            extrusion_forward_textbox_->render(renderer);
+        }
+        if (kind_ != Kind::ImpassableBox && extrusion_backward_textbox_) {
+            extrusion_backward_textbox_->render(renderer);
         }
         if (kind_ == Kind::AttackBox && damage_textbox_) {
             damage_textbox_->render(renderer);
@@ -612,8 +631,11 @@ void RoomBoxToolsPanel::update_layout() const {
         if (name_textbox_) {
             name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (extrusion_textbox_) {
-            extrusion_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (extrusion_forward_textbox_) {
+            extrusion_forward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (extrusion_backward_textbox_) {
+            extrusion_backward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
@@ -655,7 +677,10 @@ void RoomBoxToolsPanel::update_layout() const {
     const int controls_w = std::max(0, panel_rect_.w - (kPanelPadding * 2));
     const int row_gap = 6;
     const int name_h = name_textbox_ ? name_textbox_->preferred_height(controls_w) : DMTextBox::height();
-    const int extrusion_h = extrusion_textbox_ ? extrusion_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int extrusion_forward_h =
+        extrusion_forward_textbox_ ? extrusion_forward_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int extrusion_backward_h =
+        extrusion_backward_textbox_ ? extrusion_backward_textbox_->preferred_height(controls_w) : DMTextBox::height();
     const int damage_h = damage_textbox_ ? damage_textbox_->preferred_height(controls_w) : DMTextBox::height();
     const int point_stepper_h = point_count_stepper_ ? point_count_stepper_->preferred_height(controls_w) : DMNumericStepper::height();
     const int flatten_h = DMCheckbox::height();
@@ -682,7 +707,9 @@ void RoomBoxToolsPanel::update_layout() const {
             controls_height += point_stepper_h;                          // points
             controls_height += row_gap;
         } else {
-            controls_height += extrusion_h;                              // extrusion
+            controls_height += extrusion_forward_h;                      // extrusion forward
+            controls_height += row_gap;
+            controls_height += extrusion_backward_h;                     // extrusion backward
             controls_height += row_gap;
         }
         if (kind_ == Kind::AttackBox) {
@@ -743,14 +770,21 @@ void RoomBoxToolsPanel::update_layout() const {
                 point_count_stepper_->set_rect(SDL_Rect{controls_x, y, controls_w, point_stepper_h});
             }
             y += point_stepper_h + row_gap;
-            if (extrusion_textbox_) {
-                extrusion_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            if (extrusion_forward_textbox_) {
+                extrusion_forward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            if (extrusion_backward_textbox_) {
+                extrusion_backward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
             }
         } else {
-            if (extrusion_textbox_) {
-                extrusion_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, extrusion_h});
+            if (extrusion_forward_textbox_) {
+                extrusion_forward_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, extrusion_forward_h});
             }
-            y += extrusion_h + row_gap;
+            y += extrusion_forward_h + row_gap;
+            if (extrusion_backward_textbox_) {
+                extrusion_backward_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, extrusion_backward_h});
+            }
+            y += extrusion_backward_h + row_gap;
             if (point_count_stepper_) {
                 point_count_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
             }
@@ -771,8 +805,11 @@ void RoomBoxToolsPanel::update_layout() const {
         if (name_textbox_) {
             name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (extrusion_textbox_) {
-            extrusion_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (extrusion_forward_textbox_) {
+            extrusion_forward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (extrusion_backward_textbox_) {
+            extrusion_backward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});

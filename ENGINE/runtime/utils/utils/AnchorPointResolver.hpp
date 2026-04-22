@@ -27,14 +27,15 @@ bool displace_along_camera_to_point_ray(const Asset& asset,
                                         AnchorWorldPoint3& out_point,
                                         AnchorWorldPoint3* out_direction = nullptr);
 
-// Build symmetric extrusion endpoints around a flat point along the camera->point ray.
-// out_near_point is closer to camera; out_far_point is farther from camera.
-bool build_symmetric_camera_ray_extrusion(const Asset& asset,
-                                          const AnchorWorldPoint3& flat_point,
-                                          float extrusion_amount,
-                                          AnchorWorldPoint3& out_near_point,
-                                          AnchorWorldPoint3& out_far_point,
-                                          AnchorWorldPoint3* out_direction = nullptr);
+// Build asymmetric extrusion endpoints around a flat point along the camera->point ray.
+// out_near_point is closer to camera (backward extrusion); out_far_point is farther from camera (forward extrusion).
+bool build_asymmetric_camera_ray_extrusion(const Asset& asset,
+                                           const AnchorWorldPoint3& flat_point,
+                                           float extrusion_backward,
+                                           float extrusion_forward,
+                                           AnchorWorldPoint3& out_near_point,
+                                           AnchorWorldPoint3& out_far_point,
+                                           AnchorWorldPoint3* out_direction = nullptr);
 
 struct FrameAnchorSample {
     SDL_FPoint uv{0.5f, 0.5f};

@@ -552,7 +552,8 @@ std::vector<Asset::RuntimeBoxVolume> build_runtime_box_overlay_volumes_for_frame
         volume.frame_end = box.frame_end;
         volume.anchor_link = box.anchor_link;
         volume.frame_index = frame->frame_index;
-        volume.extrusion_amount = std::max(0, box.extrusion_amount);
+        volume.extrusion_forward = std::max(1, box.extrusion_forward);
+        volume.extrusion_backward = std::max(1, box.extrusion_backward);
         volume.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
         volume.damage_amount = damage_of(box);
         volume.meta_json = meta_of(box);
@@ -562,7 +563,8 @@ std::vector<Asset::RuntimeBoxVolume> build_runtime_box_overlay_volumes_for_frame
         float sum_y = 0.0f;
         float sum_z = 0.0f;
         bool valid = true;
-        const float extrusion = static_cast<float>(volume.extrusion_amount);
+        const float extrusion_forward = static_cast<float>(volume.extrusion_forward);
+        const float extrusion_backward = static_cast<float>(volume.extrusion_backward);
         for (std::size_t corner_index = 0; corner_index < corners.size(); ++corner_index) {
             const auto& corner = corners[corner_index];
             DisplacedAssetAnchorPoint sample_anchor{};
@@ -580,11 +582,12 @@ std::vector<Asset::RuntimeBoxVolume> build_runtime_box_overlay_volumes_for_frame
 
             anchor_points::AnchorWorldPoint3 near_point{};
             anchor_points::AnchorWorldPoint3 far_point{};
-            if (!anchor_points::build_symmetric_camera_ray_extrusion(*target,
-                                                                     sample.flat_relative_pixel_point,
-                                                                     extrusion,
-                                                                     near_point,
-                                                                     far_point) ||
+            if (!anchor_points::build_asymmetric_camera_ray_extrusion(*target,
+                                                                      sample.flat_relative_pixel_point,
+                                                                      extrusion_backward,
+                                                                      extrusion_forward,
+                                                                      near_point,
+                                                                      far_point) ||
                 !near_point.valid ||
                 !far_point.valid) {
                 valid = false;
@@ -2068,7 +2071,8 @@ template <typename TState>
 void clear_box_extrusion_drag_state(TState& state) {
     state.dragging_extrusion_handle = false;
     set_box_extrusion_side(state, BoxExtrusionHandleSide::None);
-    state.extrusion_drag_start_value = 1;
+    state.extrusion_drag_start_forward = 1;
+    state.extrusion_drag_start_backward = 1;
     state.extrusion_drag_start_axis_center_x = 0.0f;
     state.extrusion_drag_start_axis_center_y = 0.0f;
     state.extrusion_drag_axis_unit_x = 0.0f;
@@ -2087,7 +2091,8 @@ bool begin_box_extrusion_handle_drag(TState& state,
                                      const std::vector<Asset::RuntimeBoxVolume>& volumes,
                                      const WarpedScreenGrid& cam,
                                      SDL_Point screen_point,
-                                     int current_extrusion) {
+                                     int current_extrusion_forward,
+                                     int current_extrusion_backward) {
     const int selected_box = state.selected_box_index;
     if (selected_box < 0 || selected_box >= static_cast<int>(volumes.size())) {
         return false;
@@ -2105,7 +2110,8 @@ bool begin_box_extrusion_handle_drag(TState& state,
     clear_box_extrusion_drag_state(state);
     state.dragging_extrusion_handle = true;
     set_box_extrusion_side(state, side);
-    state.extrusion_drag_start_value = std::max(1, current_extrusion);
+    state.extrusion_drag_start_forward = std::max(1, current_extrusion_forward);
+    state.extrusion_drag_start_backward = std::max(1, current_extrusion_backward);
     state.extrusion_drag_start_axis_center_x = projection.axis_center.x;
     state.extrusion_drag_start_axis_center_y = projection.axis_center.y;
     state.extrusion_drag_axis_unit_x = projection.axis_unit.x;
@@ -2123,7 +2129,11 @@ int resolve_dragged_extrusion_value(const TState& state, SDL_Point screen_point)
     const float current_half_separation = std::fabs(along_axis);
     const float base_half_separation = std::max(0.001f, state.extrusion_drag_start_half_separation);
     const float scale = current_half_separation / base_half_separation;
-    const int scaled_value = static_cast<int>(std::lround(static_cast<float>(state.extrusion_drag_start_value) * scale));
+    const int base_value =
+        state.dragging_extrusion_handle_side == std::decay_t<decltype(state.dragging_extrusion_handle_side)>::Back
+            ? state.extrusion_drag_start_backward
+            : state.extrusion_drag_start_forward;
+    const int scaled_value = static_cast<int>(std::lround(static_cast<float>(base_value) * scale));
     return std::max(1, scaled_value);
 }
 
@@ -8912,7 +8922,8 @@ void RoomEditor::sync_hitbox_tools_panel() {
     if (frame && selected_box >= 0 && selected_box < static_cast<int>(frame->hit_boxes.boxes.size())) {
         const auto& box = frame->hit_boxes.boxes[static_cast<std::size_t>(selected_box)];
         values.name = box.name;
-        values.extrusion = box.extrusion_amount;
+        values.extrusion_forward = box.extrusion_forward;
+        values.extrusion_backward = box.extrusion_backward;
         values.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
     }
     hitbox_tools_panel_->set_detail_values(values);
@@ -8967,7 +8978,8 @@ void RoomEditor::sync_attack_box_tools_panel() {
     if (frame && selected_box >= 0 && selected_box < static_cast<int>(frame->attack_boxes.boxes.size())) {
         const auto& box = frame->attack_boxes.boxes[static_cast<std::size_t>(selected_box)];
         values.name = box.name;
-        values.extrusion = box.extrusion_amount;
+        values.extrusion_forward = box.extrusion_forward;
+        values.extrusion_backward = box.extrusion_backward;
         values.damage = box.damage_amount;
         values.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
     }
@@ -9460,9 +9472,14 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
                     normalized_name = normalized;
                 }
             }
-            const int next_extrusion = std::max(1, values.extrusion);
-            if (box.extrusion_amount != next_extrusion) {
-                box.extrusion_amount = next_extrusion;
+            const int next_extrusion_forward = std::max(1, values.extrusion_forward);
+            if (box.extrusion_forward != next_extrusion_forward) {
+                box.extrusion_forward = next_extrusion_forward;
+                changed = true;
+            }
+            const int next_extrusion_backward = std::max(1, values.extrusion_backward);
+            if (box.extrusion_backward != next_extrusion_backward) {
+                box.extrusion_backward = next_extrusion_backward;
                 changed = true;
             }
             if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
@@ -9583,9 +9600,14 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
                     normalized_name = normalized;
                 }
             }
-            const int next_extrusion = std::max(1, values.extrusion);
-            if (box.extrusion_amount != next_extrusion) {
-                box.extrusion_amount = next_extrusion;
+            const int next_extrusion_forward = std::max(1, values.extrusion_forward);
+            if (box.extrusion_forward != next_extrusion_forward) {
+                box.extrusion_forward = next_extrusion_forward;
+                changed = true;
+            }
+            const int next_extrusion_backward = std::max(1, values.extrusion_backward);
+            if (box.extrusion_backward != next_extrusion_backward) {
+                box.extrusion_backward = next_extrusion_backward;
                 changed = true;
             }
             if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
@@ -17395,9 +17417,14 @@ bool RoomEditor::enter_hitbox_edit_mode() {
         [](std::vector<animation_update::FrameHitBox>& boxes) {
             bool changed = false;
             for (auto& box : boxes) {
-                const int next_extrusion = std::max(1, box.extrusion_amount);
-                if (box.extrusion_amount != next_extrusion) {
-                    box.extrusion_amount = next_extrusion;
+                const int next_extrusion_forward = std::max(1, box.extrusion_forward);
+                if (box.extrusion_forward != next_extrusion_forward) {
+                    box.extrusion_forward = next_extrusion_forward;
+                    changed = true;
+                }
+                const int next_extrusion_backward = std::max(1, box.extrusion_backward);
+                if (box.extrusion_backward != next_extrusion_backward) {
+                    box.extrusion_backward = next_extrusion_backward;
                     changed = true;
                 }
             }
@@ -17517,9 +17544,14 @@ bool RoomEditor::enter_attack_box_edit_mode() {
         [](std::vector<animation_update::FrameAttackBox>& boxes) {
             bool changed = false;
             for (auto& box : boxes) {
-                const int next_extrusion = std::max(1, box.extrusion_amount);
-                if (box.extrusion_amount != next_extrusion) {
-                    box.extrusion_amount = next_extrusion;
+                const int next_extrusion_forward = std::max(1, box.extrusion_forward);
+                if (box.extrusion_forward != next_extrusion_forward) {
+                    box.extrusion_forward = next_extrusion_forward;
+                    changed = true;
+                }
+                const int next_extrusion_backward = std::max(1, box.extrusion_backward);
+                if (box.extrusion_backward != next_extrusion_backward) {
+                    box.extrusion_backward = next_extrusion_backward;
                     changed = true;
                 }
             }
@@ -18801,7 +18833,8 @@ bool RoomEditor::drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point
             const auto base_corner = start_box.corner(corner_id);
             const int base_x = base_corner.texture_x;
             const int base_y = base_corner.texture_y;
-            const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
+            const float extrusion_forward = static_cast<float>(std::max(1, box.extrusion_forward));
+            const float extrusion_backward = static_cast<float>(std::max(1, box.extrusion_backward));
 
             DisplacedAssetAnchorPoint anchor_template{};
             anchor_template.name = "__box_corner";
@@ -18823,10 +18856,11 @@ bool RoomEditor::drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point
 
                 anchor_points::AnchorWorldPoint3 near_point{};
                 anchor_points::AnchorWorldPoint3 far_point{};
-                if (!anchor_points::build_symmetric_camera_ray_extrusion(
+                if (!anchor_points::build_asymmetric_camera_ray_extrusion(
                         *target,
                         sample.flat_relative_pixel_point,
-                        extrusion,
+                        extrusion_backward,
+                        extrusion_forward,
                         near_point,
                         far_point)) {
                     return false;
@@ -18951,7 +18985,8 @@ bool RoomEditor::drag_hitbox_corner_to_screen(int box_index, int point_index, SD
             anchor_template.texture_y = base_y;
             anchor_template.depth_offset = 0;
 
-            const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
+            const float extrusion_forward = static_cast<float>(std::max(1, box.extrusion_forward));
+            const float extrusion_backward = static_cast<float>(std::max(1, box.extrusion_backward));
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = anchor_template;
                 sample_anchor.texture_x = std::max(0, texture_x);
@@ -18966,10 +19001,11 @@ bool RoomEditor::drag_hitbox_corner_to_screen(int box_index, int point_index, SD
 
                 anchor_points::AnchorWorldPoint3 near_point{};
                 anchor_points::AnchorWorldPoint3 far_point{};
-                if (!anchor_points::build_symmetric_camera_ray_extrusion(
+                if (!anchor_points::build_asymmetric_camera_ray_extrusion(
                         *target,
                         sample.flat_relative_pixel_point,
-                        extrusion,
+                        extrusion_backward,
+                        extrusion_forward,
                         near_point,
                         far_point)) {
                     return false;
@@ -19064,7 +19100,8 @@ bool RoomEditor::drag_attack_box_to_screen(int box_index, SDL_Point screen_point
             const auto base_corner = start_box.corner(corner_id);
             const int base_x = base_corner.texture_x;
             const int base_y = base_corner.texture_y;
-            const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
+            const float extrusion_forward = static_cast<float>(std::max(1, box.extrusion_forward));
+            const float extrusion_backward = static_cast<float>(std::max(1, box.extrusion_backward));
 
             DisplacedAssetAnchorPoint anchor_template{};
             anchor_template.name = "__box_corner";
@@ -19086,10 +19123,11 @@ bool RoomEditor::drag_attack_box_to_screen(int box_index, SDL_Point screen_point
 
                 anchor_points::AnchorWorldPoint3 near_point{};
                 anchor_points::AnchorWorldPoint3 far_point{};
-                if (!anchor_points::build_symmetric_camera_ray_extrusion(
+                if (!anchor_points::build_asymmetric_camera_ray_extrusion(
                         *target,
                         sample.flat_relative_pixel_point,
-                        extrusion,
+                        extrusion_backward,
+                        extrusion_forward,
                         near_point,
                         far_point)) {
                     return false;
@@ -19181,7 +19219,8 @@ bool RoomEditor::drag_attack_box_corner_to_screen(int box_index, int point_index
             anchor_template.texture_y = base_y;
             anchor_template.depth_offset = 0;
 
-            const float extrusion = static_cast<float>(std::max(0, box.extrusion_amount));
+            const float extrusion_forward = static_cast<float>(std::max(1, box.extrusion_forward));
+            const float extrusion_backward = static_cast<float>(std::max(1, box.extrusion_backward));
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = anchor_template;
                 sample_anchor.texture_x = std::max(0, texture_x);
@@ -19196,10 +19235,11 @@ bool RoomEditor::drag_attack_box_corner_to_screen(int box_index, int point_index
 
                 anchor_points::AnchorWorldPoint3 near_point{};
                 anchor_points::AnchorWorldPoint3 far_point{};
-                if (!anchor_points::build_symmetric_camera_ray_extrusion(
+                if (!anchor_points::build_asymmetric_camera_ray_extrusion(
                         *target,
                         sample.flat_relative_pixel_point,
-                        extrusion,
+                        extrusion_backward,
+                        extrusion_forward,
                         near_point,
                         far_point)) {
                     return false;
@@ -19547,7 +19587,8 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
                     hitbox_volumes,
                     assets_->getView(),
                     screen_pt,
-                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_amount);
+                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_forward,
+                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_backward);
                 if (started_extrusion_drag) {
                     hitbox_edit_.point_selected = false;
                     hitbox_edit_.dragging_corner = false;
@@ -19664,10 +19705,17 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
                 }
                 auto& box = boxes[static_cast<std::size_t>(clamped_selected)];
                 const int next_value = resolve_dragged_extrusion_value(hitbox_edit_, screen_pt);
-                if (next_value == box.extrusion_amount) {
+                const bool dragging_back =
+                    hitbox_edit_.dragging_extrusion_handle_side == BoxEditState::ExtrusionHandleSide::Back;
+                const int current_value = dragging_back ? box.extrusion_backward : box.extrusion_forward;
+                if (next_value == current_value) {
                     return false;
                 }
-                box.extrusion_amount = next_value;
+                if (dragging_back) {
+                    box.extrusion_backward = next_value;
+                } else {
+                    box.extrusion_forward = next_value;
+                }
                 return true;
             },
             devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -19804,7 +19852,8 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
                     attack_volumes,
                     assets_->getView(),
                     screen_pt,
-                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_amount);
+                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_forward,
+                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_backward);
                 if (started_extrusion_drag) {
                     attack_box_edit_.point_selected = false;
                     attack_box_edit_.dragging_corner = false;
@@ -19919,10 +19968,17 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
                 }
                 auto& box = boxes[static_cast<std::size_t>(clamped_selected)];
                 const int next_value = resolve_dragged_extrusion_value(attack_box_edit_, screen_pt);
-                if (next_value == box.extrusion_amount) {
+                const bool dragging_back =
+                    attack_box_edit_.dragging_extrusion_handle_side == BoxEditState::ExtrusionHandleSide::Back;
+                const int current_value = dragging_back ? box.extrusion_backward : box.extrusion_forward;
+                if (next_value == current_value) {
                     return false;
                 }
-                box.extrusion_amount = next_value;
+                if (dragging_back) {
+                    box.extrusion_backward = next_value;
+                } else {
+                    box.extrusion_forward = next_value;
+                }
                 return true;
             },
             devmode::core::DevSaveCoordinator::Priority::Debounced);

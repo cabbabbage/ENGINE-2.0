@@ -1,5 +1,6 @@
 #include "ui/menu_ui.hpp"
 #include "app/bootstrap.hpp"
+#include "app/frame_pacing.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
@@ -7,6 +8,7 @@
 #include "asset_loader.hpp"
 #include "AssetsManager.hpp"
 #include "utils/input.hpp"
+#include "utils/log.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -67,10 +69,8 @@ bool MenuUI::wants_return_to_main_menu() const {
 
 void MenuUI::game_loop() {
 
-        constexpr double TARGET_FPS = 24.0;
-        constexpr double TARGET_FRAME_SECONDS = 1.0 / TARGET_FPS;
         const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
-        const double target_counts  = TARGET_FRAME_SECONDS * perf_frequency;
+        const double target_counts  = app::frame_pacing::target_frame_counts(perf_frequency);
 
         SDL_Renderer* renderer = raw_renderer();
         if (!renderer) {
@@ -84,6 +84,7 @@ void MenuUI::game_loop() {
         double idle_counts_accum = 0.0;
         int idle_frame_counter   = 0;
         constexpr int IDLE_REPORT_INTERVAL = 120;
+        vibble::log::info("[MenuUI] Frame pacing target: " + app::frame_pacing::target_summary());
 
 	while (!quit) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
@@ -153,16 +154,15 @@ void MenuUI::game_loop() {
 
                 if (input_) input_->update();
 
-                const Uint64 frame_end = SDL_GetPerformanceCounter();
-                const double work_counts = static_cast<double>(frame_end - frame_begin);
-                if (work_counts < target_counts) {
-                        const double remaining_counts = target_counts - work_counts;
+                const double remaining_counts =
+                        app::frame_pacing::remaining_frame_counts(frame_begin,
+                                                                  target_counts,
+                                                                  perf_frequency);
+                if (remaining_counts > 0.0) {
                         idle_counts_accum += remaining_counts;
                         ++idle_frame_counter;
-                        const double remaining_ms = (remaining_counts * 1000.0) / perf_frequency;
-                        if (remaining_ms >= 1.0) {
-                                SDL_Delay(static_cast<Uint32>(remaining_ms));
-                        }
+                        app::frame_pacing::delay_from_remaining_counts(remaining_counts,
+                                                                       perf_frequency);
                 }
 
                 if (idle_frame_counter >= IDLE_REPORT_INTERVAL) {

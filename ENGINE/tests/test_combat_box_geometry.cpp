@@ -107,7 +107,8 @@ TEST_CASE("Room box payload writes canonical corners from normalized rect") {
     hit_box.name = "hit_box";
     hit_box.enabled = true;
     hit_box.set_rect(animation_update::FrameBoxRect{8, 9, 2, 1});
-    hit_box.extrusion_amount = 3;
+    hit_box.extrusion_forward = 3;
+    hit_box.extrusion_backward = 3;
     hit_box.anchor_link = "root";
 
     nlohmann::json payload = nlohmann::json::object();
@@ -129,6 +130,8 @@ TEST_CASE("Room box payload writes canonical corners from normalized rect") {
     CHECK(box["size"]["w"] == 6);
     CHECK(box["size"]["h"] == 8);
     CHECK(box["anchor_link"] == "root");
+    CHECK(box["extrusion_forward"] == 3);
+    CHECK(box["extrusion_backward"] == 3);
     const auto& corners = payload["hit_boxes"][0][0]["corners"];
     REQUIRE(corners.is_array());
     REQUIRE(corners.size() == 4);
@@ -152,7 +155,8 @@ TEST_CASE("Attack box payload writes canonical corners and preserves damage") {
     attack_box.frame_end = 5;
     attack_box.anchor_link = "hand_r";
     attack_box.set_rect(animation_update::FrameBoxRect{11, 3, 4, 15});
-    attack_box.extrusion_amount = 2;
+    attack_box.extrusion_forward = 2;
+    attack_box.extrusion_backward = 2;
     attack_box.damage_amount = 12;
     attack_box.meta_json = R"({"category":"heavy"})";
 
@@ -175,6 +179,8 @@ TEST_CASE("Attack box payload writes canonical corners and preserves damage") {
     CHECK(box["size"]["w"] == 7);
     CHECK(box["size"]["h"] == 12);
     CHECK(box["anchor_link"] == "hand_r");
+    CHECK(box["extrusion_forward"] == 2);
+    CHECK(box["extrusion_backward"] == 2);
     CHECK(box["payload_id"] == "attack_box_alpha");
     CHECK(box["damage_amount"] == 12);
     REQUIRE(box["meta"].is_object());
@@ -213,6 +219,8 @@ TEST_CASE("Default room box factories populate canonical schema fields") {
     CHECK(hit_box.frame_start == -1);
     CHECK(hit_box.frame_end == -1);
     CHECK(hit_box.anchor_link.empty());
+    CHECK(hit_box.extrusion_forward == 1);
+    CHECK(hit_box.extrusion_backward == 1);
 
     const auto attack_box = devmode::room_box_payload::make_default_attack_box(existing_attack_names, 64, 32);
     CHECK(!attack_box.id.empty());
@@ -221,6 +229,8 @@ TEST_CASE("Default room box factories populate canonical schema fields") {
     CHECK(attack_box.frame_start == -1);
     CHECK(attack_box.frame_end == -1);
     CHECK(attack_box.anchor_link.empty());
+    CHECK(attack_box.extrusion_forward == 1);
+    CHECK(attack_box.extrusion_backward == 1);
     CHECK(attack_box.damage_amount == 0);
     CHECK(attack_box.payload_id == attack_box.id);
     const nlohmann::json default_meta = nlohmann::json::parse(attack_box.meta_json, nullptr, false);

@@ -134,7 +134,8 @@ nlohmann::json serialize_box_base(const TBox& box,
     node["rotation_degrees"] = static_cast<double>(
         animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees));
     node["anchor_link"] = box.anchor_link;
-    node["extrusion_amount"] = std::max(0, box.extrusion_amount);
+    node["extrusion_forward"] = std::max(1, box.extrusion_forward);
+    node["extrusion_backward"] = std::max(1, box.extrusion_backward);
     node["flatten_bottom_to_floor"] = box.flatten_bottom_to_floor;
     nlohmann::json corners = nlohmann::json::array();
     const auto runtime_corners = box.to_runtime_clockwise_points();
@@ -239,7 +240,8 @@ TBox make_default_box_with_name(const std::string& name, int frame_width, int fr
     box.frame_start = -1;
     box.frame_end = -1;
     box.anchor_link.clear();
-    box.extrusion_amount = 1;
+    box.extrusion_forward = 1;
+    box.extrusion_backward = 1;
     const int max_x = std::max(0, frame_width - 1);
     const int max_y = std::max(0, frame_height - 1);
     box.set_rect(animation_update::FrameBoxRect{0, 0, max_x, max_y});

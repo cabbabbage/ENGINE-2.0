@@ -294,7 +294,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1305,7 +1306,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1346,7 +1348,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1387,7 +1390,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1428,7 +1432,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1469,7 +1474,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1510,7 +1516,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1551,7 +1558,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1592,7 +1600,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1633,7 +1642,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1674,7 +1684,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1715,7 +1726,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1756,7 +1768,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1797,7 +1810,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1838,7 +1852,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1879,7 +1894,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -1920,7 +1936,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5512,7 +5529,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5553,7 +5571,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5594,7 +5613,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5635,7 +5655,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5676,7 +5697,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5717,7 +5739,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5758,7 +5781,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5799,7 +5823,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5840,7 +5865,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5881,7 +5907,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5922,7 +5949,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -5963,7 +5991,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -6004,7 +6033,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -6045,7 +6075,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -6086,7 +6117,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -6127,7 +6159,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 30,
+                "extrusion_backward": 30,
+                "extrusion_forward": 30,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14386,7 +14419,8 @@
                 ],
                 "damage_amount": 20,
                 "enabled": true,
-                "extrusion_amount": 20,
+                "extrusion_backward": 20,
+                "extrusion_forward": 20,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -14445,7 +14479,8 @@
                 ],
                 "damage_amount": 20,
                 "enabled": true,
-                "extrusion_amount": 20,
+                "extrusion_backward": 20,
+                "extrusion_forward": 20,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -14504,7 +14539,8 @@
                 ],
                 "damage_amount": 20,
                 "enabled": true,
-                "extrusion_amount": 20,
+                "extrusion_backward": 20,
+                "extrusion_forward": 20,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -14563,7 +14599,8 @@
                 ],
                 "damage_amount": 20,
                 "enabled": true,
-                "extrusion_amount": 20,
+                "extrusion_backward": 20,
+                "extrusion_forward": 20,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -14622,7 +14659,8 @@
                 ],
                 "damage_amount": 20,
                 "enabled": true,
-                "extrusion_amount": 20,
+                "extrusion_backward": 20,
+                "extrusion_forward": 20,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -14681,7 +14719,8 @@
                 ],
                 "damage_amount": 20,
                 "enabled": true,
-                "extrusion_amount": 20,
+                "extrusion_backward": 20,
+                "extrusion_forward": 20,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -14876,7 +14915,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14917,7 +14957,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14958,7 +14999,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14999,7 +15041,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15040,7 +15083,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15081,7 +15125,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15204,7 +15249,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15293,7 +15339,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15334,7 +15381,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15375,7 +15423,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15416,7 +15465,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15457,7 +15507,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15498,7 +15549,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 60,
+                "extrusion_backward": 60,
+                "extrusion_forward": 60,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17647,7 +17699,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 1,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -17687,7 +17740,8 @@
                   }
                 ],
                 "enabled": true,
-                "extrusion_amount": 1,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
                 "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
@@ -18135,7 +18189,8 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 160,
+                "extrusion_backward": 160,
+                "extrusion_forward": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18193,7 +18248,8 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 160,
+                "extrusion_backward": 160,
+                "extrusion_forward": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18251,7 +18307,8 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 160,
+                "extrusion_backward": 160,
+                "extrusion_forward": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18309,7 +18366,8 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 160,
+                "extrusion_backward": 160,
+                "extrusion_forward": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18367,7 +18425,8 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 160,
+                "extrusion_backward": 160,
+                "extrusion_forward": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18425,7 +18484,8 @@
                 ],
                 "damage_amount": 100,
                 "enabled": true,
-                "extrusion_amount": 160,
+                "extrusion_backward": 160,
+                "extrusion_forward": 160,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18944,9 +19004,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            132,
             242,
             36,
-            125,
             255
           ],
           "edge_smoothness": 2,
@@ -19347,9 +19407,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
-            61,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,

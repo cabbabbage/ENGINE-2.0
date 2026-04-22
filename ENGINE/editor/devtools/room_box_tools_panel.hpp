@@ -28,7 +28,8 @@ public:
 
     struct DetailValues {
         std::string name;
-        int extrusion = 0;
+        int extrusion_forward = 1;
+        int extrusion_backward = 1;
         int damage = 0;
         bool flatten_bottom_to_floor = false;
     };
@@ -119,7 +120,8 @@ private:
     std::unique_ptr<DMButton> apply_animation_button_;
     std::unique_ptr<DMButton> apply_asset_button_;
     std::unique_ptr<DMTextBox> name_textbox_;
-    std::unique_ptr<DMTextBox> extrusion_textbox_;
+    std::unique_ptr<DMTextBox> extrusion_forward_textbox_;
+    std::unique_ptr<DMTextBox> extrusion_backward_textbox_;
     std::unique_ptr<DMTextBox> damage_textbox_;
     std::unique_ptr<DMNumericStepper> point_count_stepper_;
     std::unique_ptr<DMCheckbox> flatten_bottom_to_floor_checkbox_;

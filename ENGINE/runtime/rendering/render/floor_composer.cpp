@@ -475,6 +475,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
                                     double max_cull_depth,
                                     SDL_Color clear_color,
                                     bool render_floor_tiles) {
+    has_floor_dark_mask_ = false;
     if (!renderer_ || !ensure_sized_target(floor_base_texture_) || !ensure_sized_target(floor_light_mask_texture_)) {
         return nullptr;
     }
@@ -602,12 +603,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
 
         SDL_SetRenderClipRect(renderer_, nullptr);
     }
-
-    SDL_SetRenderTarget(renderer_, floor_base_texture_);
-    SDL_SetTextureBlendMode(floor_light_mask_texture_, SDL_BLENDMODE_MOD);
-    SDL_SetTextureAlphaMod(floor_light_mask_texture_, 255);
-    SDL_SetTextureColorMod(floor_light_mask_texture_, 255, 255, 255);
-    SDL_RenderTexture(renderer_, floor_light_mask_texture_, nullptr, nullptr);
+    has_floor_dark_mask_ = true;
 
     return floor_base_texture_;
 }

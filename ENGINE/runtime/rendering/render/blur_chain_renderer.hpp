@@ -20,6 +20,7 @@ public:
 
     render_pipeline::BlurCompositeResult compose(const render_pipeline::LayerRenderResult& layer_render,
                                                  SDL_Texture* background_seed,
+                                                 SDL_Texture* floor_dark_mask,
                                                  bool depth_of_field_enabled,
                                                  float blur_px,
                                                  float radial_blur_px,
@@ -32,6 +33,7 @@ private:
     void clear_target(SDL_Texture* texture) const;
     bool copy_texture(SDL_Texture* src, SDL_Texture* dst) const;
     bool composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const;
+    bool composite_texture_modulate_over(SDL_Texture* src, SDL_Texture* dst) const;
 
     bool blur_step(SDL_Texture* src,
                    SDL_Texture* dst,

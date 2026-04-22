@@ -6,16 +6,13 @@ inline bool should_advance_animation_for_asset(bool dev_mode,
                                                bool runtime_updates_enabled,
                                                bool frame_editor_session_active,
                                                bool is_frame_editor_target) {
+    (void)runtime_updates_enabled;
+    (void)frame_editor_session_active;
     (void)is_frame_editor_target;
     if (!dev_mode) {
         return true;
     }
-
-    if (frame_editor_session_active) {
-        return false;
-    }
-
-    return runtime_updates_enabled;
+    return false;
 }
 
 inline bool should_allow_movement_for_asset(bool dev_mode) {

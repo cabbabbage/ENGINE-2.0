@@ -16012,7 +16012,20 @@
       "animations": {
         "default": {
           "anchor_points": [
-            []
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 173,
+                "texture_y": 524
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -16606,8 +16619,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -16644,8 +16657,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -16682,8 +16695,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -16720,8 +16733,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -16758,8 +16771,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -16796,8 +16809,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -16834,8 +16847,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -16872,8 +16885,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -18917,9 +18930,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            209,
             242,
             36,
-            125,
             255
           ],
           "edge_smoothness": 2,
@@ -19320,9 +19333,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            64,
+            36,
             242,
-            242,
-            61,
             255
           ],
           "edge_smoothness": 101,

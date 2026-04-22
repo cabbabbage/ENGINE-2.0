@@ -49,6 +49,7 @@ public:
                          double max_cull_depth,
                          SDL_Color clear_color,
                          bool render_floor_tiles);
+    SDL_Texture* floor_dark_mask_texture() const { return has_floor_dark_mask_ ? floor_light_mask_texture_ : nullptr; }
 
 private:
     bool ensure_sized_target(SDL_Texture*& texture);
@@ -65,4 +66,5 @@ private:
     SDL_Texture* floor_base_texture_ = nullptr;
     SDL_Texture* floor_light_mask_texture_ = nullptr;
     SDL_Texture* floor_light_falloff_texture_ = nullptr;
+    bool has_floor_dark_mask_ = false;
 };

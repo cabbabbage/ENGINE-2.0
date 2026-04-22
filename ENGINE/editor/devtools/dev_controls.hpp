@@ -370,7 +370,11 @@ private:
     bool sliding_headers_hidden_ = false;
     bool world_mutation_in_progress_ = false;
     bool pending_selection_sync_refresh_ = false;
-    mutable std::unordered_map<Asset*, bool> filter_hidden_assets_;
+    struct FilterHiddenAssetState {
+        bool hidden = false;
+        bool active = false;
+    };
+    mutable std::unordered_map<Asset*, FilterHiddenAssetState> filter_hidden_assets_;
     mutable std::unordered_set<Asset*> previous_filtered_membership_;
     std::unique_ptr<TrailEditorSuite> trail_suite_;
     std::unique_ptr<Room> pending_trail_template_;

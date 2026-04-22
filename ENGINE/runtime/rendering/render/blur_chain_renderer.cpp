@@ -136,6 +136,19 @@ bool BlurChainRenderer::composite_texture_over(SDL_Texture* src, SDL_Texture* ds
     return true;
 }
 
+bool BlurChainRenderer::composite_texture_modulate_over(SDL_Texture* src, SDL_Texture* dst) const {
+    if (!renderer_ || !src || !dst) {
+        return false;
+    }
+
+    SDL_SetRenderTarget(renderer_, dst);
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_MOD);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    return true;
+}
+
 bool BlurChainRenderer::blur_step(SDL_Texture* src,
                                   SDL_Texture* dst,
                                   SDL_Texture* blur_work,
@@ -351,6 +364,7 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
 render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
     const render_pipeline::LayerRenderResult& layer_render,
     SDL_Texture* background_seed,
+    SDL_Texture* floor_dark_mask,
     bool depth_of_field_enabled,
     float blur_px,
     float radial_blur_px,
@@ -403,6 +417,12 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
                        blur_quality_scale,
                        background_has_content)) {
         return result;
+    }
+
+    if (floor_dark_mask && background_has_content) {
+        if (!composite_texture_modulate_over(floor_dark_mask, background_mid_tex_)) {
+            return result;
+        }
     }
 
     if (SDL_Texture* player_layer_texture = find_player_layer_texture(layer_render)) {

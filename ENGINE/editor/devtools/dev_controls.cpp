@@ -4514,7 +4514,8 @@ void DevControls::update_movement_debug_visibility() {
 void DevControls::restore_filter_hidden_assets() const {
     for (auto& kv : filter_hidden_assets_) {
         if (Asset* asset = kv.first) {
-            asset->set_hidden(kv.second);
+            asset->set_hidden(kv.second.hidden);
+            asset->active = kv.second.active;
         }
     }
     filter_hidden_assets_.clear();
@@ -4817,9 +4818,9 @@ void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
         const bool still_active = active_set.find(asset) != active_set.end();
         const bool should_hide = to_hide.find(asset) != to_hide.end();
         if (!still_active || !should_hide) {
-            if (asset && still_active) {
-                asset->set_hidden(it->second);
-                asset->active = true;
+            if (asset) {
+                asset->set_hidden(it->second.hidden);
+                asset->active = it->second.active;
             }
             it = filter_hidden_assets_.erase(it);
         } else {
@@ -4832,7 +4833,8 @@ void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
         if (!asset) {
             continue;
         }
-        auto [entry, inserted] = filter_hidden_assets_.emplace(asset, asset->is_hidden());
+        auto [entry, inserted] = filter_hidden_assets_.emplace(
+            asset, FilterHiddenAssetState{asset->is_hidden(), asset->active});
         asset->set_hidden(true);
         asset->active = false;
         asset->set_highlighted(false);

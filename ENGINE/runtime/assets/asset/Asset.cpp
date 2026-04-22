@@ -1152,9 +1152,13 @@ void Asset::update() {
 
     const bool controller_suppressed_for_frame_editor =
         assets_ && assets_->is_frame_editor_target_active(this);
+    const bool runtime_animation_updates_enabled =
+        !assets_ || assets_->should_advance_animation_for(this);
 
     if (controller_) {
-        if (!controller_suppressed_for_frame_editor && assets_) {
+        if (!controller_suppressed_for_frame_editor &&
+            runtime_animation_updates_enabled &&
+            assets_) {
             if (Input* in = assets_->get_input()) {
                 controller_->update(*in);
             }
@@ -1198,7 +1202,7 @@ void Asset::update() {
         }
     }
 
-    const bool can_advance_animation = !assets_ || assets_->should_advance_animation_for(this);
+    const bool can_advance_animation = runtime_animation_updates_enabled;
 
     if (!dead && anim_runtime_ && can_advance_animation) {
         anim_runtime_->update();

@@ -1816,6 +1816,8 @@ void SceneRenderer::render() {
         gather_runtime_lights(cam, depth_anchor_world_z, rendered_assets_for_debug, runtime_lights);
     }
     SDL_Texture* floor_texture = nullptr;
+    SDL_Texture* floor_dark_mask_texture = nullptr;
+    bool floor_dark_mask_drawn = false;
     if (floor_composer_) {
         floor_texture = floor_composer_->compose(cam,
                                                  grid,
@@ -1824,6 +1826,7 @@ void SceneRenderer::render() {
                                                  max_cull_depth,
                                                  map_clear_color_,
                                                  true);
+        floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
     }
 
     SDL_SetRenderTarget(renderer_, scene_composite_tex_);
@@ -1860,16 +1863,32 @@ void SceneRenderer::render() {
         const render_pipeline::BlurCompositeResult blur_result = blur_chain_renderer_
             ? blur_chain_renderer_->compose(layer_render,
                                             floor_texture,
+                                            floor_dark_mask_texture,
                                             realism.depth_of_field_enabled,
                                             realism.blur_px,
                                             realism.radial_blur_px,
                                             optical_center)
             : render_pipeline::BlurCompositeResult{};
 
+        if (!blur_result.valid && floor_dark_mask_texture) {
+            SDL_SetTextureBlendMode(floor_dark_mask_texture, SDL_BLENDMODE_MOD);
+            SDL_SetTextureAlphaMod(floor_dark_mask_texture, 255);
+            SDL_SetTextureColorMod(floor_dark_mask_texture, 255, 255, 255);
+            SDL_RenderTexture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
+            floor_dark_mask_drawn = true;
+        }
+
         composed = scene_composite_pass_->compose(scene_composite_tex_, layer_render, blur_result);
     }
 
     if (!composed) {
+        if (floor_dark_mask_texture && !floor_dark_mask_drawn) {
+            SDL_SetTextureBlendMode(floor_dark_mask_texture, SDL_BLENDMODE_MOD);
+            SDL_SetTextureAlphaMod(floor_dark_mask_texture, 255);
+            SDL_SetTextureColorMod(floor_dark_mask_texture, 255, 255, 255);
+            SDL_RenderTexture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
+            floor_dark_mask_drawn = true;
+        }
         geometry_batcher_->flush();
     }
 

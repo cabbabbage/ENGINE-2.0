@@ -116,11 +116,7 @@ void CustomAssetController::initialize_anchor_candidate_children() {
 
         const vibble::spawn::RuntimeCandidates runtime_candidates =
             vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
-        if (runtime_candidates.empty()) {
-            vibble::log::warn(std::string("[CustomAssetController] Empty explicit anchor candidates for anchor '") +
-                              anchor_name + "' on asset '" + self_->info->name + "'");
-            continue;
-        }
+
 
         const auto resolved = runtime_candidates.pick_hashed(
             anchor_candidate_hash(anchor_name),

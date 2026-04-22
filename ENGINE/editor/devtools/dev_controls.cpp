@@ -32,6 +32,7 @@
 #include <regex>
 #include <system_error>
 #include <unordered_set>
+#include <exception>
 
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
@@ -875,31 +876,39 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             "map-session",
             [this]() { return map_dirty_; },
             [this](devmode::core::DevSaveCoordinator::Priority priority) {
-                if (!assets_) {
+                try {
+                    if (!assets_) {
+                        return false;
+                    }
+                    // Ensure in-memory room state (including spawn groups) is reflected in the map payload.
+                    assets_->snapshot_rooms_to_map_info();
+                    const std::string map_id = assets_->map_id();
+                    if (map_id.empty()) {
+                        std::cerr << "[DevControls] Cannot batch-save map: id empty\n";
+                        return false;
+                    }
+                    std::cerr << "[DevControls] Serializing rooms (spawn groups included) into map payload for '"
+                              << map_id << "'\n";
+                    nlohmann::json payload = assets_->map_info_json();
+                    bool ok = save_manager_.persist_map_entry(
+                        map_id, std::move(payload), priority, "Map session",
+                        [this]() {
+                            map_dirty_ = false;
+                            if (assets_) {
+                                assets_->clear_map_data_dirty();
+                            }
+                            if (map_mode_ui_) map_mode_ui_->mark_layers_clean();
+                            if (map_mode_ui_) map_mode_ui_->notify_saved();
+                            if (room_editor_) room_editor_->notify_room_assets_saved();
+                        });
+                    return ok;
+                } catch (const std::exception& ex) {
+                    std::cerr << "[DevControls] Map session save failed: " << ex.what() << "\n";
+                    return false;
+                } catch (...) {
+                    std::cerr << "[DevControls] Map session save failed: unknown error\n";
                     return false;
                 }
-                // Ensure in-memory room state (including spawn groups) is reflected in the map payload.
-                assets_->snapshot_rooms_to_map_info();
-                const std::string map_id = assets_->map_id();
-                if (map_id.empty()) {
-                    std::cerr << "[DevControls] Cannot batch-save map: id empty\n";
-                    return false;
-                }
-                std::cerr << "[DevControls] Serializing rooms (spawn groups included) into map payload for '"
-                          << map_id << "'\n";
-                nlohmann::json payload = assets_->map_info_json();
-                bool ok = save_manager_.persist_map_entry(
-                    map_id, std::move(payload), priority, "Map session",
-                    [this]() {
-                        map_dirty_ = false;
-                        if (assets_) {
-                            assets_->clear_map_data_dirty();
-                        }
-                        if (map_mode_ui_) map_mode_ui_->mark_layers_clean();
-                        if (map_mode_ui_) map_mode_ui_->notify_saved();
-                        if (room_editor_) room_editor_->notify_room_assets_saved();
-                    });
-                return ok;
             },
             devmode::core::SaveManager::Stage::Manifest});
 
@@ -1986,9 +1995,21 @@ void DevControls::update(const Input& input) {
     }
 
     if (save_manager_.has_dirty_saveables()) {
-        save_manager_.save_dirty_with_reason(devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                             devmode::core::SaveOrchestrator::Reason::AutoSave,
-                                             "DevControls update dirty saveables");
+        try {
+            save_manager_.save_dirty_with_reason(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                                 devmode::core::SaveOrchestrator::Reason::AutoSave,
+                                                 "DevControls update dirty saveables");
+        } catch (const std::exception& ex) {
+            std::cerr << "[DevControls] save_dirty_with_reason failed: " << ex.what() << "\n";
+            if (assets_) {
+                assets_->show_dev_notice("Save failed");
+            }
+        } catch (...) {
+            std::cerr << "[DevControls] save_dirty_with_reason failed: unknown error\n";
+            if (assets_) {
+                assets_->show_dev_notice("Save failed");
+            }
+        }
     }
 
     save_coordinator_.tick();

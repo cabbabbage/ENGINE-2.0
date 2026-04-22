@@ -214,6 +214,38 @@ bool SaveManager::save_dirty(DevSaveCoordinator::Priority priority, const std::s
     return any_saved;
 }
 
+bool SaveManager::persist_map_entry_direct(const std::string& map_id,
+                                           nlohmann::json payload,
+                                           DevSaveCoordinator::Priority priority,
+                                           const std::string& flush_reason,
+                                           std::function<void()> on_success) {
+    ManifestStore::MapPersistOptions write_options;
+    write_options.flush = false;
+    write_options.guard_reason = kMapPersistGuardReason;
+    if (!store_->persist_map_entry(map_id, payload, write_options)) {
+        return false;
+    }
+
+    if (on_success) {
+        on_success();
+    }
+
+    if (batch_save_active_) {
+        return true;
+    }
+
+    if (priority == DevSaveCoordinator::Priority::Immediate) {
+        store_->flush();
+        if (coordinator_) {
+            coordinator_->flush_now(flush_reason);
+        }
+    } else {
+        request_manifest_flush(priority, flush_reason);
+    }
+
+    return true;
+}
+
 bool SaveManager::persist_map_entry(const std::string& map_id,
                                     nlohmann::json payload,
                                     DevSaveCoordinator::Priority priority,
@@ -231,6 +263,14 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
 
     const std::string flush_reason = label.empty() ? std::string("Map ") + map_id : label;
 
+    if (batch_save_active_) {
+        return persist_map_entry_direct(map_id,
+                                        std::move(payload),
+                                        priority,
+                                        flush_reason,
+                                        std::move(on_success));
+    }
+
     SaveOrchestrator::Request request;
     request.document_id = map_id;
     request.reason = map_reason_from_label(flush_reason);
@@ -241,31 +281,11 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         return true;
     };
     request.atomic_write = [this, map_id, payload = std::move(payload), priority, flush_reason, on_success]() mutable {
-        ManifestStore::MapPersistOptions write_options;
-        write_options.flush = false;
-        write_options.guard_reason = kMapPersistGuardReason;
-        if (!store_->persist_map_entry(map_id, payload, write_options)) {
-            return false;
-        }
-
-        if (on_success) {
-            on_success();
-        }
-
-        if (batch_save_active_) {
-            return true;
-        }
-
-        if (priority == DevSaveCoordinator::Priority::Immediate) {
-            store_->flush();
-            if (coordinator_) {
-                coordinator_->flush_now(flush_reason);
-            }
-        } else {
-            request_manifest_flush(priority, flush_reason);
-        }
-
-        return true;
+        return persist_map_entry_direct(map_id,
+                                        std::move(payload),
+                                        priority,
+                                        flush_reason,
+                                        std::move(on_success));
     };
 
     auto result = orchestrator_.save(request);

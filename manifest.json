@@ -10721,6 +10721,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -10733,7 +10734,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -16022,8 +16024,20 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 173,
-                "texture_y": 524
+                "texture_x": 162,
+                "texture_y": 184
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 403
               }
             ]
           ],
@@ -16643,8 +16657,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -16681,8 +16695,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -16719,8 +16733,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -16757,8 +16771,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -16795,8 +16809,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -16833,8 +16847,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -16871,8 +16885,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -16909,8 +16923,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ]
           ],
@@ -17314,8 +17328,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 143
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17338,8 +17352,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -17352,8 +17366,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17376,8 +17390,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -17390,8 +17404,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17414,8 +17428,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -17428,8 +17442,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17452,8 +17466,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -17466,8 +17480,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17490,8 +17504,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -17504,8 +17518,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17528,8 +17542,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -17542,8 +17556,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17566,8 +17580,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ],
             [
@@ -17580,8 +17594,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 162,
+                "texture_y": 184
               },
               {
                 "depth_offset": 0.0,
@@ -17604,8 +17618,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
+                "texture_x": 163,
+                "texture_y": 403
               }
             ]
           ],
@@ -17939,7 +17953,7 @@
         },
         {
           "asset_name": "vibble",
-          "height_radius_z": 60.0,
+          "height_radius_z": 20.0,
           "legacy_names": [],
           "name": "melee",
           "points": [
@@ -17973,7 +17987,7 @@
                 "right"
               ],
               "texture_x": 35,
-              "texture_y": 42
+              "texture_y": 14
             },
             {
               "angle_degrees": 90.0,
@@ -17989,7 +18003,7 @@
                 "right"
               ],
               "texture_x": 0,
-              "texture_y": 60
+              "texture_y": 20
             },
             {
               "angle_degrees": 135.0,
@@ -18005,7 +18019,7 @@
                 "right"
               ],
               "texture_x": -35,
-              "texture_y": 42
+              "texture_y": 14
             },
             {
               "angle_degrees": 180.0,
@@ -18038,7 +18052,7 @@
                 "left"
               ],
               "texture_x": -35,
-              "texture_y": -42
+              "texture_y": -14
             },
             {
               "angle_degrees": 270.0,
@@ -18054,7 +18068,7 @@
                 "left"
               ],
               "texture_x": 0,
-              "texture_y": -60
+              "texture_y": -20
             },
             {
               "angle_degrees": 315.0,
@@ -18070,7 +18084,7 @@
                 "left"
               ],
               "texture_x": 35,
-              "texture_y": -42
+              "texture_y": -14
             }
           ],
           "radius_offset_degrees": 288.0,
@@ -18753,13 +18767,13 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 1.0199999809265137,
+        "behind_layer_light_strength_multiplier": 1.8899999856948853,
         "blur_px": 1.4299999475479126,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 2692,
         "camera_height_min_px": 25,
         "depth_of_field_enabled": true,
-        "front_layer_light_strength_multiplier": 1.5499999523162842,
+        "front_layer_light_strength_multiplier": 1.46999990940094,
         "layer_depth_curve": 12.109999656677246,
         "layer_depth_interval": 34.0,
         "light_culling_debug_overlay": false,
@@ -18930,7 +18944,7 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            209,
+            225,
             242,
             36,
             255
@@ -19333,9 +19347,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            64,
-            36,
-            242,
+            32,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -19419,8 +19433,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -112,
-              "dz": -112,
+              "dx": -1360,
+              "dz": -1200,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -19432,7 +19446,7 @@
               "position": "Exact",
               "priority": 2,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-72a44007fe85"

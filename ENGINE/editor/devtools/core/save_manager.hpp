@@ -53,6 +53,11 @@ public:
 private:
     bool request_manifest_flush(DevSaveCoordinator::Priority priority,
                                 const std::string& reason);
+    bool persist_map_entry_direct(const std::string& map_id,
+                                  nlohmann::json payload,
+                                  DevSaveCoordinator::Priority priority,
+                                  const std::string& flush_reason,
+                                  std::function<void()> on_success);
 
     ManifestStore* store_ = nullptr;
     DevSaveCoordinator* coordinator_ = nullptr;

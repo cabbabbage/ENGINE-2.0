@@ -318,6 +318,7 @@ add_executable(engine_tests
     ENGINE/tests/test_asset_collision_context_policy.cpp
     ENGINE/tests/test_impassable_geometry_signature.cpp
     ENGINE/tests/test_dynamic_boundary_size_variation.cpp
+    ENGINE/tests/test_save_orchestrator.cpp
 )
 
 target_include_directories(engine_tests

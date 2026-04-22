@@ -49,7 +49,7 @@ FrameNavigator::FrameNavigator() {
     btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
     btn_apply_animation_ = std::make_unique<DMButton>("Apply To Selected", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
     btn_apply_all_ = std::make_unique<DMButton>("Apply To All", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
-    btn_save_exit_ = std::make_unique<DMButton>("Save and Exit", &DMStyles::DeleteButton(), kSaveExitButtonWidth, kBottomButtonHeight);
+    btn_save_exit_ = std::make_unique<DMButton>("Exit", &DMStyles::DeleteButton(), kSaveExitButtonWidth, kBottomButtonHeight);
     update_button_states();
 }
 

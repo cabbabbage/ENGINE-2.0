@@ -10,6 +10,7 @@
 
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/core/save_orchestrator.hpp"
 #include "devtools/widgets.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -134,6 +135,9 @@ class AnimationEditorWindow {
     void process_auto_save();
     void close_manifest_transaction();
     bool persist_manifest_payload(const nlohmann::json& payload, bool finalize = false);
+    bool orchestrated_save(devmode::core::SaveOrchestrator::Reason reason,
+                           const std::string& document_id,
+                           const std::function<bool()>& write);
     std::optional<std::string> resolve_manifest_key(const AssetInfo& info) const;
 
     std::optional<std::filesystem::path> pick_folder() const;
@@ -207,6 +211,7 @@ class AnimationEditorWindow {
     std::string manifest_asset_key_;
     bool using_manifest_store_ = false;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
+    devmode::core::SaveOrchestrator save_orchestrator_;
 
     Assets* assets_ = nullptr;
     Asset* target_asset_ = nullptr;

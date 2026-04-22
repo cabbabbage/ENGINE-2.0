@@ -748,7 +748,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                                 document_ && document_->animation_ids().size() == 1 && document_->animation_ids().front() == "default";
 
     if (seeded_default) {
-        document_->save_to_file();
+        orchestrated_save(devmode::core::SaveOrchestrator::Reason::HotReload,
+                          manifest_asset_key_.empty() ? std::string("animation-editor") : manifest_asset_key_,
+                          [this]() { document_->save_to_file(); return true; });
     } else if (document_) {
         document_->consume_dirty_flag();
     }
@@ -1365,8 +1367,10 @@ void AnimationEditorWindow::refresh_inspector_animation_callback() {
             return;
         }
         if (document_) {
-            if (!document_->save_to_file_checked(true)) {
-                const std::string manifest_key = document_->manifest_asset_key_debug();
+            const std::string manifest_key = document_->manifest_asset_key_debug();
+            if (!orchestrated_save(devmode::core::SaveOrchestrator::Reason::StateChange,
+                                   manifest_key.empty() ? std::string("animation-editor") : manifest_key,
+                                   [this]() { return document_->save_to_file_checked(true); })) {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                             "AnimationEditorWindow: fallback save failed for animation '%s' (manifest key: '%s').",
                             animation_id.c_str(),
@@ -2311,7 +2315,9 @@ void AnimationEditorWindow::reload_document() {
     const bool seeded_default = snapshot_was_empty && document_ && document_->animation_ids().size() == 1 && document_->animation_ids().front() == "default";
 
     if (seeded_default) {
-        document_->save_to_file();
+        orchestrated_save(devmode::core::SaveOrchestrator::Reason::HotReload,
+                          manifest_asset_key_.empty() ? std::string("animation-editor") : manifest_asset_key_,
+                          [this]() { document_->save_to_file(); return true; });
     } else if (document_) {
         document_->consume_dirty_flag();
     }
@@ -2340,7 +2346,9 @@ void AnimationEditorWindow::process_auto_save() {
         return;
     }
 
-    document_->save_to_file_checked(true);
+    (void)orchestrated_save(devmode::core::SaveOrchestrator::Reason::AutoSave,
+                            manifest_asset_key_.empty() ? std::string("animation-editor") : manifest_asset_key_,
+                            [this]() { return document_->save_to_file_checked(true); });
     if (using_manifest_store_) {
         set_status_message("Animations auto-saved.", 180);
     }
@@ -2518,6 +2526,23 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
         on_success();
     }
     return committed;
+}
+
+
+bool AnimationEditorWindow::orchestrated_save(devmode::core::SaveOrchestrator::Reason reason,
+                                              const std::string& document_id,
+                                              const std::function<bool()>& write) {
+    devmode::core::SaveOrchestrator::Request request;
+    request.document_id = document_id.empty() ? std::string("animation-editor") : document_id;
+    request.reason = reason;
+    request.atomic_write = write;
+    request.disk_available_check = []() { return true; };
+    request.checksum = []() { return std::size_t{0}; };
+    const auto result = save_orchestrator_.save(request);
+    if (!result.success && result.conflict) {
+        set_status_message("Conflict detected", 240);
+    }
+    return result.success;
 }
 
 std::optional<std::string> AnimationEditorWindow::resolve_manifest_key(const AssetInfo& info) const {

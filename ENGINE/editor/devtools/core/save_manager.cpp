@@ -14,6 +14,19 @@ namespace {
 constexpr const char* kMapPersistGuardReason = "SaveManager::persist_map_entry";
 constexpr const char* kManifestFlushIntentKey = "save-manager:manifest-flush";
 constexpr const char* kManifestFlushLabel = "Manifest flush";
+
+SaveOrchestrator::Reason map_reason_from_label(const std::string& reason) {
+    if (reason.find("focus") != std::string::npos) {
+        return SaveOrchestrator::Reason::FocusChange;
+    }
+    if (reason.find("reload") != std::string::npos) {
+        return SaveOrchestrator::Reason::HotReload;
+    }
+    if (reason.find("auto") != std::string::npos) {
+        return SaveOrchestrator::Reason::AutoSave;
+    }
+    return SaveOrchestrator::Reason::StateChange;
+}
 }
 
 void SaveManager::set_manifest_store(ManifestStore* store) {
@@ -33,6 +46,10 @@ void SaveManager::set_manifest_store(ManifestStore* store) {
 
 void SaveManager::set_save_coordinator(DevSaveCoordinator* coordinator) {
     coordinator_ = coordinator;
+}
+
+void SaveManager::set_save_status_sink(SaveOrchestrator::StatusSink sink) {
+    orchestrator_.set_status_sink(std::move(sink));
 }
 
 void SaveManager::register_saveable(Saveable saveable) {
@@ -96,6 +113,19 @@ bool SaveManager::request_manifest_flush(DevSaveCoordinator::Priority priority,
 
     store_->flush();
     return true;
+}
+
+bool SaveManager::save_dirty_with_reason(DevSaveCoordinator::Priority priority,
+                                     SaveOrchestrator::Reason reason,
+                                     const std::string& label) {
+    SaveOrchestrator::Request request;
+    request.document_id = "save-manager";
+    request.reason = reason;
+    request.atomic_write = [this, priority, label]() {
+        return this->save_dirty(priority, label);
+    };
+    auto result = orchestrator_.save(request);
+    return result.success;
 }
 
 bool SaveManager::save_dirty(DevSaveCoordinator::Priority priority, const std::string& reason) {
@@ -199,32 +229,47 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         return false;
     }
 
-    ManifestStore::MapPersistOptions write_options;
-    write_options.flush = false;
-    write_options.guard_reason = kMapPersistGuardReason;
-    if (!store_->persist_map_entry(map_id, payload, write_options)) {
-        return false;
-    }
-
-    if (on_success) {
-        on_success();
-    }
-
-    if (batch_save_active_) {
-        return true;
-    }
-
     const std::string flush_reason = label.empty() ? std::string("Map ") + map_id : label;
-    if (priority == DevSaveCoordinator::Priority::Immediate) {
-        store_->flush();
-        if (coordinator_) {
-            coordinator_->flush_now(flush_reason);
-        }
-    } else {
-        request_manifest_flush(priority, flush_reason);
-    }
 
-    return true;
+    SaveOrchestrator::Request request;
+    request.document_id = map_id;
+    request.reason = map_reason_from_label(flush_reason);
+    request.conflict_check = [this, map_id]() {
+        return store_ && store_->find_map_entry(map_id) != nullptr && store_->has_pending_write();
+    };
+    request.disk_available_check = []() {
+        return true;
+    };
+    request.atomic_write = [this, map_id, payload = std::move(payload), priority, flush_reason, on_success]() mutable {
+        ManifestStore::MapPersistOptions write_options;
+        write_options.flush = false;
+        write_options.guard_reason = kMapPersistGuardReason;
+        if (!store_->persist_map_entry(map_id, payload, write_options)) {
+            return false;
+        }
+
+        if (on_success) {
+            on_success();
+        }
+
+        if (batch_save_active_) {
+            return true;
+        }
+
+        if (priority == DevSaveCoordinator::Priority::Immediate) {
+            store_->flush();
+            if (coordinator_) {
+                coordinator_->flush_now(flush_reason);
+            }
+        } else {
+            request_manifest_flush(priority, flush_reason);
+        }
+
+        return true;
+    };
+
+    auto result = orchestrator_.save(request);
+    return result.success;
 }
 
 }

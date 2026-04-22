@@ -924,18 +924,6 @@ void MapModeUI::configure_footer_buttons() {
             buttons.push_back(std::move(layers_btn));
         }
 
-        DevFooterBar::Button save_btn;
-        save_btn.id = "save";
-        save_btn.label = "Save";
-        save_btn.group = FooterButtonGroup::Actions;
-        save_btn.momentary = true;
-        save_btn.style_override = &DMStyles::SecondaryButton();
-        save_btn.active_style_override = &DMStyles::AccentButton();
-        save_btn.on_toggle = [this](bool) {
-            this->save_all_now(devmode::core::DevSaveCoordinator::Priority::Immediate);
-        };
-        buttons.push_back(std::move(save_btn));
-
         append_custom(room_mode_buttons_, HeaderMode::Room);
     }
 
@@ -1458,18 +1446,6 @@ bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priorit
         return true;
     }
     return false;
-}
-
-bool MapModeUI::save_all_now(devmode::core::DevSaveCoordinator::Priority priority) const {
-    if (!save_manager_) {
-        std::cerr << "[MapModeUI] Save requested but SaveManager is unavailable\n";
-        return false;
-    }
-    const bool saved = save_manager_->save_dirty(priority, "Dev footer save all");
-    if (!saved) {
-        std::cerr << "[MapModeUI] Save request completed with no dirty entries\n";
-    }
-    return saved;
 }
 
 bool MapModeUI::mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator) {

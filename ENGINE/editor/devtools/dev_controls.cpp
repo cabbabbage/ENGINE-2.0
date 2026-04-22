@@ -774,6 +774,26 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     save_coordinator_.set_manifest_store(&manifest_store_);
     save_manager_.set_manifest_store(&manifest_store_);
     save_manager_.set_save_coordinator(&save_coordinator_);
+    save_manager_.set_save_status_sink([this](devmode::core::SaveOrchestrator::Status status,
+                                             const std::string& message) {
+        if (!assets_) {
+            return;
+        }
+        switch (status) {
+            case devmode::core::SaveOrchestrator::Status::Saving:
+                assets_->show_dev_notice("Saving...", 700u);
+                break;
+            case devmode::core::SaveOrchestrator::Status::Saved:
+                assets_->show_dev_notice(message.empty() ? "Saved" : message, 1200u);
+                break;
+            case devmode::core::SaveOrchestrator::Status::SaveFailed:
+                assets_->show_dev_notice(message.empty() ? "Save failed" : message, 2200u);
+                break;
+            case devmode::core::SaveOrchestrator::Status::ConflictDetected:
+                assets_->show_dev_notice(message.empty() ? "Conflict detected" : message, 2200u);
+                break;
+        }
+    });
     save_coordinator_.set_notice_sink([this](bool success, const std::string& message) {
         if (assets_) {
             assets_->show_dev_notice(message, success ? 1200u : 2000u);
@@ -1059,7 +1079,9 @@ bool DevControls::run_exit_save_sequence(const std::string& reason) {
     }
 
     const bool batch_saved =
-        save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, reason);
+        save_manager_.save_dirty_with_reason(devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                           devmode::core::SaveOrchestrator::Reason::FocusChange,
+                                           reason);
 
     const bool has_dirty_after = save_manager_.has_dirty_saveables();
     bool cache_rebuild_attempted = false;
@@ -1964,8 +1986,9 @@ void DevControls::update(const Input& input) {
     }
 
     if (save_manager_.has_dirty_saveables()) {
-        save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                 "DevControls update dirty saveables");
+        save_manager_.save_dirty_with_reason(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                             devmode::core::SaveOrchestrator::Reason::AutoSave,
+                                             "DevControls update dirty saveables");
     }
 
     save_coordinator_.tick();
@@ -3819,7 +3842,9 @@ void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority pri
     map_dirty_ = true;
     map_info_dirty_ = true;
     if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
-        save_manager_.save_dirty(priority, "Immediate map change");
+        save_manager_.save_dirty_with_reason(priority,
+                                             devmode::core::SaveOrchestrator::Reason::StateChange,
+                                             "Immediate map change");
     }
 }
 

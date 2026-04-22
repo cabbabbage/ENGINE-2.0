@@ -151,6 +151,47 @@ std::optional<float> resolve_child_perspective_override(const AnchorPoint& paren
     return fallback_parent_scale();
 }
 
+struct ChildRuntimeSnapshot {
+    bool has_child = false;
+    int world_x = 0;
+    int world_y = 0;
+    int world_z = 0;
+    int resolution_layer = 0;
+    bool hidden = true;
+    bool anchor_hidden = true;
+    bool active = false;
+    bool has_anchor_perspective_override = false;
+    bool has_anchor_sprite_transform_override = false;
+    float render_anchor_offset_x = 0.0f;
+    float render_anchor_offset_y = 0.0f;
+    float render_anchor_offset_z = 0.0f;
+    double render_depth_bias = 0.0;
+};
+
+ChildRuntimeSnapshot make_child_runtime_snapshot(const ChildAsset& child_asset) {
+    ChildRuntimeSnapshot snapshot{};
+    Asset* child = child_asset.get_asset();
+    if (!child) {
+        return snapshot;
+    }
+
+    snapshot.has_child = true;
+    snapshot.world_x = child->world_x();
+    snapshot.world_y = child->world_y();
+    snapshot.world_z = child->world_z();
+    snapshot.resolution_layer = child->grid_resolution;
+    snapshot.hidden = child->is_hidden();
+    snapshot.anchor_hidden = child->is_anchor_hidden();
+    snapshot.active = child->active;
+    snapshot.has_anchor_perspective_override = child->has_anchor_perspective_override();
+    snapshot.has_anchor_sprite_transform_override = child->has_anchor_sprite_transform_override();
+    snapshot.render_anchor_offset_x = child->render_anchor_offset_x();
+    snapshot.render_anchor_offset_y = child->render_anchor_offset_y();
+    snapshot.render_anchor_offset_z = child->render_anchor_offset_z();
+    snapshot.render_depth_bias = child->render_depth_bias();
+    return snapshot;
+}
+
 } // namespace
 
 ChildAsset::ChildAsset(Asset& owner, std::string asset_name)
@@ -606,7 +647,7 @@ Asset* ChildAsset::get_asset() const {
     return child_;
 }
 
-bool ChildAsset::update() {
+bool ChildAsset::update_internal() {
     if (!ensure_child_alive() || !bound_) {
         return false;
     }
@@ -619,6 +660,49 @@ bool ChildAsset::update() {
         return changed;
     }
     return apply_anchor_solution(*anchor);
+}
+
+ChildAsset::UpdateResult ChildAsset::update_detailed() {
+    const ChildRuntimeSnapshot before = make_child_runtime_snapshot(*this);
+    const bool changed = update_internal();
+    const ChildRuntimeSnapshot after = make_child_runtime_snapshot(*this);
+
+    UpdateResult result{};
+    result.any_change = changed;
+    if (!changed) {
+        return result;
+    }
+
+    result.world_transform_changed =
+        before.has_child != after.has_child ||
+        before.world_x != after.world_x ||
+        before.world_y != after.world_y ||
+        before.world_z != after.world_z ||
+        before.resolution_layer != after.resolution_layer;
+
+    result.visibility_or_membership_changed =
+        before.has_child != after.has_child ||
+        before.hidden != after.hidden ||
+        before.anchor_hidden != after.anchor_hidden ||
+        before.active != after.active;
+
+    result.visual_only_changed = !result.world_transform_changed &&
+                                 !result.visibility_or_membership_changed &&
+                                 (before.has_anchor_perspective_override != after.has_anchor_perspective_override ||
+                                  before.has_anchor_sprite_transform_override != after.has_anchor_sprite_transform_override ||
+                                  std::fabs(before.render_anchor_offset_x - after.render_anchor_offset_x) > 1e-6f ||
+                                  std::fabs(before.render_anchor_offset_y - after.render_anchor_offset_y) > 1e-6f ||
+                                  std::fabs(before.render_anchor_offset_z - after.render_anchor_offset_z) > 1e-6f ||
+                                  std::fabs(before.render_depth_bias - after.render_depth_bias) > 1e-9);
+
+    result.needs_repass = result.world_transform_changed;
+    result.needs_traversal_refresh = result.world_transform_changed ||
+                                     result.visibility_or_membership_changed;
+    return result;
+}
+
+bool ChildAsset::update() {
+    return update_internal();
 }
 
 void ChildAsset::move_from(ChildAsset&& other) noexcept {

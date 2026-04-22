@@ -186,6 +186,22 @@ bool vibble_scale_trace_enabled() {
     return enabled;
 }
 
+bool vibble_runtime_convergence_trace_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_RUNTIME_CONVERGENCE_TRACE");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" ||
+               value == "true" ||
+               value == "TRUE" ||
+               value == "on" ||
+               value == "ON";
+    }();
+    return enabled;
+}
+
 std::uint64_t hash_grid_cell(const world::GridCoord& coord) {
     const std::uint64_t ux = static_cast<std::uint32_t>(coord.x);
     const std::uint64_t uz = static_cast<std::uint32_t>(coord.z);
@@ -860,7 +876,7 @@ std::uint64_t Assets::next_anchor_invalidation_version() {
     return anchor_invalidation_version_counter_;
 }
 
-bool Assets::run_active_runtime_single_pass(bool include_audio_update) {
+Assets::RuntimeConvergencePassResult Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const SDL_Point camera_focus = camera_.get_screen_center();
     const std::uint64_t camera_state_version = camera_.camera_state_version();
     const float camera_anchor_world_z = static_cast<float>(camera_.anchor_world_z());
@@ -896,7 +912,17 @@ bool Assets::run_active_runtime_single_pass(bool include_audio_update) {
         last_audio_engine_update_frame_id_ = frame_id_;
     }
 
-    return anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates();
+    const anchor_bound_asset_helper::AnchorBoundAssetHelper::FlushResult helper_result =
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates_detailed();
+
+    RuntimeConvergencePassResult result{};
+    result.any_change = helper_result.any_change;
+    result.needs_repass = helper_result.needs_repass;
+    result.needs_traversal_refresh = helper_result.needs_traversal_refresh;
+    result.wave_count = helper_result.wave_count;
+    result.children_considered = helper_result.children_considered;
+    result.children_updated = helper_result.children_updated;
+    return result;
 }
 
 void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
@@ -1670,24 +1696,73 @@ void Assets::run_post_flush_traversal_refresh_once() {
 }
 
 void Assets::run_runtime_effects_stage(bool include_audio_update) {
+    auto elapsed_ms = [this](Uint64 begin, Uint64 end) -> double {
+        if (end <= begin || perf_counter_frequency_ <= 0.0) {
+            return 0.0;
+        }
+        return static_cast<double>(end - begin) * 1000.0 / perf_counter_frequency_;
+    };
+
+    const Uint64 stage_begin = SDL_GetPerformanceCounter();
+    RuntimeConvergenceFrameStats stats{};
     bool audio_update_pending = include_audio_update;
-    bool converged = false;
     std::size_t iteration = 0;
     for (; iteration < kRuntimeAnchorConvergenceIterationCap; ++iteration) {
-        const bool child_transforms_changed = run_active_runtime_single_pass(audio_update_pending);
+        const Uint64 pass_begin = SDL_GetPerformanceCounter();
+        const RuntimeConvergencePassResult pass_result =
+            run_active_runtime_single_pass(audio_update_pending);
+        const Uint64 pass_end = SDL_GetPerformanceCounter();
+        stats.pass_ms += elapsed_ms(pass_begin, pass_end);
         audio_update_pending = false;
-        if (!child_transforms_changed) {
-            converged = true;
+
+        stats.iterations = iteration + 1;
+        stats.wave_count += pass_result.wave_count;
+        stats.children_considered += pass_result.children_considered;
+        stats.children_updated += pass_result.children_updated;
+
+        if (pass_result.needs_traversal_refresh) {
+            const Uint64 refresh_begin = SDL_GetPerformanceCounter();
+            run_post_flush_traversal_refresh_once();
+            const Uint64 refresh_end = SDL_GetPerformanceCounter();
+            stats.refresh_ms += elapsed_ms(refresh_begin, refresh_end);
+            ++stats.traversal_refresh_count;
+        }
+
+        if (!pass_result.needs_repass) {
+            stats.converged = true;
             break;
         }
-        run_post_flush_traversal_refresh_once();
+    }
+    const Uint64 stage_end = SDL_GetPerformanceCounter();
+    stats.stage_ms = elapsed_ms(stage_begin, stage_end);
+    last_runtime_convergence_stats_ = stats;
+
+    if (vibble_runtime_convergence_trace_enabled()) {
+        vibble::log::debug(
+            std::string("[Assets] Runtime convergence frame=") + std::to_string(frame_id_) +
+            " iterations=" + std::to_string(stats.iterations) +
+            " converged=" + (stats.converged ? "1" : "0") +
+            " waves=" + std::to_string(stats.wave_count) +
+            " children_considered=" + std::to_string(stats.children_considered) +
+            " children_updated=" + std::to_string(stats.children_updated) +
+            " traversal_refreshes=" + std::to_string(stats.traversal_refresh_count) +
+            " pass_ms=" + std::to_string(stats.pass_ms) +
+            " refresh_ms=" + std::to_string(stats.refresh_ms) +
+            " stage_ms=" + std::to_string(stats.stage_ms));
     }
 
-    if (!converged && last_runtime_convergence_warning_frame_id_ != frame_id_) {
+    if (!stats.converged && last_runtime_convergence_warning_frame_id_ != frame_id_) {
         last_runtime_convergence_warning_frame_id_ = frame_id_;
         std::cerr << "[Assets] Anchor convergence cap reached ("
                   << kRuntimeAnchorConvergenceIterationCap
                   << ") at frame " << frame_id_
+                  << "; iterations=" << stats.iterations
+                  << " waves=" << stats.wave_count
+                  << " children_updated=" << stats.children_updated
+                  << " traversal_refreshes=" << stats.traversal_refresh_count
+                  << " pass_ms=" << stats.pass_ms
+                  << " refresh_ms=" << stats.refresh_ms
+                  << " stage_ms=" << stats.stage_ms
                   << "; deferring remaining anchor reconciliation to next frame.\n";
     }
 }

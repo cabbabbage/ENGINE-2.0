@@ -11,6 +11,15 @@ class Assets;
 
 class ChildAsset {
 public:
+    struct UpdateResult {
+        bool any_change = false;
+        bool world_transform_changed = false;
+        bool visibility_or_membership_changed = false;
+        bool visual_only_changed = false;
+        bool needs_repass = false;
+        bool needs_traversal_refresh = false;
+    };
+
     ChildAsset(Asset& owner, std::string asset_name);
     ~ChildAsset();
 
@@ -31,6 +40,7 @@ public:
     bool is_hidden() const;
     bool is_bound() const;
     Asset* get_asset() const;
+    UpdateResult update_detailed();
     bool update();
 
 private:
@@ -48,6 +58,7 @@ private:
     void move_from(ChildAsset&& other) noexcept;
     void register_anchor_binding();
     void unregister_anchor_binding();
+    bool update_internal();
 
     std::string asset_name_;
     Asset* owner_ = nullptr;

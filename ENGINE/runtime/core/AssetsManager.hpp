@@ -14,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <cstdint>
+#include <cstddef>
 #include <limits>
 #include <utility>
 #include <string>
@@ -131,6 +132,11 @@ public:
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
     float frame_delta_seconds_clamped() const;
     std::uint32_t frame_id() const { return frame_id_; }
+    std::size_t last_runtime_convergence_iterations() const { return last_runtime_convergence_stats_.iterations; }
+    std::size_t last_runtime_convergence_traversal_refreshes() const { return last_runtime_convergence_stats_.traversal_refresh_count; }
+    std::size_t last_runtime_convergence_waves() const { return last_runtime_convergence_stats_.wave_count; }
+    std::size_t last_runtime_convergence_children_updated() const { return last_runtime_convergence_stats_.children_updated; }
+    bool last_runtime_convergence_converged() const { return last_runtime_convergence_stats_.converged; }
 
     void render_overlays(SDL_Renderer* renderer);
     SDL_Renderer* renderer() const;
@@ -404,6 +410,25 @@ private:
         float width = 0.0f;
         float height = 0.0f;
     };
+    struct RuntimeConvergencePassResult {
+        bool any_change = false;
+        bool needs_repass = false;
+        bool needs_traversal_refresh = false;
+        std::size_t wave_count = 0;
+        std::size_t children_considered = 0;
+        std::size_t children_updated = 0;
+    };
+    struct RuntimeConvergenceFrameStats {
+        std::size_t iterations = 0;
+        std::size_t traversal_refresh_count = 0;
+        std::size_t wave_count = 0;
+        std::size_t children_considered = 0;
+        std::size_t children_updated = 0;
+        bool converged = false;
+        double stage_ms = 0.0;
+        double pass_ms = 0.0;
+        double refresh_ms = 0.0;
+    };
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
     std::vector<Asset*> asset_dimension_update_queue_;
     std::unordered_set<Asset*> asset_dimension_update_lookup_;
@@ -432,6 +457,7 @@ private:
     std::uint32_t frame_rebuild_request_count_ = 0;
     std::uint32_t frame_rebuild_execution_count_ = 0;
     bool frame_rebuild_metrics_initialized_ = false;
+    RuntimeConvergenceFrameStats last_runtime_convergence_stats_{};
 
     bool pending_initial_rebuild_ = false;
     bool post_runtime_traversal_refresh_pending_ = false;
@@ -489,7 +515,7 @@ private:
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
     std::uint64_t next_anchor_invalidation_version();
-    bool run_active_runtime_single_pass(bool include_audio_update = true);
+    RuntimeConvergencePassResult run_active_runtime_single_pass(bool include_audio_update = true);
     void run_active_runtime_single_pass_for_asset(Asset* asset,
                                                   const SDL_Point& camera_focus,
                                                   std::uint64_t camera_state_version,

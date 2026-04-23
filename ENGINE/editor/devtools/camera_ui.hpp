@@ -12,9 +12,7 @@ class FloatSliderWidget;
 class PitchDialWidget;
 class SliderWidget;
 class DMSlider;
-class DMDropdown;
 class DMCheckbox;
-class DropdownWidget;
 class CallbackCheckboxWidget;
 
 
@@ -66,6 +64,8 @@ private:
     std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
+    std::unique_ptr<FloatSliderWidget> front_layer_light_strength_multiplier_slider_;
+    std::unique_ptr<FloatSliderWidget> behind_layer_light_strength_multiplier_slider_;
     std::unique_ptr<FloatSliderWidget> blur_px_slider_;
     std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
 
@@ -76,12 +76,6 @@ private:
     std::unique_ptr<SliderWidget> camera_height_max_widget_;
     std::unique_ptr<CallbackCheckboxWidget> depth_of_field_widget_;
     DMCheckbox* depth_of_field_checkbox_ = nullptr;
-    std::unique_ptr<CallbackCheckboxWidget> asset_lighting_enabled_widget_;
-    DMCheckbox* asset_lighting_enabled_checkbox_ = nullptr;
-    std::unique_ptr<DMDropdown> asset_lighting_preset_dropdown_;
-    std::unique_ptr<DropdownWidget> asset_lighting_preset_widget_;
-    std::unique_ptr<DMDropdown> asset_lighting_quality_dropdown_;
-    std::unique_ptr<DropdownWidget> asset_lighting_quality_widget_;
     std::unique_ptr<Widget> movement_section_widget_;
     std::unique_ptr<Widget> framing_section_widget_;
     std::unique_ptr<Widget> lighting_section_widget_;

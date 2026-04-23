@@ -19,6 +19,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -571,10 +572,6 @@ TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") 
     CHECK_FALSE(serialized.contains("extra_cull_margin"));
     CHECK_FALSE(serialized.contains("depth_near_world"));
     CHECK_FALSE(serialized.contains("depth_far_world"));
-    CHECK_FALSE(serialized.contains("front_layer_light_strength_multiplier"));
-    CHECK_FALSE(serialized.contains("behind_layer_light_strength_multiplier"));
-    CHECK_FALSE(serialized.contains("max_lights_per_asset"));
-    CHECK_FALSE(serialized.contains("asset_lighting_depth_response_curve"));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") {
@@ -597,8 +594,8 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
-    CHECK(after.asset_lighting_preset == before.asset_lighting_preset);
-    CHECK(after.asset_lighting_quality_tier == before.asset_lighting_quality_tier);
+    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
+    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys handled by Assets") {
@@ -617,8 +614,8 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
-    CHECK(after.asset_lighting_preset == before.asset_lighting_preset);
-    CHECK(after.asset_lighting_quality_tier == before.asset_lighting_quality_tier);
+    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
+    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
 }
 
 TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer and DoF controls") {
@@ -627,6 +624,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"max_cull_depth", 2500.0},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
+        {"front_layer_light_strength_multiplier", 1.4},
+        {"behind_layer_light_strength_multiplier", 0.65},
         {"min_visible_uses_light_radius", true},
         {"light_radius_overlap_culling_enabled", true},
         {"light_fade_smoothing_enabled", true},
@@ -637,9 +636,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"blur_px", 20.0},
         {"radial_blur_px", 64.0},
         {"depth_of_field_enabled", true},
-        {"asset_lighting_enabled", true},
-        {"asset_lighting_preset", 2},
-        {"asset_lighting_quality_tier", 0},
         {"transition_damping", 11.0},
         {"max_camera_velocity", 1800.0},
         {"room_blend_damping_scale", 0.30},
@@ -655,6 +651,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
+    CHECK(settings.front_layer_light_strength_multiplier == doctest::Approx(1.4f));
+    CHECK(settings.behind_layer_light_strength_multiplier == doctest::Approx(0.65f));
     CHECK(settings.min_visible_uses_light_radius);
     CHECK(settings.light_radius_overlap_culling_enabled);
     CHECK(settings.light_fade_smoothing_enabled);
@@ -665,9 +663,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(settings.blur_px == doctest::Approx(20.0f));
     CHECK(settings.radial_blur_px == doctest::Approx(64.0f));
     CHECK(settings.depth_of_field_enabled);
-    CHECK(settings.asset_lighting_enabled == true);
-    CHECK(settings.asset_lighting_preset == 2);
-    CHECK(settings.asset_lighting_quality_tier == 0);
     CHECK(camera_grid.transition_settings().transition_damping == doctest::Approx(11.0f));
     CHECK(camera_grid.transition_settings().max_camera_velocity == doctest::Approx(1800.0f));
     CHECK(camera_grid.transition_settings().room_blend_damping_scale == doctest::Approx(0.30f));
@@ -683,6 +678,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
+    CHECK(serialized["front_layer_light_strength_multiplier"] == doctest::Approx(1.4));
+    CHECK(serialized["behind_layer_light_strength_multiplier"] == doctest::Approx(0.65));
     CHECK(serialized["min_visible_uses_light_radius"] == true);
     CHECK(serialized["light_radius_overlap_culling_enabled"] == true);
     CHECK(serialized["light_fade_smoothing_enabled"] == true);
@@ -693,9 +690,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(serialized["blur_px"] == doctest::Approx(20.0));
     CHECK(serialized["radial_blur_px"] == doctest::Approx(64.0));
     CHECK(serialized["depth_of_field_enabled"] == true);
-    CHECK(serialized["asset_lighting_enabled"] == true);
-    CHECK(serialized["asset_lighting_preset"] == 2);
-    CHECK(serialized["asset_lighting_quality_tier"] == 0);
     CHECK(serialized["transition_damping"] == doctest::Approx(11.0));
     CHECK(serialized["max_camera_velocity"] == doctest::Approx(1800.0));
     CHECK(serialized["room_blend_damping_scale"] == doctest::Approx(0.30));
@@ -709,27 +703,6 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK_FALSE(serialized.contains("max_blur_px"));
     CHECK_FALSE(serialized.contains("radial_max_blur_px"));
     CHECK_FALSE(serialized.contains("focus_depth"));
-    CHECK_FALSE(serialized.contains("front_layer_light_strength_multiplier"));
-    CHECK_FALSE(serialized.contains("behind_layer_light_strength_multiplier"));
-    CHECK_FALSE(serialized.contains("max_lights_per_asset"));
-    CHECK_FALSE(serialized.contains("asset_lighting_depth_response_curve"));
-}
-
-TEST_CASE("WarpedScreenGrid ignores deprecated asset and layer lighting keys on load") {
-    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
-    const WarpedScreenGrid::RealismSettings before = camera_grid.get_settings();
-
-    camera_grid.apply_camera_settings(nlohmann::json{
-        {"front_layer_light_strength_multiplier", 3.5},
-        {"behind_layer_light_strength_multiplier", 0.1},
-        {"max_lights_per_asset", 1},
-        {"asset_lighting_depth_response_curve", 4.0}
-    });
-
-    const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
-    CHECK(after.asset_lighting_enabled == before.asset_lighting_enabled);
-    CHECK(after.asset_lighting_preset == before.asset_lighting_preset);
-    CHECK(after.asset_lighting_quality_tier == before.asset_lighting_quality_tier);
 }
 
 TEST_CASE("WarpedScreenGrid camera settings accepts legacy blur keys") {

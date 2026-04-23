@@ -65,7 +65,7 @@ TEST_CASE("Render layer chains keep player only in background_mid chain") {
         render_internal::foreground_chain_layers(non_empty_layers, kPlayerLayer);
 
     const std::vector<int> expected_background{6, 5, 4, 3};
-    const std::vector<int> expected_foreground{2, 1, 0};
+    const std::vector<int> expected_foreground{0, 1, 2};
     CHECK(background_chain == expected_background);
     CHECK(foreground_chain == expected_foreground);
 }
@@ -76,7 +76,7 @@ TEST_CASE("Render foreground chain excludes all layers at or behind player") {
 
     const std::vector<int> foreground_chain =
         render_internal::foreground_chain_layers(non_empty_layers, kPlayerLayer);
-    const std::vector<int> expected_foreground{4, 1};
+    const std::vector<int> expected_foreground{1, 4};
     CHECK(foreground_chain == expected_foreground);
 }
 

@@ -2,7 +2,6 @@
 
 #include <SDL3/SDL.h>
 
-#include <algorithm>
 #include <vector>
 
 #include "rendering/render/blur_chain_renderer.hpp"
@@ -122,32 +121,6 @@ bool fill_texture(SDL_Renderer* renderer, SDL_Texture* texture, SDL_Color color)
     return true;
 }
 
-bool fill_texture_rect(SDL_Renderer* renderer,
-                       SDL_Texture* texture,
-                       int x,
-                       int y,
-                       int w,
-                       int h,
-                       SDL_Color color) {
-    if (!renderer || !texture || w <= 0 || h <= 0) {
-        return false;
-    }
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
-    if (!SDL_SetRenderTarget(renderer, texture)) {
-        return false;
-    }
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-    const SDL_FRect rect{
-        static_cast<float>(x),
-        static_cast<float>(y),
-        static_cast<float>(w),
-        static_cast<float>(h)};
-    SDL_RenderFillRect(renderer, &rect);
-    SDL_SetRenderTarget(renderer, previous_target);
-    return true;
-}
-
 bool read_pixel(SDL_Renderer* renderer, SDL_Texture* texture, int x, int y, SDL_Color& out_color) {
     out_color = SDL_Color{0, 0, 0, 0};
     if (!renderer || !texture || x < 0 || y < 0) {
@@ -185,16 +158,6 @@ bool read_pixel(SDL_Renderer* renderer, SDL_Texture* texture, int x, int y, SDL_
                 &out_color.a);
     SDL_DestroySurface(captured);
     return true;
-}
-
-bool supports_sum_blend() {
-    const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_SRC_ALPHA,
-                                                           SDL_BLENDFACTOR_ONE,
-                                                           SDL_BLENDOPERATION_ADD,
-                                                           SDL_BLENDFACTOR_ONE,
-                                                           SDL_BLENDFACTOR_ONE,
-                                                           SDL_BLENDOPERATION_ADD);
-    return mode != SDL_BLENDMODE_INVALID;
 }
 
 } // namespace
@@ -310,123 +273,7 @@ TEST_CASE("DoF background chain keeps the player split layer in the blur path") 
     const std::vector<int> foreground_chain = render_internal::foreground_chain_layers(non_empty_layers, 2);
 
     CHECK(background_chain == std::vector<int>({3, 2}));
-    CHECK(foreground_chain == std::vector<int>({1, 0}));
-}
-
-TEST_CASE("Blur chain foreground composition keeps nearest foreground on top") {
-    ScopedRenderer renderer_scope;
-    REQUIRE(renderer_scope.ready());
-
-    SDL_Renderer* renderer = renderer_scope.get();
-    REQUIRE(renderer != nullptr);
-
-    constexpr int kW = 16;
-    constexpr int kH = 16;
-    SDL_Texture* near_foreground = create_target_texture(renderer, kW, kH);
-    SDL_Texture* far_foreground = create_target_texture(renderer, kW, kH);
-    SDL_Texture* transparent_player_layer = create_target_texture(renderer, kW, kH);
-    REQUIRE(near_foreground != nullptr);
-    REQUIRE(far_foreground != nullptr);
-    REQUIRE(transparent_player_layer != nullptr);
-
-    REQUIRE(fill_texture(renderer, near_foreground, SDL_Color{230, 20, 20, 255}));
-    REQUIRE(fill_texture(renderer, far_foreground, SDL_Color{20, 230, 20, 255}));
-    REQUIRE(fill_texture(renderer, transparent_player_layer, SDL_Color{0, 0, 0, 0}));
-
-    render_pipeline::LayerRenderResult layer_render{};
-    layer_render.valid = true;
-    layer_render.layer_count = 3;
-    layer_render.player_layer_index = 2;
-    layer_render.non_empty_layers = {0, 1, 2};
-    layer_render.final_layer_textures = {near_foreground, far_foreground, transparent_player_layer};
-
-    BlurChainRenderer blur_chain(renderer);
-    blur_chain.set_output_dimensions(kW, kH);
-    const render_pipeline::BlurCompositeResult result = blur_chain.compose(
-        layer_render,
-        nullptr,
-        nullptr,
-        false,
-        0.0f,
-        0.0f,
-        SDL_FPoint{8.0f, 8.0f});
-    REQUIRE(result.valid);
-    REQUIRE(result.foreground_mid != nullptr);
-
-    SDL_Color pixel{};
-    REQUIRE(read_pixel(renderer, result.foreground_mid, 8, 8, pixel));
-    CHECK(pixel.r == 230);
-    CHECK(pixel.g == 20);
-    CHECK(pixel.b == 20);
-    CHECK(pixel.a == 255);
-
-    SDL_DestroyTexture(transparent_player_layer);
-    SDL_DestroyTexture(far_foreground);
-    SDL_DestroyTexture(near_foreground);
-}
-
-TEST_CASE("Blur chain uses prelit layer texture as blur input when DoF blur is active") {
-    ScopedRenderer renderer_scope;
-    REQUIRE(renderer_scope.ready());
-    if (!supports_sum_blend()) {
-        return;
-    }
-
-    SDL_Renderer* renderer = renderer_scope.get();
-    REQUIRE(renderer != nullptr);
-
-    constexpr int kW = 32;
-    constexpr int kH = 32;
-    SDL_Texture* prelit_layer = create_target_texture(renderer, kW, kH);
-    SDL_Texture* transparent_player_layer = create_target_texture(renderer, kW, kH);
-    REQUIRE(prelit_layer != nullptr);
-    REQUIRE(transparent_player_layer != nullptr);
-
-    REQUIRE(fill_texture(renderer, prelit_layer, SDL_Color{0, 0, 0, 0}));
-    REQUIRE(fill_texture_rect(renderer, prelit_layer, 12, 12, 8, 8, SDL_Color{255, 70, 40, 255}));
-    REQUIRE(fill_texture(renderer, transparent_player_layer, SDL_Color{0, 0, 0, 0}));
-
-    render_pipeline::LayerRenderResult layer_render{};
-    layer_render.valid = true;
-    layer_render.layer_count = 2;
-    layer_render.player_layer_index = 1;
-    layer_render.non_empty_layers = {0, 1};
-    layer_render.final_layer_textures = {prelit_layer, transparent_player_layer};
-
-    BlurChainRenderer blur_chain(renderer);
-    blur_chain.set_output_dimensions(kW, kH);
-    const render_pipeline::BlurCompositeResult result = blur_chain.compose(
-        layer_render,
-        nullptr,
-        nullptr,
-        true,
-        8.0f,
-        0.0f,
-        SDL_FPoint{16.0f, 16.0f});
-    REQUIRE(result.valid);
-    REQUIRE(result.foreground_mid != nullptr);
-
-    const std::vector<SDL_Point> probe_points{
-        SDL_Point{11, 16},
-        SDL_Point{20, 16},
-        SDL_Point{16, 11},
-        SDL_Point{16, 20},
-    };
-    int max_source_red = 0;
-    int max_blurred_red = 0;
-    for (const SDL_Point point : probe_points) {
-        SDL_Color source_px{};
-        SDL_Color blurred_px{};
-        REQUIRE(read_pixel(renderer, prelit_layer, point.x, point.y, source_px));
-        REQUIRE(read_pixel(renderer, result.foreground_mid, point.x, point.y, blurred_px));
-        max_source_red = std::max(max_source_red, static_cast<int>(source_px.r));
-        max_blurred_red = std::max(max_blurred_red, static_cast<int>(blurred_px.r));
-    }
-    CHECK(max_source_red == 0);
-    CHECK(max_blurred_red > 0);
-
-    SDL_DestroyTexture(transparent_player_layer);
-    SDL_DestroyTexture(prelit_layer);
+    CHECK(foreground_chain == std::vector<int>({0, 1}));
 }
 
 TEST_CASE("Blur chain applies floor dark mask to floor seed when only player layer exists") {

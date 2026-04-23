@@ -218,15 +218,81 @@ bool capture_texture_pixels(SDL_Renderer* renderer,
     for (int y = 0; y < expected_h; ++y) {
         const std::uint8_t* row = static_cast<const std::uint8_t*>(captured->pixels) + (captured->pitch * y);
         for (int x = 0; x < expected_w; ++x) {
-            Uint32 pixel = 0;
-            std::memcpy(&pixel, row + (x * bpp), static_cast<std::size_t>(bpp));
-            SDL_Color color{};
-            SDL_GetRGBA(pixel, format, palette, &color.r, &color.g, &color.b, &color.a);
-            out_pixels[static_cast<std::size_t>(y * expected_w + x)] = color;
+            const std::uint8_t* src = row + (x * bpp);
+            Uint32 raw = 0;
+            switch (bpp) {
+            case 1:
+                raw = src[0];
+                break;
+            case 2:
+                std::memcpy(&raw, src, 2);
+                break;
+            case 3:
+                raw = static_cast<Uint32>(src[0]) |
+                      (static_cast<Uint32>(src[1]) << 8) |
+                      (static_cast<Uint32>(src[2]) << 16);
+                break;
+            default:
+                std::memcpy(&raw, src, 4);
+                break;
+            }
+
+            SDL_Color decoded{};
+            SDL_GetRGBA(raw, format, palette, &decoded.r, &decoded.g, &decoded.b, &decoded.a);
+            out_pixels[static_cast<std::size_t>(y * expected_w + x)] = decoded;
         }
     }
+
     SDL_DestroySurface(captured);
     return true;
+}
+
+int luminance_u8(const SDL_Color& color) {
+    return static_cast<int>(
+        std::lround((0.2126 * static_cast<double>(color.r)) +
+                    (0.7152 * static_cast<double>(color.g)) +
+                    (0.0722 * static_cast<double>(color.b))));
+}
+
+bool supports_alpha_preserving_pipeline_blends() {
+    const SDL_BlendMode alpha_copy = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDOPERATION_ADD);
+
+    const SDL_BlendMode add_rgb_preserve_alpha = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_SRC_ALPHA,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+
+    const SDL_BlendMode alpha_masked_mul = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_DST_COLOR,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+
+    return alpha_copy != SDL_BLENDMODE_INVALID &&
+           add_rgb_preserve_alpha != SDL_BLENDMODE_INVALID &&
+           alpha_masked_mul != SDL_BLENDMODE_INVALID;
+}
+
+bool supports_sum_blend() {
+    const SDL_BlendMode sum = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_SRC_ALPHA,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+    return sum != SDL_BLENDMODE_INVALID;
 }
 
 render_pipeline::GeometryLayerDrawItem make_fullscreen_draw(SDL_Texture* texture, float width, float height) {
@@ -241,21 +307,14 @@ render_pipeline::GeometryLayerDrawItem make_fullscreen_draw(SDL_Texture* texture
     return draw;
 }
 
-bool supports_sum_blend() {
-    const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE,
-                                                           SDL_BLENDFACTOR_ONE,
-                                                           SDL_BLENDOPERATION_ADD,
-                                                           SDL_BLENDFACTOR_ONE,
-                                                           SDL_BLENDFACTOR_ONE,
-                                                           SDL_BLENDOPERATION_ADD);
-    return mode != SDL_BLENDMODE_INVALID;
-}
-
 } // namespace
 
-TEST_CASE("LayerEffectProcessor process_layer copies source into output exactly") {
+TEST_CASE("LayerEffectProcessor preserves dark-mask alpha from base layer") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
 
     SDL_Renderer* renderer = renderer_scope.get();
     REQUIRE(renderer != nullptr);
@@ -264,31 +323,181 @@ TEST_CASE("LayerEffectProcessor process_layer copies source into output exactly"
     constexpr int kH = 8;
     SDL_Texture* base = create_target_texture(renderer, kW, kH);
     SDL_Texture* output = create_target_texture(renderer, kW, kH);
+    SDL_Texture* dark_mask = create_target_texture(renderer, kW, kH);
     REQUIRE(base != nullptr);
     REQUIRE(output != nullptr);
+    REQUIRE(dark_mask != nullptr);
 
     REQUIRE(clear_texture(renderer, base, SDL_Color{0, 0, 0, 0}));
-    REQUIRE(fill_texture_rect(renderer, base, 0, 0, 4, 4, SDL_Color{255, 0, 0, 255}));
-    REQUIRE(fill_texture_rect(renderer, base, 4, 0, 4, 4, SDL_Color{0, 255, 0, 255}));
-    REQUIRE(fill_texture_rect(renderer, base, 0, 4, 4, 4, SDL_Color{0, 0, 255, 255}));
+    REQUIRE(fill_texture_rect(renderer, base, 0, 0, 4, 4, SDL_Color{255, 255, 255, 0}));
+    REQUIRE(fill_texture_rect(renderer, base, 4, 0, 4, 4, SDL_Color{255, 255, 255, 64}));
+    REQUIRE(fill_texture_rect(renderer, base, 0, 4, 4, 4, SDL_Color{255, 255, 255, 128}));
     REQUIRE(fill_texture_rect(renderer, base, 4, 4, 4, 4, SDL_Color{255, 255, 255, 255}));
 
     LayerEffectProcessor processor(renderer);
-    const LayerEffectProcessor::LayerProcessResult result = processor.process_layer(base, output);
-    CHECK(result.final_texture == output);
+    LayerEffectProcessor::LayerLightingParams lighting{};
+    lighting.enabled = true;
+    lighting.ambient_color = SDL_Color{18, 20, 24, 255};
 
-    std::vector<SDL_Color> base_pixels{};
-    std::vector<SDL_Color> output_pixels{};
-    REQUIRE(capture_texture_pixels(renderer, base, kW, kH, base_pixels));
-    REQUIRE(capture_texture_pixels(renderer, output, kW, kH, output_pixels));
-    REQUIRE(base_pixels.size() == output_pixels.size());
-    for (std::size_t i = 0; i < base_pixels.size(); ++i) {
-        CHECK(base_pixels[i].r == output_pixels[i].r);
-        CHECK(base_pixels[i].g == output_pixels[i].g);
-        CHECK(base_pixels[i].b == output_pixels[i].b);
-        CHECK(base_pixels[i].a == output_pixels[i].a);
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{4.0f, 4.0f};
+    light.color = SDL_Color{255, 255, 255, 255};
+    light.intensity = 1.0f;
+    light.radius_px = 12.0f;
+    light.falloff = 1.8f;
+    light.world_z = 0.0f;
+
+    LayerEffectProcessor::LayerScratchTextures scratch{};
+    scratch.dark_mask_texture = dark_mask;
+
+    const LayerEffectProcessor::LayerProcessResult result = processor.process_layer(
+        base,
+        output,
+        0.0,
+        10.0,
+        lighting,
+        std::vector<LayerEffectProcessor::RuntimeLight>{light},
+        scratch);
+    CHECK(result.lighting_applied);
+
+    SDL_Color c00{};
+    SDL_Color c10{};
+    SDL_Color c01{};
+    SDL_Color c11{};
+    REQUIRE(read_pixel(renderer, dark_mask, 1, 1, c00));
+    REQUIRE(read_pixel(renderer, dark_mask, 6, 1, c10));
+    REQUIRE(read_pixel(renderer, dark_mask, 1, 6, c01));
+    REQUIRE(read_pixel(renderer, dark_mask, 6, 6, c11));
+
+    CHECK(c00.a == 0);
+    CHECK(c10.a == 64);
+    CHECK(c01.a == 128);
+    CHECK(c11.a == 255);
+
+    SDL_DestroyTexture(dark_mask);
+    SDL_DestroyTexture(output);
+    SDL_DestroyTexture(base);
+}
+
+TEST_CASE("LayerEffectProcessor attenuates lights behind a layer") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
     }
 
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 32;
+    constexpr int kH = 32;
+    SDL_Texture* base = create_target_texture(renderer, kW, kH);
+    SDL_Texture* output = create_target_texture(renderer, kW, kH);
+    SDL_Texture* dark_mask = create_target_texture(renderer, kW, kH);
+    REQUIRE(base != nullptr);
+    REQUIRE(output != nullptr);
+    REQUIRE(dark_mask != nullptr);
+    REQUIRE(clear_texture(renderer, base, SDL_Color{255, 255, 255, 255}));
+
+    LayerEffectProcessor processor(renderer);
+    LayerEffectProcessor::LayerLightingParams lighting{};
+    lighting.enabled = true;
+    lighting.ambient_color = SDL_Color{0, 0, 0, 255};
+
+    auto render_light_sample = [&](float world_z) -> int {
+        LayerEffectProcessor::RuntimeLight light{};
+        light.screen_center = SDL_FPoint{16.0f, 16.0f};
+        light.color = SDL_Color{255, 255, 255, 255};
+        light.intensity = 0.9f;
+        light.radius_px = 12.0f;
+        light.falloff = 1.6f;
+        light.world_z = world_z;
+
+        LayerEffectProcessor::LayerScratchTextures scratch{};
+        scratch.dark_mask_texture = dark_mask;
+
+        processor.process_layer(base,
+                                output,
+                                100.0,
+                                120.0,
+                                lighting,
+                                std::vector<LayerEffectProcessor::RuntimeLight>{light},
+                                scratch);
+
+        SDL_Color center{};
+        CHECK(read_pixel(renderer, output, 16, 16, center));
+        return luminance_u8(center);
+    };
+
+    const int front_value = render_light_sample(80.0f);
+    const int behind_value = render_light_sample(220.0f);
+
+    CHECK(front_value > behind_value);
+    CHECK(front_value - behind_value >= 8);
+
+    SDL_DestroyTexture(dark_mask);
+    SDL_DestroyTexture(output);
+    SDL_DestroyTexture(base);
+}
+
+TEST_CASE("LayerEffectProcessor behind attenuation is monotonic as depth increases") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 32;
+    constexpr int kH = 32;
+    SDL_Texture* base = create_target_texture(renderer, kW, kH);
+    SDL_Texture* output = create_target_texture(renderer, kW, kH);
+    SDL_Texture* dark_mask = create_target_texture(renderer, kW, kH);
+    REQUIRE(base != nullptr);
+    REQUIRE(output != nullptr);
+    REQUIRE(dark_mask != nullptr);
+    REQUIRE(clear_texture(renderer, base, SDL_Color{255, 255, 255, 255}));
+
+    LayerEffectProcessor processor(renderer);
+    LayerEffectProcessor::LayerLightingParams lighting{};
+    lighting.enabled = true;
+    lighting.ambient_color = SDL_Color{0, 0, 0, 255};
+
+    auto sample = [&](float light_world_z) -> int {
+        LayerEffectProcessor::RuntimeLight light{};
+        light.screen_center = SDL_FPoint{16.0f, 16.0f};
+        light.color = SDL_Color{255, 255, 255, 255};
+        light.intensity = 0.6f;
+        light.radius_px = 14.0f;
+        light.falloff = 1.8f;
+        light.world_z = light_world_z;
+
+        LayerEffectProcessor::LayerScratchTextures scratch{};
+        scratch.dark_mask_texture = dark_mask;
+
+        processor.process_layer(base,
+                                output,
+                                100.0,
+                                120.0,
+                                lighting,
+                                std::vector<LayerEffectProcessor::RuntimeLight>{light},
+                                scratch);
+
+        SDL_Color center{};
+        CHECK(read_pixel(renderer, output, 16, 16, center));
+        return luminance_u8(center);
+    };
+
+    const int value_not_behind = sample(120.0f);
+    const int value_mildly_behind = sample(150.0f);
+    const int value_far_behind = sample(250.0f);
+
+    CHECK(value_not_behind >= value_mildly_behind);
+    CHECK(value_mildly_behind >= value_far_behind);
+
+    SDL_DestroyTexture(dark_mask);
     SDL_DestroyTexture(output);
     SDL_DestroyTexture(base);
 }
@@ -360,11 +569,22 @@ TEST_CASE("LayerEffectProcessor tiny blur values are applied and accumulate acro
         }
         return accum;
     };
+    auto l1_alpha_diff = [](const std::vector<SDL_Color>& a, const std::vector<SDL_Color>& b) {
+        std::uint64_t accum = 0;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            accum += static_cast<std::uint64_t>(std::abs(static_cast<int>(a[i].a) - static_cast<int>(b[i].a)));
+        }
+        return accum;
+    };
 
     const std::uint64_t single_pass_diff = l1_diff(source_pixels, once_pixels);
     const std::uint64_t repeated_pass_diff = l1_diff(source_pixels, twice_pixels);
+    const std::uint64_t single_pass_alpha_diff = l1_alpha_diff(source_pixels, once_pixels);
+    const std::uint64_t repeated_pass_alpha_diff = l1_alpha_diff(source_pixels, twice_pixels);
     CHECK(single_pass_diff > 0);
     CHECK(repeated_pass_diff > single_pass_diff);
+    CHECK(single_pass_alpha_diff > 0);
+    CHECK(repeated_pass_alpha_diff > single_pass_alpha_diff);
 
     SDL_DestroyTexture(scratch);
     SDL_DestroyTexture(blurred_twice);
@@ -414,27 +634,11 @@ TEST_CASE("LayerEffectProcessor zero blur radii copy the source exactly") {
     REQUIRE(capture_texture_pixels(renderer, source, kW, kH, source_pixels));
     REQUIRE(capture_texture_pixels(renderer, output, kW, kH, output_pixels));
     REQUIRE(source_pixels.size() == output_pixels.size());
-
-    auto expected_premul = [](Uint8 channel, Uint8 alpha) -> int {
-        return static_cast<int>(std::lround((static_cast<float>(channel) * static_cast<float>(alpha)) / 255.0f));
-    };
     for (std::size_t i = 0; i < source_pixels.size(); ++i) {
+        CHECK(source_pixels[i].r == output_pixels[i].r);
+        CHECK(source_pixels[i].g == output_pixels[i].g);
+        CHECK(source_pixels[i].b == output_pixels[i].b);
         CHECK(source_pixels[i].a == output_pixels[i].a);
-        if (source_pixels[i].a == 255) {
-            CHECK(source_pixels[i].r == output_pixels[i].r);
-            CHECK(source_pixels[i].g == output_pixels[i].g);
-            CHECK(source_pixels[i].b == output_pixels[i].b);
-            continue;
-        }
-        if (source_pixels[i].a == 0) {
-            CHECK(output_pixels[i].r == 0);
-            CHECK(output_pixels[i].g == 0);
-            CHECK(output_pixels[i].b == 0);
-            continue;
-        }
-        CHECK(std::abs(static_cast<int>(output_pixels[i].r) - expected_premul(source_pixels[i].r, source_pixels[i].a)) <= 1);
-        CHECK(std::abs(static_cast<int>(output_pixels[i].g) - expected_premul(source_pixels[i].g, source_pixels[i].a)) <= 1);
-        CHECK(std::abs(static_cast<int>(output_pixels[i].b) - expected_premul(source_pixels[i].b, source_pixels[i].a)) <= 1);
     }
 
     SDL_DestroyTexture(scratch);
@@ -442,9 +646,205 @@ TEST_CASE("LayerEffectProcessor zero blur radii copy the source exactly") {
     SDL_DestroyTexture(source);
 }
 
-TEST_CASE("LayerStackRenderer rasterizes prelit sprites without relighting") {
+TEST_CASE("LayerEffectProcessor applies lighting") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 24;
+    constexpr int kH = 24;
+    SDL_Texture* base = create_target_texture(renderer, kW, kH);
+    SDL_Texture* output = create_target_texture(renderer, kW, kH);
+    SDL_Texture* dark_mask = create_target_texture(renderer, kW, kH);
+    REQUIRE(base != nullptr);
+    REQUIRE(output != nullptr);
+    REQUIRE(dark_mask != nullptr);
+    REQUIRE(clear_texture(renderer, base, SDL_Color{255, 255, 255, 255}));
+
+    LayerEffectProcessor processor(renderer);
+    LayerEffectProcessor::LayerLightingParams lighting{};
+    lighting.enabled = true;
+    lighting.ambient_color = SDL_Color{8, 8, 10, 255};
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{12.0f, 12.0f};
+    light.color = SDL_Color{255, 245, 220, 255};
+    light.intensity = 0.8f;
+    light.radius_px = 10.0f;
+    light.falloff = 1.7f;
+    light.world_z = 20.0f;
+
+    LayerEffectProcessor::LayerScratchTextures scratch{};
+    scratch.dark_mask_texture = dark_mask;
+
+    const LayerEffectProcessor::LayerProcessResult result = processor.process_layer(
+        base,
+        output,
+        -40.0,
+        40.0,
+        lighting,
+        std::vector<LayerEffectProcessor::RuntimeLight>{light},
+        scratch);
+
+    CHECK(result.lighting_applied);
+
+    SDL_Color center{};
+    REQUIRE(read_pixel(renderer, output, 12, 12, center));
+    CHECK(center.a > 0);
+
+    SDL_DestroyTexture(dark_mask);
+    SDL_DestroyTexture(output);
+    SDL_DestroyTexture(base);
+}
+
+TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(32, 32);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 1;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0};
+    build.layers.resize(1);
+    build.layers[0].depth_min = -4.0;
+    build.layers[0].depth_max = 4.0;
+    build.layers[0].representative_depth = 0.0;
+    build.layers[0].bounds_min_x = 8.0f;
+    build.layers[0].bounds_min_y = 8.0f;
+    build.layers[0].bounds_max_x = 24.0f;
+    build.layers[0].bounds_max_y = 24.0f;
+
+    LayerEffectProcessor::RuntimeLight frame_one_light{};
+    frame_one_light.stable_light_id = 42;
+    frame_one_light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    frame_one_light.intensity = 1.0f;
+    frame_one_light.radius_px = 12.0f;
+    frame_one_light.world_z = 0.0f;
+
+    const render_pipeline::LayerRenderResult frame_one = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{frame_one_light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(frame_one.valid);
+    REQUIRE(frame_one.owning_body_lights.size() == 1);
+    CHECK(frame_one.owning_body_lights[0].size() == 1);
+
+    LayerEffectProcessor::RuntimeLight frame_two_light = frame_one_light;
+    frame_two_light.screen_center = SDL_FPoint{34.0f, 16.0f};
+    frame_two_light.radius_px = 8.0f;
+
+    const render_pipeline::LayerRenderResult frame_two_same_id = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(frame_two_same_id.valid);
+    REQUIRE(frame_two_same_id.owning_body_lights.size() == 1);
+    CHECK(frame_two_same_id.owning_body_lights[0].empty());
+
+    LayerEffectProcessor::RuntimeLight frame_two_changed_id = frame_two_light;
+    frame_two_changed_id.stable_light_id = 4242;
+
+    const render_pipeline::LayerRenderResult frame_two_new_id = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_changed_id},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(frame_two_new_id.valid);
+    REQUIRE(frame_two_new_id.owning_body_lights.size() == 1);
+    CHECK(frame_two_new_id.owning_body_lights[0].empty());
+}
+
+TEST_CASE("LayerStackRenderer light assignment is invariant to player_layer_index changes") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(32, 32);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 2;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0, 1};
+    build.layers.resize(2);
+    build.layers[0].depth_min = -4.0;
+    build.layers[0].depth_max = 4.0;
+    build.layers[0].representative_depth = 0.0;
+    build.layers[0].bounds_min_x = 4.0f;
+    build.layers[0].bounds_min_y = 4.0f;
+    build.layers[0].bounds_max_x = 28.0f;
+    build.layers[0].bounds_max_y = 28.0f;
+    build.layers[1].depth_min = 15.0;
+    build.layers[1].depth_max = 25.0;
+    build.layers[1].representative_depth = 20.0;
+    build.layers[1].bounds_min_x = 4.0f;
+    build.layers[1].bounds_min_y = 4.0f;
+    build.layers[1].bounds_max_x = 28.0f;
+    build.layers[1].bounds_max_y = 28.0f;
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.stable_light_id = 123;
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.intensity = 1.0f;
+    light.radius_px = 8.0f;
+    light.radius_world = 6.0f;
+    light.world_z = 3.0f;
+
+    const render_pipeline::LayerRenderResult player_front = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(player_front.valid);
+    REQUIRE(player_front.owning_body_lights.size() == 2);
+
+    build.player_layer_index = 1;
+    const render_pipeline::LayerRenderResult player_back = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(player_back.valid);
+    REQUIRE(player_back.owning_body_lights.size() == 2);
+
+    CHECK(player_front.owning_body_lights[0].size() == player_back.owning_body_lights[0].size());
+    CHECK(player_front.owning_body_lights[1].size() == player_back.owning_body_lights[1].size());
+}
+
+TEST_CASE("LayerStackRenderer applies front multiplier for screen-overlapping lights in front of layer depth") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
 
     SDL_Renderer* renderer = renderer_scope.get();
     REQUIRE(renderer != nullptr);
@@ -453,7 +853,7 @@ TEST_CASE("LayerStackRenderer rasterizes prelit sprites without relighting") {
     constexpr int kH = 32;
     SDL_Texture* sprite = create_target_texture(renderer, kW, kH);
     REQUIRE(sprite != nullptr);
-    REQUIRE(clear_texture(renderer, sprite, SDL_Color{164, 196, 228, 255}));
+    REQUIRE(clear_texture(renderer, sprite, SDL_Color{168, 168, 168, 255}));
 
     LayerStackRenderer stack_renderer(renderer);
     stack_renderer.set_output_dimensions(kW, kH);
@@ -464,33 +864,54 @@ TEST_CASE("LayerStackRenderer rasterizes prelit sprites without relighting") {
     build.player_layer_index = 0;
     build.non_empty_layers = {0};
     build.layers.resize(1);
-    build.layers[0].depth_min = -32.0;
-    build.layers[0].depth_max = 32.0;
-    build.layers[0].representative_depth = 0.0;
+    build.layers[0].depth_min = 100.0;
+    build.layers[0].depth_max = 120.0;
+    build.layers[0].representative_depth = 110.0;
     build.layers[0].bounds_min_x = 0.0f;
     build.layers[0].bounds_min_y = 0.0f;
     build.layers[0].bounds_max_x = static_cast<float>(kW);
     build.layers[0].bounds_max_y = static_cast<float>(kH);
     build.layers[0].draws.push_back(make_fullscreen_draw(sprite, static_cast<float>(kW), static_cast<float>(kH)));
 
-    const render_pipeline::LayerRenderResult rendered = stack_renderer.render(build);
-    REQUIRE(rendered.valid);
-    REQUIRE(rendered.final_layer_textures.size() == 1);
-    REQUIRE(rendered.final_layer_textures[0] != nullptr);
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.color = SDL_Color{255, 255, 255, 255};
+    light.intensity = 0.65f;
+    light.radius_px = 12.0f;
+    light.radius_world = 8.0f;
+    light.falloff = 1.5f;
+    light.world_z = 0.0f;
 
-    SDL_Color center{};
-    REQUIRE(read_pixel(renderer, rendered.final_layer_textures[0], 16, 16, center));
-    CHECK(center.r == 164);
-    CHECK(center.g == 196);
-    CHECK(center.b == 228);
-    CHECK(center.a == 255);
+    std::uint64_t light_id = 1;
+    auto sample_luminance = [&](float front_multiplier, float behind_multiplier) -> int {
+        LayerEffectProcessor::RuntimeLight sampled = light;
+        sampled.stable_light_id = light_id++;
+        const render_pipeline::LayerRenderResult rendered = stack_renderer.render(
+            build,
+            std::vector<LayerEffectProcessor::RuntimeLight>{sampled},
+            true,
+            front_multiplier,
+            behind_multiplier);
+        REQUIRE(rendered.valid);
+        REQUIRE(rendered.final_layer_textures.size() == 1);
+        SDL_Color center{};
+        REQUIRE(read_pixel(renderer, rendered.final_layer_textures[0], 16, 16, center));
+        return luminance_u8(center);
+    };
+
+    const int low_front = sample_luminance(0.10f, 0.20f);
+    const int high_front = sample_luminance(2.00f, 0.20f);
+    CHECK(high_front > low_front + 8);
 
     SDL_DestroyTexture(sprite);
 }
 
-TEST_CASE("LayerStackRenderer output is invariant to layer depth metadata after asset prelighting") {
+TEST_CASE("LayerStackRenderer applies behind multiplier for screen-overlapping lights behind layer depth") {
     ScopedRenderer renderer_scope;
     REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
 
     SDL_Renderer* renderer = renderer_scope.get();
     REQUIRE(renderer != nullptr);
@@ -499,44 +920,122 @@ TEST_CASE("LayerStackRenderer output is invariant to layer depth metadata after 
     constexpr int kH = 32;
     SDL_Texture* sprite = create_target_texture(renderer, kW, kH);
     REQUIRE(sprite != nullptr);
-    REQUIRE(clear_texture(renderer, sprite, SDL_Color{210, 150, 90, 255}));
+    REQUIRE(clear_texture(renderer, sprite, SDL_Color{168, 168, 168, 255}));
 
     LayerStackRenderer stack_renderer(renderer);
     stack_renderer.set_output_dimensions(kW, kH);
 
-    auto build_layer = [&](double depth_min, double depth_max, int player_layer_index) {
-        render_pipeline::LayerBuildResult build{};
-        build.valid = true;
-        build.layer_count = 1;
-        build.player_layer_index = player_layer_index;
-        build.non_empty_layers = {0};
-        build.layers.resize(1);
-        build.layers[0].depth_min = depth_min;
-        build.layers[0].depth_max = depth_max;
-        build.layers[0].representative_depth = 0.5 * (depth_min + depth_max);
-        build.layers[0].bounds_min_x = 0.0f;
-        build.layers[0].bounds_min_y = 0.0f;
-        build.layers[0].bounds_max_x = static_cast<float>(kW);
-        build.layers[0].bounds_max_y = static_cast<float>(kH);
-        build.layers[0].draws.push_back(make_fullscreen_draw(sprite, static_cast<float>(kW), static_cast<float>(kH)));
-        return build;
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 1;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0};
+    build.layers.resize(1);
+    build.layers[0].depth_min = -130.0;
+    build.layers[0].depth_max = -100.0;
+    build.layers[0].representative_depth = -115.0;
+    build.layers[0].bounds_min_x = 0.0f;
+    build.layers[0].bounds_min_y = 0.0f;
+    build.layers[0].bounds_max_x = static_cast<float>(kW);
+    build.layers[0].bounds_max_y = static_cast<float>(kH);
+    build.layers[0].draws.push_back(make_fullscreen_draw(sprite, static_cast<float>(kW), static_cast<float>(kH)));
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.color = SDL_Color{255, 255, 255, 255};
+    light.intensity = 0.65f;
+    light.radius_px = 12.0f;
+    light.radius_world = 8.0f;
+    light.falloff = 1.5f;
+    light.world_z = 220.0f;
+
+    std::uint64_t light_id = 11;
+    auto sample_luminance = [&](float front_multiplier, float behind_multiplier) -> int {
+        LayerEffectProcessor::RuntimeLight sampled = light;
+        sampled.stable_light_id = light_id++;
+        const render_pipeline::LayerRenderResult rendered = stack_renderer.render(
+            build,
+            std::vector<LayerEffectProcessor::RuntimeLight>{sampled},
+            true,
+            front_multiplier,
+            behind_multiplier);
+        REQUIRE(rendered.valid);
+        REQUIRE(rendered.final_layer_textures.size() == 1);
+        SDL_Color center{};
+        REQUIRE(read_pixel(renderer, rendered.final_layer_textures[0], 16, 16, center));
+        return luminance_u8(center);
     };
 
-    const render_pipeline::LayerRenderResult near_render = stack_renderer.render(build_layer(-20.0, 20.0, 0));
-    const render_pipeline::LayerRenderResult far_render = stack_renderer.render(build_layer(300.0, 500.0, 3));
-    REQUIRE(near_render.valid);
-    REQUIRE(far_render.valid);
-    REQUIRE(near_render.final_layer_textures.size() == 1);
-    REQUIRE(far_render.final_layer_textures.size() == 1);
+    const int low_behind = sample_luminance(0.20f, 0.10f);
+    const int high_behind = sample_luminance(0.20f, 2.00f);
+    CHECK(high_behind > low_behind + 8);
 
-    SDL_Color near_pixel{};
-    SDL_Color far_pixel{};
-    REQUIRE(read_pixel(renderer, near_render.final_layer_textures[0], 16, 16, near_pixel));
-    REQUIRE(read_pixel(renderer, far_render.final_layer_textures[0], 16, 16, far_pixel));
-    CHECK(near_pixel.r == far_pixel.r);
-    CHECK(near_pixel.g == far_pixel.g);
-    CHECK(near_pixel.b == far_pixel.b);
-    CHECK(near_pixel.a == far_pixel.a);
+    SDL_DestroyTexture(sprite);
+}
+
+TEST_CASE("LayerStackRenderer equal-depth lights use front multiplier") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 32;
+    constexpr int kH = 32;
+    SDL_Texture* sprite = create_target_texture(renderer, kW, kH);
+    REQUIRE(sprite != nullptr);
+    REQUIRE(clear_texture(renderer, sprite, SDL_Color{168, 168, 168, 255}));
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(kW, kH);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 1;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0};
+    build.layers.resize(1);
+    build.layers[0].depth_min = 100.0;
+    build.layers[0].depth_max = 120.0;
+    build.layers[0].representative_depth = 110.0;
+    build.layers[0].bounds_min_x = 0.0f;
+    build.layers[0].bounds_min_y = 0.0f;
+    build.layers[0].bounds_max_x = static_cast<float>(kW);
+    build.layers[0].bounds_max_y = static_cast<float>(kH);
+    build.layers[0].draws.push_back(make_fullscreen_draw(sprite, static_cast<float>(kW), static_cast<float>(kH)));
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.color = SDL_Color{255, 255, 255, 255};
+    light.intensity = 0.65f;
+    light.radius_px = 6.0f;
+    light.radius_world = 6.0f;
+    light.falloff = 1.5f;
+    light.world_z = 110.0f;
+
+    std::uint64_t light_id = 21;
+    auto sample_luminance = [&](float front_multiplier, float behind_multiplier) -> int {
+        LayerEffectProcessor::RuntimeLight sampled = light;
+        sampled.stable_light_id = light_id++;
+        const render_pipeline::LayerRenderResult rendered = stack_renderer.render(
+            build,
+            std::vector<LayerEffectProcessor::RuntimeLight>{sampled},
+            true,
+            front_multiplier,
+            behind_multiplier);
+        REQUIRE(rendered.valid);
+        REQUIRE(rendered.final_layer_textures.size() == 1);
+        SDL_Color center{};
+        REQUIRE(read_pixel(renderer, rendered.final_layer_textures[0], 16, 16, center));
+        return luminance_u8(center);
+    };
+
+    const int front_selected = sample_luminance(2.00f, 0.10f);
+    const int behind_selected = sample_luminance(0.10f, 2.00f);
+    CHECK(front_selected > behind_selected + 8);
 
     SDL_DestroyTexture(sprite);
 }

@@ -193,19 +193,16 @@ void CameraUIPanel::sync_from_camera() {
     if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
     if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
     if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
+    if (front_layer_light_strength_multiplier_slider_) {
+        front_layer_light_strength_multiplier_slider_->set_value(settings.front_layer_light_strength_multiplier);
+    }
+    if (behind_layer_light_strength_multiplier_slider_) {
+        behind_layer_light_strength_multiplier_slider_->set_value(settings.behind_layer_light_strength_multiplier);
+    }
     if (blur_px_slider_) blur_px_slider_->set_value(settings.blur_px);
     if (radial_blur_px_slider_) radial_blur_px_slider_->set_value(settings.radial_blur_px);
     if (depth_of_field_checkbox_) {
         depth_of_field_checkbox_->set_value(settings.depth_of_field_enabled);
-    }
-    if (asset_lighting_enabled_checkbox_) {
-        asset_lighting_enabled_checkbox_->set_value(settings.asset_lighting_enabled);
-    }
-    if (asset_lighting_preset_dropdown_) {
-        asset_lighting_preset_dropdown_->set_selected(settings.asset_lighting_preset);
-    }
-    if (asset_lighting_quality_dropdown_) {
-        asset_lighting_quality_dropdown_->set_selected(settings.asset_lighting_quality_tier);
     }
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
@@ -276,6 +273,26 @@ void CameraUIPanel::build_ui() {
         2);
     layer_depth_curve_slider_->set_tooltip("Non-linear bin growth with distance. Higher values create fewer far-depth layers.");
     layer_depth_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    front_layer_light_strength_multiplier_slider_ = std::make_unique<FloatSliderWidget>(
+        "Front Layer Light Strength",
+        0.0f,
+        4.0f,
+        0.01f,
+        defaults.front_layer_light_strength_multiplier,
+        2);
+    front_layer_light_strength_multiplier_slider_->set_tooltip(
+        "Scales lighting energy for layers in front of the camera plane. Higher values punch up nearby lights and may increase additive light passes.");
+    front_layer_light_strength_multiplier_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    behind_layer_light_strength_multiplier_slider_ = std::make_unique<FloatSliderWidget>(
+        "Behind Layer Light Strength",
+        0.0f,
+        4.0f,
+        0.01f,
+        defaults.behind_layer_light_strength_multiplier,
+        2);
+    behind_layer_light_strength_multiplier_slider_->set_tooltip(
+        "Scales lighting energy for layers behind the camera plane. Raise to keep deep background lights readable; lower to reduce distant glow and cost.");
+    behind_layer_light_strength_multiplier_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     blur_px_slider_ = std::make_unique<FloatSliderWidget>("Blur (px)", 0.0f, 128.0f, 0.01f, defaults.blur_px, 3);
     blur_px_slider_->set_tooltip("Per-layer Gaussian-like blur budget. Larger values produce softer focus transitions and increase blur processing cost.");
     blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
@@ -293,37 +310,6 @@ void CameraUIPanel::build_ui() {
     depth_of_field_widget_ = std::make_unique<CallbackCheckboxWidget>(
         std::move(dof_checkbox),
         [this](bool) { on_control_value_changed(); });
-    auto asset_lighting_checkbox = std::make_unique<DMCheckbox>("Enable Asset Lighting", defaults.asset_lighting_enabled);
-    asset_lighting_enabled_checkbox_ = asset_lighting_checkbox.get();
-    asset_lighting_enabled_widget_ = std::make_unique<CallbackCheckboxWidget>(
-        std::move(asset_lighting_checkbox),
-        [this](bool) { on_control_value_changed(); });
-    if (asset_lighting_enabled_widget_) {
-        asset_lighting_enabled_widget_->set_tooltip(
-            "When enabled, sprite geometry is lit per asset before layer composition. Floor lighting remains unchanged.");
-    }
-
-    asset_lighting_preset_dropdown_ = std::make_unique<DMDropdown>(
-        "Asset Lighting Preset",
-        std::vector<std::string>{"Natural", "Cinematic", "Punchy"},
-        std::clamp(defaults.asset_lighting_preset, 0, 2));
-    asset_lighting_preset_dropdown_->set_on_selection_changed([this](int) { on_control_value_changed(); });
-    asset_lighting_preset_widget_ = std::make_unique<DropdownWidget>(asset_lighting_preset_dropdown_.get());
-    if (asset_lighting_preset_widget_) {
-        asset_lighting_preset_widget_->set_tooltip(
-            "Natural is softer, Cinematic is balanced, Punchy is high contrast.");
-    }
-
-    asset_lighting_quality_dropdown_ = std::make_unique<DMDropdown>(
-        "Asset Lighting Quality",
-        std::vector<std::string>{"Low (4 lights)", "Medium (8 lights)", "High (12 lights)"},
-        std::clamp(defaults.asset_lighting_quality_tier, 0, 2));
-    asset_lighting_quality_dropdown_->set_on_selection_changed([this](int) { on_control_value_changed(); });
-    asset_lighting_quality_widget_ = std::make_unique<DropdownWidget>(asset_lighting_quality_dropdown_.get());
-    if (asset_lighting_quality_widget_) {
-        asset_lighting_quality_widget_->set_tooltip(
-            "Controls the number of runtime lights sampled per sprite.");
-    }
 
     // Global camera height bounds
     const auto [saved_min, saved_max] = load_camera_height_bounds();
@@ -442,9 +428,8 @@ void CameraUIPanel::rebuild_rows() {
         if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
         if (blur_px_slider_) rows.push_back({ blur_px_slider_.get() });
         if (radial_blur_px_slider_) rows.push_back({ radial_blur_px_slider_.get() });
-        if (asset_lighting_enabled_widget_) rows.push_back({ asset_lighting_enabled_widget_.get() });
-        if (asset_lighting_preset_widget_) rows.push_back({ asset_lighting_preset_widget_.get() });
-        if (asset_lighting_quality_widget_) rows.push_back({ asset_lighting_quality_widget_.get() });
+        if (front_layer_light_strength_multiplier_slider_) rows.push_back({ front_layer_light_strength_multiplier_slider_.get() });
+        if (behind_layer_light_strength_multiplier_slider_) rows.push_back({ behind_layer_light_strength_multiplier_slider_.get() });
     }
 
     if (debug_section_widget_) rows.push_back({ debug_section_widget_.get() });
@@ -476,12 +461,15 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (max_cull_depth_slider_) updated.max_cull_depth = max_cull_depth_slider_->value();
     if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
     if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
+    if (front_layer_light_strength_multiplier_slider_) {
+        updated.front_layer_light_strength_multiplier = front_layer_light_strength_multiplier_slider_->value();
+    }
+    if (behind_layer_light_strength_multiplier_slider_) {
+        updated.behind_layer_light_strength_multiplier = behind_layer_light_strength_multiplier_slider_->value();
+    }
     if (blur_px_slider_) updated.blur_px = blur_px_slider_->value();
     if (radial_blur_px_slider_) updated.radial_blur_px = radial_blur_px_slider_->value();
     if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
-    if (asset_lighting_enabled_checkbox_) updated.asset_lighting_enabled = asset_lighting_enabled_checkbox_->value();
-    if (asset_lighting_preset_dropdown_) updated.asset_lighting_preset = asset_lighting_preset_dropdown_->selected();
-    if (asset_lighting_quality_dropdown_) updated.asset_lighting_quality_tier = asset_lighting_quality_dropdown_->selected();
 
     auto float_changed = [](float a, float b, float eps = 1e-5f) {
         return std::fabs(a - b) > eps;
@@ -491,12 +479,11 @@ void CameraUIPanel::apply_settings_if_needed() {
         float_changed(updated.max_cull_depth, current.max_cull_depth) ||
         float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
+        float_changed(updated.front_layer_light_strength_multiplier, current.front_layer_light_strength_multiplier) ||
+        float_changed(updated.behind_layer_light_strength_multiplier, current.behind_layer_light_strength_multiplier) ||
         float_changed(updated.blur_px, current.blur_px) ||
         float_changed(updated.radial_blur_px, current.radial_blur_px) ||
-        (updated.depth_of_field_enabled != current.depth_of_field_enabled) ||
-        (updated.asset_lighting_enabled != current.asset_lighting_enabled) ||
-        (updated.asset_lighting_preset != current.asset_lighting_preset) ||
-        (updated.asset_lighting_quality_tier != current.asset_lighting_quality_tier);
+        (updated.depth_of_field_enabled != current.depth_of_field_enabled);
 
     float boundary_value = assets_->boundary_min_visible_screen_ratio();
     if (boundary_min_render_size_slider_) {

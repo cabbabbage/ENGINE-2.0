@@ -1,32 +1,13 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
 #include <vector>
 
 #include <SDL3/SDL.h>
 
-namespace render_pipeline {
+#include "rendering/render/layer_effect_processor.hpp"
 
-struct RuntimeLight {
-    std::uint64_t stable_light_id = 0;
-    SDL_FPoint screen_center{0.0f, 0.0f};
-    SDL_Color color{255, 255, 255, 255};
-    float intensity = 0.0f;
-    float opacity = 0.0f;
-    float radius_px = 0.0f;
-    float radius_world = 0.0f;
-    float falloff = 1.0f;
-    float world_z = 0.0f;
-    float floor_world_x = 0.0f;
-    float floor_world_z = 0.0f;
-    float world_height = 0.0f;
-    SDL_FPoint floor_screen_center{0.0f, 0.0f};
-    bool has_floor_projection = false;
-    float signed_depth_to_focus = 0.0f;
-    float depth_overlap_weight = 1.0f;
-    SDL_FPoint dominant_screen_direction{0.0f, -1.0f};
-};
+namespace render_pipeline {
 
 struct GeometryLayerDrawItem {
     SDL_Texture* texture = nullptr;
@@ -60,6 +41,7 @@ struct LayerRenderResult {
     int player_layer_index = 0;
     std::vector<int> non_empty_layers;
     std::vector<SDL_Texture*> final_layer_textures;
+    std::vector<std::vector<LayerEffectProcessor::RuntimeLight>> owning_body_lights;
 };
 
 struct BlurCompositeResult {

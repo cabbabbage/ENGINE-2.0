@@ -93,6 +93,8 @@ struct AssetLightingPresetParameters {
     float direct_scale = 0.85f;
     float wrap_scale = 0.50f;
     float rim_scale = 0.45f;
+    float shadow_scale = 0.25f;
+    float edge_push_scale = 0.35f;
     float emission_scale = 0.85f;
     float exposure = 1.00f;
 };
@@ -111,6 +113,18 @@ float asset_lighting_surface_response(float lambert,
                                       float signed_depth_to_asset,
                                       float depth_sigma,
                                       int asset_lighting_preset);
+float asset_lighting_shadow_response(float ndotl,
+                                     float thickness,
+                                     float sdf,
+                                     float signed_depth_to_asset,
+                                     float depth_sigma,
+                                     int asset_lighting_preset);
+float asset_lighting_edge_push_response(float rim_alignment,
+                                        float thickness,
+                                        float sdf,
+                                        float signed_depth_to_asset,
+                                        float depth_sigma,
+                                        int asset_lighting_preset);
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px);

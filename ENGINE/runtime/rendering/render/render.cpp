@@ -576,6 +576,8 @@ AssetLightingPresetParameters asset_lighting_preset_parameters(int asset_lightin
                 0.70f,
                 0.38f,
                 0.34f,
+                0.18f,
+                0.22f,
                 0.74f,
                 0.95f};
         case 2: // Punchy
@@ -584,6 +586,8 @@ AssetLightingPresetParameters asset_lighting_preset_parameters(int asset_lightin
                 0.98f,
                 0.66f,
                 0.80f,
+                0.36f,
+                0.52f,
                 1.08f,
                 1.08f};
         default: // Cinematic
@@ -592,6 +596,8 @@ AssetLightingPresetParameters asset_lighting_preset_parameters(int asset_lightin
                 0.84f,
                 0.52f,
                 0.62f,
+                0.28f,
+                0.36f,
                 0.90f,
                 1.00f};
     }
@@ -672,6 +678,52 @@ float asset_lighting_surface_response(float lambert,
     const float sdf_response = 0.84f + 0.16f * smoothstep01(0.5f + (sdf * 2.2f));
     const float total = (direct_term + front_wrap_term + rim_term + behind_wrap_term) * sdf_response;
     return std::max(0.0f, total);
+}
+
+float asset_lighting_shadow_response(float ndotl,
+                                     float thickness,
+                                     float sdf,
+                                     float signed_depth_to_asset,
+                                     float depth_sigma,
+                                     int asset_lighting_preset) {
+    const AssetLightingPresetParameters preset = asset_lighting_preset_parameters(asset_lighting_preset);
+    const float direct_visibility =
+        asset_lighting_direct_visibility(signed_depth_to_asset, depth_sigma, asset_lighting_preset);
+    const float safe_thickness = clamp01(thickness);
+    const float safe_ndotl = std::clamp(ndotl, -1.0f, 1.0f);
+    const float non_lit_side = clamp01(0.5f - 0.5f * safe_ndotl);
+    const float edge_mask = smoothstep01(0.42f - (sdf * 2.1f));
+    const float center_mask = 1.0f - edge_mask;
+
+    const float shadow =
+        preset.shadow_scale *
+        direct_visibility *
+        non_lit_side *
+        (0.35f + 0.65f * center_mask) *
+        (0.30f + 0.70f * (1.0f - safe_thickness));
+    return std::max(0.0f, shadow);
+}
+
+float asset_lighting_edge_push_response(float rim_alignment,
+                                        float thickness,
+                                        float sdf,
+                                        float signed_depth_to_asset,
+                                        float depth_sigma,
+                                        int asset_lighting_preset) {
+    const AssetLightingPresetParameters preset = asset_lighting_preset_parameters(asset_lighting_preset);
+    const float rim_visibility =
+        asset_lighting_rim_visibility(signed_depth_to_asset, depth_sigma, asset_lighting_preset);
+    const float safe_rim_alignment = clamp01(rim_alignment);
+    const float safe_thickness = clamp01(thickness);
+    const float edge_mask = smoothstep01(0.42f - (sdf * 2.1f));
+
+    const float push =
+        preset.edge_push_scale *
+        rim_visibility *
+        (0.20f + 0.80f * safe_rim_alignment) *
+        (0.15f + 0.85f * edge_mask) *
+        (0.25f + 0.75f * (1.0f - safe_thickness));
+    return std::max(0.0f, push);
 }
 
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
@@ -1902,24 +1954,48 @@ void SceneRenderer::apply_asset_lighting_to_vertices(
                 candidate.signed_depth,
                 candidate.depth_sigma,
                 preset);
+            const float shadow_response = render_internal::asset_lighting_shadow_response(
+                ndotl,
+                shape.thickness,
+                shape.sdf,
+                candidate.signed_depth,
+                candidate.depth_sigma,
+                preset);
+            const float edge_push_response = render_internal::asset_lighting_edge_push_response(
+                rim_alignment,
+                shape.thickness,
+                shape.sdf,
+                candidate.signed_depth,
+                candidate.depth_sigma,
+                preset);
             float opacity = light.opacity;
             if (!std::isfinite(opacity) || opacity <= 0.0f) {
                 opacity = 1.0f;
             }
-            const float energy =
+            const float base_energy =
                 candidate.score *
                 std::max(0.08f, candidate.depth_weight) *
-                surface_response *
-                std::clamp(opacity, 0.1f, 2.0f) *
-                preset_params.emission_scale;
-            out_r += energy * (static_cast<float>(light.color.r) / 255.0f);
-            out_g += energy * (static_cast<float>(light.color.g) / 255.0f);
-            out_b += energy * (static_cast<float>(light.color.b) / 255.0f);
+                std::clamp(opacity, 0.1f, 2.0f);
+            const float energy = base_energy * surface_response * preset_params.emission_scale;
+            const float shadow = base_energy * shadow_response;
+            const float edge_push = base_energy * edge_push_response;
+            const float light_r = static_cast<float>(light.color.r) / 255.0f;
+            const float light_g = static_cast<float>(light.color.g) / 255.0f;
+            const float light_b = static_cast<float>(light.color.b) / 255.0f;
+            out_r += energy * light_r;
+            out_g += energy * light_g;
+            out_b += energy * light_b;
+            out_r += edge_push * (0.35f + 0.65f * light_r);
+            out_g += edge_push * (0.35f + 0.65f * light_g);
+            out_b += edge_push * (0.35f + 0.65f * light_b);
+            out_r -= shadow;
+            out_g -= shadow;
+            out_b -= shadow;
         }
 
-        out_r = std::clamp(out_r * preset_params.exposure, 0.14f, 2.4f);
-        out_g = std::clamp(out_g * preset_params.exposure, 0.14f, 2.4f);
-        out_b = std::clamp(out_b * preset_params.exposure, 0.14f, 2.4f);
+        out_r = std::clamp(out_r * preset_params.exposure, 0.05f, 2.4f);
+        out_g = std::clamp(out_g * preset_params.exposure, 0.05f, 2.4f);
+        out_b = std::clamp(out_b * preset_params.exposure, 0.05f, 2.4f);
 
         SDL_FColor lit_color = vertex.color;
         lit_color.r = std::clamp(lit_color.r * out_r, 0.0f, 1.0f);

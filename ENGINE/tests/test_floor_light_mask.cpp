@@ -448,6 +448,34 @@ TEST_CASE("Behind lights emphasize edge/rim response over center response") {
     CHECK(front_center > behind_center);
 }
 
+TEST_CASE("Asset lighting shadow attenuation is stronger on non-lit sprite side") {
+    constexpr float kSigma = 20.0f;
+    constexpr int kPreset = 1; // Cinematic
+    constexpr float kThickness = 0.85f;
+    constexpr float kSdf = 0.30f;
+
+    const float lit_side_shadow = render_internal::asset_lighting_shadow_response(
+        0.92f, kThickness, kSdf, -24.0f, kSigma, kPreset);
+    const float non_lit_side_shadow = render_internal::asset_lighting_shadow_response(
+        -0.92f, kThickness, kSdf, -24.0f, kSigma, kPreset);
+
+    CHECK(non_lit_side_shadow > lit_side_shadow);
+    CHECK(non_lit_side_shadow > 0.10f);
+}
+
+TEST_CASE("Asset lighting edge push is stronger at silhouette edges than sprite center") {
+    constexpr float kSigma = 20.0f;
+    constexpr int kPreset = 1; // Cinematic
+
+    const float center_push = render_internal::asset_lighting_edge_push_response(
+        0.10f, 0.90f, 0.40f, -18.0f, kSigma, kPreset);
+    const float edge_push = render_internal::asset_lighting_edge_push_response(
+        0.95f, 0.20f, -0.25f, -18.0f, kSigma, kPreset);
+
+    CHECK(edge_push > center_push);
+    CHECK(edge_push > 0.08f);
+}
+
 TEST_CASE("Asset lighting presets produce ordered output strength") {
     constexpr float kLambert = 0.82f;
     constexpr float kRimAlign = 0.35f;

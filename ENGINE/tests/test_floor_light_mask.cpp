@@ -181,24 +181,6 @@ TEST_CASE("Floor light height attenuation and footprint scale realistically") {
     CHECK(raised_footprint > base_footprint);
 }
 
-TEST_CASE("Layer light strength multipliers split front and behind depths independently") {
-    constexpr float kBaseIntensity = 2.0f;
-    constexpr float kFrontMultiplier = 1.6f;
-    constexpr float kBehindMultiplier = 0.45f;
-
-    const float front_side =
-        render_internal::apply_layer_light_strength_bias(kBaseIntensity, -1, kFrontMultiplier, kBehindMultiplier);
-    const float boundary_side =
-        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 0, kFrontMultiplier, kBehindMultiplier);
-    const float behind_side =
-        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 1, kFrontMultiplier, kBehindMultiplier);
-
-    CHECK(front_side == doctest::Approx(kBaseIntensity * kFrontMultiplier));
-    CHECK(boundary_side == doctest::Approx(kBaseIntensity * kFrontMultiplier));
-    CHECK(behind_side == doctest::Approx(kBaseIntensity * kBehindMultiplier));
-    CHECK(front_side > behind_side);
-}
-
 TEST_CASE("Floor light contact resolution locks to flat world point") {
     constexpr float kFlatX = 100.0f;
     constexpr float kFlatZ = 260.0f;
@@ -326,7 +308,7 @@ TEST_CASE("Near-camera floor footprint sampling remains finite and stable") {
 }
 
 TEST_CASE("Layer light overlap requires depth overlap even when screen footprint overlaps") {
-    LayerEffectProcessor::RuntimeLight light{};
+    render_pipeline::RuntimeLight light{};
     light.screen_center = SDL_FPoint{50.0f, 50.0f};
     light.radius_px = 32.0f;
     light.radius_world = 16.0f;
@@ -341,7 +323,7 @@ TEST_CASE("Layer light overlap requires depth overlap even when screen footprint
 }
 
 TEST_CASE("Layer light overlap requires coverage overlap even when depth slice overlaps") {
-    LayerEffectProcessor::RuntimeLight light{};
+    render_pipeline::RuntimeLight light{};
     light.screen_center = SDL_FPoint{400.0f, 400.0f};
     light.radius_px = 8.0f;
     light.radius_world = 30.0f;
@@ -356,7 +338,7 @@ TEST_CASE("Layer light overlap requires coverage overlap even when depth slice o
 }
 
 TEST_CASE("Layer light overlap accepts depth and coverage intersection") {
-    LayerEffectProcessor::RuntimeLight light{};
+    render_pipeline::RuntimeLight light{};
     light.screen_center = SDL_FPoint{70.0f, 60.0f};
     light.radius_px = 24.0f;
     light.radius_world = 20.0f;
@@ -371,7 +353,7 @@ TEST_CASE("Layer light overlap accepts depth and coverage intersection") {
 }
 
 TEST_CASE("Layer light overlap accepts inside-layer center when depth overlaps") {
-    LayerEffectProcessor::RuntimeLight light{};
+    render_pipeline::RuntimeLight light{};
     light.screen_center = SDL_FPoint{64.0f, 64.0f};
     light.radius_px = 12.0f;
     light.radius_world = 18.0f;
@@ -386,7 +368,7 @@ TEST_CASE("Layer light overlap accepts inside-layer center when depth overlaps")
 }
 
 TEST_CASE("Layer light overlap rejects invalid geometry inputs") {
-    LayerEffectProcessor::RuntimeLight light{};
+    render_pipeline::RuntimeLight light{};
     light.screen_center = SDL_FPoint{50.0f, 50.0f};
     light.radius_px = 20.0f;
     light.radius_world = 20.0f;
@@ -421,10 +403,66 @@ TEST_CASE("Interval comparison classifies front behind and touching overlap cons
 }
 
 TEST_CASE("Same light can classify differently against narrow and wide depth layers") {
-    LayerEffectProcessor::RuntimeLight light{};
+    render_pipeline::RuntimeLight light{};
     light.world_z = 25.0f;
     light.radius_world = 5.0f;
     const render_internal::DepthInterval light_interval = render_internal::light_depth_interval(light);
     CHECK(render_internal::compare_depth_intervals_signed(light_interval, render_internal::DepthInterval{0.0, 10.0}) > 0);
     CHECK(render_internal::compare_depth_intervals_signed(light_interval, render_internal::DepthInterval{0.0, 25.0}) == 0);
+}
+
+TEST_CASE("Asset lighting quality tier maps to fixed per-asset light budgets") {
+    CHECK(render_internal::asset_lighting_light_budget_for_quality_tier(0) == 4);
+    CHECK(render_internal::asset_lighting_light_budget_for_quality_tier(1) == 8);
+    CHECK(render_internal::asset_lighting_light_budget_for_quality_tier(2) == 12);
+    CHECK(render_internal::asset_lighting_light_budget_for_quality_tier(-5) == 4);
+    CHECK(render_internal::asset_lighting_light_budget_for_quality_tier(999) == 12);
+}
+
+TEST_CASE("Asset lighting suppresses behind-light direct term while preserving rim energy") {
+    constexpr float kSigma = 24.0f;
+    const float direct_front = render_internal::asset_lighting_direct_visibility(-36.0f, kSigma, 1);
+    const float direct_behind = render_internal::asset_lighting_direct_visibility(36.0f, kSigma, 1);
+    const float rim_front = render_internal::asset_lighting_rim_visibility(-36.0f, kSigma, 1);
+    const float rim_behind = render_internal::asset_lighting_rim_visibility(36.0f, kSigma, 1);
+
+    CHECK(direct_front > direct_behind);
+    CHECK(direct_front >= 0.55f);
+    CHECK(direct_behind <= 0.25f);
+    CHECK(rim_behind > rim_front);
+    CHECK(rim_behind >= 0.65f);
+}
+
+TEST_CASE("Behind lights emphasize edge/rim response over center response") {
+    constexpr float kSigma = 20.0f;
+    constexpr int kPreset = 1; // Cinematic
+
+    const float behind_center = render_internal::asset_lighting_surface_response(
+        0.95f, 0.05f, 0.95f, 0.40f, 30.0f, kSigma, kPreset);
+    const float behind_edge = render_internal::asset_lighting_surface_response(
+        0.20f, 0.95f, 0.20f, -0.25f, 30.0f, kSigma, kPreset);
+    const float front_center = render_internal::asset_lighting_surface_response(
+        0.95f, 0.05f, 0.95f, 0.40f, -30.0f, kSigma, kPreset);
+
+    CHECK(behind_edge > behind_center);
+    CHECK(front_center > behind_center);
+}
+
+TEST_CASE("Asset lighting presets produce ordered output strength") {
+    constexpr float kLambert = 0.82f;
+    constexpr float kRimAlign = 0.35f;
+    constexpr float kThickness = 0.72f;
+    constexpr float kSdf = 0.08f;
+    constexpr float kSignedDepth = -20.0f;
+    constexpr float kSigma = 18.0f;
+
+    const float natural = render_internal::asset_lighting_surface_response(
+        kLambert, kRimAlign, kThickness, kSdf, kSignedDepth, kSigma, 0);
+    const float cinematic = render_internal::asset_lighting_surface_response(
+        kLambert, kRimAlign, kThickness, kSdf, kSignedDepth, kSigma, 1);
+    const float punchy = render_internal::asset_lighting_surface_response(
+        kLambert, kRimAlign, kThickness, kSdf, kSignedDepth, kSigma, 2);
+
+    CHECK(natural < cinematic);
+    CHECK(cinematic < punchy);
 }

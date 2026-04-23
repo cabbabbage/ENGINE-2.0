@@ -18826,6 +18826,9 @@
         }
       },
       "camera_settings": {
+        "asset_lighting_depth_response_curve": 1.0,
+        "asset_lighting_enabled": true,
+        "asset_lighting_quality_tier": 1,
         "base_height_px": 720.0,
         "behind_layer_light_strength_multiplier": 1.8899999856948853,
         "blur_px": 1.4299999475479126,
@@ -18844,6 +18847,7 @@
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
         "max_cull_depth": 3588.0,
+        "max_lights_per_asset": 3,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
@@ -19004,9 +19008,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            209,
             242,
             36,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -19407,9 +19411,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            64,
-            36,
             242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 101,

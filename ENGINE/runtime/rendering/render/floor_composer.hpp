@@ -5,7 +5,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "rendering/render/layer_effect_processor.hpp"
+#include "rendering/render/render_pipeline_types.hpp"
 
 class Assets;
 class GeometryBatcher;
@@ -44,7 +44,7 @@ public:
 
     SDL_Texture* compose(const WarpedScreenGrid& cam,
                          const world::WorldGrid& grid,
-                         const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                         const std::vector<render_pipeline::RuntimeLight>& runtime_lights,
                          bool runtime_lighting_enabled,
                          double max_cull_depth,
                          SDL_Color clear_color,

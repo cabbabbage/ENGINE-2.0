@@ -11,16 +11,17 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/anchor_point.hpp"
-#include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "rendering/render/debug_overlay_renderer.hpp"
+#include "rendering/render/render_pipeline_types.hpp"
 #include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_builder.hpp"
 
@@ -79,21 +80,37 @@ float floor_light_height_weight(float world_height, float base_radius_world);
 float floor_light_height_spread_scale(float world_height, float base_radius_world);
 float floor_light_footprint_radius(float base_radius_px, float world_height);
 DepthInterval make_sorted_depth_interval(double depth_min, double depth_max);
-DepthInterval light_depth_interval(const LayerEffectProcessor::RuntimeLight& light);
+DepthInterval light_depth_interval(const render_pipeline::RuntimeLight& light);
 int compare_depth_intervals_signed(const DepthInterval& light_interval, const DepthInterval& layer_interval);
 bool screen_aabb_overlaps(const ScreenAabb& lhs, const ScreenAabb& rhs);
-float layer_light_strength_multiplier_for_depth_interval(int signed_depth_separation,
-                                                float front_multiplier,
-                                                float behind_multiplier);
-float apply_layer_light_strength_bias(float intensity,
-                                      int signed_depth_separation,
-                                      float front_multiplier,
-                                      float behind_multiplier);
-bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
+bool light_overlaps_layer_slice(const render_pipeline::RuntimeLight& light,
                                 const DepthInterval& light_interval,
                                 const DepthInterval& layer_interval,
                                 const ScreenAabb& light_bounds,
                                 const ScreenAabb& layer_bounds);
+struct AssetLightingPresetParameters {
+    float ambient = 0.60f;
+    float direct_scale = 0.85f;
+    float wrap_scale = 0.50f;
+    float rim_scale = 0.45f;
+    float emission_scale = 0.85f;
+    float exposure = 1.00f;
+};
+int asset_lighting_light_budget_for_quality_tier(int quality_tier);
+AssetLightingPresetParameters asset_lighting_preset_parameters(int asset_lighting_preset);
+float asset_lighting_direct_visibility(float signed_depth_to_asset,
+                                       float depth_sigma,
+                                       int asset_lighting_preset);
+float asset_lighting_rim_visibility(float signed_depth_to_asset,
+                                    float depth_sigma,
+                                    int asset_lighting_preset);
+float asset_lighting_surface_response(float lambert,
+                                      float rim_alignment,
+                                      float thickness,
+                                      float sdf,
+                                      float signed_depth_to_asset,
+                                      float depth_sigma,
+                                      int asset_lighting_preset);
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px);
@@ -224,7 +241,7 @@ private:
         std::uint64_t last_seen_frame = 0;
     };
     struct RuntimeLightCacheEntry {
-        LayerEffectProcessor::RuntimeLight instance{};
+        render_pipeline::RuntimeLight instance{};
         RuntimeLightFadeState fade{};
         std::uint64_t last_seen_frame = 0;
     };
@@ -266,6 +283,49 @@ private:
         SDL_Texture* texture_identity = nullptr;
         Uint32 reprojection_identity = 0;
     };
+    struct AssetLightingProfileKey {
+        SDL_Texture* texture = nullptr;
+        SDL_Rect src_rect{0, 0, 0, 0};
+        bool has_src_rect = false;
+
+        bool operator==(const AssetLightingProfileKey& other) const {
+            return texture == other.texture &&
+                   has_src_rect == other.has_src_rect &&
+                   src_rect.x == other.src_rect.x &&
+                   src_rect.y == other.src_rect.y &&
+                   src_rect.w == other.src_rect.w &&
+                   src_rect.h == other.src_rect.h;
+        }
+    };
+    struct AssetLightingProfileKeyHash {
+        std::size_t operator()(const AssetLightingProfileKey& key) const {
+            std::size_t hash = std::hash<SDL_Texture*>{}(key.texture);
+            auto mix = [&](int value) {
+                const std::size_t vhash = std::hash<int>{}(value);
+                hash ^= vhash + 0x9e3779b9u + (hash << 6) + (hash >> 2);
+            };
+            mix(key.has_src_rect ? 1 : 0);
+            mix(key.src_rect.x);
+            mix(key.src_rect.y);
+            mix(key.src_rect.w);
+            mix(key.src_rect.h);
+            return hash;
+        }
+    };
+    struct AssetLightingProfile {
+        int width = 0;
+        int height = 0;
+        std::vector<float> sdf{};
+        std::vector<SDL_FPoint> gradient{};
+        std::vector<float> thickness{};
+        std::uint64_t revision_key = 0;
+        bool valid = false;
+    };
+    struct AssetLightingTemporalState {
+        std::array<SDL_FColor, 4> vertex_colors{};
+        std::uint64_t frame_token = 0;
+        bool valid = false;
+    };
 
     struct PrevalidatedTag {};
 
@@ -284,11 +344,12 @@ private:
                                 world::WorldGrid& grid,
                                 double focus_plane_world_z,
                                 double max_cull_depth,
+                                const std::vector<render_pipeline::RuntimeLight>& runtime_lights,
                                 std::vector<Asset*>& rendered_assets_for_debug);
     void gather_runtime_lights(const WarpedScreenGrid& cam,
                             double focus_plane_world_z,
                             const std::vector<Asset*>& rendered_assets,
-                            std::vector<LayerEffectProcessor::RuntimeLight>& out_lights);
+                            std::vector<render_pipeline::RuntimeLight>& out_lights);
     void update_runtime_light_registry_incremental(std::uint64_t frame_token);
     void enqueue_runtime_light_dirty(std::uint32_t light_id, RuntimeLightRegistryEntry& entry,
                                      bool transform_dirty, bool frame_dirty, bool light_data_dirty, bool removed);
@@ -300,6 +361,17 @@ private:
                                            float culling_margin,
                                            std::vector<std::uint32_t>& out_light_ids) const;
     void refresh_movement_debug_snapshots(const std::vector<Asset*>& visible_assets);
+    const AssetLightingProfile* ensure_asset_lighting_profile(const AssetLightingProfileKey& key);
+    bool build_asset_lighting_profile(const AssetLightingProfileKey& key, AssetLightingProfile& out_profile) const;
+    void apply_asset_lighting_to_vertices(Asset* asset,
+                                          const RenderObject& obj,
+                                          const std::vector<render_pipeline::RuntimeLight>& runtime_lights,
+                                          bool asset_lighting_enabled,
+                                          int asset_lighting_preset,
+                                          int asset_lighting_quality_tier,
+                                          double asset_depth_from_focus_plane,
+                                          std::uint64_t frame_token,
+                                          std::array<SDL_Vertex, 4>& vertices);
 
     SDL_Renderer* renderer_ = nullptr;
     Assets* assets_ = nullptr;
@@ -326,6 +398,9 @@ private:
     std::unordered_map<const Asset*, render_debug::MovementDebugAssetSnapshot> movement_debug_snapshots_;
     std::unordered_map<const Asset*, render_debug::MovementDebugObservedState> movement_debug_observed_state_;
     std::unordered_map<const Asset*, AssetRenderCacheEntry> asset_render_cache_;
+    std::unordered_map<AssetLightingProfileKey, AssetLightingProfile, AssetLightingProfileKeyHash> asset_lighting_profiles_;
+    std::unordered_map<Asset*, AssetLightingTemporalState> asset_lighting_temporal_states_;
+    std::uint64_t asset_lighting_profile_revision_counter_ = 1;
     std::vector<render_debug::RuntimeLightDebugOverlayEntry> runtime_light_debug_overlay_;
 
     std::unordered_map<RuntimeLightRegistryKey, std::uint32_t, RuntimeLightRegistryKeyHash> runtime_light_registry_ids_;

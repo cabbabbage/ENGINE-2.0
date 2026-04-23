@@ -167,6 +167,27 @@ struct WarpedMesh {
     bool valid = false;
 };
 
+float clamp01(float value) {
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
+float smoothstep01(float value) {
+    const float t = clamp01(value);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+SDL_FPoint normalize_or_default(SDL_FPoint value, SDL_FPoint fallback = SDL_FPoint{0.0f, -1.0f}) {
+    const float length = std::sqrt(value.x * value.x + value.y * value.y);
+    if (!std::isfinite(length) || length <= 1.0e-5f) {
+        return fallback;
+    }
+    return SDL_FPoint{value.x / length, value.y / length};
+}
+
+std::size_t profile_index(int x, int y, int width) {
+    return static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x);
+}
+
 bool build_perspective_mesh(RenderObject& obj,
                             const WarpedScreenGrid& cam,
                             float perspective_scale,
@@ -462,7 +483,7 @@ DepthInterval make_sorted_depth_interval(double depth_min, double depth_max) {
     return DepthInterval{depth_max, depth_min};
 }
 
-DepthInterval light_depth_interval(const LayerEffectProcessor::RuntimeLight& light) {
+DepthInterval light_depth_interval(const render_pipeline::RuntimeLight& light) {
     if (!std::isfinite(light.world_z)) {
         return {};
     }
@@ -507,25 +528,7 @@ bool screen_aabb_overlaps(const ScreenAabb& lhs, const ScreenAabb& rhs) {
            lhs.min_y <= rhs.max_y;
 }
 
-float layer_light_strength_multiplier_for_depth_interval(int signed_depth_separation,
-                                                         float front_multiplier,
-                                                         float behind_multiplier) {
-    const float safe_front = std::clamp(std::isfinite(front_multiplier) ? front_multiplier : 1.0f, 0.0f, 4.0f);
-    const float safe_behind = std::clamp(std::isfinite(behind_multiplier) ? behind_multiplier : 1.0f, 0.0f, 4.0f);
-    return (signed_depth_separation <= 0) ? safe_front : safe_behind;
-}
-
-float apply_layer_light_strength_bias(float intensity,
-                                      int signed_depth_separation,
-                                      float front_multiplier,
-                                      float behind_multiplier) {
-    const float safe_intensity = (std::isfinite(intensity) && intensity > 0.0f) ? intensity : 0.0f;
-    return safe_intensity * layer_light_strength_multiplier_for_depth_interval(signed_depth_separation,
-                                                                               front_multiplier,
-                                                                               behind_multiplier);
-}
-
-bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
+bool light_overlaps_layer_slice(const render_pipeline::RuntimeLight& light,
                                 const DepthInterval& light_interval,
                                 const DepthInterval& layer_interval,
                                 const ScreenAabb& light_bounds,
@@ -552,6 +555,123 @@ bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
         return false;
     }
     return screen_aabb_overlaps(light_bounds, layer_bounds);
+}
+
+int asset_lighting_light_budget_for_quality_tier(int quality_tier) {
+    switch (std::clamp(quality_tier, 0, 2)) {
+        case 0:
+            return 4;
+        case 2:
+            return 12;
+        default:
+            return 8;
+    }
+}
+
+AssetLightingPresetParameters asset_lighting_preset_parameters(int asset_lighting_preset) {
+    switch (std::clamp(asset_lighting_preset, 0, 2)) {
+        case 0: // Natural
+            return AssetLightingPresetParameters{
+                0.56f,
+                0.70f,
+                0.38f,
+                0.34f,
+                0.74f,
+                0.95f};
+        case 2: // Punchy
+            return AssetLightingPresetParameters{
+                0.66f,
+                0.98f,
+                0.66f,
+                0.80f,
+                1.08f,
+                1.08f};
+        default: // Cinematic
+            return AssetLightingPresetParameters{
+                0.60f,
+                0.84f,
+                0.52f,
+                0.62f,
+                0.90f,
+                1.00f};
+    }
+}
+
+float asset_lighting_direct_visibility(float signed_depth_to_asset,
+                                       float depth_sigma,
+                                       int asset_lighting_preset) {
+    const float safe_sigma = std::max(1.0f, std::fabs(depth_sigma));
+    float direct_visibility = 0.5f + 0.5f * std::tanh((-signed_depth_to_asset) / (safe_sigma * 0.80f));
+    direct_visibility = clamp01(direct_visibility);
+    const int preset = std::clamp(asset_lighting_preset, 0, 2);
+    if (preset == 0) {
+        direct_visibility = std::pow(direct_visibility, 1.12f);
+    } else if (preset == 2) {
+        direct_visibility = std::pow(direct_visibility, 0.88f);
+    }
+    return clamp01(direct_visibility);
+}
+
+float asset_lighting_rim_visibility(float signed_depth_to_asset,
+                                    float depth_sigma,
+                                    int asset_lighting_preset) {
+    const float safe_sigma = std::max(1.0f, std::fabs(depth_sigma));
+    float rim_visibility = 0.5f + 0.5f * std::tanh((signed_depth_to_asset) / (safe_sigma * 0.90f));
+    rim_visibility = 0.20f + 0.80f * clamp01(rim_visibility);
+    const int preset = std::clamp(asset_lighting_preset, 0, 2);
+    if (preset == 0) {
+        rim_visibility *= 0.90f;
+    } else if (preset == 2) {
+        rim_visibility *= 1.10f;
+    }
+    return std::clamp(rim_visibility, 0.0f, 1.35f);
+}
+
+float asset_lighting_surface_response(float lambert,
+                                      float rim_alignment,
+                                      float thickness,
+                                      float sdf,
+                                      float signed_depth_to_asset,
+                                      float depth_sigma,
+                                      int asset_lighting_preset) {
+    const AssetLightingPresetParameters preset = asset_lighting_preset_parameters(asset_lighting_preset);
+    const float direct_visibility =
+        asset_lighting_direct_visibility(signed_depth_to_asset, depth_sigma, asset_lighting_preset);
+    const float rim_visibility =
+        asset_lighting_rim_visibility(signed_depth_to_asset, depth_sigma, asset_lighting_preset);
+
+    const float safe_lambert = clamp01(lambert);
+    const float safe_rim_alignment = clamp01(rim_alignment);
+    const float safe_thickness = clamp01(thickness);
+    const float wrapped_lambert = 0.30f + 0.70f * safe_lambert;
+    const float edge_mask = smoothstep01(0.42f - (sdf * 2.1f));
+    const float center_mask = 1.0f - edge_mask;
+
+    const float direct_term =
+        preset.direct_scale *
+        direct_visibility *
+        wrapped_lambert *
+        (0.58f + 0.42f * safe_thickness) *
+        (0.35f + 0.65f * center_mask);
+    const float front_wrap_term =
+        preset.wrap_scale *
+        direct_visibility *
+        (0.32f + 0.68f * wrapped_lambert) *
+        (0.45f + 0.55f * safe_thickness);
+    const float rim_term =
+        preset.rim_scale *
+        rim_visibility *
+        (0.30f + 0.70f * safe_rim_alignment) *
+        (0.12f + 0.88f * edge_mask);
+    const float behind_wrap_term =
+        preset.wrap_scale *
+        rim_visibility *
+        (0.20f + 0.80f * safe_rim_alignment) *
+        (0.10f + 0.90f * edge_mask);
+
+    const float sdf_response = 0.84f + 0.16f * smoothstep01(0.5f + (sdf * 2.2f));
+    const float total = (direct_term + front_wrap_term + rim_term + behind_wrap_term) * sdf_response;
+    return std::max(0.0f, total);
 }
 
 bool dof_blur_chain_enabled(bool depth_of_field_enabled,
@@ -931,6 +1051,7 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
                                            world::WorldGrid& grid,
                                            double focus_plane_world_z,
                                            double max_cull_depth,
+                                           const std::vector<render_pipeline::RuntimeLight>& runtime_lights,
                                            std::vector<Asset*>& rendered_assets_for_debug) {
     if (!geometry_batcher_ || !dynamic_boundary_system_) {
         return;
@@ -938,6 +1059,8 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
 
     geometry_batcher_->clear();
     rendered_assets_for_debug.clear();
+    const auto realism = cam.get_settings();
+    const std::uint64_t frame_token = static_cast<std::uint64_t>(assets_ ? assets_->frame_id() : 0);
 
     const bool boundary_assets_visible = assets_->boundary_assets_visible();
     const bool runtime_updates_enabled = assets_->should_run_runtime_updates();
@@ -1095,24 +1218,34 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
                                                   static_cast<double>(asset->world_z()),
                                                   asset->render_depth_bias());
 
-        WarpedMesh mesh{};
-        if (!obj.texture ||
-            !build_perspective_mesh(obj, cam, perspective_scale, base_world_z + obj.world_z_offset, mesh) ||
-            !mesh.valid) {
-            continue;
-        }
-        asset->clear_mesh_dirty();
+            WarpedMesh mesh{};
+            if (!obj.texture ||
+                !build_perspective_mesh(obj, cam, perspective_scale, base_world_z + obj.world_z_offset, mesh) ||
+                !mesh.valid) {
+                continue;
+            }
 
-        // IMPORTANT:
-        // Project the quad using the render Z offset so it appears in the right place,
-        // but keep DOF/layer bucketing tied to the asset's focus-plane depth, not the
-        // sprite's render-anchor Z offset. Otherwise the player/focus object can get
-        // pushed into an adjacent blurred layer even when the camera focus plane is correct.
-        geometry_batcher_->addQuad(obj.texture,
-                                mesh.vertices.data(),
-                                mesh.indices.data(),
-                                obj.blend_mode,
-                                asset_depth_from_focus_plane);
+            apply_asset_lighting_to_vertices(asset,
+                                             obj,
+                                             runtime_lights,
+                                             realism.asset_lighting_enabled,
+                                             realism.asset_lighting_preset,
+                                             realism.asset_lighting_quality_tier,
+                                             asset_depth_from_focus_plane,
+                                             frame_token,
+                                             mesh.vertices);
+            asset->clear_mesh_dirty();
+
+            // IMPORTANT:
+            // Project the quad using the render Z offset so it appears in the right place,
+            // but keep DOF/layer bucketing tied to the asset's focus-plane depth, not the
+            // sprite's render-anchor Z offset. Otherwise the player/focus object can get
+            // pushed into an adjacent blurred layer even when the camera focus plane is correct.
+            geometry_batcher_->addQuad(obj.texture,
+                                       mesh.vertices.data(),
+                                       mesh.indices.data(),
+                                       obj.blend_mode,
+                                       asset_depth_from_focus_plane);
             continue;
         }
 
@@ -1128,13 +1261,20 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
             ++it;
         }
     }
+    for (auto it = asset_lighting_temporal_states_.begin(); it != asset_lighting_temporal_states_.end();) {
+        if (!it->first || touched_assets.find(it->first) == touched_assets.end()) {
+            it = asset_lighting_temporal_states_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 
 void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                           double focus_plane_world_z,
                                           const std::vector<Asset*>& rendered_assets,
-                                          std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) {
+                                          std::vector<render_pipeline::RuntimeLight>& out_lights) {
     (void)rendered_assets;
     out_lights.clear();
     runtime_light_debug_overlay_.clear();
@@ -1320,7 +1460,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             continue;
         }
 
-        LayerEffectProcessor::RuntimeLight& instance = cache_entry.instance;
+        render_pipeline::RuntimeLight& instance = cache_entry.instance;
         instance.stable_light_id = broadphase.light_id;
         instance.screen_center = screen;
         instance.color = SDL_Color{light.color_r, light.color_g, light.color_b, 255};
@@ -1332,6 +1472,11 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         instance.world_z = static_cast<float>(
             render_depth::depth_from_anchor(focus_plane_world_z,
                                             static_cast<double>(resolved->world_exact_z)));
+        instance.signed_depth_to_focus = instance.world_z;
+        const float depth_extent = std::max(1.0f, radius_world);
+        instance.depth_overlap_weight =
+            smoothstep01(1.0f - std::min(std::fabs(instance.signed_depth_to_focus) / depth_extent, 1.0f));
+        instance.dominant_screen_direction = SDL_FPoint{0.0f, -1.0f};
         const render_internal::FloorLightContact floor_contact = render_internal::resolve_floor_light_contact(
             resolved->flat_world_exact_pos_2d.x,
             resolved->flat_world_exact_z,
@@ -1347,6 +1492,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             if (render_internal::project_floor_contact_to_screen(cam, floor_contact, floor_screen)) {
                 instance.floor_screen_center = floor_screen;
                 instance.has_floor_projection = true;
+                instance.dominant_screen_direction = normalize_or_default(SDL_FPoint{
+                    floor_screen.x - screen.x,
+                    floor_screen.y - screen.y});
             }
         }
         out_lights.push_back(cache_entry.instance);
@@ -1372,6 +1520,415 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                " ms=" + std::to_string(ticks_to_seconds(elapsed_ticks) * 1000.0f));
         }
     }
+}
+
+const SceneRenderer::AssetLightingProfile* SceneRenderer::ensure_asset_lighting_profile(
+    const AssetLightingProfileKey& key) {
+    if (!key.texture) {
+        return nullptr;
+    }
+
+    const auto existing = asset_lighting_profiles_.find(key);
+    if (existing != asset_lighting_profiles_.end()) {
+        return existing->second.valid ? &existing->second : nullptr;
+    }
+
+    AssetLightingProfile profile{};
+    if (!build_asset_lighting_profile(key, profile)) {
+        (void)asset_lighting_profiles_.emplace(key, AssetLightingProfile{});
+        return nullptr;
+    }
+    profile.revision_key = asset_lighting_profile_revision_counter_++;
+    profile.valid = true;
+    const auto inserted = asset_lighting_profiles_.emplace(key, std::move(profile));
+    return inserted.first->second.valid ? &inserted.first->second : nullptr;
+}
+
+bool SceneRenderer::build_asset_lighting_profile(const AssetLightingProfileKey& key,
+                                                 AssetLightingProfile& out_profile) const {
+    out_profile = AssetLightingProfile{};
+    if (!renderer_ || !key.texture) {
+        return false;
+    }
+
+    float texture_wf = 0.0f;
+    float texture_hf = 0.0f;
+    if (!SDL_GetTextureSize(key.texture, &texture_wf, &texture_hf)) {
+        return false;
+    }
+
+    const int texture_w = std::max(1, static_cast<int>(std::lround(texture_wf)));
+    const int texture_h = std::max(1, static_cast<int>(std::lround(texture_hf)));
+    SDL_Rect src_rect{0, 0, texture_w, texture_h};
+    if (key.has_src_rect) {
+        src_rect = key.src_rect;
+        src_rect.x = std::clamp(src_rect.x, 0, texture_w - 1);
+        src_rect.y = std::clamp(src_rect.y, 0, texture_h - 1);
+        src_rect.w = std::clamp(src_rect.w, 1, texture_w - src_rect.x);
+        src_rect.h = std::clamp(src_rect.h, 1, texture_h - src_rect.y);
+    }
+
+    const int max_profile_dim = 48;
+    const float profile_scale = std::min({
+        1.0f,
+        static_cast<float>(max_profile_dim) / static_cast<float>(src_rect.w),
+        static_cast<float>(max_profile_dim) / static_cast<float>(src_rect.h)});
+    const int profile_w = std::max(8, static_cast<int>(std::lround(static_cast<float>(src_rect.w) * profile_scale)));
+    const int profile_h = std::max(8, static_cast<int>(std::lround(static_cast<float>(src_rect.h) * profile_scale)));
+
+    SDL_Texture* capture_texture = SDL_CreateTexture(renderer_,
+                                                     SDL_PIXELFORMAT_RGBA8888,
+                                                     SDL_TEXTUREACCESS_TARGET,
+                                                     profile_w,
+                                                     profile_h);
+    if (!capture_texture) {
+        return false;
+    }
+    SDL_SetTextureBlendMode(capture_texture, SDL_BLENDMODE_BLEND);
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
+    SDL_SetRenderTarget(renderer_, capture_texture);
+    SDL_SetRenderViewport(renderer_, nullptr);
+    SDL_SetRenderClipRect(renderer_, nullptr);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+    SDL_RenderClear(renderer_);
+
+    SDL_SetTextureBlendMode(key.texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureColorMod(key.texture, 255, 255, 255);
+    SDL_SetTextureAlphaMod(key.texture, 255);
+    const SDL_FRect src_rect_f{
+        static_cast<float>(src_rect.x),
+        static_cast<float>(src_rect.y),
+        static_cast<float>(src_rect.w),
+        static_cast<float>(src_rect.h)};
+    const SDL_FRect dst_rect{0.0f, 0.0f, static_cast<float>(profile_w), static_cast<float>(profile_h)};
+    SDL_RenderTexture(renderer_, key.texture, &src_rect_f, &dst_rect);
+
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer_, nullptr);
+    SDL_SetRenderTarget(renderer_, previous_target);
+    SDL_DestroyTexture(capture_texture);
+    if (!captured) {
+        return false;
+    }
+
+    SDL_Surface* rgba_surface = SDL_ConvertSurface(captured, SDL_PIXELFORMAT_RGBA8888);
+    SDL_DestroySurface(captured);
+    if (!rgba_surface || !rgba_surface->pixels || rgba_surface->pitch <= 0) {
+        if (rgba_surface) {
+            SDL_DestroySurface(rgba_surface);
+        }
+        return false;
+    }
+
+    const int width = rgba_surface->w;
+    const int height = rgba_surface->h;
+    if (width <= 0 || height <= 0) {
+        SDL_DestroySurface(rgba_surface);
+        return false;
+    }
+
+    std::vector<float> alpha_field(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0.0f);
+    std::vector<unsigned char> inside(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
+    std::vector<SDL_FPoint> edge_points{};
+    edge_points.reserve(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) / 4);
+
+    const auto alpha_at = [&](int x, int y) -> float {
+        x = std::clamp(x, 0, width - 1);
+        y = std::clamp(y, 0, height - 1);
+        return alpha_field[profile_index(x, y, width)];
+    };
+
+    for (int y = 0; y < height; ++y) {
+        const auto* row = static_cast<const std::uint8_t*>(rgba_surface->pixels) +
+                          static_cast<std::ptrdiff_t>(y) * rgba_surface->pitch;
+        for (int x = 0; x < width; ++x) {
+            const std::uint8_t alpha = row[x * 4 + 3];
+            const float normalized_alpha = static_cast<float>(alpha) / 255.0f;
+            const std::size_t idx = profile_index(x, y, width);
+            alpha_field[idx] = normalized_alpha;
+            inside[idx] = normalized_alpha > 0.02f ? 1 : 0;
+        }
+    }
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const std::size_t idx = profile_index(x, y, width);
+            const unsigned char in = inside[idx];
+            bool is_edge = false;
+            for (int oy = -1; oy <= 1 && !is_edge; ++oy) {
+                for (int ox = -1; ox <= 1; ++ox) {
+                    if (ox == 0 && oy == 0) {
+                        continue;
+                    }
+                    const int nx = std::clamp(x + ox, 0, width - 1);
+                    const int ny = std::clamp(y + oy, 0, height - 1);
+                    if (inside[profile_index(nx, ny, width)] != in) {
+                        is_edge = true;
+                        break;
+                    }
+                }
+            }
+            if (is_edge) {
+                edge_points.push_back(SDL_FPoint{static_cast<float>(x), static_cast<float>(y)});
+            }
+        }
+    }
+
+    const float inv_extent = 1.0f / static_cast<float>(std::max(width, height));
+    out_profile.width = width;
+    out_profile.height = height;
+    out_profile.sdf.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0.0f);
+    out_profile.gradient.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
+                                SDL_FPoint{0.0f, -1.0f});
+    out_profile.thickness.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0.0f);
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const std::size_t idx = profile_index(x, y, width);
+            float min_distance = static_cast<float>(std::max(width, height));
+            if (!edge_points.empty()) {
+                for (const SDL_FPoint& edge : edge_points) {
+                    const float dx = static_cast<float>(x) - edge.x;
+                    const float dy = static_cast<float>(y) - edge.y;
+                    const float distance = std::sqrt(dx * dx + dy * dy);
+                    if (distance < min_distance) {
+                        min_distance = distance;
+                    }
+                }
+            }
+            const float signed_distance = (inside[idx] ? min_distance : -min_distance) * inv_extent;
+            out_profile.sdf[idx] = signed_distance;
+        }
+    }
+
+    float max_inside_distance = 0.0f;
+    for (std::size_t i = 0; i < out_profile.sdf.size(); ++i) {
+        if (!inside[i]) {
+            continue;
+        }
+        max_inside_distance = std::max(max_inside_distance, out_profile.sdf[i]);
+    }
+    max_inside_distance = std::max(max_inside_distance, 1.0e-4f);
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const std::size_t idx = profile_index(x, y, width);
+            const float gx = 0.5f * (alpha_at(x + 1, y) - alpha_at(x - 1, y));
+            const float gy = 0.5f * (alpha_at(x, y + 1) - alpha_at(x, y - 1));
+            out_profile.gradient[idx] = normalize_or_default(SDL_FPoint{gx, gy});
+            if (inside[idx]) {
+                out_profile.thickness[idx] = clamp01(out_profile.sdf[idx] / max_inside_distance);
+            }
+        }
+    }
+
+    SDL_DestroySurface(rgba_surface);
+    out_profile.valid = true;
+    return true;
+}
+
+void SceneRenderer::apply_asset_lighting_to_vertices(
+    Asset* asset,
+    const RenderObject& obj,
+    const std::vector<render_pipeline::RuntimeLight>& runtime_lights,
+    bool asset_lighting_enabled,
+    int asset_lighting_preset,
+    int asset_lighting_quality_tier,
+    double asset_depth_from_focus_plane,
+    std::uint64_t frame_token,
+    std::array<SDL_Vertex, 4>& vertices) {
+    if (!asset) {
+        return;
+    }
+
+    if (!asset_lighting_enabled || runtime_lights.empty()) {
+        asset_lighting_temporal_states_.erase(asset);
+        return;
+    }
+
+    const float frame_dt = assets_ ? std::clamp(assets_->frame_delta_seconds(), 0.0f, 0.25f) : 0.0f;
+    const bool severe_frame = frame_dt > 0.050f;
+    const int preset = std::clamp(asset_lighting_preset, 0, 2);
+    const int quality_tier = std::clamp(asset_lighting_quality_tier, 0, 2);
+    const int light_budget = render_internal::asset_lighting_light_budget_for_quality_tier(quality_tier);
+
+    auto temporal_it = asset_lighting_temporal_states_.find(asset);
+    if (severe_frame &&
+        temporal_it != asset_lighting_temporal_states_.end() &&
+        temporal_it->second.valid &&
+        frame_token <= temporal_it->second.frame_token + 4) {
+        for (std::size_t i = 0; i < vertices.size(); ++i) {
+            const float original_alpha = vertices[i].color.a;
+            vertices[i].color = temporal_it->second.vertex_colors[i];
+            vertices[i].color.a = original_alpha;
+        }
+        return;
+    }
+
+    const AssetLightingProfileKey profile_key{
+        obj.texture,
+        obj.src_rect,
+        obj.has_src_rect};
+    const AssetLightingProfile* profile = ensure_asset_lighting_profile(profile_key);
+
+    struct VertexShapeSample {
+        SDL_FPoint gradient{0.0f, -1.0f};
+        float thickness = 0.5f;
+        float sdf = 0.0f;
+    };
+    std::array<VertexShapeSample, 4> shape_samples{};
+    for (std::size_t i = 0; i < vertices.size(); ++i) {
+        const float u = clamp01(vertices[i].tex_coord.x);
+        const float v = clamp01(vertices[i].tex_coord.y);
+        if (profile && profile->valid && profile->width > 0 && profile->height > 0) {
+            const int x = std::clamp(static_cast<int>(std::lround(u * static_cast<float>(profile->width - 1))),
+                                     0,
+                                     profile->width - 1);
+            const int y = std::clamp(static_cast<int>(std::lround(v * static_cast<float>(profile->height - 1))),
+                                     0,
+                                     profile->height - 1);
+            const std::size_t idx = profile_index(x, y, profile->width);
+            shape_samples[i].gradient = profile->gradient[idx];
+            shape_samples[i].thickness = profile->thickness[idx];
+            shape_samples[i].sdf = profile->sdf[idx];
+        } else {
+            shape_samples[i].gradient = normalize_or_default(SDL_FPoint{u - 0.5f, v - 0.5f});
+            shape_samples[i].thickness = 0.5f;
+            shape_samples[i].sdf = 0.0f;
+        }
+    }
+
+    SDL_FPoint sprite_center{0.0f, 0.0f};
+    for (const SDL_Vertex& vertex : vertices) {
+        sprite_center.x += vertex.position.x;
+        sprite_center.y += vertex.position.y;
+    }
+    sprite_center.x *= 0.25f;
+    sprite_center.y *= 0.25f;
+
+    struct LightCandidate {
+        const render_pipeline::RuntimeLight* light = nullptr;
+        float score = 0.0f;
+        float depth_weight = 0.0f;
+        float signed_depth = 0.0f;
+        float depth_sigma = 1.0f;
+    };
+    std::vector<LightCandidate> candidates{};
+    candidates.reserve(runtime_lights.size());
+
+    const render_internal::AssetLightingPresetParameters preset_params =
+        render_internal::asset_lighting_preset_parameters(preset);
+    const float quality_scale = (quality_tier <= 0) ? 0.80f : (quality_tier == 1 ? 1.0f : 1.15f);
+    const float depth_falloff_power = (preset == 0) ? 1.15f : (preset == 2 ? 0.85f : 1.0f);
+    for (const render_pipeline::RuntimeLight& light : runtime_lights) {
+        if (light.intensity <= 0.0005f) {
+            continue;
+        }
+        const float radius_px = std::max(4.0f, light.radius_px);
+        const float dx = light.screen_center.x - sprite_center.x;
+        const float dy = light.screen_center.y - sprite_center.y;
+        const float center_distance = std::sqrt(dx * dx + dy * dy);
+        const float radius_limit = radius_px * 1.35f;
+        if (!std::isfinite(center_distance) || center_distance > radius_limit) {
+            continue;
+        }
+        const float radial_weight = smoothstep01(1.0f - center_distance / std::max(radius_limit, 1.0f));
+        const float signed_depth = light.world_z - static_cast<float>(asset_depth_from_focus_plane);
+        const float depth_sigma = std::max(1.0f, (light.radius_world > 0.0f ? light.radius_world : radius_px * 0.25f));
+        const float depth_weight = std::pow(std::exp(-std::fabs(signed_depth) / depth_sigma), depth_falloff_power);
+        const float direct_visibility =
+            render_internal::asset_lighting_direct_visibility(signed_depth, depth_sigma, preset);
+        const float rim_visibility =
+            render_internal::asset_lighting_rim_visibility(signed_depth, depth_sigma, preset);
+        const float visibility_hint =
+            std::clamp(0.30f + 0.70f * std::max(direct_visibility, 0.55f * rim_visibility), 0.15f, 1.30f);
+        const float overlap_weight = clamp01(light.depth_overlap_weight);
+        const float score = std::max(0.0f, light.intensity) *
+                            radial_weight *
+                            std::max(0.10f, depth_weight) *
+                            std::max(0.25f, overlap_weight) *
+                            visibility_hint *
+                            quality_scale;
+        if (score <= 0.003f) {
+            continue;
+        }
+        candidates.push_back(LightCandidate{
+            &light,
+            score,
+            depth_weight,
+            signed_depth,
+            depth_sigma});
+    }
+
+    if (candidates.empty()) {
+        asset_lighting_temporal_states_.erase(asset);
+        return;
+    }
+
+    std::sort(candidates.begin(),
+              candidates.end(),
+              [](const LightCandidate& lhs, const LightCandidate& rhs) {
+                  return lhs.score > rhs.score;
+              });
+    if (static_cast<int>(candidates.size()) > light_budget) {
+        candidates.resize(static_cast<std::size_t>(light_budget));
+    }
+
+    AssetLightingTemporalState temporal_state{};
+    temporal_state.valid = true;
+    temporal_state.frame_token = frame_token;
+    for (std::size_t i = 0; i < vertices.size(); ++i) {
+        const SDL_Vertex& vertex = vertices[i];
+        const VertexShapeSample& shape = shape_samples[i];
+        const SDL_FPoint pseudo_normal = normalize_or_default(SDL_FPoint{-shape.gradient.x, -shape.gradient.y});
+        float out_r = preset_params.ambient + 0.22f * shape.thickness + 0.08f * std::max(0.0f, shape.sdf);
+        float out_g = out_r;
+        float out_b = out_r;
+
+        for (const LightCandidate& candidate : candidates) {
+            const render_pipeline::RuntimeLight& light = *candidate.light;
+            const SDL_FPoint vertex_to_light = normalize_or_default(SDL_FPoint{
+                light.screen_center.x - vertex.position.x,
+                light.screen_center.y - vertex.position.y});
+            const float ndotl = pseudo_normal.x * vertex_to_light.x + pseudo_normal.y * vertex_to_light.y;
+            const float lambert = std::max(0.0f, ndotl);
+            const float rim_alignment = clamp01(1.0f - std::clamp(ndotl, -1.0f, 1.0f));
+            const float surface_response = render_internal::asset_lighting_surface_response(
+                lambert,
+                rim_alignment,
+                shape.thickness,
+                shape.sdf,
+                candidate.signed_depth,
+                candidate.depth_sigma,
+                preset);
+            float opacity = light.opacity;
+            if (!std::isfinite(opacity) || opacity <= 0.0f) {
+                opacity = 1.0f;
+            }
+            const float energy =
+                candidate.score *
+                std::max(0.08f, candidate.depth_weight) *
+                surface_response *
+                std::clamp(opacity, 0.1f, 2.0f) *
+                preset_params.emission_scale;
+            out_r += energy * (static_cast<float>(light.color.r) / 255.0f);
+            out_g += energy * (static_cast<float>(light.color.g) / 255.0f);
+            out_b += energy * (static_cast<float>(light.color.b) / 255.0f);
+        }
+
+        out_r = std::clamp(out_r * preset_params.exposure, 0.14f, 2.4f);
+        out_g = std::clamp(out_g * preset_params.exposure, 0.14f, 2.4f);
+        out_b = std::clamp(out_b * preset_params.exposure, 0.14f, 2.4f);
+
+        SDL_FColor lit_color = vertex.color;
+        lit_color.r = std::clamp(lit_color.r * out_r, 0.0f, 1.0f);
+        lit_color.g = std::clamp(lit_color.g * out_g, 0.0f, 1.0f);
+        lit_color.b = std::clamp(lit_color.b * out_b, 0.0f, 1.0f);
+        temporal_state.vertex_colors[i] = lit_color;
+        vertices[i].color = lit_color;
+    }
+    asset_lighting_temporal_states_[asset] = temporal_state;
 }
 
 void SceneRenderer::enqueue_runtime_light_dirty(std::uint32_t light_id,
@@ -1867,14 +2424,18 @@ void SceneRenderer::render() {
     }
     const double max_cull_depth = std::max(1.0, static_cast<double>(realism.max_cull_depth));
 
-    std::vector<Asset*> rendered_assets_for_debug;
-    collect_frame_geometry(cam, grid, depth_anchor_world_z, max_cull_depth, rendered_assets_for_debug);
-
-    std::vector<LayerEffectProcessor::RuntimeLight> runtime_lights;
+    std::vector<render_pipeline::RuntimeLight> runtime_lights;
     const bool runtime_lighting_enabled = assets_->should_render_runtime_lighting();
+    std::vector<Asset*> rendered_assets_for_debug;
     if (runtime_lighting_enabled) {
         gather_runtime_lights(cam, depth_anchor_world_z, rendered_assets_for_debug, runtime_lights);
     }
+    collect_frame_geometry(cam,
+                           grid,
+                           depth_anchor_world_z,
+                           max_cull_depth,
+                           runtime_lights,
+                           rendered_assets_for_debug);
     SDL_Texture* floor_texture = nullptr;
     SDL_Texture* floor_dark_mask_texture = nullptr;
     bool floor_dark_mask_drawn = false;
@@ -1906,14 +2467,7 @@ void SceneRenderer::render() {
 
     bool composed = false;
     if (layer_build.valid && !layer_build.non_empty_layers.empty() && layer_stack_renderer_ && scene_composite_pass_) {
-        const float front_mult = std::clamp(realism.front_layer_light_strength_multiplier, 0.0f, 4.0f);
-        const float behind_mult = std::clamp(realism.behind_layer_light_strength_multiplier, 0.0f, 4.0f);
-        const render_pipeline::LayerRenderResult layer_render =
-            layer_stack_renderer_->render(layer_build,
-                                          runtime_lights,
-                                          runtime_lighting_enabled,
-                                          front_mult,
-                                          behind_mult);
+        const render_pipeline::LayerRenderResult layer_render = layer_stack_renderer_->render(layer_build);
 
         SDL_Point screen_center = cam.get_focus_override_point();
         const SDL_FPoint optical_center{

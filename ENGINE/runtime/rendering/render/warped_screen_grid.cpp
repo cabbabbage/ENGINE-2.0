@@ -742,18 +742,6 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.layer_depth_curve = 0.0f;
     }
     settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
-    if (!std::isfinite(settings_.front_layer_light_strength_multiplier) ||
-        settings_.front_layer_light_strength_multiplier < 0.0f) {
-        settings_.front_layer_light_strength_multiplier = 1.0f;
-    }
-    settings_.front_layer_light_strength_multiplier =
-        std::min(settings_.front_layer_light_strength_multiplier, 4.0f);
-    if (!std::isfinite(settings_.behind_layer_light_strength_multiplier) ||
-        settings_.behind_layer_light_strength_multiplier < 0.0f) {
-        settings_.behind_layer_light_strength_multiplier = 1.0f;
-    }
-    settings_.behind_layer_light_strength_multiplier =
-        std::min(settings_.behind_layer_light_strength_multiplier, 4.0f);
     if (!std::isfinite(settings_.light_fade_in_seconds) || settings_.light_fade_in_seconds < 0.0f) {
         settings_.light_fade_in_seconds = 0.0f;
     }
@@ -776,6 +764,8 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.radial_blur_px = 0.0f;
     }
     settings_.radial_blur_px = std::min(settings_.radial_blur_px, 256.0f);
+    settings_.asset_lighting_preset = std::clamp(settings_.asset_lighting_preset, 0, 2);
+    settings_.asset_lighting_quality_tier = std::clamp(settings_.asset_lighting_quality_tier, 0, 2);
     camera_.set_fallback_height(settings_.base_height_px);
     invalidate_camera_cache();
 
@@ -1488,14 +1478,9 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
     read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
-    read_float("front_layer_light_strength_multiplier",
-               updated.front_layer_light_strength_multiplier,
-               0.0f,
-               4.0f);
-    read_float("behind_layer_light_strength_multiplier",
-               updated.behind_layer_light_strength_multiplier,
-               0.0f,
-               4.0f);
+    // Deprecated sprite-layer lighting keys are intentionally ignored:
+    // front_layer_light_strength_multiplier
+    // behind_layer_light_strength_multiplier
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
     read_bool("light_fade_smoothing_enabled", updated.light_fade_smoothing_enabled);
     read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
@@ -1511,6 +1496,20 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         read_float("radial_max_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
     }
     read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
+    read_bool("asset_lighting_enabled", updated.asset_lighting_enabled);
+    auto read_int = [&](const char* key, int& target, int min_value, int max_value) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_number_integer()) {
+            return;
+        }
+        const int value = it->get<int>();
+        target = std::clamp(value, min_value, max_value);
+    };
+    read_int("asset_lighting_quality_tier", updated.asset_lighting_quality_tier, 0, 2);
+    read_int("asset_lighting_preset", updated.asset_lighting_preset, 0, 2);
+    // Deprecated per-asset lighting tuning keys are intentionally ignored:
+    // max_lights_per_asset
+    // asset_lighting_depth_response_curve
     set_realism_settings(updated);
 
     transition_settings_.transition_damping = read_transition_float(
@@ -1579,8 +1578,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["max_cull_depth"] = settings_.max_cull_depth;
     result["layer_depth_interval"] = settings_.layer_depth_interval;
     result["layer_depth_curve"] = settings_.layer_depth_curve;
-    result["front_layer_light_strength_multiplier"] = settings_.front_layer_light_strength_multiplier;
-    result["behind_layer_light_strength_multiplier"] = settings_.behind_layer_light_strength_multiplier;
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
     result["light_fade_smoothing_enabled"] = settings_.light_fade_smoothing_enabled;
     result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;
@@ -1590,6 +1587,9 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
+    result["asset_lighting_enabled"] = settings_.asset_lighting_enabled;
+    result["asset_lighting_preset"] = settings_.asset_lighting_preset;
+    result["asset_lighting_quality_tier"] = settings_.asset_lighting_quality_tier;
     result["transition_damping"] = transition_settings_.transition_damping;
     result["max_camera_velocity"] = transition_settings_.max_camera_velocity;
     result["room_blend_damping_scale"] = transition_settings_.room_blend_damping_scale;

@@ -470,7 +470,7 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
 
 SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
                                     const world::WorldGrid& grid,
-                                    const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                                    const std::vector<render_pipeline::RuntimeLight>& runtime_lights,
                                     bool runtime_lighting_enabled,
                                     double max_cull_depth,
                                     SDL_Color clear_color,

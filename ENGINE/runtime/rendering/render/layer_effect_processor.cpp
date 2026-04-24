@@ -646,7 +646,7 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
     if (lighting_params.enabled && dark_mask_ready) {
         if (!supports_strict_dark_mask_pipeline()) {
             if (!warned_missing_strict_dark_mask_pipeline_blend_modes_) {
-                vibble::log::warn("[LayerEffectProcessor] Strict alpha-preserving dark-mask blends unavailable; skipping dark-mask lighting.");
+                vibble::log::warn("[LayerEffectProcessor] מצבי ערבוב dark-mask ששומרים אלפא בצורה מחמירה אינם זמינים; מדלג על תאורת dark-mask.");
                 warned_missing_strict_dark_mask_pipeline_blend_modes_ = true;
             }
         } else {

@@ -52,7 +52,7 @@ namespace {
         return Area(name, corners, resolution);
     }
 
-    // clamp_height_scale and all scale-based logic removed; camera is now fully explicit per-room.
+// clamp_height_scale וכל לוגיקה מבוססת קנה-מידה הוסרו; המצלמה כעת מפורשת לחלוטין לכל חדר.
 
     Vec3 operator+(const Vec3& a, const Vec3& b) {
         return Vec3{ a.x + b.x, a.y + b.y, a.z + b.z };
@@ -193,7 +193,7 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         const double pitch_rad = static_cast<double>(tilt_deg) * PI_D / 180.0;
         const double meters_scale = std::max(1e-6, kWorldUnitScale);
         const Vec3 anchor{ 0.0, 0.0, 0.0 };
-        // Height along +Y (up), depth along +Z (forward)
+    // גובה לאורך +Y (למעלה), עומק לאורך +Z (קדימה)
         Vec3 camera_pos{
             0.0,
             camera_height_pixels * meters_scale,
@@ -208,7 +208,7 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         if (lock_anchor_to_screen_center) {
             const double tan_pitch = std::tan(pitch_rad);
             if (std::isfinite(tan_pitch) && std::fabs(tan_pitch) > 1e-6) {
-                // Shift along -Z so anchor stays centered given pitch.
+    // הזז לאורך -Z כדי שהעוגן יישאר ממורכז בהתאם להטיה.
                 camera_pos.z = camera_pos.y / tan_pitch;
             }
         }
@@ -217,7 +217,7 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         Vec3 horiz_dir{ to_anchor.x, 0.0, to_anchor.z };
         const double horiz_len = length(horiz_dir);
         if (horiz_len < 1e-3 || !std::isfinite(horiz_len)) {
-            // Default to looking forward along -Z so the camera sits behind the anchor.
+    // ברירת מחדל: מבט קדימה לאורך -Z כדי שהמצלמה תישב מאחורי העוגן.
             horiz_dir = Vec3{0.0, 0.0, -1.0};
         } else {
             horiz_dir = horiz_dir * (1.0 / horiz_len);
@@ -237,7 +237,7 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         }
 
         Vec3 world_up{0.0, 1.0, 0.0};
-        // Build a right-handed camera basis where +X remains screen-right.
+    // בנה בסיס מצלמה ימני שבו +X נשאר לימין המסך.
         Vec3 right = cross(forward, world_up);
         right = normalize(right);
         Vec3 up = normalize(cross(right, forward));
@@ -271,8 +271,8 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.pitch_radians = pitch_rad;
         state.pitch_degrees = tilt_deg;
         state.camera_world_y = camera_pos.y;
-        state.anchor_world_y = 0.0; // height anchor (Y)
-        state.anchor_world_z = static_cast<double>(anchor_world.y); // depth anchor (Z)
+    state.anchor_world_y = 0.0; // עוגן גובה (Y)
+    state.anchor_world_z = static_cast<double>(anchor_world.y); // עוגן עומק (Z)
 
         return state;
     }
@@ -574,8 +574,8 @@ WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
         params.up_y = cam.up.y;
         params.up_z = cam.up.z;
         params.anchor_world_x = static_cast<double>(cam.anchor_world_px.x);
-        params.anchor_world_y = cam.anchor_world_y; // height anchor
-        params.anchor_world_z = cam.anchor_world_z; // depth anchor
+    params.anchor_world_y = cam.anchor_world_y; // עוגן גובה
+    params.anchor_world_z = cam.anchor_world_z; // עוגן עומק
         params.meters_scale = cam.meters_scale;
         params.tan_half_fov_x = cam.tan_half_fov_x;
         params.tan_half_fov_y = cam.tan_half_fov_y;
@@ -588,7 +588,7 @@ WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
         params.horizon_band_px = horizon_band_px;
         params.screen_width = screen_width;
         params.screen_height = screen_height;
-        params.state_version = 0; // Will be set by caller
+    params.state_version = 0; // ייקבע על ידי הקורא
         return params;
     }
 
@@ -706,13 +706,13 @@ WarpedScreenGrid::~WarpedScreenGrid() = default;
 const char* WarpedScreenGrid::transition_state_name(CameraTransitionState state) {
     switch (state) {
         case CameraTransitionState::Idle:
-            return "Idle";
+            return "סרק";
         case CameraTransitionState::BlendingToNewRoom:
-            return "BlendingToNewRoom";
+            return "מיזוג_לחדר_חדש";
         case CameraTransitionState::Settling:
-            return "Settling";
+            return "התייצבות";
         default:
-            return "Unknown";
+            return "לא_ידוע";
     }
 }
 
@@ -779,7 +779,7 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     camera_.set_fallback_height(settings_.base_height_px);
     invalidate_camera_cache();
 
-    // No-op: geometry cache is obsolete.
+    // No-op: מטמון הגאומטריה אינו בשימוש עוד.
 }
 
 void WarpedScreenGrid::set_screen_center(SDL_Point p, bool snap_immediately) {
@@ -908,7 +908,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
                          float dt,
                          bool dev_mode)
 {
-    // Keep the anchor locked to screen center so depth parallax remains stable on the ground plane.
+    // השאר את העוגן נעול למרכז המסך כדי שפראלקסת העומק תישאר יציבה על מישור הקרקע.
     lock_anchor_to_screen_center_ = true;
     tracked_player_asset_ = player;
     const float safe_dt = (std::isfinite(dt) && dt > 0.0f) ? std::min(dt, 0.1f) : (1.0f / 60.0f);
@@ -930,11 +930,11 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 
     if (!dev_mode) {
         if (camera_.manual_height_override()) {
-            vibble::log::info("[Camera] Clearing manual_height_override in normal mode");
+            vibble::log::info("[Camera] מנקה manual_height_override במצב רגיל");
             camera_.set_manual_height_override(false);
         }
         if (camera_.manual_zoom_override()) {
-            vibble::log::info("[Camera] Clearing manual_zoom_override in normal mode");
+            vibble::log::info("[Camera] מנקה manual_zoom_override במצב רגיל");
             camera_.set_manual_zoom_override(false);
         }
     }
@@ -961,7 +961,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     cur_params = camera_math::sanitize_camera_params(cur_params, fallback_height);
     neigh_params = camera_math::sanitize_camera_params(neigh_params, fallback_height);
 
-    // Interpolation factor t: if player is between rooms, interpolate; else use cur
+    // מקדם אינטרפולציה t: אם השחקן בין חדרים בצע אינטרפולציה; אחרת השתמש ב-cur
     if (player && cur && cur->room_area && neigh && neigh->room_area && cur != neigh) {
         auto [ax, ay] = cur->room_area->get_center();
         auto [bx, by] = neigh->room_area->get_center();
@@ -1180,7 +1180,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     }
 
     if (dev_mode && focus_override_active) {
-        // Explicit debug path: focus lock should hard-snap.
+    // נתיב דיבאג מפורש: נעילת פוקוס צריכה לקפוץ בצורה קשיחה.
         set_screen_center(camera_.state().focus_override, true);
         transition_state = CameraTransitionState::Idle;
         settle_time_remaining_ = 0.0f;
@@ -1206,12 +1206,12 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 
     if (camera_transition_trace_enabled()) {
         vibble::log::debug(
-            std::string("[CameraTransition] state=") + transition_state_name(transition_state) +
-            " target=(" + std::to_string(desired_center.x) + "," + std::to_string(desired_center.y) + ")" +
-            " velocity=(" + std::to_string(controller_state.center_velocity.x) + "," +
+            std::string("[CameraTransition] מצב=") + transition_state_name(transition_state) +
+            " מטרה=(" + std::to_string(desired_center.x) + "," + std::to_string(desired_center.y) + ")" +
+            " מהירות=(" + std::to_string(controller_state.center_velocity.x) + "," +
             std::to_string(controller_state.center_velocity.y) + ")" +
-            " blend=" + std::to_string(static_cast<float>(t)) +
-            " settle_remaining=" + std::to_string(settle_time_remaining_));
+            " מיזוג=" + std::to_string(static_cast<float>(t)) +
+            " התייצבות_נותרה=" + std::to_string(settle_time_remaining_));
     }
 
     previous_transition_room_ = cur;
@@ -1331,8 +1331,8 @@ SDL_FPoint WarpedScreenGrid::map_to_screen_f(SDL_FPoint world) const {
     const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                0.0, // height defaults to 0
-                                                static_cast<double>(world.y), // depth
+        0.0, // ברירת מחדל לגובה היא 0
+        static_cast<double>(world.y), // עומק
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -1346,8 +1346,8 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
     const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                static_cast<double>(world.y),   // height (Y)
-                                                static_cast<double>(world_z),   // depth (Z)
+        static_cast<double>(world.y),   // גובה (Y)
+        static_cast<double>(world_z),   // עומק (Z)
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -1407,8 +1407,8 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
     const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                static_cast<double>(world.y),   // height (Y)
-                                                static_cast<double>(world_z),   // depth (Z)
+        static_cast<double>(world.y),   // גובה (Y)
+        static_cast<double>(world_z),   // עומק (Z)
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -1714,7 +1714,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     const std::uint64_t frame_stamp = frame_id;
     clear_grid_state();
 
-    // Refresh the world-space view area based on the latest camera parameters.
+    // רענן את אזור התצוגה במרחב העולם לפי פרמטרי המצלמה האחרונים.
     recompute_current_view();
 
     int minx, miny, maxx, maxy;
@@ -2195,16 +2195,16 @@ void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
     const CameraState& cam_state = camera_state_cached();
     const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
 
-    // Use GridPoint's self-contained projection method
+    // השתמש בשיטת ההקרנה העצמאית של GridPoint
     world::CameraProjectionParams params = camera_state_to_projection_params(
         cam_state, screen_width_, screen_height_, horizon_band);
     params.state_version = camera_state_version_;
 
     point.project_to_screen(params);
 
-    // Note: GridPoint uses screen coordinates with Y increasing downward,
-    // but the internal projection uses Y increasing upward. The GridPoint
-    // method handles this internally, so no Y-flip is needed here.
+    // הערה: GridPoint משתמש בקואורדינטות מסך שבהן Y גדל כלפי מטה,
+    // אך ההקרנה הפנימית משתמשת ב-Y שגדל כלפי מעלה. שיטת GridPoint
+    // מטפלת בכך פנימית, ולכן אין צורך בהיפוך Y כאן.
 }
 
 bool WarpedScreenGrid::is_manual_height_override() const {
@@ -2297,7 +2297,7 @@ Area WarpedScreenGrid::frame_to_area(const SDL_Rect& frame) const {
 }
 
 SDL_Point WarpedScreenGrid::pan_and_height_to_point(double pan, double height) const {
-    // Pan as x offset, height as y offset from center
+    // היסט pan כ-offset בציר x, וגובה כ-offset בציר y מהמרכז
     SDL_Point center = get_screen_center();
     return {center.x + static_cast<int>(pan), center.y + static_cast<int>(height)};
 }
@@ -2318,6 +2318,6 @@ bool WarpedScreenGrid::is_height_animating() const {
 
 SDL_Point WarpedScreenGrid::pan_and_height_to_asset(double pan, double height, const Asset* asset) const {
     if (!asset) return {0, 0};
-    // Adjust asset position by pan and height
+    // התאם את מיקום הנכס לפי pan וגובה
     return {asset->world_x() + static_cast<int>(pan), asset->world_y() + static_cast<int>(height)};
 }

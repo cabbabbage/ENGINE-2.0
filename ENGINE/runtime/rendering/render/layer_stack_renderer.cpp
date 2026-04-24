@@ -1,4 +1,4 @@
-﻿#include "rendering/render/layer_stack_renderer.hpp"
+#include "rendering/render/layer_stack_renderer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -224,7 +224,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             continue;
         }
 
-        // ????? ????? ????? ????; ????? ???? ???? ????? ????? ????/?????.
+        // השיוך מבוסס כיסוי בלבד; סיווג עומק מוחל בהמשך כחוזק קדמי או אחורי.
         for (const std::size_t li : frame_scratch_.layer_order_by_depth_start) {
             const FrameScratchArena::LayerMetadata& layer_meta = frame_scratch_.layer_metadata[li];
             const bool bounds_overlap =

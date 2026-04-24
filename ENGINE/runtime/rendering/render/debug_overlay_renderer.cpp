@@ -336,12 +336,12 @@ void DebugOverlayRenderer::render_anchor_debug(const WarpedScreenGrid& cam,
             continue;
         }
 
-        const std::string mode_label = dev_mode ? "dev" : "normal";
-        vibble::log::warn(std::string("[AnchorParity][") + mode_label + "] owner='" +
+        const std::string mode_label = dev_mode ? "פיתוח" : "רגיל";
+        vibble::log::warn(std::string("[AnchorParity][") + mode_label + "] בעלים='" +
                           (owner->info ? owner->info->name : std::string{"<unknown>"}) +
-                          "' child='" +
+                          "' ילד='" +
                           (child->info ? child->info->name : std::string{"<unknown>"}) +
-                          "' anchor='" + binding.anchor_name +
-                          "' delta_px=" + std::to_string(delta_px));
+                          "' עוגן='" + binding.anchor_name +
+                          "' דלתא_פיקסלים=" + std::to_string(delta_px));
     }
 }

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include "utils/sdl_render_conversions.hpp"
@@ -455,7 +455,7 @@ private:
                     value *= 0.01f;
                 }
                 if (!::std::isfinite(value) || value <= 0.0f) continue;
-                if (value >= 0.999f) continue; // ?????? ????? ???? ?????
+                if (value >= 0.999f) continue; // וריאנט הבסיס נשמר בנפרד
                 steps.push_back(::std::clamp(value, 0.01f, 1.0f));
             }
         };
@@ -518,7 +518,7 @@ private:
                 state.entries.emplace(it.key(), ::std::move(entry));
             }
         } catch (...) {
-            // ???? ??????? ????; ??? ?? ????? ??? ??? ????? ?? ???? header-only ???.
+            // חזרה לברירות מחדל; אין מה לרשום כאן כדי לשמור על תלות header-only קלה.
         }
     }
 

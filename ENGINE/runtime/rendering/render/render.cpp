@@ -1,4 +1,4 @@
-﻿#include "rendering/render/render.hpp"
+#include "rendering/render/render.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render_object_projection.hpp"
@@ -790,8 +790,8 @@ SceneRenderer::PrevalidatedTag SceneRenderer::require_prerequisites(SDL_Renderer
                                                                     Assets* assets) {
     std::string reason;
     if (!SceneRenderer::prerequisites_ready(renderer, assets, &reason)) {
-        const std::string message = reason.empty() ? "SceneRenderer prerequisites missing." : reason;
-        vibble::log::error(std::string{"[SceneRenderer] Initialization aborted: "} + message);
+        const std::string message = reason.empty() ? "חסרים תנאי קדם עבור SceneRenderer." : reason;
+        vibble::log::error(std::string{"[SceneRenderer] האתחול הופסק: "} + message);
         if (!renderer) SDL_assert(renderer != nullptr);
         if (!assets) SDL_assert(assets != nullptr);
         throw std::invalid_argument(message);
@@ -821,7 +821,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
 
     if (dynamic_boundary_system_ && !dynamic_boundary_system_->initialize(renderer_, &assets_->library())) {
-        vibble::log::warn("[SceneRenderer] Failed to initialize dynamic boundary system");
+        vibble::log::warn("[SceneRenderer] אתחול מערכת הגבולות הדינמיים נכשל");
     }
 
     map_radius_world_ = map_layers::map_radius_from_map_info(map_manifest);
@@ -833,8 +833,8 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
     if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
 
-    vibble::log::debug(std::string{"[SceneRenderer] Initializing for map '"} + map_id +
-                       "' with screen " + std::to_string(screen_width_) + "x" + std::to_string(screen_height_) + ".");
+    vibble::log::debug(std::string{"[SceneRenderer] מתחיל אתחול עבור מפה '"} + map_id +
+                       "' עם מסך " + std::to_string(screen_width_) + "x" + std::to_string(screen_height_) + ".");
 }
 
 SceneRenderer::~SceneRenderer() {
@@ -1103,11 +1103,11 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         }
         asset->clear_mesh_dirty();
 
-        // ????:
-        // ???? ?? ????? ??????? ???? Z ?? ??????? ??? ?????? ????? ?????,
-        // ?? ???? ?? ????? DOF/????? ????? ????? ????? ?????? ?? ????, ???
-        // ????? Z ?? ???? ??????? ?? ???????. ???? ??????? ?????/?????? ????
-        // ?????? ????? ??????? ????? ?? ???? ????? ?????? ?? ?????? ????.
+        // חשוב:
+        // הקרן את הקווד באמצעות היסט Z של הרינדור כדי שיופיע במקום הנכון,
+        // אבל השאר את חלוקת DOF/שכבות קשורה לעומק מישור הפוקוס של הנכס, ולא
+        // להיסט Z של עוגן הרינדור של הספרייט. אחרת אובייקט השחקן או הפוקוס עלול
+        // להידחף לשכבה מטושטשת סמוכה גם כאשר מישור הפוקוס של המצלמה תקין.
         geometry_batcher_->addQuad(obj.texture,
                                 mesh.vertices.data(),
                                 mesh.indices.data(),
@@ -1365,11 +1365,11 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         const std::uint64_t elapsed_ticks = SDL_GetTicks() - gather_start_ticks;
         if (runtime_light_profile_last_log_ticks_ == 0 || now_ticks - runtime_light_profile_last_log_ticks_ >= 1000) {
             runtime_light_profile_last_log_ticks_ = now_ticks;
-            vibble::log::debug("[SceneRenderer] light gather profile: candidates=" +
+            vibble::log::debug("[SceneRenderer] פרופיל איסוף תאורה: מועמדים=" +
                                std::to_string(candidate_light_ids.size()) +
-                               " rendered=" + std::to_string(runtime_light_rendered_count_) +
-                               " culled=" + std::to_string(runtime_light_culled_count_) +
-                               " ms=" + std::to_string(ticks_to_seconds(elapsed_ticks) * 1000.0f));
+                               " צוירו=" + std::to_string(runtime_light_rendered_count_) +
+                               " סוננו=" + std::to_string(runtime_light_culled_count_) +
+                               " מילישניות=" + std::to_string(ticks_to_seconds(elapsed_ticks) * 1000.0f));
         }
     }
 }
@@ -1736,8 +1736,8 @@ void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& 
                 continue;
             }
 
-            // ????? ???????? ??????? ?? ??????? ?? ??? ?????/????? ?? ?????, ???? ????? ????? ??????
-            // ????? ???? ??? ????? ???? ????? ???.
+            // ילדים שמקושרים לאליפסה הם דינמיים עם מצב כיוון ורדיוס של העכבר, ולכן נתיבי דיבאג לתנועה
+            // נבנים מחדש בכל פריים עבור הנכסים האלה.
             std::optional<float> heading{};
             const auto anchor = binding.owner->anchor_state(binding.anchor_name,
                                                             anchor_points::GridMaterialization::None,

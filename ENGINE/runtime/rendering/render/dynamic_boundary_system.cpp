@@ -139,8 +139,8 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
         size_variation_sample);
     const float current_scale = base_scale * perspective_scale;
 
-    // Match runtime assets: pick the nearest larger variant for this draw scale
-    // and only upscale if every variant is smaller than the target.
+// התאמה לנכסי זמן ריצה: בחר את הווריאנט הגדול הקרוב ביותר לקנה המידה הזה
+// ובצע הגדלה רק אם כל הווריאנטים קטנים מהיעד.
     float desired_variant_scale = current_scale;
     if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
         desired_variant_scale = 1.0f;
@@ -183,7 +183,7 @@ DynamicBoundarySystem::~DynamicBoundarySystem() {
 
 bool DynamicBoundarySystem::initialize(SDL_Renderer* renderer, AssetLibrary* asset_library) {
     if (!renderer || !asset_library) {
-        vibble::log::warn("[DynamicBoundarySystem] Renderer or AssetLibrary is null; cannot initialize");
+        vibble::log::warn("[DynamicBoundarySystem] ה-Renderer או AssetLibrary הם null; אי אפשר לאתחל");
         return false;
     }
     renderer_ = renderer;
@@ -334,10 +334,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             }
             if (total_cells > kMaxBoundaryCells) {
                 if (dense_type_warnings_.insert(static_cast<int>(type_idx)).second) {
-                    vibble::log::warn(std::string{"[DynamicBoundarySystem] Skipping dense boundary type '"} +
+                    vibble::log::warn(std::string{"[DynamicBoundarySystem] מדלג על סוג גבול צפוף '"} +
                                       btype.display_name + "' (grid_resolution=" +
                                       std::to_string(btype.grid_resolution) +
-                                      ") to avoid excessive cells.");
+                                      ") כדי להימנע ממספר תאים מוגזם.");
                 }
                 continue;
             }
@@ -913,8 +913,8 @@ float DynamicBoundarySystem::sample_size_variation_from_hash(std::uint64_t key_h
     std::seed_seq seq{
         seed_lo,
         seed_hi,
-        0x53495A45u, // "SIZE"
-        0x56415259u  // "VARY"
+        0x53495A45u, // "גודל"
+        0x56415259u  // "שונות"
     };
     std::mt19937 rng(seq);
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f);

@@ -1,4 +1,4 @@
-﻿# VIBBLE - מנוע משחק דו-ממדי (Departed Affairs and Co.)
+# VIBBLE - מנוע משחק דו-ממדי (Departed Affairs and Co.)
 
 
 ## התקנה

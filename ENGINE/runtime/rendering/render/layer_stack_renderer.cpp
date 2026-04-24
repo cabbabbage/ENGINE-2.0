@@ -1,4 +1,4 @@
-#include "rendering/render/layer_stack_renderer.hpp"
+﻿#include "rendering/render/layer_stack_renderer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -224,7 +224,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             continue;
         }
 
-        // Assignment is purely coverage-based; depth classification is applied later as front/behind strength.
+        // ????? ????? ????? ????; ????? ???? ???? ????? ????? ????/?????.
         for (const std::size_t li : frame_scratch_.layer_order_by_depth_start) {
             const FrameScratchArena::LayerMetadata& layer_meta = frame_scratch_.layer_metadata[li];
             const bool bounds_overlap =
@@ -307,3 +307,4 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
     out.valid = true;
     return out;
 }
+

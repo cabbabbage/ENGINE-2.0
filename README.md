@@ -1,38 +1,38 @@
-# VIBBLE - 2D Game Engine (Departed Affairs and Co.)
+﻿# VIBBLE - מנוע משחק דו-ממדי (Departed Affairs and Co.)
 
 
-## Installation
-### Quick start (Windows)
-1. Clone the repo.
-2. Run `setup.bat` from the project root if you wish to build and compile compile.
+## התקנה
+### התחלה מהירה (Windows)
+1. שכפל את המאגר.
+2. הרץ `setup.bat` משורש הפרויקט אם ברצונך לבנות ולהדר.
 
-The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fetches dependencies, configures a RelWithDebInfo build, compiles, and launches the engine. Requires Windows 10/11, internet, and admin rights are recommended for tool installs.
+הסקריפט מתקין כלי בנייה (Git, כלי הבנייה של MSVC, CMake, Ninja, vcpkg), מושך תלויות, מגדיר בניית RelWithDebInfo, מהדר ומפעיל את המנוע. נדרשים Windows 10/11 וחיבור לאינטרנט, ומומלצות הרשאות מנהל לצורך התקנת הכלים.
 
 
-## Overview
-- SDL3-based 2D engine; content lives in external JSON-driven files for maps, assets, lighting, and animations.
-- Manifest-driven loading keeps game data out of the executable so asset changes do not require recompiles.
-- Dev Mode ships in-engine for editing rooms, lighting, assets, and spawns with immediate write-through to content files.
-- Asset tools regenerate animation and lighting caches from explicit requests and missing-file repair.
-- Asset manifest enable-flag contract and floor-box schema: `ENGINE/runtime/core/manifest/ASSET_MANIFEST_SCHEMA.md`.
+## סקירה כללית
+- מנוע דו-ממדי מבוסס SDL3; התוכן נשמר בקבצים חיצוניים מונעי-JSON עבור מפות, נכסים, תאורה ואנימציות.
+- טעינה מונעת-manifest שומרת את נתוני המשחק מחוץ לקובץ ההפעלה כדי ששינויי נכסים לא ידרשו הידור מחדש.
+- מצב פיתוח מובנה בתוך המנוע לעריכת חדרים, תאורה, נכסים ונקודות זימון, עם כתיבה מיידית חזרה לקובצי התוכן.
+- כלי הנכסים מייצרים מחדש מטמוני אנימציה ותאורה לפי בקשה מפורשת ותיקון קבצים חסרים.
+- חוזה דגל ההפעלה של manifest הנכסים וסכמת floor-box: `ENGINE/runtime/core/manifest/ASSET_MANIFEST_SCHEMA.md`.
 
-## Running
-- Preferred: run `run.bat` to configure, build, and start the engine.
-- To build fresh run `compile_and_run.bat`; it launches `release\engine.exe` produced by the build.
-- Repeat runs reuse the configured build; rerun `compile_and_run.bat` after pulling dependency changes.
+## הרצה
+- מומלץ: להריץ `run.bat` כדי להגדיר, לבנות ולהפעיל את המנוע.
+- כדי לבנות מאפס הרץ `compile_and_run.bat`; הוא מפעיל את `release\engine.exe` שנוצר בתהליך הבנייה.
+- הרצות חוזרות משתמשות בבנייה שהוגדרה; הרץ שוב `compile_and_run.bat` אחרי משיכת שינויי תלויות.
 
-## Dev Mode
-- Toggle with `Ctrl+D` or through the pause menu (`Esc`), or it auto-enables when a map lacks a player.
-- Reduces render quality for responsiveness and exposes editors for maps, assets, lighting, and spawns. Settings persist in `dev_mode_settings.json`.
+## מצב פיתוח
+- החלפה עם `Ctrl+D` או דרך תפריט ההשהיה (`Esc`), או הפעלה אוטומטית כשהמפה ללא שחקן.
+- מפחית איכות רינדור לשיפור תגובתיות וחושף עורכים למפות, נכסים, תאורה ונקודות זימון. ההגדרות נשמרות ב-`dev_mode_settings.json`.
 
-## Custom Controllers
-- Add new controllers under `ENGINE/runtime/animation/controllers/custom_controllers/` and register them in `ControllerFactory::create_by_key`.
-- Controllers are linked by asset name (for example, asset `spider` maps to `spider_controller`).
+## בקרים מותאמים אישית
+- הוסף בקרים חדשים תחת `ENGINE/runtime/animation/controllers/custom_controllers/` ורשום אותם ב-`ControllerFactory::create_by_key`.
+- הבקרים מקושרים לפי שם נכס (לדוגמה, הנכס `spider` ממופה ל-`spider_controller`).
 
-## Testing
-- Build tests: `cmake --build --preset windows-vcpkg-release --target engine_tests`
-- Run tests: `ENGINE/engine_tests.exe`
+## בדיקות
+- בניית בדיקות: `cmake --build --preset windows-vcpkg-release --target engine_tests`
+- הרצת בדיקות: `ENGINE/engine_tests.exe`
 
-## License
+## רישיון
 
-MIT License - see `LICENSE`.
+רישיון MIT - ראו `LICENSE`.

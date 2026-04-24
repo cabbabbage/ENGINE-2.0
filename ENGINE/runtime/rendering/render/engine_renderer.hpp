@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
 #include <string>
@@ -48,17 +48,17 @@ public:
     const RenderCaps& caps() const { return caps_; }
     RenderQualityTier quality_tier() const { return quality_tier_; }
 
-    // Frame control
+    // ???? ?????
     void begin_frame(const SDL_Color& clear_color);
     void end_frame();
     void present();
 
-    // Basic transforms
+    // ???????????? ???????
     void set_scale(float scale_x, float scale_y);
     void set_viewport(const SDL_Rect& rect);
     void clear_viewport();
 
-    // Texture helpers
+    // ??? ??? ?????????
     SDL_Texture* create_texture(SDL_PixelFormat format, SDL_TextureAccess access, int w, int h) const;
     SDL_Texture* create_texture_from_surface(SDL_Surface* surface) const;
 
@@ -84,3 +84,4 @@ private:
     RenderCaps caps_{};
     RenderQualityTier quality_tier_ = RenderQualityTier::Accelerated;
 };
+

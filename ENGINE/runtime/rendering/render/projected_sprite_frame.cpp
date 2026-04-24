@@ -1,4 +1,4 @@
-#include "rendering/render/projected_sprite_frame.hpp"
+﻿#include "rendering/render/projected_sprite_frame.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -80,7 +80,7 @@ bool calibrate_pixels_per_world_x(const WarpedScreenGrid& cam,
         return false;
     }
 
-    out_pixels_per_world_x = pixel_span; // Sampled over exactly one world unit.
+    out_pixels_per_world_x = pixel_span; // ???? ????? ?? ????? ???? ???.
     return true;
 }
 
@@ -143,7 +143,7 @@ SDL_FPoint ProjectedSpriteFrame::anchor_uv_from_texture_pixel(SDL_Point texture_
 }
 
 SDL_FPoint ProjectedSpriteFrame::sample_screen_from_uv(SDL_FPoint uv) const {
-    // Match SDL_RenderGeometry's fixed triangle split: (TL,TR,BR) and (TL,BR,BL).
+    // ???? ?????? ???????? ????? ?? SDL_RenderGeometry: (TL,TR,BR) ??? (TL,BR,BL).
     if (uv.x >= uv.y) {
         const float w_tl = 1.0f - uv.x;
         const float w_tr = uv.x - uv.y;
@@ -243,8 +243,8 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
         screen_tr = cand_tr_b;
     }
 
-    // Re-anchor the projected quad so caller-specified UV maps to the same
-    // world anchor point used by the default bottom-center projection.
+    // ??? ???? ?? ????? ?????? ?? ?-UV ?????? ???? ????? ?????
+    // ????? ????? ????? ??? ?????? ????? ????? ?? ????? ????-?????.
     ProjectedSpriteFrame anchor_sample_frame{};
     anchor_sample_frame.screen_tl = screen_tl;
     anchor_sample_frame.screen_tr = screen_tr;
@@ -401,3 +401,4 @@ bool project_world_to_screen(const WarpedScreenGrid& cam,
 }
 
 }  // namespace render_projection
+

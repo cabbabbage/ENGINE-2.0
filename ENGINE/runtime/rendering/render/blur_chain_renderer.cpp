@@ -350,8 +350,8 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
             }
             initialized = true;
         } else {
-            // Keep ping-pong copies reserved for real blur passes; direct composite otherwise.
-            // Player-layer behavior must stay confined to ordering/composition and never feed lighting semantics.
+            // השאר עותקי ping-pong שמורים למעברי טשטוש אמיתיים; אחרת בצע קומפוזיציה ישירה.
+            // התנהגות שכבת השחקן חייבת להישאר מוגבלת לסידור ולקומפוזיציה בלבד, בלי להשפיע על סמנטיקת תאורה.
             if (!composite_texture_over(layer_texture, accum)) {
                 return false;
             }
@@ -449,7 +449,7 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
         return result;
     }
 
-    // Player-layer handling is composition-only and must never affect lighting bias/assignment semantics.
+    // הטיפול בשכבת השחקן הוא לקומפוזיציה בלבד, ואסור שישפיע על הטיה או שיוך של תאורה.
     if (SDL_Texture* player_layer_texture = find_player_layer_texture(layer_render)) {
         if (!background_has_content) {
             if (!copy_texture(player_layer_texture, background_mid_tex_)) {
@@ -483,3 +483,4 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
     result.foreground_mid = foreground_has_content ? foreground_mid_tex_ : nullptr;
     return result;
 }
+

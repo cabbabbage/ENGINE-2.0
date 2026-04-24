@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
@@ -34,7 +34,7 @@ public:
 
     struct BoundaryFrame {
         std::vector<BoundaryFrameVariant> variants;
-        float duration_ms = 41.67f;  // ~24 fps default
+        float duration_ms = 41.67f;  // ????? ???? ?? ~24 ??????? ??????
     };
 
     struct BoundarySprite {
@@ -78,7 +78,7 @@ public:
 
     struct BoundaryKey {
         int group = 0;
-        int region_domain = 0;  // 0 = boundary, 1 = room/trail
+        int region_domain = 0;  // 0 = ????, 1 = ???/????
         int resolution_layer = 0;
         int grid_x = 0;
         int grid_y = 0;
@@ -300,3 +300,4 @@ private:
     };
     static BoundaryConfig& config();
 };
+

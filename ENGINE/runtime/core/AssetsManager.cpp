@@ -76,6 +76,119 @@ constexpr int kCollisionIndexSpacingMinPx = 64;
 constexpr int kCollisionIndexSpacingMaxPx = 256;
 constexpr int kAggressiveMaxCollisionSearchRadiusPx = 320;
 
+int env_int_clamped(const char* name, int fallback, int min_value, int max_value) {
+    const int safe_min = std::min(min_value, max_value);
+    const int safe_max = std::max(min_value, max_value);
+    const int safe_fallback = std::clamp(fallback, safe_min, safe_max);
+    const char* raw = SDL_getenv(name);
+    if (!raw || !*raw) {
+        return safe_fallback;
+    }
+    try {
+        const int parsed = std::stoi(raw);
+        return std::clamp(parsed, safe_min, safe_max);
+    } catch (...) {
+        return safe_fallback;
+    }
+}
+
+double env_double_clamped(const char* name, double fallback, double min_value, double max_value) {
+    const double safe_min = std::min(min_value, max_value);
+    const double safe_max = std::max(min_value, max_value);
+    double safe_fallback = fallback;
+    if (!std::isfinite(safe_fallback)) {
+        safe_fallback = safe_min;
+    }
+    safe_fallback = std::clamp(safe_fallback, safe_min, safe_max);
+    const char* raw = SDL_getenv(name);
+    if (!raw || !*raw) {
+        return safe_fallback;
+    }
+    try {
+        const double parsed = std::stod(raw);
+        if (!std::isfinite(parsed)) {
+            return safe_fallback;
+        }
+        return std::clamp(parsed, safe_min, safe_max);
+    } catch (...) {
+        return safe_fallback;
+    }
+}
+
+bool startup_runtime_safety_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_STARTUP_RUNTIME_SAFETY");
+        if (!raw || !*raw) {
+            return true;
+        }
+        const std::string value(raw);
+        return value == "1" ||
+               value == "true" ||
+               value == "TRUE" ||
+               value == "on" ||
+               value == "ON";
+    }();
+    return enabled;
+}
+
+std::uint32_t startup_runtime_safety_frames() {
+    static const std::uint32_t frames = static_cast<std::uint32_t>(
+        env_int_clamped("VIBBLE_STARTUP_RUNTIME_SAFETY_FRAMES", 360, 1, 5000));
+    return frames;
+}
+
+bool startup_runtime_safety_active(std::uint32_t frame_id) {
+    return startup_runtime_safety_enabled() && frame_id <= startup_runtime_safety_frames();
+}
+
+std::uint32_t startup_skip_runtime_effects_frames() {
+    static const std::uint32_t frames = static_cast<std::uint32_t>(
+        env_int_clamped("VIBBLE_STARTUP_SKIP_RUNTIME_EFFECTS_FRAMES", 24, 0, 1000));
+    return frames;
+}
+
+std::uint32_t startup_skip_render_frames() {
+    static const std::uint32_t frames = static_cast<std::uint32_t>(
+        env_int_clamped("VIBBLE_STARTUP_SKIP_RENDER_FRAMES", 48, 0, 1000));
+    return frames;
+}
+
+std::uint32_t startup_render_every_n_frames() {
+    static const std::uint32_t n = static_cast<std::uint32_t>(
+        env_int_clamped("VIBBLE_STARTUP_RENDER_EVERY_N_FRAMES", 2, 1, 16));
+    return n;
+}
+
+std::size_t runtime_convergence_iteration_cap_for_frame(std::uint32_t frame_id) {
+    const std::size_t base_cap = static_cast<std::size_t>(
+        env_int_clamped("VIBBLE_RUNTIME_CONVERGENCE_ITERATION_CAP",
+                        static_cast<int>(kRuntimeAnchorConvergenceIterationCap),
+                        1,
+                        64));
+    if (!startup_runtime_safety_active(frame_id)) {
+        return base_cap;
+    }
+    const std::size_t startup_cap = static_cast<std::size_t>(
+        env_int_clamped("VIBBLE_STARTUP_CONVERGENCE_ITERATION_CAP", 1, 1, 64));
+    return std::min(base_cap, startup_cap);
+}
+
+double runtime_convergence_stage_budget_ms_for_frame(std::uint32_t frame_id) {
+    if (!startup_runtime_safety_active(frame_id)) {
+        return env_double_clamped("VIBBLE_RUNTIME_CONVERGENCE_BUDGET_MS", 0.0, 0.0, 2000.0);
+    }
+    return env_double_clamped("VIBBLE_STARTUP_CONVERGENCE_BUDGET_MS", 12.0, 0.0, 2000.0);
+}
+
+bool allow_traversal_refresh_for_frame(std::uint32_t frame_id) {
+    if (!startup_runtime_safety_active(frame_id)) {
+        return true;
+    }
+    const std::uint32_t interval = static_cast<std::uint32_t>(
+        env_int_clamped("VIBBLE_STARTUP_TRAVERSAL_REFRESH_INTERVAL_FRAMES", 8, 1, 240));
+    return interval <= 1 || (frame_id % interval) == 0;
+}
+
 float normalize_depth_axis_sign(float sign) {
     if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
         return 1.0f;
@@ -1703,11 +1816,23 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
         return static_cast<double>(end - begin) * 1000.0 / perf_counter_frequency_;
     };
 
+    if (startup_runtime_safety_active(frame_id_) &&
+        frame_id_ <= startup_skip_runtime_effects_frames()) {
+        RuntimeConvergenceFrameStats skipped{};
+        skipped.converged = false;
+        skipped.iterations = 0;
+        skipped.stage_ms = 0.0;
+        last_runtime_convergence_stats_ = skipped;
+        return;
+    }
+
     const Uint64 stage_begin = SDL_GetPerformanceCounter();
     RuntimeConvergenceFrameStats stats{};
     bool audio_update_pending = include_audio_update;
+    const std::size_t iteration_cap = runtime_convergence_iteration_cap_for_frame(frame_id_);
+    const double stage_budget_ms = runtime_convergence_stage_budget_ms_for_frame(frame_id_);
     std::size_t iteration = 0;
-    for (; iteration < kRuntimeAnchorConvergenceIterationCap; ++iteration) {
+    for (; iteration < iteration_cap; ++iteration) {
         const Uint64 pass_begin = SDL_GetPerformanceCounter();
         const RuntimeConvergencePassResult pass_result =
             run_active_runtime_single_pass(audio_update_pending);
@@ -1720,7 +1845,7 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
         stats.children_considered += pass_result.children_considered;
         stats.children_updated += pass_result.children_updated;
 
-        if (pass_result.needs_traversal_refresh) {
+        if (pass_result.needs_traversal_refresh && allow_traversal_refresh_for_frame(frame_id_)) {
             const Uint64 refresh_begin = SDL_GetPerformanceCounter();
             run_post_flush_traversal_refresh_once();
             const Uint64 refresh_end = SDL_GetPerformanceCounter();
@@ -1731,6 +1856,13 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
         if (!pass_result.needs_repass) {
             stats.converged = true;
             break;
+        }
+
+        if (stage_budget_ms > 0.0) {
+            const Uint64 budget_now = SDL_GetPerformanceCounter();
+            if (elapsed_ms(stage_begin, budget_now) >= stage_budget_ms) {
+                break;
+            }
         }
     }
     const Uint64 stage_end = SDL_GetPerformanceCounter();
@@ -1754,7 +1886,7 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
     if (!stats.converged && last_runtime_convergence_warning_frame_id_ != frame_id_) {
         last_runtime_convergence_warning_frame_id_ = frame_id_;
         std::cerr << "[Assets] Anchor convergence cap reached ("
-                  << kRuntimeAnchorConvergenceIterationCap
+                  << iteration_cap
                   << ") at frame " << frame_id_
                   << "; iterations=" << stats.iterations
                   << " waves=" << stats.wave_count
@@ -1802,7 +1934,21 @@ void Assets::refresh_filtered_active_assets_if_needed() {
 
 void Assets::render_runtime_frame() {
     if (!suppress_render_ && scene) {
-        scene->render();
+        bool should_render = true;
+        if (startup_runtime_safety_active(frame_id_)) {
+            const std::uint32_t skip_frames = startup_skip_render_frames();
+            if (frame_id_ <= skip_frames) {
+                should_render = false;
+            } else {
+                const std::uint32_t every_n = startup_render_every_n_frames();
+                if (every_n > 1 && (frame_id_ % every_n) != 0) {
+                    should_render = false;
+                }
+            }
+        }
+        if (should_render) {
+            scene->render();
+        }
     }
 
     render_overlays(renderer());
@@ -3688,6 +3834,9 @@ bool Assets::should_render_runtime_lighting() const {
     }
     if (dev_controls_ && dev_controls_->is_runtime_light_editor_active()) {
         return true;
+    }
+    if (startup_runtime_safety_active(frame_id_)) {
+        return false;
     }
     if (dev_mode) {
         return false;

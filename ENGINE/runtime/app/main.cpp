@@ -352,25 +352,42 @@ void MainApp::run_startup_stabilization() {
         SDL_Renderer* renderer = raw_renderer();
         const int warmup_max_ms = env_int_clamped("VIBBLE_STARTUP_WARMUP_MAX_MS", 4000, 0, 30000);
         const int stable_frames_required = env_int_clamped("VIBBLE_STARTUP_STABLE_FRAMES", 3, 1, 120);
+        const int warmup_max_frames = env_int_clamped("VIBBLE_STARTUP_WARMUP_MAX_FRAMES", 180, 1, 2000);
+        const int warmup_frame_delay_ms = env_int_clamped("VIBBLE_STARTUP_WARMUP_FRAME_DELAY_MS", 8, 0, 33);
         const bool startup_trace_enabled = env_flag_enabled("VIBBLE_STARTUP_TRACE", false);
 
         vibble::log::info("[MainApp] Startup warmup: max_ms=" +
                           std::to_string(warmup_max_ms) +
-                          ", stable_frames=" + std::to_string(stable_frames_required));
+                          ", stable_frames=" + std::to_string(stable_frames_required) +
+                          ", max_frames=" + std::to_string(warmup_max_frames) +
+                          ", frame_delay_ms=" + std::to_string(warmup_frame_delay_ms));
+
+        if (warmup_max_ms <= 0) {
+                vibble::log::info("[MainApp] Startup warmup disabled via VIBBLE_STARTUP_WARMUP_MAX_MS=0.");
+                return;
+        }
 
         if (renderer) {
                 sync_output_dimensions(renderer);
         }
 
-        // One-time startup snap: force a deterministic baseline, then snap to camera target center.
-        game_assets_->force_camera_view_refresh();
+        struct RenderSuppressionGuard {
+                Assets* assets = nullptr;
+                bool active = false;
+                ~RenderSuppressionGuard() {
+                        if (active && assets) {
+                                assets->set_render_suppressed(false);
+                        }
+                }
+        } suppression_guard{game_assets_.get(), true};
+
+        // Safety first: keep startup warmup lightweight and avoid aggressive renderer churn.
+        game_assets_->set_render_suppressed(true);
+
+        // One-time startup snap to current center (safe path) without forcing additional grid rebuilds.
         {
                 WarpedScreenGrid& view = game_assets_->getView();
-                const CameraController::State& state = view.camera_state();
-                const SDL_Point snap_target{
-                        static_cast<int>(std::lround(state.target_center.x)),
-                        static_cast<int>(std::lround(state.target_center.y))
-                };
+                const SDL_Point snap_target = view.get_screen_center();
                 view.set_screen_center(snap_target, true);
         }
 
@@ -387,9 +404,11 @@ void MainApp::run_startup_stabilization() {
         int warmup_frame_count = 0;
         int stable_frame_streak = 0;
         bool timed_out = false;
+        bool frame_cap_reached = false;
 
         for (;;) {
                 ++warmup_frame_count;
+                const Uint64 frame_begin_ms = SDL_GetTicks();
 
                 SDL_Event e;
                 while (SDL_PollEvent(&e)) {
@@ -421,22 +440,16 @@ void MainApp::run_startup_stabilization() {
 
                 const WarpedScreenGrid& view = game_assets_->getView();
                 const bool convergence_ready = game_assets_->last_runtime_convergence_converged();
-                const bool camera_animating = view.is_height_animating();
                 const bool camera_blending =
                         view.camera_transition_telemetry().state ==
                         WarpedScreenGrid::CameraTransitionState::BlendingToNewRoom;
                 const bool pending_initial_rebuild = game_assets_->has_pending_initial_rebuild();
-                const std::optional<SDL_Point> postprocess_target = game_assets_->scene_postprocess_target_size();
-                const bool postprocess_target_ready =
-                        postprocess_target.has_value() &&
-                        postprocess_target->x == screen_w_ &&
-                        postprocess_target->y == screen_h_;
+                const bool camera_animating = view.is_height_animating();
                 const bool frame_ready =
                         convergence_ready &&
-                        !camera_animating &&
                         !camera_blending &&
                         !pending_initial_rebuild &&
-                        postprocess_target_ready;
+                        !camera_animating;
 
                 if (frame_ready) {
                         ++stable_frame_streak;
@@ -452,13 +465,7 @@ void MainApp::run_startup_stabilization() {
                               << " camera_animating=" << (camera_animating ? "1" : "0")
                               << " camera_blending=" << (camera_blending ? "1" : "0")
                               << " pending_initial_rebuild=" << (pending_initial_rebuild ? "1" : "0")
-                              << " target=";
-                        if (postprocess_target.has_value()) {
-                                trace << postprocess_target->x << "x" << postprocess_target->y;
-                        } else {
-                                trace << "none";
-                        }
-                        trace << " output=" << screen_w_ << "x" << screen_h_;
+                              << " output=" << screen_w_ << "x" << screen_h_;
                         vibble::log::debug(trace.str());
                 }
 
@@ -475,11 +482,27 @@ void MainApp::run_startup_stabilization() {
                         timed_out = true;
                         break;
                 }
+                if (warmup_frame_count >= warmup_max_frames) {
+                        frame_cap_reached = true;
+                        break;
+                }
+                const Uint64 frame_elapsed_ms = SDL_GetTicks() - frame_begin_ms;
+                if (frame_elapsed_ms > 1500) {
+                        vibble::log::warn("[MainApp] Startup warmup frame exceeded 1500ms; aborting warmup early for safety.");
+                        break;
+                }
+                if (warmup_frame_delay_ms > 0) {
+                        SDL_Delay(static_cast<Uint32>(warmup_frame_delay_ms));
+                }
         }
 
         const Uint64 total_ms = SDL_GetTicks() - warmup_begin_ms;
         if (timed_out) {
                 vibble::log::warn("[MainApp] Startup warmup timed out after " +
+                                  std::to_string(total_ms) +
+                                  "ms (" + std::to_string(warmup_frame_count) + " frame(s)).");
+        } else if (frame_cap_reached) {
+                vibble::log::warn("[MainApp] Startup warmup frame cap reached after " +
                                   std::to_string(total_ms) +
                                   "ms (" + std::to_string(warmup_frame_count) + " frame(s)).");
         } else {

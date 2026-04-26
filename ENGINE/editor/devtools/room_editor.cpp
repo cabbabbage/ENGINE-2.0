@@ -16525,7 +16525,10 @@ void RoomEditor::refresh_movement_runtime_animation() {
     animation.total_dy = total_dy;
     animation.total_dz = total_dz;
     animation.total_dr = total_dr;
-    apply_movement_preview_pose_to_target();
+    // Keep the target stable while a point is actively dragged so only the point moves.
+    if (!movement_edit_.dragging_point) {
+        apply_movement_preview_pose_to_target();
+    }
     movement_edit_.target_asset->refresh_frame_texture_bindings();
     if (assets_) {
         assets_->mark_active_assets_dirty();
@@ -20335,6 +20338,10 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     const bool left_pressed = input.wasPressed(Input::LEFT);
     const bool left_released = input.wasReleased(Input::LEFT);
 
+    if (assets_ && (movement_edit_.dragging_point || movement_edit_.point_selected || movement_edit_.selected_point_active)) {
+        camera_controls_.cancel(assets_->getView());
+    }
+
     if (!movement_edit_.dragging_point) {
         movement_edit_.hovered_point_index = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
     }
@@ -20387,7 +20394,14 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     }
 
     if (left_released) {
+        const bool was_dragging = movement_edit_.dragging_point;
         movement_edit_.dragging_point = false;
+        if (was_dragging) {
+            apply_movement_preview_pose_to_target();
+            if (assets_) {
+                assets_->mark_active_assets_dirty();
+            }
+        }
     }
 
     const int scroll_y = input.getScrollY();

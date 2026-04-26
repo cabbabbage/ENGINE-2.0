@@ -74,6 +74,43 @@ bool same_point(SDL_Point lhs, SDL_Point rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y;
 }
 
+template <typename Fn>
+bool visit_impassable_neighbors_for_segment(const Asset& asset,
+                                            SDL_Point from,
+                                            SDL_Point to,
+                                            Fn&& fn) {
+    const Assets* assets = asset.get_assets();
+    if (!assets) {
+        return false;
+    }
+
+    std::vector<const Assets::FrameCollisionEntry*> entries;
+    const int base_search_radius =
+        (asset.info && asset.info->NeighborSearchRadius > 0) ? asset.info->NeighborSearchRadius : 0;
+
+    const SDL_Point self_center = asset.world_xz_point();
+    const std::int64_t dx_from = static_cast<std::int64_t>(from.x) - static_cast<std::int64_t>(self_center.x);
+    const std::int64_t dy_from = static_cast<std::int64_t>(from.y) - static_cast<std::int64_t>(self_center.y);
+    const std::int64_t dx_to = static_cast<std::int64_t>(to.x) - static_cast<std::int64_t>(self_center.x);
+    const std::int64_t dy_to = static_cast<std::int64_t>(to.y) - static_cast<std::int64_t>(self_center.y);
+    const std::int64_t max_dist_sq =
+        std::max(dx_from * dx_from + dy_from * dy_from, dx_to * dx_to + dy_to * dy_to);
+    const int segment_coverage_radius = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(max_dist_sq))));
+    const int query_radius = std::max(base_search_radius, segment_coverage_radius);
+
+    assets->query_impassable_entries(asset, query_radius, entries);
+
+    for (const Assets::FrameCollisionEntry* entry : entries) {
+        if (!entry) {
+            continue;
+        }
+        if (fn(entry, entry->asset, entry->area, entry->bottom_middle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int resolve_effective_grid_resolution(const Asset* self,
                                       const vibble::grid::Grid& grid_service,
                                       std::optional<int> override_resolution) {
@@ -1030,10 +1067,13 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         return true;
     }
     bool blocked = false;
-    visit_impassable_neighbors(*self_, [&](const Assets::FrameCollisionEntry* entry,
-                                           const Asset* neighbor,
-                                           const Area& area,
-                                           const world::GridPoint& neighbor_bottom) {
+    visit_impassable_neighbors_for_segment(*self_,
+                                           from.to_sdl_point(),
+                                           to.to_sdl_point(),
+                                           [&](const Assets::FrameCollisionEntry* entry,
+                                               const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
         if (!neighbor || neighbor == self_ || neighbor == ignored || !neighbor->info) {
             return false;
         }

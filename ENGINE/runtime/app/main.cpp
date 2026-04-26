@@ -349,7 +349,7 @@ void MainApp::run_startup_stabilization() {
                 return;
         }
 
-        const bool warmup_enabled = env_flag_enabled("VIBBLE_STARTUP_WARMUP_ENABLED", false);
+        const bool warmup_enabled = env_flag_enabled("VIBBLE_STARTUP_WARMUP_ENABLED", true);
         if (!warmup_enabled) {
                 vibble::log::info("[MainApp] Startup warmup disabled (set VIBBLE_STARTUP_WARMUP_ENABLED=1 to enable).");
                 return;
@@ -968,7 +968,7 @@ void run(SDL_Window* window,
                 shared_asset_library->load_all_from_resources();
     { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
     vibble::log::info(std::string("[Main] Asset metadata cache ready for ") + std::to_string(shared_asset_library->all().size()) + " asset(s).");
-    const bool safe_loading_enabled = env_flag_enabled("VIBBLE_SAFE_LOADING", true);
+    const bool safe_loading_enabled = env_flag_enabled("VIBBLE_SAFE_LOADING", false);
     if (!safe_loading_enabled) {
         vibble::log::info("[Main] Loading cached asset resources...");
         shared_asset_library->loadAllAnimations(renderer);

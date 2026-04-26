@@ -25,8 +25,18 @@ set "EXTRA_ARGS="
 set "REPO_ROOT=%CD%"
 
 if not defined VIBBLE_SAFE_LOADING (
-    set "VIBBLE_SAFE_LOADING=1"
-    echo [compile_and_run.bat] SAFE loading enabled (VIBBLE_SAFE_LOADING=%VIBBLE_SAFE_LOADING%)
+    set "VIBBLE_SAFE_LOADING=0"
+    echo [compile_and_run.bat] SAFE loading disabled by default for smooth startup (VIBBLE_SAFE_LOADING=!VIBBLE_SAFE_LOADING!)
+)
+if not defined VIBBLE_STARTUP_WARMUP_ENABLED (
+    set "VIBBLE_STARTUP_WARMUP_ENABLED=1"
+    echo [compile_and_run.bat] Startup warmup enabled (VIBBLE_STARTUP_WARMUP_ENABLED=!VIBBLE_STARTUP_WARMUP_ENABLED!)
+)
+if not defined VIBBLE_STARTUP_WARMUP_RENDER (
+    set "VIBBLE_STARTUP_WARMUP_RENDER=1"
+)
+if not defined VIBBLE_STARTUP_RUNTIME_SAFETY (
+    set "VIBBLE_STARTUP_RUNTIME_SAFETY=1"
 )
 
 if not exist "%REPO_ROOT%\CMakeLists.txt" (

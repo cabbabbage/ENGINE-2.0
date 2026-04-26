@@ -1968,6 +1968,14 @@ void Assets::update(const Input& input)
     ++frame_id_;
     reset_frame_rebuild_stage();
 
+    static bool startup_safety_logged = false;
+    if (!startup_safety_logged && startup_runtime_safety_active(frame_id_)) {
+        startup_safety_logged = true;
+        vibble::log::info("[Assets] Startup runtime safety enabled for " +
+                          std::to_string(startup_runtime_safety_frames()) +
+                          " frame(s).");
+    }
+
     if (!should_step_frame) {
         run_idle_frame_pipeline(input);
         last_frame_dt_seconds_ = 0.0f;

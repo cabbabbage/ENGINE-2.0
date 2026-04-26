@@ -8083,7 +8083,7 @@ RoomEditor::DeleteConfirmResult RoomEditor::prompt_delete_confirmation(const Del
         nullptr,
         title.c_str(),
         body.str().c_str(),
-        static_cast<int>(std::size(buttons)),
+        static_cast<int>(sizeof(buttons) / sizeof(buttons[0])),
         buttons,
         nullptr,
     };

@@ -293,6 +293,22 @@ TEST_CASE("RoomEditor delete confirmation confirm path mutates once when scope i
     CHECK(apply_calls == 1);
 }
 
+TEST_CASE("RoomEditor delete confirmation blocks zero affected scope") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_anchor(),
+        true,
+        true,
+        0,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
 TEST_CASE("RoomEditor delete confirmation blocks stale selection at confirmation time") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);

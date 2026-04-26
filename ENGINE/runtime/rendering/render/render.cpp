@@ -2078,7 +2078,13 @@ void SceneRenderer::render() {
             spec.usage = usage;
             spec.layer_count_or_depth = 1;
             spec.num_levels = 1;
-            spec.sample_count = format_policy.sample_count;
+            // Runtime scene textures are sampled in later passes; keep them single-sampled.
+            // Multisampled textures are not guaranteed to be sampler-readable across backends.
+            const bool sampled_texture =
+                (usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0;
+            spec.sample_count = sampled_texture
+                ? SDL_GPU_SAMPLECOUNT_1
+                : format_policy.sample_count;
             if (!gpu_scene_renderer_->ensure_texture_resource(logical_name, spec, gpu_resource_error)) {
                 vibble::log::error("[SceneRenderer] GPU texture resource initialization failed for '" +
                                    logical_name + "': " + gpu_resource_error);

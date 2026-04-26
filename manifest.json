@@ -21629,7 +21629,7 @@
           "display_color": [
             242,
             36,
-            125,
+            54,
             255
           ],
           "edge_smoothness": 2,
@@ -22030,9 +22030,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            242,
-            61,
+            226,
             255
           ],
           "edge_smoothness": 101,

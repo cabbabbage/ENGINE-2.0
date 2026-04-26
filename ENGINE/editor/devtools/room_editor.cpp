@@ -14660,38 +14660,62 @@ bool RoomEditor::delete_selected_oval_mapping() {
         oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
         return false;
     }
+    const int selected_snapshot = oval_edit_.selected_oval_index;
+    DeleteIntentSummary summary{};
+    summary.mode = editor_mode_;
+    summary.domain_label = "oval_mapping_and_points";
+    summary.entity_type = "Oval mapping";
+    summary.scope_label = "current asset";
+    summary.affected_count = 1;
+    return execute_delete_with_confirmation(
+        summary,
+        [this, target, selected_snapshot]() {
+            return oval_mode_active() &&
+                   oval_edit_.target_asset == target &&
+                   target &&
+                   target->info &&
+                   selected_snapshot >= 0 &&
+                   selected_snapshot < static_cast<int>(target->info->oval_anchor_mappings.size()) &&
+                   oval_edit_.selected_oval_index == selected_snapshot;
+        },
+        [this, target, target_info, selected_snapshot]() {
+            auto& current_mappings = target_info->oval_anchor_mappings;
+            if (selected_snapshot < 0 || selected_snapshot >= static_cast<int>(current_mappings.size())) {
+                return false;
+            }
+            const std::string mapping_name = current_mappings[static_cast<std::size_t>(selected_snapshot)].name;
+            if (!target_info->remove_oval_anchor_mapping(mapping_name)) {
+                return false;
+            }
+            target->invalidate_anchor_registry();
 
-    const std::string mapping_name = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)].name;
-    if (!target_info->remove_oval_anchor_mapping(mapping_name)) {
-        return false;
-    }
-    target->invalidate_anchor_registry();
-
-    const int mapping_count = static_cast<int>(target_info->oval_anchor_mappings.size());
-    if (mapping_count <= 0) {
-        oval_edit_.selected_oval_index = -1;
-        oval_edit_.selected_point_index = -1;
-        oval_edit_.center_selected = false;
-        oval_edit_.center_hovered = false;
-        oval_edit_.center_dragging = false;
-    } else if (oval_edit_.selected_oval_index >= mapping_count) {
-        oval_edit_.selected_oval_index = mapping_count - 1;
-        oval_edit_.selected_point_index = -1;
-        oval_edit_.center_selected = true;
-        oval_edit_.center_hovered = false;
-        oval_edit_.center_dragging = false;
-    } else {
-        oval_edit_.selected_point_index = -1;
-        oval_edit_.center_selected = true;
-        oval_edit_.center_hovered = false;
-        oval_edit_.center_dragging = false;
-    }
-    refresh_oval_mode_handles();
-    sync_oval_tools_panel();
-    return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                 false,
-                                 "Oval Mapping Delete",
-                                 "room-oval-mapping-delete");
+            const int mapping_count = static_cast<int>(target_info->oval_anchor_mappings.size());
+            if (mapping_count <= 0) {
+                oval_edit_.selected_oval_index = -1;
+                oval_edit_.selected_point_index = -1;
+                oval_edit_.center_selected = false;
+                oval_edit_.center_hovered = false;
+                oval_edit_.center_dragging = false;
+            } else if (selected_snapshot >= mapping_count) {
+                oval_edit_.selected_oval_index = mapping_count - 1;
+                oval_edit_.selected_point_index = -1;
+                oval_edit_.center_selected = true;
+                oval_edit_.center_hovered = false;
+                oval_edit_.center_dragging = false;
+            } else {
+                oval_edit_.selected_oval_index = selected_snapshot;
+                oval_edit_.selected_point_index = -1;
+                oval_edit_.center_selected = true;
+                oval_edit_.center_hovered = false;
+                oval_edit_.center_dragging = false;
+            }
+            refresh_oval_mode_handles();
+            sync_oval_tools_panel();
+            return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                         false,
+                                         "Oval Mapping Delete",
+                                         "room-oval-mapping-delete");
+        });
 }
 
 bool RoomEditor::apply_selected_oval_properties(const RoomOvalToolsPanel::OvalProperties& properties) {

@@ -261,6 +261,84 @@ TEST_CASE("RoomEditor oval candidate source requires explicit center or point se
         editor, RoomEditorTestAccess::candidate_source_oval_center()));
 }
 
+TEST_CASE("RoomEditor delete confirmation cancel path produces zero mutation") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 0);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_floor_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
+TEST_CASE("RoomEditor delete confirmation confirm path mutates once when scope is valid") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_anchor(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete confirmation blocks stale selection at confirmation time") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        true,
+        false,
+        1,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
+TEST_CASE("RoomEditor delete confirmation dont-ask-again is session scoped per mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 2);
+
+    int apply_calls = 0;
+    const bool first_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_attack_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(first_result);
+    CHECK(apply_calls == 1);
+    CHECK(RoomEditorTestAccess::delete_confirmation_disabled_for_mode(
+        editor, RoomEditorTestAccess::mode_attack_box()));
+
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 0);
+    apply_calls = 0;
+    const bool second_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_attack_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(second_result);
+    CHECK(apply_calls == 1);
+}
+
 TEST_CASE("RoomEditor queues re-entrant subview requests while transition is in progress") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_subview_change_in_progress(editor, true);

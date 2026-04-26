@@ -12043,28 +12043,60 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name,
                 "room-anchor-candidate-adjust");
         });
         anchor_candidate_editor_.pie_widget->set_on_delete([this](int index) {
-            mutate_anchor_candidate_entry(
-                [index](nlohmann::json& candidate_entry) -> bool {
-                    if (index < 0) {
+            DeleteIntentSummary summary{};
+            summary.mode = editor_mode_;
+            summary.domain_label = "anchor_point_child_candidates";
+            summary.entity_type = "Anchor candidate entry";
+            summary.scope_label = "selected anchor candidate list";
+            summary.affected_count = (index >= 0) ? 1 : 0;
+            const int index_snapshot = index;
+            execute_delete_with_confirmation(
+                summary,
+                [this, index_snapshot]() {
+                    if (index_snapshot < 0 ||
+                        !anchor_candidate_editor_mode_active() ||
+                        !anchor_candidate_editor_.open ||
+                        !anchor_candidate_editor_.target_asset ||
+                        !anchor_candidate_editor_.target_asset->info ||
+                        anchor_candidate_editor_.anchor_name.empty() ||
+                        !validate_anchor_candidate_source_context(anchor_candidate_editor_.source_context,
+                                                                  "anchor_candidate_delete_validate")) {
                         return false;
                     }
+                    nlohmann::json candidate_entry =
+                        anchor_candidate_editor_.target_asset->info->anchor_point_child_candidate_candidates(
+                            anchor_candidate_editor_.anchor_name);
                     vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
-                    auto& candidates = candidate_entry["candidates"];
-                    if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) {
-                        return false;
-                    }
-                    if (vibble::spawn_group_codec::is_null_candidate_entry(
-                            candidates[static_cast<std::size_t>(index)])) {
-                        return false;
-                    }
-                    auto erase_it = candidates.begin() + static_cast<nlohmann::json::difference_type>(index);
-                    candidates.erase(erase_it);
-                    return true;
+                    const auto& candidates = candidate_entry["candidates"];
+                    return candidates.is_array() &&
+                           index_snapshot < static_cast<int>(candidates.size()) &&
+                           !vibble::spawn_group_codec::is_null_candidate_entry(
+                               candidates[static_cast<std::size_t>(index_snapshot)]);
                 },
-                devmode::core::DevSaveCoordinator::Priority::Debounced,
-                false,
-                "Anchor Candidate Delete",
-                "room-anchor-candidate-delete");
+                [this, index_snapshot]() {
+                    return mutate_anchor_candidate_entry(
+                        [index_snapshot](nlohmann::json& candidate_entry) -> bool {
+                            if (index_snapshot < 0) {
+                                return false;
+                            }
+                            vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                            auto& candidates = candidate_entry["candidates"];
+                            if (!candidates.is_array() || index_snapshot >= static_cast<int>(candidates.size())) {
+                                return false;
+                            }
+                            if (vibble::spawn_group_codec::is_null_candidate_entry(
+                                    candidates[static_cast<std::size_t>(index_snapshot)])) {
+                                return false;
+                            }
+                            auto erase_it = candidates.begin() + static_cast<nlohmann::json::difference_type>(index_snapshot);
+                            candidates.erase(erase_it);
+                            return true;
+                        },
+                        devmode::core::DevSaveCoordinator::Priority::Debounced,
+                        false,
+                        "Anchor Candidate Delete",
+                        "room-anchor-candidate-delete");
+                });
         });
         anchor_candidate_editor_.pie_widget->set_on_add_candidate([this](const std::string& value) {
             mutate_anchor_candidate_entry(
@@ -12530,28 +12562,54 @@ void RoomEditor::open_floor_box_candidate_editor(int box_index,
                 "room-floor-box-candidate-adjust");
         });
         floor_box_candidate_editor_.pie_widget->set_on_delete([this](int index) {
-            mutate_floor_box_candidate_entry(
-                [index](nlohmann::json& candidate_entry) -> bool {
-                    if (index < 0) {
+            DeleteIntentSummary summary{};
+            summary.mode = editor_mode_;
+            summary.domain_label = "floor_box_candidates";
+            summary.entity_type = "Floor candidate entry";
+            summary.scope_label = "selected floor box candidate list";
+            summary.affected_count = (index >= 0) ? 1 : 0;
+            const int index_snapshot = index;
+            execute_delete_with_confirmation(
+                summary,
+                [this, index_snapshot]() {
+                    if (index_snapshot < 0 ||
+                        !floor_box_candidate_target_exists() ||
+                        !validate_floor_candidate_source_context(floor_box_candidate_editor_.source_context,
+                                                                 "floor_candidate_delete_validate")) {
                         return false;
                     }
+                    nlohmann::json candidate_entry = floor_box_candidate_entry_json_for_index(floor_box_candidate_editor_.box_index);
                     vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
-                    auto& candidates = candidate_entry["candidates"];
-                    if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) {
-                        return false;
-                    }
-                    if (vibble::spawn_group_codec::is_null_candidate_entry(
-                            candidates[static_cast<std::size_t>(index)])) {
-                        return false;
-                    }
-                    auto erase_it = candidates.begin() + static_cast<nlohmann::json::difference_type>(index);
-                    candidates.erase(erase_it);
-                    return true;
+                    const auto& candidates = candidate_entry["candidates"];
+                    return candidates.is_array() &&
+                           index_snapshot < static_cast<int>(candidates.size()) &&
+                           !vibble::spawn_group_codec::is_null_candidate_entry(
+                               candidates[static_cast<std::size_t>(index_snapshot)]);
                 },
-                devmode::core::DevSaveCoordinator::Priority::Debounced,
-                false,
-                "Floor Box Candidate Delete",
-                "room-floor-box-candidate-delete");
+                [this, index_snapshot]() {
+                    return mutate_floor_box_candidate_entry(
+                        [index_snapshot](nlohmann::json& candidate_entry) -> bool {
+                            if (index_snapshot < 0) {
+                                return false;
+                            }
+                            vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+                            auto& candidates = candidate_entry["candidates"];
+                            if (!candidates.is_array() || index_snapshot >= static_cast<int>(candidates.size())) {
+                                return false;
+                            }
+                            if (vibble::spawn_group_codec::is_null_candidate_entry(
+                                    candidates[static_cast<std::size_t>(index_snapshot)])) {
+                                return false;
+                            }
+                            auto erase_it = candidates.begin() + static_cast<nlohmann::json::difference_type>(index_snapshot);
+                            candidates.erase(erase_it);
+                            return true;
+                        },
+                        devmode::core::DevSaveCoordinator::Priority::Debounced,
+                        false,
+                        "Floor Box Candidate Delete",
+                        "room-floor-box-candidate-delete");
+                });
         });
         floor_box_candidate_editor_.pie_widget->set_on_add_candidate([this](const std::string& value) {
             mutate_floor_box_candidate_entry(
@@ -14436,98 +14494,148 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
     if (!selected_anchor_visible) {
         return false;
     }
-    const bool closing_open_candidate_editor =
-        anchor_candidate_editor_.open && anchor_candidate_editor_.anchor_name == deleted_name;
-    bool normalized_any = false;
-    if (!light_mode_active()) {
-        if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
-            return false;
-        }
-    }
     const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
     if (eligible_ids.empty()) {
         return false;
     }
-
-    bool updated_any = normalized_any;
+    int affected_count = 0;
     for (const std::string& animation_id : eligible_ids) {
         auto anim_it = target_info->animations.find(animation_id);
         if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
             continue;
         }
-        nlohmann::json payload = target_info->animation_payload(animation_id);
         const std::size_t frame_count = anim_it->second.frame_count();
-        bool payload_changed = false;
         for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
             AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
             if (!frame) {
                 continue;
             }
-            if (!devmode::room_anchor_mode::delete_anchor_in_mode(frame->anchor_points,
-                                                                  deleted_name,
-                                                                  owner,
-                                                                  is_reserved_anchor_name)) {
-                continue;
+            if (devmode::room_anchor_mode::find_anchor_in_mode(frame->anchor_points,
+                                                                deleted_name,
+                                                                owner,
+                                                                is_reserved_anchor_name) != nullptr) {
+                ++affected_count;
             }
-            frame->rebuild_anchor_lookup();
-            if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
-                                                                          frame_count,
-                                                                          frame_index,
-                                                                          frame->anchor_points)) {
+        }
+    }
+    if (affected_count <= 0) {
+        return false;
+    }
+
+    DeleteIntentSummary summary{};
+    summary.mode = editor_mode_;
+    summary.domain_label = light_mode_active() ? "anchor_light" : "anchor_non_light";
+    summary.entity_type = "Anchor";
+    summary.scope_label = light_mode_active() ? "eligible light frames" : "eligible non-light frames";
+    summary.affected_count = affected_count;
+    const std::string deleted_name_snapshot = deleted_name;
+
+    return execute_delete_with_confirmation(
+        summary,
+        [this, target, deleted_name_snapshot]() {
+            if (!anchor_mode_active() ||
+                anchor_edit_.target_asset != target ||
+                !target ||
+                !target->info ||
+                anchor_edit_.selected_anchor_name != deleted_name_snapshot) {
                 return false;
             }
-            payload_changed = true;
-            updated_any = true;
-        }
-        if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
-            return false;
-        }
-    }
-    if (!anchor_name_exists_across_eligible_animations(target_info, deleted_name) &&
-        target_info->remove_anchor_point_child_candidate(deleted_name)) {
-        updated_any = true;
-    }
-
-    if (!updated_any) {
-        return false;
-    }
-
-    if (closing_open_candidate_editor) {
-        close_anchor_candidate_editor();
-    }
-
-    std::string next_anchor_name;
-    auto current_anim_it = target_info->animations.find(anchor_edit_.animation_id);
-    if (current_anim_it != target_info->animations.end() && current_anim_it->second.has_frames()) {
-        const int frame_index = devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index,
-                                                                       static_cast<int>(current_anim_it->second.frame_count()));
-        AnimationFrame* frame = current_anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
-        if (frame) {
-            const auto next_it = std::find_if(frame->anchor_points.begin(),
-                                              frame->anchor_points.end(),
-                                              [&](const DisplacedAssetAnchorPoint& anchor) {
-                                                  return anchor_mutable_in_current_mode(anchor);
-                                              });
-            if (next_it != frame->anchor_points.end()) {
-                next_anchor_name = next_it->name;
+            return std::any_of(anchor_edit_.handles.begin(),
+                               anchor_edit_.handles.end(),
+                               [&](const AnchorHandleSample& handle) {
+                                   return handle.name == deleted_name_snapshot;
+                               });
+        },
+        [this, target, target_info, owner, is_reserved_anchor_name, deleted_name_snapshot]() {
+            const bool closing_open_candidate_editor =
+                anchor_candidate_editor_.open && anchor_candidate_editor_.anchor_name == deleted_name_snapshot;
+            bool normalized_any = false;
+            if (!light_mode_active()) {
+                if (!normalize_anchor_invariants_for_eligible_animations(target, target_info, normalized_any)) {
+                    return false;
+                }
             }
-        }
-    }
-    anchor_edit_.selected_anchor_name = next_anchor_name;
-    anchor_edit_.point_selected = !anchor_edit_.selected_anchor_name.empty();
-    if (anchor_tools_panel_) {
-        anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
-    }
-    if (!commit_anchor_bulk_edit(target,
-                                 target_info,
-                                 devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                 false,
-                                 "Anchor Global Delete",
-                                 "room-anchor-global-delete")) {
-        return false;
-    }
-    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, deleted_name);
-    return true;
+            const std::vector<std::string> perform_eligible_ids = eligible_anchor_animation_names(*target_info);
+            if (perform_eligible_ids.empty()) {
+                return false;
+            }
+            bool updated_any = normalized_any;
+            for (const std::string& animation_id : perform_eligible_ids) {
+                auto anim_it = target_info->animations.find(animation_id);
+                if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
+                    continue;
+                }
+                nlohmann::json payload = target_info->animation_payload(animation_id);
+                const std::size_t frame_count = anim_it->second.frame_count();
+                bool payload_changed = false;
+                for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+                    AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+                    if (!frame) {
+                        continue;
+                    }
+                    if (!devmode::room_anchor_mode::delete_anchor_in_mode(frame->anchor_points,
+                                                                          deleted_name_snapshot,
+                                                                          owner,
+                                                                          is_reserved_anchor_name)) {
+                        continue;
+                    }
+                    frame->rebuild_anchor_lookup();
+                    if (!devmode::room_anchor_mode::write_anchor_frame_to_payload(payload,
+                                                                                  frame_count,
+                                                                                  frame_index,
+                                                                                  frame->anchor_points)) {
+                        return false;
+                    }
+                    payload_changed = true;
+                    updated_any = true;
+                }
+                if (payload_changed && !target_info->upsert_animation(animation_id, payload)) {
+                    return false;
+                }
+            }
+            if (!anchor_name_exists_across_eligible_animations(target_info, deleted_name_snapshot) &&
+                target_info->remove_anchor_point_child_candidate(deleted_name_snapshot)) {
+                updated_any = true;
+            }
+            if (!updated_any) {
+                return false;
+            }
+            if (closing_open_candidate_editor) {
+                close_anchor_candidate_editor();
+            }
+            std::string next_anchor_name;
+            auto current_anim_it = target_info->animations.find(anchor_edit_.animation_id);
+            if (current_anim_it != target_info->animations.end() && current_anim_it->second.has_frames()) {
+                const int frame_index = devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index,
+                                                                               static_cast<int>(current_anim_it->second.frame_count()));
+                AnimationFrame* frame = current_anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
+                if (frame) {
+                    const auto next_it = std::find_if(frame->anchor_points.begin(),
+                                                      frame->anchor_points.end(),
+                                                      [&](const DisplacedAssetAnchorPoint& anchor) {
+                                                          return anchor_mutable_in_current_mode(anchor);
+                                                      });
+                    if (next_it != frame->anchor_points.end()) {
+                        next_anchor_name = next_it->name;
+                    }
+                }
+            }
+            anchor_edit_.selected_anchor_name = next_anchor_name;
+            anchor_edit_.point_selected = !anchor_edit_.selected_anchor_name.empty();
+            if (anchor_tools_panel_) {
+                anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
+            }
+            if (!commit_anchor_bulk_edit(target,
+                                         target_info,
+                                         devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                         false,
+                                         "Anchor Global Delete",
+                                         "room-anchor-global-delete")) {
+                return false;
+            }
+            anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(target, deleted_name_snapshot);
+            return true;
+        });
 }
 
 bool RoomEditor::persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority priority,
@@ -23830,6 +23938,50 @@ void RoomEditorTestAccess::set_spawn_group_callback_in_progress(RoomEditor& edit
 
 bool RoomEditorTestAccess::spawn_group_callback_in_progress(const RoomEditor& editor) {
     return editor.spawn_group_callback_in_progress_;
+}
+
+void RoomEditorTestAccess::set_delete_confirm_callback_for_tests(RoomEditor& editor, int confirm_result) {
+    editor.delete_confirm_callback_ = [confirm_result](const RoomEditor::DeleteIntentSummary&) {
+        switch (confirm_result) {
+            case 1:
+                return RoomEditor::DeleteConfirmResult::Confirm;
+            case 2:
+                return RoomEditor::DeleteConfirmResult::ConfirmDontAskAgain;
+            case 0:
+            default:
+                return RoomEditor::DeleteConfirmResult::Cancel;
+        }
+    };
+}
+
+bool RoomEditorTestAccess::execute_delete_confirmation_flow(RoomEditor& editor,
+                                                            int mode,
+                                                            bool validate_before_confirm,
+                                                            bool validate_after_confirm,
+                                                            int affected_count,
+                                                            int& out_apply_calls) {
+    out_apply_calls = 0;
+    int validate_calls = 0;
+    RoomEditor::DeleteIntentSummary summary{};
+    summary.mode = static_cast<RoomEditor::EditorMode>(mode);
+    summary.domain_label = "test_domain";
+    summary.entity_type = "test_entity";
+    summary.scope_label = "test_scope";
+    summary.affected_count = affected_count;
+    return editor.execute_delete_with_confirmation(
+        summary,
+        [&validate_calls, validate_before_confirm, validate_after_confirm]() {
+            ++validate_calls;
+            return validate_calls == 1 ? validate_before_confirm : validate_after_confirm;
+        },
+        [&out_apply_calls]() {
+            ++out_apply_calls;
+            return true;
+        });
+}
+
+bool RoomEditorTestAccess::delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode) {
+    return editor.mode_delete_confirmation_disabled(static_cast<RoomEditor::EditorMode>(mode));
 }
 
 void RoomEditorTestAccess::enqueue_spawn_group_work(RoomEditor& editor,

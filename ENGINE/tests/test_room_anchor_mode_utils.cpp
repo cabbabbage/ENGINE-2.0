@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "devtools/room_anchor_mode_utils.hpp"
+#include "room_editor_payload_contract_test_helper.hpp"
 
 namespace {
 
@@ -103,6 +104,32 @@ TEST_CASE("Anchor mode payload write normalizes frame count and writes current f
     CHECK(payload["anchor_points"][1][0]["scaling_method"] == "parent");
     CHECK(payload["anchor_points"][2].is_array());
     CHECK(payload["anchor_points"][3].is_array());
+}
+
+TEST_CASE("Anchor mode mixed payload contract preserves untouched keys and fails atomically on invalid bounds") {
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json before = payload;
+
+    const std::vector<DisplacedAssetAnchorPoint> replacement{
+        DisplacedAssetAnchorPoint{"edited", 10, 11, 12.5f}
+    };
+    REQUIRE(write_anchor_frame_to_payload(payload, 1, 0, replacement));
+
+    const auto keys = room_editor_test_payload_contract::unchanged_keys_excluding(before, {"anchor_points"});
+    const auto before_snapshot = room_editor_test_payload_contract::snapshot_key_bytes(before);
+    const auto after_snapshot = room_editor_test_payload_contract::snapshot_key_bytes(payload);
+    for (const auto& key : keys) {
+        INFO("key=" << key);
+        REQUIRE(before_snapshot.find(key) != before_snapshot.end());
+        REQUIRE(after_snapshot.find(key) != after_snapshot.end());
+        CHECK(before_snapshot.at(key) == after_snapshot.at(key));
+    }
+
+    const std::string stable_after_success = payload.dump();
+    CHECK_FALSE(write_anchor_frame_to_payload(payload, 0, 0, replacement));
+    CHECK(payload.dump() == stable_after_success);
+    CHECK_FALSE(write_anchor_frame_to_payload(payload, 1, 3, replacement));
+    CHECK(payload.dump() == stable_after_success);
 }
 
 TEST_CASE("Anchor mode serialization preserves scaling method tokens") {

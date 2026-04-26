@@ -342,7 +342,18 @@ bool RoomOvalToolsPanel::handle_event(const SDL_Event& event) {
                 on_select_oval_(static_cast<int>(i));
             }
             if (on_open_candidates_) {
-                on_open_candidates_(oval_names_[i], SDL_Point{pointer_x, pointer_y}, row_rect);
+                devmode::CandidateSourceContext source_context = devmode::CandidateSourceContext::OvalCenter;
+                bool valid_source = false;
+                if (!center_selected_ && selected_point_index_ >= 0) {
+                    source_context = devmode::CandidateSourceContext::OvalPoint;
+                    valid_source = true;
+                } else if (center_selected_ && selected_point_index_ < 0) {
+                    source_context = devmode::CandidateSourceContext::OvalCenter;
+                    valid_source = true;
+                }
+                if (valid_source) {
+                    on_open_candidates_(oval_names_[i], SDL_Point{pointer_x, pointer_y}, row_rect, source_context);
+                }
             }
             return true;
         }

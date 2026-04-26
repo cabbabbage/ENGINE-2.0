@@ -20,6 +20,7 @@
 #include "devtools/room_anchor_mode_utils.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
+#include "devtools/room_devtools_panel_style.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_tools_panel.hpp"
 #include "devtools/oval_point_topology.hpp"
@@ -82,6 +83,7 @@
 #include <cctype>
 #include <limits>
 #include <random>
+#include <sstream>
 #include <set>
 #include <type_traits>
 #include <tuple>
@@ -8021,6 +8023,118 @@ bool RoomEditor::floor_box_mode_active() const {
     return editor_mode_ == EditorMode::FloorBoxEdit;
 }
 
+std::size_t RoomEditor::editor_mode_index(EditorMode mode) {
+    return static_cast<std::size_t>(mode);
+}
+
+std::string RoomEditor::delete_mode_label(EditorMode mode) const {
+    switch (mode) {
+        case EditorMode::AnchorEdit: return "Anchor";
+        case EditorMode::LightEdit: return "Light";
+        case EditorMode::OvalAnchorEdit: return "Oval";
+        case EditorMode::MovementEdit: return "Movement";
+        case EditorMode::HitBoxEdit: return "Hit Box";
+        case EditorMode::AttackBoxEdit: return "Attack Box";
+        case EditorMode::ImpassableBoxEdit: return "Impassable";
+        case EditorMode::FloorBoxEdit: return "Floor Box";
+        case EditorMode::Normal:
+        default:
+            return "Editor";
+    }
+}
+
+bool RoomEditor::mode_delete_confirmation_disabled(EditorMode mode) const {
+    const std::size_t idx = editor_mode_index(mode);
+    if (idx >= suppress_delete_confirmation_by_mode_.size()) {
+        return false;
+    }
+    return suppress_delete_confirmation_by_mode_[idx];
+}
+
+void RoomEditor::set_mode_delete_confirmation_disabled(EditorMode mode, bool disabled) {
+    const std::size_t idx = editor_mode_index(mode);
+    if (idx >= suppress_delete_confirmation_by_mode_.size()) {
+        return;
+    }
+    suppress_delete_confirmation_by_mode_[idx] = disabled;
+}
+
+RoomEditor::DeleteConfirmResult RoomEditor::prompt_delete_confirmation(const DeleteIntentSummary& summary) {
+    if (delete_confirm_callback_) {
+        return delete_confirm_callback_(summary);
+    }
+
+    std::ostringstream body;
+    body << "Mode: " << delete_mode_label(summary.mode) << "\n";
+    body << "Domain: " << (summary.domain_label ? summary.domain_label : "unknown") << "\n";
+    body << "Type: " << (summary.entity_type ? summary.entity_type : "unknown") << "\n";
+    body << "Scope: " << (summary.scope_label ? summary.scope_label : "current selection") << "\n";
+    body << "Affected: " << summary.affected_count << "\n\n";
+    body << "Confirm delete?";
+
+    const SDL_MessageBoxButtonData buttons[] = {
+        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
+        {0, 1, "Delete"},
+        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 2, "Delete + Don't Ask Again"},
+    };
+    const std::string title = delete_mode_label(summary.mode) + " Delete Confirmation";
+    const SDL_MessageBoxData msg{
+        SDL_MESSAGEBOX_WARNING,
+        nullptr,
+        title.c_str(),
+        body.str().c_str(),
+        static_cast<int>(std::size(buttons)),
+        buttons,
+        nullptr,
+    };
+    int pressed = 0;
+    if (SDL_ShowMessageBox(&msg, &pressed) != 0) {
+        return DeleteConfirmResult::Cancel;
+    }
+    if (pressed == 2) {
+        return DeleteConfirmResult::ConfirmDontAskAgain;
+    }
+    if (pressed == 1) {
+        return DeleteConfirmResult::Confirm;
+    }
+    return DeleteConfirmResult::Cancel;
+}
+
+bool RoomEditor::execute_delete_with_confirmation(const DeleteIntentSummary& summary,
+                                                  const std::function<bool()>& validate_selection,
+                                                  const std::function<bool()>& perform_delete) {
+    if (!validate_selection || !perform_delete) {
+        return false;
+    }
+    if (summary.affected_count <= 0) {
+        return false;
+    }
+    if (!validate_selection()) {
+        SDL_Log("[RoomEditor][DeleteGuard] stale-or-invalid selection before confirmation mode=%d domain=%s",
+                static_cast<int>(summary.mode),
+                summary.domain_label ? summary.domain_label : "unknown");
+        return false;
+    }
+
+    if (!mode_delete_confirmation_disabled(summary.mode)) {
+        const DeleteConfirmResult decision = prompt_delete_confirmation(summary);
+        if (decision == DeleteConfirmResult::Cancel) {
+            return false;
+        }
+        if (decision == DeleteConfirmResult::ConfirmDontAskAgain) {
+            set_mode_delete_confirmation_disabled(summary.mode, true);
+        }
+    }
+
+    if (!validate_selection()) {
+        SDL_Log("[RoomEditor][DeleteGuard] stale-or-invalid selection at confirmation mode=%d domain=%s",
+                static_cast<int>(summary.mode),
+                summary.domain_label ? summary.domain_label : "unknown");
+        return false;
+    }
+    return perform_delete();
+}
+
 bool RoomEditor::is_anchor_edit_mode_active() const {
     return anchor_mode_active();
 }
@@ -8092,6 +8206,9 @@ void RoomEditor::reconcile_mode_ownership_state(EditorMode previous_mode) {
     if (!active_mode_owns_domain(OwnershipDomain::AnchorNonLight) &&
         !active_mode_owns_domain(OwnershipDomain::AnchorLight)) {
         clear_anchor_selection();
+        if (anchor_candidate_editor_.open) {
+            close_anchor_candidate_editor();
+        }
     } else {
         ensure_anchor_selection_valid();
     }
@@ -8125,6 +8242,9 @@ void RoomEditor::reconcile_mode_ownership_state(EditorMode previous_mode) {
         floor_box_edit_.hovered_box_index = -1;
         floor_box_edit_.dragging_box = false;
         floor_box_edit_.dragging_corner = false;
+        if (floor_box_candidate_editor_.open) {
+            close_floor_box_candidate_editor();
+        }
     }
 }
 
@@ -8206,8 +8326,9 @@ void RoomEditor::ensure_anchor_editor_widgets() {
         });
         anchor_tools_panel_->set_on_open_candidates([this](const std::string& anchor_name,
                                                             SDL_Point click_point,
-                                                            SDL_Rect row_rect) {
-            open_anchor_candidate_editor(anchor_name, click_point, row_rect);
+                                                            SDL_Rect row_rect,
+                                                            devmode::CandidateSourceContext source_context) {
+            open_anchor_candidate_editor(anchor_name, click_point, row_rect, source_context);
         });
     }
 
@@ -8242,8 +8363,9 @@ void RoomEditor::ensure_oval_editor_widgets() {
         });
         oval_tools_panel_->set_on_open_candidates([this](const std::string& anchor_name,
                                                          SDL_Point click_point,
-                                                         SDL_Rect row_rect) {
-            open_anchor_candidate_editor(anchor_name, click_point, row_rect);
+                                                         SDL_Rect row_rect,
+                                                         devmode::CandidateSourceContext source_context) {
+            open_anchor_candidate_editor(anchor_name, click_point, row_rect, source_context);
         });
         oval_tools_panel_->set_on_increment_point_count([this]() {
             increment_selected_oval_point_count();
@@ -8498,7 +8620,7 @@ void RoomEditor::ensure_floor_box_editor_widgets() {
             }
             floor_box_edit_.selected_box_index = index;
             sync_floor_box_tools_panel();
-            open_floor_box_candidate_editor(index, click_point);
+            open_floor_box_candidate_editor(index, click_point, devmode::CandidateSourceContext::FloorBox);
         });
         floor_box_tools_panel_->set_on_add([this]() {
             add_floor_box();
@@ -8814,6 +8936,9 @@ bool RoomEditor::add_floor_box() {
 }
 
 bool RoomEditor::delete_selected_floor_box() {
+    if (!active_mode_owns_domain(OwnershipDomain::FloorBoxCandidates)) {
+        return log_rejected_domain_mutation("delete_selected_floor_box", OwnershipDomain::FloorBoxCandidates);
+    }
     if (!floor_box_mode_active() || !floor_box_edit_.target_asset || !floor_box_edit_.target_asset->info) {
         return false;
     }
@@ -8956,6 +9081,9 @@ bool RoomEditor::add_hitbox_in_current_frame() {
 }
 
 bool RoomEditor::delete_selected_hitbox_in_current_frame() {
+    if (!active_mode_owns_domain(OwnershipDomain::HitBoxes)) {
+        return log_rejected_domain_mutation("delete_selected_hitbox_in_current_frame", OwnershipDomain::HitBoxes);
+    }
     const int selected = hitbox_edit_.selected_box_index;
     if (selected < 0) {
         return false;
@@ -9018,6 +9146,9 @@ bool RoomEditor::add_attack_box_in_current_frame() {
 }
 
 bool RoomEditor::delete_selected_attack_box_in_current_frame() {
+    if (!active_mode_owns_domain(OwnershipDomain::AttackBoxes)) {
+        return log_rejected_domain_mutation("delete_selected_attack_box_in_current_frame", OwnershipDomain::AttackBoxes);
+    }
     const int selected = attack_box_edit_.selected_box_index;
     if (selected < 0) {
         return false;
@@ -9078,6 +9209,9 @@ bool RoomEditor::add_impassable_box() {
 }
 
 bool RoomEditor::delete_selected_impassable_box() {
+    if (!active_mode_owns_domain(OwnershipDomain::ImpassableGeometry)) {
+        return log_rejected_domain_mutation("delete_selected_impassable_box", OwnershipDomain::ImpassableGeometry);
+    }
     const int selected = impassable_box_edit_.selected_box_index;
     if (selected < 0) {
         return false;
@@ -11561,6 +11695,7 @@ void RoomEditor::close_anchor_candidate_editor() {
     anchor_candidate_editor_.open = false;
     anchor_candidate_editor_.anchor_name.clear();
     anchor_candidate_editor_.target_asset = nullptr;
+    anchor_candidate_editor_.source_context = devmode::CandidateSourceContext::AnchorNonLight;
     anchor_candidate_editor_.open_point = SDL_Point{0, 0};
     anchor_candidate_editor_.anchor_row_rect = SDL_Rect{0, 0, 0, 0};
 }
@@ -11577,6 +11712,41 @@ Asset* RoomEditor::active_anchor_candidate_target_asset() const {
 
 bool RoomEditor::anchor_candidate_editor_mode_active() const {
     return anchor_mode_active() || oval_mode_active();
+}
+
+bool RoomEditor::validate_anchor_candidate_source_context(devmode::CandidateSourceContext source_context,
+                                                          const char* operation) const {
+    const char* op = operation ? operation : "unknown";
+    const bool anchor_context =
+        source_context == devmode::CandidateSourceContext::AnchorNonLight ||
+        source_context == devmode::CandidateSourceContext::AnchorLight;
+    const bool oval_context =
+        source_context == devmode::CandidateSourceContext::OvalPoint ||
+        source_context == devmode::CandidateSourceContext::OvalCenter;
+
+    bool valid = false;
+    if (anchor_mode_active()) {
+        const bool expected_light = light_mode_active();
+        const bool actual_light = source_context == devmode::CandidateSourceContext::AnchorLight;
+        valid = anchor_context && (expected_light == actual_light);
+    } else if (oval_mode_active()) {
+        if (source_context == devmode::CandidateSourceContext::OvalPoint) {
+            valid = oval_context && oval_edit_.selected_point_index >= 0 && !oval_edit_.center_selected;
+        } else if (source_context == devmode::CandidateSourceContext::OvalCenter) {
+            valid = oval_context && oval_edit_.center_selected && oval_edit_.selected_point_index < 0;
+        }
+    }
+
+    if (!valid) {
+        SDL_Log("[RoomEditor][CandidateSourceGuard] rejected operation=%s mode=%d source=%s",
+                op,
+                static_cast<int>(editor_mode_),
+                devmode::candidate_source_context_name(source_context));
+#if !defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+        SDL_assert(false && "RoomEditor candidate source guard rejected out-of-scope mutation");
+#endif
+    }
+    return valid;
 }
 
 bool RoomEditor::anchor_candidate_anchor_exists_for_target(const Asset* target, const std::string& anchor_name) const {
@@ -11598,7 +11768,7 @@ void RoomEditor::layout_anchor_candidate_editor_popup() {
         return;
     }
 
-    constexpr int kPopupMargin = 10;
+    constexpr int kPopupMargin = devmode::room_devtools_panel_style::kDefaultPanelPopupMargin;
     constexpr int kPanelPadding = 12;
     constexpr int kPanelHeaderReserve = 88;
     const int min_panel_width = 500;
@@ -11678,6 +11848,11 @@ void RoomEditor::sync_anchor_candidate_editor() {
         close_anchor_candidate_editor();
         return;
     }
+    if (!validate_anchor_candidate_source_context(anchor_candidate_editor_.source_context,
+                                                  "sync_anchor_candidate_editor")) {
+        close_anchor_candidate_editor();
+        return;
+    }
     anchor_candidate_editor_.target_asset = active_target;
     if (anchor_candidate_editor_.anchor_name.empty()) {
         close_anchor_candidate_editor();
@@ -11702,9 +11877,16 @@ void RoomEditor::sync_anchor_candidate_editor() {
     refresh_anchor_candidate_editor_widget();
 }
 
-void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect) {
+void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name,
+                                              SDL_Point click_point,
+                                              const SDL_Rect& row_rect,
+                                              devmode::CandidateSourceContext source_context) {
     Asset* target_asset = active_anchor_candidate_target_asset();
     if (anchor_name.empty() || !anchor_candidate_editor_mode_active() || !target_asset || !target_asset->info) {
+        close_anchor_candidate_editor();
+        return;
+    }
+    if (!validate_anchor_candidate_source_context(source_context, "open_anchor_candidate_editor")) {
         close_anchor_candidate_editor();
         return;
     }
@@ -11733,11 +11915,12 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
     if (!anchor_candidate_editor_.panel) {
         anchor_candidate_editor_.panel = std::make_unique<DockableCollapsible>("Anchor Candidates", true);
         anchor_candidate_editor_.panel->set_scroll_enabled(true);
-        anchor_candidate_editor_.panel->set_floating_content_width(520);
-        anchor_candidate_editor_.panel->set_cell_width(460);
-        anchor_candidate_editor_.panel->set_row_gap(10);
-        anchor_candidate_editor_.panel->set_col_gap(12);
-        anchor_candidate_editor_.panel->set_padding(12);
+        anchor_candidate_editor_.panel->set_floating_content_width(
+            devmode::room_devtools_panel_style::kDefaultPanelFloatingContentWidth);
+        anchor_candidate_editor_.panel->set_cell_width(devmode::room_devtools_panel_style::kDefaultPanelCellWidth);
+        anchor_candidate_editor_.panel->set_row_gap(devmode::room_devtools_panel_style::kDefaultPanelRowGap);
+        anchor_candidate_editor_.panel->set_col_gap(devmode::room_devtools_panel_style::kDefaultPanelColGap);
+        anchor_candidate_editor_.panel->set_padding(devmode::room_devtools_panel_style::kDefaultPanelPadding);
         anchor_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
     }
 
@@ -11857,6 +12040,7 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name, SD
     anchor_candidate_editor_.target_asset = target_asset;
     anchor_candidate_editor_.open_point = click_point;
     anchor_candidate_editor_.anchor_row_rect = row_rect;
+    anchor_candidate_editor_.source_context = source_context;
     anchor_candidate_editor_.open = true;
 
     if (anchor_mode_active()) {
@@ -11886,10 +12070,15 @@ bool RoomEditor::mutate_anchor_candidate_entry(const std::function<bool(nlohmann
         anchor_candidate_editor_.anchor_name.empty()) {
         return false;
     }
+    if (!validate_anchor_candidate_source_context(anchor_candidate_editor_.source_context,
+                                                  "mutate_anchor_candidate_entry")) {
+        return false;
+    }
 
     std::shared_ptr<AssetInfo> target_info = anchor_candidate_editor_.target_asset->info;
-    nlohmann::json candidate_entry =
+    const nlohmann::json original_entry =
         target_info->anchor_point_child_candidate_candidates(anchor_candidate_editor_.anchor_name);
+    nlohmann::json candidate_entry = original_entry;
     if (!candidate_entry.is_object()) {
         candidate_entry = nlohmann::json::object();
     }
@@ -11905,6 +12094,7 @@ bool RoomEditor::mutate_anchor_candidate_entry(const std::function<bool(nlohmann
                                  flush_now,
                                  reason,
                                  flush_tag)) {
+        target_info->upsert_anchor_point_child_candidate(anchor_candidate_editor_.anchor_name, original_entry);
         return false;
     }
     if (oval_mode_active()) {
@@ -12055,6 +12245,7 @@ void RoomEditor::close_floor_box_candidate_editor() {
     floor_box_candidate_editor_.open = false;
     floor_box_candidate_editor_.target_asset = nullptr;
     floor_box_candidate_editor_.box_index = -1;
+    floor_box_candidate_editor_.source_context = devmode::CandidateSourceContext::FloorBox;
     floor_box_candidate_editor_.open_point = SDL_Point{0, 0};
 }
 
@@ -12079,7 +12270,27 @@ bool RoomEditor::floor_box_candidate_target_exists() const {
     if (floor_box_edit_.selected_box_index != floor_box_candidate_editor_.box_index) {
         return false;
     }
+    if (!validate_floor_candidate_source_context(floor_box_candidate_editor_.source_context,
+                                                 "floor_box_candidate_target_exists")) {
+        return false;
+    }
     return true;
+}
+
+bool RoomEditor::validate_floor_candidate_source_context(devmode::CandidateSourceContext source_context,
+                                                         const char* operation) const {
+    const bool valid = floor_box_mode_active() && source_context == devmode::CandidateSourceContext::FloorBox;
+    if (!valid) {
+        const char* op = operation ? operation : "unknown";
+        SDL_Log("[RoomEditor][CandidateSourceGuard] rejected operation=%s mode=%d source=%s",
+                op,
+                static_cast<int>(editor_mode_),
+                devmode::candidate_source_context_name(source_context));
+#if !defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+        SDL_assert(false && "RoomEditor candidate source guard rejected out-of-scope mutation");
+#endif
+    }
+    return valid;
 }
 
 void RoomEditor::layout_floor_box_candidate_editor_popup() {
@@ -12087,7 +12298,7 @@ void RoomEditor::layout_floor_box_candidate_editor_popup() {
         return;
     }
 
-    constexpr int kPopupMargin = 10;
+    constexpr int kPopupMargin = devmode::room_devtools_panel_style::kDefaultPanelPopupMargin;
     constexpr int kPanelPadding = 12;
     constexpr int kPanelHeaderReserve = 162;
     const int min_panel_width = 500;
@@ -12171,10 +12382,16 @@ void RoomEditor::sync_floor_box_candidate_editor() {
     refresh_floor_box_candidate_editor_widget();
 }
 
-void RoomEditor::open_floor_box_candidate_editor(int box_index, SDL_Point click_point) {
+void RoomEditor::open_floor_box_candidate_editor(int box_index,
+                                                 SDL_Point click_point,
+                                                 devmode::CandidateSourceContext source_context) {
     if (!floor_box_candidate_editor_mode_active() ||
         !floor_box_edit_.target_asset ||
         !floor_box_edit_.target_asset->info) {
+        close_floor_box_candidate_editor();
+        return;
+    }
+    if (!validate_floor_candidate_source_context(source_context, "open_floor_box_candidate_editor")) {
         close_floor_box_candidate_editor();
         return;
     }
@@ -12186,11 +12403,12 @@ void RoomEditor::open_floor_box_candidate_editor(int box_index, SDL_Point click_
     if (!floor_box_candidate_editor_.panel) {
         floor_box_candidate_editor_.panel = std::make_unique<DockableCollapsible>("Floor Box Candidates", true);
         floor_box_candidate_editor_.panel->set_scroll_enabled(true);
-        floor_box_candidate_editor_.panel->set_floating_content_width(520);
-        floor_box_candidate_editor_.panel->set_cell_width(460);
-        floor_box_candidate_editor_.panel->set_row_gap(10);
-        floor_box_candidate_editor_.panel->set_col_gap(12);
-        floor_box_candidate_editor_.panel->set_padding(12);
+        floor_box_candidate_editor_.panel->set_floating_content_width(
+            devmode::room_devtools_panel_style::kDefaultPanelFloatingContentWidth);
+        floor_box_candidate_editor_.panel->set_cell_width(devmode::room_devtools_panel_style::kDefaultPanelCellWidth);
+        floor_box_candidate_editor_.panel->set_row_gap(devmode::room_devtools_panel_style::kDefaultPanelRowGap);
+        floor_box_candidate_editor_.panel->set_col_gap(devmode::room_devtools_panel_style::kDefaultPanelColGap);
+        floor_box_candidate_editor_.panel->set_padding(devmode::room_devtools_panel_style::kDefaultPanelPadding);
         floor_box_candidate_editor_.panel->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
     }
 
@@ -12340,6 +12558,7 @@ void RoomEditor::open_floor_box_candidate_editor(int box_index, SDL_Point click_
     floor_box_candidate_editor_.pie_widget->set_assets(assets_);
     floor_box_candidate_editor_.target_asset = floor_box_edit_.target_asset;
     floor_box_candidate_editor_.box_index = box_index;
+    floor_box_candidate_editor_.source_context = source_context;
     floor_box_candidate_editor_.open_point = click_point;
     floor_box_candidate_editor_.open = true;
 
@@ -12361,6 +12580,10 @@ bool RoomEditor::mutate_floor_box_candidate_entry(const std::function<bool(nlohm
         floor_box_candidate_editor_.box_index < 0) {
         return false;
     }
+    if (!validate_floor_candidate_source_context(floor_box_candidate_editor_.source_context,
+                                                 "mutate_floor_box_candidate_entry")) {
+        return false;
+    }
 
     Asset* target = floor_box_candidate_editor_.target_asset;
     std::shared_ptr<AssetInfo> target_info = target->info;
@@ -12373,6 +12596,7 @@ bool RoomEditor::mutate_floor_box_candidate_entry(const std::function<bool(nlohm
         return false;
     }
 
+    const auto original_candidate = boxes[static_cast<std::size_t>(box_index)].candidate;
     nlohmann::json candidate_entry = floor_box_candidate_entry_json_for_index(box_index);
     if (!candidate_entry.is_object()) {
         candidate_entry = default_floor_box_candidate_entry_json();
@@ -12394,11 +12618,18 @@ bool RoomEditor::mutate_floor_box_candidate_entry(const std::function<bool(nlohm
     payload.candidates = candidate_entry["candidates"];
     payload.grid_resolution = grid_resolution;
     boxes[static_cast<std::size_t>(box_index)].candidate = std::move(payload);
+    if (!persist_floor_boxes(priority, flush_now, reason, flush_tag)) {
+        boxes[static_cast<std::size_t>(box_index)].candidate = original_candidate;
+        target->refresh_runtime_floor_boxes_cache();
+        sync_floor_box_tools_panel();
+        refresh_floor_box_candidate_editor_widget();
+        return false;
+    }
 
     target->refresh_runtime_floor_boxes_cache();
     sync_floor_box_tools_panel();
     refresh_floor_box_candidate_editor_widget();
-    return persist_floor_boxes(priority, flush_now, reason, flush_tag);
+    return true;
 }
 
 bool RoomEditor::handle_floor_box_candidate_editor_event(const SDL_Event& event) {
@@ -14095,6 +14326,13 @@ bool RoomEditor::rename_selected_anchor_in_current_frame(const std::string& desi
 }
 
 bool RoomEditor::delete_selected_anchor_in_current_frame() {
+    if (!active_mode_owns_domain(OwnershipDomain::AnchorNonLight) &&
+        !active_mode_owns_domain(OwnershipDomain::AnchorLight)) {
+        return log_rejected_domain_mutation("delete_selected_anchor_in_current_frame",
+                                            light_mode_active()
+                                                ? OwnershipDomain::AnchorLight
+                                                : OwnershipDomain::AnchorNonLight);
+    }
     if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
     }
@@ -17976,7 +18214,7 @@ bool RoomEditor::handle_floor_box_mode_mouse_input(const Input& input) {
             floor_box_edit_.dragging_corner = false;
             floor_box_edit_.dragging_box = false;
             sync_floor_box_tools_panel();
-            open_floor_box_candidate_editor(context_box, screen_pt);
+            open_floor_box_candidate_editor(context_box, screen_pt, devmode::CandidateSourceContext::FloorBox);
             return true;
         }
     }
@@ -23229,6 +23467,22 @@ int RoomEditorTestAccess::subview_anchor() {
     return static_cast<int>(RoomEditor::AssetEditorSubview::Anchor);
 }
 
+int RoomEditorTestAccess::mode_anchor() {
+    return static_cast<int>(RoomEditor::EditorMode::AnchorEdit);
+}
+
+int RoomEditorTestAccess::mode_light() {
+    return static_cast<int>(RoomEditor::EditorMode::LightEdit);
+}
+
+int RoomEditorTestAccess::mode_oval() {
+    return static_cast<int>(RoomEditor::EditorMode::OvalAnchorEdit);
+}
+
+int RoomEditorTestAccess::mode_floor_box() {
+    return static_cast<int>(RoomEditor::EditorMode::FloorBoxEdit);
+}
+
 int RoomEditorTestAccess::mode_movement() {
     return static_cast<int>(RoomEditor::EditorMode::MovementEdit);
 }
@@ -23239,6 +23493,26 @@ int RoomEditorTestAccess::mode_hitbox() {
 
 int RoomEditorTestAccess::mode_attack_box() {
     return static_cast<int>(RoomEditor::EditorMode::AttackBoxEdit);
+}
+
+int RoomEditorTestAccess::candidate_source_anchor_non_light() {
+    return static_cast<int>(devmode::CandidateSourceContext::AnchorNonLight);
+}
+
+int RoomEditorTestAccess::candidate_source_anchor_light() {
+    return static_cast<int>(devmode::CandidateSourceContext::AnchorLight);
+}
+
+int RoomEditorTestAccess::candidate_source_oval_point() {
+    return static_cast<int>(devmode::CandidateSourceContext::OvalPoint);
+}
+
+int RoomEditorTestAccess::candidate_source_oval_center() {
+    return static_cast<int>(devmode::CandidateSourceContext::OvalCenter);
+}
+
+int RoomEditorTestAccess::candidate_source_floor_box() {
+    return static_cast<int>(devmode::CandidateSourceContext::FloorBox);
 }
 
 bool RoomEditorTestAccess::mode_owns_hitbox_domain(const RoomEditor& editor, int mode) {
@@ -23259,6 +23533,25 @@ bool RoomEditorTestAccess::mode_owns_movement_domain(const RoomEditor& editor, i
 bool RoomEditorTestAccess::mode_owns_oval_domain(const RoomEditor& editor, int mode) {
     return editor.mode_owns_domain(static_cast<RoomEditor::EditorMode>(mode),
                                    RoomEditor::OwnershipDomain::OvalMappingAndPoints);
+}
+
+bool RoomEditorTestAccess::validate_anchor_candidate_source(const RoomEditor& editor, int source_context) {
+    return editor.validate_anchor_candidate_source_context(
+        static_cast<devmode::CandidateSourceContext>(source_context),
+        "test-validate-anchor-candidate-source");
+}
+
+bool RoomEditorTestAccess::validate_floor_candidate_source(const RoomEditor& editor, int source_context) {
+    return editor.validate_floor_candidate_source_context(
+        static_cast<devmode::CandidateSourceContext>(source_context),
+        "test-validate-floor-candidate-source");
+}
+
+void RoomEditorTestAccess::set_oval_candidate_selection(RoomEditor& editor,
+                                                        bool center_selected,
+                                                        int selected_point_index) {
+    editor.oval_edit_.center_selected = center_selected;
+    editor.oval_edit_.selected_point_index = selected_point_index;
 }
 
 int RoomEditorTestAccess::active_subview(const RoomEditor& editor) {

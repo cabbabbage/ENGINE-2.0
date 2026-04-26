@@ -21,6 +21,7 @@
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
+#include "devtools/room_candidate_source_context.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
 #include "devtools/room_oval_tools_panel.hpp"
@@ -558,7 +559,10 @@ private:
     void refresh_anchor_candidate_editor_widget();
     void update_anchor_candidate_editor_search(const Input& input);
     void layout_anchor_candidate_editor_popup();
-    void open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect);
+    void open_anchor_candidate_editor(const std::string& anchor_name,
+                                      SDL_Point click_point,
+                                      const SDL_Rect& row_rect,
+                                      devmode::CandidateSourceContext source_context);
     void close_anchor_candidate_editor();
     Asset* active_anchor_candidate_target_asset() const;
     bool anchor_candidate_editor_mode_active() const;
@@ -574,7 +578,9 @@ private:
     void refresh_floor_box_candidate_editor_widget();
     void update_floor_box_candidate_editor_search(const Input& input);
     void layout_floor_box_candidate_editor_popup();
-    void open_floor_box_candidate_editor(int box_index, SDL_Point click_point);
+    void open_floor_box_candidate_editor(int box_index,
+                                         SDL_Point click_point,
+                                         devmode::CandidateSourceContext source_context);
     void close_floor_box_candidate_editor();
     bool floor_box_candidate_editor_mode_active() const;
     bool floor_box_candidate_target_exists() const;
@@ -585,6 +591,10 @@ private:
                                           bool flush_now,
                                           const char* reason,
                                           const char* flush_tag);
+    bool validate_anchor_candidate_source_context(devmode::CandidateSourceContext source_context,
+                                                  const char* operation) const;
+    bool validate_floor_candidate_source_context(devmode::CandidateSourceContext source_context,
+                                                 const char* operation) const;
     std::vector<std::string> canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const;
     bool reconcile_anchor_child_candidates_with_eligible_names(const std::shared_ptr<AssetInfo>& target_info,
                                                                bool& changed);
@@ -750,6 +760,26 @@ private:
     bool apply_attack_payload_editor_update(const animation_update::AttackPayload& payload);
     bool add_floor_box();
     bool delete_selected_floor_box();
+    struct DeleteIntentSummary {
+        EditorMode mode = EditorMode::Normal;
+        const char* domain_label = "";
+        const char* entity_type = "";
+        const char* scope_label = "";
+        int affected_count = 0;
+    };
+    enum class DeleteConfirmResult {
+        Cancel,
+        Confirm,
+        ConfirmDontAskAgain,
+    };
+    static std::size_t editor_mode_index(EditorMode mode);
+    std::string delete_mode_label(EditorMode mode) const;
+    bool mode_delete_confirmation_disabled(EditorMode mode) const;
+    void set_mode_delete_confirmation_disabled(EditorMode mode, bool disabled);
+    DeleteConfirmResult prompt_delete_confirmation(const DeleteIntentSummary& summary);
+    bool execute_delete_with_confirmation(const DeleteIntentSummary& summary,
+                                          const std::function<bool()>& validate_selection,
+                                          const std::function<bool()>& perform_delete);
     bool apply_floor_box_panel_detail_update(const RoomFloorBoxToolsPanel::DetailValues& values);
     bool persist_floor_boxes(devmode::core::DevSaveCoordinator::Priority priority,
                              bool flush_now,
@@ -941,6 +971,7 @@ private:
         bool open = false;
         std::string anchor_name;
         Asset* target_asset = nullptr;
+        devmode::CandidateSourceContext source_context = devmode::CandidateSourceContext::AnchorNonLight;
         SDL_Point open_point{0, 0};
         SDL_Rect anchor_row_rect{0, 0, 0, 0};
         std::unique_ptr<DockableCollapsible> panel{};
@@ -952,6 +983,7 @@ private:
         bool open = false;
         Asset* target_asset = nullptr;
         int box_index = -1;
+        devmode::CandidateSourceContext source_context = devmode::CandidateSourceContext::FloorBox;
         SDL_Point open_point{0, 0};
         std::unique_ptr<DockableCollapsible> panel{};
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
@@ -1080,6 +1112,8 @@ private:
     bool asset_info_panel_visible_ = false;
 
     std::array<bool, static_cast<size_t>(BlockingPanel::Count)> blocking_panel_visible_{};
+    std::array<bool, static_cast<std::size_t>(EditorMode::FloorBoxEdit) + 1> suppress_delete_confirmation_by_mode_{};
+    std::function<DeleteConfirmResult(const DeleteIntentSummary&)> delete_confirm_callback_{};
 
     Asset* hovered_asset_ = nullptr;
     Asset* hovered_anchor_asset_ = nullptr;
@@ -1244,13 +1278,25 @@ struct RoomEditorTestAccess {
     static int subview_asset_info();
     static int subview_animation_editor();
     static int subview_anchor();
+    static int mode_anchor();
+    static int mode_light();
+    static int mode_oval();
+    static int mode_floor_box();
     static int mode_movement();
     static int mode_hitbox();
     static int mode_attack_box();
+    static int candidate_source_anchor_non_light();
+    static int candidate_source_anchor_light();
+    static int candidate_source_oval_point();
+    static int candidate_source_oval_center();
+    static int candidate_source_floor_box();
     static bool mode_owns_hitbox_domain(const RoomEditor& editor, int mode);
     static bool mode_owns_attack_domain(const RoomEditor& editor, int mode);
     static bool mode_owns_movement_domain(const RoomEditor& editor, int mode);
     static bool mode_owns_oval_domain(const RoomEditor& editor, int mode);
+    static bool validate_anchor_candidate_source(const RoomEditor& editor, int source_context);
+    static bool validate_floor_candidate_source(const RoomEditor& editor, int source_context);
+    static void set_oval_candidate_selection(RoomEditor& editor, bool center_selected, int selected_point_index);
 
     static int active_subview(const RoomEditor& editor);
     static void set_active_subview(RoomEditor& editor, int subview);
@@ -1299,6 +1345,14 @@ struct RoomEditorTestAccess {
     static int drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
     static void set_spawn_group_callback_in_progress(RoomEditor& editor, bool in_progress);
     static bool spawn_group_callback_in_progress(const RoomEditor& editor);
+    static void set_delete_confirm_callback_for_tests(RoomEditor& editor, int confirm_result);
+    static bool execute_delete_confirmation_flow(RoomEditor& editor,
+                                                 int mode,
+                                                 bool validate_before_confirm,
+                                                 bool validate_after_confirm,
+                                                 int affected_count,
+                                                 int& out_apply_calls);
+    static bool delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode);
     static void enqueue_spawn_group_work(RoomEditor& editor,
                                          const std::string& spawn_id,
                                          bool needs_respawn,

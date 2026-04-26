@@ -11,6 +11,7 @@
 #include "devtools/room_box_payload_utils.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/room_movement_payload.hpp"
+#include "room_editor_payload_contract_test_helper.hpp"
 
 namespace {
 
@@ -41,6 +42,22 @@ AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_na
     point.scaling_method = AnchorScalingMethod::Parent;
     mapping.points.push_back(point);
     return mapping;
+}
+
+void check_unchanged_key_bytes(const nlohmann::json& before,
+                               const nlohmann::json& after,
+                               const std::vector<std::string>& changed_keys) {
+    const auto snapshot_before = room_editor_test_payload_contract::snapshot_key_bytes(before);
+    const auto snapshot_after = room_editor_test_payload_contract::snapshot_key_bytes(after);
+    const auto keys = room_editor_test_payload_contract::unchanged_keys_excluding(before, changed_keys);
+    for (const auto& key : keys) {
+        INFO("key=" << key);
+        auto before_it = snapshot_before.find(key);
+        auto after_it = snapshot_after.find(key);
+        REQUIRE(before_it != snapshot_before.end());
+        REQUIRE(after_it != snapshot_after.end());
+        CHECK(before_it->second == after_it->second);
+    }
 }
 
 }  // namespace
@@ -88,54 +105,27 @@ TEST_CASE("Anchor and light mode mutations are isolated by ownership") {
 }
 
 TEST_CASE("Hitbox and attack box payload writers keep unrelated editor keys untouched") {
-    nlohmann::json payload = nlohmann::json::object({
-        {"anchor_points", nlohmann::json::array({nlohmann::json::array()})},
-        {"movement", nlohmann::json::array({nlohmann::json::array({0, 0, 0})})},
-        {"movement_total", nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0.0}})},
-        {"oval_anchor_mappings", nlohmann::json::array()},
-        {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
-        {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
-    });
-
-    const nlohmann::json anchor_points_before = payload["anchor_points"];
-    const nlohmann::json movement_before = payload["movement"];
-    const nlohmann::json movement_total_before = payload["movement_total"];
-    const nlohmann::json oval_before = payload["oval_anchor_mappings"];
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json payload_before = payload;
 
     const std::vector<std::string> names;
     const std::vector<animation_update::FrameHitBox> hit_boxes{
         devmode::room_box_payload::make_default_hit_box(names, 64, 64)};
     REQUIRE(devmode::room_box_payload::write_hit_box_frame_to_payload(payload, 1, 0, hit_boxes));
 
-    CHECK(payload["anchor_points"] == anchor_points_before);
-    CHECK(payload["movement"] == movement_before);
-    CHECK(payload["movement_total"] == movement_total_before);
-    CHECK(payload["oval_anchor_mappings"] == oval_before);
+    check_unchanged_key_bytes(payload_before, payload, {"hit_boxes", "box_schema_version"});
 
     const std::vector<animation_update::FrameAttackBox> attack_boxes{
         devmode::room_box_payload::make_default_attack_box(names, 64, 64)};
+    const nlohmann::json before_attack_write = payload;
     REQUIRE(devmode::room_box_payload::write_attack_box_frame_to_payload(payload, 1, 0, attack_boxes));
 
-    CHECK(payload["anchor_points"] == anchor_points_before);
-    CHECK(payload["movement"] == movement_before);
-    CHECK(payload["movement_total"] == movement_total_before);
-    CHECK(payload["oval_anchor_mappings"] == oval_before);
+    check_unchanged_key_bytes(before_attack_write, payload, {"attack_boxes", "box_schema_version"});
 }
 
 TEST_CASE("Movement payload updates keep anchor and box editor keys unchanged") {
-    nlohmann::json payload = nlohmann::json::object({
-        {"anchor_points", nlohmann::json::array({nlohmann::json::array()})},
-        {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
-        {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
-        {"oval_anchor_mappings", nlohmann::json::array()},
-        {"movement", nlohmann::json::array({nlohmann::json::array({0, 0, 0})})},
-        {"movement_total", nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0.0}})},
-    });
-
-    const nlohmann::json anchor_before = payload["anchor_points"];
-    const nlohmann::json hit_before = payload["hit_boxes"];
-    const nlohmann::json attack_before = payload["attack_boxes"];
-    const nlohmann::json oval_before = payload["oval_anchor_mappings"];
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json before = payload;
 
     std::vector<devmode::room_movement_payload::MovementFrame> frames(2);
     frames[1].dx = 3.0f;
@@ -144,12 +134,59 @@ TEST_CASE("Movement payload updates keep anchor and box editor keys unchanged") 
 
     const nlohmann::json updated = devmode::room_movement_payload::build_payload_from_frames(frames, payload);
 
-    CHECK(updated["anchor_points"] == anchor_before);
-    CHECK(updated["hit_boxes"] == hit_before);
-    CHECK(updated["attack_boxes"] == attack_before);
-    CHECK(updated["oval_anchor_mappings"] == oval_before);
+    check_unchanged_key_bytes(before, updated, {"movement", "movement_total"});
     CHECK(updated["movement"].is_array());
     CHECK(updated["movement_total"].is_object());
+}
+
+TEST_CASE("Anchor payload writer keeps unrelated mixed payload keys byte-equal") {
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json before = payload;
+
+    const std::vector<DisplacedAssetAnchorPoint> replacement{
+        DisplacedAssetAnchorPoint{"edited", 10, 11, 12.5f}
+    };
+    REQUIRE(devmode::room_anchor_mode::write_anchor_frame_to_payload(payload, 1, 0, replacement));
+
+    check_unchanged_key_bytes(before, payload, {"anchor_points"});
+}
+
+TEST_CASE("Writer precondition failures do not partially mutate mixed payload") {
+    const std::vector<std::string> names;
+    const std::vector<animation_update::FrameHitBox> hit_boxes{
+        devmode::room_box_payload::make_default_hit_box(names, 64, 64)};
+    const std::vector<animation_update::FrameAttackBox> attack_boxes{
+        devmode::room_box_payload::make_default_attack_box(names, 64, 64)};
+    const std::vector<DisplacedAssetAnchorPoint> anchors{
+        DisplacedAssetAnchorPoint{"edited", 2, 3, 4.0f}
+    };
+
+    SUBCASE("anchor writer rejects invalid frame bounds atomically") {
+        nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+        const std::string before = payload.dump();
+        CHECK_FALSE(devmode::room_anchor_mode::write_anchor_frame_to_payload(payload, 0, 0, anchors));
+        CHECK(payload.dump() == before);
+        CHECK_FALSE(devmode::room_anchor_mode::write_anchor_frame_to_payload(payload, 1, 4, anchors));
+        CHECK(payload.dump() == before);
+    }
+
+    SUBCASE("hit writer rejects invalid frame bounds atomically") {
+        nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+        const std::string before = payload.dump();
+        CHECK_FALSE(devmode::room_box_payload::write_hit_box_frame_to_payload(payload, 0, 0, hit_boxes));
+        CHECK(payload.dump() == before);
+        CHECK_FALSE(devmode::room_box_payload::write_hit_box_frame_to_payload(payload, 1, 3, hit_boxes));
+        CHECK(payload.dump() == before);
+    }
+
+    SUBCASE("attack writer rejects invalid frame bounds atomically") {
+        nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+        const std::string before = payload.dump();
+        CHECK_FALSE(devmode::room_box_payload::write_attack_box_frame_to_payload(payload, 0, 0, attack_boxes));
+        CHECK(payload.dump() == before);
+        CHECK_FALSE(devmode::room_box_payload::write_attack_box_frame_to_payload(payload, 1, 3, attack_boxes));
+        CHECK(payload.dump() == before);
+    }
 }
 
 TEST_CASE("Oval mapping updates do not rewrite animation payload keys from other editors") {
@@ -175,6 +212,55 @@ TEST_CASE("Oval mapping updates do not rewrite animation payload keys from other
 }
 
 #if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+TEST_CASE("RoomEditor candidate source validation blocks cross-domain contexts") {
+    RoomEditor editor(nullptr, 1280, 720);
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_anchor());
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_non_light()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_light()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_floor_box()));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_light());
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_light()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_non_light()));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_floor_box());
+    CHECK(RoomEditorTestAccess::validate_floor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_floor_box()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_floor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_light()));
+}
+
+TEST_CASE("RoomEditor oval candidate source requires explicit center or point selection") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_oval());
+
+    RoomEditorTestAccess::set_oval_candidate_selection(editor, true, -1);
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_point()));
+
+    RoomEditorTestAccess::set_oval_candidate_selection(editor, false, 0);
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_point()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+
+    RoomEditorTestAccess::set_oval_candidate_selection(editor, false, -1);
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_point()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+}
+
 TEST_CASE("RoomEditor queues re-entrant subview requests while transition is in progress") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_subview_change_in_progress(editor, true);

@@ -8,6 +8,7 @@
 #include <SDL3/SDL.h>
 
 #include "assets/asset/anchor_point.hpp"
+#include "devtools/room_candidate_source_context.hpp"
 
 class DMButton;
 class DMTextBox;
@@ -65,7 +66,8 @@ public:
     using AddOvalCallback = std::function<void()>;
     using DeleteOvalCallback = std::function<void()>;
     using ApplyOvalPropertiesCallback = std::function<void(const OvalProperties&)>;
-    using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
+    using OpenCandidatesCallback =
+        std::function<void(const std::string&, SDL_Point, SDL_Rect, devmode::CandidateSourceContext)>;
 
     using IncrementPointCountCallback = std::function<void()>;
     using DecrementPointCountCallback = std::function<void()>;

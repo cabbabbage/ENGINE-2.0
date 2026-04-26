@@ -410,7 +410,11 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
                 on_select_(selected_anchor_name_);
             }
             if (on_open_candidates_) {
-                on_open_candidates_(selected_anchor_name_, SDL_Point{pointer_x, pointer_y}, row_rect);
+                const devmode::CandidateSourceContext source_context =
+                    light_editor_mode_ ? devmode::CandidateSourceContext::AnchorLight
+                                       : devmode::CandidateSourceContext::AnchorNonLight;
+                on_open_candidates_(
+                    selected_anchor_name_, SDL_Point{pointer_x, pointer_y}, row_rect, source_context);
             }
             return true;
         }

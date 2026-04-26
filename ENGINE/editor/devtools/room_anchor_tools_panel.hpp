@@ -8,6 +8,7 @@
 #include <SDL3/SDL.h>
 
 #include "assets/asset/anchor_point.hpp"
+#include "devtools/room_candidate_source_context.hpp"
 
 class DMButton;
 class DMTextBox;
@@ -54,7 +55,8 @@ public:
     using ApplyDetailsCallback = std::function<void(const DetailValues&)>;
     using ApplyLightDetailsCallback = std::function<void(const LightValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
-    using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
+    using OpenCandidatesCallback =
+        std::function<void(const std::string&, SDL_Point, SDL_Rect, devmode::CandidateSourceContext)>;
 
     RoomAnchorToolsPanel();
     ~RoomAnchorToolsPanel();

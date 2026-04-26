@@ -623,9 +623,6 @@ void RoomBoxToolsPanel::update_layout() const {
         if (delete_button_) {
             delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (onion_skin_checkbox_) {
-            onion_skin_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
         if (apply_next_frame_button_) {
             apply_next_frame_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
@@ -663,7 +660,6 @@ void RoomBoxToolsPanel::update_layout() const {
     controls_height += kSectionGap;
     controls_height += DMButton::height();                               // delete
     controls_height += kSectionGap;
-    controls_height += DMCheckbox::height();                             // onion skin
     if (has_selected_box) {
         controls_height += kSectionGap;
         controls_height += kLineHeight;                                  // details title
@@ -717,10 +713,7 @@ void RoomBoxToolsPanel::update_layout() const {
         delete_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
     }
     y += DMButton::height() + kSectionGap;
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_rect(SDL_Rect{controls_x, y, controls_w, DMCheckbox::height()});
-    }
-    y += DMCheckbox::height() + kSectionGap;
+    y += kSectionGap;
 
     if (has_selected_box) {
         detail_title_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};

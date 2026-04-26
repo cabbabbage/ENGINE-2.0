@@ -448,7 +448,7 @@ TEST_CASE("RoomEditor delete confirmation dont-ask-again is session scoped per m
     CHECK(apply_calls == 1);
 }
 
-TEST_CASE("RoomEditor delete persistence is configured for immediate flush") {
+TEST_CASE("RoomEditor delete persistence remains configured for immediate flush") {
     CHECK(RoomEditorTestAccess::delete_persist_priority_for_tests() ==
           static_cast<int>(devmode::core::DevSaveCoordinator::Priority::Immediate));
     CHECK(RoomEditorTestAccess::delete_persist_flush_now_for_tests());

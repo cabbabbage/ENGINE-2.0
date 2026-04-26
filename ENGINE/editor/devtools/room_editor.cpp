@@ -8153,6 +8153,14 @@ bool RoomEditor::execute_delete_with_confirmation(const DeleteIntentSummary& sum
     if (summary.affected_count <= 0) {
         return false;
     }
+
+    // Runtime delete must be deterministic and immediate. When no test hook is
+    // installed, execute the scoped delete directly instead of relying on a
+    // confirmation dialog path that can drift while UI focus changes.
+    if (!delete_confirm_callback_) {
+        return perform_delete();
+    }
+
     if (!validate_selection()) {
         SDL_Log("[RoomEditor][DeleteGuard] stale-or-invalid selection before confirmation mode=%d domain=%s",
                 static_cast<int>(summary.mode),
@@ -14300,6 +14308,20 @@ bool RoomEditor::commit_anchor_bulk_edit(Asset* target,
 
     target_info->mark_dirty();
     nlohmann::json manifest_payload = target_info->manifest_payload();
+    if (flush_now && manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = manifest_payload;
+        if (!session.commit()) {
+            return false;
+        }
+        devmode::refresh_loaded_animation_instances(assets_, target_info);
+        anchor_edit_.dirty_since_last_flush = false;
+        return true;
+    }
+
     if (save_coordinator_ && manifest_store_) {
         save_coordinator_->enqueue_manifest_asset(
             target_info->name,
@@ -14836,6 +14858,20 @@ bool RoomEditor::persist_oval_mappings(devmode::core::DevSaveCoordinator::Priori
 
     target_info->mark_dirty();
     nlohmann::json manifest_payload = target_info->manifest_payload();
+    if (flush_now && manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = manifest_payload;
+        if (!session.commit()) {
+            return false;
+        }
+        devmode::refresh_loaded_animation_instances(assets_, target_info);
+        oval_edit_.dirty_since_last_flush = false;
+        return true;
+    }
+
     if (save_coordinator_ && manifest_store_) {
         save_coordinator_->enqueue_manifest_asset(
             target_info->name,
@@ -16481,6 +16517,19 @@ bool RoomEditor::persist_asset_manifest_from_info(const std::shared_ptr<AssetInf
 
     target_info->mark_dirty();
     nlohmann::json manifest_payload = target_info->manifest_payload();
+    if (flush_now && manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(target_info->name, true);
+        if (!session) {
+            return false;
+        }
+        session.data() = manifest_payload;
+        if (!session.commit()) {
+            return false;
+        }
+        devmode::refresh_loaded_animation_instances(assets_, target_info);
+        return true;
+    }
+
     if (save_coordinator_ && manifest_store_) {
         save_coordinator_->enqueue_manifest_asset(
             target_info->name,

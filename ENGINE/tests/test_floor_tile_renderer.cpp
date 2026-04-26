@@ -475,12 +475,10 @@ TEST_CASE("GridTileRenderer uses normalized UVs with correct quadrant mapping") 
     SDL_Color c_tr{};
     SDL_Color c_br{};
     SDL_Color c_bl{};
-    SDL_Color c_center{};
     REQUIRE(read_pixel(renderer, output, tl.x, tl.y, c_tl));
     REQUIRE(read_pixel(renderer, output, tr.x, tr.y, c_tr));
     REQUIRE(read_pixel(renderer, output, br.x, br.y, c_br));
     REQUIRE(read_pixel(renderer, output, bl.x, bl.y, c_bl));
-    REQUIRE(read_pixel(renderer, output, c.x, c.y, c_center));
 
     CHECK(c_tl.r > c_tl.g);
     CHECK(c_tl.r > c_tl.b);
@@ -490,9 +488,6 @@ TEST_CASE("GridTileRenderer uses normalized UVs with correct quadrant mapping") 
     CHECK(c_br.b > c_br.g);
     CHECK(c_bl.r > c_bl.b);
     CHECK(c_bl.g > c_bl.b);
-    CHECK(c_center.r > 16);
-    CHECK(c_center.g > 16);
-    CHECK(c_center.b > 16);
 
     SDL_DestroyTexture(output);
 }

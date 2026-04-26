@@ -108,6 +108,16 @@ struct GpuSubmissionStats {
     std::uint64_t buffer_destroy_count = 0;
 };
 
+struct GpuCompactRenderStats {
+    std::uint32_t tile_count_x = 0;
+    std::uint32_t tile_count_y = 0;
+    std::uint32_t tile_size_px = 0;
+    std::uint32_t tile_light_assignment_count = 0;
+    std::uint32_t naive_light_evaluations = 0;
+    std::uint32_t tiled_light_evaluations = 0;
+    std::uint32_t aggregated_light_count = 0;
+};
+
 struct LayerRenderResult {
     bool valid = false;
     int layer_count = 0;
@@ -116,6 +126,13 @@ struct LayerRenderResult {
     std::vector<SDL_Texture*> final_layer_textures;
     std::vector<std::vector<LayerEffectProcessor::RuntimeLight>> owning_body_lights;
     GpuSubmissionStats gpu_submission{};
+};
+
+struct CompactLayerRenderResult {
+    bool valid = false;
+    SDL_Texture* final_texture = nullptr;
+    GpuSubmissionStats gpu_submission{};
+    GpuCompactRenderStats compact_stats{};
 };
 
 struct BlurCompositeResult {

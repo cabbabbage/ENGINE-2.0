@@ -26,6 +26,9 @@ struct RenderFrameStats {
     std::string present_mode;
     std::uint64_t texture_memory_bytes = 0;
     bool texture_memory_known = false;
+    std::uint32_t gpu_light_tile_assignments = 0;
+    std::uint32_t gpu_light_naive_evaluations = 0;
+    std::uint32_t gpu_light_tiled_evaluations = 0;
 };
 
 namespace render_diagnostics {
@@ -51,6 +54,9 @@ void set_renderer_runtime_info(const std::string& renderer_path,
                                const std::string& present_mode);
 void set_texture_memory_usage(std::uint64_t bytes, bool known);
 void set_render_thread_cpu_ms(double elapsed_ms);
+void set_gpu_light_culling_stats(std::uint32_t tile_assignments,
+                                 std::uint32_t naive_evaluations,
+                                 std::uint32_t tiled_evaluations);
 
 SDL_Texture* create_texture(SDL_Renderer* renderer,
                             SDL_PixelFormat format,

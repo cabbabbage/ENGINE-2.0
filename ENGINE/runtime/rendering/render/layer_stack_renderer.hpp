@@ -28,6 +28,18 @@ public:
         bool runtime_lighting_enabled,
         float front_layer_light_strength_multiplier,
         float behind_layer_light_strength_multiplier);
+    render_pipeline::GpuCompactRenderStats build_gpu_tiled_light_bins(
+        const render_pipeline::LayerBuildResult& build,
+        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights);
+    render_pipeline::CompactLayerRenderResult render_gpu_compact(
+        const render_pipeline::LayerBuildResult& build,
+        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+        bool runtime_lighting_enabled,
+        float front_layer_light_strength_multiplier,
+        float behind_layer_light_strength_multiplier);
+    const render_pipeline::GpuCompactRenderStats& gpu_tiled_light_bin_stats() const {
+        return gpu_compact_stats_;
+    }
 
 private:
     struct FrameScratchArena {
@@ -90,6 +102,16 @@ private:
         bool active = false;
     };
 
+    struct GpuTiledLightBins {
+        int tile_size_px = 64;
+        int tile_count_x = 0;
+        int tile_count_y = 0;
+        std::vector<std::vector<std::uint32_t>> bins;
+        std::vector<std::uint32_t> dedupe_stamps;
+        std::uint32_t dedupe_generation = 1;
+        std::size_t source_light_count = 0;
+    };
+
     bool ensure_target(SDL_Texture*& texture) const;
     bool ensure_layer_capacity(int layer_count);
     void reset_targets();
@@ -106,6 +128,11 @@ private:
         const render_pipeline::LayerBuildResult& build,
         const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights);
     render_pipeline::GpuSubmissionStats current_gpu_submission_stats() const;
+    bool ensure_gpu_compact_targets();
+    bool query_gpu_tiled_light_candidates(const render_internal::ScreenAabb& bounds,
+                                          std::vector<std::uint32_t>& out_candidates);
+    void draw_layer_geometry(const render_pipeline::LayerBuildResult& build,
+                             const render_pipeline::LayerSubmission& layer) const;
 
     void render_layer_base(const render_pipeline::LayerBuildResult& build,
                            const render_pipeline::LayerSubmission& layer,
@@ -118,4 +145,9 @@ private:
     std::vector<TextureSet> layer_targets_;
     FrameScratchArena frame_scratch_;
     GpuUploadResources gpu_upload_;
+    SDL_Texture* gpu_compact_geometry_ = nullptr;
+    SDL_Texture* gpu_compact_light_ = nullptr;
+    SDL_Texture* gpu_compact_final_ = nullptr;
+    GpuTiledLightBins gpu_tiled_light_bins_{};
+    render_pipeline::GpuCompactRenderStats gpu_compact_stats_{};
 };

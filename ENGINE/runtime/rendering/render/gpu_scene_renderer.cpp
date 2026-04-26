@@ -31,13 +31,29 @@ bool GpuSceneRenderer::has_shader_variant(const std::string& shader_name) const 
     return shader_packages_.find(shader_name) != nullptr;
 }
 
+void GpuSceneRenderer::add_render_pass(std::string name, GpuFrameGraph::PassCallback callback) {
+    frame_graph_.add_render_pass(std::move(name), std::move(callback));
+}
+
+void GpuSceneRenderer::add_copy_pass(std::string name, GpuFrameGraph::PassCallback callback) {
+    frame_graph_.add_copy_pass(std::move(name), std::move(callback));
+}
+
+void GpuSceneRenderer::add_compute_pass(std::string name, GpuFrameGraph::PassCallback callback) {
+    frame_graph_.add_compute_pass(std::move(name), std::move(callback));
+}
+
 void GpuSceneRenderer::begin_frame() {
     frame_graph_.reset();
     render_diagnostics::set_renderer_runtime_info("gpu", device_ ? device_->backend_name() : "unknown", device_ ? device_->present_mode() : "unknown");
 }
 
 void GpuSceneRenderer::end_frame() {
-    frame_graph_.execute();
+    const GpuFrameGraph::ExecutionStats graph_stats = frame_graph_.execute();
+    vibble::log::debug("[GpuSceneRenderer] Pass graph executed: render=" +
+                       std::to_string(graph_stats.render_pass_count) +
+                       " copy=" + std::to_string(graph_stats.copy_pass_count) +
+                       " compute=" + std::to_string(graph_stats.compute_pass_count));
     vibble::log::debug("[GpuSceneRenderer] Pipeline cache hit-rate=" +
                        std::to_string(pipeline_cache_.hit_rate()));
 }

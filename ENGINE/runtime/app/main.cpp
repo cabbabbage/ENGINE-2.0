@@ -742,6 +742,9 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                    << " gpu_buf_destroy=" << stats.gpu_buffer_destroy_count
                    << " cpu_light_gather_ms=" << stats.cpu_light_gather_ms
                    << " cpu_light_mask_ms=" << stats.cpu_light_mask_generation_ms
+                   << " gpu_light_tiles=" << stats.gpu_light_tile_assignments
+                   << " gpu_light_naive=" << stats.gpu_light_naive_evaluations
+                   << " gpu_light_tiled=" << stats.gpu_light_tiled_evaluations
                    << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)
                    << " backend=" << backend_name
                    << " present_mode=" << present_mode;

@@ -42,6 +42,9 @@ void begin_frame() {
     g_frame_stats.cpu_light_gather_ms = 0.0;
     g_frame_stats.cpu_light_mask_generation_ms = 0.0;
     g_frame_stats.draw_submission_cpu_ms = 0.0;
+    g_frame_stats.gpu_light_tile_assignments = 0;
+    g_frame_stats.gpu_light_naive_evaluations = 0;
+    g_frame_stats.gpu_light_tiled_evaluations = 0;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -118,6 +121,14 @@ void set_texture_memory_usage(std::uint64_t bytes, bool known) {
 
 void set_render_thread_cpu_ms(double elapsed_ms_value) {
     g_frame_stats.render_thread_cpu_ms = std::max(0.0, elapsed_ms_value);
+}
+
+void set_gpu_light_culling_stats(std::uint32_t tile_assignments,
+                                 std::uint32_t naive_evaluations,
+                                 std::uint32_t tiled_evaluations) {
+    g_frame_stats.gpu_light_tile_assignments = tile_assignments;
+    g_frame_stats.gpu_light_naive_evaluations = naive_evaluations;
+    g_frame_stats.gpu_light_tiled_evaluations = tiled_evaluations;
 }
 
 SDL_Texture* create_texture(SDL_Renderer* renderer,

@@ -25,6 +25,11 @@ public:
                                                  float blur_px,
                                                  float radial_blur_px,
                                                  SDL_FPoint optical_center);
+    render_pipeline::BlurCompositeResult compose_gpu(SDL_Texture* scene_texture,
+                                                     bool depth_of_field_enabled,
+                                                     float blur_px,
+                                                     float radial_blur_px,
+                                                     SDL_FPoint optical_center);
 
 private:
     bool ensure_targets();

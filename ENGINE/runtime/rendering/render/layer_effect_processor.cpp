@@ -2,6 +2,7 @@
 #include "rendering/render/render_diagnostics.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -14,6 +15,8 @@ constexpr float kMinimumBlurRadiusEpsilonPx = 1.0e-4f;
 constexpr int kMaxGaussianKernelRadius = 12;
 constexpr int kMinFalloffTextureSize = 96;
 constexpr int kMaxFalloffTextureSize = 160;
+constexpr int kGpuLightRadialSegments = 24;
+constexpr int kGpuLightRadialRings = 3;
 
 struct TextureStateSnapshot {
     SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
@@ -179,6 +182,98 @@ static Uint8 clamp_alpha_from_unit(float value) {
         static_cast<int>(std::lround(value * 255.0f)),
         0,
         255));
+}
+
+static SDL_FColor make_unit_color(SDL_Color color, Uint8 alpha) {
+    return SDL_FColor{
+        static_cast<float>(color.r) / 255.0f,
+        static_cast<float>(color.g) / 255.0f,
+        static_cast<float>(color.b) / 255.0f,
+        static_cast<float>(alpha) / 255.0f
+    };
+}
+
+static bool append_gpu_radial_light_geometry(const LayerEffectProcessor::GpuRadialLight& light,
+                                             std::vector<SDL_Vertex>& out_vertices,
+                                             std::vector<int>& out_indices) {
+    const float radius_x = std::max(0.0f, light.radius_x_px);
+    const float radius_y = std::max(0.0f, light.radius_y_px);
+    const float intensity = std::max(0.0f, light.intensity);
+    const float opacity = std::clamp(light.opacity, 0.0f, 1.0f);
+    if (!(std::isfinite(light.center.x) && std::isfinite(light.center.y) &&
+          std::isfinite(radius_x) && std::isfinite(radius_y) &&
+          std::isfinite(intensity) && std::isfinite(opacity)) ||
+        radius_x <= 0.5f || radius_y <= 0.5f || intensity <= 0.0005f || opacity <= 0.0005f) {
+        return false;
+    }
+
+    const float clamped_falloff = std::clamp(light.falloff, 0.05f, 8.0f);
+    const float center_unit_alpha = std::clamp(intensity * opacity, 0.0f, 4.0f);
+    const Uint8 center_alpha = clamp_alpha_from_unit(std::min(center_unit_alpha, 1.0f));
+    if (center_alpha == 0) {
+        return false;
+    }
+
+    const int base_vertex = static_cast<int>(out_vertices.size());
+    out_vertices.push_back(SDL_Vertex{
+        SDL_FPoint{light.center.x, light.center.y},
+        make_unit_color(light.color, center_alpha),
+        SDL_FPoint{0.0f, 0.0f}});
+
+    std::array<int, kGpuLightRadialRings + 1> ring_start{};
+    ring_start.fill(-1);
+    ring_start[0] = base_vertex;
+
+    for (int ring = 1; ring <= kGpuLightRadialRings; ++ring) {
+        const float t = static_cast<float>(ring) / static_cast<float>(kGpuLightRadialRings);
+        const float alpha_scale = std::pow(std::clamp(1.0f - t, 0.0f, 1.0f), clamped_falloff);
+        const Uint8 ring_alpha = clamp_alpha_from_unit(std::min(center_unit_alpha * alpha_scale, 1.0f));
+        ring_start[ring] = static_cast<int>(out_vertices.size());
+        for (int seg = 0; seg <= kGpuLightRadialSegments; ++seg) {
+            const float u = static_cast<float>(seg) / static_cast<float>(kGpuLightRadialSegments);
+            constexpr float kTwoPi = 6.28318530717958647692f;
+            const float angle = u * kTwoPi;
+            const float ca = std::cos(angle);
+            const float sa = std::sin(angle);
+            out_vertices.push_back(SDL_Vertex{
+                SDL_FPoint{
+                    light.center.x + (radius_x * t * ca),
+                    light.center.y + (radius_y * t * sa)},
+                make_unit_color(light.color, ring_alpha),
+                SDL_FPoint{0.0f, 0.0f}});
+        }
+    }
+
+    const int first_ring_start = ring_start[1];
+    for (int seg = 0; seg < kGpuLightRadialSegments; ++seg) {
+        const int i0 = base_vertex;
+        const int i1 = first_ring_start + seg;
+        const int i2 = first_ring_start + seg + 1;
+        out_indices.push_back(i0);
+        out_indices.push_back(i1);
+        out_indices.push_back(i2);
+    }
+
+    for (int ring = 1; ring < kGpuLightRadialRings; ++ring) {
+        const int inner_start = ring_start[ring];
+        const int outer_start = ring_start[ring + 1];
+        for (int seg = 0; seg < kGpuLightRadialSegments; ++seg) {
+            const int inner0 = inner_start + seg;
+            const int inner1 = inner_start + seg + 1;
+            const int outer0 = outer_start + seg;
+            const int outer1 = outer_start + seg + 1;
+
+            out_indices.push_back(inner0);
+            out_indices.push_back(outer0);
+            out_indices.push_back(outer1);
+
+            out_indices.push_back(inner0);
+            out_indices.push_back(outer1);
+            out_indices.push_back(inner1);
+        }
+    }
+
+    return true;
 }
 
 static bool apply_axis_blur(SDL_Renderer* renderer,
@@ -762,6 +857,52 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
 
     restore_state_and_target();
     return result;
+}
+
+bool LayerEffectProcessor::render_gpu_light_field(SDL_Texture* output_texture,
+                                                  SDL_Color ambient_color,
+                                                  const std::vector<GpuRadialLight>& lights,
+                                                  SDL_BlendMode blend_mode) const {
+    if (!renderer_ || !output_texture) {
+        return false;
+    }
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
+    if (!render_diagnostics::set_render_target(renderer_, output_texture)) {
+        return false;
+    }
+
+    SDL_SetRenderViewport(renderer_, nullptr);
+    SDL_SetRenderClipRect(renderer_, nullptr);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, ambient_color.r, ambient_color.g, ambient_color.b, 255);
+    SDL_RenderClear(renderer_);
+
+    if (lights.empty()) {
+        SDL_SetRenderTarget(renderer_, previous_target);
+        return true;
+    }
+
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
+    vertices.reserve(lights.size() * static_cast<std::size_t>((kGpuLightRadialSegments + 1) * kGpuLightRadialRings + 1));
+    indices.reserve(lights.size() * static_cast<std::size_t>(kGpuLightRadialSegments * (3 + (kGpuLightRadialRings - 1) * 6)));
+    for (const GpuRadialLight& light : lights) {
+        append_gpu_radial_light_geometry(light, vertices, indices);
+    }
+
+    if (!vertices.empty() && !indices.empty()) {
+        SDL_SetRenderDrawBlendMode(renderer_, blend_mode);
+        render_diagnostics::render_geometry(renderer_,
+                                            nullptr,
+                                            vertices.data(),
+                                            static_cast<int>(vertices.size()),
+                                            indices.data(),
+                                            static_cast<int>(indices.size()));
+    }
+
+    SDL_SetRenderTarget(renderer_, previous_target);
+    return true;
 }
 
 

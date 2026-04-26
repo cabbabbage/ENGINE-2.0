@@ -1921,31 +1921,6 @@ void SceneRenderer::render() {
     if (runtime_lighting_enabled) {
         gather_runtime_lights(cam, depth_anchor_world_z, rendered_assets_for_debug, runtime_lights);
     }
-    SDL_Texture* floor_texture = nullptr;
-    SDL_Texture* floor_dark_mask_texture = nullptr;
-    bool floor_dark_mask_drawn = false;
-    if (floor_composer_) {
-        floor_texture = floor_composer_->compose(cam,
-                                                 grid,
-                                                 runtime_lights,
-                                                 runtime_lighting_enabled,
-                                                 max_cull_depth,
-                                                 map_clear_color_,
-                                                 true);
-        floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
-    }
-
-    render_diagnostics::add_render_target_switch_count();
-    SDL_SetRenderTarget(renderer_, scene_composite_tex_);
-    SDL_SetRenderViewport(renderer_, nullptr);
-    SDL_SetRenderClipRect(renderer_, nullptr);
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-    SDL_RenderClear(renderer_);
-
-    if (floor_texture) {
-        render_texture_utils::draw_fullscreen_texture(renderer_, floor_texture);
-    }
 
     const std::uint64_t submission_begin_counter = SDL_GetPerformanceCounter();
     const render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
@@ -1959,41 +1934,138 @@ void SceneRenderer::render() {
         render_diagnostics::add_draw_submission_ms(submission_ms);
     }
 
+    const bool use_gpu_compact_path =
+        gpu_runtime_path_enabled_ &&
+        gpu_scene_renderer_ &&
+        layer_stack_renderer_ &&
+        scene_composite_pass_;
+
+    SDL_Texture* floor_texture = nullptr;
+    SDL_Texture* floor_dark_mask_texture = nullptr;
+    bool floor_dark_mask_drawn = false;
     bool composed = false;
-    if (layer_build.valid && !layer_build.non_empty_layers.empty() && layer_stack_renderer_ && scene_composite_pass_) {
+    bool gpu_graph_executed = false;
+    if (use_gpu_compact_path && layer_build.valid && !layer_build.non_empty_layers.empty()) {
         const float front_mult = std::clamp(realism.front_layer_light_strength_multiplier, 0.0f, 4.0f);
         const float behind_mult = std::clamp(realism.behind_layer_light_strength_multiplier, 0.0f, 4.0f);
-        const render_pipeline::LayerRenderResult layer_render =
-            layer_stack_renderer_->render(layer_build,
-                                          runtime_lights,
-                                          runtime_lighting_enabled,
-                                          front_mult,
-                                          behind_mult);
-
         SDL_Point screen_center = cam.get_focus_override_point();
         const SDL_FPoint optical_center{
             std::clamp(static_cast<float>(screen_center.x), 0.0f, static_cast<float>(screen_width_)),
             std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(screen_height_))};
 
-        const render_pipeline::BlurCompositeResult blur_result = blur_chain_renderer_
-            ? blur_chain_renderer_->compose(layer_render,
-                                            floor_texture,
-                                            floor_dark_mask_texture,
-                                            realism.depth_of_field_enabled,
-                                            realism.blur_px,
-                                            realism.radial_blur_px,
-                                            optical_center)
-            : render_pipeline::BlurCompositeResult{};
-
-        if (!blur_result.valid && floor_dark_mask_texture) {
-            SDL_SetTextureBlendMode(floor_dark_mask_texture, SDL_BLENDMODE_MOD);
-            SDL_SetTextureAlphaMod(floor_dark_mask_texture, 255);
-            SDL_SetTextureColorMod(floor_dark_mask_texture, 255, 255, 255);
-            SDL_RenderTexture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
-            floor_dark_mask_drawn = true;
+        render_pipeline::CompactLayerRenderResult compact_result{};
+        render_pipeline::BlurCompositeResult blur_result{};
+        gpu_scene_renderer_->add_render_pass("floor", [&]() {
+            if (!floor_composer_) {
+                floor_texture = nullptr;
+                floor_dark_mask_texture = nullptr;
+                return;
+            }
+            floor_texture = floor_composer_->compose_gpu(cam,
+                                                         grid,
+                                                         runtime_lights,
+                                                         runtime_lighting_enabled,
+                                                         max_cull_depth,
+                                                         map_clear_color_,
+                                                         true);
+            floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
+        });
+        gpu_scene_renderer_->add_compute_pass("tiled_light_culling", [&]() {
+            if (layer_stack_renderer_) {
+                layer_stack_renderer_->build_gpu_tiled_light_bins(layer_build, runtime_lights);
+            }
+        });
+        gpu_scene_renderer_->add_render_pass("geometry_lighting", [&]() {
+            if (!layer_stack_renderer_) {
+                compact_result = render_pipeline::CompactLayerRenderResult{};
+                return;
+            }
+            compact_result = layer_stack_renderer_->render_gpu_compact(layer_build,
+                                                                       runtime_lights,
+                                                                       runtime_lighting_enabled,
+                                                                       front_mult,
+                                                                       behind_mult);
+        });
+        gpu_scene_renderer_->add_render_pass("dof", [&]() {
+            if (!blur_chain_renderer_ || !compact_result.valid || !compact_result.final_texture) {
+                blur_result = render_pipeline::BlurCompositeResult{};
+                return;
+            }
+            blur_result = blur_chain_renderer_->compose_gpu(compact_result.final_texture,
+                                                            realism.depth_of_field_enabled,
+                                                            realism.blur_px,
+                                                            realism.radial_blur_px,
+                                                            optical_center);
+        });
+        gpu_scene_renderer_->add_render_pass("scene_composite", [&]() {
+            SDL_Texture* scene_texture = compact_result.valid ? compact_result.final_texture : nullptr;
+            composed = scene_composite_pass_->compose_gpu(scene_composite_tex_,
+                                                          floor_texture,
+                                                          floor_dark_mask_texture,
+                                                          scene_texture,
+                                                          blur_result);
+        });
+        gpu_scene_renderer_->end_frame();
+        gpu_graph_executed = true;
+    } else {
+        if (floor_composer_) {
+            floor_texture = floor_composer_->compose(cam,
+                                                     grid,
+                                                     runtime_lights,
+                                                     runtime_lighting_enabled,
+                                                     max_cull_depth,
+                                                     map_clear_color_,
+                                                     true);
+            floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
         }
 
-        composed = scene_composite_pass_->compose(scene_composite_tex_, layer_render, blur_result);
+        render_diagnostics::add_render_target_switch_count();
+        SDL_SetRenderTarget(renderer_, scene_composite_tex_);
+        SDL_SetRenderViewport(renderer_, nullptr);
+        SDL_SetRenderClipRect(renderer_, nullptr);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+
+        if (floor_texture) {
+            render_texture_utils::draw_fullscreen_texture(renderer_, floor_texture);
+        }
+
+        if (layer_build.valid && !layer_build.non_empty_layers.empty() && layer_stack_renderer_ && scene_composite_pass_) {
+            const float front_mult = std::clamp(realism.front_layer_light_strength_multiplier, 0.0f, 4.0f);
+            const float behind_mult = std::clamp(realism.behind_layer_light_strength_multiplier, 0.0f, 4.0f);
+            const render_pipeline::LayerRenderResult layer_render =
+                layer_stack_renderer_->render(layer_build,
+                                              runtime_lights,
+                                              runtime_lighting_enabled,
+                                              front_mult,
+                                              behind_mult);
+
+            SDL_Point screen_center = cam.get_focus_override_point();
+            const SDL_FPoint optical_center{
+                std::clamp(static_cast<float>(screen_center.x), 0.0f, static_cast<float>(screen_width_)),
+                std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(screen_height_))};
+
+            const render_pipeline::BlurCompositeResult blur_result = blur_chain_renderer_
+                ? blur_chain_renderer_->compose(layer_render,
+                                                floor_texture,
+                                                floor_dark_mask_texture,
+                                                realism.depth_of_field_enabled,
+                                                realism.blur_px,
+                                                realism.radial_blur_px,
+                                                optical_center)
+                : render_pipeline::BlurCompositeResult{};
+
+            if (!blur_result.valid && floor_dark_mask_texture) {
+                SDL_SetTextureBlendMode(floor_dark_mask_texture, SDL_BLENDMODE_MOD);
+                SDL_SetTextureAlphaMod(floor_dark_mask_texture, 255);
+                SDL_SetTextureColorMod(floor_dark_mask_texture, 255, 255, 255);
+                SDL_RenderTexture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
+                floor_dark_mask_drawn = true;
+            }
+
+            composed = scene_composite_pass_->compose(scene_composite_tex_, layer_render, blur_result);
+        }
     }
 
     if (!composed) {
@@ -2049,7 +2121,7 @@ void SceneRenderer::render() {
         render_diagnostics::set_render_thread_cpu_ms(render_ms);
     }
     render_diagnostics::add_draw_call_count(static_cast<std::uint32_t>(geometry_batcher_->getDrawCallCount()));
-    if (gpu_runtime_path_enabled_ && gpu_scene_renderer_) {
+    if (gpu_runtime_path_enabled_ && gpu_scene_renderer_ && !gpu_graph_executed) {
         gpu_scene_renderer_->end_frame();
     }
     render_diagnostics::end_frame();

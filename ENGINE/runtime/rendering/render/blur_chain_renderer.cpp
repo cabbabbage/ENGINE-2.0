@@ -484,3 +484,51 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
     return result;
 }
 
+render_pipeline::BlurCompositeResult BlurChainRenderer::compose_gpu(SDL_Texture* scene_texture,
+                                                                    bool depth_of_field_enabled,
+                                                                    float blur_px,
+                                                                    float radial_blur_px,
+                                                                    SDL_FPoint optical_center) {
+    render_pipeline::BlurCompositeResult result{};
+    if (!renderer_ || !scene_texture) {
+        return result;
+    }
+    if (!ensure_targets()) {
+        return result;
+    }
+
+    const float safe_blur_px = sanitized_non_negative(blur_px);
+    const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
+    const bool blur_enabled =
+        render_internal::dof_blur_chain_enabled(depth_of_field_enabled,
+                                                safe_blur_px,
+                                                safe_radial_blur_px);
+
+    if (!blur_enabled) {
+        if (!copy_texture(scene_texture, background_mid_tex_)) {
+            return result;
+        }
+        result.valid = true;
+        result.background_mid = background_mid_tex_;
+        result.foreground_mid = nullptr;
+        return result;
+    }
+
+    const float blur_quality_scale =
+        compute_quality_scale(screen_width_, screen_height_, safe_blur_px, safe_radial_blur_px);
+    if (!blur_step(scene_texture,
+                   background_mid_tex_,
+                   blur_work_tex_,
+                   safe_blur_px,
+                   optical_center,
+                   safe_radial_blur_px,
+                   blur_quality_scale)) {
+        return result;
+    }
+
+    result.valid = true;
+    result.background_mid = background_mid_tex_;
+    result.foreground_mid = nullptr;
+    return result;
+}
+

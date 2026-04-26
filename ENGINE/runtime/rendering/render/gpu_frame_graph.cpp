@@ -3,40 +3,43 @@
 #include "rendering/render/render_diagnostics.hpp"
 
 void GpuFrameGraph::reset() {
-    render_passes_.clear();
-    copy_passes_.clear();
-    compute_passes_.clear();
+    passes_.clear();
+    last_execution_stats_ = ExecutionStats{};
 }
 
 void GpuFrameGraph::add_render_pass(std::string name, PassCallback callback) {
-    render_passes_.push_back(Pass{std::move(name), std::move(callback)});
+    passes_.push_back(Pass{PassType::Render, std::move(name), std::move(callback)});
 }
 
 void GpuFrameGraph::add_copy_pass(std::string name, PassCallback callback) {
-    copy_passes_.push_back(Pass{std::move(name), std::move(callback)});
+    passes_.push_back(Pass{PassType::Copy, std::move(name), std::move(callback)});
 }
 
 void GpuFrameGraph::add_compute_pass(std::string name, PassCallback callback) {
-    compute_passes_.push_back(Pass{std::move(name), std::move(callback)});
+    passes_.push_back(Pass{PassType::Compute, std::move(name), std::move(callback)});
 }
 
-void GpuFrameGraph::execute() const {
-    for (const Pass& pass : render_passes_) {
-        render_diagnostics::add_render_pass();
+GpuFrameGraph::ExecutionStats GpuFrameGraph::execute() const {
+    ExecutionStats stats{};
+    for (const Pass& pass : passes_) {
+        switch (pass.type) {
+        case PassType::Render:
+            render_diagnostics::add_render_pass();
+            ++stats.render_pass_count;
+            break;
+        case PassType::Copy:
+            render_diagnostics::add_copy_pass();
+            ++stats.copy_pass_count;
+            break;
+        case PassType::Compute:
+            render_diagnostics::add_compute_pass();
+            ++stats.compute_pass_count;
+            break;
+        }
         if (pass.callback) {
             pass.callback();
         }
     }
-    for (const Pass& pass : copy_passes_) {
-        render_diagnostics::add_copy_pass();
-        if (pass.callback) {
-            pass.callback();
-        }
-    }
-    for (const Pass& pass : compute_passes_) {
-        render_diagnostics::add_compute_pass();
-        if (pass.callback) {
-            pass.callback();
-        }
-    }
+    last_execution_stats_ = stats;
+    return stats;
 }

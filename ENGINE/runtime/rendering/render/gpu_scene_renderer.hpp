@@ -24,6 +24,10 @@ public:
     bool load_shader_packages(const std::string& manifest_path, std::string& out_error);
     bool has_shader_variant(const std::string& shader_name) const;
 
+    void add_render_pass(std::string name, GpuFrameGraph::PassCallback callback);
+    void add_copy_pass(std::string name, GpuFrameGraph::PassCallback callback);
+    void add_compute_pass(std::string name, GpuFrameGraph::PassCallback callback);
+
     void begin_frame();
     void end_frame();
 

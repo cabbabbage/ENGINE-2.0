@@ -8953,32 +8953,52 @@ bool RoomEditor::delete_selected_floor_box() {
     if (selected < 0 || selected >= static_cast<int>(target_info->floor_boxes.size())) {
         return false;
     }
+    DeleteIntentSummary summary{};
+    summary.mode = editor_mode_;
+    summary.domain_label = "floor_box_candidates";
+    summary.entity_type = "Floor box";
+    summary.scope_label = "current asset";
+    summary.affected_count = 1;
+    const int selected_snapshot = selected;
 
-    target_info->floor_boxes.erase(target_info->floor_boxes.begin() + static_cast<std::size_t>(selected));
-    if (floor_box_candidate_editor_.open &&
-        floor_box_candidate_editor_.target_asset == target &&
-        floor_box_candidate_editor_.box_index == selected) {
-        close_floor_box_candidate_editor();
-    }
-    if (target_info->floor_boxes.empty()) {
-        floor_box_edit_.selected_box_index = -1;
-    } else if (selected >= static_cast<int>(target_info->floor_boxes.size())) {
-        floor_box_edit_.selected_box_index = static_cast<int>(target_info->floor_boxes.size()) - 1;
-    } else {
-        floor_box_edit_.selected_box_index = selected;
-    }
-    floor_box_edit_.selected_corner_index = -1;
-    floor_box_edit_.hovered_box_index = -1;
-    floor_box_edit_.hovered_corner_index = -1;
-    floor_box_edit_.dragging_corner = false;
-    floor_box_edit_.dragging_box = false;
+    return execute_delete_with_confirmation(
+        summary,
+        [this, target, selected_snapshot]() {
+            return floor_box_mode_active() &&
+                   floor_box_edit_.target_asset == target &&
+                   target &&
+                   target->info &&
+                   selected_snapshot >= 0 &&
+                   selected_snapshot < static_cast<int>(target->info->floor_boxes.size()) &&
+                   floor_box_edit_.selected_box_index == selected_snapshot;
+        },
+        [this, target, target_info, selected_snapshot]() {
+            target_info->floor_boxes.erase(target_info->floor_boxes.begin() + static_cast<std::size_t>(selected_snapshot));
+            if (floor_box_candidate_editor_.open &&
+                floor_box_candidate_editor_.target_asset == target &&
+                floor_box_candidate_editor_.box_index == selected_snapshot) {
+                close_floor_box_candidate_editor();
+            }
+            if (target_info->floor_boxes.empty()) {
+                floor_box_edit_.selected_box_index = -1;
+            } else if (selected_snapshot >= static_cast<int>(target_info->floor_boxes.size())) {
+                floor_box_edit_.selected_box_index = static_cast<int>(target_info->floor_boxes.size()) - 1;
+            } else {
+                floor_box_edit_.selected_box_index = selected_snapshot;
+            }
+            floor_box_edit_.selected_corner_index = -1;
+            floor_box_edit_.hovered_box_index = -1;
+            floor_box_edit_.hovered_corner_index = -1;
+            floor_box_edit_.dragging_corner = false;
+            floor_box_edit_.dragging_box = false;
 
-    target->refresh_runtime_floor_boxes_cache();
-    sync_floor_box_tools_panel();
-    return persist_floor_boxes(devmode::core::DevSaveCoordinator::Priority::Debounced,
-                               false,
-                               "Floor Box Delete",
-                               "room-floor-box-delete");
+            target->refresh_runtime_floor_boxes_cache();
+            sync_floor_box_tools_panel();
+            return persist_floor_boxes(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                       false,
+                                       "Floor Box Delete",
+                                       "room-floor-box-delete");
+        });
 }
 
 bool RoomEditor::apply_floor_box_panel_detail_update(const RoomFloorBoxToolsPanel::DetailValues& values) {
@@ -9088,28 +9108,48 @@ bool RoomEditor::delete_selected_hitbox_in_current_frame() {
     if (selected < 0) {
         return false;
     }
-    return mutate_hitbox_current_frame(
-        [this, selected](std::vector<animation_update::FrameHitBox>& boxes) {
-            if (selected >= static_cast<int>(boxes.size())) {
-                return false;
-            }
-            boxes.erase(boxes.begin() + static_cast<std::size_t>(selected));
-            if (boxes.empty()) {
-                hitbox_edit_.selected_box_index = -1;
-            } else if (selected >= static_cast<int>(boxes.size())) {
-                hitbox_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
-            } else {
-                hitbox_edit_.selected_box_index = selected;
-            }
-            hitbox_edit_.selected_corner_index = 0;
-            hitbox_edit_.selected_point_index = 0;
-            hitbox_edit_.dragging_box = false;
-            hitbox_edit_.dragging_corner = false;
-            hitbox_edit_.dragging_rotation = false;
-            hitbox_edit_.hovered_rotation_handle = false;
-            return true;
+    DeleteIntentSummary summary{};
+    summary.mode = editor_mode_;
+    summary.domain_label = "hit_boxes";
+    summary.entity_type = "Hit box";
+    summary.scope_label = "current frame";
+    summary.affected_count = 1;
+    const int selected_snapshot = selected;
+    return execute_delete_with_confirmation(
+        summary,
+        [this, selected_snapshot]() {
+            return hitbox_mode_active() &&
+                   hitbox_edit_.target_asset &&
+                   hitbox_edit_.target_asset->current_frame &&
+                   selected_snapshot >= 0 &&
+                   selected_snapshot <
+                       static_cast<int>(hitbox_edit_.target_asset->current_frame->hit_boxes.boxes.size()) &&
+                   hitbox_edit_.selected_box_index == selected_snapshot;
         },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
+        [this, selected_snapshot]() {
+            return mutate_hitbox_current_frame(
+                [this, selected_snapshot](std::vector<animation_update::FrameHitBox>& boxes) {
+                    if (selected_snapshot >= static_cast<int>(boxes.size())) {
+                        return false;
+                    }
+                    boxes.erase(boxes.begin() + static_cast<std::size_t>(selected_snapshot));
+                    if (boxes.empty()) {
+                        hitbox_edit_.selected_box_index = -1;
+                    } else if (selected_snapshot >= static_cast<int>(boxes.size())) {
+                        hitbox_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
+                    } else {
+                        hitbox_edit_.selected_box_index = selected_snapshot;
+                    }
+                    hitbox_edit_.selected_corner_index = 0;
+                    hitbox_edit_.selected_point_index = 0;
+                    hitbox_edit_.dragging_box = false;
+                    hitbox_edit_.dragging_corner = false;
+                    hitbox_edit_.dragging_rotation = false;
+                    hitbox_edit_.hovered_rotation_handle = false;
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
 }
 
 bool RoomEditor::add_attack_box_in_current_frame() {
@@ -9153,28 +9193,48 @@ bool RoomEditor::delete_selected_attack_box_in_current_frame() {
     if (selected < 0) {
         return false;
     }
-    return mutate_attack_box_current_frame(
-        [this, selected](std::vector<animation_update::FrameAttackBox>& boxes) {
-            if (selected >= static_cast<int>(boxes.size())) {
-                return false;
-            }
-            boxes.erase(boxes.begin() + static_cast<std::size_t>(selected));
-            if (boxes.empty()) {
-                attack_box_edit_.selected_box_index = -1;
-            } else if (selected >= static_cast<int>(boxes.size())) {
-                attack_box_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
-            } else {
-                attack_box_edit_.selected_box_index = selected;
-            }
-            attack_box_edit_.selected_corner_index = 0;
-            attack_box_edit_.selected_point_index = 0;
-            attack_box_edit_.dragging_box = false;
-            attack_box_edit_.dragging_corner = false;
-            attack_box_edit_.dragging_rotation = false;
-            attack_box_edit_.hovered_rotation_handle = false;
-            return true;
+    DeleteIntentSummary summary{};
+    summary.mode = editor_mode_;
+    summary.domain_label = "attack_boxes";
+    summary.entity_type = "Attack box";
+    summary.scope_label = "current frame";
+    summary.affected_count = 1;
+    const int selected_snapshot = selected;
+    return execute_delete_with_confirmation(
+        summary,
+        [this, selected_snapshot]() {
+            return attack_box_mode_active() &&
+                   attack_box_edit_.target_asset &&
+                   attack_box_edit_.target_asset->current_frame &&
+                   selected_snapshot >= 0 &&
+                   selected_snapshot <
+                       static_cast<int>(attack_box_edit_.target_asset->current_frame->attack_boxes.boxes.size()) &&
+                   attack_box_edit_.selected_box_index == selected_snapshot;
         },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
+        [this, selected_snapshot]() {
+            return mutate_attack_box_current_frame(
+                [this, selected_snapshot](std::vector<animation_update::FrameAttackBox>& boxes) {
+                    if (selected_snapshot >= static_cast<int>(boxes.size())) {
+                        return false;
+                    }
+                    boxes.erase(boxes.begin() + static_cast<std::size_t>(selected_snapshot));
+                    if (boxes.empty()) {
+                        attack_box_edit_.selected_box_index = -1;
+                    } else if (selected_snapshot >= static_cast<int>(boxes.size())) {
+                        attack_box_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
+                    } else {
+                        attack_box_edit_.selected_box_index = selected_snapshot;
+                    }
+                    attack_box_edit_.selected_corner_index = 0;
+                    attack_box_edit_.selected_point_index = 0;
+                    attack_box_edit_.dragging_box = false;
+                    attack_box_edit_.dragging_corner = false;
+                    attack_box_edit_.dragging_rotation = false;
+                    attack_box_edit_.hovered_rotation_handle = false;
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
 }
 
 bool RoomEditor::add_impassable_box() {
@@ -9216,31 +9276,51 @@ bool RoomEditor::delete_selected_impassable_box() {
     if (selected < 0) {
         return false;
     }
-    return mutate_impassable_shapes(
-        [this, selected](std::vector<AssetInfo::ImpassableShape>& shapes) {
-            if (selected >= static_cast<int>(shapes.size())) {
-                return false;
-            }
-            shapes.erase(shapes.begin() + static_cast<std::size_t>(selected));
-            if (shapes.empty()) {
-                impassable_box_edit_.selected_box_index = -1;
-                impassable_box_edit_.selected_point_index = -1;
-            } else if (selected >= static_cast<int>(shapes.size())) {
-                impassable_box_edit_.selected_box_index = static_cast<int>(shapes.size()) - 1;
-                impassable_box_edit_.selected_point_index = 0;
-            } else {
-                impassable_box_edit_.selected_box_index = selected;
-                impassable_box_edit_.selected_point_index = 0;
-            }
-            impassable_box_edit_.selected_corner_index = 0;
-            impassable_box_edit_.point_selected = impassable_box_edit_.selected_box_index >= 0;
-            impassable_box_edit_.dragging_box = false;
-            impassable_box_edit_.dragging_corner = false;
-            impassable_box_edit_.dragging_rotation = false;
-            impassable_box_edit_.hovered_rotation_handle = false;
-            return true;
+    DeleteIntentSummary summary{};
+    summary.mode = editor_mode_;
+    summary.domain_label = "impassable_geometry";
+    summary.entity_type = "Impassable shape";
+    summary.scope_label = "current asset";
+    summary.affected_count = 1;
+    const int selected_snapshot = selected;
+    return execute_delete_with_confirmation(
+        summary,
+        [this, selected_snapshot]() {
+            return impassable_box_mode_active() &&
+                   impassable_box_edit_.target_asset &&
+                   impassable_box_edit_.target_asset->info &&
+                   selected_snapshot >= 0 &&
+                   selected_snapshot <
+                       static_cast<int>(impassable_box_edit_.target_asset->info->impassable_shapes_payload().size()) &&
+                   impassable_box_edit_.selected_box_index == selected_snapshot;
         },
-        devmode::core::DevSaveCoordinator::Priority::Debounced);
+        [this, selected_snapshot]() {
+            return mutate_impassable_shapes(
+                [this, selected_snapshot](std::vector<AssetInfo::ImpassableShape>& shapes) {
+                    if (selected_snapshot >= static_cast<int>(shapes.size())) {
+                        return false;
+                    }
+                    shapes.erase(shapes.begin() + static_cast<std::size_t>(selected_snapshot));
+                    if (shapes.empty()) {
+                        impassable_box_edit_.selected_box_index = -1;
+                        impassable_box_edit_.selected_point_index = -1;
+                    } else if (selected_snapshot >= static_cast<int>(shapes.size())) {
+                        impassable_box_edit_.selected_box_index = static_cast<int>(shapes.size()) - 1;
+                        impassable_box_edit_.selected_point_index = 0;
+                    } else {
+                        impassable_box_edit_.selected_box_index = selected_snapshot;
+                        impassable_box_edit_.selected_point_index = 0;
+                    }
+                    impassable_box_edit_.selected_corner_index = 0;
+                    impassable_box_edit_.point_selected = impassable_box_edit_.selected_box_index >= 0;
+                    impassable_box_edit_.dragging_box = false;
+                    impassable_box_edit_.dragging_corner = false;
+                    impassable_box_edit_.dragging_rotation = false;
+                    impassable_box_edit_.hovered_rotation_handle = false;
+                    return true;
+                },
+                devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
 }
 
 bool RoomEditor::increment_selected_impassable_point_count() {

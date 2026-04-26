@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cmath>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <initializer_list>
 #include <iterator>
@@ -278,6 +279,31 @@ CacheManager::BundleFrameLayer load_layer_from_candidates(std::initializer_list<
         }
     }
     return CacheManager::BundleFrameLayer{};
+}
+
+std::uint64_t fnv1a64(const void* data, std::size_t size, std::uint64_t seed = 1469598103934665603ull) {
+    const auto* bytes = static_cast<const std::uint8_t*>(data);
+    std::uint64_t hash = seed;
+    for (std::size_t idx = 0; idx < size; ++idx) {
+        hash ^= static_cast<std::uint64_t>(bytes[idx]);
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
+std::uint64_t hash_layer_identity(const CacheManager::BundleFrameLayer& layer) {
+    if (layer.empty()) {
+        return 0;
+    }
+    std::uint64_t hash = 1469598103934665603ull;
+    hash = fnv1a64(&layer.width, sizeof(layer.width), hash);
+    hash = fnv1a64(&layer.height, sizeof(layer.height), hash);
+    hash = fnv1a64(&layer.format, sizeof(layer.format), hash);
+    hash = fnv1a64(&layer.pitch, sizeof(layer.pitch), hash);
+    if (!layer.pixels.empty()) {
+        hash = fnv1a64(layer.pixels.data(), layer.pixels.size(), hash);
+    }
+    return hash;
 }
 
 fs::path cache_variant_root(const fs::path& animation_cache_root,
@@ -777,6 +803,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
         }
         const std::size_t frame_count = anim.frames.size();
         prepared.frames.reserve(frame_count);
+        std::unordered_map<std::uint64_t, SDL_Texture*> dedup_textures;
 
         std::unordered_map<std::size_t, SDL_Texture*> atlas_by_variant;
         if (anim.uses_atlas) {
@@ -809,15 +836,36 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                     cache_entry.uses_atlas[variant_idx] = true;
                     cache_entry.source_rects[variant_idx] = variant.atlas_rect;
                 } else if (!variant.base.empty()) {
-                    SDL_Surface* base_surface = surface_from_layer(variant.base);
-                    SDL_Texture* tex = CacheManager::surface_to_texture(renderer_, base_surface);
-                    apply_texture_scale_mode(tex);
+                    SDL_Texture* tex = nullptr;
+                    const std::uint64_t layer_hash = hash_layer_identity(variant.base);
+                    if (layer_hash != 0) {
+                        auto dedup_it = dedup_textures.find(layer_hash);
+                        if (dedup_it != dedup_textures.end()) {
+                            tex = dedup_it->second;
+                        }
+                    }
+
+                    if (!tex) {
+                        SDL_Surface* base_surface = surface_from_layer(variant.base);
+                        CacheManager::TextureUploadOptions upload_options{};
+                        upload_options.semantic = CacheManager::TextureSemantic::Color;
+                        upload_options.enable_mipmaps =
+                            variant.base.width >= 128 && variant.base.height >= 128;
+                        tex = CacheManager::surface_to_texture(renderer_, base_surface, upload_options);
+                        if (base_surface) {
+                            SDL_DestroySurface(base_surface);
+                        }
+                        apply_texture_scale_mode(tex);
+                        if (tex && layer_hash != 0) {
+                            dedup_textures[layer_hash] = tex;
+                        }
+                    }
+
                     cache_entry.textures[variant_idx] = tex;
                     cache_entry.widths[variant_idx] = variant.base.width;
                     cache_entry.heights[variant_idx] = variant.base.height;
                     cache_entry.source_rects[variant_idx] = SDL_Rect{0, 0, variant.base.width, variant.base.height};
                     cache_entry.uses_atlas[variant_idx] = false;
-                    SDL_DestroySurface(base_surface);
                 }
             }
 

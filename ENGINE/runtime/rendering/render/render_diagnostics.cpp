@@ -7,6 +7,10 @@ RenderFrameStats g_frame_stats{};
 std::uint64_t g_frame_begin_counter = 0;
 std::uint64_t g_perf_frequency = 0;
 SDL_Texture* g_last_render_target = nullptr;
+double g_last_present_block_ms = 0.0;
+double g_last_present_interval_ms = 0.0;
+bool g_last_present_interval_known = false;
+bool g_has_present_sample = false;
 
 void ensure_perf_frequency() {
     if (g_perf_frequency == 0) {
@@ -42,6 +46,9 @@ void begin_frame() {
     g_frame_stats.cpu_light_gather_ms = 0.0;
     g_frame_stats.cpu_light_mask_generation_ms = 0.0;
     g_frame_stats.draw_submission_cpu_ms = 0.0;
+    g_frame_stats.present_block_ms = g_has_present_sample ? g_last_present_block_ms : 0.0;
+    g_frame_stats.present_interval_ms = g_has_present_sample ? g_last_present_interval_ms : 0.0;
+    g_frame_stats.present_interval_known = g_has_present_sample && g_last_present_interval_known;
     g_frame_stats.gpu_light_tile_assignments = 0;
     g_frame_stats.gpu_light_naive_evaluations = 0;
     g_frame_stats.gpu_light_tiled_evaluations = 0;
@@ -104,6 +111,18 @@ void add_cpu_light_mask_generation_ms(double elapsed_ms_value) {
 
 void add_draw_submission_ms(double elapsed_ms_value) {
     g_frame_stats.draw_submission_cpu_ms += std::max(0.0, elapsed_ms_value);
+}
+
+void set_present_pacing(double present_block_ms_value,
+                        double present_interval_ms_value,
+                        bool interval_known) {
+    g_frame_stats.present_block_ms = std::max(0.0, present_block_ms_value);
+    g_frame_stats.present_interval_ms = std::max(0.0, present_interval_ms_value);
+    g_frame_stats.present_interval_known = interval_known;
+    g_last_present_block_ms = g_frame_stats.present_block_ms;
+    g_last_present_interval_ms = g_frame_stats.present_interval_ms;
+    g_last_present_interval_known = g_frame_stats.present_interval_known;
+    g_has_present_sample = true;
 }
 
 void set_renderer_runtime_info(const std::string& renderer_path,

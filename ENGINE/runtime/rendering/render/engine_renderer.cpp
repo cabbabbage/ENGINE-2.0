@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "rendering/render/render_diagnostics.hpp"
 #include "utils/log.hpp"
 
 #ifdef _WIN32
@@ -594,7 +595,27 @@ void EngineRenderer::end_frame() {
 
 void EngineRenderer::present() {
     if (renderer_) {
+        const std::uint64_t perf_frequency = SDL_GetPerformanceFrequency();
+        const std::uint64_t present_begin = SDL_GetPerformanceCounter();
         SDL_RenderPresent(renderer_);
+        const std::uint64_t present_end = SDL_GetPerformanceCounter();
+
+        const double present_block_ms =
+            (perf_frequency > 0 && present_end >= present_begin)
+                ? (static_cast<double>(present_end - present_begin) * 1000.0 /
+                   static_cast<double>(perf_frequency))
+                : 0.0;
+
+        bool interval_known = false;
+        double present_interval_ms = 0.0;
+        if (perf_frequency > 0 && last_present_counter_ != 0 && present_begin >= last_present_counter_) {
+            present_interval_ms =
+                (static_cast<double>(present_begin - last_present_counter_) * 1000.0) /
+                static_cast<double>(perf_frequency);
+            interval_known = true;
+        }
+        last_present_counter_ = present_end;
+        render_diagnostics::set_present_pacing(present_block_ms, present_interval_ms, interval_known);
     }
 }
 

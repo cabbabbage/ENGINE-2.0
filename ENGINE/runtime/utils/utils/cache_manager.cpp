@@ -1,10 +1,14 @@
 #include "cache_manager.hpp"
 #include <nlohmann/json.hpp>
+#include <SDL3/SDL_gpu.h>
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <filesystem>
 #include <cstring>
+#include <limits>
+
+#include "utils/log.hpp"
 
 namespace CacheManager {
 
@@ -32,6 +36,159 @@ std::uint64_t fnv1a(const void* data, std::size_t len, std::uint64_t seed) {
         hash *= 1099511628211ull;
     }
     return hash;
+}
+
+constexpr Uint32 kD3D12UploadRowAlignment = 256u;
+
+std::size_t align_up(std::size_t value, std::size_t alignment) {
+    if (alignment == 0) {
+        return value;
+    }
+    const std::size_t remainder = value % alignment;
+    return remainder == 0 ? value : (value + alignment - remainder);
+}
+
+bool is_mipmap_beneficial(const SDL_Surface* surface, const CacheManager::TextureUploadOptions& options) {
+    if (!surface || !options.enable_mipmaps) {
+        return false;
+    }
+    return surface->w >= 128 && surface->h >= 128;
+}
+
+void log_texture_policy_once(SDL_GPUDevice* gpu_device,
+                             const CacheManager::TextureUploadOptions& options) {
+    static bool logged_color = false;
+    static bool logged_normals = false;
+    bool& logged = (options.semantic == CacheManager::TextureSemantic::NormalMap) ? logged_normals : logged_color;
+    if (logged || !gpu_device) {
+        return;
+    }
+    logged = true;
+
+    const bool supports_bc7 = SDL_GPUTextureSupportsFormat(gpu_device,
+                                                            SDL_GPU_TEXTUREFORMAT_BC7_RGBA_UNORM,
+                                                            SDL_GPU_TEXTURETYPE_2D,
+                                                            SDL_GPU_TEXTUREUSAGE_SAMPLER);
+    const bool supports_bc5 = SDL_GPUTextureSupportsFormat(gpu_device,
+                                                            SDL_GPU_TEXTUREFORMAT_BC5_RG_UNORM,
+                                                            SDL_GPU_TEXTURETYPE_2D,
+                                                            SDL_GPU_TEXTUREUSAGE_SAMPLER);
+    if (options.semantic == CacheManager::TextureSemantic::NormalMap) {
+        vibble::log::info("[CacheManager] Texture upload policy(normal): preferred=BC5 supported=" +
+                          std::string(supports_bc5 ? "1" : "0") +
+                          " upload=RGBA8 (source assets are uncompressed)");
+    } else {
+        vibble::log::info("[CacheManager] Texture upload policy(color): preferred=BC7 supported=" +
+                          std::string(supports_bc7 ? "1" : "0") +
+                          " upload=RGBA8 (source assets are uncompressed)");
+    }
+}
+
+bool upload_surface_via_transfer_buffer(SDL_Renderer* renderer,
+                                        SDL_Texture* texture,
+                                        SDL_Surface* surface,
+                                        const CacheManager::TextureUploadOptions& options) {
+    if (!renderer || !texture || !surface) {
+        return false;
+    }
+
+    SDL_PropertiesID renderer_props = SDL_GetRendererProperties(renderer);
+    if (!renderer_props) {
+        return false;
+    }
+    SDL_GPUDevice* gpu_device = static_cast<SDL_GPUDevice*>(
+        SDL_GetPointerProperty(renderer_props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr));
+    if (!gpu_device) {
+        return false;
+    }
+
+    SDL_PropertiesID texture_props = SDL_GetTextureProperties(texture);
+    if (!texture_props) {
+        return false;
+    }
+    SDL_GPUTexture* gpu_texture = static_cast<SDL_GPUTexture*>(
+        SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
+    if (!gpu_texture) {
+        return false;
+    }
+
+    log_texture_policy_once(gpu_device, options);
+
+    if (surface->w <= 0 || surface->h <= 0 || surface->pitch <= 0) {
+        return false;
+    }
+
+    const std::size_t row_bytes = static_cast<std::size_t>(surface->w) * 4u;
+    const std::size_t upload_row_bytes = align_up(row_bytes, kD3D12UploadRowAlignment);
+    const std::size_t upload_bytes = upload_row_bytes * static_cast<std::size_t>(surface->h);
+    if (upload_bytes == 0 || upload_bytes > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        return false;
+    }
+    if (upload_row_bytes > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        return false;
+    }
+
+    SDL_GPUTransferBufferCreateInfo transfer_create{};
+    transfer_create.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_create.size = static_cast<Uint32>(upload_bytes);
+    transfer_create.props = 0;
+    SDL_GPUTransferBuffer* transfer_buffer = SDL_CreateGPUTransferBuffer(gpu_device, &transfer_create);
+    if (!transfer_buffer) {
+        return false;
+    }
+
+    bool uploaded = false;
+    void* mapped = SDL_MapGPUTransferBuffer(gpu_device, transfer_buffer, true);
+    if (mapped) {
+        std::uint8_t* dst = static_cast<std::uint8_t*>(mapped);
+        const std::uint8_t* src = static_cast<const std::uint8_t*>(surface->pixels);
+        for (int row = 0; row < surface->h; ++row) {
+            std::memcpy(dst + static_cast<std::size_t>(row) * upload_row_bytes,
+                        src + static_cast<std::size_t>(row) * static_cast<std::size_t>(surface->pitch),
+                        row_bytes);
+        }
+        SDL_UnmapGPUTransferBuffer(gpu_device, transfer_buffer);
+
+        SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(gpu_device);
+        if (command_buffer) {
+            SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
+            if (copy_pass) {
+                SDL_GPUTextureTransferInfo source{};
+                source.transfer_buffer = transfer_buffer;
+                source.offset = 0;
+                source.pixels_per_row = static_cast<Uint32>(upload_row_bytes / 4u);
+                source.rows_per_layer = static_cast<Uint32>(surface->h);
+
+                SDL_GPUTextureRegion destination{};
+                destination.texture = gpu_texture;
+                destination.mip_level = 0;
+                destination.layer = 0;
+                destination.x = 0;
+                destination.y = 0;
+                destination.z = 0;
+                destination.w = static_cast<Uint32>(surface->w);
+                destination.h = static_cast<Uint32>(surface->h);
+                destination.d = 1;
+
+                SDL_UploadToGPUTexture(copy_pass, &source, &destination, false);
+                SDL_EndGPUCopyPass(copy_pass);
+
+                if (is_mipmap_beneficial(surface, options)) {
+                    SDL_GenerateMipmapsForGPUTexture(command_buffer, gpu_texture);
+                }
+
+                uploaded = SDL_SubmitGPUCommandBuffer(command_buffer);
+                if (!uploaded) {
+                    SDL_CancelGPUCommandBuffer(command_buffer);
+                }
+            } else {
+                SDL_CancelGPUCommandBuffer(command_buffer);
+            }
+        }
+    }
+
+    SDL_ReleaseGPUTransferBuffer(gpu_device, transfer_buffer);
+    return uploaded;
 }
 
 nlohmann::json describe_layer(const BundleFrameLayer& layer, std::uint64_t offset) {
@@ -79,11 +236,52 @@ SDL_Surface* load_surface(const std::string& file_path) {
     return surface;
 }
 
-SDL_Texture* surface_to_texture(SDL_Renderer* renderer, SDL_Surface* surface) {
+SDL_Texture* surface_to_texture(SDL_Renderer* renderer,
+                                SDL_Surface* surface,
+                                const TextureUploadOptions& options) {
     if (!renderer || !surface) {
         return nullptr;
     }
-    return SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_Surface* rgba_surface = surface;
+    bool owns_rgba_surface = false;
+    if (surface->format != SDL_PIXELFORMAT_RGBA8888) {
+        rgba_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+        if (!rgba_surface) {
+            return SDL_CreateTextureFromSurface(renderer, surface);
+        }
+        owns_rgba_surface = true;
+    }
+
+    SDL_Texture* texture = SDL_CreateTexture(renderer,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_STATIC,
+                                             rgba_surface->w,
+                                             rgba_surface->h);
+    if (texture) {
+        bool uploaded = upload_surface_via_transfer_buffer(renderer,
+                                                           texture,
+                                                           rgba_surface,
+                                                           options);
+        if (!uploaded) {
+            uploaded = SDL_UpdateTexture(texture,
+                                         nullptr,
+                                         rgba_surface->pixels,
+                                         rgba_surface->pitch);
+        }
+        if (!uploaded) {
+            SDL_DestroyTexture(texture);
+            texture = nullptr;
+        }
+    }
+
+    if (!texture) {
+        texture = SDL_CreateTextureFromSurface(renderer, rgba_surface);
+    }
+
+    if (owns_rgba_surface) {
+        SDL_DestroySurface(rgba_surface);
+    }
+    return texture;
 }
 
 bool save_bundle(const std::string& bundle_path, const BundleData& data) {

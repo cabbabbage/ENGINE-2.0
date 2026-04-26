@@ -28,6 +28,7 @@ private:
     bool initialize(bool prefer_depth32, std::string& out_error);
 
     SDL_Renderer* renderer_ = nullptr;
+    SDL_Window* window_ = nullptr;
     SDL_GPUDevice* gpu_device_ = nullptr;
     RuntimeGpuFormatPolicy format_policy_{};
     std::string backend_name_ = "unknown";

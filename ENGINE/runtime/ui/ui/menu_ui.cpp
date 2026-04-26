@@ -169,7 +169,11 @@ void MenuUI::game_loop() {
                         }
                 }
 
-                SDL_RenderPresent(renderer);
+                if (renderer_) {
+                        renderer_->present();
+                } else {
+                        SDL_RenderPresent(renderer);
+                }
 
                 if (input_) input_->update();
 

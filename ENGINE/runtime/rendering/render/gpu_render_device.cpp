@@ -2,9 +2,53 @@
 
 #include "utils/log.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+
 namespace {
 std::string safe_string(const char* value) {
     return value ? std::string(value) : std::string();
+}
+
+std::string to_lower_copy(const std::string& value) {
+    std::string lowered;
+    lowered.reserve(value.size());
+    for (const unsigned char ch : value) {
+        lowered.push_back(static_cast<char>(std::tolower(ch)));
+    }
+    return lowered;
+}
+
+const char* present_mode_name(SDL_GPUPresentMode mode) {
+    switch (mode) {
+    case SDL_GPU_PRESENTMODE_IMMEDIATE:
+        return "immediate";
+    case SDL_GPU_PRESENTMODE_MAILBOX:
+        return "mailbox";
+    case SDL_GPU_PRESENTMODE_VSYNC:
+    default:
+        return "vsync";
+    }
+}
+
+SDL_GPUPresentMode select_present_mode(bool supports_mailbox,
+                                       bool supports_immediate) {
+    const char* requested = std::getenv("VIBBLE_GPU_PRESENT_MODE");
+    std::string mode = requested ? to_lower_copy(requested) : std::string();
+    if (mode.empty() || mode == "auto") {
+        return supports_mailbox ? SDL_GPU_PRESENTMODE_MAILBOX : SDL_GPU_PRESENTMODE_VSYNC;
+    }
+    if (mode == "mailbox") {
+        return supports_mailbox ? SDL_GPU_PRESENTMODE_MAILBOX : SDL_GPU_PRESENTMODE_VSYNC;
+    }
+    if (mode == "immediate") {
+        if (supports_immediate) {
+            return SDL_GPU_PRESENTMODE_IMMEDIATE;
+        }
+        return supports_mailbox ? SDL_GPU_PRESENTMODE_MAILBOX : SDL_GPU_PRESENTMODE_VSYNC;
+    }
+    return SDL_GPU_PRESENTMODE_VSYNC;
 }
 } // namespace
 
@@ -40,9 +84,64 @@ bool GpuRenderDevice::initialize(bool prefer_depth32, std::string& out_error) {
         return false;
     }
 
+    window_ = static_cast<SDL_Window*>(
+        SDL_GetPointerProperty(props, SDL_PROP_RENDERER_WINDOW_POINTER, nullptr));
+
     SDL_PropertiesID gpu_props = SDL_GetGPUDeviceProperties(gpu_device_);
+    const std::string gpu_driver_name = safe_string(SDL_GetGPUDeviceDriver(gpu_device_));
     if (gpu_props) {
-        backend_name_ = safe_string(SDL_GetStringProperty(gpu_props, SDL_PROP_GPU_DEVICE_NAME_STRING, nullptr));
+        const std::string backend_prop = safe_string(
+            SDL_GetStringProperty(gpu_props, SDL_PROP_GPU_DEVICE_DRIVER_NAME_STRING, nullptr));
+        const std::string device_name = safe_string(
+            SDL_GetStringProperty(gpu_props, SDL_PROP_GPU_DEVICE_NAME_STRING, nullptr));
+        backend_name_ = !backend_prop.empty() ? backend_prop : (!gpu_driver_name.empty() ? gpu_driver_name : "unknown");
+        if (backend_name_.empty()) {
+            backend_name_ = "unknown";
+        }
+        if (!device_name.empty()) {
+            vibble::log::info("[GpuRenderDevice] Using GPU adapter: " + device_name);
+        }
+    } else if (!gpu_driver_name.empty()) {
+        backend_name_ = gpu_driver_name;
+    }
+
+    if (window_) {
+        const bool supports_vsync =
+            SDL_WindowSupportsGPUPresentMode(gpu_device_, window_, SDL_GPU_PRESENTMODE_VSYNC);
+        const bool supports_mailbox =
+            SDL_WindowSupportsGPUPresentMode(gpu_device_, window_, SDL_GPU_PRESENTMODE_MAILBOX);
+        const bool supports_immediate =
+            SDL_WindowSupportsGPUPresentMode(gpu_device_, window_, SDL_GPU_PRESENTMODE_IMMEDIATE);
+
+        SDL_GPUPresentMode selected_mode =
+            select_present_mode(supports_mailbox, supports_immediate);
+        if (!SDL_SetGPUSwapchainParameters(gpu_device_,
+                                           window_,
+                                           SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                           selected_mode)) {
+            vibble::log::warn("[GpuRenderDevice] Failed to set requested present mode '" +
+                              std::string(present_mode_name(selected_mode)) +
+                              "': " + safe_string(SDL_GetError()) +
+                              ". Falling back to vsync.");
+            selected_mode = SDL_GPU_PRESENTMODE_VSYNC;
+            if (!SDL_SetGPUSwapchainParameters(gpu_device_,
+                                               window_,
+                                               SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                               selected_mode)) {
+                vibble::log::warn("[GpuRenderDevice] Failed to apply VSYNC fallback present mode: " +
+                                  safe_string(SDL_GetError()));
+            }
+        }
+        present_mode_ = present_mode_name(selected_mode);
+
+        vibble::log::info("[GpuRenderDevice] Present mode probe: mailbox=" +
+                          std::string(supports_mailbox ? "1" : "0") +
+                          " vsync=" + std::string(supports_vsync ? "1" : "0") +
+                          " immediate=" + std::string(supports_immediate ? "1" : "0") +
+                          " selected=" + present_mode_);
+    } else {
+        present_mode_ = "vsync";
+        vibble::log::warn("[GpuRenderDevice] Renderer window handle unavailable; present mode probe skipped.");
     }
 
     if (!GpuFormatPolicyResolver::Resolve(gpu_device_, prefer_depth32, format_policy_, out_error)) {
@@ -50,6 +149,7 @@ bool GpuRenderDevice::initialize(bool prefer_depth32, std::string& out_error) {
     }
 
     vibble::log::info("[GpuRenderDevice] SDL_GPU ready. backend=" + backend_name_ +
+                      " present=" + present_mode_ +
                       " albedo=" + std::to_string(static_cast<int>(format_policy_.albedo_format)) +
                       " light=" + std::to_string(static_cast<int>(format_policy_.light_accumulation_format)) +
                       " mask=" + std::to_string(static_cast<int>(format_policy_.mask_format)) +

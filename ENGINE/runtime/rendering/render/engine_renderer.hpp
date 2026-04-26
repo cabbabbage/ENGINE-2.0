@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <cstdint>
 
 #include <SDL3/SDL.h>
 
@@ -93,4 +94,5 @@ private:
     std::string present_mode_name_ = "vsync";
     RuntimeGpuFormatPolicy gpu_format_policy_{};
     bool has_gpu_format_policy_ = false;
+    std::uint64_t last_present_counter_ = 0;
 };

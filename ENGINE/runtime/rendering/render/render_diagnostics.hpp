@@ -21,6 +21,9 @@ struct RenderFrameStats {
     double cpu_light_gather_ms = 0.0;
     double cpu_light_mask_generation_ms = 0.0;
     double draw_submission_cpu_ms = 0.0;
+    double present_block_ms = 0.0;
+    double present_interval_ms = 0.0;
+    bool present_interval_known = false;
     std::string renderer_path;
     std::string backend_name;
     std::string present_mode;
@@ -49,6 +52,9 @@ void add_render_target_switch_count(std::uint32_t count = 1);
 void add_cpu_light_gather_ms(double elapsed_ms);
 void add_cpu_light_mask_generation_ms(double elapsed_ms);
 void add_draw_submission_ms(double elapsed_ms);
+void set_present_pacing(double present_block_ms,
+                        double present_interval_ms,
+                        bool interval_known);
 void set_renderer_runtime_info(const std::string& renderer_path,
                                const std::string& backend_name,
                                const std::string& present_mode);

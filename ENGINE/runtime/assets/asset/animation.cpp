@@ -5,6 +5,7 @@
 #include "surface_utils.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/scaling_logic.hpp"
+#include "utils/cache_manager.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"
 #include <SDL3_image/SDL_image.h>
@@ -62,7 +63,16 @@ SDL_Texture* load_texture_from_path(SDL_Renderer* renderer,
         return nullptr;
     }
 
-    SDL_Texture* tex = IMG_LoadTexture(renderer, path.generic_string().c_str());
+    SDL_Surface* surface = CacheManager::load_surface(path.generic_string());
+    if (!surface) {
+        return nullptr;
+    }
+
+    CacheManager::TextureUploadOptions upload_options{};
+    upload_options.semantic = CacheManager::TextureSemantic::Color;
+    upload_options.enable_mipmaps = surface->w >= 128 && surface->h >= 128;
+    SDL_Texture* tex = CacheManager::surface_to_texture(renderer, surface, upload_options);
+    SDL_DestroySurface(surface);
     if (!tex) {
         return nullptr;
     }

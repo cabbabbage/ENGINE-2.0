@@ -243,7 +243,11 @@ void MainApp::setup() {
                                                 try {
                                                         loading_screen_->set_status(status);
                                                         loading_screen_->draw_frame();
-                                                        SDL_RenderPresent(renderer);
+                                                        if (renderer_) {
+                                                                renderer_->present();
+                                                        } else {
+                                                                SDL_RenderPresent(renderer);
+                                                        }
                                                 } catch (...) {
                                                 }
                                                 SDL_Event ev;
@@ -253,7 +257,11 @@ void MainApp::setup() {
 
                                 loading_screen_->set_status("Preparing...");
                                 loading_screen_->draw_frame();
-                                SDL_RenderPresent(renderer);
+                                if (renderer_) {
+                                        renderer_->present();
+                                } else {
+                                        SDL_RenderPresent(renderer);
+                                }
                                 SDL_Event ev;
                                 while (SDL_PollEvent(&ev)) {}
                         }
@@ -407,7 +415,11 @@ void MainApp::run_startup_stabilization() {
                 }
                 loading_screen_->set_status(status);
                 loading_screen_->draw_frame();
-                SDL_RenderPresent(renderer);
+                if (renderer_) {
+                        renderer_->present();
+                } else {
+                        SDL_RenderPresent(renderer);
+                }
         };
 
         const Uint64 warmup_begin_ms = SDL_GetTicks();
@@ -711,8 +723,12 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
 
         std::ostringstream frame_line;
         const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
-        const std::string backend_name = renderer_ ? renderer_->caps().renderer_name : std::string("unknown");
-        const std::string present_mode = renderer_ ? renderer_->present_mode_name() : std::string("unknown");
+        const std::string backend_name = !stats.backend_name.empty()
+            ? stats.backend_name
+            : (renderer_ ? renderer_->caps().renderer_name : std::string("unknown"));
+        const std::string present_mode = !stats.present_mode.empty()
+            ? stats.present_mode
+            : (renderer_ ? renderer_->present_mode_name() : std::string("unknown"));
         frame_line << "[RenderDiag][" << (loop_label ? loop_label : "loop")
                    << "] frame=" << frame_diagnostics_counter_
                    << " window=" << window_w << "x" << window_h
@@ -731,6 +747,8 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                    << " frame_cpu_ms=" << stats.frame_cpu_ms
                    << " render_thread_cpu_ms=" << stats.render_thread_cpu_ms
                    << " draw_submission_ms=" << stats.draw_submission_cpu_ms
+                   << " present_block_ms=" << stats.present_block_ms
+                   << " present_interval_ms=" << (stats.present_interval_known ? stats.present_interval_ms : -1.0)
                    << " pass_count=" << stats.render_pass_count
                    << " copy_pass_count=" << stats.copy_pass_count
                    << " compute_pass_count=" << stats.compute_pass_count
@@ -971,7 +989,7 @@ void run(SDL_Window* window,
         SDL_SetRenderTarget(renderer, nullptr);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
-        SDL_RenderPresent(renderer);
+        engine_renderer.present();
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {}
     }
@@ -1088,7 +1106,7 @@ void run(SDL_Window* window,
                 SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 SDL_RenderClear(renderer);
                 menu->render();
-                SDL_RenderPresent(renderer);
+                engine_renderer.present();
                 const double remaining_counts =
                     app::frame_pacing::remaining_frame_counts(frame_begin,
                                                               target_counts,

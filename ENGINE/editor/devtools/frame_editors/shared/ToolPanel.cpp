@@ -13,7 +13,7 @@ namespace devmode::frame_editors {
 
 namespace {
 int default_content_width() {
-    return DockableCollapsible::kDefaultFloatingContentWidth + 40;
+    return DockableCollapsible::kDefaultFloatingContentWidth + 100;
 }
 
 SDL_Rect full_work_area(int w, int h) {
@@ -72,11 +72,12 @@ FrameToolPanel::FrameToolPanel(std::string title, std::string stack_key)
     if (panel_) {
         panel_->set_close_button_enabled(false);
         panel_->set_scroll_enabled(true);
-        panel_->set_padding(DMSpacing::item_gap());
-        panel_->set_row_gap(DMSpacing::small_gap());
-        panel_->set_col_gap(DMSpacing::small_gap());
+        const int panel_padding = DMSpacing::item_gap() + 4;
+        panel_->set_padding(panel_padding);
+        panel_->set_row_gap(DMSpacing::item_gap());
+        panel_->set_col_gap(DMSpacing::item_gap());
         panel_->set_floating_content_width(default_content_width());
-        panel_->set_cell_width(default_content_width() - DMSpacing::item_gap() * 2);
+        panel_->set_cell_width(default_content_width() - panel_padding * 2);
         panel_->set_visible(true);
         panel_->set_expanded(true);
     }

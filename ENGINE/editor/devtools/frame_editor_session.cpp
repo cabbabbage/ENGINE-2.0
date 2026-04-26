@@ -169,8 +169,9 @@ void FrameEditorSession::update(const Input& input) {
     }
     if (assets_) {
         WarpedScreenGrid& cam = assets_->getView();
+        const bool point_selected = selection_state_.has_target();
         // Standard camera controls: left-click drag = pan, scroll = height, Ctrl + drag for tilt, Ctrl + scroll for zoom
-        camera_controls_.handle_input(cam, input, false);
+        camera_controls_.handle_input(cam, input, point_selected);
     }
     active_editor_->update(input, 0.0f);
     if (exit_requested_) {

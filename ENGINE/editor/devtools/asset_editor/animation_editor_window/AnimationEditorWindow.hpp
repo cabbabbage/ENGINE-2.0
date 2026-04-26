@@ -77,10 +77,8 @@ class AnimationEditorWindow {
     void set_assets(Assets* assets) { assets_ = assets; }
     void set_target_asset(Asset* asset) { target_asset_ = asset; }
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
-    void on_live_frame_editor_closed(const std::string& animation_id);
 
   FRAME_EDITOR_ACCESS:
-    struct LiveFrameEditorToken {};
     void handle_document_saved();
     void layout_children();
     void ensure_layout() const;
@@ -128,8 +126,6 @@ class AnimationEditorWindow {
                                                   int dy,
                                                   int dz,
                                                   bool invert_frames_horizontal) const;
-    void open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode);
-    Asset* resolve_frame_editor_asset();
     void create_animation_via_prompt();
     void reload_document();
     void process_auto_save();
@@ -193,9 +189,6 @@ class AnimationEditorWindow {
     SDL_Rect status_rect_{0, 0, 0, 0};
     std::string status_message_;
     int status_timer_frames_ = 0;
-    bool live_frame_editor_session_active_ = false;
-    // Expires when the window is destroyed to invalidate callbacks.
-    std::shared_ptr<LiveFrameEditorToken> live_frame_editor_token_;
     mutable SDL_Texture* inspector_background_cache_ = nullptr;
     mutable SDL_Rect inspector_background_cache_rect_{0, 0, 0, 0};
     mutable bool inspector_background_dirty_ = true;

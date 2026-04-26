@@ -520,7 +520,6 @@ nlohmann::json snapshot_from_asset_info(const AssetInfo& info) {
 namespace animation_editor {
 
 AnimationEditorWindow::AnimationEditorWindow() {
-    live_frame_editor_token_ = std::make_shared<LiveFrameEditorToken>();
     document_ = std::make_shared<AnimationDocument>();
     document_->set_on_saved_callback([this]() { this->handle_document_saved(); });
     preview_provider_ = std::make_shared<PreviewProvider>();
@@ -798,7 +797,6 @@ void AnimationEditorWindow::clear_info() {
     asset_root_path_.clear();
     close_manifest_transaction();
     close_defaults_modal();
-    live_frame_editor_session_active_ = false;
     document_->load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, {});
     document_->consume_dirty_flag();
     preview_provider_->invalidate_all();
@@ -919,7 +917,7 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_source_png_sequence_picker([this]() { return this->pick_png_sequence(); });
     inspector_panel_->set_source_status_callback([this](const std::string& message) { this->set_status_message(message); });
     inspector_panel_->set_frame_edit_callback({});
-    inspector_panel_->set_frame_mode_edit_callback([this](const std::string& id, FrameEditorLaunchMode mode) { this->open_frame_editor(id, mode); });
+    inspector_panel_->set_frame_mode_edit_callback({});
     inspector_panel_->set_navigate_to_animation_callback([this](const std::string& id) {
         this->select_animation(std::optional<std::string>{id}, true);
     });
@@ -2145,92 +2143,6 @@ void AnimationEditorWindow::handle_create_defaults() {
     }
     set_status_message("Created default movement animations.", 300);
     close_defaults_modal();
-}
-
-Asset* AnimationEditorWindow::resolve_frame_editor_asset() {
-    if (target_asset_) {
-        return target_asset_;
-    }
-    if (!assets_) {
-        return nullptr;
-    }
-    auto info = info_.lock();
-    if (!info) {
-        return nullptr;
-    }
-    const std::string context_name_lower = animation_editor::strings::to_lower_copy(info->name);
-    auto matches_context = [&](Asset* candidate) -> bool {
-        if (!candidate || !candidate->info) {
-            return false;
-        }
-        if (candidate->info == info) {
-            return true;
-        }
-        if (context_name_lower.empty() || candidate->info->name.empty()) {
-            return false;
-        }
-        return animation_editor::strings::to_lower_copy(candidate->info->name) == context_name_lower;
-};
-    auto pick_from = [&](const std::vector<Asset*>& candidates) -> Asset* {
-        for (Asset* candidate : candidates) {
-            if (matches_context(candidate)) {
-                return candidate;
-            }
-        }
-        return nullptr;
-};
-
-    if (Asset* hovered = assets_->get_hovered_asset(); hovered && matches_context(hovered)) {
-        return hovered;
-    }
-    if (Asset* from_selection = pick_from(assets_->get_selected_assets())) {
-        return from_selection;
-    }
-    if (Asset* from_highlight = pick_from(assets_->get_highlighted_assets())) {
-        return from_highlight;
-    }
-    if (Asset* from_active = pick_from(assets_->getActive())) {
-        return from_active;
-    }
-    return nullptr;
-}
-
-void AnimationEditorWindow::open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode) {
-    if (animation_id.empty() || !document_) {
-        return;
-    }
-    if (mode == FrameEditorLaunchMode::Movement) {
-        set_status_message("Movement editing moved to the in-room asset stack. Open Asset Info on a room asset and press Tab.", 300);
-        return;
-    }
-    if (!assets_) {
-        set_status_message("Live Frame Editor is only available inside the room editor.", 240);
-        return;
-    }
-    Asset* runtime_asset = resolve_frame_editor_asset();
-    if (!runtime_asset) {
-        set_status_message("Select an in-room asset to edit frames in-scene.", 240);
-        return;
-    }
-    target_asset_ = runtime_asset;
-    live_frame_editor_session_active_ = true;
-    std::weak_ptr<LiveFrameEditorToken> host_token = live_frame_editor_token_;
-    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id, mode,
-        [this, host_token](const std::string& closed_animation_id) {
-            if (host_token.expired()) return;
-            this->on_live_frame_editor_closed(closed_animation_id);
-        });
-    set_visible(false, false );
-}
-
-void AnimationEditorWindow::on_live_frame_editor_closed(const std::string& animation_id) {
-    live_frame_editor_session_active_ = false;
-    preview_provider_->invalidate_all();
-    set_visible(true);
-    if (!animation_id.empty()) {
-        focus_animation(animation_id);
-    }
-    set_status_message("Frame editor updated.", 180);
 }
 
 void AnimationEditorWindow::create_animation_via_prompt() {

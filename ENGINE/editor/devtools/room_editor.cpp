@@ -18195,7 +18195,7 @@ RoomEditor::EditorInteractionState RoomEditor::current_editor_interaction_state(
         state.has_selected_editable = oval_edit_.selected_point_index >= 0 || oval_edit_.center_selected;
         state.is_dragging_editable = oval_edit_.center_dragging;
     } else if (movement_mode_active()) {
-        state.has_selected_editable = movement_edit_.point_selected;
+        state.has_selected_editable = movement_edit_.point_selected || movement_edit_.selected_point_active;
         state.is_dragging_editable = movement_edit_.dragging_point;
     } else if (hitbox_mode_active()) {
         state.has_selected_editable = hitbox_edit_.point_selected;
@@ -20243,7 +20243,9 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     if (movement_tools_panel_) {
         movement_edit_.smooth_enabled = movement_tools_panel_->smooth_enabled();
         movement_edit_.curve_enabled = movement_tools_panel_->curve_enabled();
-        (void)apply_movement_panel_numeric_edits();
+        if (!movement_edit_.dragging_point) {
+            (void)apply_movement_panel_numeric_edits();
+        }
     }
 
     const SDL_Point screen_pt{input.getX(), input.getY()};
@@ -20265,6 +20267,7 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
             apply_movement_animation_and_frame(movement_edit_.animation_id, hit);
             // apply_movement_animation_and_frame refreshes selection and clears drag state.
             // Restore drag so a press+move gesture actually updates the selected point.
+            movement_edit_.point_selected = true;
             movement_edit_.dragging_point = true;
             movement_edit_.selected_point_active = true;
         } else if (hit == 0) {
@@ -20298,6 +20301,7 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
             static_cast<float>(world_px.x - anchor.x),
             static_cast<float>(world_px.y - anchor.y)};
         redistribute_movement_points_after_adjustment(index);
+        sync_movement_panel_frame_values();
     }
 
     if (left_released) {
@@ -20312,6 +20316,7 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
         const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions_z.size()) - 1);
         movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] += static_cast<float>(scroll_y * 4);
         redistribute_movement_points_after_adjustment(index);
+        sync_movement_panel_frame_values();
         if (input_) {
             input_->consumeScroll();
         }

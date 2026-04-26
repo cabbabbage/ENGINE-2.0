@@ -86,7 +86,6 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
             }
         });
     }
-    flatten_bottom_to_floor_checkbox_ = std::make_unique<DMCheckbox>("flatten_bottom_to_floor", false);
     system_enabled_checkbox_ = std::make_unique<DMCheckbox>(enabled_label, false);
 }
 
@@ -173,9 +172,6 @@ void RoomBoxToolsPanel::set_detail_values(const DetailValues& values) {
     if (damage_textbox_ && !damage_textbox_->is_editing()) {
         damage_textbox_->set_value(std::to_string(values.damage));
     }
-    if (flatten_bottom_to_floor_checkbox_) {
-        flatten_bottom_to_floor_checkbox_->set_value(values.flatten_bottom_to_floor);
-    }
 }
 
 void RoomBoxToolsPanel::set_system_enabled(bool enabled) {
@@ -249,8 +245,6 @@ RoomBoxToolsPanel::DetailValues RoomBoxToolsPanel::collect_detail_values() const
     values.extrusion_backward =
         parse_int_or(extrusion_backward_textbox_ ? extrusion_backward_textbox_->value() : std::string{}, 1);
     values.damage = parse_int_or(damage_textbox_ ? damage_textbox_->value() : std::string{}, 0);
-    values.flatten_bottom_to_floor =
-        flatten_bottom_to_floor_checkbox_ ? flatten_bottom_to_floor_checkbox_->value() : false;
     return values;
 }
 
@@ -408,13 +402,6 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         details_changed = true;
     }
     if (has_selected_box &&
-        kind_ != Kind::ImpassableBox &&
-        flatten_bottom_to_floor_checkbox_ &&
-        flatten_bottom_to_floor_checkbox_->handle_event(event)) {
-        handled = true;
-        details_changed = true;
-    }
-    if (has_selected_box &&
         kind_ == Kind::ImpassableBox &&
         point_count_stepper_ &&
         point_count_stepper_->handle_event(event)) {
@@ -540,9 +527,6 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
         if (kind_ == Kind::ImpassableBox && point_count_stepper_) {
             point_count_stepper_->render(renderer);
         }
-        if (kind_ != Kind::ImpassableBox && flatten_bottom_to_floor_checkbox_) {
-            flatten_bottom_to_floor_checkbox_->render(renderer);
-        }
     }
     if (propagation_visible_) {
         if (apply_next_frame_button_) {
@@ -611,9 +595,6 @@ void RoomBoxToolsPanel::update_layout() const {
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (flatten_bottom_to_floor_checkbox_) {
-            flatten_bottom_to_floor_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
         if (point_count_stepper_) {
             point_count_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
@@ -651,7 +632,6 @@ void RoomBoxToolsPanel::update_layout() const {
         extrusion_backward_textbox_ ? extrusion_backward_textbox_->preferred_height(controls_w) : DMTextBox::height();
     const int damage_h = damage_textbox_ ? damage_textbox_->preferred_height(controls_w) : DMTextBox::height();
     const int point_stepper_h = point_count_stepper_ ? point_count_stepper_->preferred_height(controls_w) : DMNumericStepper::height();
-    const int flatten_h = DMCheckbox::height();
     const bool has_selected_box = selected_box_index_ >= 0 &&
                                   selected_box_index_ < static_cast<int>(box_names_.size());
 
@@ -681,10 +661,6 @@ void RoomBoxToolsPanel::update_layout() const {
         }
         if (kind_ == Kind::AttackBox) {
             controls_height += damage_h;                                 // damage
-            controls_height += row_gap;
-        }
-        if (kind_ != Kind::ImpassableBox) {
-            controls_height += flatten_h;                                // flatten toggle
             controls_height += row_gap;
         }
     } else {
@@ -757,12 +733,6 @@ void RoomBoxToolsPanel::update_layout() const {
             damage_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, damage_h});
             y += damage_h + row_gap;
         }
-        if (kind_ != Kind::ImpassableBox && flatten_bottom_to_floor_checkbox_) {
-            flatten_bottom_to_floor_checkbox_->set_rect(SDL_Rect{controls_x, y, controls_w, flatten_h});
-            y += flatten_h + row_gap;
-        } else if (flatten_bottom_to_floor_checkbox_) {
-            flatten_bottom_to_floor_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
     } else {
         detail_title_rect_ = SDL_Rect{0, 0, 0, 0};
         corner_label_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -777,9 +747,6 @@ void RoomBoxToolsPanel::update_layout() const {
         }
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
-        if (flatten_bottom_to_floor_checkbox_) {
-            flatten_bottom_to_floor_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (point_count_stepper_) {
             point_count_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});

@@ -340,7 +340,6 @@ class Asset {
         int frame_index = -1;
         int extrusion_forward = 1;
         int extrusion_backward = 1;
-        bool flatten_bottom_to_floor = false;
         int damage_amount = 0;
         std::string payload_id;
         std::string meta_json;

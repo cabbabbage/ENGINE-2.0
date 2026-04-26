@@ -136,7 +136,6 @@ nlohmann::json serialize_box_base(const TBox& box,
     node["anchor_link"] = box.anchor_link;
     node["extrusion_forward"] = std::max(1, box.extrusion_forward);
     node["extrusion_backward"] = std::max(1, box.extrusion_backward);
-    node["flatten_bottom_to_floor"] = box.flatten_bottom_to_floor;
     nlohmann::json corners = nlohmann::json::array();
     const auto runtime_corners = box.to_runtime_clockwise_points();
     for (std::size_t corner_index = 0; corner_index < runtime_corners.size(); ++corner_index) {

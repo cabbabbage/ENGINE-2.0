@@ -31,7 +31,6 @@ public:
         int extrusion_forward = 1;
         int extrusion_backward = 1;
         int damage = 0;
-        bool flatten_bottom_to_floor = false;
     };
 
     using SelectCallback = std::function<void(int)>;
@@ -120,7 +119,6 @@ private:
     std::unique_ptr<DMTextBox> extrusion_backward_textbox_;
     std::unique_ptr<DMTextBox> damage_textbox_;
     std::unique_ptr<DMNumericStepper> point_count_stepper_;
-    std::unique_ptr<DMCheckbox> flatten_bottom_to_floor_checkbox_;
     std::unique_ptr<DMCheckbox> system_enabled_checkbox_;
     int point_count_ = 0;
 

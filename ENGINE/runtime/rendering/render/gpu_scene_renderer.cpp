@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdint>
 
 namespace {
 
@@ -67,12 +68,58 @@ std::uint32_t graphics_state_key_from_index(std::size_t index) {
     return 0x1000u + static_cast<std::uint32_t>(index);
 }
 
+bool texture_spec_matches(const GpuSceneRenderer::TextureResourceSpec& lhs,
+                          const GpuSceneRenderer::TextureResourceSpec& rhs) {
+    return lhs.width == rhs.width &&
+           lhs.height == rhs.height &&
+           lhs.format == rhs.format &&
+           lhs.usage == rhs.usage &&
+           lhs.layer_count_or_depth == rhs.layer_count_or_depth &&
+           lhs.num_levels == rhs.num_levels &&
+           lhs.sample_count == rhs.sample_count;
+}
+
+bool buffer_spec_matches(const GpuSceneRenderer::BufferResourceSpec& lhs,
+                         const GpuSceneRenderer::BufferResourceSpec& rhs) {
+    return lhs.size_bytes == rhs.size_bytes &&
+           lhs.usage == rhs.usage;
+}
+
+std::uint64_t estimate_gpu_texture_bytes(const GpuSceneRenderer::TextureResourceSpec& spec) {
+    const std::uint64_t width = std::max<std::uint64_t>(1u, spec.width);
+    const std::uint64_t height = std::max<std::uint64_t>(1u, spec.height);
+    const std::uint64_t layers = std::max<std::uint64_t>(1u, spec.layer_count_or_depth);
+    const std::uint64_t levels = std::max<std::uint64_t>(1u, spec.num_levels);
+    const std::uint64_t samples = std::max<std::uint64_t>(1u, static_cast<std::uint64_t>(spec.sample_count));
+    std::uint64_t bpp = 4;
+    switch (spec.format) {
+    case SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT:
+        bpp = 8;
+        break;
+    case SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT:
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT:
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT:
+    case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM:
+    case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB:
+        bpp = 4;
+        break;
+    case SDL_GPU_TEXTUREFORMAT_R8_UNORM:
+        bpp = 1;
+        break;
+    default:
+        bpp = 4;
+        break;
+    }
+    return width * height * layers * levels * samples * bpp;
+}
+
 } // namespace
 
 GpuSceneRenderer::GpuSceneRenderer(std::unique_ptr<GpuRenderDevice> device)
     : device_(std::move(device)) {}
 
 GpuSceneRenderer::~GpuSceneRenderer() {
+    release_runtime_resources();
     pipeline_cache_.clear(device_ ? device_->gpu_device() : nullptr);
 }
 
@@ -510,21 +557,204 @@ void GpuSceneRenderer::begin_frame() {
     const bool texture_memory_known =
         device_ ? device_->query_texture_memory_usage(texture_memory_bytes) : false;
     render_diagnostics::set_texture_memory_usage(texture_memory_bytes, texture_memory_known);
+    last_pipeline_hit_total_ = pipeline_cache_.total_hits();
+    last_pipeline_miss_total_ = pipeline_cache_.total_misses();
 }
 
-void GpuSceneRenderer::end_frame() {
-    const GpuFrameGraph::ExecutionStats graph_stats = frame_graph_.execute();
+bool GpuSceneRenderer::end_frame(std::string* out_error) {
+    GpuFrameGraph::ExecuteOptions execute_options{};
+    execute_options.strict_resource_validation = true;
+    execute_options.fail_on_validation_error = true;
+    const GpuFrameGraph::ExecutionStats graph_stats = frame_graph_.execute(execute_options);
+    if (!graph_stats.success) {
+        std::string frame_error = graph_stats.error_message.empty()
+            ? "Frame graph dependency validation failed"
+            : graph_stats.error_message;
+        if (device_) {
+            std::string cancel_error;
+            (void)device_->end_frame(false, cancel_error);
+        }
+        if (out_error) {
+            *out_error = frame_error;
+        }
+        vibble::log::error("[GpuSceneRenderer] Frame graph execution failed: " + frame_error);
+        return false;
+    }
     std::string frame_error;
     if (device_ && !device_->end_frame(true, frame_error)) {
         vibble::log::error("[GpuSceneRenderer] end_frame submit failed: " + frame_error);
+        if (out_error) {
+            *out_error = frame_error;
+        }
+        return false;
     }
+    const std::uint64_t total_hits = pipeline_cache_.total_hits();
+    const std::uint64_t total_misses = pipeline_cache_.total_misses();
+    const std::uint64_t frame_hits = (total_hits >= last_pipeline_hit_total_)
+        ? (total_hits - last_pipeline_hit_total_) : total_hits;
+    const std::uint64_t frame_misses = (total_misses >= last_pipeline_miss_total_)
+        ? (total_misses - last_pipeline_miss_total_) : total_misses;
+    const double frame_hit_rate = (frame_hits + frame_misses) == 0
+        ? 1.0
+        : static_cast<double>(frame_hits) /
+            static_cast<double>(frame_hits + frame_misses);
+    render_diagnostics::set_gpu_pipeline_cache_stats(frame_hits, frame_misses, frame_hit_rate);
     vibble::log::debug("[GpuSceneRenderer] Pass graph executed: render=" +
                        std::to_string(graph_stats.render_pass_count) +
                        " copy=" + std::to_string(graph_stats.copy_pass_count) +
                        " compute=" + std::to_string(graph_stats.compute_pass_count) +
-                       " dependency_warnings=" + std::to_string(graph_stats.dependency_warning_count));
+                       " dependency_warnings=" + std::to_string(graph_stats.dependency_warning_count) +
+                       " dependency_errors=" + std::to_string(graph_stats.dependency_error_count));
     vibble::log::debug("[GpuSceneRenderer] Pipeline cache hit-rate=" +
-                       std::to_string(pipeline_cache_.hit_rate()) +
+                       std::to_string(frame_hit_rate) +
+                       " frame_hits=" + std::to_string(frame_hits) +
+                       " frame_misses=" + std::to_string(frame_misses) +
                        " graphics=" + std::to_string(pipeline_cache_.graphics_pipeline_count()) +
                        " compute=" + std::to_string(pipeline_cache_.compute_pipeline_count()));
+    if (out_error) {
+        out_error->clear();
+    }
+    return true;
+}
+
+bool GpuSceneRenderer::ensure_texture_resource(const std::string& logical_name,
+                                               const TextureResourceSpec& spec,
+                                               std::string& out_error) {
+    if (!device_ || !device_->gpu_device()) {
+        out_error = "GPU device unavailable while creating texture resource '" + logical_name + "'";
+        return false;
+    }
+    if (logical_name.empty()) {
+        out_error = "Texture resource name cannot be empty";
+        return false;
+    }
+    if (spec.width == 0 || spec.height == 0) {
+        out_error = "Texture resource '" + logical_name + "' has invalid dimensions";
+        return false;
+    }
+    if (spec.format == SDL_GPU_TEXTUREFORMAT_INVALID) {
+        out_error = "Texture resource '" + logical_name + "' has invalid format";
+        return false;
+    }
+    const auto it = texture_resources_.find(logical_name);
+    if (it != texture_resources_.end() &&
+        it->second.texture &&
+        texture_spec_matches(it->second.spec, spec)) {
+        out_error.clear();
+        return true;
+    }
+
+    if (it != texture_resources_.end() && it->second.texture) {
+        SDL_ReleaseGPUTexture(device_->gpu_device(), it->second.texture);
+        it->second.texture = nullptr;
+        render_diagnostics::add_texture_destroy_count();
+    }
+
+    SDL_GPUTextureCreateInfo create_info{};
+    create_info.type = SDL_GPU_TEXTURETYPE_2D;
+    create_info.format = spec.format;
+    create_info.usage = spec.usage;
+    create_info.width = spec.width;
+    create_info.height = spec.height;
+    create_info.layer_count_or_depth = spec.layer_count_or_depth;
+    create_info.num_levels = spec.num_levels;
+    create_info.sample_count = spec.sample_count;
+    create_info.props = 0;
+    SDL_GPUTexture* texture = SDL_CreateGPUTexture(device_->gpu_device(), &create_info);
+    if (!texture) {
+        out_error = "SDL_CreateGPUTexture failed for '" + logical_name + "': " + SDL_GetError();
+        return false;
+    }
+
+    RuntimeTextureResource resource{};
+    resource.texture = texture;
+    resource.spec = spec;
+    resource.estimated_bytes = estimate_gpu_texture_bytes(spec);
+    texture_resources_[logical_name] = resource;
+    render_diagnostics::add_texture_create_count();
+    out_error.clear();
+    return true;
+}
+
+SDL_GPUTexture* GpuSceneRenderer::find_texture_resource(const std::string& logical_name) const {
+    const auto it = texture_resources_.find(logical_name);
+    return (it != texture_resources_.end()) ? it->second.texture : nullptr;
+}
+
+bool GpuSceneRenderer::ensure_buffer_resource(const std::string& logical_name,
+                                              const BufferResourceSpec& spec,
+                                              std::string& out_error) {
+    if (!device_ || !device_->gpu_device()) {
+        out_error = "GPU device unavailable while creating buffer resource '" + logical_name + "'";
+        return false;
+    }
+    if (logical_name.empty()) {
+        out_error = "Buffer resource name cannot be empty";
+        return false;
+    }
+    if (spec.size_bytes == 0) {
+        out_error = "Buffer resource '" + logical_name + "' has zero byte size";
+        return false;
+    }
+
+    const auto it = buffer_resources_.find(logical_name);
+    if (it != buffer_resources_.end() &&
+        it->second.buffer &&
+        buffer_spec_matches(it->second.spec, spec)) {
+        out_error.clear();
+        return true;
+    }
+
+    if (it != buffer_resources_.end() && it->second.buffer) {
+        SDL_ReleaseGPUBuffer(device_->gpu_device(), it->second.buffer);
+        it->second.buffer = nullptr;
+        render_diagnostics::add_gpu_buffer_destroy_count();
+    }
+
+    SDL_GPUBufferCreateInfo create_info{};
+    create_info.usage = spec.usage;
+    create_info.size = spec.size_bytes;
+    create_info.props = 0;
+    SDL_GPUBuffer* buffer = SDL_CreateGPUBuffer(device_->gpu_device(), &create_info);
+    if (!buffer) {
+        out_error = "SDL_CreateGPUBuffer failed for '" + logical_name + "': " + SDL_GetError();
+        return false;
+    }
+
+    RuntimeBufferResource resource{};
+    resource.buffer = buffer;
+    resource.spec = spec;
+    buffer_resources_[logical_name] = resource;
+    render_diagnostics::add_gpu_buffer_create_count();
+    out_error.clear();
+    return true;
+}
+
+SDL_GPUBuffer* GpuSceneRenderer::find_buffer_resource(const std::string& logical_name) const {
+    const auto it = buffer_resources_.find(logical_name);
+    return (it != buffer_resources_.end()) ? it->second.buffer : nullptr;
+}
+
+void GpuSceneRenderer::release_runtime_resources() {
+    if (!device_ || !device_->gpu_device()) {
+        texture_resources_.clear();
+        buffer_resources_.clear();
+        return;
+    }
+    for (auto& entry : texture_resources_) {
+        if (entry.second.texture) {
+            SDL_ReleaseGPUTexture(device_->gpu_device(), entry.second.texture);
+            entry.second.texture = nullptr;
+            render_diagnostics::add_texture_destroy_count();
+        }
+    }
+    for (auto& entry : buffer_resources_) {
+        if (entry.second.buffer) {
+            SDL_ReleaseGPUBuffer(device_->gpu_device(), entry.second.buffer);
+            entry.second.buffer = nullptr;
+            render_diagnostics::add_gpu_buffer_destroy_count();
+        }
+    }
+    texture_resources_.clear();
+    buffer_resources_.clear();
 }

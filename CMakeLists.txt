@@ -339,6 +339,7 @@ add_executable(engine_tests
     ENGINE/tests/test_layer_submission_packets.cpp
     ENGINE/tests/test_layer_stack_gpu_submission.cpp
     ENGINE/tests/test_gpu_compact_pass_graph.cpp
+    ENGINE/tests/test_gpu_frame_graph_validation.cpp
     ENGINE/tests/test_shader_package_library.cpp
     ENGINE/tests/test_shader_pipeline_cache.cpp
     ENGINE/tests/test_floor_light_mask.cpp

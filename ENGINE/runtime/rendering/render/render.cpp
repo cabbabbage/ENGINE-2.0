@@ -1989,6 +1989,53 @@ void SceneRenderer::render() {
                                                       gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->backend_name() : "unknown",
                                                       gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->present_mode() : "unknown");
 
+        const RuntimeGpuFormatPolicy format_policy = gpu_scene_renderer_->device()
+            ? gpu_scene_renderer_->device()->format_policy()
+            : RuntimeGpuFormatPolicy{};
+        const Uint32 logical_width = static_cast<Uint32>(std::max(1, screen_width_));
+        const Uint32 logical_height = static_cast<Uint32>(std::max(1, screen_height_));
+        std::string gpu_resource_error;
+        auto ensure_gpu_texture = [&](const std::string& logical_name,
+                                      SDL_GPUTextureFormat format,
+                                      SDL_GPUTextureUsageFlags usage) -> bool {
+            GpuSceneRenderer::TextureResourceSpec spec{};
+            spec.width = logical_width;
+            spec.height = logical_height;
+            spec.format = format;
+            spec.usage = usage;
+            spec.layer_count_or_depth = 1;
+            spec.num_levels = 1;
+            spec.sample_count = format_policy.sample_count;
+            if (!gpu_scene_renderer_->ensure_texture_resource(logical_name, spec, gpu_resource_error)) {
+                vibble::log::error("[SceneRenderer] GPU texture resource initialization failed for '" +
+                                   logical_name + "': " + gpu_resource_error);
+                return false;
+            }
+            return true;
+        };
+        const Uint32 tile_size_px = 16u;
+        const Uint32 tile_count_x = std::max<Uint32>(1u, (logical_width + tile_size_px - 1u) / tile_size_px);
+        const Uint32 tile_count_y = std::max<Uint32>(1u, (logical_height + tile_size_px - 1u) / tile_size_px);
+        const Uint32 light_bin_buffer_bytes = std::max<Uint32>(256u, tile_count_x * tile_count_y * 64u);
+        GpuSceneRenderer::BufferResourceSpec light_bin_spec{};
+        light_bin_spec.size_bytes = light_bin_buffer_bytes;
+        light_bin_spec.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
+                               SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
+                               SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        if (!ensure_gpu_texture("scene_floor", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+            !ensure_gpu_texture("scene_geometry", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+            !ensure_gpu_texture("scene_light", format_policy.light_accumulation_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+            !ensure_gpu_texture("scene_blur_bg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+            !ensure_gpu_texture("scene_blur_fg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+            !ensure_gpu_texture("scene_output", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+            !gpu_scene_renderer_->ensure_buffer_resource("light_bins", light_bin_spec, gpu_resource_error)) {
+            if (!gpu_resource_error.empty()) {
+                vibble::log::error("[SceneRenderer] GPU runtime resource initialization failed: " + gpu_resource_error);
+            }
+            render_diagnostics::end_frame();
+            return;
+        }
+
         gpu_scene_renderer_->add_render_pass("floor",
                                              [&]() {
             gpu_scene_renderer_->touch_graphics_pipeline("floor_compose", 0x1001u);
@@ -2069,7 +2116,12 @@ void SceneRenderer::render() {
                                               GpuFrameGraph::ResourceDependency{"scene.floor.mask", false},
                                               GpuFrameGraph::ResourceDependency{"scene.blur", false},
                                               GpuFrameGraph::ResourceDependency{"scene.output", true}});
-        gpu_scene_renderer_->end_frame();
+        std::string gpu_frame_error;
+        if (!gpu_scene_renderer_->end_frame(&gpu_frame_error)) {
+            render_diagnostics::end_frame();
+            vibble::log::error("[SceneRenderer] GPU frame execution failed: " + gpu_frame_error);
+            return;
+        }
     } else {
         render_diagnostics::set_renderer_runtime_info("legacy", "sdl_renderer", "unknown");
         floor_texture = floor_composer_ ? floor_composer_->compose(cam,

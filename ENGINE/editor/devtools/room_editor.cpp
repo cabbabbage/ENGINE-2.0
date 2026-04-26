@@ -159,35 +159,10 @@ bool is_integral_weight(double value) {
     return std::fabs(value - rounded) < 1e-9;
 }
 
-bool requires_non_deletable_null_candidate(devmode::CandidateSourceContext source_context) {
-    return source_context == devmode::CandidateSourceContext::AnchorNonLight;
-}
-
 bool sanitize_anchor_candidate_entry_for_source(nlohmann::json& candidate_entry,
                                                 devmode::CandidateSourceContext source_context) {
-    bool changed = vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
-    if (!requires_non_deletable_null_candidate(source_context)) {
-        return changed;
-    }
-
-    auto candidates_it = candidate_entry.find("candidates");
-    if (candidates_it == candidate_entry.end() || !candidates_it->is_array()) {
-        candidate_entry["candidates"] = nlohmann::json::array();
-        changed = true;
-        candidates_it = candidate_entry.find("candidates");
-    }
-
-    for (auto& candidate : *candidates_it) {
-        if (!vibble::spawn_group_codec::is_null_candidate_entry(candidate)) {
-            continue;
-        }
-        const double current_weight = std::max(0.0, vibble::spawn_group_codec::read_candidate_chance(candidate, 0.0));
-        if (std::fabs(current_weight) > 1e-9 || !candidate.contains("chance")) {
-            candidate["chance"] = 0;
-            changed = true;
-        }
-    }
-    return changed;
+    (void)source_context;
+    return vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
 }
 
 struct BoxCornerPickResult {
@@ -8244,9 +8219,11 @@ bool RoomEditor::is_asset_stack_editor_active() const {
 bool RoomEditor::mode_owns_domain(EditorMode mode, OwnershipDomain domain) const {
     switch (mode) {
         case EditorMode::AnchorEdit:
-            return domain == OwnershipDomain::AnchorNonLight;
+            return domain == OwnershipDomain::AnchorNonLight ||
+                   domain == OwnershipDomain::AnchorPointChildCandidates;
         case EditorMode::LightEdit:
-            return domain == OwnershipDomain::AnchorLight;
+            return domain == OwnershipDomain::AnchorLight ||
+                   domain == OwnershipDomain::AnchorPointChildCandidates;
         case EditorMode::OvalAnchorEdit:
             return domain == OwnershipDomain::OvalMappingAndPoints ||
                    domain == OwnershipDomain::AnchorPointChildCandidates;
@@ -12049,15 +12026,9 @@ bool RoomEditor::validate_anchor_candidate_source_context(devmode::CandidateSour
 
     bool valid = false;
     if (anchor_mode_active()) {
-        const bool expected_light = light_mode_active();
-        const bool actual_light = source_context == devmode::CandidateSourceContext::AnchorLight;
-        valid = anchor_context && (expected_light == actual_light);
+        valid = anchor_context;
     } else if (oval_mode_active()) {
-        if (source_context == devmode::CandidateSourceContext::OvalPoint) {
-            valid = oval_context && oval_edit_.selected_point_index >= 0 && !oval_edit_.center_selected;
-        } else if (source_context == devmode::CandidateSourceContext::OvalCenter) {
-            valid = oval_context && oval_edit_.center_selected && oval_edit_.selected_point_index < 0;
-        }
+        valid = oval_context;
     }
 
     if (!valid) {
@@ -12093,7 +12064,7 @@ void RoomEditor::layout_anchor_candidate_editor_popup() {
 
     constexpr int kPopupMargin = devmode::room_devtools_panel_style::kDefaultPanelPopupMargin;
     constexpr int kPanelPadding = 12;
-    constexpr int kPanelHeaderReserve = 88;
+    constexpr int kPanelHeaderReserve = 162;
     const int min_panel_width = 500;
     const int max_panel_width = 620;
     int panel_width = 560;
@@ -12105,10 +12076,10 @@ void RoomEditor::layout_anchor_candidate_editor_popup() {
     const int pie_width = std::max(320, panel_width - (kPanelPadding * 2));
     int panel_height = anchor_candidate_editor_.pie_widget->height_for_width(pie_width) + kPanelHeaderReserve;
     if (panel_height <= 0) {
-        panel_height = 420;
+        panel_height = 500;
     }
     if (screen_h_ > 0) {
-        panel_height = std::clamp(panel_height, 320, std::max(320, screen_h_ - (kPopupMargin * 2)));
+        panel_height = std::clamp(panel_height, 360, std::max(360, screen_h_ - (kPopupMargin * 2)));
     }
 
     int panel_x = kPopupMargin;

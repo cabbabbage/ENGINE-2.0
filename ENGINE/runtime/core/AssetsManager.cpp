@@ -119,7 +119,7 @@ bool startup_runtime_safety_enabled() {
     static const bool enabled = [] {
         const char* raw = SDL_getenv("VIBBLE_STARTUP_RUNTIME_SAFETY");
         if (!raw || !*raw) {
-            return true;
+            return false;
         }
         const std::string value(raw);
         return value == "1" ||
@@ -143,20 +143,48 @@ bool startup_runtime_safety_active(std::uint32_t frame_id) {
 
 std::uint32_t startup_skip_runtime_effects_frames() {
     static const std::uint32_t frames = static_cast<std::uint32_t>(
-        env_int_clamped("VIBBLE_STARTUP_SKIP_RUNTIME_EFFECTS_FRAMES", 24, 0, 1000));
+        env_int_clamped("VIBBLE_STARTUP_SKIP_RUNTIME_EFFECTS_FRAMES", 8, 0, 1000));
     return frames;
 }
 
 std::uint32_t startup_skip_render_frames() {
     static const std::uint32_t frames = static_cast<std::uint32_t>(
-        env_int_clamped("VIBBLE_STARTUP_SKIP_RENDER_FRAMES", 48, 0, 1000));
+        env_int_clamped("VIBBLE_STARTUP_SKIP_RENDER_FRAMES", 0, 0, 1000));
     return frames;
 }
 
 std::uint32_t startup_render_every_n_frames() {
     static const std::uint32_t n = static_cast<std::uint32_t>(
-        env_int_clamped("VIBBLE_STARTUP_RENDER_EVERY_N_FRAMES", 2, 1, 16));
+        env_int_clamped("VIBBLE_STARTUP_RENDER_EVERY_N_FRAMES", 1, 1, 16));
     return n;
+}
+
+std::size_t startup_non_player_update_batch_size() {
+    static const std::size_t batch = static_cast<std::size_t>(
+        env_int_clamped("VIBBLE_STARTUP_NON_PLAYER_UPDATE_BATCH", 96, 8, 50000));
+    return batch;
+}
+
+std::size_t startup_runtime_pass_asset_batch_size() {
+    static const std::size_t batch = static_cast<std::size_t>(
+        env_int_clamped("VIBBLE_STARTUP_RUNTIME_PASS_ASSET_BATCH", 128, 8, 50000));
+    return batch;
+}
+
+std::uint32_t startup_skip_trap_escape_frames() {
+    static const std::uint32_t frames = static_cast<std::uint32_t>(
+        env_int_clamped("VIBBLE_STARTUP_SKIP_TRAP_ESCAPE_FRAMES", 240, 0, 5000));
+    return frames;
+}
+
+std::uint32_t startup_visibility_refresh_interval_frames() {
+    static const std::uint32_t frames = static_cast<std::uint32_t>(
+        env_int_clamped("VIBBLE_STARTUP_VISIBILITY_INTERVAL_FRAMES", 2, 1, 64));
+    return frames;
+}
+
+double startup_stage_warning_ms() {
+    return env_double_clamped("VIBBLE_STARTUP_STAGE_WARN_MS", 250.0, 10.0, 5000.0);
 }
 
 std::size_t runtime_convergence_iteration_cap_for_frame(std::uint32_t frame_id) {
@@ -997,14 +1025,37 @@ Assets::RuntimeConvergencePassResult Assets::run_active_runtime_single_pass(bool
     const float depth_axis_sign = depth_axis_sign_from_forward_z(
         static_cast<float>(projection.forward_z));
 
-    if (asset_matches_focus_filter(player)) {
+    const bool startup_batching = startup_runtime_safety_active(frame_id_);
+    const std::size_t active_total = active_assets.size();
+    std::size_t active_begin = 0;
+    std::size_t active_end = active_total;
+    bool partial_pass = false;
+    if (startup_batching) {
+        const std::size_t batch_size = startup_runtime_pass_asset_batch_size();
+        if (batch_size > 0 && active_total > batch_size) {
+            if (startup_runtime_pass_cursor_ >= active_total) {
+                startup_runtime_pass_cursor_ = 0;
+            }
+            active_begin = startup_runtime_pass_cursor_;
+            active_end = std::min(active_total, active_begin + batch_size);
+            startup_runtime_pass_cursor_ = (active_end >= active_total) ? 0 : active_end;
+            partial_pass = active_end < active_total;
+        } else {
+            startup_runtime_pass_cursor_ = 0;
+        }
+    } else {
+        startup_runtime_pass_cursor_ = 0;
+    }
+
+    if (player && asset_matches_focus_filter(player)) {
         run_active_runtime_single_pass_for_asset(player,
                                                  camera_focus,
                                                  camera_state_version,
                                                  camera_anchor_world_z,
                                                  depth_axis_sign);
     }
-    for (Asset* asset : active_assets) {
+    for (std::size_t i = active_begin; i < active_end; ++i) {
+        Asset* asset = active_assets[i];
         if (asset == player) {
             continue;
         }
@@ -1030,7 +1081,7 @@ Assets::RuntimeConvergencePassResult Assets::run_active_runtime_single_pass(bool
 
     RuntimeConvergencePassResult result{};
     result.any_change = helper_result.any_change;
-    result.needs_repass = helper_result.needs_repass;
+    result.needs_repass = helper_result.needs_repass || partial_pass;
     result.needs_traversal_refresh = helper_result.needs_traversal_refresh;
     result.wave_count = helper_result.wave_count;
     result.children_considered = helper_result.children_considered;
@@ -1121,8 +1172,14 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
 
 
 void Assets::run_camera_trap_escape_pass() {
+    if (startup_runtime_safety_active(frame_id_) &&
+        frame_id_ <= startup_skip_trap_escape_frames()) {
+        return;
+    }
+
     std::unordered_set<Asset*> seen;
     seen.reserve(active_assets.size() + 1);
+    std::size_t processed_assets = 0;
 
     auto process_asset = [&](Asset* asset) {
         if (!asset || asset->dead || !asset->info || !asset->isMovementEnabled()) {
@@ -1134,6 +1191,7 @@ void Assets::run_camera_trap_escape_pass() {
         if (!seen.insert(asset).second) {
             return;
         }
+        ++processed_assets;
 
         const world::GridPoint current = world::GridPoint::make_virtual(
             asset->world_x(),
@@ -1143,9 +1201,12 @@ void Assets::run_camera_trap_escape_pass() {
         const world::GridPoint bottom = animation_update::detail::bottom_middle_for(*asset, current);
 
         std::vector<const FrameCollisionEntry*> entries;
-        const int search_radius = (asset->info && asset->info->NeighborSearchRadius > 0)
+        int search_radius = (asset->info && asset->info->NeighborSearchRadius > 0)
             ? asset->info->NeighborSearchRadius
             : 0;
+        if (startup_runtime_safety_active(frame_id_)) {
+            search_radius = std::min(search_radius, 128);
+        }
         query_impassable_entries(*asset, search_radius, entries);
 
         bool inside_impassable = false;
@@ -1182,7 +1243,13 @@ void Assets::run_camera_trap_escape_pass() {
     };
 
     process_asset(player);
+    const std::size_t startup_cap = startup_runtime_safety_active(frame_id_)
+        ? startup_non_player_update_batch_size()
+        : 0;
     for (Asset* asset : active_assets) {
+        if (startup_cap > 0 && processed_assets >= startup_cap) {
+            break;
+        }
         process_asset(asset);
     }
 }
@@ -1709,8 +1776,27 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     }
 
     rebuild_non_player_update_buffer_if_needed();
+    const bool startup_batching = startup_runtime_safety_active(frame_id_);
+    std::size_t update_begin = 0;
+    std::size_t update_end = non_player_update_buffer_.size();
+    if (startup_batching) {
+        const std::size_t batch_size = startup_non_player_update_batch_size();
+        if (batch_size > 0 && update_end > batch_size) {
+            if (startup_non_player_update_cursor_ >= update_end) {
+                startup_non_player_update_cursor_ = 0;
+            }
+            update_begin = startup_non_player_update_cursor_;
+            update_end = std::min(update_end, update_begin + batch_size);
+            startup_non_player_update_cursor_ = (update_end >= non_player_update_buffer_.size()) ? 0 : update_end;
+        } else {
+            startup_non_player_update_cursor_ = 0;
+        }
+    } else {
+        startup_non_player_update_cursor_ = 0;
+    }
 
-    for (Asset* asset : non_player_update_buffer_) {
+    for (std::size_t index = update_begin; index < update_end; ++index) {
+        Asset* asset = non_player_update_buffer_[index];
         if (!asset) continue;
         if (!should_process_asset(asset)) {
             asset->active = false;
@@ -1791,6 +1877,13 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
 }
 
 void Assets::run_visibility_build_stage() {
+    if (startup_runtime_safety_active(frame_id_) && !pending_initial_rebuild_) {
+        const std::uint32_t interval = startup_visibility_refresh_interval_frames();
+        if (interval > 1 && (frame_id_ % interval) != 0) {
+            return;
+        }
+    }
+
     run_frame_rebuild_stage();
     if (focus_filter_closure_dirty_) {
         rebuild_focus_filter_closure();
@@ -2030,19 +2123,53 @@ void Assets::update(const Input& input)
     if (task_editor_) {
         task_editor_->update();
     }
+
+    auto elapsed_ms = [this](Uint64 begin, Uint64 end) -> double {
+        if (end <= begin || perf_counter_frequency_ <= 0.0) {
+            return 0.0;
+        }
+        return static_cast<double>(end - begin) * 1000.0 / perf_counter_frequency_;
+    };
+    const bool startup_active = startup_runtime_safety_active(frame_id_);
+    const double warn_ms = startup_stage_warning_ms();
+
     bool room_changed = false;
     bool player_moved = false;
+    const Uint64 world_begin = SDL_GetPerformanceCounter();
     run_world_update_stage(input, room_changed, player_moved);
+    const Uint64 world_end = SDL_GetPerformanceCounter();
 
     // Stage: visibility/traversal refresh.
+    const Uint64 visibility_begin = SDL_GetPerformanceCounter();
     run_visibility_build_stage();
+    const Uint64 visibility_end = SDL_GetPerformanceCounter();
 
     // Stage: runtime effects (with optional one-time post-runtime traversal refresh).
+    const Uint64 runtime_begin = SDL_GetPerformanceCounter();
     run_runtime_effects_stage();
+    const Uint64 runtime_end = SDL_GetPerformanceCounter();
 
     // Stage: render + UI refresh.
+    const Uint64 render_begin = SDL_GetPerformanceCounter();
     refresh_filtered_active_assets_if_needed();
     render_runtime_frame();
+    const Uint64 render_end = SDL_GetPerformanceCounter();
+
+    if (startup_active) {
+        const double world_ms = elapsed_ms(world_begin, world_end);
+        const double visibility_ms = elapsed_ms(visibility_begin, visibility_end);
+        const double runtime_ms = elapsed_ms(runtime_begin, runtime_end);
+        const double render_ms = elapsed_ms(render_begin, render_end);
+        if (world_ms >= warn_ms || visibility_ms >= warn_ms ||
+            runtime_ms >= warn_ms || render_ms >= warn_ms) {
+            vibble::log::warn("[Assets] Slow startup frame " + std::to_string(frame_id_) +
+                              "ms world=" + std::to_string(world_ms) +
+                              " visibility=" + std::to_string(visibility_ms) +
+                              " runtime=" + std::to_string(runtime_ms) +
+                              " render=" + std::to_string(render_ms));
+        }
+    }
+
     finalize_dev_frame_state();
 }
 

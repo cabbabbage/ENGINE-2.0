@@ -360,13 +360,15 @@ void MainApp::run_startup_stabilization() {
         const int stable_frames_required = env_int_clamped("VIBBLE_STARTUP_STABLE_FRAMES", 3, 1, 120);
         const int warmup_max_frames = env_int_clamped("VIBBLE_STARTUP_WARMUP_MAX_FRAMES", 180, 1, 2000);
         const int warmup_frame_delay_ms = env_int_clamped("VIBBLE_STARTUP_WARMUP_FRAME_DELAY_MS", 8, 0, 33);
+        const bool warmup_render_enabled = env_flag_enabled("VIBBLE_STARTUP_WARMUP_RENDER", true);
         const bool startup_trace_enabled = env_flag_enabled("VIBBLE_STARTUP_TRACE", false);
 
         vibble::log::info("[MainApp] Startup warmup: max_ms=" +
                           std::to_string(warmup_max_ms) +
                           ", stable_frames=" + std::to_string(stable_frames_required) +
                           ", max_frames=" + std::to_string(warmup_max_frames) +
-                          ", frame_delay_ms=" + std::to_string(warmup_frame_delay_ms));
+                          ", frame_delay_ms=" + std::to_string(warmup_frame_delay_ms) +
+                          ", hidden_render=" + (warmup_render_enabled ? std::string("on") : std::string("off")));
 
         if (warmup_max_ms <= 0) {
                 vibble::log::info("[MainApp] Startup warmup disabled via VIBBLE_STARTUP_WARMUP_MAX_MS=0.");
@@ -385,12 +387,13 @@ void MainApp::run_startup_stabilization() {
                                 assets->set_render_suppressed(false);
                         }
                 }
-        } suppression_guard{game_assets_.get(), true};
+        } suppression_guard{game_assets_.get(), !warmup_render_enabled};
 
-        // Safety first: keep startup warmup lightweight and avoid aggressive renderer churn.
-        game_assets_->set_render_suppressed(true);
+        // Warm scene resources before reveal by default; this keeps first visible gameplay frame from hitching.
+        game_assets_->set_render_suppressed(!warmup_render_enabled);
 
         // One-time startup snap to current center (safe path) without forcing additional grid rebuilds.
+        game_assets_->force_camera_view_refresh();
         {
                 WarpedScreenGrid& view = game_assets_->getView();
                 const SDL_Point snap_target = view.get_screen_center();
@@ -451,11 +454,20 @@ void MainApp::run_startup_stabilization() {
                         WarpedScreenGrid::CameraTransitionState::BlendingToNewRoom;
                 const bool pending_initial_rebuild = game_assets_->has_pending_initial_rebuild();
                 const bool camera_animating = view.is_height_animating();
+                const std::optional<SDL_Point> postprocess_target_size =
+                        game_assets_->scene_postprocess_target_size();
+                const bool target_ready =
+                        !renderer ||
+                        !warmup_render_enabled ||
+                        (postprocess_target_size &&
+                         postprocess_target_size->x == screen_w_ &&
+                         postprocess_target_size->y == screen_h_);
                 const bool frame_ready =
                         convergence_ready &&
                         !camera_blending &&
                         !pending_initial_rebuild &&
-                        !camera_animating;
+                        !camera_animating &&
+                        target_ready;
 
                 if (frame_ready) {
                         ++stable_frame_streak;
@@ -471,7 +483,13 @@ void MainApp::run_startup_stabilization() {
                               << " camera_animating=" << (camera_animating ? "1" : "0")
                               << " camera_blending=" << (camera_blending ? "1" : "0")
                               << " pending_initial_rebuild=" << (pending_initial_rebuild ? "1" : "0")
+                              << " target_ready=" << (target_ready ? "1" : "0")
                               << " output=" << screen_w_ << "x" << screen_h_;
+                        if (postprocess_target_size) {
+                                trace << " target=" << postprocess_target_size->x << "x" << postprocess_target_size->y;
+                        } else {
+                                trace << " target=none";
+                        }
                         vibble::log::debug(trace.str());
                 }
 

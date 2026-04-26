@@ -451,6 +451,8 @@ private:
     std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
     std::uint32_t non_player_update_visit_epoch_ = 0;
+    std::size_t startup_non_player_update_cursor_ = 0;
+    std::size_t startup_runtime_pass_cursor_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
     std::uint32_t last_runtime_convergence_warning_frame_id_ = std::numeric_limits<std::uint32_t>::max();

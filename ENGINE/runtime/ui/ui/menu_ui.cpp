@@ -139,7 +139,22 @@ void MenuUI::game_loop() {
 
                 const bool should_update = !menu_active_ && game_assets_ && input_;
                 if (should_update) {
+                        const Uint64 update_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
+                        const Uint64 update_end = SDL_GetPerformanceCounter();
+                        const double update_ms =
+                                (update_end > update_begin && perf_frequency > 0.0)
+                                        ? (static_cast<double>(update_end - update_begin) * 1000.0 / perf_frequency)
+                                        : 0.0;
+                        if (update_ms >= 250.0) {
+                                static Uint64 last_update_warn_ticks = 0;
+                                const Uint64 now_ticks = SDL_GetTicks();
+                                if (last_update_warn_ticks == 0 || (now_ticks - last_update_warn_ticks) >= 1000) {
+                                        last_update_warn_ticks = now_ticks;
+                                        vibble::log::warn("[MenuUI] Slow gameplay update frame: " +
+                                                          std::to_string(update_ms) + "ms");
+                                }
+                        }
                 }
                 log_render_diagnostics(renderer, "MenuUI");
 

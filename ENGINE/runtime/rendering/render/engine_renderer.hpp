@@ -10,9 +10,8 @@
 #include "rendering/render/gpu_format_policy.hpp"
 
 /**
- * Engine-owned renderer wrapper that selects the best SDL3 backend once at startup.
- * It always exposes the same API surface regardless of whether the underlying
- * implementation is GPU, accelerated 2D, or software.
+ * Engine-owned renderer wrapper that selects a GPU SDL3 backend once at startup.
+ * Startup fails when a compatible GPU backend cannot be created.
  */
 enum class RenderBackendType {
     GPU,

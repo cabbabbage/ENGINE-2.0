@@ -213,11 +213,11 @@
           "candidates": {
             "candidates": [
               {
-                "chance": 5,
+                "chance": 2,
                 "name": "#small_surface_top"
               },
               {
-                "chance": 0,
+                "chance": 11,
                 "name": "null"
               }
             ]
@@ -229,8 +229,12 @@
           "candidates": {
             "candidates": [
               {
-                "chance": 0,
+                "chance": 94,
                 "name": "null"
+              },
+              {
+                "chance": 23,
+                "name": "#small_surface_top"
               }
             ]
           },
@@ -242,7 +246,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.10000000149011612,
+                "depth_offset": -0.20000000298023224,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -254,7 +258,7 @@
                 "texture_y": 24
               },
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.20000000298023224,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -23478,9 +23482,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            124,
             242,
             36,
+            125,
             255
           ],
           "edge_smoothness": 2,
@@ -23881,9 +23885,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            242,
+            242,
+            61,
             255
           ],
           "edge_smoothness": 101,
@@ -24115,96 +24119,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "bone"
-                }
-              ],
-              "display_name": "bone",
-              "dx": -1445,
-              "dz": 13,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 4,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-30380bbb81dd"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "booze_2"
-                }
-              ],
-              "display_name": "booze_2",
-              "dx": -1445,
-              "dz": 13,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 8,
-              "quantity": 1,
-              "resolution": 4,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-16d2f189c825"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "mushroom_1"
-                }
-              ],
-              "display_name": "mushroom_1",
-              "dx": -1445,
-              "dz": 13,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 9,
-              "quantity": 1,
-              "resolution": 4,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-caabc9151c6e"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "mushroom"
                 }
               ],
@@ -24220,7 +24134,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 10,
+              "priority": 7,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -24250,7 +24164,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 11,
+              "priority": 8,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -24280,7 +24194,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 12,
+              "priority": 9,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,

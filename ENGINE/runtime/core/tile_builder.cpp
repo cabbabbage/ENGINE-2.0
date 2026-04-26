@@ -11,6 +11,7 @@
 #include <SDL3/SDL.h>
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "utils/map_grid_settings.hpp"
@@ -26,10 +27,120 @@ struct ChunkTileAsset {
     Asset*       asset        = nullptr;
     SDL_Rect     sprite_world{0, 0, 0, 0};
     SDL_Texture* texture      = nullptr;
+    SDL_Rect     source_rect{0, 0, 0, 0};
     int          texture_w    = 0;
     int          texture_h    = 0;
     bool         flipped      = false;
 };
+
+struct ResolvedFrameData {
+    SDL_Texture* texture = nullptr;
+    SDL_Rect     source_rect{0, 0, 0, 0};
+    int          frame_w = 0;
+    int          frame_h = 0;
+    int          texture_w = 0;
+    int          texture_h = 0;
+};
+
+static SDL_Rect clamp_to_texture_bounds(SDL_Rect rect, int texture_w, int texture_h) {
+    SDL_Rect invalid{0, 0, 0, 0};
+    if (texture_w <= 0 || texture_h <= 0 || rect.w <= 0 || rect.h <= 0) {
+        return invalid;
+    }
+
+    const int x0 = std::clamp(rect.x, 0, texture_w - 1);
+    const int y0 = std::clamp(rect.y, 0, texture_h - 1);
+    const int x1 = std::clamp(rect.x + rect.w, x0 + 1, texture_w);
+    const int y1 = std::clamp(rect.y + rect.h, y0 + 1, texture_h);
+
+    SDL_Rect out{};
+    out.x = x0;
+    out.y = y0;
+    out.w = std::max(1, x1 - x0);
+    out.h = std::max(1, y1 - y0);
+    return out;
+}
+
+static bool resolve_current_frame_data(const Asset* asset, ResolvedFrameData& out) {
+    out = ResolvedFrameData{};
+    if (!asset) {
+        return false;
+    }
+
+    const FrameVariant* selected_variant = nullptr;
+    SDL_Texture* texture = nullptr;
+    if (const AnimationFrame* frame = asset->current_animation_frame()) {
+        if (!frame->variants.empty()) {
+            const int variant_idx = std::clamp(asset->current_variant_index, 0, static_cast<int>(frame->variants.size()) - 1);
+            selected_variant = &frame->variants[static_cast<std::size_t>(variant_idx)];
+            texture = selected_variant->get_base_texture();
+        }
+    }
+    if (!texture) {
+        texture = asset->get_current_frame();
+    }
+    if (!texture) {
+        return false;
+    }
+
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+        return false;
+    }
+
+    const int tex_w = static_cast<int>(std::lround(tex_wf));
+    const int tex_h = static_cast<int>(std::lround(tex_hf));
+    if (tex_w <= 0 || tex_h <= 0) {
+        return false;
+    }
+
+    SDL_Rect source_rect{0, 0, tex_w, tex_h};
+    if (selected_variant && selected_variant->source_rect.w > 0 && selected_variant->source_rect.h > 0) {
+        source_rect = clamp_to_texture_bounds(selected_variant->source_rect, tex_w, tex_h);
+    }
+
+    out.texture = texture;
+    out.source_rect = source_rect;
+    out.frame_w = source_rect.w;
+    out.frame_h = source_rect.h;
+    out.texture_w = tex_w;
+    out.texture_h = tex_h;
+    return out.frame_w > 0 && out.frame_h > 0;
+}
+
+static SDL_Point resolve_asset_dimensions(const Asset* asset) {
+    if (!asset) {
+        return SDL_Point{1, 1};
+    }
+
+    ResolvedFrameData frame_data{};
+    if (resolve_current_frame_data(asset, frame_data)) {
+        return SDL_Point{std::max(1, frame_data.frame_w), std::max(1, frame_data.frame_h)};
+    }
+
+    int width = asset->width();
+    int height = asset->height();
+
+    if ((width <= 0 || height <= 0) && asset->info) {
+        width = std::max(width, asset->info->original_canvas_width);
+        height = std::max(height, asset->info->original_canvas_height);
+    }
+
+    if (width <= 0 || height <= 0) {
+        SDL_Texture* texture = asset->get_current_frame();
+        if (texture) {
+            float tex_wf = 0.0f;
+            float tex_hf = 0.0f;
+            if (SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+                width = static_cast<int>(std::lround(tex_wf));
+                height = static_cast<int>(std::lround(tex_hf));
+            }
+        }
+    }
+
+    return SDL_Point{std::max(1, width), std::max(1, height)};
+}
 
 static int floor_div_int(int value, int step) {
     if (step == 0) {
@@ -72,8 +183,9 @@ static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* as
 
     int step = tile_step_from_settings(grid_settings);
     if (step <= 0) {
-        const int raw_w = std::max(1, asset->info->original_canvas_width);
-        const int raw_h = std::max(1, asset->info->original_canvas_height);
+        const SDL_Point sprite_dims = resolve_asset_dimensions(asset);
+        const int raw_w = sprite_dims.x;
+        const int raw_h = sprite_dims.y;
         double scale = 1.0;
         if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
             scale = static_cast<double>(asset->info->scale_factor);
@@ -83,8 +195,9 @@ static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* as
     step = std::max(1, step);
 
     const SDL_Point world_pos{ asset->world_x(), asset->world_z() };
-    const int base_w = std::max(1, asset->info->original_canvas_width);
-    const int base_h = std::max(1, asset->info->original_canvas_height);
+    const SDL_Point sprite_dims = resolve_asset_dimensions(asset);
+    const int base_w = sprite_dims.x;
+    const int base_h = sprite_dims.y;
     double scale = 1.0;
     if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
         scale = static_cast<double>(asset->info->scale_factor);
@@ -130,8 +243,9 @@ static std::optional<SDL_Rect> compute_sprite_world_rect(const Asset* asset) {
         return std::nullopt;
     }
 
-    const int base_w = std::max(1, asset->info->original_canvas_width);
-    const int base_h = std::max(1, asset->info->original_canvas_height);
+    const SDL_Point sprite_dims = resolve_asset_dimensions(asset);
+    const int base_w = sprite_dims.x;
+    const int base_h = sprite_dims.y;
     double scale     = 1.0;
     if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
         scale = static_cast<double>(asset->info->scale_factor);
@@ -150,8 +264,15 @@ static std::optional<SDL_Rect> compute_sprite_world_rect(const Asset* asset) {
 
 static SDL_Rect compute_source_rect(const ChunkTileAsset& ctx, const SDL_Rect& sprite_overlap) {
     SDL_Rect invalid{0, 0, 0, 0};
-    if (!ctx.texture || ctx.texture_w <= 0 || ctx.texture_h <= 0 || sprite_overlap.w <= 0 || sprite_overlap.h <= 0 ||
-        ctx.sprite_world.w <= 0 || ctx.sprite_world.h <= 0) {
+    if (!ctx.texture ||
+        ctx.texture_w <= 0 ||
+        ctx.texture_h <= 0 ||
+        ctx.source_rect.w <= 0 ||
+        ctx.source_rect.h <= 0 ||
+        sprite_overlap.w <= 0 ||
+        sprite_overlap.h <= 0 ||
+        ctx.sprite_world.w <= 0 ||
+        ctx.sprite_world.h <= 0) {
         return invalid;
     }
 
@@ -175,20 +296,25 @@ static SDL_Rect compute_source_rect(const ChunkTileAsset& ctx, const SDL_Rect& s
         end_u   = flipped_end;
     }
 
-    const double tex_start_x = start_u * static_cast<double>(ctx.texture_w);
-    const double tex_end_x   = end_u * static_cast<double>(ctx.texture_w);
-    const double tex_start_y = start_v * static_cast<double>(ctx.texture_h);
-    const double tex_end_y   = end_v * static_cast<double>(ctx.texture_h);
+    const int src_left = ctx.source_rect.x;
+    const int src_top = ctx.source_rect.y;
+    const int src_right = ctx.source_rect.x + ctx.source_rect.w;
+    const int src_bottom = ctx.source_rect.y + ctx.source_rect.h;
+
+    const double tex_start_x = static_cast<double>(src_left) + start_u * static_cast<double>(ctx.source_rect.w);
+    const double tex_end_x   = static_cast<double>(src_left) + end_u * static_cast<double>(ctx.source_rect.w);
+    const double tex_start_y = static_cast<double>(src_top) + start_v * static_cast<double>(ctx.source_rect.h);
+    const double tex_end_y   = static_cast<double>(src_top) + end_v * static_cast<double>(ctx.source_rect.h);
 
     int sx  = static_cast<int>(std::floor(tex_start_x));
     int sy  = static_cast<int>(std::floor(tex_start_y));
     int sx2 = static_cast<int>(std::ceil(tex_end_x));
     int sy2 = static_cast<int>(std::ceil(tex_end_y));
 
-    sx  = std::clamp(sx, 0, std::max(0, ctx.texture_w - 1));
-    sy  = std::clamp(sy, 0, std::max(0, ctx.texture_h - 1));
-    sx2 = std::min(std::max(sx + 1, sx2), ctx.texture_w);
-    sy2 = std::min(std::max(sy + 1, sy2), ctx.texture_h);
+    sx  = std::clamp(sx, src_left, std::max(src_left, src_right - 1));
+    sy  = std::clamp(sy, src_top, std::max(src_top, src_bottom - 1));
+    sx2 = std::min(std::max(sx + 1, sx2), src_right);
+    sy2 = std::min(std::max(sy + 1, sy2), src_bottom);
 
     SDL_Rect src{};
     src.x = sx;
@@ -226,26 +352,18 @@ void build_grid_tiles(SDL_Renderer* renderer,
         auto sprite_world = compute_sprite_world_rect(a);
         if (!sprite_world) continue;
 
-        SDL_Texture* texture = a->get_current_frame();
-        if (!texture) continue;
-
-        float tex_wf = 0.0f;
-        float tex_hf = 0.0f;
-        if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
-            continue;
-        }
-        const int tex_w = static_cast<int>(std::lround(tex_wf));
-        const int tex_h = static_cast<int>(std::lround(tex_hf));
-        if (tex_w <= 0 || tex_h <= 0) {
+        ResolvedFrameData frame_data{};
+        if (!resolve_current_frame_data(a, frame_data)) {
             continue;
         }
 
         ChunkTileAsset ctx{};
         ctx.asset        = a;
         ctx.sprite_world = *sprite_world;
-        ctx.texture      = texture;
-        ctx.texture_w    = tex_w;
-        ctx.texture_h    = tex_h;
+        ctx.texture      = frame_data.texture;
+        ctx.source_rect  = frame_data.source_rect;
+        ctx.texture_w    = frame_data.texture_w;
+        ctx.texture_h    = frame_data.texture_h;
         ctx.flipped      = a->flipped;
 
         asset_contexts.push_back(ctx);
@@ -361,6 +479,5 @@ void build_grid_tiles(SDL_Renderer* renderer,
 }
 
 }
-
 
 

@@ -411,8 +411,12 @@
           "candidates": {
             "candidates": [
               {
-                "chance": 0,
+                "chance": 95,
                 "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#small_surface_top"
               }
             ]
           },
@@ -13238,73 +13242,92 @@
           "anchor_point_name": "anchor_1",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_13",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_14",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_15",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_16",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_17",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_18",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_19",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_20",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_21",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_22",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_23",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_23_copy",
+          "candidates": {
+            "candidates": []
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -13908,6 +13931,32 @@
                 "scaling_method": "parent",
                 "texture_x": 831,
                 "texture_y": 398
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": false,
+                  "color": [
+                    255,
+                    23,
+                    19
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 0.33000001311302185,
+                  "opacity": 0.0,
+                  "radius": 319.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_23_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "real_3d_point",
+                "texture_x": 468,
+                "texture_y": 378
               }
             ]
           ],
@@ -13944,6 +13993,7 @@
       "asset_directory": "resources/assets/casino",
       "asset_name": "casino",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -19326,13 +19376,15 @@
                 "name": "vibble_eyes"
               }
             ]
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "eyes_oval_center",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "melee",
@@ -19343,25 +19395,29 @@
                 "name": "vibble_attack_1"
               }
             ]
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "melee_oval_center",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "neck",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "neck_oval_center",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -22440,6 +22496,7 @@
       "asset_name": "vibble",
       "asset_type": "player",
       "attack_box_enabled": true,
+      "bounce_amount": 0,
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
       "impassable_enabled": false,
@@ -22448,7 +22505,7 @@
       "oval_anchor_mappings": [
         {
           "asset_name": "vibble",
-          "height_radius_z": 10.0,
+          "height_radius_z": 2.0,
           "legacy_names": [],
           "name": "eyes",
           "points": [
@@ -22474,7 +22531,7 @@
               "scaling_method": "parent",
               "tags": [],
               "texture_x": 0,
-              "texture_y": 10
+              "texture_y": 2
             },
             {
               "angle_degrees": 180.0,
@@ -22498,7 +22555,7 @@
               "scaling_method": "parent",
               "tags": [],
               "texture_x": 0,
-              "texture_y": -10
+              "texture_y": -2
             }
           ],
           "radius_offset_degrees": 0.0,
@@ -23437,7 +23494,7 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 2692,
         "camera_height_min_px": 25,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 129.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.019999999552965164,
         "front_layer_light_strength_multiplier": 1.0,
@@ -23613,7 +23670,7 @@
           "display_color": [
             242,
             36,
-            125,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -24007,16 +24064,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1216,
-          "camera_center_dz": -497,
+          "camera_center_dx": -918,
+          "camera_center_dz": -891,
           "camera_height_px": 499,
           "camera_tilt_deg": 50.791439056396484,
-          "camera_zoom_percent": 0,
+          "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
             242,
-            242,
-            61,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 101,

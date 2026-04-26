@@ -134,23 +134,26 @@ void RoomBoxToolsPanel::set_box_names(const std::vector<std::string>& names) {
         box_buttons_.push_back(std::make_unique<DMButton>(name, &DMStyles::ListButton(), 220, DMButton::height()));
     }
     if (selected_box_index_ < 0 || selected_box_index_ >= static_cast<int>(box_names_.size())) {
-        selected_box_index_ = box_names_.empty() ? -1 : 0;
+        selected_box_index_ = -1;
+        selected_corner_index_ = -1;
     }
     layout_dirty_ = true;
 }
 
 void RoomBoxToolsPanel::set_selection(int box_index, int corner_index) {
-    const int bounded_corner = std::clamp(corner_index, 0, 3);
-    if (selected_box_index_ == box_index && selected_corner_index_ == bounded_corner) {
+    const int bounded_box =
+        (box_index >= 0 && box_index < static_cast<int>(box_names_.size())) ? box_index : -1;
+    const int bounded_corner = (bounded_box >= 0) ? std::clamp(corner_index, 0, 3) : -1;
+    if (selected_box_index_ == bounded_box && selected_corner_index_ == bounded_corner) {
         return;
     }
-    selected_box_index_ = box_index;
+    selected_box_index_ = bounded_box;
     selected_corner_index_ = bounded_corner;
     layout_dirty_ = true;
 }
 
 void RoomBoxToolsPanel::clear_selection() {
-    set_selection(-1, 0);
+    set_selection(-1, -1);
 }
 
 void RoomBoxToolsPanel::set_name_text(const std::string& value) {
@@ -339,7 +342,7 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    if (delete_button_ && delete_button_->handle_event(event)) {
+    if (has_selected_box && delete_button_ && delete_button_->handle_event(event)) {
         handled = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
             event.button.button == SDL_BUTTON_LEFT &&
@@ -494,14 +497,14 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
         SDL_SetRenderClipRect(renderer, nullptr);
     }
 
+    const bool has_selected_box = selected_box_index_ >= 0 &&
+                                  selected_box_index_ < static_cast<int>(box_names_.size());
     if (add_button_) {
         add_button_->render(renderer);
     }
-    if (delete_button_) {
+    if (has_selected_box && delete_button_) {
         delete_button_->render(renderer);
     }
-    const bool has_selected_box = selected_box_index_ >= 0 &&
-                                  selected_box_index_ < static_cast<int>(box_names_.size());
     if (has_selected_box) {
         const std::string detail_label = (kind_ == Kind::ImpassableBox) ? "Shape Properties" : "Box Properties";
         DMFontCache::instance().draw_text(renderer, label_style, detail_label, detail_title_rect_.x, detail_title_rect_.y);
@@ -638,8 +641,10 @@ void RoomBoxToolsPanel::update_layout() const {
     int controls_height = 0;
     controls_height += DMButton::height();                               // add
     controls_height += kSectionGap;
-    controls_height += DMButton::height();                               // delete
-    controls_height += kSectionGap;
+    if (has_selected_box) {
+        controls_height += DMButton::height();                           // delete
+        controls_height += kSectionGap;
+    }
     if (has_selected_box) {
         controls_height += kSectionGap;
         controls_height += kLineHeight;                                  // details title
@@ -685,10 +690,12 @@ void RoomBoxToolsPanel::update_layout() const {
         add_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
     }
     y += DMButton::height() + kSectionGap;
-    if (delete_button_) {
+    if (has_selected_box && delete_button_) {
         delete_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+        y += DMButton::height() + kSectionGap;
+    } else if (delete_button_) {
+        delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
-    y += DMButton::height() + kSectionGap;
     y += kSectionGap;
 
     if (has_selected_box) {
@@ -816,3 +823,22 @@ bool RoomBoxToolsPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {
     SDL_Point point{x, y};
     return SDL_PointInRect(&point, &rect);
 }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+bool RoomBoxToolsPanelTestAccess::delete_button_visible(RoomBoxToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return false;
+    }
+    const SDL_Rect rect = panel.delete_button_->rect();
+    return rect.w > 0 && rect.h > 0;
+}
+
+SDL_Rect RoomBoxToolsPanelTestAccess::delete_button_rect(RoomBoxToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return SDL_Rect{0, 0, 0, 0};
+    }
+    return panel.delete_button_->rect();
+}
+#endif

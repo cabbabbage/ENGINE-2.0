@@ -192,10 +192,17 @@ std::string format_color_channel(int value) {
 }
 
 void RoomAnchorToolsPanel::set_selected_anchor(const std::string& name) {
-    if (selected_anchor_name_ == name) {
+    std::string normalized = name;
+    if (!normalized.empty()) {
+        const bool exists = std::find(anchor_names_.begin(), anchor_names_.end(), normalized) != anchor_names_.end();
+        if (!exists) {
+            normalized.clear();
+        }
+    }
+    if (selected_anchor_name_ == normalized) {
         return;
     }
-    selected_anchor_name_ = name;
+    selected_anchor_name_ = std::move(normalized);
     if (!rename_textbox_->is_editing()) {
         rename_textbox_->set_value(selected_anchor_name_);
     }
@@ -543,7 +550,7 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
     }
 
-    if (!handled && delete_button_ && delete_button_->handle_event(event)) {
+    if (!handled && has_selected_anchor && delete_button_ && delete_button_->handle_event(event)) {
         handled = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
             event.button.button == SDL_BUTTON_LEFT &&
@@ -756,7 +763,7 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
             }
         }
     }
-    if (delete_button_) {
+    if (has_selected_anchor && delete_button_) {
         delete_button_->render(renderer);
     }
     if (apply_next_frame_button_) {
@@ -879,8 +886,10 @@ void RoomAnchorToolsPanel::update_layout() const {
         }
         controls_height += kSectionGap;
     }
-    controls_height += DMButton::height();                          // delete
-    controls_height += kSectionGap;
+    if (has_selected_anchor) {
+        controls_height += DMButton::height();                      // delete
+        controls_height += kSectionGap;
+    }
     controls_height += DMButton::height();                          // copy next
     controls_height += row_gap;
     controls_height += DMButton::height();                          // copy animation
@@ -1115,11 +1124,16 @@ void RoomAnchorToolsPanel::update_layout() const {
         }
     }
 
-    if (delete_button_) {
+    if (has_selected_anchor && delete_button_) {
         delete_button_->set_rect(SDL_Rect{controls_x, row_y, controls_width, DMButton::height()});
+    } else if (delete_button_) {
+        delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
 
-    int copy_y = row_y + DMButton::height() + kSectionGap;
+    int copy_y = row_y;
+    if (has_selected_anchor) {
+        copy_y += DMButton::height() + kSectionGap;
+    }
     if (apply_next_frame_button_) {
         apply_next_frame_button_->set_rect(SDL_Rect{controls_x, copy_y, controls_width, DMButton::height()});
     }
@@ -1173,3 +1187,22 @@ bool RoomAnchorToolsPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {
     SDL_Point point{x, y};
     return SDL_PointInRect(&point, &rect);
 }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+bool RoomAnchorToolsPanelTestAccess::delete_button_visible(RoomAnchorToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return false;
+    }
+    const SDL_Rect rect = panel.delete_button_->rect();
+    return rect.w > 0 && rect.h > 0;
+}
+
+SDL_Rect RoomAnchorToolsPanelTestAccess::delete_button_rect(RoomAnchorToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return SDL_Rect{0, 0, 0, 0};
+    }
+    return panel.delete_button_->rect();
+}
+#endif

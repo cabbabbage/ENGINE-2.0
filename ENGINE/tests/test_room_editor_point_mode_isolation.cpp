@@ -8,8 +8,11 @@
 #include "assets/asset/animation.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
+#include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_payload_utils.hpp"
+#include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_editor.hpp"
+#include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
 #include "room_editor_payload_contract_test_helper.hpp"
 
@@ -58,6 +61,23 @@ void check_unchanged_key_bytes(const nlohmann::json& before,
         REQUIRE(after_it != snapshot_after.end());
         CHECK(before_it->second == after_it->second);
     }
+}
+
+template <typename TPanel>
+void dispatch_left_click(TPanel& panel, int x, int y) {
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = x;
+    down.button.y = y;
+    panel.handle_event(down);
+
+    SDL_Event up{};
+    up.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    up.button.button = SDL_BUTTON_LEFT;
+    up.button.x = x;
+    up.button.y = y;
+    panel.handle_event(up);
 }
 
 }  // namespace
@@ -368,6 +388,36 @@ TEST_CASE("RoomEditor delete confirmation blocks stale selection at confirmation
     CHECK(apply_calls == 0);
 }
 
+TEST_CASE("RoomEditor delete confirmation remains valid when transient UI selection drifts") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_with_transient_ui_drift(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        true,
+        1,
+        apply_calls);
+    CHECK(result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete confirmation blocks when snapshot target no longer exists") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_with_transient_ui_drift(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        false,
+        1,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
 TEST_CASE("RoomEditor delete confirmation dont-ask-again is session scoped per mode") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 2);
@@ -402,6 +452,111 @@ TEST_CASE("RoomEditor delete persistence is configured for immediate flush") {
     CHECK(RoomEditorTestAccess::delete_persist_priority_for_tests() ==
           static_cast<int>(devmode::core::DevSaveCoordinator::Priority::Immediate));
     CHECK(RoomEditorTestAccess::delete_persist_flush_now_for_tests());
+}
+
+TEST_CASE("RoomEditor delete shortcut routes to stack-mode delete path in stack editor mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_delete_shortcut_route_counters(editor);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_hitbox());
+
+    RoomEditorTestAccess::invoke_delete_shortcut(editor, true, false);
+
+    CHECK(RoomEditorTestAccess::delete_shortcut_stack_dispatch_count(editor) == 1);
+    CHECK(RoomEditorTestAccess::delete_shortcut_asset_delete_count(editor) == 0);
+}
+
+TEST_CASE("RoomEditor delete shortcut routes to asset delete path in normal mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_delete_shortcut_route_counters(editor);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_normal());
+
+    RoomEditorTestAccess::invoke_delete_shortcut(editor, true, false);
+
+    CHECK(RoomEditorTestAccess::delete_shortcut_stack_dispatch_count(editor) == 0);
+    CHECK(RoomEditorTestAccess::delete_shortcut_asset_delete_count(editor) == 1);
+}
+
+TEST_CASE("RoomBoxToolsPanel delete button is selection-gated and stale click safe") {
+    RoomBoxToolsPanel panel(RoomBoxToolsPanel::Kind::HitBox);
+    panel.set_visible(true);
+    panel.set_screen_dimensions(1280, 720);
+    panel.set_system_enabled(true);
+    panel.set_box_names({"Box A", "Box B"});
+
+    CHECK_FALSE(RoomBoxToolsPanelTestAccess::delete_button_visible(panel));
+
+    panel.set_selection(0, 0);
+    REQUIRE(RoomBoxToolsPanelTestAccess::delete_button_visible(panel));
+    const SDL_Rect stale_delete_rect = RoomBoxToolsPanelTestAccess::delete_button_rect(panel);
+
+    int delete_calls = 0;
+    panel.set_on_delete([&delete_calls]() { ++delete_calls; });
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+
+    panel.clear_selection();
+    CHECK_FALSE(RoomBoxToolsPanelTestAccess::delete_button_visible(panel));
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+}
+
+TEST_CASE("RoomFloorBoxToolsPanel delete button is selection-gated and stale click safe") {
+    RoomFloorBoxToolsPanel panel;
+    panel.set_visible(true);
+    panel.set_screen_dimensions(1280, 720);
+    panel.set_system_enabled(true);
+    panel.set_floor_box_names({"Floor A"});
+
+    CHECK_FALSE(RoomFloorBoxToolsPanelTestAccess::delete_button_visible(panel));
+
+    panel.set_selection(0);
+    REQUIRE(RoomFloorBoxToolsPanelTestAccess::delete_button_visible(panel));
+    const SDL_Rect stale_delete_rect = RoomFloorBoxToolsPanelTestAccess::delete_button_rect(panel);
+
+    int delete_calls = 0;
+    panel.set_on_delete([&delete_calls]() { ++delete_calls; });
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+
+    panel.clear_selection();
+    CHECK_FALSE(RoomFloorBoxToolsPanelTestAccess::delete_button_visible(panel));
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+}
+
+TEST_CASE("RoomAnchorToolsPanel delete button is selection-gated and stale click safe") {
+    RoomAnchorToolsPanel panel;
+    panel.set_visible(true);
+    panel.set_screen_dimensions(1280, 720);
+    panel.set_anchor_names({"Anchor A"});
+
+    CHECK_FALSE(RoomAnchorToolsPanelTestAccess::delete_button_visible(panel));
+
+    panel.set_selected_anchor("Anchor A");
+    REQUIRE(RoomAnchorToolsPanelTestAccess::delete_button_visible(panel));
+    const SDL_Rect stale_delete_rect = RoomAnchorToolsPanelTestAccess::delete_button_rect(panel);
+
+    int delete_calls = 0;
+    panel.set_on_delete([&delete_calls]() { ++delete_calls; });
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+
+    panel.set_selected_anchor("");
+    CHECK_FALSE(RoomAnchorToolsPanelTestAccess::delete_button_visible(panel));
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
 }
 
 TEST_CASE("RoomEditor queues re-entrant subview requests while transition is in progress") {

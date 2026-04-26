@@ -135,4 +135,15 @@ private:
     DeleteCallback on_delete_;
     ApplyCallback on_apply_;
     SystemEnabledToggleCallback on_system_enabled_toggle_;
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    friend struct RoomFloorBoxToolsPanelTestAccess;
+#endif
 };
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+struct RoomFloorBoxToolsPanelTestAccess {
+    static bool delete_button_visible(RoomFloorBoxToolsPanel& panel);
+    static SDL_Rect delete_button_rect(RoomFloorBoxToolsPanel& panel);
+};
+#endif

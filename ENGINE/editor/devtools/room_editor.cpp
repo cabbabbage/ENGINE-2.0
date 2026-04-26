@@ -640,6 +640,50 @@ std::string make_unique_floor_box_name(const std::vector<AssetInfo::FloorBox>& b
     return candidate;
 }
 
+template <typename TItem>
+int find_index_by_id_name_index(const std::vector<TItem>& items,
+                                const std::string& id,
+                                const std::string& name,
+                                int index_fallback) {
+    if (!id.empty()) {
+        const auto id_it = std::find_if(items.begin(), items.end(), [&](const TItem& item) {
+            return item.id == id;
+        });
+        if (id_it != items.end()) {
+            return static_cast<int>(std::distance(items.begin(), id_it));
+        }
+    }
+    if (!name.empty()) {
+        const auto name_it = std::find_if(items.begin(), items.end(), [&](const TItem& item) {
+            return item.name == name;
+        });
+        if (name_it != items.end()) {
+            return static_cast<int>(std::distance(items.begin(), name_it));
+        }
+    }
+    if (index_fallback >= 0 && index_fallback < static_cast<int>(items.size())) {
+        return index_fallback;
+    }
+    return -1;
+}
+
+int find_index_by_name_index(const std::vector<AssetInfo::OvalAnchorMapping>& mappings,
+                             const std::string& name,
+                             int index_fallback) {
+    if (!name.empty()) {
+        const auto name_it = std::find_if(mappings.begin(), mappings.end(), [&](const AssetInfo::OvalAnchorMapping& mapping) {
+            return mapping.name == name;
+        });
+        if (name_it != mappings.end()) {
+            return static_cast<int>(std::distance(mappings.begin(), name_it));
+        }
+    }
+    if (index_fallback >= 0 && index_fallback < static_cast<int>(mappings.size())) {
+        return index_fallback;
+    }
+    return -1;
+}
+
 std::string normalize_floor_box_tag(std::string raw_tag) {
     std::string normalized = vibble::strings::to_lower_copy(vibble::strings::trim_copy(raw_tag));
     if (normalized.empty()) {
@@ -8691,11 +8735,6 @@ void RoomEditor::sync_floor_box_tools_panel() {
     floor_box_tools_panel_->set_floor_box_names(names);
     int selected_box = floor_box_edit_.selected_box_index;
     if (selected_box >= static_cast<int>(names.size())) {
-        selected_box = static_cast<int>(names.size()) - 1;
-    }
-    if (selected_box < 0 && !names.empty()) {
-        selected_box = 0;
-    } else if (selected_box < 0) {
         selected_box = -1;
     }
     floor_box_edit_.selected_box_index = selected_box;
@@ -8777,6 +8816,8 @@ void RoomEditor::sync_hitbox_tools_panel() {
     }
     if (selected_box < 0) {
         selected_box = -1;
+        hitbox_edit_.selected_corner_index = -1;
+        hitbox_edit_.selected_point_index = -1;
         hitbox_edit_.point_selected = false;
         hitbox_edit_.dragging_corner = false;
         hitbox_edit_.dragging_box = false;
@@ -8784,12 +8825,13 @@ void RoomEditor::sync_hitbox_tools_panel() {
         hitbox_edit_.hovered_rotation_handle = false;
         clear_box_extrusion_drag_state(hitbox_edit_);
         clear_box_extrusion_hover_state(hitbox_edit_);
+    } else {
+        hitbox_edit_.selected_corner_index = clamp_box_corner_index(hitbox_edit_.selected_corner_index);
+        const int selected_side = (hitbox_edit_.selected_point_index >= 4) ? 4 : 0;
+        const int selected_runtime_corner = runtime_corner_from_editor_corner(hitbox_edit_.selected_corner_index);
+        hitbox_edit_.selected_point_index = selected_side + selected_runtime_corner;
     }
     hitbox_edit_.selected_box_index = selected_box;
-    hitbox_edit_.selected_corner_index = clamp_box_corner_index(hitbox_edit_.selected_corner_index);
-    const int selected_side = (hitbox_edit_.selected_point_index >= 4) ? 4 : 0;
-    const int selected_runtime_corner = runtime_corner_from_editor_corner(hitbox_edit_.selected_corner_index);
-    hitbox_edit_.selected_point_index = selected_side + selected_runtime_corner;
     hitbox_tools_panel_->set_selection(selected_box, hitbox_edit_.selected_corner_index);
 
     RoomBoxToolsPanel::DetailValues values;
@@ -8831,6 +8873,8 @@ void RoomEditor::sync_attack_box_tools_panel() {
     }
     if (selected_box < 0) {
         selected_box = -1;
+        attack_box_edit_.selected_corner_index = -1;
+        attack_box_edit_.selected_point_index = -1;
         attack_box_edit_.point_selected = false;
         attack_box_edit_.dragging_corner = false;
         attack_box_edit_.dragging_box = false;
@@ -8838,12 +8882,13 @@ void RoomEditor::sync_attack_box_tools_panel() {
         attack_box_edit_.hovered_rotation_handle = false;
         clear_box_extrusion_drag_state(attack_box_edit_);
         clear_box_extrusion_hover_state(attack_box_edit_);
+    } else {
+        attack_box_edit_.selected_corner_index = clamp_box_corner_index(attack_box_edit_.selected_corner_index);
+        const int selected_side = (attack_box_edit_.selected_point_index >= 4) ? 4 : 0;
+        const int selected_runtime_corner = runtime_corner_from_editor_corner(attack_box_edit_.selected_corner_index);
+        attack_box_edit_.selected_point_index = selected_side + selected_runtime_corner;
     }
     attack_box_edit_.selected_box_index = selected_box;
-    attack_box_edit_.selected_corner_index = clamp_box_corner_index(attack_box_edit_.selected_corner_index);
-    const int selected_side = (attack_box_edit_.selected_point_index >= 4) ? 4 : 0;
-    const int selected_runtime_corner = runtime_corner_from_editor_corner(attack_box_edit_.selected_corner_index);
-    attack_box_edit_.selected_point_index = selected_side + selected_runtime_corner;
     attack_box_tools_panel_->set_selection(selected_box, attack_box_edit_.selected_corner_index);
 
     RoomBoxToolsPanel::DetailValues values;
@@ -8953,6 +8998,9 @@ bool RoomEditor::delete_selected_floor_box() {
     if (selected < 0 || selected >= static_cast<int>(target_info->floor_boxes.size())) {
         return false;
     }
+    const AssetInfo::FloorBox& selected_box = target_info->floor_boxes[static_cast<std::size_t>(selected)];
+    const std::string selected_box_id_snapshot = selected_box.id;
+    const std::string selected_box_name_snapshot = selected_box.name;
     DeleteIntentSummary summary{};
     summary.mode = editor_mode_;
     summary.domain_label = "floor_box_candidates";
@@ -8963,29 +9011,36 @@ bool RoomEditor::delete_selected_floor_box() {
 
     return execute_delete_with_confirmation(
         summary,
-        [this, target, selected_snapshot]() {
-            return active_mode_owns_domain(OwnershipDomain::FloorBoxCandidates) &&
-                   floor_box_mode_active() &&
-                   floor_box_edit_.target_asset == target &&
-                   target &&
-                   target->info &&
-                   selected_snapshot >= 0 &&
-                   selected_snapshot < static_cast<int>(target->info->floor_boxes.size());
+        [this, target, selected_snapshot, selected_box_id_snapshot, selected_box_name_snapshot]() {
+            if (!(active_mode_owns_domain(OwnershipDomain::FloorBoxCandidates) &&
+                  floor_box_mode_active() &&
+                  floor_box_edit_.target_asset == target &&
+                  target &&
+                  target->info)) {
+                return false;
+            }
+            const auto& boxes = target->info->floor_boxes;
+            const int resolved_index = find_index_by_id_name_index(
+                boxes,
+                selected_box_id_snapshot,
+                selected_box_name_snapshot,
+                selected_snapshot);
+            return resolved_index >= 0;
         },
-        [this, target, target_info, selected_snapshot]() {
-            target_info->floor_boxes.erase(target_info->floor_boxes.begin() + static_cast<std::size_t>(selected_snapshot));
-            if (floor_box_candidate_editor_.open &&
-                floor_box_candidate_editor_.target_asset == target &&
-                floor_box_candidate_editor_.box_index == selected_snapshot) {
+        [this, target, target_info, selected_snapshot, selected_box_id_snapshot, selected_box_name_snapshot]() {
+            const int delete_index = find_index_by_id_name_index(
+                target_info->floor_boxes,
+                selected_box_id_snapshot,
+                selected_box_name_snapshot,
+                selected_snapshot);
+            if (delete_index < 0) {
+                return false;
+            }
+            target_info->floor_boxes.erase(target_info->floor_boxes.begin() + static_cast<std::size_t>(delete_index));
+            if (floor_box_candidate_editor_.open && floor_box_candidate_editor_.target_asset == target) {
                 close_floor_box_candidate_editor();
             }
-            if (target_info->floor_boxes.empty()) {
-                floor_box_edit_.selected_box_index = -1;
-            } else if (selected_snapshot >= static_cast<int>(target_info->floor_boxes.size())) {
-                floor_box_edit_.selected_box_index = static_cast<int>(target_info->floor_boxes.size()) - 1;
-            } else {
-                floor_box_edit_.selected_box_index = selected_snapshot;
-            }
+            floor_box_edit_.selected_box_index = -1;
             floor_box_edit_.selected_corner_index = -1;
             floor_box_edit_.hovered_box_index = -1;
             floor_box_edit_.hovered_corner_index = -1;
@@ -9104,10 +9159,29 @@ bool RoomEditor::delete_selected_hitbox_in_current_frame() {
     if (!active_mode_owns_domain(OwnershipDomain::HitBoxes)) {
         return log_rejected_domain_mutation("delete_selected_hitbox_in_current_frame", OwnershipDomain::HitBoxes);
     }
-    const int selected = hitbox_edit_.selected_box_index;
-    if (selected < 0) {
+    if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
         return false;
     }
+    Asset* target = hitbox_edit_.target_asset;
+    const std::string animation_id_snapshot = hitbox_edit_.animation_id;
+    auto anim_it = target->info->animations.find(animation_id_snapshot);
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
+        return false;
+    }
+    const int frame_index_snapshot = devmode::room_anchor_mode::wrap_index(
+        hitbox_edit_.frame_index,
+        static_cast<int>(anim_it->second.frame_count()));
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index_snapshot));
+    if (!frame) {
+        return false;
+    }
+    const int selected = hitbox_edit_.selected_box_index;
+    if (selected < 0 || selected >= static_cast<int>(frame->hit_boxes.boxes.size())) {
+        return false;
+    }
+    const auto& selected_box = frame->hit_boxes.boxes[static_cast<std::size_t>(selected)];
+    const std::string selected_box_id_snapshot = selected_box.id;
+    const std::string selected_box_name_snapshot = selected_box.name;
     DeleteIntentSummary summary{};
     summary.mode = editor_mode_;
     summary.domain_label = "hit_boxes";
@@ -9117,35 +9191,76 @@ bool RoomEditor::delete_selected_hitbox_in_current_frame() {
     const int selected_snapshot = selected;
     return execute_delete_with_confirmation(
         summary,
-        [this, selected_snapshot]() {
-            return active_mode_owns_domain(OwnershipDomain::HitBoxes) &&
-                   hitbox_mode_active() &&
-                   hitbox_edit_.target_asset &&
-                   hitbox_edit_.target_asset->current_frame &&
-                   selected_snapshot >= 0 &&
-                   selected_snapshot <
-                       static_cast<int>(hitbox_edit_.target_asset->current_frame->hit_boxes.boxes.size());
+        [this,
+         target,
+         animation_id_snapshot,
+         frame_index_snapshot,
+         selected_snapshot,
+         selected_box_id_snapshot,
+         selected_box_name_snapshot]() {
+            if (!(active_mode_owns_domain(OwnershipDomain::HitBoxes) &&
+                  hitbox_mode_active() &&
+                  target &&
+                  target->info)) {
+                return false;
+            }
+            auto validate_anim_it = target->info->animations.find(animation_id_snapshot);
+            if (validate_anim_it == target->info->animations.end() || !validate_anim_it->second.has_frames()) {
+                return false;
+            }
+            if (frame_index_snapshot < 0 ||
+                frame_index_snapshot >= static_cast<int>(validate_anim_it->second.frame_count())) {
+                return false;
+            }
+            AnimationFrame* validate_frame =
+                validate_anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index_snapshot));
+            if (!validate_frame) {
+                return false;
+            }
+            const int resolved_index = find_index_by_id_name_index(
+                validate_frame->hit_boxes.boxes,
+                selected_box_id_snapshot,
+                selected_box_name_snapshot,
+                selected_snapshot);
+            return resolved_index >= 0;
         },
-        [this, selected_snapshot]() {
+        [this,
+         target,
+         animation_id_snapshot,
+         frame_index_snapshot,
+         selected_snapshot,
+         selected_box_id_snapshot,
+         selected_box_name_snapshot]() {
+            hitbox_edit_.target_asset = target;
+            hitbox_edit_.animation_id = animation_id_snapshot;
+            hitbox_edit_.frame_index = frame_index_snapshot;
             return mutate_hitbox_current_frame(
-                [this, selected_snapshot](std::vector<animation_update::FrameHitBox>& boxes) {
-                    if (selected_snapshot >= static_cast<int>(boxes.size())) {
+                [this, selected_snapshot, selected_box_id_snapshot, selected_box_name_snapshot](
+                    std::vector<animation_update::FrameHitBox>& boxes) {
+                    const int delete_index = find_index_by_id_name_index(
+                        boxes,
+                        selected_box_id_snapshot,
+                        selected_box_name_snapshot,
+                        selected_snapshot);
+                    if (delete_index < 0) {
                         return false;
                     }
-                    boxes.erase(boxes.begin() + static_cast<std::size_t>(selected_snapshot));
-                    if (boxes.empty()) {
-                        hitbox_edit_.selected_box_index = -1;
-                    } else if (selected_snapshot >= static_cast<int>(boxes.size())) {
-                        hitbox_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
-                    } else {
-                        hitbox_edit_.selected_box_index = selected_snapshot;
-                    }
-                    hitbox_edit_.selected_corner_index = 0;
-                    hitbox_edit_.selected_point_index = 0;
+                    boxes.erase(boxes.begin() + static_cast<std::size_t>(delete_index));
+                    hitbox_edit_.selected_box_index = -1;
+                    hitbox_edit_.selected_corner_index = -1;
+                    hitbox_edit_.selected_point_index = -1;
+                    hitbox_edit_.point_selected = false;
                     hitbox_edit_.dragging_box = false;
                     hitbox_edit_.dragging_corner = false;
                     hitbox_edit_.dragging_rotation = false;
+                    hitbox_edit_.drag_reference_point_index = -1;
+                    hitbox_edit_.drag_reference_corner_index = -1;
+                    hitbox_edit_.hovered_box_index = -1;
+                    hitbox_edit_.hovered_corner_index = -1;
+                    hitbox_edit_.hovered_point_index = -1;
                     hitbox_edit_.hovered_rotation_handle = false;
+                    clear_box_extrusion_drag_state(hitbox_edit_);
+                    clear_box_extrusion_hover_state(hitbox_edit_);
                     return true;
                 },
                 kDeletePersistPriority,
@@ -9190,10 +9305,29 @@ bool RoomEditor::delete_selected_attack_box_in_current_frame() {
     if (!active_mode_owns_domain(OwnershipDomain::AttackBoxes)) {
         return log_rejected_domain_mutation("delete_selected_attack_box_in_current_frame", OwnershipDomain::AttackBoxes);
     }
-    const int selected = attack_box_edit_.selected_box_index;
-    if (selected < 0) {
+    if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
         return false;
     }
+    Asset* target = attack_box_edit_.target_asset;
+    const std::string animation_id_snapshot = attack_box_edit_.animation_id;
+    auto anim_it = target->info->animations.find(animation_id_snapshot);
+    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
+        return false;
+    }
+    const int frame_index_snapshot = devmode::room_anchor_mode::wrap_index(
+        attack_box_edit_.frame_index,
+        static_cast<int>(anim_it->second.frame_count()));
+    AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index_snapshot));
+    if (!frame) {
+        return false;
+    }
+    const int selected = attack_box_edit_.selected_box_index;
+    if (selected < 0 || selected >= static_cast<int>(frame->attack_boxes.boxes.size())) {
+        return false;
+    }
+    const auto& selected_box = frame->attack_boxes.boxes[static_cast<std::size_t>(selected)];
+    const std::string selected_box_id_snapshot = selected_box.id;
+    const std::string selected_box_name_snapshot = selected_box.name;
     DeleteIntentSummary summary{};
     summary.mode = editor_mode_;
     summary.domain_label = "attack_boxes";
@@ -9203,35 +9337,76 @@ bool RoomEditor::delete_selected_attack_box_in_current_frame() {
     const int selected_snapshot = selected;
     return execute_delete_with_confirmation(
         summary,
-        [this, selected_snapshot]() {
-            return active_mode_owns_domain(OwnershipDomain::AttackBoxes) &&
-                   attack_box_mode_active() &&
-                   attack_box_edit_.target_asset &&
-                   attack_box_edit_.target_asset->current_frame &&
-                   selected_snapshot >= 0 &&
-                   selected_snapshot <
-                       static_cast<int>(attack_box_edit_.target_asset->current_frame->attack_boxes.boxes.size());
+        [this,
+         target,
+         animation_id_snapshot,
+         frame_index_snapshot,
+         selected_snapshot,
+         selected_box_id_snapshot,
+         selected_box_name_snapshot]() {
+            if (!(active_mode_owns_domain(OwnershipDomain::AttackBoxes) &&
+                  attack_box_mode_active() &&
+                  target &&
+                  target->info)) {
+                return false;
+            }
+            auto validate_anim_it = target->info->animations.find(animation_id_snapshot);
+            if (validate_anim_it == target->info->animations.end() || !validate_anim_it->second.has_frames()) {
+                return false;
+            }
+            if (frame_index_snapshot < 0 ||
+                frame_index_snapshot >= static_cast<int>(validate_anim_it->second.frame_count())) {
+                return false;
+            }
+            AnimationFrame* validate_frame =
+                validate_anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index_snapshot));
+            if (!validate_frame) {
+                return false;
+            }
+            const int resolved_index = find_index_by_id_name_index(
+                validate_frame->attack_boxes.boxes,
+                selected_box_id_snapshot,
+                selected_box_name_snapshot,
+                selected_snapshot);
+            return resolved_index >= 0;
         },
-        [this, selected_snapshot]() {
+        [this,
+         target,
+         animation_id_snapshot,
+         frame_index_snapshot,
+         selected_snapshot,
+         selected_box_id_snapshot,
+         selected_box_name_snapshot]() {
+            attack_box_edit_.target_asset = target;
+            attack_box_edit_.animation_id = animation_id_snapshot;
+            attack_box_edit_.frame_index = frame_index_snapshot;
             return mutate_attack_box_current_frame(
-                [this, selected_snapshot](std::vector<animation_update::FrameAttackBox>& boxes) {
-                    if (selected_snapshot >= static_cast<int>(boxes.size())) {
+                [this, selected_snapshot, selected_box_id_snapshot, selected_box_name_snapshot](
+                    std::vector<animation_update::FrameAttackBox>& boxes) {
+                    const int delete_index = find_index_by_id_name_index(
+                        boxes,
+                        selected_box_id_snapshot,
+                        selected_box_name_snapshot,
+                        selected_snapshot);
+                    if (delete_index < 0) {
                         return false;
                     }
-                    boxes.erase(boxes.begin() + static_cast<std::size_t>(selected_snapshot));
-                    if (boxes.empty()) {
-                        attack_box_edit_.selected_box_index = -1;
-                    } else if (selected_snapshot >= static_cast<int>(boxes.size())) {
-                        attack_box_edit_.selected_box_index = static_cast<int>(boxes.size()) - 1;
-                    } else {
-                        attack_box_edit_.selected_box_index = selected_snapshot;
-                    }
-                    attack_box_edit_.selected_corner_index = 0;
-                    attack_box_edit_.selected_point_index = 0;
+                    boxes.erase(boxes.begin() + static_cast<std::size_t>(delete_index));
+                    attack_box_edit_.selected_box_index = -1;
+                    attack_box_edit_.selected_corner_index = -1;
+                    attack_box_edit_.selected_point_index = -1;
+                    attack_box_edit_.point_selected = false;
                     attack_box_edit_.dragging_box = false;
                     attack_box_edit_.dragging_corner = false;
                     attack_box_edit_.dragging_rotation = false;
+                    attack_box_edit_.drag_reference_point_index = -1;
+                    attack_box_edit_.drag_reference_corner_index = -1;
+                    attack_box_edit_.hovered_box_index = -1;
+                    attack_box_edit_.hovered_corner_index = -1;
+                    attack_box_edit_.hovered_point_index = -1;
                     attack_box_edit_.hovered_rotation_handle = false;
+                    clear_box_extrusion_drag_state(attack_box_edit_);
+                    clear_box_extrusion_hover_state(attack_box_edit_);
                     return true;
                 },
                 kDeletePersistPriority,
@@ -9274,10 +9449,18 @@ bool RoomEditor::delete_selected_impassable_box() {
     if (!active_mode_owns_domain(OwnershipDomain::ImpassableGeometry)) {
         return log_rejected_domain_mutation("delete_selected_impassable_box", OwnershipDomain::ImpassableGeometry);
     }
-    const int selected = impassable_box_edit_.selected_box_index;
-    if (selected < 0) {
+    if (!impassable_box_mode_active() || !impassable_box_edit_.target_asset || !impassable_box_edit_.target_asset->info) {
         return false;
     }
+    Asset* target = impassable_box_edit_.target_asset;
+    const auto& shapes = target->info->impassable_shapes_payload();
+    const int selected = impassable_box_edit_.selected_box_index;
+    if (selected < 0 || selected >= static_cast<int>(shapes.size())) {
+        return false;
+    }
+    const AssetInfo::ImpassableShape& selected_shape = shapes[static_cast<std::size_t>(selected)];
+    const std::string selected_shape_id_snapshot = selected_shape.id;
+    const std::string selected_shape_name_snapshot = selected_shape.name;
     DeleteIntentSummary summary{};
     summary.mode = editor_mode_;
     summary.domain_label = "impassable_geometry";
@@ -9287,38 +9470,50 @@ bool RoomEditor::delete_selected_impassable_box() {
     const int selected_snapshot = selected;
     return execute_delete_with_confirmation(
         summary,
-        [this, selected_snapshot]() {
-            return active_mode_owns_domain(OwnershipDomain::ImpassableGeometry) &&
-                   impassable_box_mode_active() &&
-                   impassable_box_edit_.target_asset &&
-                   impassable_box_edit_.target_asset->info &&
-                   selected_snapshot >= 0 &&
-                   selected_snapshot <
-                       static_cast<int>(impassable_box_edit_.target_asset->info->impassable_shapes_payload().size());
+        [this, target, selected_snapshot, selected_shape_id_snapshot, selected_shape_name_snapshot]() {
+            if (!(active_mode_owns_domain(OwnershipDomain::ImpassableGeometry) &&
+                  impassable_box_mode_active() &&
+                  target &&
+                  target->info)) {
+                return false;
+            }
+            const auto& validate_shapes = target->info->impassable_shapes_payload();
+            const int resolved_index = find_index_by_id_name_index(
+                validate_shapes,
+                selected_shape_id_snapshot,
+                selected_shape_name_snapshot,
+                selected_snapshot);
+            return resolved_index >= 0;
         },
-        [this, selected_snapshot]() {
+        [this, target, selected_snapshot, selected_shape_id_snapshot, selected_shape_name_snapshot]() {
+            impassable_box_edit_.target_asset = target;
             return mutate_impassable_shapes(
-                [this, selected_snapshot](std::vector<AssetInfo::ImpassableShape>& shapes) {
-                    if (selected_snapshot >= static_cast<int>(shapes.size())) {
+                [this, selected_snapshot, selected_shape_id_snapshot, selected_shape_name_snapshot](
+                    std::vector<AssetInfo::ImpassableShape>& shapes) {
+                    const int delete_index = find_index_by_id_name_index(
+                        shapes,
+                        selected_shape_id_snapshot,
+                        selected_shape_name_snapshot,
+                        selected_snapshot);
+                    if (delete_index < 0) {
                         return false;
                     }
-                    shapes.erase(shapes.begin() + static_cast<std::size_t>(selected_snapshot));
-                    if (shapes.empty()) {
-                        impassable_box_edit_.selected_box_index = -1;
-                        impassable_box_edit_.selected_point_index = -1;
-                    } else if (selected_snapshot >= static_cast<int>(shapes.size())) {
-                        impassable_box_edit_.selected_box_index = static_cast<int>(shapes.size()) - 1;
-                        impassable_box_edit_.selected_point_index = 0;
-                    } else {
-                        impassable_box_edit_.selected_box_index = selected_snapshot;
-                        impassable_box_edit_.selected_point_index = 0;
-                    }
-                    impassable_box_edit_.selected_corner_index = 0;
-                    impassable_box_edit_.point_selected = impassable_box_edit_.selected_box_index >= 0;
+                    shapes.erase(shapes.begin() + static_cast<std::size_t>(delete_index));
+                    impassable_box_edit_.selected_box_index = -1;
+                    impassable_box_edit_.selected_point_index = -1;
+                    impassable_box_edit_.selected_corner_index = -1;
+                    impassable_box_edit_.point_selected = false;
                     impassable_box_edit_.dragging_box = false;
                     impassable_box_edit_.dragging_corner = false;
                     impassable_box_edit_.dragging_rotation = false;
+                    impassable_box_edit_.drag_reference_point_index = -1;
+                    impassable_box_edit_.drag_reference_corner_index = -1;
+                    impassable_box_edit_.hovered_box_index = -1;
+                    impassable_box_edit_.hovered_corner_index = -1;
+                    impassable_box_edit_.hovered_point_index = -1;
                     impassable_box_edit_.hovered_rotation_handle = false;
+                    clear_box_extrusion_drag_state(impassable_box_edit_);
+                    clear_box_extrusion_hover_state(impassable_box_edit_);
                     return true;
                 },
                 kDeletePersistPriority,
@@ -11601,21 +11796,14 @@ void RoomEditor::sync_oval_tools_panel() {
     }
     oval_tools_panel_->set_oval_names(oval_names);
 
-    if (oval_edit_.selected_oval_index < 0 && !mappings.empty()) {
-        oval_edit_.selected_oval_index = 0;
+    if (oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
+        oval_edit_.selected_oval_index = -1;
+    }
+    if (oval_edit_.selected_oval_index < 0) {
         oval_edit_.selected_point_index = -1;
-        oval_edit_.center_selected = true;
+        oval_edit_.center_selected = false;
         oval_edit_.center_hovered = false;
         oval_edit_.center_dragging = false;
-    }
-    if (oval_edit_.selected_oval_index >= static_cast<int>(mappings.size())) {
-        oval_edit_.selected_oval_index = mappings.empty() ? -1 : static_cast<int>(mappings.size()) - 1;
-        if (oval_edit_.selected_oval_index >= 0) {
-            oval_edit_.selected_point_index = -1;
-            oval_edit_.center_selected = true;
-            oval_edit_.center_hovered = false;
-            oval_edit_.center_dragging = false;
-        }
     }
     oval_tools_panel_->set_selected_oval_index(oval_edit_.selected_oval_index);
 
@@ -14491,42 +14679,41 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
         return is_valid_oval_center_anchor_name(anchor_name);
     };
     const std::string deleted_name = anchor_edit_.selected_anchor_name;
-    if (selected_anchor_is_oval_center()) {
+    if (is_valid_oval_center_anchor_name(deleted_name)) {
         show_notice("Oval center anchors are managed by Oval Anchor mode. Delete the oval object instead.");
         return false;
     }
-    const bool selected_anchor_visible = std::any_of(anchor_edit_.handles.begin(),
-                                                     anchor_edit_.handles.end(),
-                                                     [&](const AnchorHandleSample& handle) {
-                                                         return handle.name == deleted_name;
-                                                     });
-    if (!selected_anchor_visible) {
-        return false;
-    }
-    const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*target_info);
-    if (eligible_ids.empty()) {
-        return false;
-    }
-    int affected_count = 0;
-    for (const std::string& animation_id : eligible_ids) {
-        auto anim_it = target_info->animations.find(animation_id);
-        if (anim_it == target_info->animations.end() || !anim_it->second.has_frames()) {
-            continue;
+    const auto count_affected_anchors = [&](const std::shared_ptr<AssetInfo>& info) {
+        if (!info) {
+            return 0;
         }
-        const std::size_t frame_count = anim_it->second.frame_count();
-        for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
-            AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
-            if (!frame) {
+        const std::vector<std::string> eligible_ids = eligible_anchor_animation_names(*info);
+        if (eligible_ids.empty()) {
+            return 0;
+        }
+        int affected_count = 0;
+        for (const std::string& animation_id : eligible_ids) {
+            auto anim_it = info->animations.find(animation_id);
+            if (anim_it == info->animations.end() || !anim_it->second.has_frames()) {
                 continue;
             }
-            if (devmode::room_anchor_mode::find_anchor_in_mode(frame->anchor_points,
-                                                                deleted_name,
-                                                                owner,
-                                                                is_reserved_anchor_name) != nullptr) {
-                ++affected_count;
+            const std::size_t frame_count = anim_it->second.frame_count();
+            for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+                AnimationFrame* frame = anim_it->second.primary_frame_at(frame_index);
+                if (!frame) {
+                    continue;
+                }
+                if (devmode::room_anchor_mode::find_anchor_in_mode(frame->anchor_points,
+                                                                    deleted_name,
+                                                                    owner,
+                                                                    is_reserved_anchor_name) != nullptr) {
+                    ++affected_count;
+                }
             }
         }
-    }
+        return affected_count;
+    };
+    const int affected_count = count_affected_anchors(target_info);
     if (affected_count <= 0) {
         return false;
     }
@@ -14541,7 +14728,7 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
 
     return execute_delete_with_confirmation(
         summary,
-        [this, target, deleted_name_snapshot]() {
+        [this, target, target_info, deleted_name_snapshot, count_affected_anchors]() {
             if ((!anchor_mode_active() && !light_mode_active()) ||
                 (!active_mode_owns_domain(OwnershipDomain::AnchorNonLight) &&
                  !active_mode_owns_domain(OwnershipDomain::AnchorLight)) ||
@@ -14551,11 +14738,10 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
                 deleted_name_snapshot.empty()) {
                 return false;
             }
-            return std::any_of(anchor_edit_.handles.begin(),
-                               anchor_edit_.handles.end(),
-                               [&](const AnchorHandleSample& handle) {
-                                   return handle.name == deleted_name_snapshot;
-                               });
+            if (target_info != target->info) {
+                return false;
+            }
+            return count_affected_anchors(target_info) > 0;
         },
         [this, target, target_info, owner, is_reserved_anchor_name, deleted_name_snapshot]() {
             const bool closing_open_candidate_editor =
@@ -14614,25 +14800,8 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
             if (closing_open_candidate_editor) {
                 close_anchor_candidate_editor();
             }
-            std::string next_anchor_name;
-            auto current_anim_it = target_info->animations.find(anchor_edit_.animation_id);
-            if (current_anim_it != target_info->animations.end() && current_anim_it->second.has_frames()) {
-                const int frame_index = devmode::room_anchor_mode::wrap_index(anchor_edit_.frame_index,
-                                                                               static_cast<int>(current_anim_it->second.frame_count()));
-                AnimationFrame* frame = current_anim_it->second.primary_frame_at(static_cast<std::size_t>(frame_index));
-                if (frame) {
-                    const auto next_it = std::find_if(frame->anchor_points.begin(),
-                                                      frame->anchor_points.end(),
-                                                      [&](const DisplacedAssetAnchorPoint& anchor) {
-                                                          return anchor_mutable_in_current_mode(anchor);
-                                                      });
-                    if (next_it != frame->anchor_points.end()) {
-                        next_anchor_name = next_it->name;
-                    }
-                }
-            }
-            anchor_edit_.selected_anchor_name = next_anchor_name;
-            anchor_edit_.point_selected = !anchor_edit_.selected_anchor_name.empty();
+            anchor_edit_.selected_anchor_name.clear();
+            anchor_edit_.point_selected = false;
             if (anchor_tools_panel_) {
                 anchor_tools_panel_->set_rename_text(anchor_edit_.selected_anchor_name);
             }
@@ -14780,6 +14949,8 @@ bool RoomEditor::delete_selected_oval_mapping() {
         return false;
     }
     const int selected_snapshot = oval_edit_.selected_oval_index;
+    const std::string selected_mapping_name_snapshot =
+        mappings[static_cast<std::size_t>(selected_snapshot)].name;
     DeleteIntentSummary summary{};
     summary.mode = editor_mode_;
     summary.domain_label = "oval_mapping_and_points";
@@ -14788,46 +14959,40 @@ bool RoomEditor::delete_selected_oval_mapping() {
     summary.affected_count = 1;
     return execute_delete_with_confirmation(
         summary,
-        [this, target, selected_snapshot]() {
-            return active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints) &&
-                   oval_mode_active() &&
-                   oval_edit_.target_asset == target &&
-                   target &&
-                   target->info &&
-                   selected_snapshot >= 0 &&
-                   selected_snapshot < static_cast<int>(target->info->oval_anchor_mappings.size());
-        },
-        [this, target, target_info, selected_snapshot]() {
-            auto& current_mappings = target_info->oval_anchor_mappings;
-            if (selected_snapshot < 0 || selected_snapshot >= static_cast<int>(current_mappings.size())) {
+        [this, target, selected_snapshot, selected_mapping_name_snapshot]() {
+            if (!(active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints) &&
+                  oval_mode_active() &&
+                  oval_edit_.target_asset == target &&
+                  target &&
+                  target->info)) {
                 return false;
             }
-            const std::string mapping_name = current_mappings[static_cast<std::size_t>(selected_snapshot)].name;
+            const int resolved_index = find_index_by_name_index(
+                target->info->oval_anchor_mappings,
+                selected_mapping_name_snapshot,
+                selected_snapshot);
+            return resolved_index >= 0;
+        },
+        [this, target, target_info, selected_snapshot, selected_mapping_name_snapshot]() {
+            auto& current_mappings = target_info->oval_anchor_mappings;
+            const int delete_index = find_index_by_name_index(
+                current_mappings,
+                selected_mapping_name_snapshot,
+                selected_snapshot);
+            if (delete_index < 0) {
+                return false;
+            }
+            const std::string mapping_name = current_mappings[static_cast<std::size_t>(delete_index)].name;
             if (!target_info->remove_oval_anchor_mapping(mapping_name)) {
                 return false;
             }
             target->invalidate_anchor_registry();
 
-            const int mapping_count = static_cast<int>(target_info->oval_anchor_mappings.size());
-            if (mapping_count <= 0) {
-                oval_edit_.selected_oval_index = -1;
-                oval_edit_.selected_point_index = -1;
-                oval_edit_.center_selected = false;
-                oval_edit_.center_hovered = false;
-                oval_edit_.center_dragging = false;
-            } else if (selected_snapshot >= mapping_count) {
-                oval_edit_.selected_oval_index = mapping_count - 1;
-                oval_edit_.selected_point_index = -1;
-                oval_edit_.center_selected = true;
-                oval_edit_.center_hovered = false;
-                oval_edit_.center_dragging = false;
-            } else {
-                oval_edit_.selected_oval_index = selected_snapshot;
-                oval_edit_.selected_point_index = -1;
-                oval_edit_.center_selected = true;
-                oval_edit_.center_hovered = false;
-                oval_edit_.center_dragging = false;
-            }
+            oval_edit_.selected_oval_index = -1;
+            oval_edit_.selected_point_index = -1;
+            oval_edit_.center_selected = false;
+            oval_edit_.center_hovered = false;
+            oval_edit_.center_dragging = false;
             refresh_oval_mode_handles();
             sync_oval_tools_panel();
             return persist_oval_mappings(kDeletePersistPriority,
@@ -18147,6 +18312,8 @@ void RoomEditor::sync_impassable_box_tools_panel() {
     }
     if (selected_box < 0) {
         selected_box = -1;
+        impassable_box_edit_.selected_corner_index = -1;
+        impassable_box_edit_.selected_point_index = -1;
         impassable_box_edit_.point_selected = false;
         impassable_box_edit_.dragging_corner = false;
         impassable_box_edit_.dragging_box = false;
@@ -18154,9 +18321,10 @@ void RoomEditor::sync_impassable_box_tools_panel() {
         impassable_box_edit_.hovered_rotation_handle = false;
         clear_box_extrusion_drag_state(impassable_box_edit_);
         clear_box_extrusion_hover_state(impassable_box_edit_);
+    } else {
+        impassable_box_edit_.selected_corner_index = clamp_box_corner_index(impassable_box_edit_.selected_corner_index);
     }
     impassable_box_edit_.selected_box_index = selected_box;
-        impassable_box_edit_.selected_corner_index = clamp_box_corner_index(impassable_box_edit_.selected_corner_index);
     if (selected_box >= 0 && target_info &&
         selected_box < static_cast<int>(target_info->impassable_shapes.size())) {
         const int point_count = static_cast<int>(target_info->impassable_shapes[static_cast<std::size_t>(selected_box)].points.size());
@@ -20756,15 +20924,53 @@ void RoomEditor::handle_delete_shortcut(const Input& input) {
         return;
     }
 
-    if (active_modal_ == ActiveModal::AssetInfo || is_asset_stack_editor_active()) {
-        return;
-    }
-
     if (!input.wasScancodePressed(SDL_SCANCODE_DELETE)) {
         return;
     }
 
+    if (is_asset_stack_editor_active()) {
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+        ++test_delete_shortcut_stack_dispatch_count_;
+#endif
+        delete_selected_stack_editor_entity();
+        return;
+    }
+
+    if (active_modal_ == ActiveModal::AssetInfo) {
+        return;
+    }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    ++test_delete_shortcut_asset_delete_count_;
+#endif
     delete_selected_asset_or_group();
+}
+
+bool RoomEditor::delete_selected_stack_editor_entity() {
+    if (!is_asset_stack_editor_active()) {
+        return false;
+    }
+
+    if (anchor_mode_active() || light_mode_active()) {
+        return delete_selected_anchor_in_current_frame();
+    }
+    if (oval_mode_active()) {
+        return delete_selected_oval_mapping();
+    }
+    if (hitbox_mode_active()) {
+        return delete_selected_hitbox_in_current_frame();
+    }
+    if (attack_box_mode_active()) {
+        return delete_selected_attack_box_in_current_frame();
+    }
+    if (impassable_box_mode_active()) {
+        return delete_selected_impassable_box();
+    }
+    if (floor_box_mode_active()) {
+        return delete_selected_floor_box();
+    }
+
+    return false;
 }
 
 void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier) {
@@ -23690,6 +23896,10 @@ int RoomEditorTestAccess::subview_anchor() {
     return static_cast<int>(RoomEditor::AssetEditorSubview::Anchor);
 }
 
+int RoomEditorTestAccess::mode_normal() {
+    return static_cast<int>(RoomEditor::EditorMode::Normal);
+}
+
 int RoomEditorTestAccess::mode_anchor() {
     return static_cast<int>(RoomEditor::EditorMode::AnchorEdit);
 }
@@ -23991,6 +24201,35 @@ bool RoomEditorTestAccess::execute_delete_confirmation_flow(RoomEditor& editor,
         });
 }
 
+bool RoomEditorTestAccess::execute_delete_confirmation_with_transient_ui_drift(RoomEditor& editor,
+                                                                                int mode,
+                                                                                bool snapshot_target_exists,
+                                                                                int affected_count,
+                                                                                int& out_apply_calls) {
+    out_apply_calls = 0;
+    bool transient_ui_selection_valid = true;
+    int validate_calls = 0;
+    RoomEditor::DeleteIntentSummary summary{};
+    summary.mode = static_cast<RoomEditor::EditorMode>(mode);
+    summary.domain_label = "test_domain";
+    summary.entity_type = "test_entity";
+    summary.scope_label = "test_scope";
+    summary.affected_count = affected_count;
+    return editor.execute_delete_with_confirmation(
+        summary,
+        [&validate_calls, &transient_ui_selection_valid, snapshot_target_exists]() {
+            ++validate_calls;
+            if (validate_calls == 1) {
+                transient_ui_selection_valid = false;
+            }
+            return snapshot_target_exists;
+        },
+        [&out_apply_calls]() {
+            ++out_apply_calls;
+            return true;
+        });
+}
+
 bool RoomEditorTestAccess::delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode) {
     return editor.mode_delete_confirmation_disabled(static_cast<RoomEditor::EditorMode>(mode));
 }
@@ -24033,5 +24272,36 @@ std::uint32_t RoomEditorTestAccess::respawn_spawn_group_call_count(const RoomEdi
 
 void RoomEditorTestAccess::reset_respawn_spawn_group_call_count(RoomEditor& editor) {
     editor.test_respawn_spawn_group_call_count_ = 0;
+}
+
+void RoomEditorTestAccess::invoke_delete_shortcut(RoomEditor& editor, bool delete_pressed, bool escape_pressed) {
+    Input input;
+    SDL_Event event{};
+    if (delete_pressed) {
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.scancode = SDL_SCANCODE_DELETE;
+        input.handleEvent(event);
+    }
+    if (escape_pressed) {
+        event = SDL_Event{};
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.scancode = SDL_SCANCODE_ESCAPE;
+        input.handleEvent(event);
+    }
+    input.update();
+    editor.handle_delete_shortcut(input);
+}
+
+std::uint32_t RoomEditorTestAccess::delete_shortcut_stack_dispatch_count(const RoomEditor& editor) {
+    return editor.test_delete_shortcut_stack_dispatch_count_;
+}
+
+std::uint32_t RoomEditorTestAccess::delete_shortcut_asset_delete_count(const RoomEditor& editor) {
+    return editor.test_delete_shortcut_asset_delete_count_;
+}
+
+void RoomEditorTestAccess::reset_delete_shortcut_route_counters(RoomEditor& editor) {
+    editor.test_delete_shortcut_stack_dispatch_count_ = 0;
+    editor.test_delete_shortcut_asset_delete_count_ = 0;
 }
 #endif

@@ -130,4 +130,15 @@ private:
     SystemEnabledToggleCallback on_system_enabled_toggle_;
     IncrementPointCountCallback on_increment_point_count_;
     DecrementPointCountCallback on_decrement_point_count_;
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    friend struct RoomBoxToolsPanelTestAccess;
+#endif
 };
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+struct RoomBoxToolsPanelTestAccess {
+    static bool delete_button_visible(RoomBoxToolsPanel& panel);
+    static SDL_Rect delete_button_rect(RoomBoxToolsPanel& panel);
+};
+#endif

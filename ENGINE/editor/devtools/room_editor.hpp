@@ -278,6 +278,7 @@ private:
     bool should_enable_mouse_controls() const;
     void handle_shortcuts(const Input& input);
     void handle_delete_shortcut(const Input& input);
+    bool delete_selected_stack_editor_entity();
     void set_focus_asset(Asset* asset, bool from_asset_info);
     void set_focus_spawn_group(const std::string& spawn_id);
     void clear_focus();
@@ -1265,6 +1266,8 @@ private:
 #if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
     std::uint32_t test_snap_spawn_group_to_resolution_call_count_ = 0;
     std::uint32_t test_respawn_spawn_group_call_count_ = 0;
+    std::uint32_t test_delete_shortcut_stack_dispatch_count_ = 0;
+    std::uint32_t test_delete_shortcut_asset_delete_count_ = 0;
     friend struct RoomEditorTestAccess;
 #endif
 
@@ -1286,6 +1289,7 @@ struct RoomEditorTestAccess {
     static int subview_asset_info();
     static int subview_animation_editor();
     static int subview_anchor();
+    static int mode_normal();
     static int mode_anchor();
     static int mode_light();
     static int mode_oval();
@@ -1360,6 +1364,11 @@ struct RoomEditorTestAccess {
                                                  bool validate_after_confirm,
                                                  int affected_count,
                                                  int& out_apply_calls);
+    static bool execute_delete_confirmation_with_transient_ui_drift(RoomEditor& editor,
+                                                                    int mode,
+                                                                    bool snapshot_target_exists,
+                                                                    int affected_count,
+                                                                    int& out_apply_calls);
     static bool delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode);
     static int delete_persist_priority_for_tests();
     static bool delete_persist_flush_now_for_tests();
@@ -1373,5 +1382,9 @@ struct RoomEditorTestAccess {
     static void process_pending_spawn_group_work(RoomEditor& editor);
     static std::uint32_t respawn_spawn_group_call_count(const RoomEditor& editor);
     static void reset_respawn_spawn_group_call_count(RoomEditor& editor);
+    static void invoke_delete_shortcut(RoomEditor& editor, bool delete_pressed, bool escape_pressed);
+    static std::uint32_t delete_shortcut_stack_dispatch_count(const RoomEditor& editor);
+    static std::uint32_t delete_shortcut_asset_delete_count(const RoomEditor& editor);
+    static void reset_delete_shortcut_route_counters(RoomEditor& editor);
 };
 #endif

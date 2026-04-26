@@ -156,4 +156,15 @@ private:
     ApplyLightDetailsCallback on_apply_light_details_;
     PropagateCallback on_propagate_;
     OpenCandidatesCallback on_open_candidates_;
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    friend struct RoomAnchorToolsPanelTestAccess;
+#endif
 };
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+struct RoomAnchorToolsPanelTestAccess {
+    static bool delete_button_visible(RoomAnchorToolsPanel& panel);
+    static SDL_Rect delete_button_rect(RoomAnchorToolsPanel& panel);
+};
+#endif

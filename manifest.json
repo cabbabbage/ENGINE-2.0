@@ -21450,9 +21450,9 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 2692,
         "camera_height_min_px": 25,
-        "depth_of_field_enabled": true,
-        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.09999999403953552,
-        "dynamic_renderer_depth_efficiency_threshold": 0.3999999761581421,
+        "depth_of_field_enabled": false,
+        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.029999999329447746,
+        "dynamic_renderer_depth_efficiency_threshold": 0.9399999976158142,
         "front_layer_light_strength_multiplier": 1.0,
         "layer_depth_curve": 12.109999656677246,
         "layer_depth_interval": 234.0,
@@ -21624,9 +21624,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            124,
             242,
             36,
+            54,
             255
           ],
           "edge_smoothness": 2,
@@ -22020,16 +22020,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -299,
-          "camera_center_dz": -151,
-          "camera_height_px": 238,
-          "camera_tilt_deg": 37.06126403808594,
+          "camera_center_dx": -666,
+          "camera_center_dz": -642,
+          "camera_height_px": 2579,
+          "camera_tilt_deg": 45.24452209472656,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            36,
+            242,
+            226,
             255
           ],
           "edge_smoothness": 101,

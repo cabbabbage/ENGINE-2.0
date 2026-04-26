@@ -341,4 +341,38 @@ TEST_CASE("RoomEditor processes and clears deferred spawn-group queue work") {
 
     CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 0);
 }
+
+TEST_CASE("RoomEditor extrusion drag resolution is side-locked and clamps to min depth one") {
+    const int base_forward = 8;
+    const int base_backward = 6;
+    const float start_half_separation = 10.0f;
+
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              true, -5, start_half_separation, base_forward, base_backward) == 1);
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              true, 20, start_half_separation, base_forward, base_backward) == 16);
+
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              false, 5, start_half_separation, base_forward, base_backward) == 1);
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              false, -20, start_half_separation, base_forward, base_backward) == 12);
+}
+
+TEST_CASE("RoomEditor blocks camera interaction while hitbox extrusion handle is dragging") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_hitbox());
+    RoomEditorTestAccess::set_hitbox_dragging_extrusion(editor, true);
+
+    CHECK(RoomEditorTestAccess::editor_interaction_is_dragging(editor));
+    CHECK(RoomEditorTestAccess::editor_interaction_camera_blocked(editor));
+}
+
+TEST_CASE("RoomEditor blocks camera interaction while attack-box extrusion handle is dragging") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_attack_box());
+    RoomEditorTestAccess::set_attack_box_dragging_extrusion(editor, true);
+
+    CHECK(RoomEditorTestAccess::editor_interaction_is_dragging(editor));
+    CHECK(RoomEditorTestAccess::editor_interaction_camera_blocked(editor));
+}
 #endif

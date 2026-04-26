@@ -8964,13 +8964,13 @@ bool RoomEditor::delete_selected_floor_box() {
     return execute_delete_with_confirmation(
         summary,
         [this, target, selected_snapshot]() {
-            return floor_box_mode_active() &&
+            return active_mode_owns_domain(OwnershipDomain::FloorBoxCandidates) &&
+                   floor_box_mode_active() &&
                    floor_box_edit_.target_asset == target &&
                    target &&
                    target->info &&
                    selected_snapshot >= 0 &&
-                   selected_snapshot < static_cast<int>(target->info->floor_boxes.size()) &&
-                   floor_box_edit_.selected_box_index == selected_snapshot;
+                   selected_snapshot < static_cast<int>(target->info->floor_boxes.size());
         },
         [this, target, target_info, selected_snapshot]() {
             target_info->floor_boxes.erase(target_info->floor_boxes.begin() + static_cast<std::size_t>(selected_snapshot));
@@ -8994,8 +8994,8 @@ bool RoomEditor::delete_selected_floor_box() {
 
             target->refresh_runtime_floor_boxes_cache();
             sync_floor_box_tools_panel();
-            return persist_floor_boxes(devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                       false,
+            return persist_floor_boxes(kDeletePersistPriority,
+                                       kDeletePersistFlushNow,
                                        "Floor Box Delete",
                                        "room-floor-box-delete");
         });
@@ -9118,13 +9118,13 @@ bool RoomEditor::delete_selected_hitbox_in_current_frame() {
     return execute_delete_with_confirmation(
         summary,
         [this, selected_snapshot]() {
-            return hitbox_mode_active() &&
+            return active_mode_owns_domain(OwnershipDomain::HitBoxes) &&
+                   hitbox_mode_active() &&
                    hitbox_edit_.target_asset &&
                    hitbox_edit_.target_asset->current_frame &&
                    selected_snapshot >= 0 &&
                    selected_snapshot <
-                       static_cast<int>(hitbox_edit_.target_asset->current_frame->hit_boxes.boxes.size()) &&
-                   hitbox_edit_.selected_box_index == selected_snapshot;
+                       static_cast<int>(hitbox_edit_.target_asset->current_frame->hit_boxes.boxes.size());
         },
         [this, selected_snapshot]() {
             return mutate_hitbox_current_frame(
@@ -9148,7 +9148,8 @@ bool RoomEditor::delete_selected_hitbox_in_current_frame() {
                     hitbox_edit_.hovered_rotation_handle = false;
                     return true;
                 },
-                devmode::core::DevSaveCoordinator::Priority::Debounced);
+                kDeletePersistPriority,
+                kDeletePersistFlushNow);
         });
 }
 
@@ -9203,13 +9204,13 @@ bool RoomEditor::delete_selected_attack_box_in_current_frame() {
     return execute_delete_with_confirmation(
         summary,
         [this, selected_snapshot]() {
-            return attack_box_mode_active() &&
+            return active_mode_owns_domain(OwnershipDomain::AttackBoxes) &&
+                   attack_box_mode_active() &&
                    attack_box_edit_.target_asset &&
                    attack_box_edit_.target_asset->current_frame &&
                    selected_snapshot >= 0 &&
                    selected_snapshot <
-                       static_cast<int>(attack_box_edit_.target_asset->current_frame->attack_boxes.boxes.size()) &&
-                   attack_box_edit_.selected_box_index == selected_snapshot;
+                       static_cast<int>(attack_box_edit_.target_asset->current_frame->attack_boxes.boxes.size());
         },
         [this, selected_snapshot]() {
             return mutate_attack_box_current_frame(
@@ -9233,7 +9234,8 @@ bool RoomEditor::delete_selected_attack_box_in_current_frame() {
                     attack_box_edit_.hovered_rotation_handle = false;
                     return true;
                 },
-                devmode::core::DevSaveCoordinator::Priority::Debounced);
+                kDeletePersistPriority,
+                kDeletePersistFlushNow);
         });
 }
 
@@ -9286,13 +9288,13 @@ bool RoomEditor::delete_selected_impassable_box() {
     return execute_delete_with_confirmation(
         summary,
         [this, selected_snapshot]() {
-            return impassable_box_mode_active() &&
+            return active_mode_owns_domain(OwnershipDomain::ImpassableGeometry) &&
+                   impassable_box_mode_active() &&
                    impassable_box_edit_.target_asset &&
                    impassable_box_edit_.target_asset->info &&
                    selected_snapshot >= 0 &&
                    selected_snapshot <
-                       static_cast<int>(impassable_box_edit_.target_asset->info->impassable_shapes_payload().size()) &&
-                   impassable_box_edit_.selected_box_index == selected_snapshot;
+                       static_cast<int>(impassable_box_edit_.target_asset->info->impassable_shapes_payload().size());
         },
         [this, selected_snapshot]() {
             return mutate_impassable_shapes(
@@ -9319,7 +9321,8 @@ bool RoomEditor::delete_selected_impassable_box() {
                     impassable_box_edit_.hovered_rotation_handle = false;
                     return true;
                 },
-                devmode::core::DevSaveCoordinator::Priority::Debounced);
+                kDeletePersistPriority,
+                kDeletePersistFlushNow);
         });
 }
 
@@ -13168,7 +13171,8 @@ bool RoomEditor::persist_hitbox_current_frame(devmode::core::DevSaveCoordinator:
 
 bool RoomEditor::mutate_hitbox_current_frame(
     const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
-    devmode::core::DevSaveCoordinator::Priority priority) {
+    devmode::core::DevSaveCoordinator::Priority priority,
+    bool flush_now) {
     if (!active_mode_owns_domain(OwnershipDomain::HitBoxes)) {
         return log_rejected_domain_mutation("mutate_hitbox_current_frame", OwnershipDomain::HitBoxes);
     }
@@ -13238,7 +13242,7 @@ bool RoomEditor::mutate_hitbox_current_frame(
 
     hitbox_edit_.dirty_since_last_flush = true;
     sync_hitbox_tools_panel();
-    persist_hitbox_current_frame(priority, false);
+    persist_hitbox_current_frame(priority, flush_now);
     return true;
 }
 
@@ -13266,7 +13270,8 @@ bool RoomEditor::persist_impassable_boxes(devmode::core::DevSaveCoordinator::Pri
 
 bool RoomEditor::mutate_impassable_shapes(
     const std::function<bool(std::vector<AssetInfo::ImpassableShape>&)>& mutator,
-    devmode::core::DevSaveCoordinator::Priority priority) {
+    devmode::core::DevSaveCoordinator::Priority priority,
+    bool flush_now) {
     if (!active_mode_owns_domain(OwnershipDomain::ImpassableGeometry)) {
         return log_rejected_domain_mutation("mutate_impassable_shapes", OwnershipDomain::ImpassableGeometry);
     }
@@ -13316,7 +13321,7 @@ bool RoomEditor::mutate_impassable_shapes(
 
     impassable_box_edit_.dirty_since_last_flush = true;
     sync_impassable_box_tools_panel();
-    persist_impassable_boxes(priority, false);
+    persist_impassable_boxes(priority, flush_now);
     return true;
 }
 
@@ -13424,7 +13429,8 @@ bool RoomEditor::persist_specific_attack_box_frame(int frame_index,
 
 bool RoomEditor::mutate_attack_box_current_frame(
     const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
-    devmode::core::DevSaveCoordinator::Priority priority) {
+    devmode::core::DevSaveCoordinator::Priority priority,
+    bool flush_now) {
     if (!active_mode_owns_domain(OwnershipDomain::AttackBoxes)) {
         return log_rejected_domain_mutation("mutate_attack_box_current_frame", OwnershipDomain::AttackBoxes);
     }
@@ -13505,7 +13511,7 @@ bool RoomEditor::mutate_attack_box_current_frame(
 
     attack_box_edit_.dirty_since_last_flush = true;
     sync_attack_box_tools_panel();
-    persist_attack_box_current_frame(priority, false);
+    persist_attack_box_current_frame(priority, flush_now);
     return true;
 }
 
@@ -14471,7 +14477,10 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
                                                 ? OwnershipDomain::AnchorLight
                                                 : OwnershipDomain::AnchorNonLight);
     }
-    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+    if ((!anchor_mode_active() && !light_mode_active()) ||
+        anchor_edit_.selected_anchor_name.empty() ||
+        !anchor_edit_.target_asset ||
+        !anchor_edit_.target_asset->info) {
         return false;
     }
 
@@ -14533,11 +14542,13 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
     return execute_delete_with_confirmation(
         summary,
         [this, target, deleted_name_snapshot]() {
-            if (!anchor_mode_active() ||
+            if ((!anchor_mode_active() && !light_mode_active()) ||
+                (!active_mode_owns_domain(OwnershipDomain::AnchorNonLight) &&
+                 !active_mode_owns_domain(OwnershipDomain::AnchorLight)) ||
                 anchor_edit_.target_asset != target ||
                 !target ||
                 !target->info ||
-                anchor_edit_.selected_anchor_name != deleted_name_snapshot) {
+                deleted_name_snapshot.empty()) {
                 return false;
             }
             return std::any_of(anchor_edit_.handles.begin(),
@@ -14627,8 +14638,8 @@ bool RoomEditor::delete_selected_anchor_in_current_frame() {
             }
             if (!commit_anchor_bulk_edit(target,
                                          target_info,
-                                         devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                         false,
+                                         kDeletePersistPriority,
+                                         kDeletePersistFlushNow,
                                          "Anchor Global Delete",
                                          "room-anchor-global-delete")) {
                 return false;
@@ -14778,13 +14789,13 @@ bool RoomEditor::delete_selected_oval_mapping() {
     return execute_delete_with_confirmation(
         summary,
         [this, target, selected_snapshot]() {
-            return oval_mode_active() &&
+            return active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints) &&
+                   oval_mode_active() &&
                    oval_edit_.target_asset == target &&
                    target &&
                    target->info &&
                    selected_snapshot >= 0 &&
-                   selected_snapshot < static_cast<int>(target->info->oval_anchor_mappings.size()) &&
-                   oval_edit_.selected_oval_index == selected_snapshot;
+                   selected_snapshot < static_cast<int>(target->info->oval_anchor_mappings.size());
         },
         [this, target, target_info, selected_snapshot]() {
             auto& current_mappings = target_info->oval_anchor_mappings;
@@ -14819,8 +14830,8 @@ bool RoomEditor::delete_selected_oval_mapping() {
             }
             refresh_oval_mode_handles();
             sync_oval_tools_panel();
-            return persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                         false,
+            return persist_oval_mappings(kDeletePersistPriority,
+                                         kDeletePersistFlushNow,
                                          "Oval Mapping Delete",
                                          "room-oval-mapping-delete");
         });
@@ -23982,6 +23993,14 @@ bool RoomEditorTestAccess::execute_delete_confirmation_flow(RoomEditor& editor,
 
 bool RoomEditorTestAccess::delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode) {
     return editor.mode_delete_confirmation_disabled(static_cast<RoomEditor::EditorMode>(mode));
+}
+
+int RoomEditorTestAccess::delete_persist_priority_for_tests() {
+    return static_cast<int>(RoomEditor::kDeletePersistPriority);
+}
+
+bool RoomEditorTestAccess::delete_persist_flush_now_for_tests() {
+    return RoomEditor::kDeletePersistFlushNow;
 }
 
 void RoomEditorTestAccess::enqueue_spawn_group_work(RoomEditor& editor,

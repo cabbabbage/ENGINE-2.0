@@ -293,6 +293,49 @@ TEST_CASE("RoomEditor delete confirmation confirm path mutates once when scope i
     CHECK(apply_calls == 1);
 }
 
+TEST_CASE("RoomEditor delete confirmation confirm path succeeds in light mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_light(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete confirmation confirm path succeeds for hitbox and attack modes") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool hitbox_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(hitbox_result);
+    CHECK(apply_calls == 1);
+
+    apply_calls = 0;
+    const bool attack_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_attack_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(attack_result);
+    CHECK(apply_calls == 1);
+}
+
 TEST_CASE("RoomEditor delete confirmation blocks zero affected scope") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
@@ -353,6 +396,12 @@ TEST_CASE("RoomEditor delete confirmation dont-ask-again is session scoped per m
         apply_calls);
     CHECK(second_result);
     CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete persistence is configured for immediate flush") {
+    CHECK(RoomEditorTestAccess::delete_persist_priority_for_tests() ==
+          static_cast<int>(devmode::core::DevSaveCoordinator::Priority::Immediate));
+    CHECK(RoomEditorTestAccess::delete_persist_flush_now_for_tests());
 }
 
 TEST_CASE("RoomEditor queues re-entrant subview requests while transition is in progress") {

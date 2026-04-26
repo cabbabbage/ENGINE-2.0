@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include "rendering/render/scaling_logic.hpp"
+#include "rendering/render/grid_overlay.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
 
 #include <cstdint>
@@ -164,7 +165,29 @@ private:
     std::size_t room_trail_catalog_signature_ = std::numeric_limits<std::size_t>::max();
     std::unordered_map<BoundaryKey, BoundaryAssignment, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
-    std::unordered_map<BoundaryKey, Asset*, BoundaryKeyHash> promoted_boundary_assets_;
+    struct PromotionSlotKey {
+        int world_x = 0;
+        int world_z = 0;
+        int region_domain = 0;
+
+        bool operator==(const PromotionSlotKey& other) const noexcept {
+            return world_x == other.world_x &&
+                   world_z == other.world_z &&
+                   region_domain == other.region_domain;
+        }
+    };
+    struct PromotionSlotKeyHash {
+        std::size_t operator()(const PromotionSlotKey& key) const noexcept {
+            return static_cast<std::size_t>(
+                render_overlay::hash_grid_cell(key.world_x,
+                                               key.world_z,
+                                               key.region_domain,
+                                               0,
+                                               0,
+                                               0));
+        }
+    };
+    std::unordered_map<PromotionSlotKey, Asset*, PromotionSlotKeyHash> promoted_boundary_assets_;
     std::vector<BoundarySprite> active_boundary_sprites_;
     struct StaticCellAssignment {
         BoundaryKey key;

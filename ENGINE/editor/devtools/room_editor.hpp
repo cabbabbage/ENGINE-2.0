@@ -726,11 +726,14 @@ private:
     bool handle_impassable_box_mode_mouse_input(const Input& input);
     bool handle_floor_box_mode_mouse_input(const Input& input);
     bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
-                                     devmode::core::DevSaveCoordinator::Priority priority);
+                                     devmode::core::DevSaveCoordinator::Priority priority,
+                                     bool flush_now = false);
     bool mutate_attack_box_current_frame(const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
-                                         devmode::core::DevSaveCoordinator::Priority priority);
+                                         devmode::core::DevSaveCoordinator::Priority priority,
+                                         bool flush_now = false);
     bool mutate_impassable_shapes(const std::function<bool(std::vector<AssetInfo::ImpassableShape>&)>& mutator,
-                                  devmode::core::DevSaveCoordinator::Priority priority);
+                                  devmode::core::DevSaveCoordinator::Priority priority,
+                                  bool flush_now = false);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_impassable_boxes(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
@@ -774,6 +777,9 @@ private:
         Confirm,
         ConfirmDontAskAgain,
     };
+    static constexpr devmode::core::DevSaveCoordinator::Priority kDeletePersistPriority =
+        devmode::core::DevSaveCoordinator::Priority::Immediate;
+    static constexpr bool kDeletePersistFlushNow = true;
     static std::size_t editor_mode_index(EditorMode mode);
     std::string delete_mode_label(EditorMode mode) const;
     bool mode_delete_confirmation_disabled(EditorMode mode) const;
@@ -1355,6 +1361,8 @@ struct RoomEditorTestAccess {
                                                  int affected_count,
                                                  int& out_apply_calls);
     static bool delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode);
+    static int delete_persist_priority_for_tests();
+    static bool delete_persist_flush_now_for_tests();
     static void enqueue_spawn_group_work(RoomEditor& editor,
                                          const std::string& spawn_id,
                                          bool needs_respawn,

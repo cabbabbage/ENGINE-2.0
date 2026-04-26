@@ -227,6 +227,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         }
         ++it;
     }
+    std::unordered_set<PromotionSlotKey, PromotionSlotKeyHash> visible_promotion_slots;
 
     const nlohmann::json& map_info = assets->map_info_json();
     const bool config_changed = refresh_boundary_config_revision(map_info);
@@ -434,15 +435,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             continue;
         }
 
-        auto promoted_it = promoted_boundary_assets_.find(assignment.key);
-        if (promoted_it != promoted_boundary_assets_.end()) {
-            Asset* promoted = promoted_it->second;
-            if (promoted && assets->contains_asset(promoted)) {
-                continue;
-            }
-            promoted_boundary_assets_.erase(promoted_it);
-        }
-
         const double depth_from_anchor =
             render_depth::depth_from_anchor(cam.anchor_world_z(), static_cast<double>(assignment.world_z));
         const double depth_distance = std::fabs(depth_from_anchor);
@@ -468,15 +460,29 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         }
         if (candidate->info &&
             ControllerFactory::has_registered_controller_for_asset_name(candidate->info->name)) {
+            const PromotionSlotKey slot_key{
+                static_cast<int>(std::lround(assignment.world_pos.x)),
+                assignment.world_z,
+                assignment.key.region_domain
+            };
+            visible_promotion_slots.insert(slot_key);
+            auto promoted_it = promoted_boundary_assets_.find(slot_key);
+            if (promoted_it != promoted_boundary_assets_.end()) {
+                Asset* promoted = promoted_it->second;
+                if (promoted && assets->contains_asset(promoted)) {
+                    continue;
+                }
+                promoted_boundary_assets_.erase(promoted_it);
+            }
             const std::string promoted_spawn_id = btype.spawn_id.empty()
                 ? std::string{}
                 : (btype.spawn_id + "::promoted::" +
-                   std::to_string(assignment.key.grid_x) + ":" +
-                   std::to_string(assignment.key.grid_y) + ":" +
-                   std::to_string(assignment.key.world_z));
+                   std::to_string(slot_key.world_x) + ":" +
+                   std::to_string(slot_key.world_z) + ":" +
+                   std::to_string(slot_key.region_domain));
             if (!promoted_spawn_id.empty()) {
                 if (Asset* existing = assets->find_asset_by_stable_id(promoted_spawn_id)) {
-                    promoted_boundary_assets_[assignment.key] = existing;
+                    promoted_boundary_assets_[slot_key] = existing;
                     continue;
                 }
             }
@@ -490,7 +496,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 if (!promoted_spawn_id.empty()) {
                     promoted->spawn_id = promoted_spawn_id;
                 }
-                promoted_boundary_assets_[assignment.key] = promoted;
+                promoted_boundary_assets_[slot_key] = promoted;
                 continue;
             }
         }
@@ -595,6 +601,14 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 if (da != db) return da > db;
                 return a.world_pos.x < b.world_pos.x;
             });
+    }
+
+    for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
+        if (visible_promotion_slots.find(it->first) == visible_promotion_slots.end()) {
+            it = promoted_boundary_assets_.erase(it);
+            continue;
+        }
+        ++it;
     }
 
 }
@@ -926,7 +940,6 @@ void DynamicBoundarySystem::clear_runtime_caches() {
     boundary_assignments_.clear();
     animation_states_.clear();
     active_boundary_sprites_.clear();
-    promoted_boundary_assets_.clear();
     region_cache_.clear();
     region_area_index_.clear();
     static_assignments_.clear();

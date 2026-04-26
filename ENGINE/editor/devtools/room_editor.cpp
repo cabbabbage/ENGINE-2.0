@@ -10252,7 +10252,10 @@ void RoomEditor::sync_shared_footer_navigation() {
         const std::string animation_id = movement_edit_.animation_id;
         frame_nav.on_select_frame = [this, animation_id](int frame_index) {
             if (apply_movement_animation_and_frame(animation_id, frame_index)) {
-                refresh_movement_editor_selection(true);
+                movement_edit_.point_selected = true;
+                movement_edit_.selected_point_active = true;
+                movement_edit_.dragging_point = false;
+                refresh_movement_editor_selection(false);
             }
         };
     } else if (hitbox_mode_active() &&

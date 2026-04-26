@@ -349,6 +349,12 @@ void MainApp::run_startup_stabilization() {
                 return;
         }
 
+        const bool warmup_enabled = env_flag_enabled("VIBBLE_STARTUP_WARMUP_ENABLED", false);
+        if (!warmup_enabled) {
+                vibble::log::info("[MainApp] Startup warmup disabled (set VIBBLE_STARTUP_WARMUP_ENABLED=1 to enable).");
+                return;
+        }
+
         SDL_Renderer* renderer = raw_renderer();
         const int warmup_max_ms = env_int_clamped("VIBBLE_STARTUP_WARMUP_MAX_MS", 4000, 0, 30000);
         const int stable_frames_required = env_int_clamped("VIBBLE_STARTUP_STABLE_FRAMES", 3, 1, 120);

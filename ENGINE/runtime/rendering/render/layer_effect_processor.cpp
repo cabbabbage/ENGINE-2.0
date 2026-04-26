@@ -62,7 +62,7 @@ static TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
 }
 
 static void clear_target(SDL_Renderer* renderer, SDL_Texture* target) {
-    SDL_SetRenderTarget(renderer, target);
+    render_diagnostics::set_render_target(renderer, target);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
@@ -123,7 +123,7 @@ static void draw_offset_sample(SDL_Renderer* renderer,
         static_cast<float>(draw_h)
     };
 
-    SDL_RenderTexture(renderer, texture, &src_rect, &dst_rect);
+    render_diagnostics::render_texture(renderer, texture, &src_rect, &dst_rect);
 }
 
 static void draw_scaled_sample(SDL_Renderer* renderer,
@@ -155,7 +155,7 @@ static void draw_scaled_sample(SDL_Renderer* renderer,
         scaled_h
     };
 
-    SDL_RenderTexture(renderer, texture, &src_rect, &dst_rect);
+    render_diagnostics::render_texture(renderer, texture, &src_rect, &dst_rect);
 }
 
 static int choose_radial_sample_count(float radial_radius_px) {
@@ -304,7 +304,7 @@ static bool apply_axis_blur(SDL_Renderer* renderer,
     if (radius_px <= kMinimumBlurRadiusEpsilonPx || kernel_radius <= 0) {
         SDL_SetTextureBlendMode(src, SDL_BLENDMODE_NONE);
         SDL_SetTextureAlphaMod(src, 255);
-        SDL_RenderTexture(renderer, src, nullptr, nullptr);
+        render_diagnostics::render_texture(renderer, src, nullptr, nullptr);
         return true;
     }
 
@@ -354,7 +354,7 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
     if (radial_radius_px <= kMinimumBlurRadiusEpsilonPx) {
         SDL_SetTextureBlendMode(src, SDL_BLENDMODE_NONE);
         SDL_SetTextureAlphaMod(src, 255);
-        SDL_RenderTexture(renderer, src, nullptr, nullptr);
+        render_diagnostics::render_texture(renderer, src, nullptr, nullptr);
         return true;
     }
 
@@ -364,7 +364,7 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
     if (sample_count <= 0) {
         SDL_SetTextureBlendMode(src, SDL_BLENDMODE_NONE);
         SDL_SetTextureAlphaMod(src, 255);
-        SDL_RenderTexture(renderer, src, nullptr, nullptr);
+        render_diagnostics::render_texture(renderer, src, nullptr, nullptr);
         return true;
     }
 
@@ -514,18 +514,18 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
 
     const SDL_BlendMode sum_blend = sum_blend_mode();
     if (sum_blend == SDL_BLENDMODE_INVALID) {
-        SDL_SetRenderTarget(renderer_, dst);
+        render_diagnostics::set_render_target(renderer_, dst);
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
         SDL_RenderClear(renderer_);
         SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
         SDL_SetTextureAlphaMod(src, 255);
         SDL_SetTextureColorMod(src, 255, 255, 255);
-        SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+        render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
 
         restore_texture_state(src, src_state);
         restore_texture_state(scratch, scratch_state);
         restore_texture_state(dst, dst_state);
-        SDL_SetRenderTarget(renderer_, previous_target);
+        render_diagnostics::set_render_target(renderer_, previous_target);
         return true;
     }
 
@@ -573,7 +573,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             static_cast<float>(process_w),
             static_cast<float>(process_h)
         };
-        SDL_RenderTexture(renderer_, src, nullptr, &lowres_rect);
+        render_diagnostics::render_texture(renderer_, src, nullptr, &lowres_rect);
         current = scratch;
     }
 
@@ -599,7 +599,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             restore_texture_state(src, src_state);
             restore_texture_state(scratch, scratch_state);
             restore_texture_state(dst, dst_state);
-            SDL_SetRenderTarget(renderer_, previous_target);
+            render_diagnostics::set_render_target(renderer_, previous_target);
             return false;
         }
         current = next;
@@ -621,7 +621,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             restore_texture_state(src, src_state);
             restore_texture_state(scratch, scratch_state);
             restore_texture_state(dst, dst_state);
-            SDL_SetRenderTarget(renderer_, previous_target);
+            render_diagnostics::set_render_target(renderer_, previous_target);
             return false;
         }
         current = next;
@@ -640,7 +640,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             restore_texture_state(src, src_state);
             restore_texture_state(scratch, scratch_state);
             restore_texture_state(dst, dst_state);
-            SDL_SetRenderTarget(renderer_, previous_target);
+            render_diagnostics::set_render_target(renderer_, previous_target);
             return false;
         }
         current = next;
@@ -659,7 +659,7 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
                 static_cast<float>(process_w),
                 static_cast<float>(process_h)
             };
-            SDL_RenderTexture(renderer_, dst, &lowres_rect, &lowres_rect);
+            render_diagnostics::render_texture(renderer_, dst, &lowres_rect, &lowres_rect);
             current = scratch;
         }
 
@@ -674,19 +674,19 @@ bool LayerEffectProcessor::apply_lens_blur(SDL_Texture* src,
             static_cast<float>(process_w),
             static_cast<float>(process_h)
         };
-        SDL_RenderTexture(renderer_, current, &lowres_rect, nullptr);
+        render_diagnostics::render_texture(renderer_, current, &lowres_rect, nullptr);
     } else if (current != dst) {
         clear_target(renderer_, dst);
         SDL_SetTextureBlendMode(current, SDL_BLENDMODE_BLEND);
         SDL_SetTextureAlphaMod(current, 255);
         SDL_SetTextureColorMod(current, 255, 255, 255);
-        SDL_RenderTexture(renderer_, current, nullptr, nullptr);
+        render_diagnostics::render_texture(renderer_, current, nullptr, nullptr);
     }
 
     restore_texture_state(src, src_state);
     restore_texture_state(scratch, scratch_state);
     restore_texture_state(dst, dst_state);
-    SDL_SetRenderTarget(renderer_, previous_target);
+    render_diagnostics::set_render_target(renderer_, previous_target);
     return true;
 }
 
@@ -733,14 +733,14 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
         if (scratch_textures.dark_mask_texture) {
             restore_texture_state(scratch_textures.dark_mask_texture, dark_mask_state);
         }
-        SDL_SetRenderTarget(renderer_, previous_target);
+        render_diagnostics::set_render_target(renderer_, previous_target);
     };
 
     clear_target(renderer_, composited_output_texture);
     SDL_SetTextureBlendMode(base_layer_texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(base_layer_texture, 255);
     SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
-    SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
+    render_diagnostics::render_texture(renderer_, base_layer_texture, nullptr, nullptr);
 
     if (lighting_params.enabled && dark_mask_ready) {
         render_diagnostics::ScopedCpuTimer mask_timer(render_diagnostics::CpuTimerMetric::LightMaskGeneration);
@@ -754,7 +754,7 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
             const SDL_BlendMode light_add_preserve_alpha = light_add_rgb_preserve_alpha_blend_mode();
             const SDL_BlendMode alpha_masked_multiply = alpha_masked_multiply_blend_mode();
 
-            SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
+            render_diagnostics::set_render_target(renderer_, scratch_textures.dark_mask_texture);
             SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer_,
                                    lighting_params.ambient_color.r,
@@ -766,11 +766,11 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
             SDL_SetTextureBlendMode(base_layer_texture, alpha_copy);
             SDL_SetTextureAlphaMod(base_layer_texture, 255);
             SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
-            SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
+            render_diagnostics::render_texture(renderer_, base_layer_texture, nullptr, nullptr);
 
             bool drew_light_energy = false;
             if (!lights.empty()) {
-                SDL_SetRenderTarget(renderer_, scratch_textures.dark_mask_texture);
+                render_diagnostics::set_render_target(renderer_, scratch_textures.dark_mask_texture);
 
                 SDL_Texture* last_falloff_texture = nullptr;
                 SDL_Color last_color{0, 0, 0, 0};
@@ -841,7 +841,7 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                     };
 
                     for (int pass = 0; pass < pass_count; ++pass) {
-                        SDL_RenderTexture(renderer_, falloff_texture, nullptr, &light_dst);
+                        render_diagnostics::render_texture(renderer_, falloff_texture, nullptr, &light_dst);
                     }
                     drew_light_energy = true;
                 }
@@ -850,15 +850,15 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                     SDL_SetTextureBlendMode(base_layer_texture, alpha_copy);
                     SDL_SetTextureAlphaMod(base_layer_texture, 255);
                     SDL_SetTextureColorMod(base_layer_texture, 255, 255, 255);
-                    SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
+                    render_diagnostics::render_texture(renderer_, base_layer_texture, nullptr, nullptr);
                 }
             }
 
-            SDL_SetRenderTarget(renderer_, composited_output_texture);
+            render_diagnostics::set_render_target(renderer_, composited_output_texture);
             SDL_SetTextureBlendMode(scratch_textures.dark_mask_texture, alpha_masked_multiply);
             SDL_SetTextureAlphaMod(scratch_textures.dark_mask_texture, 255);
             SDL_SetTextureColorMod(scratch_textures.dark_mask_texture, 255, 255, 255);
-            SDL_RenderTexture(renderer_, scratch_textures.dark_mask_texture, nullptr, nullptr);
+            render_diagnostics::render_texture(renderer_, scratch_textures.dark_mask_texture, nullptr, nullptr);
 
             result.lighting_applied = true;
         }
@@ -888,7 +888,7 @@ bool LayerEffectProcessor::render_gpu_light_field(SDL_Texture* output_texture,
     SDL_RenderClear(renderer_);
 
     if (lights.empty()) {
-        SDL_SetRenderTarget(renderer_, previous_target);
+        render_diagnostics::set_render_target(renderer_, previous_target);
         return true;
     }
 
@@ -910,7 +910,7 @@ bool LayerEffectProcessor::render_gpu_light_field(SDL_Texture* output_texture,
                                             static_cast<int>(indices.size()));
     }
 
-    SDL_SetRenderTarget(renderer_, previous_target);
+    render_diagnostics::set_render_target(renderer_, previous_target);
     return true;
 }
 
@@ -1064,3 +1064,4 @@ bool LayerEffectProcessor::supports_strict_dark_mask_pipeline() {
            light_add_rgb_preserve_alpha_blend_mode() != SDL_BLENDMODE_INVALID &&
            alpha_masked_multiply_blend_mode() != SDL_BLENDMODE_INVALID;
 }
+

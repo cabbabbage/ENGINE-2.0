@@ -1,26 +1,36 @@
 #include "rendering/render/gpu_frame_graph.hpp"
 
 #include "rendering/render/render_diagnostics.hpp"
+#include "utils/log.hpp"
+
+#include <unordered_map>
 
 void GpuFrameGraph::reset() {
     passes_.clear();
     last_execution_stats_ = ExecutionStats{};
 }
 
-void GpuFrameGraph::add_render_pass(std::string name, PassCallback callback) {
-    passes_.push_back(Pass{PassType::Render, std::move(name), std::move(callback)});
+void GpuFrameGraph::add_render_pass(std::string name,
+                                    PassCallback callback,
+                                    std::vector<ResourceDependency> resources) {
+    passes_.push_back(Pass{PassType::Render, std::move(name), std::move(callback), std::move(resources)});
 }
 
-void GpuFrameGraph::add_copy_pass(std::string name, PassCallback callback) {
-    passes_.push_back(Pass{PassType::Copy, std::move(name), std::move(callback)});
+void GpuFrameGraph::add_copy_pass(std::string name,
+                                  PassCallback callback,
+                                  std::vector<ResourceDependency> resources) {
+    passes_.push_back(Pass{PassType::Copy, std::move(name), std::move(callback), std::move(resources)});
 }
 
-void GpuFrameGraph::add_compute_pass(std::string name, PassCallback callback) {
-    passes_.push_back(Pass{PassType::Compute, std::move(name), std::move(callback)});
+void GpuFrameGraph::add_compute_pass(std::string name,
+                                     PassCallback callback,
+                                     std::vector<ResourceDependency> resources) {
+    passes_.push_back(Pass{PassType::Compute, std::move(name), std::move(callback), std::move(resources)});
 }
 
 GpuFrameGraph::ExecutionStats GpuFrameGraph::execute() const {
     ExecutionStats stats{};
+    std::unordered_map<std::string, std::size_t> resource_last_writer{};
     for (const Pass& pass : passes_) {
         switch (pass.type) {
         case PassType::Render:
@@ -36,6 +46,21 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute() const {
             ++stats.compute_pass_count;
             break;
         }
+
+        for (const ResourceDependency& dep : pass.resources) {
+            if (dep.name.empty()) {
+                continue;
+            }
+            if (!dep.write && resource_last_writer.find(dep.name) == resource_last_writer.end()) {
+                ++stats.dependency_warning_count;
+                vibble::log::warn("[GpuFrameGraph] Pass '" + pass.name +
+                                  "' reads resource '" + dep.name + "' before any writer pass.");
+            }
+            if (dep.write) {
+                resource_last_writer[dep.name] = static_cast<std::size_t>(&pass - passes_.data());
+            }
+        }
+
         if (pass.callback) {
             pass.callback();
         }

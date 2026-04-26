@@ -1,6 +1,9 @@
 #include "rendering/render/gpu_format_policy.hpp"
 
 #include <array>
+#include <string>
+
+#include "utils/log.hpp"
 
 namespace {
 bool supports_format(SDL_GPUDevice* device,
@@ -22,6 +25,29 @@ SDL_GPUTextureFormat choose_supported(SDL_GPUDevice* device,
     }
     return SDL_GPU_TEXTUREFORMAT_INVALID;
 }
+
+const char* format_name(SDL_GPUTextureFormat format) {
+    switch (format) {
+    case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB: return "R8G8B8A8_UNORM_SRGB";
+    case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM: return "R8G8B8A8_UNORM";
+    case SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT: return "R16G16B16A16_FLOAT";
+    case SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT: return "R11G11B10_UFLOAT";
+    case SDL_GPU_TEXTUREFORMAT_R8_UNORM: return "R8_UNORM";
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT: return "D24_UNORM_S8_UINT";
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT: return "D32_FLOAT";
+    default: return "UNKNOWN";
+    }
+}
+
+const char* sample_count_name(SDL_GPUSampleCount sample_count) {
+    switch (sample_count) {
+    case SDL_GPU_SAMPLECOUNT_1: return "1x";
+    case SDL_GPU_SAMPLECOUNT_2: return "2x";
+    case SDL_GPU_SAMPLECOUNT_4: return "4x";
+    case SDL_GPU_SAMPLECOUNT_8: return "8x";
+    default: return "unknown";
+    }
+}
 } // namespace
 
 bool GpuFormatPolicyResolver::Resolve(SDL_GPUDevice* device,
@@ -42,6 +68,11 @@ bool GpuFormatPolicyResolver::Resolve(SDL_GPUDevice* device,
         out_error = "No supported albedo format (R8G8B8A8_UNORM_SRGB / R8G8B8A8_UNORM)";
         return false;
     }
+    if (albedo != SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB) {
+        vibble::log::warn("[GpuFormatPolicy] Falling back albedo format to " + std::string(format_name(albedo)));
+    } else {
+        vibble::log::info("[GpuFormatPolicy] Using albedo format " + std::string(format_name(albedo)));
+    }
 
     const SDL_GPUTextureFormat light =
         choose_supported(device,
@@ -52,6 +83,12 @@ bool GpuFormatPolicyResolver::Resolve(SDL_GPUDevice* device,
         out_error = "No supported light accumulation format (R16G16B16A16_FLOAT / R11G11B10_UFLOAT)";
         return false;
     }
+    if (light != SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT) {
+        vibble::log::warn("[GpuFormatPolicy] Falling back light accumulation format to " +
+                          std::string(format_name(light)));
+    } else {
+        vibble::log::info("[GpuFormatPolicy] Using light accumulation format " + std::string(format_name(light)));
+    }
 
     if (!supports_format(device,
                          SDL_GPU_TEXTUREFORMAT_R8_UNORM,
@@ -59,6 +96,7 @@ bool GpuFormatPolicyResolver::Resolve(SDL_GPUDevice* device,
         out_error = "R8_UNORM mask format is unsupported";
         return false;
     }
+    vibble::log::info("[GpuFormatPolicy] Using mask format R8_UNORM");
 
     SDL_GPUTextureFormat depth_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
     if (prefer_depth32 || !supports_format(device,
@@ -75,13 +113,20 @@ bool GpuFormatPolicyResolver::Resolve(SDL_GPUDevice* device,
             return false;
         }
     }
+    vibble::log::info("[GpuFormatPolicy] Using depth format " + std::string(format_name(depth_format)));
 
     SDL_GPUSampleCount sample_count = SDL_GPU_SAMPLECOUNT_1;
-    if (SDL_GPUTextureSupportsSampleCount(device, albedo, SDL_GPU_SAMPLECOUNT_4)) {
+    const bool supports_4x = SDL_GPUTextureSupportsSampleCount(device, albedo, SDL_GPU_SAMPLECOUNT_4);
+    const bool supports_2x = SDL_GPUTextureSupportsSampleCount(device, albedo, SDL_GPU_SAMPLECOUNT_2);
+    if (supports_4x) {
         sample_count = SDL_GPU_SAMPLECOUNT_4;
-    } else if (SDL_GPUTextureSupportsSampleCount(device, albedo, SDL_GPU_SAMPLECOUNT_2)) {
+    } else if (supports_2x) {
         sample_count = SDL_GPU_SAMPLECOUNT_2;
     }
+    vibble::log::info("[GpuFormatPolicy] Sample-count probe for " + std::string(format_name(albedo)) +
+                      ": supports_4x=" + (supports_4x ? std::string("1") : std::string("0")) +
+                      " supports_2x=" + (supports_2x ? std::string("1") : std::string("0")) +
+                      " selected=" + sample_count_name(sample_count));
 
     out_policy.albedo_format = albedo;
     out_policy.light_accumulation_format = light;

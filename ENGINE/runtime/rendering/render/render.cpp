@@ -923,13 +923,12 @@ bool SceneRenderer::ensure_scene_target() {
         }
         destroy_texture(scene_composite_tex_);
     }
-    scene_composite_tex_ = SDL_CreateTexture(renderer_,
-                                             SDL_PIXELFORMAT_RGBA8888,
-                                             SDL_TEXTUREACCESS_TARGET,
-                                             screen_width_,
-                                             screen_height_);
+    scene_composite_tex_ = render_diagnostics::create_texture(renderer_,
+                                                              SDL_PIXELFORMAT_RGBA8888,
+                                                              SDL_TEXTUREACCESS_TARGET,
+                                                              screen_width_,
+                                                              screen_height_);
     if (scene_composite_tex_) {
-        render_diagnostics::add_texture_create_count();
         SDL_SetTextureBlendMode(scene_composite_tex_, SDL_BLENDMODE_BLEND);
     }
     return scene_composite_tex_ != nullptr;
@@ -1990,7 +1989,8 @@ void SceneRenderer::render() {
                                                       gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->backend_name() : "unknown",
                                                       gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->present_mode() : "unknown");
 
-        gpu_scene_renderer_->add_render_pass("floor", [&]() {
+        gpu_scene_renderer_->add_render_pass("floor",
+                                             [&]() {
             if (!floor_composer_) {
                 floor_texture = nullptr;
                 floor_dark_mask_texture = nullptr;
@@ -2004,13 +2004,18 @@ void SceneRenderer::render() {
                                                          map_clear_color_,
                                                          true);
             floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
-        });
-        gpu_scene_renderer_->add_compute_pass("tiled_light_culling", [&]() {
+        },
+                                             {GpuFrameGraph::ResourceDependency{"scene.floor.color", true},
+                                              GpuFrameGraph::ResourceDependency{"scene.floor.mask", true}});
+        gpu_scene_renderer_->add_compute_pass("tiled_light_culling",
+                                              [&]() {
             if (layer_build.valid && !layer_build.non_empty_layers.empty()) {
                 layer_stack_renderer_->build_gpu_tiled_light_bins(layer_build, runtime_lights);
             }
-        });
-        gpu_scene_renderer_->add_render_pass("geometry_lighting", [&]() {
+        },
+                                              {GpuFrameGraph::ResourceDependency{"scene.light.tiles", true}});
+        gpu_scene_renderer_->add_render_pass("geometry_lighting",
+                                             [&]() {
             if (!layer_build.valid || layer_build.non_empty_layers.empty()) {
                 compact_result = render_pipeline::CompactLayerRenderResult{};
                 return;
@@ -2020,8 +2025,11 @@ void SceneRenderer::render() {
                                                                        runtime_lighting_enabled,
                                                                        front_mult,
                                                                        behind_mult);
-        });
-        gpu_scene_renderer_->add_render_pass("dof", [&]() {
+        },
+                                             {GpuFrameGraph::ResourceDependency{"scene.light.tiles", false},
+                                              GpuFrameGraph::ResourceDependency{"scene.geometry", true}});
+        gpu_scene_renderer_->add_render_pass("dof",
+                                             [&]() {
             if (!blur_chain_renderer_ || !compact_result.valid || !compact_result.final_texture) {
                 blur_result = render_pipeline::BlurCompositeResult{};
                 return;
@@ -2031,15 +2039,22 @@ void SceneRenderer::render() {
                                                             realism.blur_px,
                                                             realism.radial_blur_px,
                                                             optical_center);
-        });
-        gpu_scene_renderer_->add_render_pass("scene_composite", [&]() {
+        },
+                                             {GpuFrameGraph::ResourceDependency{"scene.geometry", false},
+                                              GpuFrameGraph::ResourceDependency{"scene.blur", true}});
+        gpu_scene_renderer_->add_render_pass("scene_composite",
+                                             [&]() {
             SDL_Texture* scene_texture = compact_result.valid ? compact_result.final_texture : nullptr;
             composed = scene_composite_pass_->compose_gpu(scene_composite_tex_,
                                                           floor_texture,
                                                           floor_dark_mask_texture,
                                                           scene_texture,
                                                           blur_result);
-        });
+        },
+                                             {GpuFrameGraph::ResourceDependency{"scene.floor.color", false},
+                                              GpuFrameGraph::ResourceDependency{"scene.floor.mask", false},
+                                              GpuFrameGraph::ResourceDependency{"scene.blur", false},
+                                              GpuFrameGraph::ResourceDependency{"scene.output", true}});
         gpu_scene_renderer_->end_frame();
     } else {
         render_diagnostics::set_renderer_runtime_info("legacy", "sdl_renderer", "unknown");

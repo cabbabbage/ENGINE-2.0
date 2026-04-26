@@ -18,6 +18,67 @@ void ShaderPipelineCache::register_miss(const ShaderPipelineKey& key) {
     ++misses_[key];
 }
 
+SDL_GPUGraphicsPipeline* ShaderPipelineCache::get_or_create_graphics_pipeline(
+    const ShaderPipelineKey& key,
+    const GraphicsFactory& factory) {
+    const auto existing = graphics_pipelines_.find(key);
+    if (existing != graphics_pipelines_.end() && existing->second) {
+        register_hit(key);
+        return existing->second;
+    }
+
+    register_miss(key);
+    if (!factory) {
+        return nullptr;
+    }
+    SDL_GPUGraphicsPipeline* pipeline = factory();
+    if (!pipeline) {
+        return nullptr;
+    }
+    graphics_pipelines_[key] = pipeline;
+    return pipeline;
+}
+
+SDL_GPUComputePipeline* ShaderPipelineCache::get_or_create_compute_pipeline(
+    const ShaderPipelineKey& key,
+    const ComputeFactory& factory) {
+    const auto existing = compute_pipelines_.find(key);
+    if (existing != compute_pipelines_.end() && existing->second) {
+        register_hit(key);
+        return existing->second;
+    }
+
+    register_miss(key);
+    if (!factory) {
+        return nullptr;
+    }
+    SDL_GPUComputePipeline* pipeline = factory();
+    if (!pipeline) {
+        return nullptr;
+    }
+    compute_pipelines_[key] = pipeline;
+    return pipeline;
+}
+
+void ShaderPipelineCache::clear(SDL_GPUDevice* device) {
+    if (device) {
+        for (const auto& entry : graphics_pipelines_) {
+            if (entry.second) {
+                SDL_ReleaseGPUGraphicsPipeline(device, entry.second);
+            }
+        }
+        for (const auto& entry : compute_pipelines_) {
+            if (entry.second) {
+                SDL_ReleaseGPUComputePipeline(device, entry.second);
+            }
+        }
+    }
+    graphics_pipelines_.clear();
+    compute_pipelines_.clear();
+    hits_.clear();
+    misses_.clear();
+}
+
 double ShaderPipelineCache::hit_rate() const {
     std::uint64_t hit_count = 0;
     std::uint64_t miss_count = 0;

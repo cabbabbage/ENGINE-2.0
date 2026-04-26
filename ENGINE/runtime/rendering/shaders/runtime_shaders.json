@@ -1,11 +1,118 @@
 {
+  "build_tool_version": 2,
+  "manifest_version": 2,
   "variants": {
-    "sprite_textured": {"dxil": "dxil/sprite_textured.dxil", "spirv": "spirv/sprite_textured.spv"},
-    "sprite_batched": {"dxil": "dxil/sprite_batched.dxil", "spirv": "spirv/sprite_batched.spv"},
-    "light_eval": {"dxil": "dxil/light_eval.dxil", "spirv": "spirv/light_eval.spv"},
-    "floor_compose": {"dxil": "dxil/floor_compose.dxil", "spirv": "spirv/floor_compose.spv"},
-    "dark_mask": {"dxil": "dxil/dark_mask.dxil", "spirv": "spirv/dark_mask.spv"},
-    "final_compose": {"dxil": "dxil/final_compose.dxil", "spirv": "spirv/final_compose.spv"},
-    "compute_light_binning": {"dxil": "dxil/compute_light_binning.dxil", "spirv": "spirv/compute_light_binning.spv"}
+    "compute_light_binning": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 64,
+        "hash_fnv1a64": "0x6cd4fd3ea7c421a9",
+        "path": "dxil/compute_light_binning.dxil",
+        "stage": "auto"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 20,
+        "hash_fnv1a64": "0x0806a8c99179cfc2",
+        "path": "spirv/compute_light_binning.spv",
+        "stage": "auto"
+      }
+    },
+    "dark_mask": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 64,
+        "hash_fnv1a64": "0xfaa0fcbeb090db70",
+        "path": "dxil/dark_mask.dxil",
+        "stage": "auto"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 20,
+        "hash_fnv1a64": "0x0806a8c99179cfc2",
+        "path": "spirv/dark_mask.spv",
+        "stage": "auto"
+      }
+    },
+    "final_compose": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 64,
+        "hash_fnv1a64": "0x600623e98eb6e44a",
+        "path": "dxil/final_compose.dxil",
+        "stage": "auto"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 20,
+        "hash_fnv1a64": "0x0806a8c99179cfc2",
+        "path": "spirv/final_compose.spv",
+        "stage": "auto"
+      }
+    },
+    "floor_compose": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 64,
+        "hash_fnv1a64": "0xacc76c2332bb7e48",
+        "path": "dxil/floor_compose.dxil",
+        "stage": "auto"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 20,
+        "hash_fnv1a64": "0x0806a8c99179cfc2",
+        "path": "spirv/floor_compose.spv",
+        "stage": "auto"
+      }
+    },
+    "light_eval": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 64,
+        "hash_fnv1a64": "0xa1a0bc107925e8dc",
+        "path": "dxil/light_eval.dxil",
+        "stage": "auto"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 20,
+        "hash_fnv1a64": "0x0806a8c99179cfc2",
+        "path": "spirv/light_eval.spv",
+        "stage": "auto"
+      }
+    },
+    "sprite_batched": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 64,
+        "hash_fnv1a64": "0x0810fe7ad1c444f4",
+        "path": "dxil/sprite_batched.dxil",
+        "stage": "auto"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 20,
+        "hash_fnv1a64": "0x0806a8c99179cfc2",
+        "path": "spirv/sprite_batched.spv",
+        "stage": "auto"
+      }
+    },
+    "sprite_textured": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 64,
+        "hash_fnv1a64": "0x1dadd056c725567e",
+        "path": "dxil/sprite_textured.dxil",
+        "stage": "auto"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 20,
+        "hash_fnv1a64": "0x0806a8c99179cfc2",
+        "path": "spirv/sprite_textured.spv",
+        "stage": "auto"
+      }
+    }
   }
 }

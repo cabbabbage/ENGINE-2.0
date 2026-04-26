@@ -17,10 +17,7 @@ constexpr std::size_t kMinGpuBufferBytes = 4096;
 constexpr std::size_t kUploadAlignmentBytes = 16;
 
 void destroy_texture(SDL_Texture*& texture) {
-    if (texture) {
-        SDL_DestroyTexture(texture);
-        texture = nullptr;
-    }
+    render_diagnostics::destroy_texture(texture);
 }
 
 SDL_BlendMode safe_layer_blend_mode(SDL_BlendMode blend_mode) {
@@ -120,11 +117,11 @@ bool LayerStackRenderer::ensure_target(SDL_Texture*& texture) const {
     }
 
     if (!texture) {
-        texture = SDL_CreateTexture(renderer_,
-                                    SDL_PIXELFORMAT_RGBA8888,
-                                    SDL_TEXTUREACCESS_TARGET,
-                                    screen_width_,
-                                    screen_height_);
+        texture = render_diagnostics::create_texture(renderer_,
+                                                     SDL_PIXELFORMAT_RGBA8888,
+                                                     SDL_TEXTUREACCESS_TARGET,
+                                                     screen_width_,
+                                                     screen_height_);
         if (!texture) {
             return false;
         }
@@ -162,11 +159,13 @@ bool LayerStackRenderer::copy_texture(SDL_Texture* src, SDL_Texture* dst) const 
     }
 
     clear_target(dst);
-    SDL_SetRenderTarget(renderer_, dst);
+    if (!render_diagnostics::set_render_target(renderer_, dst)) {
+        return false;
+    }
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
-    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
     return true;
 }
 
@@ -174,7 +173,9 @@ void LayerStackRenderer::clear_target(SDL_Texture* texture) const {
     if (!renderer_ || !texture) {
         return;
     }
-    SDL_SetRenderTarget(renderer_, texture);
+    if (!render_diagnostics::set_render_target(renderer_, texture)) {
+        return;
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
     SDL_RenderClear(renderer_);
@@ -655,7 +656,9 @@ void LayerStackRenderer::render_layer_base(const render_pipeline::LayerBuildResu
     }
 
     clear_target(target);
-    SDL_SetRenderTarget(renderer_, target);
+    if (!render_diagnostics::set_render_target(renderer_, target)) {
+        return;
+    }
     draw_layer_geometry(build, layer);
 }
 

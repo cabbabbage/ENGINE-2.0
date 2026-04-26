@@ -173,3 +173,97 @@ bool GpuRenderDevice::submit(SDL_GPUCommandBuffer* command_buffer) const {
     }
     return SDL_SubmitGPUCommandBuffer(command_buffer);
 }
+
+bool GpuRenderDevice::begin_frame(std::string& out_error) {
+    if (!gpu_device_) {
+        out_error = "GPU device is unavailable";
+        return false;
+    }
+    if (frame_state_.command_buffer) {
+        out_error = "Frame is already active";
+        return false;
+    }
+
+    frame_state_.command_buffer = SDL_AcquireGPUCommandBuffer(gpu_device_);
+    if (!frame_state_.command_buffer) {
+        out_error = "Failed to acquire GPU command buffer";
+        return false;
+    }
+
+    if (window_) {
+        Uint32 swapchain_width = 0;
+        Uint32 swapchain_height = 0;
+        SDL_GPUTexture* swapchain_texture = nullptr;
+        if (!SDL_WaitAndAcquireGPUSwapchainTexture(frame_state_.command_buffer,
+                                                   window_,
+                                                   &swapchain_texture,
+                                                   &swapchain_width,
+                                                   &swapchain_height)) {
+            SDL_CancelGPUCommandBuffer(frame_state_.command_buffer);
+            frame_state_ = FrameState{};
+            out_error = "Failed to acquire GPU swapchain texture: " + safe_string(SDL_GetError());
+            return false;
+        }
+        frame_state_.swapchain_texture = swapchain_texture;
+        frame_state_.swapchain_width = swapchain_width;
+        frame_state_.swapchain_height = swapchain_height;
+    }
+
+    out_error.clear();
+    return true;
+}
+
+bool GpuRenderDevice::end_frame(bool submit_commands, std::string& out_error) {
+    if (!frame_state_.command_buffer) {
+        out_error = "No active frame command buffer";
+        return false;
+    }
+
+    bool ok = false;
+    if (submit_commands) {
+        ok = SDL_SubmitGPUCommandBuffer(frame_state_.command_buffer);
+        if (!ok) {
+            out_error = "Failed to submit GPU command buffer: " + safe_string(SDL_GetError());
+        }
+    } else {
+        ok = SDL_CancelGPUCommandBuffer(frame_state_.command_buffer);
+        if (!ok) {
+            out_error = "Failed to cancel GPU command buffer: " + safe_string(SDL_GetError());
+        }
+    }
+
+    frame_state_ = FrameState{};
+    if (ok) {
+        out_error.clear();
+    }
+    return ok;
+}
+
+bool GpuRenderDevice::query_texture_memory_usage(std::uint64_t& out_bytes) const {
+    out_bytes = 0;
+    if (!gpu_device_) {
+        return false;
+    }
+
+    SDL_PropertiesID props = SDL_GetGPUDeviceProperties(gpu_device_);
+    if (!props) {
+        return false;
+    }
+
+    // SDL does not currently expose a stable cross-backend texture-memory usage
+    // property. Keep probing for vendor-specific extensions by name.
+    static constexpr const char* kCandidateProps[] = {
+        "SDL.gpu.device.memory.textures.used",
+        "SDL.gpu.device.memory.texture_bytes",
+        "SDL.gpu.device.memory.used_texture_bytes",
+    };
+
+    for (const char* prop_name : kCandidateProps) {
+        const Sint64 value = SDL_GetNumberProperty(props, prop_name, -1);
+        if (value >= 0) {
+            out_bytes = static_cast<std::uint64_t>(value);
+            return true;
+        }
+    }
+    return false;
+}

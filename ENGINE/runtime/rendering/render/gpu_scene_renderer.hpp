@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <SDL3/SDL.h>
 
@@ -15,6 +16,7 @@ public:
     static std::unique_ptr<GpuSceneRenderer> Create(SDL_Renderer* renderer,
                                                     bool prefer_depth32,
                                                     std::string& out_error);
+    ~GpuSceneRenderer();
 
     bool ready() const { return device_ != nullptr; }
     const GpuRenderDevice* device() const { return device_.get(); }
@@ -24,9 +26,15 @@ public:
     bool load_shader_packages(const std::string& manifest_path, std::string& out_error);
     bool has_shader_variant(const std::string& shader_name) const;
 
-    void add_render_pass(std::string name, GpuFrameGraph::PassCallback callback);
-    void add_copy_pass(std::string name, GpuFrameGraph::PassCallback callback);
-    void add_compute_pass(std::string name, GpuFrameGraph::PassCallback callback);
+    void add_render_pass(std::string name,
+                         GpuFrameGraph::PassCallback callback,
+                         std::vector<GpuFrameGraph::ResourceDependency> resources = {});
+    void add_copy_pass(std::string name,
+                       GpuFrameGraph::PassCallback callback,
+                       std::vector<GpuFrameGraph::ResourceDependency> resources = {});
+    void add_compute_pass(std::string name,
+                          GpuFrameGraph::PassCallback callback,
+                          std::vector<GpuFrameGraph::ResourceDependency> resources = {});
 
     void begin_frame();
     void end_frame();

@@ -428,6 +428,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         size_variation_sample_ = sample_size_variation_identity();
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
+        refresh_runtime_floor_boxes_cache();
 }
 
 void Asset::refresh_filter_tags() {

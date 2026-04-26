@@ -288,3 +288,30 @@ TEST_CASE("AssetSpawner floor-box candidate pass skips null-only and zero-weight
         run_case(zero_weight_candidates);
     }
 }
+
+TEST_CASE("Asset constructor hydrates floor-box runtime cache before finalize_setup") {
+    AssetLibrary library(false);
+    library.add_asset(
+        "owner_asset",
+        make_metadata_with_floor_box_candidate(
+            "owner_floor_box",
+            nlohmann::json::array({
+                nlohmann::json::object({{"name", "null"}, {"chance", 0}}),
+                nlohmann::json::object({{"name", "floor_spawn_asset"}, {"chance", 100}})
+            }),
+            2));
+
+    const auto& assets = library.all();
+    auto it = assets.find("owner_asset");
+    REQUIRE(it != assets.end());
+    REQUIRE(it->second != nullptr);
+
+    Area spawn_area = make_rect_area("floor_box_constructor_cache_room", 32, 32);
+    Asset owner(it->second, spawn_area, SDL_Point{0, 0}, 0, "owner_spawn", "Center", 0);
+
+    CHECK(owner.isFloorBoxesEnabled());
+    REQUIRE_FALSE(owner.getFloorBoxes().empty());
+    const auto& floor_box = owner.getFloorBoxes().front();
+    REQUIRE(floor_box.candidate.has_value());
+    CHECK(floor_box.candidate->has_positive_non_null_candidate);
+}

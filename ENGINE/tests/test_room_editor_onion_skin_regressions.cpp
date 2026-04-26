@@ -13,15 +13,16 @@ std::filesystem::path repo_root() {
 
 std::string read_text_file(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
-    REQUIRE_MESSAGE(input.good(), "Failed to open source file: " << path.string());
+    INFO("Failed to open source file: " << path.string());
+    REQUIRE(input.good());
     std::ostringstream out;
     out << input.rdbuf();
     return out.str();
 }
 
 void require_missing_token(const std::string& content, const char* token, const char* context) {
-    CHECK_MESSAGE(content.find(token) == std::string::npos,
-                  std::string("Unexpected token in ") + context + ": " + token);
+    INFO("Unexpected token in " << context << ": " << token);
+    CHECK(content.find(token) == std::string::npos);
 }
 
 }  // namespace

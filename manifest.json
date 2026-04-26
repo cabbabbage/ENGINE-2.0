@@ -14421,7 +14421,6 @@
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14481,7 +14480,6 @@
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14541,7 +14539,6 @@
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14601,7 +14598,6 @@
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14661,7 +14657,6 @@
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -14721,7 +14716,6 @@
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16119,7 +16113,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16160,7 +16153,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16755,7 +16747,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16796,7 +16787,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16839,7 +16829,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16880,7 +16869,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16923,7 +16911,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -16964,7 +16951,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17007,7 +16993,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17048,7 +17033,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17091,7 +17075,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17132,7 +17115,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17175,7 +17157,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17216,7 +17197,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17259,7 +17239,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17300,7 +17279,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17343,7 +17321,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17384,7 +17361,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17765,7 +17741,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17806,7 +17781,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17849,7 +17823,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17890,7 +17863,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17933,7 +17905,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -17974,7 +17945,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18017,7 +17987,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18058,7 +18027,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18101,7 +18069,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18142,7 +18109,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18185,7 +18151,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18226,7 +18191,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18269,7 +18233,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18310,7 +18273,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18353,7 +18315,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18394,7 +18355,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18811,7 +18771,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18852,7 +18811,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18895,7 +18853,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18936,7 +18893,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -18979,7 +18935,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19020,7 +18975,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19063,7 +19017,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19104,7 +19057,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19147,7 +19099,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19188,7 +19139,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19231,7 +19181,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19272,7 +19221,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19315,7 +19263,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19356,7 +19303,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19399,7 +19345,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19440,7 +19385,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19810,7 +19754,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19851,7 +19794,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19894,7 +19836,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19935,7 +19876,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -19978,7 +19918,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20019,7 +19958,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20062,7 +20000,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20103,7 +20040,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20146,7 +20082,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20187,7 +20122,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20230,7 +20164,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20271,7 +20204,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20314,7 +20246,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20355,7 +20286,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20398,7 +20328,6 @@
                 "enabled": true,
                 "extrusion_backward": 1,
                 "extrusion_forward": 1,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -20439,7 +20368,6 @@
                 "enabled": true,
                 "extrusion_backward": 8,
                 "extrusion_forward": 10,
-                "flatten_bottom_to_floor": false,
                 "frame_range": {
                   "end": 0,
                   "start": 0

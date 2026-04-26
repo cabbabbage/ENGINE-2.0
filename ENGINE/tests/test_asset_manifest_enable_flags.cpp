@@ -478,7 +478,6 @@ TEST_CASE("AssetInfo impassable shapes normalize canonical fields") {
         CHECK(shape.contains("points"));
         CHECK_FALSE(shape.contains("type"));
         CHECK_FALSE(shape.contains("extrusion_amount"));
-        CHECK_FALSE(shape.contains("flatten_bottom_to_floor"));
         CHECK_FALSE(shape.contains("anchor_link"));
         CHECK_FALSE(shape.contains("rotation_degrees"));
         CHECK_FALSE(shape.contains("position"));

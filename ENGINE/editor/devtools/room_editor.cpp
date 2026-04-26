@@ -1914,13 +1914,18 @@ int resolve_dragged_extrusion_value(const TState& state, SDL_Point screen_point)
     const float pointer_dy = static_cast<float>(screen_point.y) - state.extrusion_drag_start_axis_center_y;
     const float along_axis =
         pointer_dx * state.extrusion_drag_axis_unit_x + pointer_dy * state.extrusion_drag_axis_unit_y;
-    const float current_half_separation = std::fabs(along_axis);
+    const bool dragging_back_side =
+        state.dragging_extrusion_handle_side == std::decay_t<decltype(state.dragging_extrusion_handle_side)>::Back;
+    // Lock each handle to its original side of the axis so forward/back cannot invert.
+    const float current_half_separation = dragging_back_side
+        ? std::max(0.0f, along_axis)
+        : std::max(0.0f, -along_axis);
     const float base_half_separation = std::max(0.001f, state.extrusion_drag_start_half_separation);
     const float scale = current_half_separation / base_half_separation;
     const int base_value =
-        state.dragging_extrusion_handle_side == std::decay_t<decltype(state.dragging_extrusion_handle_side)>::Back
-            ? state.extrusion_drag_start_backward
-            : state.extrusion_drag_start_forward;
+        dragging_back_side
+            ? state.extrusion_drag_start_forward
+            : state.extrusion_drag_start_backward;
     const int scaled_value = static_cast<int>(std::lround(static_cast<float>(base_value) * scale));
     return std::max(1, scaled_value);
 }
@@ -4590,7 +4595,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 int box_index = -1;
                 bool selected = false;
                 bool hovered = false;
-                bool flatten_bottom_to_floor = false;
                 std::array<SDL_FPoint, 8> points{};
                 BoxExtrusionHandleProjection extrusion_projection{};
             };
@@ -4610,7 +4614,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 entry.box_index = static_cast<int>(box_index);
                 entry.selected = render_handles && (entry.box_index == selected_box);
                 entry.hovered = render_handles && (entry.box_index == hovered_box);
-                entry.flatten_bottom_to_floor = volume.flatten_bottom_to_floor;
                 for (int point_index = 0; point_index < 8; ++point_index) {
                     project_runtime_box_point_to_screen(volume.world_points[static_cast<std::size_t>(point_index)],
                                                         cam,
@@ -4742,9 +4745,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 if (box.extrusion_projection.valid) {
                     render_extrusion_segment(box.extrusion_projection.front_a, box.extrusion_projection.front_b, front_hovered);
                     render_extrusion_segment(box.extrusion_projection.back_a, box.extrusion_projection.back_b, back_hovered);
-                }
-                if (box.flatten_bottom_to_floor) {
-                    continue;
                 }
 
                 SDL_FPoint center{
@@ -8584,7 +8584,6 @@ void RoomEditor::sync_hitbox_tools_panel() {
         values.name = box.name;
         values.extrusion_forward = box.extrusion_forward;
         values.extrusion_backward = box.extrusion_backward;
-        values.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
     }
     hitbox_tools_panel_->set_detail_values(values);
 }
@@ -8640,7 +8639,6 @@ void RoomEditor::sync_attack_box_tools_panel() {
         values.extrusion_forward = box.extrusion_forward;
         values.extrusion_backward = box.extrusion_backward;
         values.damage = box.damage_amount;
-        values.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
     }
     attack_box_tools_panel_->set_detail_values(values);
     sync_attack_payload_editor();
@@ -9107,15 +9105,12 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
         return false;
     }
     std::string normalized_name;
-    std::string selected_box_id;
-    bool flatten_changed = false;
     const bool changed = mutate_hitbox_current_frame(
-        [values, selected, &normalized_name, &selected_box_id, &flatten_changed](std::vector<animation_update::FrameHitBox>& boxes) {
+        [values, selected, &normalized_name](std::vector<animation_update::FrameHitBox>& boxes) {
             if (selected >= static_cast<int>(boxes.size())) {
                 return false;
             }
             auto& box = boxes[static_cast<std::size_t>(selected)];
-            selected_box_id = box.id;
             bool changed = false;
             if (!values.name.empty()) {
                 std::vector<std::string> names;
@@ -9141,92 +9136,13 @@ bool RoomEditor::apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::Detai
                 box.extrusion_backward = next_extrusion_backward;
                 changed = true;
             }
-            if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
-                box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
-                flatten_changed = true;
-                changed = true;
-            }
-            if (box.flatten_bottom_to_floor) {
-                const float previous_rotation =
-                    animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-                if (std::fabs(previous_rotation) > 1e-4f) {
-                    box.set_rotation_degrees(0.0f);
-                    changed = true;
-                }
-            }
             return changed;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
     if (changed && !normalized_name.empty() && hitbox_tools_panel_) {
         hitbox_tools_panel_->set_name_text(normalized_name);
     }
-
-    bool propagated = false;
-    if (flatten_changed &&
-        !selected_box_id.empty() &&
-        hitbox_mode_active() &&
-        hitbox_edit_.target_asset &&
-        hitbox_edit_.target_asset->info) {
-        Asset* target = hitbox_edit_.target_asset;
-        auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
-        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
-            nlohmann::json payload = target->info->animation_payload(hitbox_edit_.animation_id);
-            const std::size_t frame_count = anim_it->second.frame_count();
-            bool payload_changed = false;
-            bool runtime_changed = false;
-            for (std::size_t idx = 0; idx < frame_count; ++idx) {
-                AnimationFrame* candidate_frame = anim_it->second.primary_frame_at(idx);
-                if (!candidate_frame) {
-                    continue;
-                }
-                std::vector<animation_update::FrameHitBox> updated = candidate_frame->hit_boxes.boxes;
-                bool frame_changed = false;
-                for (auto& box : updated) {
-                    if (box.id == selected_box_id) {
-                        if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
-                            box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
-                            frame_changed = true;
-                        }
-                        if (box.flatten_bottom_to_floor) {
-                            const float previous_rotation =
-                                animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-                            if (std::fabs(previous_rotation) > 1e-4f) {
-                                box.set_rotation_degrees(0.0f);
-                                frame_changed = true;
-                            }
-                        }
-                    }
-                }
-                if (!frame_changed) {
-                    continue;
-                }
-                candidate_frame->set_hit_boxes(updated);
-                runtime_changed = true;
-                if (devmode::room_box_payload::write_hit_box_frame_to_payload(payload,
-                                                                               frame_count,
-                                                                               idx,
-                                                                               updated)) {
-                    payload_changed = true;
-                }
-            }
-            if (payload_changed && target->info->upsert_animation(hitbox_edit_.animation_id, payload)) {
-                target->info->mark_dirty();
-                propagated = persist_asset_manifest_from_info(target->info,
-                                                              devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                                              "Hitbox Flatten Bottom Toggle",
-                                                              "room-hitbox-flatten-bottom-toggle",
-                                                              false);
-            }
-            if (runtime_changed) {
-                target->refresh_runtime_box_cache_from_frame();
-                if (assets_) {
-                    assets_->mark_active_assets_dirty();
-                }
-                sync_hitbox_tools_panel();
-            }
-        }
-    }
-    return changed || propagated;
+    return changed;
 }
 
 bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values) {
@@ -9235,15 +9151,12 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
         return false;
     }
     std::string normalized_name;
-    std::string selected_box_id;
-    bool flatten_changed = false;
     const bool changed = mutate_attack_box_current_frame(
-        [values, selected, &normalized_name, &selected_box_id, &flatten_changed](std::vector<animation_update::FrameAttackBox>& boxes) {
+        [values, selected, &normalized_name](std::vector<animation_update::FrameAttackBox>& boxes) {
             if (selected >= static_cast<int>(boxes.size())) {
                 return false;
             }
             auto& box = boxes[static_cast<std::size_t>(selected)];
-            selected_box_id = box.id;
             bool changed = false;
             if (!values.name.empty()) {
                 std::vector<std::string> names;
@@ -9269,19 +9182,6 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
                 box.extrusion_backward = next_extrusion_backward;
                 changed = true;
             }
-            if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
-                box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
-                flatten_changed = true;
-                changed = true;
-            }
-            if (box.flatten_bottom_to_floor) {
-                const float previous_rotation =
-                    animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-                if (std::fabs(previous_rotation) > 1e-4f) {
-                    box.set_rotation_degrees(0.0f);
-                    changed = true;
-                }
-            }
             animation_update::AttackPayload payload = payload_from_attack_box(box);
             payload.damage_amount = std::max(0, values.damage);
             if (payload.payload_id.empty()) {
@@ -9302,72 +9202,7 @@ bool RoomEditor::apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::D
     if (changed && !normalized_name.empty() && attack_box_tools_panel_) {
         attack_box_tools_panel_->set_name_text(normalized_name);
     }
-    bool propagated = false;
-    if (flatten_changed &&
-        !selected_box_id.empty() &&
-        attack_box_mode_active() &&
-        attack_box_edit_.target_asset &&
-        attack_box_edit_.target_asset->info) {
-        Asset* target = attack_box_edit_.target_asset;
-        auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
-        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
-            nlohmann::json payload = target->info->animation_payload(attack_box_edit_.animation_id);
-            const std::size_t frame_count = anim_it->second.frame_count();
-            bool payload_changed = false;
-            bool runtime_changed = false;
-            for (std::size_t idx = 0; idx < frame_count; ++idx) {
-                AnimationFrame* candidate_frame = anim_it->second.primary_frame_at(idx);
-                if (!candidate_frame) {
-                    continue;
-                }
-                std::vector<animation_update::FrameAttackBox> updated = candidate_frame->attack_boxes.boxes;
-                bool frame_changed = false;
-                for (auto& box : updated) {
-                    if (box.id == selected_box_id) {
-                        if (box.flatten_bottom_to_floor != values.flatten_bottom_to_floor) {
-                            box.flatten_bottom_to_floor = values.flatten_bottom_to_floor;
-                            frame_changed = true;
-                        }
-                        if (box.flatten_bottom_to_floor) {
-                            const float previous_rotation =
-                                animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-                            if (std::fabs(previous_rotation) > 1e-4f) {
-                                box.set_rotation_degrees(0.0f);
-                                frame_changed = true;
-                            }
-                        }
-                    }
-                }
-                if (!frame_changed) {
-                    continue;
-                }
-                candidate_frame->set_attack_boxes(updated);
-                runtime_changed = true;
-                if (devmode::room_box_payload::write_attack_box_frame_to_payload(payload,
-                                                                                  frame_count,
-                                                                                  idx,
-                                                                                  updated)) {
-                    payload_changed = true;
-                }
-            }
-            if (payload_changed && target->info->upsert_animation(attack_box_edit_.animation_id, payload)) {
-                target->info->mark_dirty();
-                propagated = persist_asset_manifest_from_info(target->info,
-                                                              devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                                              "Attack Box Flatten Bottom Toggle",
-                                                              "room-attack-box-flatten-bottom-toggle",
-                                                              false);
-            }
-            if (runtime_changed) {
-                target->refresh_runtime_box_cache_from_frame();
-                if (assets_) {
-                    assets_->mark_active_assets_dirty();
-                }
-                sync_attack_box_tools_panel();
-            }
-        }
-    }
-    return changed || propagated;
+    return changed;
 }
 
 bool RoomEditor::apply_impassable_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values) {
@@ -16993,80 +16828,6 @@ bool RoomEditor::enter_hitbox_edit_mode() {
         hitbox_edit_ = BoxEditState{};
         return false;
     }
-    {
-        auto anim_it = target->info->animations.find(hitbox_edit_.animation_id);
-        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
-            std::unordered_map<std::string, bool> desired_flatten_by_id;
-            for (std::size_t idx = 0; idx < anim_it->second.frame_count(); ++idx) {
-                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
-                if (!frame) {
-                    continue;
-                }
-                for (const auto& box : frame->hit_boxes.boxes) {
-                    if (box.id.empty()) {
-                        continue;
-                    }
-                    auto [it, inserted] = desired_flatten_by_id.emplace(box.id, box.flatten_bottom_to_floor);
-                    if (!inserted) {
-                        it->second = it->second || box.flatten_bottom_to_floor;
-                    }
-                }
-            }
-
-            nlohmann::json payload = target->info->animation_payload(hitbox_edit_.animation_id);
-            const std::size_t frame_count = anim_it->second.frame_count();
-            bool payload_changed = false;
-            bool runtime_changed = false;
-            for (std::size_t idx = 0; idx < frame_count; ++idx) {
-                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
-                if (!frame) {
-                    continue;
-                }
-                std::vector<animation_update::FrameHitBox> updated = frame->hit_boxes.boxes;
-                bool frame_changed = false;
-                for (auto& box : updated) {
-                    if (!box.id.empty()) {
-                        auto desired_it = desired_flatten_by_id.find(box.id);
-                        if (desired_it != desired_flatten_by_id.end() &&
-                            box.flatten_bottom_to_floor != desired_it->second) {
-                            box.flatten_bottom_to_floor = desired_it->second;
-                            frame_changed = true;
-                        }
-                    }
-                    if (box.flatten_bottom_to_floor) {
-                        const float previous_rotation =
-                            animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-                        if (std::fabs(previous_rotation) > 1e-4f) {
-                            box.set_rotation_degrees(0.0f);
-                            frame_changed = true;
-                        }
-                    }
-                }
-                if (!frame_changed) {
-                    continue;
-                }
-                frame->set_hit_boxes(updated);
-                runtime_changed = true;
-                if (devmode::room_box_payload::write_hit_box_frame_to_payload(payload, frame_count, idx, updated)) {
-                    payload_changed = true;
-                }
-            }
-            if (payload_changed && target->info->upsert_animation(hitbox_edit_.animation_id, payload)) {
-                target->info->mark_dirty();
-                (void)persist_asset_manifest_from_info(target->info,
-                                                       devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                                       "Hitbox Flatten Bottom Normalize",
-                                                       "room-hitbox-flatten-bottom-normalize",
-                                                       false);
-            }
-            if (runtime_changed) {
-                target->refresh_runtime_box_cache_from_frame();
-                if (assets_) {
-                    assets_->mark_active_assets_dirty();
-                }
-            }
-        }
-    }
     (void)mutate_hitbox_current_frame(
         [](std::vector<animation_update::FrameHitBox>& boxes) {
             bool changed = false;
@@ -17119,80 +16880,6 @@ bool RoomEditor::enter_attack_box_edit_mode() {
         editor_mode_ = EditorMode::Normal;
         attack_box_edit_ = BoxEditState{};
         return false;
-    }
-    {
-        auto anim_it = target->info->animations.find(attack_box_edit_.animation_id);
-        if (anim_it != target->info->animations.end() && anim_it->second.has_frames()) {
-            std::unordered_map<std::string, bool> desired_flatten_by_id;
-            for (std::size_t idx = 0; idx < anim_it->second.frame_count(); ++idx) {
-                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
-                if (!frame) {
-                    continue;
-                }
-                for (const auto& box : frame->attack_boxes.boxes) {
-                    if (box.id.empty()) {
-                        continue;
-                    }
-                    auto [it, inserted] = desired_flatten_by_id.emplace(box.id, box.flatten_bottom_to_floor);
-                    if (!inserted) {
-                        it->second = it->second || box.flatten_bottom_to_floor;
-                    }
-                }
-            }
-
-            nlohmann::json payload = target->info->animation_payload(attack_box_edit_.animation_id);
-            const std::size_t frame_count = anim_it->second.frame_count();
-            bool payload_changed = false;
-            bool runtime_changed = false;
-            for (std::size_t idx = 0; idx < frame_count; ++idx) {
-                AnimationFrame* frame = anim_it->second.primary_frame_at(idx);
-                if (!frame) {
-                    continue;
-                }
-                std::vector<animation_update::FrameAttackBox> updated = frame->attack_boxes.boxes;
-                bool frame_changed = false;
-                for (auto& box : updated) {
-                    if (!box.id.empty()) {
-                        auto desired_it = desired_flatten_by_id.find(box.id);
-                        if (desired_it != desired_flatten_by_id.end() &&
-                            box.flatten_bottom_to_floor != desired_it->second) {
-                            box.flatten_bottom_to_floor = desired_it->second;
-                            frame_changed = true;
-                        }
-                    }
-                    if (box.flatten_bottom_to_floor) {
-                        const float previous_rotation =
-                            animation_update::FrameBoxBase::sanitize_rotation_degrees(box.rotation_degrees);
-                        if (std::fabs(previous_rotation) > 1e-4f) {
-                            box.set_rotation_degrees(0.0f);
-                            frame_changed = true;
-                        }
-                    }
-                }
-                if (!frame_changed) {
-                    continue;
-                }
-                frame->set_attack_boxes(updated);
-                runtime_changed = true;
-                if (devmode::room_box_payload::write_attack_box_frame_to_payload(payload, frame_count, idx, updated)) {
-                    payload_changed = true;
-                }
-            }
-            if (payload_changed && target->info->upsert_animation(attack_box_edit_.animation_id, payload)) {
-                target->info->mark_dirty();
-                (void)persist_asset_manifest_from_info(target->info,
-                                                       devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                                       "Attack Box Flatten Bottom Normalize",
-                                                       "room-attack-box-flatten-bottom-normalize",
-                                                       false);
-            }
-            if (runtime_changed) {
-                target->refresh_runtime_box_cache_from_frame();
-                if (assets_) {
-                    assets_->mark_active_assets_dirty();
-                }
-            }
-        }
     }
     (void)mutate_attack_box_current_frame(
         [](std::vector<animation_update::FrameAttackBox>& boxes) {
@@ -17665,11 +17352,17 @@ RoomEditor::EditorInteractionState RoomEditor::current_editor_interaction_state(
     } else if (hitbox_mode_active()) {
         state.has_selected_editable = hitbox_edit_.point_selected;
         state.is_dragging_editable =
-            hitbox_edit_.dragging_corner || hitbox_edit_.dragging_box || hitbox_edit_.dragging_rotation;
+            hitbox_edit_.dragging_corner ||
+            hitbox_edit_.dragging_box ||
+            hitbox_edit_.dragging_rotation ||
+            hitbox_edit_.dragging_extrusion_handle;
     } else if (attack_box_mode_active()) {
         state.has_selected_editable = attack_box_edit_.point_selected;
         state.is_dragging_editable =
-            attack_box_edit_.dragging_corner || attack_box_edit_.dragging_box || attack_box_edit_.dragging_rotation;
+            attack_box_edit_.dragging_corner ||
+            attack_box_edit_.dragging_box ||
+            attack_box_edit_.dragging_rotation ||
+            attack_box_edit_.dragging_extrusion_handle;
     } else if (impassable_box_mode_active()) {
         state.has_selected_editable = impassable_box_edit_.point_selected;
         state.is_dragging_editable =
@@ -17745,11 +17438,6 @@ int RoomEditor::find_hitbox_rotation_handle_at_screen_point(SDL_Point screen_poi
     if (selected < 0) {
         return -1;
     }
-    if (hitbox_edit_.target_asset->current_frame &&
-        selected < static_cast<int>(hitbox_edit_.target_asset->current_frame->hit_boxes.boxes.size()) &&
-        hitbox_edit_.target_asset->current_frame->hit_boxes.boxes[static_cast<std::size_t>(selected)].flatten_bottom_to_floor) {
-        return -1;
-    }
     const WarpedScreenGrid& cam = assets_->getView();
     const auto hit = find_box_rotation_handle_at_screen_point_for_index(
         hitbox_edit_.target_asset->current_hit_box_volumes(),
@@ -17766,11 +17454,6 @@ int RoomEditor::find_attack_box_rotation_handle_at_screen_point(SDL_Point screen
     }
     const int selected = attack_box_edit_.selected_box_index;
     if (selected < 0) {
-        return -1;
-    }
-    if (attack_box_edit_.target_asset->current_frame &&
-        selected < static_cast<int>(attack_box_edit_.target_asset->current_frame->attack_boxes.boxes.size()) &&
-        attack_box_edit_.target_asset->current_frame->attack_boxes.boxes[static_cast<std::size_t>(selected)].flatten_bottom_to_floor) {
         return -1;
     }
     const WarpedScreenGrid& cam = assets_->getView();
@@ -18368,9 +18051,6 @@ bool RoomEditor::begin_hitbox_rotation_drag(int box_index, SDL_Point screen_poin
     if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
         return false;
     }
-    if (boxes[static_cast<std::size_t>(box_index)].flatten_bottom_to_floor) {
-        return false;
-    }
     const auto& volumes = target->current_hit_box_volumes();
     const auto hit = find_box_rotation_handle_at_screen_point_for_index(
         volumes,
@@ -18409,9 +18089,6 @@ bool RoomEditor::begin_attack_box_rotation_drag(int box_index, SDL_Point screen_
     }
     auto& boxes = target->current_frame->attack_boxes.boxes;
     if (box_index < 0 || box_index >= static_cast<int>(boxes.size())) {
-        return false;
-    }
-    if (boxes[static_cast<std::size_t>(box_index)].flatten_bottom_to_floor) {
         return false;
     }
     const auto& volumes = target->current_attack_box_volumes();
@@ -18576,13 +18253,6 @@ bool RoomEditor::drag_hitbox_rotation_to_screen(int box_index, SDL_Point screen_
     if (!hitbox_edit_.dragging_rotation) {
         return false;
     }
-    if (hitbox_edit_.target_asset->current_frame &&
-        box_index >= 0 &&
-        box_index < static_cast<int>(hitbox_edit_.target_asset->current_frame->hit_boxes.boxes.size()) &&
-        hitbox_edit_.target_asset->current_frame->hit_boxes.boxes[static_cast<std::size_t>(box_index)].flatten_bottom_to_floor) {
-        return false;
-    }
-
     const float current_angle = screen_angle_degrees(hitbox_edit_.rotation_drag_center_screen, screen_point);
     const float delta_angle = normalize_angle_delta_degrees(
         current_angle - hitbox_edit_.rotation_drag_start_angle_degrees);
@@ -18950,13 +18620,6 @@ bool RoomEditor::drag_attack_box_rotation_to_screen(int box_index, SDL_Point scr
     if (!attack_box_edit_.dragging_rotation) {
         return false;
     }
-    if (attack_box_edit_.target_asset->current_frame &&
-        box_index >= 0 &&
-        box_index < static_cast<int>(attack_box_edit_.target_asset->current_frame->attack_boxes.boxes.size()) &&
-        attack_box_edit_.target_asset->current_frame->attack_boxes.boxes[static_cast<std::size_t>(box_index)].flatten_bottom_to_floor) {
-        return false;
-    }
-
     const float current_angle = screen_angle_degrees(attack_box_edit_.rotation_drag_center_screen, screen_point);
     const float delta_angle = normalize_angle_delta_degrees(
         current_angle - attack_box_edit_.rotation_drag_start_angle_degrees);
@@ -19220,16 +18883,6 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     const int locked_box_index = hitbox_edit_.selected_box_index;
     const bool lock_to_selected_box = locked_box_index >= 0;
     const auto& hitbox_volumes = hitbox_edit_.target_asset->current_hit_box_volumes();
-    const bool selected_box_flattened =
-        lock_to_selected_box &&
-        hitbox_edit_.target_asset->current_frame &&
-        locked_box_index < static_cast<int>(hitbox_edit_.target_asset->current_frame->hit_boxes.boxes.size()) &&
-        hitbox_edit_.target_asset->current_frame->hit_boxes.boxes[static_cast<std::size_t>(locked_box_index)].flatten_bottom_to_floor;
-    if (selected_box_flattened) {
-        hitbox_edit_.dragging_rotation = false;
-        hitbox_edit_.hovered_rotation_handle = false;
-    }
-
     if (left_pressed && !pointer_blocked) {
         bool started_extrusion_drag = false;
         if (lock_to_selected_box && hitbox_edit_.target_asset && hitbox_edit_.target_asset->current_frame) {
@@ -19255,7 +18908,7 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
             }
         }
         bool started_rotation_drag = false;
-        if (!started_extrusion_drag && lock_to_selected_box && !selected_box_flattened) {
+        if (!started_extrusion_drag && lock_to_selected_box) {
             const int rotation_box = find_hitbox_rotation_handle_at_screen_point(screen_pt);
             if (rotation_box >= 0 && begin_hitbox_rotation_drag(rotation_box, screen_pt)) {
                 started_rotation_drag = true;
@@ -19358,16 +19011,17 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
                 }
                 auto& box = boxes[static_cast<std::size_t>(clamped_selected)];
                 const int next_value = resolve_dragged_extrusion_value(hitbox_edit_, screen_pt);
-                const bool dragging_back =
+                const bool dragging_back_side =
                     hitbox_edit_.dragging_extrusion_handle_side == BoxEditState::ExtrusionHandleSide::Back;
-                const int current_value = dragging_back ? box.extrusion_backward : box.extrusion_forward;
+                const bool editing_forward = dragging_back_side;
+                const int current_value = editing_forward ? box.extrusion_forward : box.extrusion_backward;
                 if (next_value == current_value) {
                     return false;
                 }
-                if (dragging_back) {
-                    box.extrusion_backward = next_value;
-                } else {
+                if (editing_forward) {
                     box.extrusion_forward = next_value;
+                } else {
+                    box.extrusion_backward = next_value;
                 }
                 return true;
             },
@@ -19405,7 +19059,7 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
             }
         }
         bool rotation_handle_hovered = false;
-        if (!extrusion_handle_hovered && hitbox_edit_.selected_box_index >= 0 && !selected_box_flattened) {
+        if (!extrusion_handle_hovered && hitbox_edit_.selected_box_index >= 0) {
             if (const auto rotation_hit = find_box_rotation_handle_at_screen_point_for_index(
                     hitbox_volumes,
                     hitbox_edit_.selected_box_index,
@@ -19485,16 +19139,6 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     const int locked_box_index = attack_box_edit_.selected_box_index;
     const bool lock_to_selected_box = locked_box_index >= 0;
     const auto& attack_volumes = attack_box_edit_.target_asset->current_attack_box_volumes();
-    const bool selected_box_flattened =
-        lock_to_selected_box &&
-        attack_box_edit_.target_asset->current_frame &&
-        locked_box_index < static_cast<int>(attack_box_edit_.target_asset->current_frame->attack_boxes.boxes.size()) &&
-        attack_box_edit_.target_asset->current_frame->attack_boxes.boxes[static_cast<std::size_t>(locked_box_index)].flatten_bottom_to_floor;
-    if (selected_box_flattened) {
-        attack_box_edit_.dragging_rotation = false;
-        attack_box_edit_.hovered_rotation_handle = false;
-    }
-
     if (left_pressed && !pointer_blocked) {
         bool started_extrusion_drag = false;
         if (lock_to_selected_box && attack_box_edit_.target_asset && attack_box_edit_.target_asset->current_frame) {
@@ -19520,7 +19164,7 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
             }
         }
         bool started_rotation_drag = false;
-        if (!started_extrusion_drag && lock_to_selected_box && !selected_box_flattened) {
+        if (!started_extrusion_drag && lock_to_selected_box) {
             const int rotation_box = find_attack_box_rotation_handle_at_screen_point(screen_pt);
             if (rotation_box >= 0 && begin_attack_box_rotation_drag(rotation_box, screen_pt)) {
                 started_rotation_drag = true;
@@ -19621,16 +19265,17 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
                 }
                 auto& box = boxes[static_cast<std::size_t>(clamped_selected)];
                 const int next_value = resolve_dragged_extrusion_value(attack_box_edit_, screen_pt);
-                const bool dragging_back =
+                const bool dragging_back_side =
                     attack_box_edit_.dragging_extrusion_handle_side == BoxEditState::ExtrusionHandleSide::Back;
-                const int current_value = dragging_back ? box.extrusion_backward : box.extrusion_forward;
+                const bool editing_forward = dragging_back_side;
+                const int current_value = editing_forward ? box.extrusion_forward : box.extrusion_backward;
                 if (next_value == current_value) {
                     return false;
                 }
-                if (dragging_back) {
-                    box.extrusion_backward = next_value;
-                } else {
+                if (editing_forward) {
                     box.extrusion_forward = next_value;
+                } else {
+                    box.extrusion_backward = next_value;
                 }
                 return true;
             },
@@ -19668,7 +19313,7 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
             }
         }
         bool rotation_handle_hovered = false;
-        if (!extrusion_handle_hovered && attack_box_edit_.selected_box_index >= 0 && !selected_box_flattened) {
+        if (!extrusion_handle_hovered && attack_box_edit_.selected_box_index >= 0) {
             if (const auto rotation_hit = find_box_rotation_handle_at_screen_point_for_index(
                     attack_volumes,
                     attack_box_edit_.selected_box_index,

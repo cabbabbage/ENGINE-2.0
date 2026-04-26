@@ -162,6 +162,8 @@ protected:
 
 private:
     enum class AssetEditorSubview;
+    enum class EditorMode;
+    enum class OwnershipDomain;
 
     void begin_area_drag_session(const std::string& area_name, const SDL_Point& world_mouse);
     void update_area_drag_session(const SDL_Point& world_mouse);

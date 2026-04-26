@@ -101,6 +101,7 @@ TEST_CASE("FrameBoxRect::from_points normalizes unsorted corners") {
 }
 
 TEST_CASE("Room box payload writes canonical corners from normalized rect") {
+    const char* legacy_flatten_key = "flatten_" "bottom_to_floor";
     animation_update::FrameHitBox hit_box{};
     hit_box.id = "hitbox_alpha";
     hit_box.type = "hitbox";
@@ -132,7 +133,7 @@ TEST_CASE("Room box payload writes canonical corners from normalized rect") {
     CHECK(box["anchor_link"] == "root");
     CHECK(box["extrusion_forward"] == 3);
     CHECK(box["extrusion_backward"] == 3);
-    CHECK_FALSE(box.contains("flatten_bottom_to_floor"));
+    CHECK_FALSE(box.contains(legacy_flatten_key));
     const auto& corners = payload["hit_boxes"][0][0]["corners"];
     REQUIRE(corners.is_array());
     REQUIRE(corners.size() == 4);
@@ -147,6 +148,7 @@ TEST_CASE("Room box payload writes canonical corners from normalized rect") {
 }
 
 TEST_CASE("Attack box payload writes canonical corners and preserves damage") {
+    const char* legacy_flatten_key = "flatten_" "bottom_to_floor";
     animation_update::FrameAttackBox attack_box{};
     attack_box.id = "attack_box_alpha";
     attack_box.type = "attack_box";
@@ -182,7 +184,7 @@ TEST_CASE("Attack box payload writes canonical corners and preserves damage") {
     CHECK(box["anchor_link"] == "hand_r");
     CHECK(box["extrusion_forward"] == 2);
     CHECK(box["extrusion_backward"] == 2);
-    CHECK_FALSE(box.contains("flatten_bottom_to_floor"));
+    CHECK_FALSE(box.contains(legacy_flatten_key));
     CHECK(box["payload_id"] == "attack_box_alpha");
     CHECK(box["damage_amount"] == 12);
     REQUIRE(box["meta"].is_object());

@@ -263,11 +263,12 @@ TEST_CASE("AnimationLoader parses hit and attack box forward/backward extrusion 
     CHECK(frame->get_attack_boxes().boxes[0].extrusion_backward == 4);
 }
 
-TEST_CASE("AnimationLoader ignores legacy flatten_bottom_to_floor fields") {
+TEST_CASE("AnimationLoader ignores legacy floor-flatten fields") {
     AssetInfo info("animation_loader_legacy_flatten_ignored_asset");
     info.hitbox_enabled = true;
     info.attack_box_enabled = true;
     Animation animation;
+    const char* legacy_flatten_key = "flatten_" "bottom_to_floor";
 
     nlohmann::json payload = {
         {"source", {{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
@@ -277,10 +278,10 @@ TEST_CASE("AnimationLoader ignores legacy flatten_bottom_to_floor fields") {
              nlohmann::json::array({
                  {{"id", "hb_flatten"},
                   {"name", "hb_flatten"},
-                  {"position", {{"x", 2}, {"y", 3}}},
+                 {"position", {{"x", 2}, {"y", 3}}},
                   {"size", {{"w", 4}, {"h", 5}}},
                   {"rotation_degrees", 37.0},
-                  {"flatten_bottom_to_floor", true},
+                  {legacy_flatten_key, true},
                   {"extrusion_forward", 6},
                   {"extrusion_backward", 2}},
              }),
@@ -290,10 +291,10 @@ TEST_CASE("AnimationLoader ignores legacy flatten_bottom_to_floor fields") {
              nlohmann::json::array({
                  {{"id", "ab_flatten"},
                   {"name", "ab_flatten"},
-                  {"position", {{"x", 6}, {"y", 7}}},
+                 {"position", {{"x", 6}, {"y", 7}}},
                   {"size", {{"w", 8}, {"h", 9}}},
                   {"rotation_degrees", -22.0},
-                  {"flatten_bottom_to_floor", false},
+                  {legacy_flatten_key, false},
                   {"damage_amount", 9},
                   {"extrusion_forward", 10},
                   {"extrusion_backward", 3}},

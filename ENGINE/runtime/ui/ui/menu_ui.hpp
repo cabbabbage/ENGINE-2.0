@@ -17,7 +17,6 @@ class MenuUI : public MainApp {
     enum class MenuAction {
     NONE = 0,
     EXIT,
-    RESTART,
     SETTINGS,
     QUIT
 };
@@ -48,7 +47,6 @@ class MenuUI : public MainApp {
     void drawVignette(Uint8 alpha) const;
     bool run_exit_save_sequence(const std::string& reason);
     void doExit();
-    void doRestart();
     void doSettings();
     void doQuit();
     void doToggleDevMode();

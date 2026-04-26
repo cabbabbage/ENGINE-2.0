@@ -1,6 +1,4 @@
 #include "ui/menu_ui.hpp"
-#include "app/bootstrap.hpp"
-#include "app/frame_pacing.hpp"
 #include "rendering/render/engine_renderer.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
@@ -69,10 +67,6 @@ bool MenuUI::wants_return_to_main_menu() const {
 }
 
 void MenuUI::game_loop() {
-
-        const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
-        const double target_counts  = app::frame_pacing::target_frame_counts(perf_frequency);
-
         SDL_Renderer* renderer = raw_renderer();
         if (!renderer) {
                 std::cerr << "[MenuUI] Renderer unavailable; exiting game loop.\n";
@@ -82,52 +76,55 @@ void MenuUI::game_loop() {
 	bool quit = false;
 	SDL_Event e;
         return_to_main_menu_ = false;
-        double idle_counts_accum = 0.0;
-        int idle_frame_counter   = 0;
-        constexpr int IDLE_REPORT_INTERVAL = 120;
-        vibble::log::info("[MenuUI] Frame pacing target: " + app::frame_pacing::target_summary());
-
+        constexpr int EVENT_WAIT_TIMEOUT_MS = 16;
+        auto process_event = [&](const SDL_Event& event) {
+                if (renderer && is_resize_or_scale_event(event.type)) {
+                        if (sync_output_dimensions(renderer)) {
+                                rebuildButtons();
+                        }
+                }
+                handle_global_shortcuts(event);
+                const bool menu_was_active = menu_active_;
+                if (event.type == SDL_EVENT_QUIT) {
+                        run_exit_save_sequence("sdl_event_quit");
+                        quit = true;
+                }
+                if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE && event.key.repeat == 0) {
+                        bool esc_consumed = false;
+                        if (game_assets_) {
+                                esc_consumed = game_assets_->consume_escape_for_asset_editor_stack();
+                        }
+                        if (!esc_consumed) {
+                                toggleMenu();
+                        }
+                }
+                if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat == 0) {
+                        const bool ctrl_down = (event.key.mod & SDL_KMOD_CTRL) != 0;
+                        if (ctrl_down && event.key.key == SDLK_D) {
+                                doToggleDevMode();
+                        }
+                }
+                if (menu_active_) {
+                        handle_event(event);
+                        return;
+                }
+                if (menu_was_active) {
+                        // Don't let the closing event fall through to gameplay handlers.
+                        return;
+                }
+                if (input_) {
+                        input_->handleEvent(event);
+                }
+                if (game_assets_) {
+                        game_assets_->handle_sdl_event(event);
+                }
+        };
 	while (!quit) {
-                const Uint64 frame_begin = SDL_GetPerformanceCounter();
-                bool had_events = false;
-                while (SDL_PollEvent(&e)) {
-                        had_events = true;
-                        if (renderer && is_resize_or_scale_event(e.type)) {
-                                if (sync_output_dimensions(renderer)) {
-                                        rebuildButtons();
-                                }
+                if (SDL_WaitEventTimeout(&e, EVENT_WAIT_TIMEOUT_MS)) {
+                        process_event(e);
+                        while (SDL_PollEvent(&e)) {
+                                process_event(e);
                         }
-                        handle_global_shortcuts(e);
-                        const bool menu_was_active = menu_active_;
-			if (e.type == SDL_EVENT_QUIT) {
-                                run_exit_save_sequence("sdl_event_quit");
-					quit = true;
-			}
-                        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && e.key.repeat == 0) {
-                                bool esc_consumed = false;
-                                if (game_assets_) {
-                                        esc_consumed = game_assets_->consume_escape_for_asset_editor_stack();
-                                }
-                                if (!esc_consumed) {
-                                        toggleMenu();
-                                }
-                        }
-                        if (e.type == SDL_EVENT_KEY_DOWN && e.key.repeat == 0) {
-                                const bool ctrl_down = (e.key.mod & SDL_KMOD_CTRL) != 0;
-                                if (ctrl_down && e.key.key == SDLK_D) {
-                                        doToggleDevMode();
-                                }
-                        }
-                        if (menu_active_) {
-                                handle_event(e);
-                                continue;
-                        }
-                        if (menu_was_active) {
-                                // Don't let the closing event fall through to gameplay handlers.
-                                continue;
-                        }
-                        if (input_) input_->handleEvent(e);
-                        if (game_assets_) game_assets_->handle_sdl_event(e);
                 }
 
                 if (sync_output_dimensions(renderer)) {
@@ -136,28 +133,12 @@ void MenuUI::game_loop() {
 
                 const bool should_update = !menu_active_ && game_assets_ && input_;
                 if (should_update) {
-                        const Uint64 update_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
-                        const Uint64 update_end = SDL_GetPerformanceCounter();
-                        const double update_ms =
-                                (update_end > update_begin && perf_frequency > 0.0)
-                                        ? (static_cast<double>(update_end - update_begin) * 1000.0 / perf_frequency)
-                                        : 0.0;
-                        if (update_ms >= 250.0) {
-                                static Uint64 last_update_warn_ticks = 0;
-                                const Uint64 now_ticks = SDL_GetTicks();
-                                if (last_update_warn_ticks == 0 || (now_ticks - last_update_warn_ticks) >= 1000) {
-                                        last_update_warn_ticks = now_ticks;
-                                        vibble::log::warn("[MenuUI] Slow gameplay update frame: " +
-                                                          std::to_string(update_ms) + "ms");
-                                }
-                        }
                 }
                 if (menu_active_) {
                         render();
                         switch (consumeAction()) {
                                 case MenuAction::EXIT:     doExit();    closeMenu(); quit = true; break;
-                                case MenuAction::RESTART:  doRestart(); closeMenu(); break;
                                 case MenuAction::QUIT:     doQuit();    closeMenu(); quit = true; break;
                                 case MenuAction::SETTINGS: doSettings();             break;
                                 default: break;
@@ -169,23 +150,8 @@ void MenuUI::game_loop() {
                 }
                 log_render_diagnostics(renderer, "MenuUI");
 
-                if (input_) input_->update();
-
-                const double remaining_counts =
-                        app::frame_pacing::remaining_frame_counts(frame_begin,
-                                                                  target_counts,
-                                                                  perf_frequency);
-                if (remaining_counts > 0.0) {
-                        idle_counts_accum += remaining_counts;
-                        ++idle_frame_counter;
-                        app::frame_pacing::delay_from_remaining_counts(remaining_counts,
-                                                                       perf_frequency);
-                }
-
-                if (idle_frame_counter >= IDLE_REPORT_INTERVAL) {
-
-                        idle_counts_accum = 0.0;
-                        idle_frame_counter = 0;
+                if (input_) {
+                        input_->update();
                 }
 	}
 }
@@ -268,7 +234,6 @@ void MenuUI::rebuildButtons() {
                 buttons_.push_back(MenuButton{ std::move(b), action });
 };
         addButton("End Run",            MenuAction::EXIT, true);
-        addButton("Restart Run",        MenuAction::RESTART);
         addButton("Quit Game",          MenuAction::QUIT, true);
         addButton("Settings",           MenuAction::SETTINGS);
 }
@@ -365,48 +330,6 @@ void MenuUI::doExit() {
 	std::cout << "[MenuUI] End Run -> return to main menu (exit_save="
                   << (saved ? "ok" : "FAILED") << ")\n";
 	return_to_main_menu_ = true;
-}
-
-void MenuUI::doRestart() {
-        std::cout << "[MenuUI] Restarting...\n";
-        game_assets_.reset();
-        SDL_Renderer* renderer = raw_renderer();
-        if (!renderer) {
-                std::cerr << "[MenuUI] Cannot restart without a renderer.\n";
-                return;
-        }
-        if (!loader_) {
-                std::cerr << "[MenuUI] Cannot restart before initial setup has completed.\n";
-                return;
-        }
-        const bool restart_ok = app::bootstrap::run_guarded(
-                [&]() {
-                        app::bootstrap::RuntimeBootstrapRequest bootstrap_request;
-                        bootstrap_request.renderer = renderer;
-                        bootstrap_request.shared_asset_library = asset_library_;
-                        bootstrap_request.source_loader = loader_.get();
-
-                        auto bootstrap_result = app::bootstrap::prepare_runtime_bootstrap(std::move(bootstrap_request));
-                        game_assets_ = app::bootstrap::create_assets_from_bootstrap(bootstrap_result,
-                                                                                    screen_w_,
-                                                                                    screen_h_,
-                                                                                    renderer);
-                        loader_ = std::move(bootstrap_result.loader);
-                        app::bootstrap::finalize_assets_post_init(
-                                *game_assets_,
-                                input_,
-                                dev_mode_,
-                                bootstrap_result.player_ptr,
-                                []() {
-                                        std::cout << "[MenuUI] No player asset found. Launching in Dev Mode.\n";
-                                });
-                },
-                [](const std::exception& ex) {
-                        std::cerr << "[MenuUI] Restart failed: " << ex.what() << "\n";
-                });
-        if (!restart_ok) {
-                return;
-        }
 }
 
 void MenuUI::doSettings() {

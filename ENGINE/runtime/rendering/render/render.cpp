@@ -1991,6 +1991,7 @@ void SceneRenderer::render() {
 
         gpu_scene_renderer_->add_render_pass("floor",
                                              [&]() {
+            gpu_scene_renderer_->touch_graphics_pipeline("floor_compose", 0x1001u);
             if (!floor_composer_) {
                 floor_texture = nullptr;
                 floor_dark_mask_texture = nullptr;
@@ -2009,6 +2010,14 @@ void SceneRenderer::render() {
                                               GpuFrameGraph::ResourceDependency{"scene.floor.mask", true}});
         gpu_scene_renderer_->add_compute_pass("tiled_light_culling",
                                               [&]() {
+            const Uint32 tile_size = 16;
+            const Uint32 group_x = static_cast<Uint32>(std::max(1, (screen_width_ + static_cast<int>(tile_size) - 1) / static_cast<int>(tile_size)));
+            const Uint32 group_y = static_cast<Uint32>(std::max(1, (screen_height_ + static_cast<int>(tile_size) - 1) / static_cast<int>(tile_size)));
+            std::string compute_error;
+            if (!gpu_scene_renderer_->dispatch_compute_light_binning(group_x, group_y, &compute_error) &&
+                !compute_error.empty()) {
+                vibble::log::warn("[SceneRenderer] GPU compute light binning dispatch failed: " + compute_error);
+            }
             if (layer_build.valid && !layer_build.non_empty_layers.empty()) {
                 layer_stack_renderer_->build_gpu_tiled_light_bins(layer_build, runtime_lights);
             }
@@ -2016,6 +2025,8 @@ void SceneRenderer::render() {
                                               {GpuFrameGraph::ResourceDependency{"scene.light.tiles", true}});
         gpu_scene_renderer_->add_render_pass("geometry_lighting",
                                              [&]() {
+            gpu_scene_renderer_->touch_graphics_pipeline("sprite_batched", 0x1002u);
+            gpu_scene_renderer_->touch_graphics_pipeline("light_eval", 0x1003u);
             if (!layer_build.valid || layer_build.non_empty_layers.empty()) {
                 compact_result = render_pipeline::CompactLayerRenderResult{};
                 return;
@@ -2030,6 +2041,7 @@ void SceneRenderer::render() {
                                               GpuFrameGraph::ResourceDependency{"scene.geometry", true}});
         gpu_scene_renderer_->add_render_pass("dof",
                                              [&]() {
+            gpu_scene_renderer_->touch_graphics_pipeline("sprite_textured", 0x1004u);
             if (!blur_chain_renderer_ || !compact_result.valid || !compact_result.final_texture) {
                 blur_result = render_pipeline::BlurCompositeResult{};
                 return;
@@ -2044,6 +2056,8 @@ void SceneRenderer::render() {
                                               GpuFrameGraph::ResourceDependency{"scene.blur", true}});
         gpu_scene_renderer_->add_render_pass("scene_composite",
                                              [&]() {
+            gpu_scene_renderer_->touch_graphics_pipeline("dark_mask", 0x1005u);
+            gpu_scene_renderer_->touch_graphics_pipeline("final_compose", 0x1006u);
             SDL_Texture* scene_texture = compact_result.valid ? compact_result.final_texture : nullptr;
             composed = scene_composite_pass_->compose_gpu(scene_composite_tex_,
                                                           floor_texture,

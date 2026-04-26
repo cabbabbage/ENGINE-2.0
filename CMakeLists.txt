@@ -254,6 +254,17 @@ endif()
 # ------------------------------------------
 set(RUNTIME_SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/runtime/rendering/shaders")
 set(RUNTIME_SHADER_PACKAGE_DIR "${CMAKE_BINARY_DIR}/runtime_shaders")
+add_custom_target(runtime_gpu_preflight
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/rendering/runtime_gpu_preflight.py"
+            --workspace "${CMAKE_SOURCE_DIR}"
+    COMMENT "Running SDL3 GPU runtime preflight checks"
+    VERBATIM)
+add_custom_target(runtime_gpu_preflight_strict
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/rendering/runtime_gpu_preflight.py"
+            --workspace "${CMAKE_SOURCE_DIR}"
+            --strict-tools
+    COMMENT "Running strict SDL3 GPU runtime preflight checks (requires shader compilers)"
+    VERBATIM)
 add_custom_target(runtime_shader_packages ALL
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/shaders/build_runtime_shader_packages.py"
             --input "${RUNTIME_SHADER_SOURCE_DIR}"
@@ -262,6 +273,7 @@ add_custom_target(runtime_shader_packages ALL
     COMMENT "Packaging deterministic runtime shader bundles (DXIL/SPIR-V)"
     VERBATIM)
 add_dependencies(engine runtime_shader_packages)
+add_dependencies(runtime_shader_packages runtime_gpu_preflight)
 
 set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
@@ -327,6 +339,8 @@ add_executable(engine_tests
     ENGINE/tests/test_layer_submission_packets.cpp
     ENGINE/tests/test_layer_stack_gpu_submission.cpp
     ENGINE/tests/test_gpu_compact_pass_graph.cpp
+    ENGINE/tests/test_shader_package_library.cpp
+    ENGINE/tests/test_shader_pipeline_cache.cpp
     ENGINE/tests/test_floor_light_mask.cpp
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_child_asset_runtime.cpp

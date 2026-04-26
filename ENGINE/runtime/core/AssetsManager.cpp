@@ -116,19 +116,7 @@ double env_double_clamped(const char* name, double fallback, double min_value, d
 }
 
 bool startup_runtime_safety_enabled() {
-    static const bool enabled = [] {
-        const char* raw = SDL_getenv("VIBBLE_STARTUP_RUNTIME_SAFETY");
-        if (!raw || !*raw) {
-            return false;
-        }
-        const std::string value(raw);
-        return value == "1" ||
-               value == "true" ||
-               value == "TRUE" ||
-               value == "on" ||
-               value == "ON";
-    }();
-    return enabled;
+    return false;
 }
 
 std::uint32_t startup_runtime_safety_frames() {

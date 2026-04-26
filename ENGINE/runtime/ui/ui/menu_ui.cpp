@@ -60,10 +60,6 @@ MenuUI::~MenuUI() = default;
 
 void MenuUI::init() {
         setup();
-        run_startup_stabilization();
-        if (startup_abort_requested()) {
-                return;
-        }
         rebuildButtons();
         game_loop();
 }

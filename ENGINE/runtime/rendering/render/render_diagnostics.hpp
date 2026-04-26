@@ -37,6 +37,8 @@ struct RenderFrameStats {
     double gpu_pipeline_cache_hit_rate = 1.0;
     std::uint32_t sdl_renderer_target_call_count = 0;
     std::uint32_t sdl_renderer_draw_call_count = 0;
+    std::uint32_t present_call_count = 0;
+    std::uint32_t gpu_failed_frame_count = 0;
 };
 
 namespace render_diagnostics {
@@ -71,6 +73,8 @@ void set_gpu_light_culling_stats(std::uint32_t tile_assignments,
 void set_gpu_pipeline_cache_stats(std::uint64_t hits,
                                   std::uint64_t misses,
                                   double hit_rate);
+void note_present_call(std::uint32_t count = 1);
+void note_gpu_frame_skipped_due_to_failure(std::uint32_t count = 1);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

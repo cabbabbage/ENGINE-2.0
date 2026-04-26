@@ -115,6 +115,8 @@ void begin_frame() {
     g_frame_stats.gpu_pipeline_cache_hit_rate = 1.0;
     g_frame_stats.sdl_renderer_target_call_count = 0;
     g_frame_stats.sdl_renderer_draw_call_count = 0;
+    g_frame_stats.present_call_count = 0;
+    g_frame_stats.gpu_failed_frame_count = 0;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -219,6 +221,14 @@ void set_gpu_pipeline_cache_stats(std::uint64_t hits,
     g_frame_stats.gpu_pipeline_cache_hits = hits;
     g_frame_stats.gpu_pipeline_cache_misses = misses;
     g_frame_stats.gpu_pipeline_cache_hit_rate = std::clamp(hit_rate, 0.0, 1.0);
+}
+
+void note_present_call(std::uint32_t count) {
+    g_frame_stats.present_call_count += count;
+}
+
+void note_gpu_frame_skipped_due_to_failure(std::uint32_t count) {
+    g_frame_stats.gpu_failed_frame_count += count;
 }
 
 void note_texture_created(SDL_Texture* texture) {

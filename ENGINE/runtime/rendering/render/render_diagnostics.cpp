@@ -1,6 +1,8 @@
 #include "rendering/render/render_diagnostics.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <unordered_map>
 
 namespace {
 RenderFrameStats g_frame_stats{};
@@ -11,6 +13,60 @@ double g_last_present_block_ms = 0.0;
 double g_last_present_interval_ms = 0.0;
 bool g_last_present_interval_known = false;
 bool g_has_present_sample = false;
+std::unordered_map<SDL_Texture*, std::uint64_t> g_texture_size_bytes{};
+std::uint64_t g_tracked_texture_bytes = 0;
+
+std::uint64_t estimate_texture_bytes(SDL_Texture* texture) {
+    if (!texture) {
+        return 0;
+    }
+
+    float width = 0.0f;
+    float height = 0.0f;
+    if (!SDL_GetTextureSize(texture, &width, &height)) {
+        return 0;
+    }
+    const std::uint64_t w = static_cast<std::uint64_t>(std::max(0.0, std::ceil(width)));
+    const std::uint64_t h = static_cast<std::uint64_t>(std::max(0.0, std::ceil(height)));
+    if (w == 0 || h == 0) {
+        return 0;
+    }
+
+    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA8888;
+    if (SDL_PropertiesID props = SDL_GetTextureProperties(texture)) {
+        format = static_cast<SDL_PixelFormat>(
+            SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, static_cast<Sint64>(format)));
+    }
+    const SDL_PixelFormatDetails* format_details = SDL_GetPixelFormatDetails(format);
+    const std::uint64_t bytes_per_pixel =
+        (format_details && format_details->bytes_per_pixel > 0)
+            ? static_cast<std::uint64_t>(format_details->bytes_per_pixel)
+            : 4ull;
+
+    return w * h * bytes_per_pixel;
+}
+
+void track_texture_create(SDL_Texture* texture) {
+    if (!texture || g_texture_size_bytes.find(texture) != g_texture_size_bytes.end()) {
+        return;
+    }
+    const std::uint64_t bytes = estimate_texture_bytes(texture);
+    g_texture_size_bytes.emplace(texture, bytes);
+    g_tracked_texture_bytes += bytes;
+}
+
+void track_texture_destroy(SDL_Texture* texture) {
+    if (!texture) {
+        return;
+    }
+    const auto it = g_texture_size_bytes.find(texture);
+    if (it == g_texture_size_bytes.end()) {
+        return;
+    }
+    const std::uint64_t bytes = it->second;
+    g_tracked_texture_bytes = (g_tracked_texture_bytes >= bytes) ? (g_tracked_texture_bytes - bytes) : 0;
+    g_texture_size_bytes.erase(it);
+}
 
 void ensure_perf_frequency() {
     if (g_perf_frequency == 0) {
@@ -49,6 +105,8 @@ void begin_frame() {
     g_frame_stats.present_block_ms = g_has_present_sample ? g_last_present_block_ms : 0.0;
     g_frame_stats.present_interval_ms = g_has_present_sample ? g_last_present_interval_ms : 0.0;
     g_frame_stats.present_interval_known = g_has_present_sample && g_last_present_interval_known;
+    g_frame_stats.texture_memory_bytes = 0;
+    g_frame_stats.texture_memory_known = false;
     g_frame_stats.gpu_light_tile_assignments = 0;
     g_frame_stats.gpu_light_naive_evaluations = 0;
     g_frame_stats.gpu_light_tiled_evaluations = 0;
@@ -150,6 +208,35 @@ void set_gpu_light_culling_stats(std::uint32_t tile_assignments,
     g_frame_stats.gpu_light_tiled_evaluations = tiled_evaluations;
 }
 
+void note_texture_created(SDL_Texture* texture) {
+    if (!texture) {
+        return;
+    }
+    add_texture_create_count();
+    track_texture_create(texture);
+}
+
+void note_texture_destroyed(SDL_Texture* texture) {
+    if (!texture) {
+        return;
+    }
+    add_texture_destroy_count();
+    track_texture_destroy(texture);
+}
+
+void destroy_texture(SDL_Texture*& texture) {
+    if (!texture) {
+        return;
+    }
+    note_texture_destroyed(texture);
+    SDL_DestroyTexture(texture);
+    texture = nullptr;
+}
+
+std::uint64_t tracked_texture_bytes() {
+    return g_tracked_texture_bytes;
+}
+
 SDL_Texture* create_texture(SDL_Renderer* renderer,
                             SDL_PixelFormat format,
                             SDL_TextureAccess access,
@@ -157,7 +244,7 @@ SDL_Texture* create_texture(SDL_Renderer* renderer,
                             int h) {
     SDL_Texture* texture = SDL_CreateTexture(renderer, format, access, w, h);
     if (texture) {
-        add_texture_create_count();
+        note_texture_created(texture);
     }
     return texture;
 }

@@ -6,16 +6,14 @@
 #include <vector>
 
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 
 namespace {
 
 constexpr float kBlurEpsilon = 1.0e-4f;
 
 void destroy_texture(SDL_Texture*& texture) {
-    if (texture) {
-        SDL_DestroyTexture(texture);
-        texture = nullptr;
-    }
+    render_diagnostics::destroy_texture(texture);
 }
 
 float sanitized_non_negative(float value) {
@@ -78,11 +76,11 @@ bool BlurChainRenderer::ensure_target(SDL_Texture*& texture) {
         destroy_texture(texture);
     }
 
-    texture = SDL_CreateTexture(renderer_,
-                                SDL_PIXELFORMAT_RGBA8888,
-                                SDL_TEXTUREACCESS_TARGET,
-                                screen_width_,
-                                screen_height_);
+    texture = render_diagnostics::create_texture(renderer_,
+                                                 SDL_PIXELFORMAT_RGBA8888,
+                                                 SDL_TEXTUREACCESS_TARGET,
+                                                 screen_width_,
+                                                 screen_height_);
     if (!texture) {
         return false;
     }
@@ -103,7 +101,9 @@ void BlurChainRenderer::clear_target(SDL_Texture* texture) const {
         return;
     }
 
-    SDL_SetRenderTarget(renderer_, texture);
+    if (!render_diagnostics::set_render_target(renderer_, texture)) {
+        return;
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
     SDL_RenderClear(renderer_);
@@ -115,11 +115,13 @@ bool BlurChainRenderer::copy_texture(SDL_Texture* src, SDL_Texture* dst) const {
     }
 
     clear_target(dst);
-    SDL_SetRenderTarget(renderer_, dst);
+    if (!render_diagnostics::set_render_target(renderer_, dst)) {
+        return false;
+    }
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
-    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
     return true;
 }
 
@@ -128,11 +130,13 @@ bool BlurChainRenderer::composite_texture_over(SDL_Texture* src, SDL_Texture* ds
         return false;
     }
 
-    SDL_SetRenderTarget(renderer_, dst);
+    if (!render_diagnostics::set_render_target(renderer_, dst)) {
+        return false;
+    }
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
-    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
     return true;
 }
 
@@ -141,11 +145,13 @@ bool BlurChainRenderer::composite_texture_modulate_over(SDL_Texture* src, SDL_Te
         return false;
     }
 
-    SDL_SetRenderTarget(renderer_, dst);
+    if (!render_diagnostics::set_render_target(renderer_, dst)) {
+        return false;
+    }
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_MOD);
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
-    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
     return true;
 }
 

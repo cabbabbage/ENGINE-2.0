@@ -63,6 +63,10 @@ void set_render_thread_cpu_ms(double elapsed_ms);
 void set_gpu_light_culling_stats(std::uint32_t tile_assignments,
                                  std::uint32_t naive_evaluations,
                                  std::uint32_t tiled_evaluations);
+void note_texture_created(SDL_Texture* texture);
+void note_texture_destroyed(SDL_Texture* texture);
+void destroy_texture(SDL_Texture*& texture);
+std::uint64_t tracked_texture_bytes();
 
 SDL_Texture* create_texture(SDL_Renderer* renderer,
                             SDL_PixelFormat format,

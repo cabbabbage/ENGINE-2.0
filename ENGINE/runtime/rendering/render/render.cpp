@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -43,6 +44,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -53,6 +55,40 @@ constexpr double kDepthBucketSize = 0.0625;
 constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
 constexpr float kQuadEpsilon = 1.0e-5f;
 
+std::string lowercase_ascii(std::string value) {
+    std::transform(value.begin(),
+                   value.end(),
+                   value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+SceneRenderer::RuntimeRendererMode parse_runtime_renderer_mode(std::string& out_mode_name,
+                                                               bool& out_used_default) {
+    out_mode_name = "gpu";
+    out_used_default = true;
+    const char* raw = std::getenv("VIBBLE_RUNTIME_GAMEPLAY_RENDERER");
+    if (!raw || !*raw) {
+        return SceneRenderer::RuntimeRendererMode::Gpu;
+    }
+    const std::string requested = lowercase_ascii(std::string(raw));
+    if (requested == "gpu") {
+        out_mode_name = "gpu";
+        out_used_default = false;
+        return SceneRenderer::RuntimeRendererMode::Gpu;
+    }
+    if (requested == "legacy") {
+        out_mode_name = "legacy";
+        out_used_default = false;
+        return SceneRenderer::RuntimeRendererMode::Legacy;
+    }
+    out_mode_name = "gpu";
+    out_used_default = true;
+    vibble::log::warn("[SceneRenderer] Unrecognized VIBBLE_RUNTIME_GAMEPLAY_RENDERER='" + requested +
+                      "'. Expected 'gpu' or 'legacy'; defaulting to gpu.");
+    return SceneRenderer::RuntimeRendererMode::Gpu;
+}
+
 inline std::int64_t quantize_depth(double depth) {
     const double scaled = std::floor(depth * kDepthBucketScale);
     const double min_value = static_cast<double>(std::numeric_limits<std::int64_t>::lowest());
@@ -61,11 +97,7 @@ inline std::int64_t quantize_depth(double depth) {
 }
 
 void destroy_texture(SDL_Texture*& texture) {
-    if (texture) {
-        render_diagnostics::add_texture_destroy_count();
-        SDL_DestroyTexture(texture);
-        texture = nullptr;
-    }
+    render_diagnostics::destroy_texture(texture);
 }
 
 
@@ -356,7 +388,9 @@ bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
     if (!renderer || !gameplay_target) {
         return false;
     }
-    SDL_SetRenderTarget(renderer, gameplay_target);
+    if (!render_diagnostics::set_render_target(renderer, gameplay_target)) {
+        return false;
+    }
     SDL_SetRenderViewport(renderer, nullptr);
     SDL_SetRenderClipRect(renderer, nullptr);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
@@ -704,12 +738,12 @@ void GeometryBatcher::flush() {
             return;
         }
         SDL_SetTextureBlendMode(current_texture, current_blend);
-        SDL_RenderGeometry(renderer_,
-                           current_texture,
-                           vertex_buffer_.data(),
-                           static_cast<int>(vertex_buffer_.size()),
-                           index_buffer_.data(),
-                           static_cast<int>(index_buffer_.size()));
+        render_diagnostics::render_geometry(renderer_,
+                                            current_texture,
+                                            vertex_buffer_.data(),
+                                            static_cast<int>(vertex_buffer_.size()),
+                                            index_buffer_.data(),
+                                            static_cast<int>(index_buffer_.size()));
         ++draw_call_count_;
         total_vertices_ += vertex_buffer_.size();
         vertex_buffer_.clear();
@@ -845,20 +879,27 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
     if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
 
-    gpu_runtime_path_enabled_ = true;
-    std::string gpu_error;
-    gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
-    if (!gpu_scene_renderer_) {
-        throw std::runtime_error("GPU runtime renderer initialization failed: " + gpu_error);
-    }
+    bool used_default_mode = true;
+    runtime_renderer_mode_ = parse_runtime_renderer_mode(runtime_renderer_mode_name_, used_default_mode);
+    gpu_runtime_path_enabled_ = runtime_renderer_mode_ == RuntimeRendererMode::Gpu;
+    if (runtime_renderer_mode_ == RuntimeRendererMode::Gpu) {
+        std::string gpu_error;
+        gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
+        if (!gpu_scene_renderer_) {
+            throw std::runtime_error("GPU runtime renderer initialization failed: " + gpu_error);
+        }
 
-    const char* shader_manifest_env = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
-    const std::string shader_manifest = shader_manifest_env ? std::string(shader_manifest_env)
-                                                            : std::string("ENGINE/runtime/rendering/shaders/runtime_shaders.json");
-    if (!gpu_scene_renderer_->load_shader_packages(shader_manifest, gpu_error)) {
-        throw std::runtime_error("GPU shader package load failed: " + gpu_error);
+        const char* shader_manifest_env = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
+        const std::string shader_manifest = shader_manifest_env ? std::string(shader_manifest_env)
+                                                                : std::string("ENGINE/runtime/rendering/shaders/runtime_shaders.json");
+        if (!gpu_scene_renderer_->load_shader_packages(shader_manifest, gpu_error)) {
+            throw std::runtime_error("GPU shader package load failed: " + gpu_error);
+        }
+        vibble::log::info("[SceneRenderer] Runtime gameplay renderer mode: gpu" +
+                          std::string(used_default_mode ? " (default)" : " (from env)"));
+    } else {
+        vibble::log::warn("[SceneRenderer] Runtime gameplay renderer mode: legacy (temporary parity path).");
     }
-    vibble::log::info("[SceneRenderer] GPU runtime renderer path is enabled by default.");
 
     vibble::log::debug(std::string{"[SceneRenderer] מתחיל אתחול עבור מפה '"} + map_id +
                        "' עם מסך " + std::to_string(screen_width_) + "x" + std::to_string(screen_height_) + ".");
@@ -1877,13 +1918,7 @@ void SceneRenderer::render() {
     const std::uint64_t render_begin_counter = SDL_GetPerformanceCounter();
     const std::uint64_t perf_freq = SDL_GetPerformanceFrequency();
     render_diagnostics::begin_frame();
-    if (!gpu_runtime_path_enabled_ || !gpu_scene_renderer_ || !layer_stack_renderer_ || !scene_composite_pass_) {
-        render_diagnostics::set_renderer_runtime_info("gpu", "unavailable", "unknown");
-        render_diagnostics::end_frame();
-        vibble::log::error("[SceneRenderer] GPU runtime renderer is unavailable during frame execution.");
-        return;
-    }
-    gpu_scene_renderer_->begin_frame();
+    render_diagnostics::set_texture_memory_usage(render_diagnostics::tracked_texture_bytes(), false);
 
     render_internal::clear_gameplay_target_to_color(renderer_, scene_composite_tex_, map_clear_color_);
     WarpedScreenGrid& cam = assets_->getView();
@@ -1934,7 +1969,6 @@ void SceneRenderer::render() {
     SDL_Texture* floor_dark_mask_texture = nullptr;
     bool floor_dark_mask_drawn = false;
     bool composed = false;
-    bool gpu_graph_executed = false;
     const float front_mult = std::clamp(realism.front_layer_light_strength_multiplier, 0.0f, 4.0f);
     const float behind_mult = std::clamp(realism.behind_layer_light_strength_multiplier, 0.0f, 4.0f);
     SDL_Point screen_center = cam.get_focus_override_point();
@@ -1944,73 +1978,120 @@ void SceneRenderer::render() {
 
     render_pipeline::CompactLayerRenderResult compact_result{};
     render_pipeline::BlurCompositeResult blur_result{};
+    if (runtime_renderer_mode_ == RuntimeRendererMode::Gpu) {
+        if (!gpu_scene_renderer_ || !layer_stack_renderer_ || !scene_composite_pass_) {
+            render_diagnostics::set_renderer_runtime_info("gpu", "unavailable", "unknown");
+            render_diagnostics::end_frame();
+            vibble::log::error("[SceneRenderer] GPU runtime renderer is unavailable during frame execution.");
+            return;
+        }
+        gpu_scene_renderer_->begin_frame();
+        render_diagnostics::set_renderer_runtime_info("gpu",
+                                                      gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->backend_name() : "unknown",
+                                                      gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->present_mode() : "unknown");
 
-    gpu_scene_renderer_->add_render_pass("floor", [&]() {
-        if (!floor_composer_) {
-            floor_texture = nullptr;
-            floor_dark_mask_texture = nullptr;
-            return;
-        }
-        floor_texture = floor_composer_->compose_gpu(cam,
-                                                     grid,
-                                                     runtime_lights,
-                                                     runtime_lighting_enabled,
-                                                     max_cull_depth,
-                                                     map_clear_color_,
-                                                     true);
-        floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
-    });
-    gpu_scene_renderer_->add_compute_pass("tiled_light_culling", [&]() {
-        if (layer_build.valid && !layer_build.non_empty_layers.empty()) {
-            layer_stack_renderer_->build_gpu_tiled_light_bins(layer_build, runtime_lights);
-        }
-    });
-    gpu_scene_renderer_->add_render_pass("geometry_lighting", [&]() {
-        if (!layer_build.valid || layer_build.non_empty_layers.empty()) {
-            compact_result = render_pipeline::CompactLayerRenderResult{};
-            return;
-        }
-        compact_result = layer_stack_renderer_->render_gpu_compact(layer_build,
+        gpu_scene_renderer_->add_render_pass("floor", [&]() {
+            if (!floor_composer_) {
+                floor_texture = nullptr;
+                floor_dark_mask_texture = nullptr;
+                return;
+            }
+            floor_texture = floor_composer_->compose_gpu(cam,
+                                                         grid,
+                                                         runtime_lights,
+                                                         runtime_lighting_enabled,
+                                                         max_cull_depth,
+                                                         map_clear_color_,
+                                                         true);
+            floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
+        });
+        gpu_scene_renderer_->add_compute_pass("tiled_light_culling", [&]() {
+            if (layer_build.valid && !layer_build.non_empty_layers.empty()) {
+                layer_stack_renderer_->build_gpu_tiled_light_bins(layer_build, runtime_lights);
+            }
+        });
+        gpu_scene_renderer_->add_render_pass("geometry_lighting", [&]() {
+            if (!layer_build.valid || layer_build.non_empty_layers.empty()) {
+                compact_result = render_pipeline::CompactLayerRenderResult{};
+                return;
+            }
+            compact_result = layer_stack_renderer_->render_gpu_compact(layer_build,
+                                                                       runtime_lights,
+                                                                       runtime_lighting_enabled,
+                                                                       front_mult,
+                                                                       behind_mult);
+        });
+        gpu_scene_renderer_->add_render_pass("dof", [&]() {
+            if (!blur_chain_renderer_ || !compact_result.valid || !compact_result.final_texture) {
+                blur_result = render_pipeline::BlurCompositeResult{};
+                return;
+            }
+            blur_result = blur_chain_renderer_->compose_gpu(compact_result.final_texture,
+                                                            realism.depth_of_field_enabled,
+                                                            realism.blur_px,
+                                                            realism.radial_blur_px,
+                                                            optical_center);
+        });
+        gpu_scene_renderer_->add_render_pass("scene_composite", [&]() {
+            SDL_Texture* scene_texture = compact_result.valid ? compact_result.final_texture : nullptr;
+            composed = scene_composite_pass_->compose_gpu(scene_composite_tex_,
+                                                          floor_texture,
+                                                          floor_dark_mask_texture,
+                                                          scene_texture,
+                                                          blur_result);
+        });
+        gpu_scene_renderer_->end_frame();
+    } else {
+        render_diagnostics::set_renderer_runtime_info("legacy", "sdl_renderer", "unknown");
+        floor_texture = floor_composer_ ? floor_composer_->compose(cam,
+                                                                   grid,
                                                                    runtime_lights,
                                                                    runtime_lighting_enabled,
-                                                                   front_mult,
-                                                                   behind_mult);
-    });
-    gpu_scene_renderer_->add_render_pass("dof", [&]() {
-        if (!blur_chain_renderer_ || !compact_result.valid || !compact_result.final_texture) {
-            blur_result = render_pipeline::BlurCompositeResult{};
-            return;
+                                                                   max_cull_depth,
+                                                                   map_clear_color_,
+                                                                   true)
+                                        : nullptr;
+        floor_dark_mask_texture = floor_composer_ ? floor_composer_->floor_dark_mask_texture() : nullptr;
+
+        render_pipeline::LayerRenderResult legacy_layer_result{};
+        if (layer_stack_renderer_ && layer_build.valid) {
+            legacy_layer_result = layer_stack_renderer_->render(layer_build,
+                                                                runtime_lights,
+                                                                runtime_lighting_enabled,
+                                                                front_mult,
+                                                                behind_mult);
         }
-        blur_result = blur_chain_renderer_->compose_gpu(compact_result.final_texture,
+        if (blur_chain_renderer_ && legacy_layer_result.valid) {
+            blur_result = blur_chain_renderer_->compose(legacy_layer_result,
                                                         realism.depth_of_field_enabled,
                                                         realism.blur_px,
                                                         realism.radial_blur_px,
                                                         optical_center);
-    });
-    gpu_scene_renderer_->add_render_pass("scene_composite", [&]() {
-        SDL_Texture* scene_texture = compact_result.valid ? compact_result.final_texture : nullptr;
-        composed = scene_composite_pass_->compose_gpu(scene_composite_tex_,
-                                                      floor_texture,
-                                                      floor_dark_mask_texture,
-                                                      scene_texture,
-                                                      blur_result);
-    });
-    gpu_scene_renderer_->end_frame();
-    gpu_graph_executed = true;
+        }
+        if (scene_composite_pass_) {
+            composed = scene_composite_pass_->compose_gpu(scene_composite_tex_,
+                                                          floor_texture,
+                                                          floor_dark_mask_texture,
+                                                          nullptr,
+                                                          blur_result);
+            if (!composed && legacy_layer_result.valid) {
+                composed = scene_composite_pass_->compose(scene_composite_tex_, legacy_layer_result, blur_result);
+            }
+        }
+    }
 
     if (!composed) {
         if (floor_dark_mask_texture && !floor_dark_mask_drawn) {
             SDL_SetTextureBlendMode(floor_dark_mask_texture, SDL_BLENDMODE_MOD);
             SDL_SetTextureAlphaMod(floor_dark_mask_texture, 255);
             SDL_SetTextureColorMod(floor_dark_mask_texture, 255, 255, 255);
-            SDL_RenderTexture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
+            render_diagnostics::render_texture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
             floor_dark_mask_drawn = true;
         }
         geometry_batcher_->flush();
     }
 
-    render_diagnostics::add_render_target_switch_count();
-    SDL_SetRenderTarget(renderer_, nullptr);
+    render_diagnostics::set_render_target(renderer_, nullptr);
     SDL_SetRenderViewport(renderer_, nullptr);
     SDL_SetRenderClipRect(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -2049,10 +2130,6 @@ void SceneRenderer::render() {
             (static_cast<double>(render_end_counter - render_begin_counter) * 1000.0) /
             static_cast<double>(perf_freq);
         render_diagnostics::set_render_thread_cpu_ms(render_ms);
-    }
-    render_diagnostics::add_draw_call_count(static_cast<std::uint32_t>(geometry_batcher_->getDrawCallCount()));
-    if (gpu_runtime_path_enabled_ && gpu_scene_renderer_ && !gpu_graph_executed) {
-        gpu_scene_renderer_->end_frame();
     }
     render_diagnostics::end_frame();
 }

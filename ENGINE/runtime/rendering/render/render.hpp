@@ -151,6 +151,11 @@ private:
 
 class SceneRenderer {
 public:
+    enum class RuntimeRendererMode {
+        Gpu,
+        Legacy
+    };
+
     SceneRenderer(SDL_Renderer* renderer,
                   Assets* assets,
                   int screen_width,
@@ -190,6 +195,8 @@ public:
     void set_map_clear_color(SDL_Color color) { map_clear_color_ = color; }
     SDL_Color map_clear_color() const { return map_clear_color_; }
     bool gpu_runtime_path_enabled() const { return gpu_runtime_path_enabled_; }
+    RuntimeRendererMode runtime_renderer_mode() const { return runtime_renderer_mode_; }
+    const std::string& runtime_renderer_mode_name() const { return runtime_renderer_mode_name_; }
 
 private:
     struct RuntimeLightRegistryKey {
@@ -323,6 +330,8 @@ private:
     std::unique_ptr<DebugOverlayRenderer> debug_overlay_renderer_;
     std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
     bool gpu_runtime_path_enabled_ = false;
+    RuntimeRendererMode runtime_renderer_mode_ = RuntimeRendererMode::Gpu;
+    std::string runtime_renderer_mode_name_ = "gpu";
 
     bool debug_auto_paths_ = false;
     bool movement_debug_visible_ = true;

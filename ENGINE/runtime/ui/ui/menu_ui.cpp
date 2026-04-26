@@ -1,6 +1,7 @@
 #include "ui/menu_ui.hpp"
 #include "app/bootstrap.hpp"
 #include "app/frame_pacing.hpp"
+#include "rendering/render/engine_renderer.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 

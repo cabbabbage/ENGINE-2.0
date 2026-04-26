@@ -26,8 +26,8 @@ std::uint64_t estimate_texture_bytes(SDL_Texture* texture) {
     if (!SDL_GetTextureSize(texture, &width, &height)) {
         return 0;
     }
-    const std::uint64_t w = static_cast<std::uint64_t>(std::max(0.0, std::ceil(width)));
-    const std::uint64_t h = static_cast<std::uint64_t>(std::max(0.0, std::ceil(height)));
+    const std::uint64_t w = static_cast<std::uint64_t>(std::max(0.0, static_cast<double>(std::ceil(width))));
+    const std::uint64_t h = static_cast<std::uint64_t>(std::max(0.0, static_cast<double>(std::ceil(height))));
     if (w == 0 || h == 0) {
         return 0;
     }

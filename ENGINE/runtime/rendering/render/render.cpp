@@ -2078,6 +2078,8 @@ void SceneRenderer::render() {
         }
         if (blur_chain_renderer_ && legacy_layer_result.valid) {
             blur_result = blur_chain_renderer_->compose(legacy_layer_result,
+                                                        floor_texture,
+                                                        floor_dark_mask_texture,
                                                         realism.depth_of_field_enabled,
                                                         realism.blur_px,
                                                         realism.radial_blur_px,

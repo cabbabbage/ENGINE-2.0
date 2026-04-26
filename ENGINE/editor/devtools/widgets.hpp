@@ -186,6 +186,9 @@ public:
     void set_rect(const SDL_Rect& r);
     const SDL_Rect& rect() const { return rect_; }
     void set_value(int v);
+    void set_min_value(int v);
+    void set_max_value(int v);
+    void set_range(int min_value, int max_value);
     int value() const { return value_; }
     int displayed_value() const;
     void set_defer_commit_until_unfocus(bool defer) {

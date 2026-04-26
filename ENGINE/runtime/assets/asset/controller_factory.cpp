@@ -93,6 +93,19 @@ ControllerFactory::ControllerFactory(Assets* assets)
 
 ControllerFactory::~ControllerFactory() = default;
 
+bool ControllerFactory::has_registered_controller_for_asset_name(const std::string& asset_name) {
+        return has_registered_controller_for_key(asset_name);
+}
+
+bool ControllerFactory::has_registered_controller_for_key(const std::string& key) {
+        const std::string normalized = normalized_controller_key(key);
+        if (normalized.empty()) {
+                return false;
+        }
+        const auto& registry = controller_registry();
+        return registry.find(normalized) != registry.end();
+}
+
 std::unique_ptr<AssetController>
 ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
 	if (!assets_ || !self) return nullptr;

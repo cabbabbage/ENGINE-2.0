@@ -622,7 +622,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{
         {"max_cull_depth", 2500.0},
-        {"dynamic_renderer_depth_efficiency_threshold", 0.35},
+        {"dynamic_renderer_depth_efficiency_depth", 875.0},
         {"dynamic_renderer_depth_efficiency_min_density_ratio", 0.2},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
@@ -651,7 +651,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
-    CHECK(settings.dynamic_renderer_depth_efficiency_threshold == doctest::Approx(0.35f));
+    CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(875.0f));
     CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(0.2f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
@@ -680,7 +680,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
-    CHECK(serialized["dynamic_renderer_depth_efficiency_threshold"] == doctest::Approx(0.35));
+    CHECK(serialized["dynamic_renderer_depth_efficiency_depth"] == doctest::Approx(875.0));
+    CHECK_FALSE(serialized.contains("dynamic_renderer_depth_efficiency_threshold"));
     CHECK(serialized["dynamic_renderer_depth_efficiency_min_density_ratio"] == doctest::Approx(0.2));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
@@ -711,20 +712,31 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK_FALSE(serialized.contains("focus_depth"));
 }
 
-TEST_CASE("WarpedScreenGrid depth efficiency camera settings are clamped to unit interval") {
+TEST_CASE("WarpedScreenGrid depth efficiency camera settings are clamped to cull-depth range") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{
-        {"dynamic_renderer_depth_efficiency_threshold", -4.0},
+        {"max_cull_depth", 300.0},
+        {"dynamic_renderer_depth_efficiency_depth", -4.0},
         {"dynamic_renderer_depth_efficiency_min_density_ratio", 9.0}
     });
 
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
-    CHECK(settings.dynamic_renderer_depth_efficiency_threshold == doctest::Approx(0.0f));
+    CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(0.0f));
     CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(1.0f));
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
-    CHECK(serialized["dynamic_renderer_depth_efficiency_threshold"] == doctest::Approx(0.0));
+    CHECK(serialized["dynamic_renderer_depth_efficiency_depth"] == doctest::Approx(0.0));
     CHECK(serialized["dynamic_renderer_depth_efficiency_min_density_ratio"] == doctest::Approx(1.0));
+}
+
+TEST_CASE("WarpedScreenGrid migrates legacy depth efficiency threshold ratio to depth") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"max_cull_depth", 2500.0},
+        {"dynamic_renderer_depth_efficiency_threshold", 0.35}
+    });
+    const auto settings = camera_grid.get_settings();
+    CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(875.0f));
 }
 
 TEST_CASE("WarpedScreenGrid camera settings accepts legacy blur keys") {

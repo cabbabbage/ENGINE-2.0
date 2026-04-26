@@ -6,6 +6,7 @@
 #include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
+#include "assets/asset/controller_factory.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "assets/asset/animation.hpp"
 #include "core/AssetsManager.hpp"
@@ -218,6 +219,15 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         delta_ms = 0.0f;
     }
 
+    for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
+        Asset* promoted = it->second;
+        if (!promoted || !assets->contains_asset(promoted)) {
+            it = promoted_boundary_assets_.erase(it);
+            continue;
+        }
+        ++it;
+    }
+
     const nlohmann::json& map_info = assets->map_info_json();
     const bool config_changed = refresh_boundary_config_revision(map_info);
     if (config_dirty_ || config_changed) {
@@ -406,12 +416,14 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
 
     const WarpedScreenGrid::RealismSettings realism_settings = cam.get_settings();
     const double max_cull_depth = std::max(1.0, static_cast<double>(realism_settings.max_cull_depth));
-    const float depth_efficiency_threshold_ratio =
-        clamp_unit_interval(realism_settings.dynamic_renderer_depth_efficiency_threshold, 0.40f);
+    const double depth_efficiency_depth = std::clamp(
+        static_cast<double>(std::isfinite(realism_settings.dynamic_renderer_depth_efficiency_depth)
+                                ? realism_settings.dynamic_renderer_depth_efficiency_depth
+                                : 2000.0f),
+        0.0,
+        max_cull_depth);
     const float depth_efficiency_min_density_ratio =
         clamp_unit_interval(realism_settings.dynamic_renderer_depth_efficiency_min_density_ratio, 0.10f);
-    const double depth_efficiency_threshold_depth =
-        max_cull_depth * static_cast<double>(depth_efficiency_threshold_ratio);
 
     for (const StaticCellAssignment& assignment : static_assignments_) {
         if (assignment.boundary_type_index < 0 || assignment.boundary_type_index >= static_cast<int>(boundary_types_.size())) {
@@ -422,6 +434,15 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             continue;
         }
 
+        auto promoted_it = promoted_boundary_assets_.find(assignment.key);
+        if (promoted_it != promoted_boundary_assets_.end()) {
+            Asset* promoted = promoted_it->second;
+            if (promoted && assets->contains_asset(promoted)) {
+                continue;
+            }
+            promoted_boundary_assets_.erase(promoted_it);
+        }
+
         const double depth_from_anchor =
             render_depth::depth_from_anchor(cam.anchor_world_z(), static_cast<double>(assignment.world_z));
         const double depth_distance = std::fabs(depth_from_anchor);
@@ -430,7 +451,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         }
         const float depth_keep_ratio = compute_depth_efficiency_keep_ratio(depth_distance,
                                                                            max_cull_depth,
-                                                                           depth_efficiency_threshold_ratio,
+                                                                           depth_efficiency_depth,
                                                                            depth_efficiency_min_density_ratio);
         if (!(depth_keep_ratio > 0.0f)) {
             continue;
@@ -444,6 +465,34 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             ensure_candidate_runtime(btype, assignment.assignment.resolved_asset_name);
         if (!candidate || candidate->is_null || candidate->frames.empty()) {
             continue;
+        }
+        if (candidate->info &&
+            ControllerFactory::has_registered_controller_for_asset_name(candidate->info->name)) {
+            const std::string promoted_spawn_id = btype.spawn_id.empty()
+                ? std::string{}
+                : (btype.spawn_id + "::promoted::" +
+                   std::to_string(assignment.key.grid_x) + ":" +
+                   std::to_string(assignment.key.grid_y) + ":" +
+                   std::to_string(assignment.key.world_z));
+            if (!promoted_spawn_id.empty()) {
+                if (Asset* existing = assets->find_asset_by_stable_id(promoted_spawn_id)) {
+                    promoted_boundary_assets_[assignment.key] = existing;
+                    continue;
+                }
+            }
+            const SDL_Point spawn_pos{
+                static_cast<int>(std::lround(assignment.world_pos.x)),
+                assignment.world_z
+            };
+            Asset* promoted = assets->spawn_asset(assignment.assignment.resolved_asset_name, spawn_pos);
+            if (promoted) {
+                promoted->spawn_method = "DynamicBoundaryPromoted";
+                if (!promoted_spawn_id.empty()) {
+                    promoted->spawn_id = promoted_spawn_id;
+                }
+                promoted_boundary_assets_[assignment.key] = promoted;
+                continue;
+            }
         }
 
         SDL_FPoint screen_pos{};
@@ -459,7 +508,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         if (total_frames <= 0) {
             continue;
         }
-        const bool freeze_animation = depth_distance > depth_efficiency_threshold_depth;
+        const bool freeze_animation = depth_distance > depth_efficiency_depth;
         advance_frame_state(frame_state, candidate->frames, delta_ms, freeze_animation);
 
         int current_index = frame_state.frame_index % total_frames;
@@ -877,6 +926,7 @@ void DynamicBoundarySystem::clear_runtime_caches() {
     boundary_assignments_.clear();
     animation_states_.clear();
     active_boundary_sprites_.clear();
+    promoted_boundary_assets_.clear();
     region_cache_.clear();
     region_area_index_.clear();
     static_assignments_.clear();
@@ -972,34 +1022,30 @@ float DynamicBoundarySystem::compute_effective_base_scale(const AssetInfo& info,
 
 float DynamicBoundarySystem::compute_depth_efficiency_keep_ratio(double depth_distance,
                                                                  double max_cull_depth,
-                                                                 float threshold_ratio,
+                                                                 double efficiency_depth,
                                                                  float min_density_ratio) {
     if (!std::isfinite(depth_distance) || !std::isfinite(max_cull_depth) || max_cull_depth <= 0.0) {
         return 0.0f;
     }
 
-    const float clamped_threshold_ratio = clamp_unit_interval(threshold_ratio, 0.40f);
+    const double clamped_efficiency_depth = std::clamp(efficiency_depth, 0.0, max_cull_depth);
     const float clamped_min_density_ratio = clamp_unit_interval(min_density_ratio, 0.10f);
     if (depth_distance <= 0.0) {
         return 1.0f;
     }
 
-    const double threshold_depth = max_cull_depth * static_cast<double>(clamped_threshold_ratio);
-    if (depth_distance <= threshold_depth) {
-        return 1.0f;
-    }
-    if (clamped_threshold_ratio >= 1.0f) {
+    if (depth_distance <= clamped_efficiency_depth) {
         return 1.0f;
     }
     if (depth_distance >= max_cull_depth) {
         return clamped_min_density_ratio;
     }
 
-    const double span = max_cull_depth - threshold_depth;
+    const double span = max_cull_depth - clamped_efficiency_depth;
     if (span <= 1e-6) {
-        return 1.0f;
+        return clamped_min_density_ratio;
     }
-    const double t = std::clamp((depth_distance - threshold_depth) / span, 0.0, 1.0);
+    const double t = std::clamp((depth_distance - clamped_efficiency_depth) / span, 0.0, 1.0);
     const double keep_ratio =
         1.0 + (static_cast<double>(clamped_min_density_ratio) - 1.0) * t;
     if (!std::isfinite(keep_ratio)) {

@@ -20,6 +20,7 @@ class WarpedScreenGrid;
 class AssetLibrary;
 class Assets;
 class AssetInfo;
+class Asset;
 namespace world {
 class WorldGrid;
 }
@@ -135,7 +136,7 @@ public:
     static float compute_effective_base_scale(const AssetInfo& info, float size_variation_sample);
     static float compute_depth_efficiency_keep_ratio(double depth_distance,
                                                      double max_cull_depth,
-                                                     float threshold_ratio,
+                                                     double efficiency_depth,
                                                      float min_density_ratio);
     static bool  should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio);
     static void  advance_frame_state(FrameState& frame_state,
@@ -163,6 +164,7 @@ private:
     std::size_t room_trail_catalog_signature_ = std::numeric_limits<std::size_t>::max();
     std::unordered_map<BoundaryKey, BoundaryAssignment, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
+    std::unordered_map<BoundaryKey, Asset*, BoundaryKeyHash> promoted_boundary_assets_;
     std::vector<BoundarySprite> active_boundary_sprites_;
     struct StaticCellAssignment {
         BoundaryKey key;
@@ -309,4 +311,3 @@ private:
     };
     static BoundaryConfig& config();
 };
-

@@ -1265,6 +1265,32 @@ void DMSlider::set_value(int v) {
     last_notified_value_ = value_;
 }
 
+void DMSlider::set_min_value(int v) {
+    set_range(v, max_);
+}
+
+void DMSlider::set_max_value(int v) {
+    set_range(min_, v);
+}
+
+void DMSlider::set_range(int min_value, int max_value) {
+    min_ = min_value;
+    max_ = max_value;
+    if (min_ > max_) {
+        std::swap(min_, max_);
+    }
+
+    value_ = clamp_value(value_);
+    pending_value_ = clamp_value(pending_value_);
+    if (!defer_commit_until_unfocus_) {
+        pending_value_ = value_;
+        has_pending_value_ = false;
+    } else {
+        has_pending_value_ = (pending_value_ != value_);
+    }
+    last_notified_value_ = display_value();
+}
+
 int DMSlider::displayed_value() const {
     return display_value();
 }

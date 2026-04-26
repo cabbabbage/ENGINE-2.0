@@ -427,6 +427,13 @@ private:
         Uint64 started_ms = 0;
     } import_busy_;
     MultiAssetImportState multi_asset_import_;
+    enum class DepthGuideSelection { None, RedCull, OrangeEfficiency, BlueLayer };
+    DepthGuideSelection depth_guide_selection_ = DepthGuideSelection::None;
+    bool depth_guide_drag_active_ = false;
+    int depth_guide_drag_start_y_ = 0;
+    WarpedScreenGrid::RealismSettings depth_guide_preview_settings_{};
+    bool depth_guide_preview_active_ = false;
+    Uint64 depth_guide_blue_wheel_last_change_ms_ = 0;
 
 
 };

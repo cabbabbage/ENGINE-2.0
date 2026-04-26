@@ -53,6 +53,7 @@
 #include "draw_utils.hpp"
 #include "widgets.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/layer_depth_bins.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 
 #include "assets/asset/Asset.hpp"
@@ -1917,6 +1918,12 @@ void DevControls::update(const Input& input) {
 
     pointer_over_camera_panel_ =
         camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_point_inside(input.getX(), input.getY());
+    if (!(camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_debug_section_expanded())) {
+        depth_guide_selection_ = DepthGuideSelection::None;
+        depth_guide_drag_active_ = false;
+        depth_guide_preview_active_ = false;
+        depth_guide_blue_wheel_last_change_ms_ = 0;
+    }
     if (map_mode_ui_ && input.wasScancodePressed(SDL_SCANCODE_F8)) {
         const bool was_visible = map_mode_ui_->is_layers_panel_visible();
         map_mode_ui_->toggle_layers_panel();
@@ -1931,7 +1938,8 @@ void DevControls::update(const Input& input) {
         if (!frame_editing) {
             const bool camera_panel_blocking =
                 camera_panel_ && camera_panel_->is_visible() && pointer_over_camera_panel_;
-            if (!camera_panel_blocking) {
+            const bool depth_guide_blocking = depth_guide_drag_active_ || depth_guide_selection_ != DepthGuideSelection::None;
+            if (!camera_panel_blocking && !depth_guide_blocking) {
                 room_editor_->update(input);
             }
         } else {
@@ -1950,6 +1958,19 @@ void DevControls::update(const Input& input) {
     other_settings_.update(input);
     if (map_mode_ui_) {
         map_mode_ui_->update(input);
+    }
+    if (depth_guide_selection_ == DepthGuideSelection::BlueLayer &&
+        depth_guide_blue_wheel_last_change_ms_ > 0 &&
+        !depth_guide_drag_active_) {
+        const Uint64 now = SDL_GetTicks();
+        if (now > depth_guide_blue_wheel_last_change_ms_ &&
+            now - depth_guide_blue_wheel_last_change_ms_ >= 180 &&
+            depth_guide_preview_active_ && assets_) {
+            assets_->getView().set_realism_settings(depth_guide_preview_settings_);
+            assets_->on_camera_settings_changed();
+            mark_map_dirty();
+            depth_guide_blue_wheel_last_change_ms_ = 0;
+        }
     }
     if (boundary_assets_modal_ && boundary_assets_modal_->visible()) {
         boundary_assets_modal_->update(input);
@@ -3282,7 +3303,114 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
         return;
     }
+
+    const bool depth_guides_enabled = camera_panel_ && camera_panel_->is_visible() &&
+                                      camera_panel_->is_debug_section_expanded() && assets_;
+    auto clear_depth_guide_selection = [&]() {
+        depth_guide_selection_ = DepthGuideSelection::None;
+        depth_guide_drag_active_ = false;
+        depth_guide_preview_active_ = false;
+    };
+    if (!depth_guides_enabled) {
+        clear_depth_guide_selection();
+    } else if (pointer_relevant && assets_) {
+        WarpedScreenGrid& cam = assets_->getView();
+        const auto settings = depth_guide_preview_active_ ? depth_guide_preview_settings_ : cam.get_settings();
+        SDL_FPoint center = cam.get_view_center_f();
+        auto project_depth_y = [&](float depth, float& out_y) -> bool {
+            SDL_FPoint screen{};
+            if (!cam.project_world_point(SDL_FPoint{center.x, 0.0f}, depth, screen)) return false;
+            const float y = cam.warp_floor_screen_y(0.0f, screen.y);
+            if (!std::isfinite(y) || y < 0.0f || y > static_cast<float>(screen_h_)) return false;
+            out_y = y;
+            return true;
+        };
+        struct Hit { DepthGuideSelection sel; float y; int prio; };
+        std::vector<Hit> hits;
+        float red_y = 0.0f;
+        if (project_depth_y(settings.max_cull_depth, red_y)) hits.push_back({DepthGuideSelection::RedCull, red_y, 3});
+        float orange_y = 0.0f;
+        if (project_depth_y(settings.dynamic_renderer_depth_efficiency_depth, orange_y)) hits.push_back({DepthGuideSelection::OrangeEfficiency, orange_y, 2});
+        if (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::BlueLayer) {
+            const double max_cull = std::max(1.0, static_cast<double>(settings.max_cull_depth));
+            const double interval = std::max(1.0, static_cast<double>(settings.layer_depth_interval));
+            const double curve = std::max(0.0, static_cast<double>(settings.layer_depth_curve));
+            for (double edge : render_depth::build_background_depth_edges(max_cull, interval, curve)) {
+                if (edge <= 0.0) continue;
+                float y = 0.0f;
+                if (project_depth_y(static_cast<float>(edge), y)) hits.push_back({DepthGuideSelection::BlueLayer, y, 1});
+            }
+        }
+        const float mx = static_cast<float>(pointer.x);
+        const float my = static_cast<float>(pointer.y);
+        std::optional<Hit> best;
+        for (const auto& h : hits) {
+            const float dy = std::fabs(my - h.y);
+            if (dy > 8.0f) continue;
+            if (!best || h.prio > best->prio || (h.prio == best->prio && dy < std::fabs(my - best->y))) {
+                best = h;
+            }
+        }
+
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT && best) {
+            depth_guide_selection_ = best->sel;
+            depth_guide_drag_active_ = true;
+            depth_guide_drag_start_y_ = pointer.y;
+            depth_guide_preview_settings_ = cam.get_settings();
+            depth_guide_preview_active_ = true;
+            if (input_) input_->consumeEvent(event);
+            return;
+        }
+        if (event.type == SDL_EVENT_MOUSE_MOTION && depth_guide_drag_active_ && depth_guide_preview_active_) {
+            const int dy = depth_guide_drag_start_y_ - pointer.y;
+            auto preview = depth_guide_preview_settings_;
+            if (depth_guide_selection_ == DepthGuideSelection::RedCull) {
+                preview.max_cull_depth = std::max(1.0f, preview.max_cull_depth + static_cast<float>(dy));
+                preview.dynamic_renderer_depth_efficiency_depth =
+                    std::clamp(preview.dynamic_renderer_depth_efficiency_depth, 0.0f, preview.max_cull_depth);
+            } else if (depth_guide_selection_ == DepthGuideSelection::OrangeEfficiency) {
+                preview.dynamic_renderer_depth_efficiency_depth =
+                    std::clamp(preview.dynamic_renderer_depth_efficiency_depth + static_cast<float>(dy), 0.0f, preview.max_cull_depth);
+            } else if (depth_guide_selection_ == DepthGuideSelection::BlueLayer) {
+                preview.layer_depth_interval = std::clamp(preview.layer_depth_interval + static_cast<float>(dy), 1.0f, 100000.0f);
+            }
+            depth_guide_drag_start_y_ = pointer.y;
+            depth_guide_preview_settings_ = preview;
+            cam.set_realism_settings(preview);
+            if (input_) input_->consumeEvent(event);
+            return;
+        }
+        if (event.type == SDL_EVENT_MOUSE_WHEEL && depth_guide_selection_ == DepthGuideSelection::BlueLayer) {
+            auto preview = depth_guide_preview_active_ ? depth_guide_preview_settings_ : cam.get_settings();
+            preview.layer_depth_curve = std::clamp(preview.layer_depth_curve + static_cast<float>(event.wheel.y) * 0.05f, 0.0f, 200.0f);
+            depth_guide_preview_settings_ = preview;
+            depth_guide_preview_active_ = true;
+            cam.set_realism_settings(preview);
+            depth_guide_blue_wheel_last_change_ms_ = SDL_GetTicks();
+            if (input_) input_->consumeEvent(event);
+            return;
+        }
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && depth_guide_drag_active_) {
+            depth_guide_drag_active_ = false;
+            if (depth_guide_preview_active_) {
+                cam.set_realism_settings(depth_guide_preview_settings_);
+                assets_->on_camera_settings_changed();
+                mark_map_dirty();
+            }
+            if (input_) input_->consumeEvent(event);
+            return;
+        }
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+            ((event.button.button == SDL_BUTTON_RIGHT && !best) ||
+             (event.button.button == SDL_BUTTON_LEFT && !best))) {
+            clear_depth_guide_selection();
+        }
+    }
     if (!pointer_over_room_ui && map_mode_ui_) {
+        if (depth_guide_selection_ != DepthGuideSelection::None && pointer_relevant) {
+            if (input_) input_->consumeEvent(event);
+            return;
+        }
         const bool pointer_inside_map_mode = pointer_relevant && map_mode_ui_->is_point_inside(pointer.x, pointer.y);
         if (consume_if_handled(map_mode_ui_->handle_event(event), pointer_inside_map_mode)) {
             return;
@@ -3343,7 +3471,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         return true;
     };
 
-    const bool show_depth_guides = camera_panel_ && camera_panel_->is_visible();
+    const bool show_depth_guides = camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_debug_section_expanded();
     const bool show_grid_overlay = false; // Grid is now rendered in SceneRenderer
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
@@ -3547,18 +3675,45 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
 
         if (cam && floor_depth_params && floor_depth_params->enabled) {
-            const WarpedScreenGrid::GridBounds cull_bounds = cam->get_bounds();
-            const float clamped_y = std::clamp(cull_bounds.bottom, 0.0f, static_cast<float>(screen_h_));
-            const int line_y = static_cast<int>(std::lround(clamped_y));
-            const SDL_Color cull_color{0, 255, 255, 220};
-            SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
-            SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
-            const int marker_x = screen_w_ / 2;
-            SDL_RenderLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
-            DMLabelStyle style = DMStyles::Label();
-            style.color = cull_color;
-            const int label_y = std::max(0, line_y - style.font_size - 2);
-            DrawLabelText(renderer, "Cull Bottom", marker_x + 12, label_y, style);
+            const auto settings = depth_guide_preview_active_ ? depth_guide_preview_settings_ : cam->get_settings();
+            SDL_FPoint center = cam->get_view_center_f();
+            auto draw_guide = [&](float depth, SDL_Color color, const char* label, bool selected) {
+                SDL_FPoint screen{};
+                if (!cam->project_world_point(SDL_FPoint{center.x, 0.0f}, depth, screen)) return;
+                const float y = cam->warp_floor_screen_y(0.0f, screen.y);
+                if (!std::isfinite(y) || y < 0.0f || y > static_cast<float>(screen_h_)) return;
+                const int line_y = static_cast<int>(std::lround(y));
+                const Uint8 alpha = static_cast<Uint8>(selected ? 255 : color.a);
+                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, alpha);
+                SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
+                DMLabelStyle style = DMStyles::Label();
+                style.color = SDL_Color{color.r, color.g, color.b, alpha};
+                DrawLabelText(renderer, label, (screen_w_ / 2) + 12, std::max(0, line_y - style.font_size - 2), style);
+            };
+            const bool blue_mode = depth_guide_selection_ == DepthGuideSelection::BlueLayer;
+            const bool show_red = !blue_mode && (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::RedCull);
+            const bool show_orange = !blue_mode && (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::OrangeEfficiency);
+            if (show_red) {
+                draw_guide(settings.max_cull_depth, SDL_Color{255, 48, 48, 220}, "Max Cull Depth", depth_guide_selection_ == DepthGuideSelection::RedCull);
+            }
+            if (show_orange) {
+                draw_guide(settings.dynamic_renderer_depth_efficiency_depth,
+                           SDL_Color{255, 165, 0, 220},
+                           "Dynamic Efficiency Depth",
+                           depth_guide_selection_ == DepthGuideSelection::OrangeEfficiency);
+            }
+            if (depth_guide_selection_ == DepthGuideSelection::None || blue_mode) {
+                const double max_cull = std::max(1.0, static_cast<double>(settings.max_cull_depth));
+                const double interval = std::max(1.0, static_cast<double>(settings.layer_depth_interval));
+                const double curve = std::max(0.0, static_cast<double>(settings.layer_depth_curve));
+                for (double edge : render_depth::build_background_depth_edges(max_cull, interval, curve)) {
+                    if (edge <= 0.0) continue;
+                    draw_guide(static_cast<float>(edge),
+                               SDL_Color{80, 160, 255, static_cast<Uint8>(blue_mode ? 220 : 120)},
+                               "",
+                               false);
+                }
+            }
         }
 
         SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);

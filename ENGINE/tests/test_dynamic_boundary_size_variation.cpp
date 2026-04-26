@@ -57,26 +57,26 @@ TEST_CASE("DynamicBoundarySystem effective base scale ignores variation for till
     CHECK(scaled == doctest::Approx(1.75f));
 }
 
-TEST_CASE("DynamicBoundarySystem depth efficiency keep ratio is linear between threshold and cull depth") {
+TEST_CASE("DynamicBoundarySystem depth efficiency keep ratio is linear between efficiency depth and cull depth") {
     const double max_cull_depth = 1000.0;
-    const float threshold_ratio = 0.40f;
+    const double efficiency_depth = 400.0;
     const float min_density_ratio = 0.10f;
 
     CHECK(DynamicBoundarySystem::compute_depth_efficiency_keep_ratio(150.0,
                                                                      max_cull_depth,
-                                                                     threshold_ratio,
+                                                                     efficiency_depth,
                                                                      min_density_ratio) == doctest::Approx(1.0f));
     CHECK(DynamicBoundarySystem::compute_depth_efficiency_keep_ratio(400.0,
                                                                      max_cull_depth,
-                                                                     threshold_ratio,
+                                                                     efficiency_depth,
                                                                      min_density_ratio) == doctest::Approx(1.0f));
     CHECK(DynamicBoundarySystem::compute_depth_efficiency_keep_ratio(700.0,
                                                                      max_cull_depth,
-                                                                     threshold_ratio,
+                                                                     efficiency_depth,
                                                                      min_density_ratio) == doctest::Approx(0.55f));
     CHECK(DynamicBoundarySystem::compute_depth_efficiency_keep_ratio(1000.0,
                                                                      max_cull_depth,
-                                                                     threshold_ratio,
+                                                                     efficiency_depth,
                                                                      min_density_ratio) == doctest::Approx(0.10f));
 }
 

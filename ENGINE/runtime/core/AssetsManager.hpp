@@ -132,6 +132,7 @@ public:
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
     float frame_delta_seconds_clamped() const;
     std::uint32_t frame_id() const { return frame_id_; }
+    bool has_pending_initial_rebuild() const { return pending_initial_rebuild_; }
     std::size_t last_runtime_convergence_iterations() const { return last_runtime_convergence_stats_.iterations; }
     std::size_t last_runtime_convergence_traversal_refreshes() const { return last_runtime_convergence_stats_.traversal_refresh_count; }
     std::size_t last_runtime_convergence_waves() const { return last_runtime_convergence_stats_.wave_count; }

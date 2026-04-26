@@ -104,6 +104,25 @@ bool env_flag_enabled(const char* name, bool default_value) {
         return default_value;
 }
 
+int env_int_clamped(const char* name, int default_value, int min_value, int max_value) {
+        const int safe_min = std::min(min_value, max_value);
+        const int safe_max = std::max(min_value, max_value);
+        const int safe_default = std::clamp(default_value, safe_min, safe_max);
+        if (!name || !*name) {
+                return safe_default;
+        }
+        const char* raw = std::getenv(name);
+        if (!raw || !*raw) {
+                return safe_default;
+        }
+        try {
+                const int value = std::stoi(raw);
+                return std::clamp(value, safe_min, safe_max);
+        } catch (...) {
+                return safe_default;
+        }
+}
+
 bool is_resize_or_scale_event(Uint32 event_type) {
         switch (event_type) {
         case SDL_EVENT_WINDOW_RESIZED:
@@ -177,11 +196,17 @@ SDL_Renderer* MainApp::raw_renderer() const {
 
 void MainApp::init() {
         setup();
+        run_startup_stabilization();
+        if (startup_abort_requested_) {
+                vibble::log::warn("[MainApp] Startup aborted before entering the game loop.");
+                return;
+        }
         vibble::log::info("[MainApp] Loading pipeline complete. Entering main loop...");
         game_loop();
 }
 
 void MainApp::setup() {
+        startup_abort_requested_ = false;
         std::srand(static_cast<unsigned int>(std::time(nullptr)));
 
         SDL_Renderer* renderer = raw_renderer();
@@ -317,6 +342,151 @@ void MainApp::setup() {
                 [](const std::exception& e) {
                         vibble::log::error(std::string("[MainApp] Setup error: ") + e.what());
                 });
+}
+
+void MainApp::run_startup_stabilization() {
+        if (startup_abort_requested_ || !game_assets_ || !input_) {
+                return;
+        }
+
+        SDL_Renderer* renderer = raw_renderer();
+        const int warmup_max_ms = env_int_clamped("VIBBLE_STARTUP_WARMUP_MAX_MS", 4000, 0, 30000);
+        const int stable_frames_required = env_int_clamped("VIBBLE_STARTUP_STABLE_FRAMES", 3, 1, 120);
+        const bool startup_trace_enabled = env_flag_enabled("VIBBLE_STARTUP_TRACE", false);
+
+        vibble::log::info("[MainApp] Startup warmup: max_ms=" +
+                          std::to_string(warmup_max_ms) +
+                          ", stable_frames=" + std::to_string(stable_frames_required));
+
+        if (renderer) {
+                sync_output_dimensions(renderer);
+        }
+
+        // One-time startup snap: force a deterministic baseline, then snap to camera target center.
+        game_assets_->force_camera_view_refresh();
+        {
+                WarpedScreenGrid& view = game_assets_->getView();
+                const CameraController::State& state = view.camera_state();
+                const SDL_Point snap_target{
+                        static_cast<int>(std::lround(state.target_center.x)),
+                        static_cast<int>(std::lround(state.target_center.y))
+                };
+                view.set_screen_center(snap_target, true);
+        }
+
+        const auto draw_loading_frame = [&](const std::string& status) {
+                if (!loading_screen_ || !renderer) {
+                        return;
+                }
+                loading_screen_->set_status(status);
+                loading_screen_->draw_frame();
+                SDL_RenderPresent(renderer);
+        };
+
+        const Uint64 warmup_begin_ms = SDL_GetTicks();
+        int warmup_frame_count = 0;
+        int stable_frame_streak = 0;
+        bool timed_out = false;
+
+        for (;;) {
+                ++warmup_frame_count;
+
+                SDL_Event e;
+                while (SDL_PollEvent(&e)) {
+                        if (renderer) {
+                                SDL_ConvertEventToRenderCoordinates(renderer, &e);
+                        }
+                        if (renderer && is_resize_or_scale_event(e.type)) {
+                                sync_output_dimensions(renderer);
+                        }
+                        handle_global_shortcuts(e);
+                        if (e.type == SDL_EVENT_QUIT) {
+                                startup_abort_requested_ = true;
+                                vibble::log::warn("[MainApp] Received quit event during startup warmup.");
+                                return;
+                        }
+                        input_->handleEvent(e);
+                        game_assets_->handle_sdl_event(e);
+                }
+
+                if (renderer) {
+                        sync_output_dimensions(renderer);
+                }
+
+                game_assets_->update(*input_);
+                if (renderer) {
+                        log_render_diagnostics(renderer, "StartupWarmup");
+                }
+                input_->update();
+
+                const WarpedScreenGrid& view = game_assets_->getView();
+                const bool convergence_ready = game_assets_->last_runtime_convergence_converged();
+                const bool camera_animating = view.is_height_animating();
+                const bool camera_blending =
+                        view.camera_transition_telemetry().state ==
+                        WarpedScreenGrid::CameraTransitionState::BlendingToNewRoom;
+                const bool pending_initial_rebuild = game_assets_->has_pending_initial_rebuild();
+                const std::optional<SDL_Point> postprocess_target = game_assets_->scene_postprocess_target_size();
+                const bool postprocess_target_ready =
+                        postprocess_target.has_value() &&
+                        postprocess_target->x == screen_w_ &&
+                        postprocess_target->y == screen_h_;
+                const bool frame_ready =
+                        convergence_ready &&
+                        !camera_animating &&
+                        !camera_blending &&
+                        !pending_initial_rebuild &&
+                        postprocess_target_ready;
+
+                if (frame_ready) {
+                        ++stable_frame_streak;
+                } else {
+                        stable_frame_streak = 0;
+                }
+
+                if (startup_trace_enabled) {
+                        std::ostringstream trace;
+                        trace << "[StartupWarmup] frame=" << warmup_frame_count
+                              << " streak=" << stable_frame_streak << "/" << stable_frames_required
+                              << " converged=" << (convergence_ready ? "1" : "0")
+                              << " camera_animating=" << (camera_animating ? "1" : "0")
+                              << " camera_blending=" << (camera_blending ? "1" : "0")
+                              << " pending_initial_rebuild=" << (pending_initial_rebuild ? "1" : "0")
+                              << " target=";
+                        if (postprocess_target.has_value()) {
+                                trace << postprocess_target->x << "x" << postprocess_target->y;
+                        } else {
+                                trace << "none";
+                        }
+                        trace << " output=" << screen_w_ << "x" << screen_h_;
+                        vibble::log::debug(trace.str());
+                }
+
+                draw_loading_frame("Finalizing world (" +
+                                   std::to_string(std::min(stable_frame_streak, stable_frames_required)) +
+                                   "/" + std::to_string(stable_frames_required) + ")");
+
+                if (stable_frame_streak >= stable_frames_required) {
+                        break;
+                }
+
+                const Uint64 elapsed_ms = SDL_GetTicks() - warmup_begin_ms;
+                if (elapsed_ms >= static_cast<Uint64>(warmup_max_ms)) {
+                        timed_out = true;
+                        break;
+                }
+        }
+
+        const Uint64 total_ms = SDL_GetTicks() - warmup_begin_ms;
+        if (timed_out) {
+                vibble::log::warn("[MainApp] Startup warmup timed out after " +
+                                  std::to_string(total_ms) +
+                                  "ms (" + std::to_string(warmup_frame_count) + " frame(s)).");
+        } else {
+                vibble::log::info("[MainApp] Startup warmup completed in " +
+                                  std::to_string(total_ms) +
+                                  "ms (" + std::to_string(warmup_frame_count) + " frame(s)).");
+        }
 }
 
 void MainApp::game_loop() {

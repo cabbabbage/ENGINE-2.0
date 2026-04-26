@@ -103,7 +103,7 @@ private:
     };
 
     struct GpuTiledLightBins {
-        int tile_size_px = 64;
+        int tile_size_px = 16;
         int tile_count_x = 0;
         int tile_count_y = 0;
         std::vector<std::vector<std::uint32_t>> bins;

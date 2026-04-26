@@ -302,6 +302,7 @@ static bool apply_axis_blur(SDL_Renderer* renderer,
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
     if (radius_px <= kMinimumBlurRadiusEpsilonPx || kernel_radius <= 0) {
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_NONE);
         SDL_SetTextureAlphaMod(src, 255);
         SDL_RenderTexture(renderer, src, nullptr, nullptr);
         return true;
@@ -351,6 +352,7 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
     if (radial_radius_px <= kMinimumBlurRadiusEpsilonPx) {
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_NONE);
         SDL_SetTextureAlphaMod(src, 255);
         SDL_RenderTexture(renderer, src, nullptr, nullptr);
         return true;
@@ -360,6 +362,7 @@ static bool apply_radial_zoom_blur(SDL_Renderer* renderer,
 
     const int sample_count = choose_radial_sample_count(radial_radius_px);
     if (sample_count <= 0) {
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_NONE);
         SDL_SetTextureAlphaMod(src, 255);
         SDL_RenderTexture(renderer, src, nullptr, nullptr);
         return true;
@@ -774,7 +777,16 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
                 Uint8 last_alpha = 0;
 
                 for (const RuntimeLight& light : lights) {
-                    const float effective_intensity = std::max(0.0f, light.intensity);
+                    float effective_intensity = std::max(0.0f, light.intensity);
+                    if (std::isfinite(layer_depth_min) && std::isfinite(layer_depth_max) && std::isfinite(light.world_z)) {
+                        const double depth_min = std::min(layer_depth_min, layer_depth_max);
+                        const double depth_max = std::max(layer_depth_min, layer_depth_max);
+                        if (static_cast<double>(light.world_z) > depth_max) {
+                            effective_intensity *= 0.65f;
+                        } else if (static_cast<double>(light.world_z) < depth_min) {
+                            effective_intensity *= 1.05f;
+                        }
+                    }
                     if (effective_intensity <= 0.0005f) {
                         continue;
                     }
@@ -851,9 +863,6 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
             result.lighting_applied = true;
         }
     }
-
-    (void)layer_depth_min;
-    (void)layer_depth_max;
 
     restore_state_and_target();
     return result;

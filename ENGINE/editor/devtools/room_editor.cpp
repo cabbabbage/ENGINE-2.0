@@ -159,6 +159,37 @@ bool is_integral_weight(double value) {
     return std::fabs(value - rounded) < 1e-9;
 }
 
+bool requires_non_deletable_null_candidate(devmode::CandidateSourceContext source_context) {
+    return source_context == devmode::CandidateSourceContext::AnchorNonLight;
+}
+
+bool sanitize_anchor_candidate_entry_for_source(nlohmann::json& candidate_entry,
+                                                devmode::CandidateSourceContext source_context) {
+    bool changed = vibble::spawn_group_codec::sanitize_spawn_group_candidates(candidate_entry);
+    if (!requires_non_deletable_null_candidate(source_context)) {
+        return changed;
+    }
+
+    auto candidates_it = candidate_entry.find("candidates");
+    if (candidates_it == candidate_entry.end() || !candidates_it->is_array()) {
+        candidate_entry["candidates"] = nlohmann::json::array();
+        changed = true;
+        candidates_it = candidate_entry.find("candidates");
+    }
+
+    for (auto& candidate : *candidates_it) {
+        if (!vibble::spawn_group_codec::is_null_candidate_entry(candidate)) {
+            continue;
+        }
+        const double current_weight = std::max(0.0, vibble::spawn_group_codec::read_candidate_chance(candidate, 0.0));
+        if (std::fabs(current_weight) > 1e-9 || !candidate.contains("chance")) {
+            candidate["chance"] = 0;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 struct BoxCornerPickResult {
     int box_index = -1;
     int corner_index = -1;
@@ -12116,6 +12147,7 @@ void RoomEditor::refresh_anchor_candidate_editor_widget() {
     if (!candidate_entry.is_object()) {
         candidate_entry = nlohmann::json::object();
     }
+    sanitize_anchor_candidate_entry_for_source(candidate_entry, anchor_candidate_editor_.source_context);
     anchor_candidate_editor_.panel->set_title(anchor_candidate_editor_.anchor_name + " Candidates");
     anchor_candidate_editor_.pie_widget->set_candidates_from_json(candidate_entry);
     layout_anchor_candidate_editor_popup();
@@ -12192,7 +12224,15 @@ void RoomEditor::open_anchor_candidate_editor(const std::string& anchor_name,
     }
     const nlohmann::json existing_candidate_entry =
         target_info->anchor_point_child_candidate_candidates(anchor_name);
-    const bool upserted = target_info->upsert_anchor_point_child_candidate(anchor_name, existing_candidate_entry);
+    nlohmann::json normalized_candidate_entry = existing_candidate_entry;
+    if (!normalized_candidate_entry.is_object()) {
+        normalized_candidate_entry = nlohmann::json::object();
+    }
+    const bool normalized_changed = sanitize_anchor_candidate_entry_for_source(normalized_candidate_entry, source_context);
+    const bool upserted = target_info->upsert_anchor_point_child_candidate(anchor_name,
+                                                                            normalized_changed
+                                                                                ? normalized_candidate_entry
+                                                                                : existing_candidate_entry);
     if (reconciled || upserted) {
         (void)commit_anchor_bulk_edit(target_asset,
                                       target_info,
@@ -12407,6 +12447,7 @@ bool RoomEditor::mutate_anchor_candidate_entry(const std::function<bool(nlohmann
     if (!mutator(candidate_entry)) {
         return false;
     }
+    sanitize_anchor_candidate_entry_for_source(candidate_entry, anchor_candidate_editor_.source_context);
     if (!target_info->upsert_anchor_point_child_candidate(anchor_candidate_editor_.anchor_name, candidate_entry)) {
         return false;
     }

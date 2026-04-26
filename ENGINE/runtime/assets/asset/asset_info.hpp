@@ -89,6 +89,7 @@ class AssetInfo {
     float scale_factor;
     float size_variation_percent = 0.0f;
     float weight_kg = 0.0f;
+    int bounce_amount = 0;
     bool smooth_scaling = true;
     int original_canvas_width = 0;
     int original_canvas_height = 0;
@@ -100,6 +101,7 @@ class AssetInfo {
     struct AnchorChildPointCandidate {
         std::string anchor_point_name;
         nlohmann::json candidates = nlohmann::json::object();
+        bool orphan_on_end = true;
     };
     std::vector<AnchorChildPointCandidate> anchor_point_child_candidates;
 
@@ -235,6 +237,8 @@ class AssetInfo {
     void set_size_variation_percentage(float percent);
     void set_weight_kg(float weight);
     float get_weight_kg() const { return weight_kg; }
+    void set_bounce_amount(int amount);
+    int get_bounce_amount() const { return bounce_amount; }
     void set_scale_filter(bool smooth);
     void set_tags(const std::vector<std::string> &t);
     void add_tag(const std::string &tag);
@@ -254,6 +258,8 @@ class AssetInfo {
     void set_anchor_point_child_candidates_payload(const nlohmann::json& candidates);
     nlohmann::json anchor_point_child_candidates_payload() const;
     nlohmann::json anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const;
+    bool anchor_point_child_candidate_orphan_on_end(const std::string& anchor_point_name) const;
+    bool set_anchor_point_child_candidate_orphan_on_end(const std::string& anchor_point_name, bool orphan_on_end);
     bool upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates);
     bool rename_anchor_point_child_candidate(const std::string& old_name, const std::string& new_name);
     bool remove_anchor_point_child_candidate(const std::string& anchor_point_name);

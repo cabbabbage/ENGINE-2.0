@@ -761,6 +761,7 @@ std::vector<AssetInfo::AnchorChildPointCandidate> parse_anchor_point_child_candi
         } else {
             candidate.candidates = normalize_anchor_candidate_payload(nlohmann::json::object());
         }
+        candidate.orphan_on_end = entry.value("orphan_on_end", true);
         parsed.push_back(std::move(candidate));
     }
 
@@ -781,6 +782,7 @@ nlohmann::json build_anchor_point_child_candidates_payload(
         nlohmann::json encoded = nlohmann::json::object();
         encoded["anchor_point_name"] = candidate.anchor_point_name;
         encoded["candidates"] = normalize_anchor_candidate_payload(candidate.candidates);
+        encoded["orphan_on_end"] = candidate.orphan_on_end;
         payload.push_back(std::move(encoded));
     }
     return payload;
@@ -2427,9 +2429,10 @@ nlohmann::json AssetInfo::manifest_payload() const {
                         payload.erase(kImpassableShapesKey);
                 }
         } else {
-                payload.erase(kImpassableShapesKey);
+        payload.erase(kImpassableShapesKey);
         }
         payload["weight_kg"] = weight_kg;
+        payload["bounce_amount"] = bounce_amount;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
@@ -2585,6 +2588,11 @@ void AssetInfo::set_weight_kg(float weight) {
         }
         weight_kg = weight;
         info_json_["weight_kg"] = weight;
+}
+
+void AssetInfo::set_bounce_amount(int amount) {
+        bounce_amount = std::clamp(amount, 0, 100);
+        info_json_["bounce_amount"] = bounce_amount;
 }
 
 void AssetInfo::set_scale_filter(bool smooth) {
@@ -2975,9 +2983,17 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 if (data.contains("weight_kg") && data["weight_kg"].is_number()) {
                         weight_kg = std::max(0.0f, static_cast<float>(data["weight_kg"].get<double>()));
                 }
+                if (data.contains("bounce_amount") && data["bounce_amount"].is_number()) {
+                        bounce_amount = std::clamp(static_cast<int>(std::lround(data["bounce_amount"].get<double>())),
+                                                   0,
+                                                   100);
+                } else {
+                        bounce_amount = 0;
+                }
         } catch (...) {
 
         }
+        info_json_["bounce_amount"] = bounce_amount;
 
         if (is_vibble_asset_name(name) && oval_anchor_mappings.empty()) {
                 const std::vector<std::string> vibble_mapping_names{
@@ -3561,14 +3577,67 @@ bool AssetInfo::rename_oval_center_anchors_for_mapping(const std::string& old_ma
 
 nlohmann::json AssetInfo::anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const {
     if (anchor_point_name.empty()) {
-        return normalize_anchor_candidate_payload(nlohmann::json::object());
+        nlohmann::json empty_entry = nlohmann::json::object();
+        empty_entry["candidates"] = normalize_anchor_candidate_payload(nlohmann::json::object())["candidates"];
+        empty_entry["orphan_on_end"] = true;
+        return empty_entry;
     }
     for (const auto& entry : anchor_point_child_candidates) {
         if (entry.anchor_point_name == anchor_point_name) {
-            return normalize_anchor_candidate_payload(entry.candidates);
+            nlohmann::json normalized = normalize_anchor_candidate_payload(entry.candidates);
+            normalized["orphan_on_end"] = entry.orphan_on_end;
+            return normalized;
         }
     }
-    return normalize_anchor_candidate_payload(nlohmann::json::object());
+    nlohmann::json empty_entry = normalize_anchor_candidate_payload(nlohmann::json::object());
+    empty_entry["orphan_on_end"] = true;
+    return empty_entry;
+}
+
+bool AssetInfo::anchor_point_child_candidate_orphan_on_end(const std::string& anchor_point_name) const {
+    if (anchor_point_name.empty()) {
+        return true;
+    }
+    for (const auto& entry : anchor_point_child_candidates) {
+        if (entry.anchor_point_name == anchor_point_name) {
+            return entry.orphan_on_end;
+        }
+    }
+    return true;
+}
+
+bool AssetInfo::set_anchor_point_child_candidate_orphan_on_end(const std::string& anchor_point_name, bool orphan_on_end) {
+    if (anchor_point_name.empty()) {
+        return false;
+    }
+
+    const nlohmann::json before_payload = anchor_point_child_candidates_payload();
+    std::vector<AnchorChildPointCandidate> updated =
+        parse_anchor_point_child_candidates_payload(before_payload);
+
+    auto existing = std::find_if(updated.begin(),
+                                 updated.end(),
+                                 [&](const AnchorChildPointCandidate& candidate) {
+                                     return candidate.anchor_point_name == anchor_point_name;
+                                 });
+    if (existing != updated.end()) {
+        existing->orphan_on_end = orphan_on_end;
+    } else {
+        AnchorChildPointCandidate created{};
+        created.anchor_point_name = anchor_point_name;
+        created.candidates = normalize_anchor_candidate_payload(nlohmann::json::object());
+        created.orphan_on_end = orphan_on_end;
+        updated.push_back(std::move(created));
+    }
+
+    const nlohmann::json after_payload = build_anchor_point_child_candidates_payload(updated);
+    if (after_payload == before_payload) {
+        return false;
+    }
+
+    anchor_point_child_candidates = std::move(updated);
+    sync_anchor_point_child_candidates_info_json();
+    return true;
 }
 
 bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates) {
@@ -3597,6 +3666,7 @@ bool AssetInfo::upsert_anchor_point_child_candidate(const std::string& anchor_po
         AnchorChildPointCandidate created{};
         created.anchor_point_name = anchor_point_name;
         created.candidates = normalized_candidates;
+        created.orphan_on_end = true;
         updated.push_back(std::move(created));
     }
 
@@ -3709,6 +3779,7 @@ bool AssetInfo::reconcile_anchor_point_child_candidates(const std::vector<std::s
             AnchorChildPointCandidate created{};
             created.anchor_point_name = name;
             created.candidates = nlohmann::json::object();
+            created.orphan_on_end = true;
             reconciled.push_back(std::move(created));
         }
     }

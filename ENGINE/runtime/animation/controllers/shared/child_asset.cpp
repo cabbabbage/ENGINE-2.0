@@ -234,6 +234,37 @@ void ChildAsset::destroy() {
     auto_hidden_for_anchor_ = true;
 }
 
+Asset* ChildAsset::orphan() {
+    Asset* orphaned = get_asset();
+    if (!orphaned) {
+        return nullptr;
+    }
+
+    unregister_anchor_binding();
+    (void)clear_child_render_offset();
+    if (owner_ && owner_->has_child(orphaned)) {
+        owner_->remove_child(orphaned);
+    }
+
+    orphaned->set_anchor_hidden(false);
+    orphaned->set_hidden(false);
+    orphaned->active = true;
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    child_ = nullptr;
+    bound_ = false;
+    bound_anchor_name_.clear();
+    has_successful_sync_ = false;
+    auto_hidden_for_anchor_ = false;
+    manual_hidden_ = false;
+    last_tag_criteria_initialized_ = false;
+    last_required_tags_.clear();
+    last_excluded_tags_.clear();
+    return orphaned;
+}
+
 void ChildAsset::hide() {
     if (!ensure_child_alive()) {
         return;

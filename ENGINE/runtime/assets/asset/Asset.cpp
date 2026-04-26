@@ -1821,6 +1821,26 @@ void Asset::Delete() {
     }
 }
 
+void Asset::notify_pre_delete() {
+    if (!controller_ && assets_) {
+        ControllerFactory cf(assets_);
+        controller_ = cf.create_for_asset(this);
+    }
+    if (controller_) {
+        controller_->on_pre_delete(*this);
+    }
+}
+
+void Asset::notify_orphaned(Asset* former_parent) {
+    if (!controller_ && assets_) {
+        ControllerFactory cf(assets_);
+        controller_ = cf.create_for_asset(this);
+    }
+    if (controller_) {
+        controller_->on_orphaned(*this, former_parent);
+    }
+}
+
 
 void Asset::ensure_animation_runtime(bool force_recreate) {
     if (!assets_) {
@@ -2096,6 +2116,11 @@ void Asset::sync_transform_to_position() {
 void Asset::send_attack(const animation_update::Attack& attack) {
         std::lock_guard<std::mutex> lock(pending_attacks_mutex_);
         pending_attacks_.push_back(attack);
+}
+
+bool Asset::has_pending_attacks() {
+        std::lock_guard<std::mutex> lock(pending_attacks_mutex_);
+        return !pending_attacks_.empty();
 }
 
 std::vector<animation_update::Attack> Asset::process_pending_attacks() {

@@ -29,6 +29,7 @@ public:
     ChildAsset& operator=(ChildAsset&& other) noexcept;
 
     void destroy();
+    Asset* orphan();
     void hide();
     void unhide();
     void set_animation(const std::string& animation_name);

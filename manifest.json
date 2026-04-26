@@ -215,6 +215,10 @@
               {
                 "chance": 5,
                 "name": "#small_surface_top"
+              },
+              {
+                "chance": 0,
+                "name": "null"
               }
             ]
           }
@@ -222,7 +226,12 @@
         {
           "anchor_point_name": "anchor_2",
           "candidates": {
-            "candidates": []
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              }
+            ]
           }
         }
       ],
@@ -341,16 +350,24 @@
           "candidate": {
             "candidates": [
               {
-                "chance": 314,
+                "chance": 932,
                 "name": "null"
               },
               {
-                "chance": 4,
+                "chance": 6,
                 "name": "barrel"
               },
               {
                 "chance": 67,
                 "name": "#floor_decor"
+              },
+              {
+                "chance": 339.7,
+                "name": "#grass"
+              },
+              {
+                "chance": 30.700000000000003,
+                "name": "#pretty"
               }
             ],
             "grid_resolution": 6
@@ -3894,7 +3911,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 18.0,
+        "scale_percentage": 21.0,
         "size_variation": 2.0
       },
       "start": "default",
@@ -15041,7 +15058,7 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            132,
+            209,
             242,
             36,
             255
@@ -15444,9 +15461,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            64,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -15668,36 +15685,6 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6a1512351c88"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "barrel"
-                }
-              ],
-              "display_name": "barrel",
-              "dx": -716,
-              "dz": 13,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-8368ed01ec5c"
             },
             {
@@ -15723,7 +15710,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 8,
+              "priority": 7,
               "quantity": 1,
               "resolution": 4,
               "resolve_geometry_to_room_size": true,
@@ -15753,7 +15740,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 9,
+              "priority": 8,
               "quantity": 1,
               "resolution": 4,
               "resolve_geometry_to_room_size": true,
@@ -15783,7 +15770,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 10,
+              "priority": 9,
               "quantity": 1,
               "resolution": 4,
               "resolve_geometry_to_room_size": true,
@@ -15813,7 +15800,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 11,
+              "priority": 10,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,

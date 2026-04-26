@@ -88,6 +88,8 @@ class Asset {
     void finalize_setup();
     void rebuild_animation_runtime();
     void Delete();
+    void notify_pre_delete();
+    void notify_orphaned(Asset* former_parent);
 
     bool is_finalized() const { return finalized_; }
     void on_scale_factor_changed();
@@ -320,6 +322,7 @@ class Asset {
     void set_current_animation(const std::string& name);
     // Queue an attack event for deferred controller handling.
     void send_attack(const animation_update::Attack& attack);
+    bool has_pending_attacks();
     // Drain and return queued attacks for this tick.
     std::vector<animation_update::Attack> process_pending_attacks();
 

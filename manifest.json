@@ -243,30 +243,16 @@
                 "texture_y": 17
               },
               {
-                "depth_offset": 400.0,
-                "flip_horizontal": false,
-                "flip_vertical": false,
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
                 "hidden": false,
-                "light": {
-                  "cast_shadows": true,
-                  "color": [
-                    255,
-                    236,
-                    196
-                  ],
-                  "enabled": true,
-                  "falloff": 6.940000057220459,
-                  "intensity": 0.03999999910593033,
-                  "opacity": 0.0,
-                  "radius": 319.0,
-                  "shadow_strength": 0.0
-                },
                 "name": "anchor_2",
-                "resolve_x": false,
+                "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 69,
-                "texture_y": 12
+                "texture_x": 95,
+                "texture_y": 40
               }
             ]
           ],
@@ -355,32 +341,28 @@
           "candidate": {
             "candidates": [
               {
-                "chance": 34,
+                "chance": 314,
                 "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "skull_pile"
-              },
-              {
-                "chance": 4,
-                "name": "#pretty"
               },
               {
                 "chance": 4,
                 "name": "barrel"
+              },
+              {
+                "chance": 67,
+                "name": "#floor_decor"
               }
             ],
             "grid_resolution": 6
           },
-          "depth": 221.0,
+          "depth": 232.0,
           "enabled": true,
           "id": "floor_box",
           "name": "Floor Box",
-          "position_x": -19.5,
-          "position_z": -44.5,
+          "position_x": 2.5,
+          "position_z": -39.0,
           "tags": [],
-          "width": 319.0
+          "width": 275.0
         }
       ],
       "floor_boxes_enabled": true,
@@ -493,6 +475,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -505,7 +488,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -526,6 +510,7 @@
       "start": "default",
       "tags": [
         "blue",
+        "floor_decor",
         "flower",
         "plant",
         "pretty"
@@ -3877,27 +3862,51 @@
       "weight_kg": 38.0
     },
     "bone": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/bone",
       "asset_name": "bone",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 18.0,
+        "size_variation": 2.0
+      },
+      "start": "default",
+      "tags": [
+        "bone",
+        "death",
+        "floor_decor",
+        "scary",
+        "small"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "bone_1": {
       "animations": {
@@ -4115,6 +4124,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -4127,7 +4137,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -4149,7 +4160,11 @@
       "tags": [
         "bottle",
         "drink",
-        "small_surface_top"
+        "floor_decor",
+        "man-made",
+        "small",
+        "small_surface_top",
+        "table_decor"
       ],
       "tillable": false,
       "weight_kg": 0.0
@@ -4162,17 +4177,23 @@
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/booze_2",
       "asset_name": "booze_2",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -4183,7 +4204,16 @@
         "scale_percentage": 20.0
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "bottle",
+        "brown",
+        "drink",
+        "floor_decor",
+        "man-made",
+        "small",
+        "small_surface_top",
+        "table_decor"
+      ],
       "tillable": false,
       "weight_kg": 0.0
     },
@@ -8575,50 +8605,98 @@
       "start": "default"
     },
     "mushroom": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/mushroom",
       "asset_name": "mushroom",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 20.0,
+        "size_variation": 6.0
+      },
+      "start": "default",
+      "tags": [
+        "floor_decor",
+        "mushroom",
+        "plant",
+        "red",
+        "small"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "mushroom_1": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/mushroom_1",
       "asset_name": "mushroom_1",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 20.0,
+        "size_variation": 6.0
+      },
+      "start": "default",
+      "tags": [
+        "floor_decor",
+        "mushroom",
+        "plant",
+        "red",
+        "small"
+      ],
+      "tillable": false,
+      "weight_kg": 0.0
     },
     "mushroom_2": {
       "animations": {
@@ -14963,9 +15041,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            132,
             242,
             36,
-            44,
             255
           ],
           "edge_smoothness": 2,
@@ -15359,16 +15437,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -389,
-          "camera_center_dz": -126,
-          "camera_height_px": 256,
-          "camera_tilt_deg": 23.191438674926758,
+          "camera_center_dx": -932,
+          "camera_center_dz": -1134,
+          "camera_height_px": 499,
+          "camera_tilt_deg": 48.99143981933594,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -15621,6 +15699,126 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-8368ed01ec5c"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "bone"
+                }
+              ],
+              "display_name": "bone",
+              "dx": -1445,
+              "dz": 13,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 8,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-30380bbb81dd"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "booze_2"
+                }
+              ],
+              "display_name": "booze_2",
+              "dx": -1445,
+              "dz": 13,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 9,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-16d2f189c825"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "mushroom_1"
+                }
+              ],
+              "display_name": "mushroom_1",
+              "dx": -1445,
+              "dz": 13,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 10,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-caabc9151c6e"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "mushroom"
+                }
+              ],
+              "display_name": "mushroom",
+              "dx": -716,
+              "dz": 13,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 11,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-8228ce7a49ec"
             }
           ]
         }

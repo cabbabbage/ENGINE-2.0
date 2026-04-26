@@ -33,6 +33,7 @@ class BlurChainRenderer;
 class LayerStackRenderer;
 class LayerSubmissionBuilder;
 class SceneCompositePass;
+class GpuSceneRenderer;
 namespace world { class WorldGrid; }
 
 namespace render_internal {
@@ -187,6 +188,7 @@ public:
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     void set_map_clear_color(SDL_Color color) { map_clear_color_ = color; }
     SDL_Color map_clear_color() const { return map_clear_color_; }
+    bool gpu_runtime_path_enabled() const { return gpu_runtime_path_enabled_; }
 
 private:
     struct RuntimeLightRegistryKey {
@@ -318,6 +320,8 @@ private:
     std::unique_ptr<LayerSubmissionBuilder> layer_submission_builder_;
     std::unique_ptr<SceneCompositePass> scene_composite_pass_;
     std::unique_ptr<DebugOverlayRenderer> debug_overlay_renderer_;
+    std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
+    bool gpu_runtime_path_enabled_ = false;
 
     bool debug_auto_paths_ = false;
     bool movement_debug_visible_ = true;

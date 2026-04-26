@@ -9,8 +9,10 @@
 #include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/scene_composite_pass.hpp"
+#include "rendering/render/gpu_scene_renderer.hpp"
 #include "rendering/render/render_texture_utils.hpp"
 #include "rendering/render/debug_overlay_renderer.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/log.hpp"
 #include "utils/input.hpp"
@@ -44,6 +46,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <cstdlib>
 
 namespace {
 constexpr double kDepthBucketSize = 0.0625;
@@ -59,6 +62,7 @@ inline std::int64_t quantize_depth(double depth) {
 
 void destroy_texture(SDL_Texture*& texture) {
     if (texture) {
+        render_diagnostics::add_texture_destroy_count();
         SDL_DestroyTexture(texture);
         texture = nullptr;
     }
@@ -833,6 +837,27 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
     if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
 
+    const char* runtime_renderer_env = std::getenv("VIBBLE_RUNTIME_GAMEPLAY_RENDERER");
+    gpu_runtime_path_enabled_ = runtime_renderer_env && std::string(runtime_renderer_env) == "gpu";
+    if (gpu_runtime_path_enabled_) {
+        std::string gpu_error;
+        gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
+        if (!gpu_scene_renderer_) {
+            vibble::log::error("[SceneRenderer] GPU runtime path requested but initialization failed: " + gpu_error);
+            gpu_runtime_path_enabled_ = false;
+        } else {
+            const char* shader_manifest_env = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
+            const std::string shader_manifest = shader_manifest_env ? std::string(shader_manifest_env)
+                                                                    : std::string("ENGINE/runtime/rendering/shaders/runtime_shaders.json");
+            if (!gpu_scene_renderer_->load_shader_packages(shader_manifest, gpu_error)) {
+                throw std::runtime_error("GPU shader package load failed: " + gpu_error);
+            }
+            vibble::log::info("[SceneRenderer] GPU runtime renderer path is enabled.");
+        }
+    } else {
+        vibble::log::info("[SceneRenderer] Legacy runtime renderer path is enabled.");
+    }
+
     vibble::log::debug(std::string{"[SceneRenderer] מתחיל אתחול עבור מפה '"} + map_id +
                        "' עם מסך " + std::to_string(screen_width_) + "x" + std::to_string(screen_height_) + ".");
 }
@@ -861,6 +886,7 @@ bool SceneRenderer::ensure_scene_target() {
                                              screen_width_,
                                              screen_height_);
     if (scene_composite_tex_) {
+        render_diagnostics::add_texture_create_count();
         SDL_SetTextureBlendMode(scene_composite_tex_, SDL_BLENDMODE_BLEND);
     }
     return scene_composite_tex_ != nullptr;
@@ -1137,6 +1163,7 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
                                           double focus_plane_world_z,
                                           const std::vector<Asset*>& rendered_assets,
                                           std::vector<LayerEffectProcessor::RuntimeLight>& out_lights) {
+    render_diagnostics::ScopedCpuTimer gather_timer(render_diagnostics::CpuTimerMetric::LightGather);
     (void)rendered_assets;
     out_lights.clear();
     runtime_light_debug_overlay_.clear();
@@ -1845,6 +1872,15 @@ void SceneRenderer::render() {
         return;
     }
 
+    const std::uint64_t render_begin_counter = SDL_GetPerformanceCounter();
+    const std::uint64_t perf_freq = SDL_GetPerformanceFrequency();
+    render_diagnostics::begin_frame();
+    if (gpu_runtime_path_enabled_ && gpu_scene_renderer_) {
+        gpu_scene_renderer_->begin_frame();
+    } else {
+        render_diagnostics::set_renderer_runtime_info("legacy", "sdl_renderer", "vsync");
+    }
+
     render_internal::clear_gameplay_target_to_color(renderer_, scene_composite_tex_, map_clear_color_);
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
@@ -1891,6 +1927,7 @@ void SceneRenderer::render() {
         floor_dark_mask_texture = floor_composer_->floor_dark_mask_texture();
     }
 
+    render_diagnostics::add_render_target_switch_count();
     SDL_SetRenderTarget(renderer_, scene_composite_tex_);
     SDL_SetRenderViewport(renderer_, nullptr);
     SDL_SetRenderClipRect(renderer_, nullptr);
@@ -1902,9 +1939,17 @@ void SceneRenderer::render() {
         render_texture_utils::draw_fullscreen_texture(renderer_, floor_texture);
     }
 
+    const std::uint64_t submission_begin_counter = SDL_GetPerformanceCounter();
     const render_pipeline::LayerBuildResult layer_build = layer_submission_builder_
         ? layer_submission_builder_->build(*geometry_batcher_, cam, player_split_world_z, max_cull_depth)
         : render_pipeline::LayerBuildResult{};
+    const std::uint64_t submission_end_counter = SDL_GetPerformanceCounter();
+    if (perf_freq > 0 && submission_end_counter >= submission_begin_counter) {
+        const double submission_ms =
+            (static_cast<double>(submission_end_counter - submission_begin_counter) * 1000.0) /
+            static_cast<double>(perf_freq);
+        render_diagnostics::add_draw_submission_ms(submission_ms);
+    }
 
     bool composed = false;
     if (layer_build.valid && !layer_build.non_empty_layers.empty() && layer_stack_renderer_ && scene_composite_pass_) {
@@ -1954,6 +1999,7 @@ void SceneRenderer::render() {
         geometry_batcher_->flush();
     }
 
+    render_diagnostics::add_render_target_switch_count();
     SDL_SetRenderTarget(renderer_, nullptr);
     SDL_SetRenderViewport(renderer_, nullptr);
     SDL_SetRenderClipRect(renderer_, nullptr);
@@ -1986,5 +2032,17 @@ void SceneRenderer::render() {
     if (assets_->dev_grid_overlay_callback_) {
         assets_->dev_grid_overlay_callback_();
     }
-}
 
+    const std::uint64_t render_end_counter = SDL_GetPerformanceCounter();
+    if (perf_freq > 0 && render_end_counter >= render_begin_counter) {
+        const double render_ms =
+            (static_cast<double>(render_end_counter - render_begin_counter) * 1000.0) /
+            static_cast<double>(perf_freq);
+        render_diagnostics::set_render_thread_cpu_ms(render_ms);
+    }
+    render_diagnostics::add_draw_call_count(static_cast<std::uint32_t>(geometry_batcher_->getDrawCallCount()));
+    if (gpu_runtime_path_enabled_ && gpu_scene_renderer_) {
+        gpu_scene_renderer_->end_frame();
+    }
+    render_diagnostics::end_frame();
+}

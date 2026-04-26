@@ -252,6 +252,17 @@ endif()
 # ------------------------------------------
 # Unit tests (doctest-based)
 # ------------------------------------------
+set(RUNTIME_SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/runtime/rendering/shaders")
+set(RUNTIME_SHADER_PACKAGE_DIR "${CMAKE_BINARY_DIR}/runtime_shaders")
+add_custom_target(runtime_shader_packages ALL
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/shaders/build_runtime_shader_packages.py"
+            --input "${RUNTIME_SHADER_SOURCE_DIR}"
+            --output "${RUNTIME_SHADER_PACKAGE_DIR}"
+    BYPRODUCTS "${RUNTIME_SHADER_PACKAGE_DIR}/runtime_shaders.json"
+    COMMENT "Packaging deterministic runtime shader bundles (DXIL/SPIR-V)"
+    VERBATIM)
+add_dependencies(engine runtime_shader_packages)
+
 set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
 

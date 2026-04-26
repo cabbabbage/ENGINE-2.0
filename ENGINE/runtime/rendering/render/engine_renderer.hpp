@@ -6,6 +6,8 @@
 
 #include <SDL3/SDL.h>
 
+#include "rendering/render/gpu_format_policy.hpp"
+
 /**
  * Engine-owned renderer wrapper that selects the best SDL3 backend once at startup.
  * It always exposes the same API surface regardless of whether the underlying
@@ -47,6 +49,11 @@ public:
     SDL_Window* window() const { return window_; }
     const RenderCaps& caps() const { return caps_; }
     RenderQualityTier quality_tier() const { return quality_tier_; }
+    const std::string& present_mode_name() const { return present_mode_name_; }
+    const RuntimeGpuFormatPolicy* gpu_format_policy() const {
+        return has_gpu_format_policy_ ? &gpu_format_policy_ : nullptr;
+    }
+    bool runtime_gpu_supported() const { return caps_.backend_type == RenderBackendType::GPU; }
 
     // בקרת פריים
     void begin_frame(const SDL_Color& clear_color);
@@ -83,5 +90,7 @@ private:
     SDL_Window* window_ = nullptr;
     RenderCaps caps_{};
     RenderQualityTier quality_tier_ = RenderQualityTier::Accelerated;
+    std::string present_mode_name_ = "vsync";
+    RuntimeGpuFormatPolicy gpu_format_policy_{};
+    bool has_gpu_format_policy_ = false;
 };
-

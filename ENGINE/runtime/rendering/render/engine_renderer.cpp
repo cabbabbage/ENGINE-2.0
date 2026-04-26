@@ -425,7 +425,33 @@ RenderBackendType classify_backend(SDL_Renderer* renderer, RenderBackendType hin
 } // namespace
 
 EngineRenderer::EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, RenderQualityTier tier, SDL_Window* window)
-    : renderer_(renderer), window_(window), caps_(std::move(caps)), quality_tier_(tier) {}
+    : renderer_(renderer), window_(window), caps_(std::move(caps)), quality_tier_(tier) {
+    present_mode_name_ = caps_.vsync_enabled ? "vsync" : "immediate";
+
+    if (caps_.backend_type == RenderBackendType::GPU && renderer_) {
+        SDL_PropertiesID props = SDL_GetRendererProperties(renderer_);
+        SDL_GPUDevice* gpu_device = props
+            ? static_cast<SDL_GPUDevice*>(SDL_GetPointerProperty(props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr))
+            : nullptr;
+        if (gpu_device) {
+            std::string format_error;
+            has_gpu_format_policy_ = GpuFormatPolicyResolver::Resolve(gpu_device,
+                                                                       false,
+                                                                       gpu_format_policy_,
+                                                                       format_error);
+            if (has_gpu_format_policy_) {
+                vibble::log::info("[EngineRenderer] GPU format policy: albedo=" +
+                                  std::to_string(static_cast<int>(gpu_format_policy_.albedo_format)) +
+                                  " light=" + std::to_string(static_cast<int>(gpu_format_policy_.light_accumulation_format)) +
+                                  " mask=" + std::to_string(static_cast<int>(gpu_format_policy_.mask_format)) +
+                                  " depth=" + std::to_string(static_cast<int>(gpu_format_policy_.depth_format)) +
+                                  " samples=" + std::to_string(static_cast<int>(gpu_format_policy_.sample_count)));
+            } else {
+                vibble::log::error("[EngineRenderer] GPU format policy probe failed: " + format_error);
+            }
+        }
+    }
+}
 
 EngineRenderer::~EngineRenderer() {
     if (renderer_) {
@@ -494,7 +520,14 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
     if (gpu_attempt.renderer) {
         auto tier = choose_quality_tier(gpu_attempt.caps);
         log_caps(gpu_attempt.caps);
-        return std::unique_ptr<EngineRenderer>(new EngineRenderer(gpu_attempt.renderer, gpu_attempt.caps, tier, window));
+        std::unique_ptr<EngineRenderer> candidate(
+            new EngineRenderer(gpu_attempt.renderer, gpu_attempt.caps, tier, window));
+        if (!candidate->has_gpu_format_policy_) {
+            vibble::log::error("[EngineRenderer] GPU renderer failed strict startup format policy checks. Falling back.");
+            candidate.reset();
+        } else {
+            return candidate;
+        }
     }
     if (!gpu_attempt.failure_reason.empty()) {
         vibble::log::warn("[EngineRenderer] renderer של GPU לא זמין, מעבר ל-2D מואץ. סיבה: " +

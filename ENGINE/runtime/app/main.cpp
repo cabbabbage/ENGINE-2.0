@@ -12,6 +12,7 @@
 #include "assets/asset/asset_library.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/engine_renderer.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 #include "AssetsManager.hpp"
 #include "utils/input.hpp"
 #include "audio/audio_engine.hpp"
@@ -709,6 +710,9 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         }
 
         std::ostringstream frame_line;
+        const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+        const std::string backend_name = renderer_ ? renderer_->caps().renderer_name : std::string("unknown");
+        const std::string present_mode = renderer_ ? renderer_->present_mode_name() : std::string("unknown");
         frame_line << "[RenderDiag][" << (loop_label ? loop_label : "loop")
                    << "] frame=" << frame_diagnostics_counter_
                    << " window=" << window_w << "x" << window_h
@@ -723,7 +727,26 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                    << " depth_culled=" << depth_culled
                    << " nodes=" << frustum_nodes
                    << " branches_skipped=" << frustum_skipped
-                   << " postprocess=" << postprocess_text;
+                   << " postprocess=" << postprocess_text
+                   << " frame_cpu_ms=" << stats.frame_cpu_ms
+                   << " render_thread_cpu_ms=" << stats.render_thread_cpu_ms
+                   << " draw_submission_ms=" << stats.draw_submission_cpu_ms
+                   << " pass_count=" << stats.render_pass_count
+                   << " copy_pass_count=" << stats.copy_pass_count
+                   << " compute_pass_count=" << stats.compute_pass_count
+                   << " draw_calls=" << stats.draw_call_count
+                   << " rt_switches=" << stats.render_target_switch_count
+                   << " tex_create=" << stats.texture_create_count
+                   << " tex_destroy=" << stats.texture_destroy_count
+                   << " cpu_light_gather_ms=" << stats.cpu_light_gather_ms
+                   << " cpu_light_mask_ms=" << stats.cpu_light_mask_generation_ms
+                   << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)
+                   << " backend=" << backend_name
+                   << " present_mode=" << present_mode;
+        if (stats.texture_memory_known) {
+                frame_line << " texture_mem_mb="
+                           << static_cast<double>(stats.texture_memory_bytes) / (1024.0 * 1024.0);
+        }
         vibble::log::debug(frame_line.str());
 
         if (output_h > 0 && std::abs(target_h - output_h / 2) <= 1) {

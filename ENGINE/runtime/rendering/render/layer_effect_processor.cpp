@@ -1,4 +1,5 @@
 #include "rendering/render/layer_effect_processor.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -644,6 +645,7 @@ LayerEffectProcessor::LayerProcessResult LayerEffectProcessor::process_layer(
     SDL_RenderTexture(renderer_, base_layer_texture, nullptr, nullptr);
 
     if (lighting_params.enabled && dark_mask_ready) {
+        render_diagnostics::ScopedCpuTimer mask_timer(render_diagnostics::CpuTimerMetric::LightMaskGeneration);
         if (!supports_strict_dark_mask_pipeline()) {
             if (!warned_missing_strict_dark_mask_pipeline_blend_modes_) {
                 vibble::log::warn("[LayerEffectProcessor] מצבי ערבוב dark-mask ששומרים אלפא בצורה מחמירה אינם זמינים; מדלג על תאורת dark-mask.");

@@ -1678,9 +1678,15 @@ void SceneRenderer::update_runtime_light_registry_incremental(std::uint64_t fram
             const std::size_t name_hash = std::hash<std::string>{}(anchor.name);
             const std::size_t hidden_hash = std::hash<bool>{}(anchor.hidden);
             const std::size_t radius_hash = std::hash<float>{}(anchor.light.radius);
+            const std::size_t texture_x_hash = std::hash<int>{}(anchor.texture_x);
+            const std::size_t texture_y_hash = std::hash<int>{}(anchor.texture_y);
+            const std::size_t depth_offset_hash = std::hash<float>{}(anchor.depth_offset);
             anchor_signature ^= (name_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
             anchor_signature ^= (hidden_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
             anchor_signature ^= (radius_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
+            anchor_signature ^= (texture_x_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
+            anchor_signature ^= (texture_y_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
+            anchor_signature ^= (depth_offset_hash + 0x9e3779b97f4a7c15ull + (anchor_signature << 6) + (anchor_signature >> 2));
         }
         const std::uint64_t anchor_revision = asset->anchor_world_revision();
         const int frame_index = asset->current_frame ? asset->current_frame->frame_index : std::numeric_limits<int>::min();
@@ -1725,9 +1731,14 @@ void SceneRenderer::update_runtime_light_registry_incremental(std::uint64_t fram
             continue;
         }
 
-        const std::optional<AnchorPoint> resolved = entry.asset->anchor_state(entry.anchor_name,
-                                                                               anchor_points::GridMaterialization::None,
-                                                                               Asset::AnchorResolveMode::Cached);
+        std::optional<AnchorPoint> resolved = entry.asset->anchor_state(entry.anchor_name,
+                                                                         anchor_points::GridMaterialization::None,
+                                                                         Asset::AnchorResolveMode::Cached);
+        if (!resolved.has_value() || !resolved->exists) {
+            resolved = entry.asset->anchor_state(entry.anchor_name,
+                                                 anchor_points::GridMaterialization::None,
+                                                 Asset::AnchorResolveMode::ForceRecompute);
+        }
         bool found_anchor = false;
         DisplacedAssetAnchorPoint source_anchor{};
         for (const DisplacedAssetAnchorPoint& anchor : entry.asset->current_frame->anchor_points) {

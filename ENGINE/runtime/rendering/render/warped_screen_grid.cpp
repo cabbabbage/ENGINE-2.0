@@ -1997,10 +1997,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 continue;
             }
 
-            const std::optional<AnchorPoint> resolved = asset->anchor_state(
+            std::optional<AnchorPoint> resolved = asset->anchor_state(
                 frame_anchor.name,
                 anchor_points::GridMaterialization::None,
                 Asset::AnchorResolveMode::Cached);
+            if (!resolved.has_value() || !resolved->exists) {
+                resolved = asset->anchor_state(
+                    frame_anchor.name,
+                    anchor_points::GridMaterialization::None,
+                    Asset::AnchorResolveMode::ForceRecompute);
+            }
             if (!resolved.has_value() || !resolved->exists) {
                 continue;
             }

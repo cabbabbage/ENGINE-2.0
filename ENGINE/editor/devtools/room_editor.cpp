@@ -14499,6 +14499,77 @@ bool RoomEditor::add_anchor_in_current_frame() {
     return true;
 }
 
+bool RoomEditor::duplicate_selected_light_in_current_frame() {
+    if (!light_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+        return false;
+    }
+    if (!anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
+        return false;
+    }
+
+    const std::string source_anchor_name = anchor_edit_.selected_anchor_name;
+    std::string duplicated_anchor_name;
+    const bool changed = mutate_anchor_current_frame(
+        [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
+            const auto source_it = std::find_if(
+                anchors.begin(),
+                anchors.end(),
+                [&](const DisplacedAssetAnchorPoint& anchor) {
+                    return anchor.name == source_anchor_name &&
+                           anchor.is_valid() &&
+                           anchor.has_light_data &&
+                           !is_valid_oval_center_anchor_name(anchor.name);
+                });
+            if (source_it == anchors.end()) {
+                return false;
+            }
+
+            std::vector<std::string> existing_names;
+            existing_names.reserve(anchors.size());
+            for (const auto& anchor : anchors) {
+                if (anchor.is_valid()) {
+                    existing_names.push_back(anchor.name);
+                }
+            }
+
+            const std::string desired_name = source_anchor_name + "_copy";
+            duplicated_anchor_name = devmode::room_anchor_mode::make_unique_anchor_name(desired_name, existing_names);
+            if (duplicated_anchor_name.empty()) {
+                return false;
+            }
+
+            DisplacedAssetAnchorPoint duplicate = *source_it;
+            duplicate.name = duplicated_anchor_name;
+            duplicate.has_light_data = true;
+            duplicate.light.sanitize();
+            anchors.insert(source_it + 1, duplicate);
+            return true;
+        },
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
+
+    if (!changed || duplicated_anchor_name.empty()) {
+        return false;
+    }
+
+    anchor_edit_.selected_anchor_name = duplicated_anchor_name;
+    anchor_edit_.point_selected = true;
+    if (anchor_tools_panel_) {
+        anchor_tools_panel_->set_selected_anchor(duplicated_anchor_name);
+        anchor_tools_panel_->set_rename_text(duplicated_anchor_name);
+    }
+
+    if (anchor_edit_.target_asset) {
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            anchor_edit_.target_asset,
+            source_anchor_name);
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+            anchor_edit_.target_asset,
+            duplicated_anchor_name);
+    }
+    show_notice("Duplicated light anchor: " + duplicated_anchor_name);
+    return true;
+}
+
 std::unordered_set<std::string> RoomEditor::valid_oval_center_anchor_names(const AssetInfo& info) const {
     std::unordered_set<std::string> valid_names;
     const auto& mappings = info.oval_anchor_mappings;
@@ -20642,7 +20713,13 @@ void RoomEditor::handle_shortcuts(const Input& input) {
     }
 
     if (input.wasScancodePressed(SDL_SCANCODE_C)) {
-        copy_selected_spawn_group();
+        if (light_mode_active()) {
+            if (!duplicate_selected_light_in_current_frame()) {
+                show_notice("Select a light anchor first");
+            }
+        } else {
+            copy_selected_spawn_group();
+        }
     }
     if (input.wasScancodePressed(SDL_SCANCODE_V)) {
         paste_spawn_group_from_clipboard();

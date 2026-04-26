@@ -28,6 +28,7 @@ constexpr int kLightCardPadding = 6;
 constexpr int kHeaderHeight = 24;
 constexpr int kLineHeight = 18;
 constexpr int kColorTextboxGap = 6;
+constexpr int kLightSwatchHeight = 14;
 
 const std::vector<std::string>& scaling_method_options() {
     static const std::vector<std::string> options{
@@ -631,7 +632,7 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                                       header_rect_.y);
 
     if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0) {
-        const SDL_Color light_bg = DMStyles::PanelBG();
+        const SDL_Color light_bg = dm_draw::LightenColor(DMStyles::PanelBG(), 0.03f);
         dm_draw::DrawBeveledRect(renderer,
                                  light_panel_rect_,
                                  DMStyles::CornerRadius(),
@@ -648,6 +649,18 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                                           "Light Tools",
                                           light_header_rect_.x,
                                           light_header_rect_.y);
+        DMLabelStyle helper_style = label_style;
+        helper_style.font_size = std::max(10, label_style.font_size - 2);
+        helper_style.color = SDL_Color{
+            static_cast<Uint8>(std::clamp(static_cast<int>(label_style.color.r) + 14, 0, 255)),
+            static_cast<Uint8>(std::clamp(static_cast<int>(label_style.color.g) + 14, 0, 255)),
+            static_cast<Uint8>(std::clamp(static_cast<int>(label_style.color.b) + 14, 0, 255)),
+            label_style.color.a};
+        DMFontCache::instance().draw_text(renderer,
+                                          helper_style,
+                                          "Ctrl+C duplicates selected light",
+                                          light_helper_rect_.x,
+                                          light_helper_rect_.y);
     }
 
     SDL_SetRenderDrawColor(renderer, 20, 24, 30, 180);
@@ -720,7 +733,7 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
         }
         if (light_editor_mode_) {
             if (light_card_rect_.w > 0 && light_card_rect_.h > 0) {
-                const SDL_Color light_fill = dm_draw::LightenColor(DMStyles::PanelBG(), 0.04f);
+                const SDL_Color light_fill = dm_draw::LightenColor(DMStyles::PanelBG(), 0.06f);
                 dm_draw::DrawBeveledRect(renderer,
                                          light_card_rect_,
                                          DMStyles::CornerRadius(),
@@ -734,6 +747,18 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                 dm_draw::DrawRoundedOutline(renderer, light_card_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
             }
             DMFontCache::instance().draw_text(renderer, label_style, "Light Attachment", light_title_rect_.x, light_title_rect_.y);
+            if (light_swatch_rect_.w > 0 && light_swatch_rect_.h > 0) {
+                const LightValues values = collect_light_values();
+                const SDL_Color swatch_color{
+                    static_cast<Uint8>(std::clamp(values.color_r, 0, 255)),
+                    static_cast<Uint8>(std::clamp(values.color_g, 0, 255)),
+                    static_cast<Uint8>(std::clamp(values.color_b, 0, 255)),
+                    static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(values.opacity * 2.55f)), 0, 255))
+                };
+                SDL_SetRenderDrawColor(renderer, swatch_color.r, swatch_color.g, swatch_color.b, swatch_color.a);
+                sdl_render::FillRect(renderer, &light_swatch_rect_);
+                dm_draw::DrawRoundedOutline(renderer, light_swatch_rect_, 3, 1, DMStyles::Border());
+            }
             if (light_color_r_textbox_) {
                 light_color_r_textbox_->render(renderer);
             }
@@ -1035,14 +1060,31 @@ void RoomAnchorToolsPanel::update_layout() const {
         advanced_card_rect_ = SDL_Rect{0, 0, 0, 0};
     }
 
+    light_helper_rect_ = SDL_Rect{0, 0, 0, 0};
+    light_swatch_rect_ = SDL_Rect{0, 0, 0, 0};
+    if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0) {
+        light_helper_rect_ = SDL_Rect{
+            light_header_rect_.x,
+            light_header_rect_.y + kLineHeight,
+            light_header_rect_.w,
+            kLineHeight};
+    }
+
     if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0 && has_selected_anchor) {
         const int light_controls_x = light_panel_rect_.x + kPanelPadding;
         const int light_controls_w = std::max(0, light_panel_rect_.w - kPanelPadding * 2);
-        int light_row_y = light_header_rect_.y + light_header_rect_.h + kSectionGap;
+        int light_row_y = light_helper_rect_.y + light_helper_rect_.h + kSectionGap;
         light_title_rect_ = SDL_Rect{light_controls_x, light_row_y, light_controls_w, kLineHeight};
         light_row_y += kLineHeight + row_gap;
 
         const int light_card_top = light_row_y;
+        light_swatch_rect_ = SDL_Rect{
+            light_controls_x,
+            light_row_y,
+            light_controls_w,
+            kLightSwatchHeight};
+        light_row_y += kLightSwatchHeight + row_gap;
+
         const int split_width = std::max(0, light_controls_w - (kColorTextboxGap * 2));
         const int col_width = split_width / 3;
         const int color_mid_x = light_controls_x + col_width + kColorTextboxGap;
@@ -1094,6 +1136,8 @@ void RoomAnchorToolsPanel::update_layout() const {
             std::max(0, card_bottom_y - card_top_y)};
     } else {
         light_title_rect_ = SDL_Rect{0, 0, 0, 0};
+        light_helper_rect_ = SDL_Rect{0, 0, 0, 0};
+        light_swatch_rect_ = SDL_Rect{0, 0, 0, 0};
         light_card_rect_ = SDL_Rect{0, 0, 0, 0};
         if (light_color_r_textbox_) {
             light_color_r_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});

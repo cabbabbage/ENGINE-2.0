@@ -112,6 +112,8 @@ private:
     mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
     mutable SDL_Rect advanced_card_rect_{0, 0, 0, 0};
     mutable SDL_Rect light_title_rect_{0, 0, 0, 0};
+    mutable SDL_Rect light_helper_rect_{0, 0, 0, 0};
+    mutable SDL_Rect light_swatch_rect_{0, 0, 0, 0};
     mutable SDL_Rect light_card_rect_{0, 0, 0, 0};
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
     mutable int content_height_ = 0;

@@ -874,7 +874,6 @@ private:
         std::string dragging_anchor_name;
         bool point_selected = false;
         bool dragging = false;
-        bool onion_skin_enabled = false;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
@@ -994,7 +993,6 @@ private:
         bool hovered_rotation_handle = false;
         ExtrusionHandleSide hovered_extrusion_handle = ExtrusionHandleSide::None;
         ExtrusionHandleSide dragging_extrusion_handle_side = ExtrusionHandleSide::None;
-        bool onion_skin_enabled = false;
         int drag_reference_point_index = -1;
         int drag_reference_corner_index = -1;
         SDL_FPoint drag_reference_screen_offset{0.0f, 0.0f};

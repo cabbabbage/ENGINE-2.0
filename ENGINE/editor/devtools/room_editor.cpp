@@ -188,27 +188,6 @@ enum class BoxExtrusionHandleSide {
     Back,
 };
 
-class ScopedAssetFrameOverride {
-public:
-    ScopedAssetFrameOverride(Asset* asset, AnimationFrame* frame)
-        : asset_(asset),
-          original_frame_(asset ? asset->current_frame : nullptr) {
-        if (asset_ && frame) {
-            asset_->current_frame = frame;
-        }
-    }
-
-    ~ScopedAssetFrameOverride() {
-        if (asset_) {
-            asset_->current_frame = original_frame_;
-        }
-    }
-
-private:
-    Asset* asset_ = nullptr;
-    AnimationFrame* original_frame_ = nullptr;
-};
-
 constexpr std::array<std::array<int, 4>, 6> kBoxVolumeFaces{{
     {{0, 1, 2, 3}},
     {{4, 5, 6, 7}},
@@ -217,25 +196,6 @@ constexpr std::array<std::array<int, 4>, 6> kBoxVolumeFaces{{
     {{2, 3, 7, 6}},
     {{3, 0, 4, 7}},
 }};
-
-AnimationFrame* adjacent_frame_for_editor(Asset* target,
-                                          const std::string& animation_id,
-                                          int current_frame_index,
-                                          int delta) {
-    if (!target || !target->info || delta == 0) {
-        return nullptr;
-    }
-    auto anim_it = target->info->animations.find(animation_id);
-    if (anim_it == target->info->animations.end() || !anim_it->second.has_frames()) {
-        return nullptr;
-    }
-    const int frame_count = static_cast<int>(anim_it->second.frame_count());
-    const int candidate = current_frame_index + delta;
-    if (candidate < 0 || candidate >= frame_count) {
-        return nullptr;
-    }
-    return anim_it->second.primary_frame_at(static_cast<std::size_t>(candidate));
-}
 
 animation_update::AttackPayload payload_from_attack_box(const animation_update::FrameAttackBox& box) {
     if (!box.payload.payload_id.empty()) {
@@ -483,178 +443,6 @@ std::optional<BoxRotationHandlePickResult> find_box_rotation_handle_at_screen_po
         handle,
         center,
     };
-}
-
-struct OnionAnchorOverlayHandle {
-    SDL_FPoint flat_screen_px{0.0f, 0.0f};
-    bool has_flat_screen_px = false;
-    SDL_FPoint final_screen_px{0.0f, 0.0f};
-    bool has_final_screen_px = false;
-};
-
-std::vector<OnionAnchorOverlayHandle> collect_anchor_overlay_handles_for_frame(
-    Asset* target,
-    AnimationFrame* frame,
-    bool light_mode_active) {
-    std::vector<OnionAnchorOverlayHandle> handles;
-    if (!target || !frame) {
-        return handles;
-    }
-    ScopedAssetFrameOverride frame_scope(target, frame);
-    handles.reserve(frame->anchor_points.size());
-    const auto owner = devmode::room_anchor_mode::owner_from_light_mode(light_mode_active);
-    for (const auto& anchor : frame->anchor_points) {
-        if (!anchor.is_valid() || !devmode::room_anchor_mode::anchor_owned_by_mode(anchor, owner) ||
-            is_oval_center_anchor_name(anchor.name)) {
-            continue;
-        }
-        const anchor_points::FrameAnchorSample sample =
-            anchor_points::resolve_frame_anchor_sample(*target, anchor, anchor_points::GridMaterialization::None);
-        OnionAnchorOverlayHandle handle{};
-        handle.flat_screen_px = sample.flat_screen_px;
-        handle.has_flat_screen_px = sample.has_flat_screen_px;
-        handle.final_screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
-        handle.has_final_screen_px = sample.has_final_screen_px ||
-                                     (std::isfinite(sample.screen_px.x) && std::isfinite(sample.screen_px.y));
-        if (handle.has_final_screen_px) {
-            handles.push_back(handle);
-        }
-    }
-    return handles;
-}
-
-template <typename TBox, typename DamageFn, typename MetaFn>
-std::vector<Asset::RuntimeBoxVolume> build_runtime_box_overlay_volumes_for_frame(
-    Asset* target,
-    AnimationFrame* frame,
-    const std::vector<TBox>& boxes,
-    const std::string& fallback_type,
-    DamageFn&& damage_of,
-    MetaFn&& meta_of) {
-    std::vector<Asset::RuntimeBoxVolume> volumes;
-    if (!target || !frame) {
-        return volumes;
-    }
-
-    ScopedAssetFrameOverride frame_scope(target, frame);
-    volumes.reserve(boxes.size());
-    for (const auto& box : boxes) {
-        if (!box.is_valid() || !box.enabled) {
-            continue;
-        }
-
-        Asset::RuntimeBoxVolume volume{};
-        volume.id = box.id;
-        volume.type = box.type.empty() ? fallback_type : box.type;
-        volume.name = box.name;
-        volume.enabled = box.enabled;
-        volume.frame_start = box.frame_start;
-        volume.frame_end = box.frame_end;
-        volume.anchor_link = box.anchor_link;
-        volume.frame_index = frame->frame_index;
-        volume.extrusion_forward = std::max(1, box.extrusion_forward);
-        volume.extrusion_backward = std::max(1, box.extrusion_backward);
-        volume.flatten_bottom_to_floor = box.flatten_bottom_to_floor;
-        volume.damage_amount = damage_of(box);
-        volume.meta_json = meta_of(box);
-
-        const auto corners = box.to_runtime_clockwise_points();
-        float sum_x = 0.0f;
-        float sum_y = 0.0f;
-        float sum_z = 0.0f;
-        bool valid = true;
-        const float extrusion_forward = static_cast<float>(volume.extrusion_forward);
-        const float extrusion_backward = static_cast<float>(volume.extrusion_backward);
-        for (std::size_t corner_index = 0; corner_index < corners.size(); ++corner_index) {
-            const auto& corner = corners[corner_index];
-            DisplacedAssetAnchorPoint sample_anchor{};
-            sample_anchor.name = "__box_corner";
-            sample_anchor.texture_x = std::max(0, corner.texture_x);
-            sample_anchor.texture_y = std::max(0, corner.texture_y);
-            sample_anchor.depth_offset = 0;
-
-            const auto sample =
-                anchor_points::resolve_frame_anchor_sample(*target, sample_anchor, anchor_points::GridMaterialization::None);
-            if (sample.resolved.missing || !sample.flat_relative_pixel_point.valid) {
-                valid = false;
-                break;
-            }
-
-            anchor_points::AnchorWorldPoint3 near_point{};
-            anchor_points::AnchorWorldPoint3 far_point{};
-            if (!anchor_points::build_asymmetric_camera_ray_extrusion(*target,
-                                                                      sample.flat_relative_pixel_point,
-                                                                      extrusion_backward,
-                                                                      extrusion_forward,
-                                                                      near_point,
-                                                                      far_point) ||
-                !near_point.valid ||
-                !far_point.valid) {
-                valid = false;
-                break;
-            }
-
-            Asset::RuntimeBoxPoint3 near_world{
-                near_point.x,
-                near_point.y,
-                near_point.z,
-            };
-            Asset::RuntimeBoxPoint3 far_world{
-                far_point.x,
-                far_point.y,
-                far_point.z,
-            };
-            if (volume.flatten_bottom_to_floor && (corner_index == 2 || corner_index == 3)) {
-                near_world.y = 0.0f;
-                far_world.y = 0.0f;
-            }
-            volume.world_points[corner_index] = near_world;
-            volume.world_points[corner_index + corners.size()] = far_world;
-            sum_x += near_world.x + far_world.x;
-            sum_y += near_world.y + far_world.y;
-            sum_z += near_world.z + far_world.z;
-        }
-
-        if (!valid) {
-            continue;
-        }
-
-        volume.centroid = Asset::RuntimeBoxPoint3{
-            sum_x / 8.0f,
-            sum_y / 8.0f,
-            sum_z / 8.0f,
-        };
-        volume.valid = true;
-        volumes.push_back(std::move(volume));
-    }
-
-    return volumes;
-}
-
-std::vector<Asset::RuntimeBoxVolume> build_hitbox_overlay_volumes_for_frame(Asset* target, AnimationFrame* frame) {
-    if (!frame) {
-        return {};
-    }
-    return build_runtime_box_overlay_volumes_for_frame(
-        target,
-        frame,
-        frame->hit_boxes.boxes,
-        "hitbox",
-        [](const animation_update::FrameHitBox&) { return 0; },
-        [](const animation_update::FrameHitBox&) { return std::string{"{}"}; });
-}
-
-std::vector<Asset::RuntimeBoxVolume> build_attack_box_overlay_volumes_for_frame(Asset* target, AnimationFrame* frame) {
-    if (!frame) {
-        return {};
-    }
-    return build_runtime_box_overlay_volumes_for_frame(
-        target,
-        frame,
-        frame->attack_boxes.boxes,
-        "attack_box",
-        [](const animation_update::FrameAttackBox& box) { return box.damage_amount; },
-        [](const animation_update::FrameAttackBox& box) { return box.meta_json; });
 }
 
 bool box_trace_enabled() {
@@ -3132,7 +2920,6 @@ if (auto selected = library_ui_->consume_selection()) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active() || light_mode_active());
         anchor_tools_panel_->set_light_editor_mode(light_mode_active());
-        anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
     if (oval_tools_panel_) {
         oval_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -3158,17 +2945,14 @@ if (auto selected = library_ui_->consume_selection()) {
     if (hitbox_tools_panel_) {
         hitbox_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         hitbox_tools_panel_->set_visible(hitbox_mode_active());
-        hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     }
     if (attack_box_tools_panel_) {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
-        attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
     if (impassable_box_tools_panel_) {
         impassable_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         impassable_box_tools_panel_->set_visible(impassable_box_mode_active());
-        impassable_box_tools_panel_->set_onion_skin_enabled(impassable_box_edit_.onion_skin_enabled);
     }
     if (floor_box_tools_panel_) {
         floor_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -4570,47 +4354,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             refresh_anchor_mode_handles();
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-            if (anchor_edit_.onion_skin_enabled && anchor_edit_.target_asset && anchor_edit_.target_asset->info) {
-                AnimationFrame* prev_frame = adjacent_frame_for_editor(anchor_edit_.target_asset,
-                                                                       anchor_edit_.animation_id,
-                                                                       anchor_edit_.frame_index,
-                                                                       -1);
-                AnimationFrame* next_frame = adjacent_frame_for_editor(anchor_edit_.target_asset,
-                                                                       anchor_edit_.animation_id,
-                                                                       anchor_edit_.frame_index,
-                                                                       1);
-                auto render_onion_handles = [&](AnimationFrame* frame, const SDL_Color& color) {
-                    if (!frame) {
-                        return;
-                    }
-                    for (const OnionAnchorOverlayHandle& handle :
-                         collect_anchor_overlay_handles_for_frame(
-                             anchor_edit_.target_asset,
-                             frame,
-                             light_mode_active())) {
-                        if (!handle.has_final_screen_px) {
-                            continue;
-                        }
-                        if (handle.has_flat_screen_px) {
-                            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-                            SDL_RenderLine(renderer,
-                                           handle.flat_screen_px.x,
-                                           handle.flat_screen_px.y,
-                                           handle.final_screen_px.x,
-                                           handle.final_screen_px.y);
-                        }
-                        const int cx = static_cast<int>(std::lround(handle.final_screen_px.x));
-                        const int cy = static_cast<int>(std::lround(handle.final_screen_px.y));
-                        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-                        SDL_Rect box{cx - 3, cy - 3, 7, 7};
-                        sdl_render::FillRect(renderer, &box);
-                    }
-                };
-
-                render_onion_handles(prev_frame, SDL_Color{96, 176, 255, 105});
-                render_onion_handles(next_frame, SDL_Color{255, 204, 120, 105});
-            }
-
             const bool isolate_selected_anchor =
                 anchor_edit_.point_selected && !anchor_edit_.selected_anchor_name.empty();
             for (const AnchorHandleSample& handle : anchor_edit_.handles) {
@@ -5061,39 +4804,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             hitbox_edit_.target_asset &&
             hitbox_edit_.target_asset->info &&
             hitbox_edit_.target_asset->info->is_hitbox_enabled()) {
-            if (hitbox_edit_.onion_skin_enabled) {
-                AnimationFrame* prev_frame = adjacent_frame_for_editor(hitbox_edit_.target_asset,
-                                                                       hitbox_edit_.animation_id,
-                                                                       hitbox_edit_.frame_index,
-                                                                       -1);
-                AnimationFrame* next_frame = adjacent_frame_for_editor(hitbox_edit_.target_asset,
-                                                                       hitbox_edit_.animation_id,
-                                                                       hitbox_edit_.frame_index,
-                                                                       1);
-                render_box_editor(build_hitbox_overlay_volumes_for_frame(hitbox_edit_.target_asset, prev_frame),
-                                  -1,
-                                  -1,
-                                  -1,
-                                  -1,
-                                  false,
-                                  RoomEditor::BoxEditState::ExtrusionHandleSide::None,
-                                  false,
-                                  SDL_Color{90, 195, 255, 120},
-                                  false,
-                                  false);
-                render_box_editor(build_hitbox_overlay_volumes_for_frame(hitbox_edit_.target_asset, next_frame),
-                                  -1,
-                                  -1,
-                                  -1,
-                                  -1,
-                                  false,
-                                  RoomEditor::BoxEditState::ExtrusionHandleSide::None,
-                                  false,
-                                  SDL_Color{120, 220, 255, 120},
-                                  false,
-                                  false);
-            }
-
             const bool isolate_selected_box = hitbox_edit_.selected_box_index >= 0;
             render_box_editor(hitbox_edit_.target_asset->current_hit_box_volumes(),
                               hitbox_edit_.selected_box_index,
@@ -5113,39 +4823,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             attack_box_edit_.target_asset &&
             attack_box_edit_.target_asset->info &&
             attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
-            if (attack_box_edit_.onion_skin_enabled) {
-                AnimationFrame* prev_frame = adjacent_frame_for_editor(attack_box_edit_.target_asset,
-                                                                       attack_box_edit_.animation_id,
-                                                                       attack_box_edit_.frame_index,
-                                                                       -1);
-                AnimationFrame* next_frame = adjacent_frame_for_editor(attack_box_edit_.target_asset,
-                                                                       attack_box_edit_.animation_id,
-                                                                       attack_box_edit_.frame_index,
-                                                                       1);
-                render_box_editor(build_attack_box_overlay_volumes_for_frame(attack_box_edit_.target_asset, prev_frame),
-                                  -1,
-                                  -1,
-                                  -1,
-                                  -1,
-                                  false,
-                                  RoomEditor::BoxEditState::ExtrusionHandleSide::None,
-                                  false,
-                                  SDL_Color{255, 120, 120, 120},
-                                  false,
-                                  false);
-                render_box_editor(build_attack_box_overlay_volumes_for_frame(attack_box_edit_.target_asset, next_frame),
-                                  -1,
-                                  -1,
-                                  -1,
-                                  -1,
-                                  false,
-                                  RoomEditor::BoxEditState::ExtrusionHandleSide::None,
-                                  false,
-                                  SDL_Color{255, 170, 130, 120},
-                                  false,
-                                  false);
-            }
-
             const bool isolate_selected_box = attack_box_edit_.selected_box_index >= 0;
             render_box_editor(attack_box_edit_.target_asset->current_attack_box_volumes(),
                               attack_box_edit_.selected_box_index,
@@ -8435,9 +8112,6 @@ void RoomEditor::ensure_anchor_editor_widgets() {
                     break;
             }
         });
-        anchor_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
-            anchor_edit_.onion_skin_enabled = enabled;
-        });
         anchor_tools_panel_->set_on_open_candidates([this](const std::string& anchor_name,
                                                             SDL_Point click_point,
                                                             SDL_Rect row_rect) {
@@ -8449,7 +8123,6 @@ void RoomEditor::ensure_anchor_editor_widgets() {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active() || light_mode_active());
         anchor_tools_panel_->set_light_editor_mode(light_mode_active());
-        anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
 }
 
@@ -8593,9 +8266,6 @@ void RoomEditor::ensure_hitbox_editor_widgets() {
                     break;
             }
         });
-        hitbox_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
-            hitbox_edit_.onion_skin_enabled = enabled;
-        });
         hitbox_tools_panel_->set_on_system_enabled_toggle([this](bool enabled) {
             set_hitbox_system_enabled(enabled);
         });
@@ -8608,7 +8278,6 @@ void RoomEditor::ensure_hitbox_editor_widgets() {
                                     hitbox_edit_.target_asset->info &&
                                     hitbox_edit_.target_asset->info->is_hitbox_enabled();
         hitbox_tools_panel_->set_system_enabled(hitbox_enabled);
-        hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     }
 }
 
@@ -8655,9 +8324,6 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
                     break;
             }
         });
-        attack_box_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
-            attack_box_edit_.onion_skin_enabled = enabled;
-        });
         attack_box_tools_panel_->set_on_system_enabled_toggle([this](bool enabled) {
             set_attack_box_system_enabled(enabled);
         });
@@ -8670,7 +8336,6 @@ void RoomEditor::ensure_attack_box_editor_widgets() {
                                     attack_box_edit_.target_asset->info &&
                                     attack_box_edit_.target_asset->info->is_attack_box_enabled();
         attack_box_tools_panel_->set_system_enabled(attack_enabled);
-        attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
     ensure_attack_payload_editor_widget();
 }
@@ -8707,9 +8372,6 @@ void RoomEditor::ensure_impassable_box_editor_widgets() {
         impassable_box_tools_panel_->set_on_apply([this](const RoomBoxToolsPanel::DetailValues& values) {
             apply_impassable_box_panel_detail_update(values);
         });
-        impassable_box_tools_panel_->set_on_onion_skin_toggle([this](bool enabled) {
-            impassable_box_edit_.onion_skin_enabled = enabled;
-        });
         impassable_box_tools_panel_->set_on_system_enabled_toggle([this](bool enabled) {
             set_impassable_box_system_enabled(enabled);
         });
@@ -8728,7 +8390,6 @@ void RoomEditor::ensure_impassable_box_editor_widgets() {
                                         impassable_box_edit_.target_asset->info &&
                                         impassable_box_edit_.target_asset->info->is_impassable_box_enabled();
         impassable_box_tools_panel_->set_system_enabled(impassable_enabled);
-        impassable_box_tools_panel_->set_onion_skin_enabled(impassable_box_edit_.onion_skin_enabled);
     }
 }
 
@@ -8896,7 +8557,6 @@ void RoomEditor::sync_hitbox_tools_panel() {
     }
 
     hitbox_tools_panel_->set_box_names(names);
-    hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     int selected_box = hitbox_edit_.selected_box_index;
     if (selected_box >= static_cast<int>(names.size())) {
         selected_box = static_cast<int>(names.size()) - 1;
@@ -8952,7 +8612,6 @@ void RoomEditor::sync_attack_box_tools_panel() {
     }
 
     attack_box_tools_panel_->set_box_names(names);
-    attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     int selected_box = attack_box_edit_.selected_box_index;
     if (selected_box >= static_cast<int>(names.size())) {
         selected_box = static_cast<int>(names.size()) - 1;
@@ -10865,7 +10524,6 @@ void RoomEditor::update_asset_editor_layout() {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         anchor_tools_panel_->set_visible(anchor_mode_active() || light_mode_active());
         anchor_tools_panel_->set_light_editor_mode(light_mode_active());
-        anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     }
     if (oval_tools_panel_) {
         oval_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -10880,17 +10538,14 @@ void RoomEditor::update_asset_editor_layout() {
     if (hitbox_tools_panel_) {
         hitbox_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         hitbox_tools_panel_->set_visible(hitbox_mode_active());
-        hitbox_tools_panel_->set_onion_skin_enabled(hitbox_edit_.onion_skin_enabled);
     }
     if (attack_box_tools_panel_) {
         attack_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         attack_box_tools_panel_->set_visible(attack_box_mode_active());
-        attack_box_tools_panel_->set_onion_skin_enabled(attack_box_edit_.onion_skin_enabled);
     }
     if (impassable_box_tools_panel_) {
         impassable_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
         impassable_box_tools_panel_->set_visible(impassable_box_mode_active());
-        impassable_box_tools_panel_->set_onion_skin_enabled(impassable_box_edit_.onion_skin_enabled);
     }
     if (floor_box_tools_panel_) {
         floor_box_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -11199,7 +10854,6 @@ void RoomEditor::sync_anchor_tools_panel() {
 
     anchor_tools_panel_->set_visible(true);
     anchor_tools_panel_->set_light_editor_mode(light_mode_active());
-    anchor_tools_panel_->set_onion_skin_enabled(anchor_edit_.onion_skin_enabled);
     anchor_tools_panel_->set_anchor_names(names);
     ensure_anchor_selection_valid();
     if (light_mode_active()) {
@@ -18170,7 +17824,6 @@ void RoomEditor::sync_impassable_box_tools_panel() {
     }
 
     impassable_box_tools_panel_->set_box_names(names);
-    impassable_box_tools_panel_->set_onion_skin_enabled(impassable_box_edit_.onion_skin_enabled);
     int selected_box = impassable_box_edit_.selected_box_index;
     if (selected_box >= static_cast<int>(names.size())) {
         selected_box = static_cast<int>(names.size()) - 1;

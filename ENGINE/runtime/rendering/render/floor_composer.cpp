@@ -5,6 +5,7 @@
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 #include <algorithm>
@@ -18,10 +19,7 @@ namespace {
 constexpr float kQuadEpsilon = 1.0e-5f;
 
 void destroy_texture(SDL_Texture*& texture) {
-    if (texture) {
-        SDL_DestroyTexture(texture);
-        texture = nullptr;
-    }
+    render_diagnostics::destroy_texture(texture);
 }
 
 bool project_floor_point_to_screen(const WarpedScreenGrid& cam,
@@ -314,7 +312,7 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
             if (batcher) {
                 batcher->addQuad(tile.texture, verts, indices, SDL_BLENDMODE_BLEND, 1000000.0);
             } else {
-                SDL_RenderGeometry(renderer, tile.texture, verts, 4, indices, 6);
+                render_diagnostics::render_geometry(renderer, tile.texture, verts, 4, indices, 6);
             }
         }
     }
@@ -364,11 +362,11 @@ bool FloorComposer::ensure_sized_target(SDL_Texture*& texture) {
         destroy_texture(texture);
     }
 
-    texture = SDL_CreateTexture(renderer_,
-                                SDL_PIXELFORMAT_RGBA8888,
-                                SDL_TEXTUREACCESS_TARGET,
-                                screen_width_,
-                                screen_height_);
+    texture = render_diagnostics::create_texture(renderer_,
+                                                 SDL_PIXELFORMAT_RGBA8888,
+                                                 SDL_TEXTUREACCESS_TARGET,
+                                                 screen_width_,
+                                                 screen_height_);
     if (!texture) {
         return false;
     }
@@ -380,7 +378,9 @@ void FloorComposer::clear_target(SDL_Texture* texture) {
     if (!renderer_ || !texture) {
         return;
     }
-    SDL_SetRenderTarget(renderer_, texture);
+    if (!render_diagnostics::set_render_target(renderer_, texture)) {
+        return;
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
     SDL_RenderClear(renderer_);
@@ -420,11 +420,11 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
     }
 
     constexpr int kTextureSize = 192;
-    SDL_Texture* texture = SDL_CreateTexture(renderer_,
-                                             SDL_PIXELFORMAT_RGBA8888,
-                                             SDL_TEXTUREACCESS_STREAMING,
-                                             kTextureSize,
-                                             kTextureSize);
+    SDL_Texture* texture = render_diagnostics::create_texture(renderer_,
+                                                              SDL_PIXELFORMAT_RGBA8888,
+                                                              SDL_TEXTUREACCESS_STREAMING,
+                                                              kTextureSize,
+                                                              kTextureSize);
     if (!texture) {
         return nullptr;
     }
@@ -432,7 +432,7 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
     void* pixels = nullptr;
     int pitch = 0;
     if (!SDL_LockTexture(texture, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
-        SDL_DestroyTexture(texture);
+        render_diagnostics::destroy_texture(texture);
         return nullptr;
     }
 
@@ -440,7 +440,7 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
     const SDL_PixelFormatDetails* pixel_format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_RGBA8888);
     if (!pixel_format) {
         SDL_UnlockTexture(texture);
-        SDL_DestroyTexture(texture);
+        render_diagnostics::destroy_texture(texture);
         return nullptr;
     }
 
@@ -487,7 +487,9 @@ SDL_Texture* FloorComposer::compose_gpu(const WarpedScreenGrid& cam,
     SDL_Rect floor_clip{0, floor_top, screen_width_, floor_height};
 
     clear_target(floor_base_texture_);
-    SDL_SetRenderTarget(renderer_, floor_base_texture_);
+    if (!render_diagnostics::set_render_target(renderer_, floor_base_texture_)) {
+        return nullptr;
+    }
     if (floor_height > 0) {
         SDL_SetRenderClipRect(renderer_, &floor_clip);
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -574,7 +576,9 @@ SDL_Texture* FloorComposer::compose_gpu(const WarpedScreenGrid& cam,
     }
 
     if (floor_top > 0) {
-        SDL_SetRenderTarget(renderer_, floor_light_mask_texture_);
+        if (!render_diagnostics::set_render_target(renderer_, floor_light_mask_texture_)) {
+            return floor_base_texture_;
+        }
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
         const SDL_FRect top_rect{
@@ -607,7 +611,9 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
     SDL_Rect floor_clip{0, floor_top, screen_width_, floor_height};
 
     clear_target(floor_base_texture_);
-    SDL_SetRenderTarget(renderer_, floor_base_texture_);
+    if (!render_diagnostics::set_render_target(renderer_, floor_base_texture_)) {
+        return nullptr;
+    }
     if (floor_height > 0) {
         SDL_SetRenderClipRect(renderer_, &floor_clip);
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -625,7 +631,9 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
     }
 
     clear_target(floor_light_mask_texture_);
-    SDL_SetRenderTarget(renderer_, floor_light_mask_texture_);
+    if (!render_diagnostics::set_render_target(renderer_, floor_light_mask_texture_)) {
+        return floor_base_texture_;
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     if (floor_height > 0) {
         SDL_SetRenderClipRect(renderer_, &floor_clip);
@@ -714,7 +722,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
                     radius_y_px * 2.0f
                 };
                 for (int pass = 0; pass < pass_count; ++pass) {
-                    SDL_RenderTexture(renderer_, falloff_texture, nullptr, &dst_rect);
+                    render_diagnostics::render_texture(renderer_, falloff_texture, nullptr, &dst_rect);
                 }
             }
 

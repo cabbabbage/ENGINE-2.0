@@ -263,7 +263,7 @@ private:
     void apply_asset_scale_live_update(Asset* asset, int scale_percent);
     bool select_asset_or_group(Asset* asset);
     Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
-    bool should_open_spawn_group_panel_for_click(const void* asset_identity,
+    bool should_open_spawn_group_panel_for_click(const std::string& spawn_id,
                                                  bool has_spawn_group,
                                                  Uint32 click_time_ms);
     bool delete_selected_asset_or_group();
@@ -1177,7 +1177,7 @@ private:
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;
     int hover_miss_frames_ = 0;
-    const void* last_click_asset_ = nullptr;
+    std::string last_click_spawn_id_{};
     Uint32 last_click_time_ms_ = 0;
     MousePressState mouse_press_state_{};
     int suppress_world_left_click_frames_ = 0;
@@ -1341,7 +1341,7 @@ struct RoomEditorTestAccess {
     static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
     static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);
     static bool should_open_spawn_group_panel_for_click(RoomEditor& editor,
-                                                        const void* asset_identity,
+                                                        const std::string& spawn_id,
                                                         bool has_spawn_group,
                                                         std::uint32_t click_time_ms);
     static void reset_click_tracking(RoomEditor& editor);

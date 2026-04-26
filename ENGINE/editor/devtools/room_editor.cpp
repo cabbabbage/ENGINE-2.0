@@ -5722,7 +5722,7 @@ bool RoomEditor::is_mouse_press_asset_valid() const {
 void RoomEditor::clear_mouse_press_state(bool reset_click_tracking) {
     mouse_press_state_ = MousePressState{};
     if (reset_click_tracking) {
-        last_click_asset_ = nullptr;
+        last_click_spawn_id_.clear();
         last_click_time_ms_ = 0;
     }
 }
@@ -5733,7 +5733,7 @@ bool RoomEditor::consume_pressed_asset_release(Uint32 click_time_ms, std::string
         return false;
     }
     const bool open_spawn_group_panel =
-        should_open_spawn_group_panel_for_click(mouse_press_state_.pressed_identity,
+        should_open_spawn_group_panel_for_click(mouse_press_state_.pressed_spawn_id,
                                                 mouse_press_state_.pressed_has_spawn_group,
                                                 click_time_ms);
     if (!open_spawn_group_panel || !mouse_press_state_.pressed_has_spawn_group ||
@@ -5748,7 +5748,7 @@ void RoomEditor::reset_click_state() {
     click_buffer_frames_ = 0;
     rclick_buffer_frames_ = 0;
     suppress_next_left_click_ = false;
-    last_click_asset_ = nullptr;
+    last_click_spawn_id_.clear();
     last_click_time_ms_ = 0;
     suppress_world_left_click_frames_ = 0;
     clear_mouse_press_state(false);
@@ -6014,22 +6014,23 @@ bool RoomEditor::select_asset_or_group(Asset* asset) {
     return !selected_assets_.empty();
 }
 
-bool RoomEditor::should_open_spawn_group_panel_for_click(const void* asset_identity,
+bool RoomEditor::should_open_spawn_group_panel_for_click(const std::string& spawn_id,
                                                          bool has_spawn_group,
                                                          Uint32 click_time_ms) {
-    if (!asset_identity || !has_spawn_group) {
-        last_click_asset_ = nullptr;
+    if (!has_spawn_group || spawn_id.empty()) {
+        last_click_spawn_id_.clear();
         last_click_time_ms_ = 0;
         return false;
     }
 
     constexpr Uint32 kDoubleClickWindowMs = 300;
-    const bool is_double_click = last_click_asset_ == asset_identity &&
+    const bool is_double_click = !last_click_spawn_id_.empty() &&
+                                 last_click_spawn_id_ == spawn_id &&
                                  last_click_time_ms_ != 0 &&
                                  click_time_ms >= last_click_time_ms_ &&
                                  (click_time_ms - last_click_time_ms_) <= kDoubleClickWindowMs;
 
-    last_click_asset_ = asset_identity;
+    last_click_spawn_id_ = spawn_id;
     last_click_time_ms_ = click_time_ms;
     return is_double_click;
 }
@@ -6630,7 +6631,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         mouse_press_state_.press_screen = screen_pt;
         mouse_press_state_.valid = selection_hit != nullptr;
         if (!selection_hit) {
-            last_click_asset_ = nullptr;
+            last_click_spawn_id_.clear();
             last_click_time_ms_ = 0;
         }
 
@@ -6703,7 +6704,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
             suppress_next_left_click_ = true;
             click_buffer_frames_      = 3;
-            last_click_asset_         = nullptr;
+            last_click_spawn_id_.clear();
             last_click_time_ms_       = 0;
 
             if (pressed_asset_valid) {
@@ -22041,6 +22042,8 @@ void RoomEditor::refresh_spawn_group_config_ui() {
                 case SpawnGroupConfig::PatchType::Add: {
                     auto& room_arr = ensure_spawn_groups_array(current_room_->assets_data());
                     nlohmann::json entry = patch.entry.is_object() ? patch.entry : nlohmann::json::object();
+                    entry.erase("explicit_flip");
+                    entry.erase("force_flipped");
                     if (entry.value("spawn_id", std::string{}).empty()) {
                         entry["spawn_id"] = patch_id.empty() ? devmode::spawn::generate_spawn_id() : patch_id;
                     }
@@ -22068,6 +22071,8 @@ void RoomEditor::refresh_spawn_group_config_ui() {
                         return false;
                     }
                     nlohmann::json updated = patch.entry.is_object() ? patch.entry : nlohmann::json::object();
+                    updated.erase("explicit_flip");
+                    updated.erase("force_flipped");
                     if (updated.value("spawn_id", std::string{}).empty()) {
                         updated["spawn_id"] = patch_id;
                     }
@@ -22671,6 +22676,11 @@ void RoomEditor::open_spawn_group_editor_by_id(const std::string& spawn_id) {
     };
     OpenGuard open_guard(spawn_group_panel_open_in_progress_);
     (void)open_guard;
+
+    const std::optional<std::string> selected_spawn_before = selected_spawn_group_id();
+    if (!selected_spawn_before.has_value() || *selected_spawn_before != spawn_id) {
+        select_spawn_group_assets(spawn_id);
+    }
 
     open_spawn_group_floating_panel(spawn_id, std::nullopt);
 }
@@ -24238,14 +24248,14 @@ void RoomEditorTestAccess::reset_snap_spawn_group_to_resolution_call_count(RoomE
 }
 
 bool RoomEditorTestAccess::should_open_spawn_group_panel_for_click(RoomEditor& editor,
-                                                                    const void* asset_identity,
+                                                                    const std::string& spawn_id,
                                                                     bool has_spawn_group,
                                                                     std::uint32_t click_time_ms) {
-    return editor.should_open_spawn_group_panel_for_click(asset_identity, has_spawn_group, click_time_ms);
+    return editor.should_open_spawn_group_panel_for_click(spawn_id, has_spawn_group, click_time_ms);
 }
 
 void RoomEditorTestAccess::reset_click_tracking(RoomEditor& editor) {
-    editor.last_click_asset_ = nullptr;
+    editor.last_click_spawn_id_.clear();
     editor.last_click_time_ms_ = 0;
 }
 

@@ -611,41 +611,36 @@ TEST_CASE("RoomEditor defers animation-editor closed fallback transition to upda
     CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_animation_editor());
 }
 
-TEST_CASE("RoomEditor opens spawn-group panel only on double left-click for same asset") {
+TEST_CASE("RoomEditor opens spawn-group panel only on double left-click for same spawn group") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::reset_click_tracking(editor);
 
-    int asset_a = 1;
-    int asset_b = 2;
-
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1000));
+        editor, "spawn_a", true, 1000));
     CHECK(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1200));
+        editor, "spawn_a", true, 1200));
 
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1605));
+        editor, "spawn_a", true, 1605));
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_b, true, 1700));
+        editor, "spawn_b", true, 1700));
 }
 
-TEST_CASE("RoomEditor click tracking ignores non-spawn assets and resets on null identity") {
+TEST_CASE("RoomEditor click tracking ignores non-spawn groups and resets on empty spawn id") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::reset_click_tracking(editor);
 
-    int asset_a = 1;
-
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, false, 1000));
+        editor, "spawn_a", false, 1000));
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1100));
+        editor, "spawn_a", true, 1100));
     CHECK(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1250));
+        editor, "spawn_a", true, 1250));
 
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, nullptr, true, 1300));
+        editor, "", true, 1300));
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1350));
+        editor, "spawn_a", true, 1350));
 }
 
 TEST_CASE("RoomEditor selection sync with snap enabled does not trigger spawn-group snapping") {

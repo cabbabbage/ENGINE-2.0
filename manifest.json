@@ -10203,41 +10203,41 @@
               0.0
             ],
             [
-              -2,
-              0,
-              -2,
-              0.0
-            ],
-            [
-              -112,
-              0,
-              45,
-              0.0
-            ],
-            [
-              114,
-              0,
-              -46,
-              0.0
-            ],
-            [
               -7,
               0,
-              -4,
+              10,
               0.0
             ],
             [
-              -1,
+              -8,
               0,
-              -1,
+              10,
+              0.0
+            ],
+            [
+              -8,
+              0,
+              9,
+              0.0
+            ],
+            [
+              -9,
+              0,
+              9,
+              0.0
+            ],
+            [
+              -9,
+              0,
+              9,
               0.0
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -8,
+            "dx": -41,
             "dy": 0,
-            "dz": -8.0
+            "dz": 47.0
           },
           "number_of_frames": 6,
           "on_end": "loop",
@@ -14937,9 +14937,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            225,
             242,
             36,
+            125,
             255
           ],
           "edge_smoothness": 2,
@@ -15340,9 +15340,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            32,
-            31,
-            204,
+            242,
+            242,
+            61,
             255
           ],
           "edge_smoothness": 101,
@@ -15356,36 +15356,6 @@
           "min_width": 4000,
           "name": "spawn",
           "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "barrel"
-                }
-              ],
-              "display_name": "barrel",
-              "dx": -1140,
-              "dz": -184,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 2,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-8dc9b094c21d"
-            },
             {
               "candidates": [
                 {
@@ -15409,12 +15379,42 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 1,
+              "priority": 0,
               "quantity": 1,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-316850aea838"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -1140,
+              "dz": -184,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 2,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-8dc9b094c21d"
             },
             {
               "candidates": [
@@ -15518,8 +15518,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -480,
-              "dz": 176,
+              "dx": -1280,
+              "dz": -64,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

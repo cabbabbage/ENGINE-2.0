@@ -263,6 +263,58 @@ TEST_CASE("AnimationLoader parses hit and attack box forward/backward extrusion 
     CHECK(frame->get_attack_boxes().boxes[0].extrusion_backward == 4);
 }
 
+TEST_CASE("AnimationLoader ignores legacy flatten_bottom_to_floor fields") {
+    AssetInfo info("animation_loader_legacy_flatten_ignored_asset");
+    info.hitbox_enabled = true;
+    info.attack_box_enabled = true;
+    Animation animation;
+
+    nlohmann::json payload = {
+        {"source", {{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
+        {"number_of_frames", 1},
+        {"hit_boxes",
+         nlohmann::json::array({
+             nlohmann::json::array({
+                 {{"id", "hb_flatten"},
+                  {"name", "hb_flatten"},
+                  {"position", {{"x", 2}, {"y", 3}}},
+                  {"size", {{"w", 4}, {"h", 5}}},
+                  {"rotation_degrees", 37.0},
+                  {"flatten_bottom_to_floor", true},
+                  {"extrusion_forward", 6},
+                  {"extrusion_backward", 2}},
+             }),
+         })},
+        {"attack_boxes",
+         nlohmann::json::array({
+             nlohmann::json::array({
+                 {{"id", "ab_flatten"},
+                  {"name", "ab_flatten"},
+                  {"position", {{"x", 6}, {"y", 7}}},
+                  {"size", {{"w", 8}, {"h", 9}}},
+                  {"rotation_degrees", -22.0},
+                  {"flatten_bottom_to_floor", false},
+                  {"damage_amount", 9},
+                  {"extrusion_forward", 10},
+                  {"extrusion_backward", 3}},
+             }),
+         })},
+    };
+
+    load_animation_with_prebuilt(animation, info, payload);
+
+    const AnimationFrame* frame = animation.primary_frame_at(0);
+    REQUIRE(frame != nullptr);
+    REQUIRE(frame->get_hit_boxes().boxes.size() == 1);
+    REQUIRE(frame->get_attack_boxes().boxes.size() == 1);
+    CHECK(frame->get_hit_boxes().boxes[0].extrusion_forward == 6);
+    CHECK(frame->get_hit_boxes().boxes[0].extrusion_backward == 2);
+    CHECK(frame->get_attack_boxes().boxes[0].extrusion_forward == 10);
+    CHECK(frame->get_attack_boxes().boxes[0].extrusion_backward == 3);
+    CHECK(frame->get_hit_boxes().boxes[0].rotation_degrees == doctest::Approx(37.0f));
+    CHECK(frame->get_attack_boxes().boxes[0].rotation_degrees == doctest::Approx(-22.0f));
+}
+
 TEST_CASE("AnimationLoader ignores legacy extrusion_amount when new extrusion fields are absent") {
     AssetInfo info("animation_loader_legacy_extrusion_ignored_asset");
     info.hitbox_enabled = true;

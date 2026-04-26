@@ -23056,6 +23056,14 @@ int RoomEditorTestAccess::subview_anchor() {
     return static_cast<int>(RoomEditor::AssetEditorSubview::Anchor);
 }
 
+int RoomEditorTestAccess::mode_hitbox() {
+    return static_cast<int>(RoomEditor::EditorMode::HitBoxEdit);
+}
+
+int RoomEditorTestAccess::mode_attack_box() {
+    return static_cast<int>(RoomEditor::EditorMode::AttackBoxEdit);
+}
+
 int RoomEditorTestAccess::active_subview(const RoomEditor& editor) {
     return static_cast<int>(editor.asset_editor_subview_);
 }
@@ -23066,6 +23074,47 @@ void RoomEditorTestAccess::set_active_subview(RoomEditor& editor, int subview) {
 
 void RoomEditorTestAccess::set_subview_change_in_progress(RoomEditor& editor, bool in_progress) {
     editor.asset_editor_subview_change_in_progress_ = in_progress;
+}
+
+void RoomEditorTestAccess::set_editor_mode(RoomEditor& editor, int mode) {
+    editor.editor_mode_ = static_cast<RoomEditor::EditorMode>(mode);
+}
+
+void RoomEditorTestAccess::set_hitbox_dragging_extrusion(RoomEditor& editor, bool dragging) {
+    editor.hitbox_edit_.dragging_extrusion_handle = dragging;
+}
+
+void RoomEditorTestAccess::set_attack_box_dragging_extrusion(RoomEditor& editor, bool dragging) {
+    editor.attack_box_edit_.dragging_extrusion_handle = dragging;
+}
+
+bool RoomEditorTestAccess::editor_interaction_is_dragging(const RoomEditor& editor) {
+    return editor.current_editor_interaction_state().is_dragging_editable;
+}
+
+bool RoomEditorTestAccess::editor_interaction_camera_blocked(const RoomEditor& editor) {
+    return editor.current_editor_interaction_state().camera_blocked;
+}
+
+int RoomEditorTestAccess::resolve_extrusion_drag_value(bool dragging_back_side,
+                                                       int axis_offset_px,
+                                                       float start_half_separation,
+                                                       int start_forward,
+                                                       int start_backward) {
+    RoomEditor::BoxEditState state{};
+    state.dragging_extrusion_handle_side =
+        dragging_back_side
+            ? RoomEditor::BoxEditState::ExtrusionHandleSide::Back
+            : RoomEditor::BoxEditState::ExtrusionHandleSide::Front;
+    state.extrusion_drag_start_forward = start_forward;
+    state.extrusion_drag_start_backward = start_backward;
+    state.extrusion_drag_start_axis_center_x = 0.0f;
+    state.extrusion_drag_start_axis_center_y = 0.0f;
+    state.extrusion_drag_axis_unit_x = 1.0f;
+    state.extrusion_drag_axis_unit_y = 0.0f;
+    state.extrusion_drag_start_half_separation = start_half_separation;
+    const SDL_Point pointer{axis_offset_px, 0};
+    return resolve_dragged_extrusion_value(state, pointer);
 }
 
 bool RoomEditorTestAccess::has_pending_subview_request(const RoomEditor& editor) {

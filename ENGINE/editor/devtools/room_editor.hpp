@@ -1228,10 +1228,22 @@ struct RoomEditorTestAccess {
     static int subview_asset_info();
     static int subview_animation_editor();
     static int subview_anchor();
+    static int mode_hitbox();
+    static int mode_attack_box();
 
     static int active_subview(const RoomEditor& editor);
     static void set_active_subview(RoomEditor& editor, int subview);
     static void set_subview_change_in_progress(RoomEditor& editor, bool in_progress);
+    static void set_editor_mode(RoomEditor& editor, int mode);
+    static void set_hitbox_dragging_extrusion(RoomEditor& editor, bool dragging);
+    static void set_attack_box_dragging_extrusion(RoomEditor& editor, bool dragging);
+    static bool editor_interaction_is_dragging(const RoomEditor& editor);
+    static bool editor_interaction_camera_blocked(const RoomEditor& editor);
+    static int resolve_extrusion_drag_value(bool dragging_back_side,
+                                            int axis_offset_px,
+                                            float start_half_separation,
+                                            int start_forward,
+                                            int start_backward);
 
     static bool has_pending_subview_request(const RoomEditor& editor);
     static int pending_subview(const RoomEditor& editor);

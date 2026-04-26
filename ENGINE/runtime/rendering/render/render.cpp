@@ -2078,217 +2078,54 @@ void SceneRenderer::render() {
         render_diagnostics::add_draw_submission_ms(submission_ms);
     }
 
-    if (!gpu_scene_renderer_) {
-        fail_gpu_frame("GPU runtime renderer is unavailable during frame execution.", false);
-        return;
-    }
-
     if (first_gpu_submission_pending_) {
         clear_backbuffer_to_color(renderer_, screen_width_, screen_height_, map_clear_color_);
         first_gpu_submission_pending_ = false;
     }
-
-    std::string gpu_begin_error;
-    if (!gpu_scene_renderer_->begin_frame(&gpu_begin_error)) {
-        fail_gpu_frame("GPU frame begin failed: " + gpu_begin_error, false);
-        return;
-    }
-    render_diagnostics::set_renderer_runtime_info("gpu",
-                                                  gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->backend_name() : "unknown",
-                                                  gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->present_mode() : "unknown");
-
-    const RuntimeGpuFormatPolicy format_policy = gpu_scene_renderer_->device()
-        ? gpu_scene_renderer_->device()->format_policy()
-        : RuntimeGpuFormatPolicy{};
-    const Uint32 logical_width = static_cast<Uint32>(std::max(1, screen_width_));
-    const Uint32 logical_height = static_cast<Uint32>(std::max(1, screen_height_));
-    const SDL_FColor clear_color{
-        static_cast<float>(map_clear_color_.r) / 255.0f,
-        static_cast<float>(map_clear_color_.g) / 255.0f,
-        static_cast<float>(map_clear_color_.b) / 255.0f,
-        static_cast<float>(map_clear_color_.a) / 255.0f};
-    std::string gpu_resource_error;
-    auto ensure_gpu_texture = [&](const std::string& logical_name,
-                                  SDL_GPUTextureFormat format,
-                                  SDL_GPUTextureUsageFlags usage) -> bool {
-        GpuSceneRenderer::TextureResourceSpec spec{};
-        spec.width = logical_width;
-        spec.height = logical_height;
-        spec.format = format;
-        spec.usage = usage;
-        spec.layer_count_or_depth = 1;
-        spec.num_levels = 1;
-        // Runtime scene textures are sampled in later passes; keep them single-sampled.
-        // Multisampled textures are not guaranteed to be sampler-readable across backends.
-        const bool sampled_texture =
-            (usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0;
-        spec.sample_count = sampled_texture
-            ? SDL_GPU_SAMPLECOUNT_1
-            : format_policy.sample_count;
-        if (!gpu_scene_renderer_->ensure_texture_resource(logical_name, spec, gpu_resource_error)) {
-            vibble::log::error("[SceneRenderer] GPU texture resource initialization failed for '" +
-                               logical_name + "': " + gpu_resource_error);
-            return false;
-        }
-        return true;
-    };
-    const Uint32 tile_size_px = 16u;
-    const Uint32 tile_count_x = std::max<Uint32>(1u, (logical_width + tile_size_px - 1u) / tile_size_px);
-    const Uint32 tile_count_y = std::max<Uint32>(1u, (logical_height + tile_size_px - 1u) / tile_size_px);
-    const Uint32 light_bin_buffer_bytes = std::max<Uint32>(256u, tile_count_x * tile_count_y * 64u);
-    GpuSceneRenderer::BufferResourceSpec light_bin_spec{};
-    light_bin_spec.size_bytes = light_bin_buffer_bytes;
-    light_bin_spec.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
-                           SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                           SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-    if (!ensure_gpu_texture("scene_floor", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-        !ensure_gpu_texture("scene_geometry", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-        !ensure_gpu_texture("scene_light", format_policy.light_accumulation_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-        !ensure_gpu_texture("scene_blur_bg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-        !ensure_gpu_texture("scene_blur_fg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-        !ensure_gpu_texture("scene_output", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-        !gpu_scene_renderer_->ensure_buffer_resource("light_bins", light_bin_spec, gpu_resource_error)) {
-        const std::string error_message = gpu_resource_error.empty()
-            ? std::string("GPU runtime resource initialization failed.")
-            : std::string("GPU runtime resource initialization failed: ") + gpu_resource_error;
-        fail_gpu_frame(error_message, true);
+    if (!ensure_scene_target()) {
+        fail_gpu_frame("Failed to allocate the scene composite target texture.", false);
         return;
     }
 
-    {
-        GpuFrameGraph::PassDescriptor pass{};
-        pass.type = GpuFrameGraph::PassType::Render;
-        pass.name = "floor";
-        pass.resources = {GpuFrameGraph::ResourceDependency{"scene.floor.color", true}};
-        pass.render.pipeline_id = "floor_compose";
-        pass.render.render_state_key = 0x1001u;
-        pass.render.color_target = "scene_floor";
-        pass.render.use_swapchain_target = false;
-        pass.render.clear_color = clear_color;
-        pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-        pass.render.store_op = SDL_GPU_STOREOP_STORE;
-        pass.render.vertex_count = 3;
-        pass.render.instance_count = 1;
-        gpu_scene_renderer_->add_pass(std::move(pass));
-    }
-        {
-            GpuFrameGraph::PassDescriptor pass{};
-            pass.type = GpuFrameGraph::PassType::Compute;
-            pass.name = "tiled_light_culling";
-            pass.resources = {GpuFrameGraph::ResourceDependency{"scene.light.tiles", true}};
-            pass.compute.pipeline_id = "compute_light_binning";
-            pass.compute.render_state_key = 0x0000C011u;
-            pass.compute.dispatch_x = tile_count_x;
-            pass.compute.dispatch_y = tile_count_y;
-            pass.compute.dispatch_z = 1;
-            pass.compute.rw_buffer_bindings.push_back("light_bins");
-            gpu_scene_renderer_->add_pass(std::move(pass));
-        }
-        {
-            GpuFrameGraph::PassDescriptor pass{};
-            pass.type = GpuFrameGraph::PassType::Render;
-            pass.name = "geometry_lighting";
-            pass.resources = {
-                GpuFrameGraph::ResourceDependency{"scene.light.tiles", false},
-                GpuFrameGraph::ResourceDependency{"scene.geometry", true}
-            };
-            pass.render.pipeline_id = "light_eval";
-            pass.render.render_state_key = 0x1003u;
-            pass.render.color_target = "scene_geometry";
-            pass.render.use_swapchain_target = false;
-            pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-            pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-            pass.render.store_op = SDL_GPU_STOREOP_STORE;
-            pass.render.vertex_count = 3;
-            pass.render.instance_count = 1;
-            gpu_scene_renderer_->add_pass(std::move(pass));
-        }
-        {
-            GpuFrameGraph::PassDescriptor pass{};
-            pass.type = GpuFrameGraph::PassType::Render;
-            pass.name = "dof";
-            pass.resources = {
-                GpuFrameGraph::ResourceDependency{"scene.geometry", false},
-                GpuFrameGraph::ResourceDependency{"scene.blur", true}
-            };
-            pass.render.pipeline_id = "sprite_textured";
-            pass.render.render_state_key = 0x1004u;
-            pass.render.color_target = "scene_blur_bg";
-            pass.render.use_swapchain_target = false;
-            pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-            pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-            pass.render.store_op = SDL_GPU_STOREOP_STORE;
-            pass.render.vertex_count = 3;
-            pass.render.instance_count = 1;
-            gpu_scene_renderer_->add_pass(std::move(pass));
-        }
-        {
-            GpuFrameGraph::PassDescriptor pass{};
-            pass.type = GpuFrameGraph::PassType::Copy;
-            pass.name = "dof_copy";
-            pass.resources = {
-                GpuFrameGraph::ResourceDependency{"scene.blur", false},
-                GpuFrameGraph::ResourceDependency{"scene.blur.fg", true}
-            };
-            pass.blit.source_texture = "scene_blur_bg";
-            pass.blit.destination_texture = "scene_blur_fg";
-            pass.blit.use_swapchain_destination = false;
-            pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
-            pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-            pass.blit.width = logical_width;
-            pass.blit.height = logical_height;
-            gpu_scene_renderer_->add_pass(std::move(pass));
-        }
-        {
-            GpuFrameGraph::PassDescriptor pass{};
-            pass.type = GpuFrameGraph::PassType::Render;
-            pass.name = "scene_mask";
-            pass.resources = {
-                GpuFrameGraph::ResourceDependency{"scene.floor.color", false},
-                GpuFrameGraph::ResourceDependency{"scene.blur.fg", false},
-                GpuFrameGraph::ResourceDependency{"scene.output", true}
-            };
-            pass.render.pipeline_id = "dark_mask";
-            pass.render.render_state_key = 0x1005u;
-            pass.render.color_target = "scene_output";
-            pass.render.use_swapchain_target = false;
-            pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-            pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-            pass.render.store_op = SDL_GPU_STOREOP_STORE;
-            pass.render.vertex_count = 3;
-            pass.render.instance_count = 1;
-            gpu_scene_renderer_->add_pass(std::move(pass));
-        }
-        {
-            GpuFrameGraph::PassDescriptor pass{};
-            pass.type = GpuFrameGraph::PassType::Render;
-            pass.name = "scene_composite";
-            pass.resources = {
-                GpuFrameGraph::ResourceDependency{"scene.output", false},
-                GpuFrameGraph::ResourceDependency{"scene.present", true}
-            };
-            pass.render.pipeline_id = "final_compose";
-            pass.render.render_state_key = 0x1006u;
-            pass.render.use_swapchain_target = true;
-            pass.render.clear_color = clear_color;
-            pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-            pass.render.store_op = SDL_GPU_STOREOP_STORE;
-            pass.render.vertex_count = 3;
-            pass.render.instance_count = 1;
-            gpu_scene_renderer_->add_pass(std::move(pass));
-        }
-    std::string gpu_frame_error;
-    if (!gpu_scene_renderer_->end_frame(&gpu_frame_error)) {
-        fail_gpu_frame("GPU frame execution failed: " + gpu_frame_error, false);
+    SDL_Texture* floor_texture = floor_composer_
+        ? floor_composer_->compose_gpu(cam,
+                                       grid,
+                                       runtime_lights,
+                                       runtime_lighting_enabled,
+                                       max_cull_depth,
+                                       map_clear_color_,
+                                       true)
+        : nullptr;
+    const render_pipeline::CompactLayerRenderResult layer_render = layer_stack_renderer_
+        ? layer_stack_renderer_->render_gpu_compact(layer_build,
+                                                    runtime_lights,
+                                                    runtime_lighting_enabled,
+                                                    realism.front_layer_light_strength_multiplier,
+                                                    realism.behind_layer_light_strength_multiplier)
+        : render_pipeline::CompactLayerRenderResult{};
+    const render_pipeline::BlurCompositeResult blur_result = blur_chain_renderer_
+        ? blur_chain_renderer_->compose_gpu(layer_render.final_texture,
+                                            realism.depth_of_field_enabled,
+                                            realism.blur_px,
+                                            realism.radial_blur_px,
+                                            SDL_FPoint{
+                                                static_cast<float>(screen_width_) * 0.5f,
+                                                static_cast<float>(screen_height_) * 0.5f})
+        : render_pipeline::BlurCompositeResult{};
+    const bool composed = scene_composite_pass_ &&
+                          scene_composite_pass_->compose_gpu(scene_composite_tex_,
+                                                             floor_texture,
+                                                             floor_composer_ ? floor_composer_->floor_dark_mask_texture() : nullptr,
+                                                             layer_render.final_texture,
+                                                             blur_result);
+    if (!composed) {
+        fail_gpu_frame("Scene composite pass failed to produce an output frame.", false);
         return;
     }
-    const RenderFrameStats& gpu_frame_stats = render_diagnostics::current_frame_stats();
-    if (gpu_frame_stats.sdl_renderer_target_call_count != 0 ||
-        gpu_frame_stats.sdl_renderer_draw_call_count != 0) {
-        vibble::log::error("[SceneRenderer] GPU runtime path executed SDL_Renderer operations "
-                           "(target_calls=" + std::to_string(gpu_frame_stats.sdl_renderer_target_call_count) +
-                           ", draw_calls=" + std::to_string(gpu_frame_stats.sdl_renderer_draw_call_count) + ").");
-    }
+
+    clear_backbuffer_to_color(renderer_, screen_width_, screen_height_, map_clear_color_);
+    render_texture_utils::draw_fullscreen_texture(renderer_, scene_composite_tex_);
+    render_diagnostics::set_renderer_runtime_info("gpu", "sdl_renderer", "vsync");
 
     finalize_render_cpu_timer();
     render_diagnostics::end_frame();

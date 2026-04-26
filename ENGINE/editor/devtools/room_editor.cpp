@@ -11261,6 +11261,8 @@ void RoomEditor::sync_anchor_tools_panel() {
         detail.flip_vertical = selected_it->flip_vertical;
         detail.rotation_degrees = selected_it->rotation_degrees;
         detail.hidden = selected_it->hidden;
+        detail.orphan_on_end = anchor_edit_.target_asset->info->anchor_point_child_candidate_orphan_on_end(
+            anchor_edit_.selected_anchor_name);
         detail.resolve_x = selected_it->resolve_x;
         detail.scaling_method = selected_it->scaling_method;
         anchor_tools_panel_->set_detail_values(detail);
@@ -13776,6 +13778,7 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
     const bool requested_flip_vertical = values.flip_vertical;
     float requested_rotation = values.rotation_degrees;
     const bool requested_hidden = values.hidden;
+    const bool requested_orphan_on_end = values.orphan_on_end;
     const bool requested_resolve_x = values.resolve_x;
     const AnchorScalingMethod requested_scaling_method = values.scaling_method;
     if (!std::isfinite(requested_depth)) {
@@ -13824,6 +13827,12 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
 
     bool changed = false;
     std::unordered_set<std::string> anchors_to_notify;
+    const bool orphan_on_end_changed =
+        target_info->set_anchor_point_child_candidate_orphan_on_end(anchor_edit_.selected_anchor_name,
+                                                                     requested_orphan_on_end);
+    if (orphan_on_end_changed) {
+        changed = true;
+    }
 
     const bool local_changed = mutate_anchor_current_frame(
         [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
@@ -13916,6 +13925,16 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
             }
             changed = true;
         }
+    }
+
+    if (orphan_on_end_changed &&
+        !commit_anchor_bulk_edit(target,
+                                 target_info,
+                                 devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 false,
+                                 "Anchor Orphan On End",
+                                 "room-anchor-orphan-on-end")) {
+        return changed;
     }
 
     if (changed) {

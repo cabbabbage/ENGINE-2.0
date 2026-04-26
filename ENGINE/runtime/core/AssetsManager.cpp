@@ -67,7 +67,6 @@ namespace {
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
-constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
 constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
 constexpr int kDefaultCameraHeightMinPx = 1;
 constexpr int kDefaultCameraHeightMaxPx = 100000;
@@ -206,10 +205,7 @@ bool allow_traversal_refresh_for_frame(std::uint32_t frame_id) {
 }
 
 float normalize_depth_axis_sign(float sign) {
-    if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
-        return 1.0f;
-    }
-    return sign >= 0.0f ? 1.0f : -1.0f;
+    return render_depth::normalize_depth_axis_sign(sign);
 }
 
 float depth_axis_sign_from_forward_z(float forward_z) {
@@ -220,7 +216,7 @@ float depth_offset_from_world_z(float world_z, float anchor_world_z, float depth
     if (!std::isfinite(world_z) || !std::isfinite(anchor_world_z)) {
         return 0.0f;
     }
-    const float sign = normalize_depth_axis_sign(depth_axis_sign);
+    const float sign = render_depth::normalize_depth_axis_sign(depth_axis_sign);
     return (world_z - anchor_world_z) * sign;
 }
 

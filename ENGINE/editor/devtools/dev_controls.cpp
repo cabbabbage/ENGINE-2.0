@@ -54,6 +54,7 @@
 #include "widgets.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/layer_depth_bins.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 
 #include "assets/asset/Asset.hpp"
@@ -101,6 +102,34 @@ using devmode::sdl::is_pointer_event;
 namespace {
 
 using vibble::strings::to_lower_copy;
+
+std::optional<float> project_depth_guide_screen_y(const WarpedScreenGrid& cam,
+                                                  float depth_distance,
+                                                  int screen_height) {
+    if (!(screen_height > 0) || !std::isfinite(depth_distance)) {
+        return std::nullopt;
+    }
+
+    const world::CameraProjectionParams projection = cam.projection_params();
+    const float depth_axis_sign =
+        render_depth::normalize_depth_axis_sign(static_cast<float>(projection.forward_z));
+    const float world_z = render_depth::world_z_from_depth_offset(
+        std::max(0.0f, depth_distance),
+        static_cast<float>(projection.anchor_world_z),
+        depth_axis_sign);
+
+    const SDL_FPoint center = cam.get_view_center_f();
+    SDL_FPoint screen{};
+    if (!cam.project_world_point(SDL_FPoint{center.x, 0.0f}, world_z, screen)) {
+        return std::nullopt;
+    }
+
+    const float y = cam.warp_floor_screen_y(0.0f, screen.y);
+    if (!std::isfinite(y) || y < 0.0f || y >= static_cast<float>(screen_height)) {
+        return std::nullopt;
+    }
+    return y;
+}
 
 std::filesystem::path repo_root_path() {
 #ifdef PROJECT_ROOT
@@ -1967,8 +1996,12 @@ void DevControls::update(const Input& input) {
             now - depth_guide_blue_wheel_last_change_ms_ >= 180 &&
             depth_guide_preview_active_ && assets_) {
             assets_->getView().set_realism_settings(depth_guide_preview_settings_);
+            if (camera_panel_) {
+                camera_panel_->sync_debug_controls_from_settings(depth_guide_preview_settings_);
+            }
             assets_->on_camera_settings_changed();
             mark_map_dirty();
+            depth_guide_preview_active_ = false;
             depth_guide_blue_wheel_last_change_ms_ = 0;
         }
     }
@@ -3316,29 +3349,26 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     } else if (pointer_relevant && assets_) {
         WarpedScreenGrid& cam = assets_->getView();
         const auto settings = depth_guide_preview_active_ ? depth_guide_preview_settings_ : cam.get_settings();
-        SDL_FPoint center = cam.get_view_center_f();
-        auto project_depth_y = [&](float depth, float& out_y) -> bool {
-            SDL_FPoint screen{};
-            if (!cam.project_world_point(SDL_FPoint{center.x, 0.0f}, depth, screen)) return false;
-            const float y = cam.warp_floor_screen_y(0.0f, screen.y);
-            if (!std::isfinite(y) || y < 0.0f || y > static_cast<float>(screen_h_)) return false;
-            out_y = y;
-            return true;
-        };
         struct Hit { DepthGuideSelection sel; float y; int prio; };
         std::vector<Hit> hits;
-        float red_y = 0.0f;
-        if (project_depth_y(settings.max_cull_depth, red_y)) hits.push_back({DepthGuideSelection::RedCull, red_y, 3});
-        float orange_y = 0.0f;
-        if (project_depth_y(settings.dynamic_renderer_depth_efficiency_depth, orange_y)) hits.push_back({DepthGuideSelection::OrangeEfficiency, orange_y, 2});
+        if (const auto red_y = project_depth_guide_screen_y(cam, settings.max_cull_depth, screen_h_)) {
+            hits.push_back({DepthGuideSelection::RedCull, *red_y, 3});
+        }
+        if (const auto orange_y = project_depth_guide_screen_y(
+                cam,
+                settings.dynamic_renderer_depth_efficiency_depth,
+                screen_h_)) {
+            hits.push_back({DepthGuideSelection::OrangeEfficiency, *orange_y, 2});
+        }
         if (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::BlueLayer) {
             const double max_cull = std::max(1.0, static_cast<double>(settings.max_cull_depth));
             const double interval = std::max(1.0, static_cast<double>(settings.layer_depth_interval));
             const double curve = std::max(0.0, static_cast<double>(settings.layer_depth_curve));
             for (double edge : render_depth::build_background_depth_edges(max_cull, interval, curve)) {
                 if (edge <= 0.0) continue;
-                float y = 0.0f;
-                if (project_depth_y(static_cast<float>(edge), y)) hits.push_back({DepthGuideSelection::BlueLayer, y, 1});
+                if (const auto y = project_depth_guide_screen_y(cam, static_cast<float>(edge), screen_h_)) {
+                    hits.push_back({DepthGuideSelection::BlueLayer, *y, 1});
+                }
             }
         }
         const float mx = static_cast<float>(pointer.x);
@@ -3377,6 +3407,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
             depth_guide_drag_start_y_ = pointer.y;
             depth_guide_preview_settings_ = preview;
             cam.set_realism_settings(preview);
+            if (camera_panel_) {
+                camera_panel_->sync_debug_controls_from_settings(preview);
+            }
             if (input_) input_->consumeEvent(event);
             return;
         }
@@ -3386,6 +3419,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
             depth_guide_preview_settings_ = preview;
             depth_guide_preview_active_ = true;
             cam.set_realism_settings(preview);
+            if (camera_panel_) {
+                camera_panel_->sync_debug_controls_from_settings(preview);
+            }
             depth_guide_blue_wheel_last_change_ms_ = SDL_GetTicks();
             if (input_) input_->consumeEvent(event);
             return;
@@ -3394,8 +3430,12 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
             depth_guide_drag_active_ = false;
             if (depth_guide_preview_active_) {
                 cam.set_realism_settings(depth_guide_preview_settings_);
+                if (camera_panel_) {
+                    camera_panel_->sync_debug_controls_from_settings(depth_guide_preview_settings_);
+                }
                 assets_->on_camera_settings_changed();
                 mark_map_dirty();
+                depth_guide_preview_active_ = false;
             }
             if (input_) input_->consumeEvent(event);
             return;
@@ -3676,13 +3716,10 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
         if (cam && floor_depth_params && floor_depth_params->enabled) {
             const auto settings = depth_guide_preview_active_ ? depth_guide_preview_settings_ : cam->get_settings();
-            SDL_FPoint center = cam->get_view_center_f();
             auto draw_guide = [&](float depth, SDL_Color color, const char* label, bool selected) {
-                SDL_FPoint screen{};
-                if (!cam->project_world_point(SDL_FPoint{center.x, 0.0f}, depth, screen)) return;
-                const float y = cam->warp_floor_screen_y(0.0f, screen.y);
-                if (!std::isfinite(y) || y < 0.0f || y > static_cast<float>(screen_h_)) return;
-                const int line_y = static_cast<int>(std::lround(y));
+                const auto y = project_depth_guide_screen_y(*cam, depth, screen_h_);
+                if (!y.has_value()) return;
+                const int line_y = static_cast<int>(std::lround(*y));
                 const Uint8 alpha = static_cast<Uint8>(selected ? 255 : color.a);
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, alpha);
                 SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);

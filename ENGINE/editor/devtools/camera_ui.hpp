@@ -33,6 +33,7 @@ public:
     void render(SDL_Renderer* renderer) const;
 
     void sync_from_camera();
+    void sync_debug_controls_from_settings(const WarpedScreenGrid::RealismSettings& settings);
     void set_dirty_callback(std::function<void()> callback);
     bool is_debug_section_expanded() const { return debug_section_expanded_; }
 

@@ -190,18 +190,7 @@ void CameraUIPanel::sync_from_camera() {
     const auto& settings = cam.get_settings();
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
-    if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
-    if (dynamic_renderer_depth_efficiency_depth_slider_) {
-        dynamic_renderer_depth_efficiency_depth_slider_->set_range(0.0f, settings.max_cull_depth);
-        dynamic_renderer_depth_efficiency_depth_slider_->set_value(
-            settings.dynamic_renderer_depth_efficiency_depth);
-    }
-    if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
-        dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_value(
-            settings.dynamic_renderer_depth_efficiency_min_density_ratio);
-    }
-    if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
-    if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
+    sync_debug_controls_from_settings(settings);
     if (front_layer_light_strength_multiplier_slider_) {
         front_layer_light_strength_multiplier_slider_->set_value(settings.front_layer_light_strength_multiplier);
     }
@@ -224,6 +213,21 @@ void CameraUIPanel::sync_from_camera() {
 
     // Initialize the global camera height bounds used by DevCameraControls
     DevCameraHeightBounds::set(static_cast<double>(saved_min), static_cast<double>(saved_max));
+}
+
+void CameraUIPanel::sync_debug_controls_from_settings(const WarpedScreenGrid::RealismSettings& settings) {
+    if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
+    if (dynamic_renderer_depth_efficiency_depth_slider_) {
+        dynamic_renderer_depth_efficiency_depth_slider_->set_range(0.0f, settings.max_cull_depth);
+        dynamic_renderer_depth_efficiency_depth_slider_->set_value(
+            settings.dynamic_renderer_depth_efficiency_depth);
+    }
+    if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
+        dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_value(
+            settings.dynamic_renderer_depth_efficiency_min_density_ratio);
+    }
+    if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
+    if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
 }
 
 void CameraUIPanel::build_ui() {

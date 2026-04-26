@@ -10843,6 +10843,12 @@
           "candidates": {
             "candidates": []
           }
+        },
+        {
+          "anchor_point_name": "anchor_2",
+          "candidates": {
+            "candidates": []
+          }
         }
       ],
       "animations": {
@@ -10926,6 +10932,32 @@
                 "scaling_method": "parent",
                 "texture_x": 537,
                 "texture_y": 524
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 1.0,
+                  "opacity": 50.0,
+                  "radius": 220.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 111,
+                "texture_y": 572
               }
             ]
           ],
@@ -21523,11 +21555,11 @@
         "camera_height_max_px": 2692,
         "camera_height_min_px": 25,
         "depth_of_field_enabled": false,
-        "dynamic_renderer_depth_efficiency_depth": 785.0,
-        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.07999999821186066,
+        "dynamic_renderer_depth_efficiency_depth": 347.0,
+        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.09999999403953552,
         "front_layer_light_strength_multiplier": 1.0,
-        "layer_depth_curve": 1.7899999618530273,
-        "layer_depth_interval": 158.0,
+        "layer_depth_curve": 62.189998626708984,
+        "layer_depth_interval": 105.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -21535,7 +21567,7 @@
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 3252.0,
+        "max_cull_depth": 6055.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
@@ -21700,9 +21732,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            209,
             242,
             36,
+            44,
             255
           ],
           "edge_smoothness": 2,
@@ -22103,8 +22135,8 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            64,
             36,
+            242,
             242,
             255
           ],

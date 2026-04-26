@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -18,15 +19,11 @@ Area make_starting_area() {
 }
 
 float normalized_depth_axis_sign(float sign) {
-    constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
-    if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
-        return 1.0f;
-    }
-    return sign >= 0.0f ? 1.0f : -1.0f;
+    return render_depth::normalize_depth_axis_sign(sign);
 }
 
 float world_z_from_depth_offset(float depth_offset, float anchor_world_z, float depth_axis_sign) {
-    return anchor_world_z + depth_offset * normalized_depth_axis_sign(depth_axis_sign);
+    return render_depth::world_z_from_depth_offset(depth_offset, anchor_world_z, depth_axis_sign);
 }
 
 float projected_bottom_edge_length(const render_projection::ProjectedSpriteFrame& frame) {
@@ -168,6 +165,28 @@ TEST_CASE("WarpedScreenGrid depth guides remain world-anchored and ordered acros
         CHECK(bg_screen.y < center_screen.y);
         CHECK(center_screen.y < fg_screen.y);
     }
+}
+
+TEST_CASE("Depth guide world-z conversion maps larger depth toward horizon") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const world::CameraProjectionParams params = grid.projection_params();
+    const float depth_axis_sign = normalized_depth_axis_sign(static_cast<float>(params.forward_z));
+    const float anchor_world_z = static_cast<float>(params.anchor_world_z);
+    const SDL_FPoint ground_center = grid.screen_to_map(SDL_Point{params.screen_width / 2, params.screen_height / 2});
+    const SDL_FPoint sample_world{ground_center.x, 0.0f};
+
+    const float near_world_z = world_z_from_depth_offset(150.0f, anchor_world_z, depth_axis_sign);
+    const float far_world_z = world_z_from_depth_offset(650.0f, anchor_world_z, depth_axis_sign);
+
+    CHECK(render_depth::depth_from_anchor(anchor_world_z, near_world_z) > 0.0);
+    CHECK(render_depth::depth_from_anchor(anchor_world_z, far_world_z) > 0.0);
+
+    SDL_FPoint near_screen{};
+    SDL_FPoint far_screen{};
+    REQUIRE(grid.project_world_point(sample_world, near_world_z, near_screen));
+    REQUIRE(grid.project_world_point(sample_world, far_world_z, far_screen));
+    CHECK(far_screen.y < near_screen.y);
 }
 
 TEST_CASE("Projected sprite frame keeps final width stable across depth with fixed perspective source") {

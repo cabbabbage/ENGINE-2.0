@@ -32,6 +32,8 @@ class MainApp {
     virtual void setup();
     SDL_Renderer* raw_renderer() const;
 protected:
+    void run_startup_stabilization();
+    bool startup_abort_requested() const { return startup_abort_requested_; }
     void handle_global_shortcuts(const SDL_Event& e);
     bool sync_output_dimensions(SDL_Renderer* renderer);
     void log_render_diagnostics(SDL_Renderer* renderer, const char* loop_label);
@@ -58,6 +60,7 @@ protected:
     int            windowed_height_  = 720;
     bool           render_diagnostics_enabled_ = false;
     std::uint64_t  frame_diagnostics_counter_ = 0;
+    bool           startup_abort_requested_ = false;
 };
 
 void run(SDL_Window* window, EngineRenderer& renderer, int screen_w, int screen_h);

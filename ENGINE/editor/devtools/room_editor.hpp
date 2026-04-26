@@ -377,6 +377,7 @@ private:
     void reorder_spawn_group_internal(const std::string& spawn_id, size_t target_index);
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
     void open_spawn_group_floating_panel(const std::string& spawn_id, std::optional<SDL_Point> screen_anchor = std::nullopt);
+    void apply_spawn_group_floating_layout(bool reset_scroll = false);
     void reopen_room_configurator();
     void notify_room_assets_saved();
     bool enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority);
@@ -1193,6 +1194,8 @@ private:
     std::optional<std::string> active_spawn_group_id_{};
     std::uint64_t room_assets_edit_version_ = 0;
     bool suppress_spawn_group_close_clear_ = false;
+    bool spawn_group_panel_single_entry_mode_ = false;
+    std::optional<std::string> spawn_group_panel_single_entry_id_{};
     std::unique_ptr<SpawnGroupConfig> spawn_group_panel_{};
 
     bool area_dragging_ = false;

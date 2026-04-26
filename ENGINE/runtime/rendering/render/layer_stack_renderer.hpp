@@ -1,8 +1,10 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_gpu.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -69,14 +71,44 @@ private:
         std::uint8_t valid_dark_mask_history_count = 0;
     };
 
+    struct GpuUploadResources {
+        SDL_GPUDevice* device = nullptr;
+        SDL_GPUBuffer* vertex_buffer = nullptr;
+        SDL_GPUBuffer* index_buffer = nullptr;
+        SDL_GPUBuffer* material_buffer = nullptr;
+        SDL_GPUBuffer* light_buffer = nullptr;
+        SDL_GPUBuffer* packet_buffer = nullptr;
+        SDL_GPUTransferBuffer* transfer_buffer = nullptr;
+        std::size_t vertex_capacity_bytes = 0;
+        std::size_t index_capacity_bytes = 0;
+        std::size_t material_capacity_bytes = 0;
+        std::size_t light_capacity_bytes = 0;
+        std::size_t packet_capacity_bytes = 0;
+        std::size_t transfer_capacity_bytes = 0;
+        std::uint64_t buffer_create_count = 0;
+        std::uint64_t buffer_destroy_count = 0;
+        bool active = false;
+    };
+
     bool ensure_target(SDL_Texture*& texture) const;
     bool ensure_layer_capacity(int layer_count);
     void reset_targets();
     void clear_target(SDL_Texture* texture) const;
     bool copy_texture(SDL_Texture* src, SDL_Texture* dst) const;
-  
+    bool initialize_gpu_upload();
+    void reset_gpu_upload();
+    bool ensure_gpu_buffer_capacity(SDL_GPUBuffer*& buffer,
+                                    std::size_t& capacity_bytes,
+                                    std::size_t required_bytes,
+                                    SDL_GPUBufferUsageFlags usage);
+    bool ensure_transfer_capacity(std::size_t required_bytes);
+    bool upload_frame_submission_buffers(
+        const render_pipeline::LayerBuildResult& build,
+        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights);
+    render_pipeline::GpuSubmissionStats current_gpu_submission_stats() const;
 
-    void render_layer_base(const render_pipeline::LayerSubmission& layer,
+    void render_layer_base(const render_pipeline::LayerBuildResult& build,
+                           const render_pipeline::LayerSubmission& layer,
                            SDL_Texture* target) const;
 
     SDL_Renderer* renderer_ = nullptr;
@@ -85,4 +117,5 @@ private:
     LayerEffectProcessor layer_effect_processor_;
     std::vector<TextureSet> layer_targets_;
     FrameScratchArena frame_scratch_;
+    GpuUploadResources gpu_upload_;
 };

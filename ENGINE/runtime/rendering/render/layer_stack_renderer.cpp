@@ -2,9 +2,19 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <limits>
+#include <utility>
+#include <vector>
+
+#include "rendering/render/render_diagnostics.hpp"
 
 namespace {
+
+constexpr std::size_t kMinGpuBufferBytes = 4096;
+constexpr std::size_t kUploadAlignmentBytes = 16;
 
 void destroy_texture(SDL_Texture*& texture) {
     if (texture) {
@@ -20,6 +30,32 @@ SDL_BlendMode safe_layer_blend_mode(SDL_BlendMode blend_mode) {
     return blend_mode;
 }
 
+std::size_t align_up(std::size_t value, std::size_t alignment) {
+    if (alignment == 0) {
+        return value;
+    }
+    const std::size_t mask = alignment - 1;
+    return (value + mask) & ~mask;
+}
+
+std::size_t next_capacity(std::size_t current, std::size_t required) {
+    std::size_t capacity = std::max<std::size_t>(kMinGpuBufferBytes, current);
+    while (capacity < required) {
+        if (capacity > (std::numeric_limits<std::size_t>::max() / 2u)) {
+            return required;
+        }
+        capacity *= 2u;
+    }
+    return capacity;
+}
+
+std::uint32_t pack_rgba(SDL_Color color) {
+    return static_cast<std::uint32_t>(color.r) |
+           (static_cast<std::uint32_t>(color.g) << 8u) |
+           (static_cast<std::uint32_t>(color.b) << 16u) |
+           (static_cast<std::uint32_t>(color.a) << 24u);
+}
+
 } // namespace
 
 LayerStackRenderer::LayerStackRenderer(SDL_Renderer* renderer)
@@ -28,6 +64,7 @@ LayerStackRenderer::LayerStackRenderer(SDL_Renderer* renderer)
 
 LayerStackRenderer::~LayerStackRenderer() {
     reset_targets();
+    reset_gpu_upload();
 }
 
 void LayerStackRenderer::set_output_dimensions(int screen_width, int screen_height) {
@@ -133,7 +170,317 @@ void LayerStackRenderer::clear_target(SDL_Texture* texture) const {
     SDL_RenderClear(renderer_);
 }
 
-void LayerStackRenderer::render_layer_base(const render_pipeline::LayerSubmission& layer,
+bool LayerStackRenderer::initialize_gpu_upload() {
+    if (gpu_upload_.device) {
+        gpu_upload_.active = true;
+        return true;
+    }
+    if (!renderer_) {
+        gpu_upload_.active = false;
+        return false;
+    }
+
+    SDL_PropertiesID renderer_props = SDL_GetRendererProperties(renderer_);
+    if (!renderer_props) {
+        gpu_upload_.active = false;
+        return false;
+    }
+
+    gpu_upload_.device = static_cast<SDL_GPUDevice*>(
+        SDL_GetPointerProperty(renderer_props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr));
+    gpu_upload_.active = (gpu_upload_.device != nullptr);
+    return gpu_upload_.active;
+}
+
+void LayerStackRenderer::reset_gpu_upload() {
+    if (gpu_upload_.device) {
+        auto release_buffer = [&](SDL_GPUBuffer*& buffer) {
+            if (buffer) {
+                SDL_ReleaseGPUBuffer(gpu_upload_.device, buffer);
+                buffer = nullptr;
+                ++gpu_upload_.buffer_destroy_count;
+            }
+        };
+        release_buffer(gpu_upload_.vertex_buffer);
+        release_buffer(gpu_upload_.index_buffer);
+        release_buffer(gpu_upload_.material_buffer);
+        release_buffer(gpu_upload_.light_buffer);
+        release_buffer(gpu_upload_.packet_buffer);
+        if (gpu_upload_.transfer_buffer) {
+            SDL_ReleaseGPUTransferBuffer(gpu_upload_.device, gpu_upload_.transfer_buffer);
+            gpu_upload_.transfer_buffer = nullptr;
+        }
+    }
+    gpu_upload_.vertex_capacity_bytes = 0;
+    gpu_upload_.index_capacity_bytes = 0;
+    gpu_upload_.material_capacity_bytes = 0;
+    gpu_upload_.light_capacity_bytes = 0;
+    gpu_upload_.packet_capacity_bytes = 0;
+    gpu_upload_.transfer_capacity_bytes = 0;
+    gpu_upload_.device = nullptr;
+    gpu_upload_.active = false;
+}
+
+bool LayerStackRenderer::ensure_gpu_buffer_capacity(SDL_GPUBuffer*& buffer,
+                                                    std::size_t& capacity_bytes,
+                                                    std::size_t required_bytes,
+                                                    SDL_GPUBufferUsageFlags usage) {
+    if (required_bytes == 0) {
+        return true;
+    }
+    if (!initialize_gpu_upload() || !gpu_upload_.device) {
+        return false;
+    }
+    if (required_bytes > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        return false;
+    }
+    if (buffer && capacity_bytes >= required_bytes) {
+        return true;
+    }
+
+    const std::size_t target_capacity = next_capacity(capacity_bytes, required_bytes);
+    if (target_capacity > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        return false;
+    }
+
+    if (buffer) {
+        SDL_ReleaseGPUBuffer(gpu_upload_.device, buffer);
+        buffer = nullptr;
+        ++gpu_upload_.buffer_destroy_count;
+        capacity_bytes = 0;
+    }
+
+    SDL_GPUBufferCreateInfo create_info{};
+    create_info.usage = usage;
+    create_info.size = static_cast<Uint32>(target_capacity);
+    create_info.props = 0;
+    buffer = SDL_CreateGPUBuffer(gpu_upload_.device, &create_info);
+    if (!buffer) {
+        return false;
+    }
+    capacity_bytes = target_capacity;
+    ++gpu_upload_.buffer_create_count;
+    return true;
+}
+
+bool LayerStackRenderer::ensure_transfer_capacity(std::size_t required_bytes) {
+    if (required_bytes == 0) {
+        return true;
+    }
+    if (!initialize_gpu_upload() || !gpu_upload_.device) {
+        return false;
+    }
+    if (required_bytes > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        return false;
+    }
+    if (gpu_upload_.transfer_buffer && gpu_upload_.transfer_capacity_bytes >= required_bytes) {
+        return true;
+    }
+
+    const std::size_t target_capacity = next_capacity(gpu_upload_.transfer_capacity_bytes, required_bytes);
+    if (target_capacity > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        return false;
+    }
+    if (gpu_upload_.transfer_buffer) {
+        SDL_ReleaseGPUTransferBuffer(gpu_upload_.device, gpu_upload_.transfer_buffer);
+        gpu_upload_.transfer_buffer = nullptr;
+        gpu_upload_.transfer_capacity_bytes = 0;
+    }
+
+    SDL_GPUTransferBufferCreateInfo create_info{};
+    create_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    create_info.size = static_cast<Uint32>(target_capacity);
+    create_info.props = 0;
+    gpu_upload_.transfer_buffer = SDL_CreateGPUTransferBuffer(gpu_upload_.device, &create_info);
+    if (!gpu_upload_.transfer_buffer) {
+        return false;
+    }
+    gpu_upload_.transfer_capacity_bytes = target_capacity;
+    return true;
+}
+
+bool LayerStackRenderer::upload_frame_submission_buffers(
+    const render_pipeline::LayerBuildResult& build,
+    const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights) {
+    if (!initialize_gpu_upload() || !gpu_upload_.device) {
+        gpu_upload_.active = false;
+        return false;
+    }
+    gpu_upload_.active = true;
+
+    std::vector<render_pipeline::GpuMaterialRecord> material_records;
+    material_records.reserve(build.materials.size());
+    for (const render_pipeline::DrawMaterial& material : build.materials) {
+        render_pipeline::GpuMaterialRecord record{};
+        record.texture_token = static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(material.texture));
+        record.blend_mode = static_cast<std::uint32_t>(material.blend_mode);
+        material_records.push_back(record);
+    }
+
+    std::vector<render_pipeline::GpuRuntimeLightRecord> light_records;
+    light_records.reserve(runtime_lights.size());
+    for (const LayerEffectProcessor::RuntimeLight& light : runtime_lights) {
+        render_pipeline::GpuRuntimeLightRecord record{};
+        record.screen_center_x = light.screen_center.x;
+        record.screen_center_y = light.screen_center.y;
+        record.radius_px = light.radius_px;
+        record.radius_world = light.radius_world;
+        record.world_z = light.world_z;
+        record.intensity = light.intensity;
+        record.falloff = light.falloff;
+        record.color_rgba = pack_rgba(light.color);
+        light_records.push_back(record);
+    }
+
+    const std::size_t vertex_bytes = build.packed_vertices.size() * sizeof(SDL_Vertex);
+    const std::size_t index_bytes = build.packed_indices.size() * sizeof(int);
+    const std::size_t material_bytes = material_records.size() * sizeof(render_pipeline::GpuMaterialRecord);
+    const std::size_t light_bytes = light_records.size() * sizeof(render_pipeline::GpuRuntimeLightRecord);
+    const std::size_t packet_bytes = build.gpu_packets.size() * sizeof(render_pipeline::GpuDrawPacketRecord);
+
+    if (!ensure_gpu_buffer_capacity(gpu_upload_.vertex_buffer,
+                                    gpu_upload_.vertex_capacity_bytes,
+                                    vertex_bytes,
+                                    SDL_GPU_BUFFERUSAGE_VERTEX)) {
+        return false;
+    }
+    if (!ensure_gpu_buffer_capacity(gpu_upload_.index_buffer,
+                                    gpu_upload_.index_capacity_bytes,
+                                    index_bytes,
+                                    SDL_GPU_BUFFERUSAGE_INDEX)) {
+        return false;
+    }
+    if (!ensure_gpu_buffer_capacity(gpu_upload_.material_buffer,
+                                    gpu_upload_.material_capacity_bytes,
+                                    material_bytes,
+                                    SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ)) {
+        return false;
+    }
+    if (!ensure_gpu_buffer_capacity(gpu_upload_.light_buffer,
+                                    gpu_upload_.light_capacity_bytes,
+                                    light_bytes,
+                                    SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+                                        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ)) {
+        return false;
+    }
+    if (!ensure_gpu_buffer_capacity(gpu_upload_.packet_buffer,
+                                    gpu_upload_.packet_capacity_bytes,
+                                    packet_bytes,
+                                    SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ |
+                                        SDL_GPU_BUFFERUSAGE_INDIRECT)) {
+        return false;
+    }
+
+    std::size_t total_upload_bytes = 0;
+    auto append_bytes = [&](std::size_t bytes) {
+        if (bytes == 0) {
+            return;
+        }
+        total_upload_bytes = align_up(total_upload_bytes, kUploadAlignmentBytes);
+        total_upload_bytes += bytes;
+    };
+    append_bytes(vertex_bytes);
+    append_bytes(index_bytes);
+    append_bytes(material_bytes);
+    append_bytes(light_bytes);
+    append_bytes(packet_bytes);
+
+    if (total_upload_bytes == 0) {
+        return true;
+    }
+    if (!ensure_transfer_capacity(total_upload_bytes)) {
+        return false;
+    }
+
+    std::uint8_t* mapped = static_cast<std::uint8_t*>(
+        SDL_MapGPUTransferBuffer(gpu_upload_.device, gpu_upload_.transfer_buffer, true));
+    if (!mapped) {
+        return false;
+    }
+
+    struct UploadChunk {
+        Uint32 offset = 0;
+        Uint32 size = 0;
+    };
+    UploadChunk vertex_chunk{};
+    UploadChunk index_chunk{};
+    UploadChunk material_chunk{};
+    UploadChunk light_chunk{};
+    UploadChunk packet_chunk{};
+
+    std::size_t cursor = 0;
+    auto write_chunk = [&](const void* src, std::size_t size_bytes, UploadChunk& out_chunk) {
+        if (!src || size_bytes == 0) {
+            out_chunk = UploadChunk{};
+            return;
+        }
+        cursor = align_up(cursor, kUploadAlignmentBytes);
+        out_chunk.offset = static_cast<Uint32>(cursor);
+        out_chunk.size = static_cast<Uint32>(size_bytes);
+        std::memcpy(mapped + cursor, src, size_bytes);
+        cursor += size_bytes;
+    };
+    write_chunk(build.packed_vertices.data(), vertex_bytes, vertex_chunk);
+    write_chunk(build.packed_indices.data(), index_bytes, index_chunk);
+    write_chunk(material_records.data(), material_bytes, material_chunk);
+    write_chunk(light_records.data(), light_bytes, light_chunk);
+    write_chunk(build.gpu_packets.data(), packet_bytes, packet_chunk);
+    SDL_UnmapGPUTransferBuffer(gpu_upload_.device, gpu_upload_.transfer_buffer);
+
+    SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(gpu_upload_.device);
+    if (!command_buffer) {
+        return false;
+    }
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
+    if (!copy_pass) {
+        SDL_CancelGPUCommandBuffer(command_buffer);
+        return false;
+    }
+
+    auto upload_chunk = [&](const UploadChunk& chunk, SDL_GPUBuffer* dst_buffer) {
+        if (!dst_buffer || chunk.size == 0) {
+            return;
+        }
+        SDL_GPUTransferBufferLocation src{};
+        src.transfer_buffer = gpu_upload_.transfer_buffer;
+        src.offset = chunk.offset;
+        SDL_GPUBufferRegion dst{};
+        dst.buffer = dst_buffer;
+        dst.offset = 0;
+        dst.size = chunk.size;
+        SDL_UploadToGPUBuffer(copy_pass, &src, &dst, false);
+    };
+
+    upload_chunk(vertex_chunk, gpu_upload_.vertex_buffer);
+    upload_chunk(index_chunk, gpu_upload_.index_buffer);
+    upload_chunk(material_chunk, gpu_upload_.material_buffer);
+    upload_chunk(light_chunk, gpu_upload_.light_buffer);
+    upload_chunk(packet_chunk, gpu_upload_.packet_buffer);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    const bool submitted = SDL_SubmitGPUCommandBuffer(command_buffer);
+    if (!submitted) {
+        SDL_CancelGPUCommandBuffer(command_buffer);
+    }
+    return submitted;
+}
+
+render_pipeline::GpuSubmissionStats LayerStackRenderer::current_gpu_submission_stats() const {
+    render_pipeline::GpuSubmissionStats stats{};
+    stats.active = gpu_upload_.active;
+    stats.vertex_capacity_bytes = gpu_upload_.vertex_capacity_bytes;
+    stats.index_capacity_bytes = gpu_upload_.index_capacity_bytes;
+    stats.material_capacity_bytes = gpu_upload_.material_capacity_bytes;
+    stats.light_capacity_bytes = gpu_upload_.light_capacity_bytes;
+    stats.packet_capacity_bytes = gpu_upload_.packet_capacity_bytes;
+    stats.buffer_create_count = gpu_upload_.buffer_create_count;
+    stats.buffer_destroy_count = gpu_upload_.buffer_destroy_count;
+    return stats;
+}
+
+void LayerStackRenderer::render_layer_base(const render_pipeline::LayerBuildResult& build,
+                                           const render_pipeline::LayerSubmission& layer,
                                            SDL_Texture* target) const {
     if (!renderer_ || !target) {
         return;
@@ -141,14 +488,45 @@ void LayerStackRenderer::render_layer_base(const render_pipeline::LayerSubmissio
 
     clear_target(target);
     SDL_SetRenderTarget(renderer_, target);
-    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
+    if (!layer.command_ranges.empty() &&
+        !build.materials.empty() &&
+        !build.packed_vertices.empty() &&
+        !build.packed_indices.empty()) {
+        const int total_vertices = static_cast<int>(build.packed_vertices.size());
+        for (const render_pipeline::DrawCommandRange& range : layer.command_ranges) {
+            if (range.material_index >= build.materials.size()) {
+                continue;
+            }
+            if (range.index_count == 0 ||
+                range.index_offset >= build.packed_indices.size() ||
+                range.index_offset + range.index_count > build.packed_indices.size()) {
+                continue;
+            }
+            const render_pipeline::DrawMaterial& material =
+                build.materials[static_cast<std::size_t>(range.material_index)];
+            if (!material.texture) {
+                continue;
+            }
+            SDL_SetTextureBlendMode(material.texture, safe_layer_blend_mode(material.blend_mode));
+            render_diagnostics::render_geometry(renderer_,
+                                               material.texture,
+                                               build.packed_vertices.data(),
+                                               total_vertices,
+                                               build.packed_indices.data() + range.index_offset,
+                                               static_cast<int>(range.index_count));
+        }
+        return;
+    }
+
+    // Compatibility fallback for hand-authored test submissions.
+    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
     for (const render_pipeline::GeometryLayerDrawItem& draw : layer.draws) {
         if (!draw.texture) {
             continue;
         }
         SDL_SetTextureBlendMode(draw.texture, safe_layer_blend_mode(draw.blend_mode));
-        SDL_RenderGeometry(renderer_, draw.texture, draw.vertices.data(), 4, kQuadIndices, 6);
+        render_diagnostics::render_geometry(renderer_, draw.texture, draw.vertices.data(), 4, kQuadIndices, 6);
     }
 }
 
@@ -168,8 +546,12 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         build.layer_count <= 0 ||
         static_cast<int>(build.layers.size()) != build.layer_count ||
         !ensure_layer_capacity(build.layer_count)) {
+        out.gpu_submission = current_gpu_submission_stats();
         return out;
     }
+
+    (void)upload_frame_submission_buffers(build, runtime_lights);
+    out.gpu_submission = current_gpu_submission_stats();
 
     out.final_layer_textures.assign(static_cast<std::size_t>(build.layer_count), nullptr);
     out.owning_body_lights.resize(static_cast<std::size_t>(build.layer_count));
@@ -224,7 +606,6 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             continue;
         }
 
-        // השיוך מבוסס כיסוי בלבד; סיווג עומק מוחל בהמשך כחוזק קדמי או אחורי.
         for (const std::size_t li : frame_scratch_.layer_order_by_depth_start) {
             const FrameScratchArena::LayerMetadata& layer_meta = frame_scratch_.layer_metadata[li];
             const bool bounds_overlap =
@@ -253,7 +634,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 
         const render_pipeline::LayerSubmission& layer = build.layers[static_cast<std::size_t>(layer_index)];
         TextureSet& targets = layer_targets_[static_cast<std::size_t>(layer_index)];
-        render_layer_base(layer, targets.base);
+        render_layer_base(build, layer, targets.base);
 
         const std::size_t li = static_cast<std::size_t>(layer_index);
         const render_internal::DepthInterval& layer_depth = frame_scratch_.layer_metadata[li].depth_interval;

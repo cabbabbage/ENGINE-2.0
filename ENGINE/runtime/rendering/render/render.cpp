@@ -776,6 +776,14 @@ void GeometryBatcher::for_each_item_far_to_near(const std::function<void(const D
     }
 }
 
+std::size_t GeometryBatcher::item_count() const {
+    std::size_t count = invalid_depth_bucket_.items.size();
+    for (const auto& entry : depth_buckets_) {
+        count += entry.second.items.size();
+    }
+    return count;
+}
+
 SceneRenderer::SceneRenderer(SDL_Renderer* renderer,
                              Assets* assets,
                              int screen_width,

@@ -128,6 +128,7 @@ public:
     void flush();
     void clear();
     void for_each_item_far_to_near(const std::function<void(const DrawItem&)>& fn) const;
+    std::size_t item_count() const;
 
     size_t getDrawCallCount() const { return draw_call_count_; }
     size_t getTotalVertices() const { return total_vertices_; }

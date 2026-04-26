@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -117,6 +119,38 @@ void expand_layer_bounds(render_pipeline::LayerSubmission& layer,
     }
 }
 
+struct MaterialRegistryKey {
+    SDL_Texture* texture = nullptr;
+    SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+
+    bool operator==(const MaterialRegistryKey& other) const {
+        return texture == other.texture && blend_mode == other.blend_mode;
+    }
+};
+
+struct MaterialRegistryKeyHash {
+    std::size_t operator()(const MaterialRegistryKey& key) const {
+        const std::size_t texture_hash = std::hash<SDL_Texture*>{}(key.texture);
+        const std::size_t blend_hash = std::hash<int>{}(static_cast<int>(key.blend_mode));
+        return texture_hash ^ (blend_hash + 0x9e3779b9u + (texture_hash << 6) + (texture_hash >> 2));
+    }
+};
+
+std::uint32_t resolve_material_index(
+    const MaterialRegistryKey& key,
+    std::unordered_map<MaterialRegistryKey, std::uint32_t, MaterialRegistryKeyHash>& registry,
+    render_pipeline::LayerBuildResult& result) {
+    const auto it = registry.find(key);
+    if (it != registry.end()) {
+        return it->second;
+    }
+
+    const std::uint32_t next_index = static_cast<std::uint32_t>(result.materials.size());
+    result.materials.push_back(render_pipeline::DrawMaterial{key.texture, key.blend_mode});
+    registry.emplace(key, next_index);
+    return next_index;
+}
+
 } // namespace
 
 render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBatcher& geometry_batcher,
@@ -137,9 +171,16 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
     const int foreground_layer_count = std::max(1, static_cast<int>(foreground_depth_edges.size()) - 1);
     const int background_layer_count = std::max(1, static_cast<int>(background_depth_edges.size()) - 1);
     const int layer_count = foreground_layer_count + background_layer_count;
+    const std::size_t estimated_draw_count = geometry_batcher.item_count();
 
     result.layer_count = layer_count;
     result.layers.resize(static_cast<std::size_t>(layer_count));
+    result.packed_vertices.reserve(estimated_draw_count * 4);
+    result.packed_indices.reserve(estimated_draw_count * 6);
+    result.packets.reserve(estimated_draw_count);
+    result.gpu_packets.reserve(estimated_draw_count);
+    result.materials.reserve(std::min<std::size_t>(estimated_draw_count, 256));
+    std::unordered_map<MaterialRegistryKey, std::uint32_t, MaterialRegistryKeyHash> material_registry;
 
     const int center_split_layer_index = std::clamp(
         depth_to_layer_index(0.0,
@@ -188,7 +229,7 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
         }
 
         auto& layer = result.layers[static_cast<std::size_t>(layer_idx)];
-        if (layer.draws.empty()) {
+        if (layer.packet_indices.empty()) {
             const double midpoint = layer_midpoint_depth(layer_idx,
                                                          foreground_layer_count,
                                                          layer_count,
@@ -203,26 +244,70 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
             layer.bounds_max_y = -std::numeric_limits<float>::infinity();
         }
 
-        render_pipeline::GeometryLayerDrawItem copy{};
-        copy.texture = item.texture;
-        copy.blend_mode = item.blend_mode;
-        copy.vertices[0] = item.vertices[0];
-        copy.vertices[1] = item.vertices[1];
-        copy.vertices[2] = item.vertices[2];
-        copy.vertices[3] = item.vertices[3];
-        copy.depth = item.depth;
-        layer.draws.push_back(copy);
+        const MaterialRegistryKey material_key{item.texture, item.blend_mode};
+        const std::uint32_t material_index = resolve_material_index(material_key, material_registry, result);
+        const std::uint32_t vertex_offset = static_cast<std::uint32_t>(result.packed_vertices.size());
+        result.packed_vertices.push_back(item.vertices[0]);
+        result.packed_vertices.push_back(item.vertices[1]);
+        result.packed_vertices.push_back(item.vertices[2]);
+        result.packed_vertices.push_back(item.vertices[3]);
+
+        const std::uint32_t index_offset = static_cast<std::uint32_t>(result.packed_indices.size());
+        result.packed_indices.push_back(static_cast<int>(vertex_offset + 0));
+        result.packed_indices.push_back(static_cast<int>(vertex_offset + 1));
+        result.packed_indices.push_back(static_cast<int>(vertex_offset + 2));
+        result.packed_indices.push_back(static_cast<int>(vertex_offset + 0));
+        result.packed_indices.push_back(static_cast<int>(vertex_offset + 2));
+        result.packed_indices.push_back(static_cast<int>(vertex_offset + 3));
+
+        render_pipeline::DrawPacket packet{};
+        packet.vertex_offset = vertex_offset;
+        packet.vertex_count = 4;
+        packet.index_offset = index_offset;
+        packet.index_count = 6;
+        packet.material_index = material_index;
+        packet.layer_index = static_cast<std::uint32_t>(layer_idx);
+        packet.light_cluster_index = static_cast<std::uint32_t>(layer_idx);
+        packet.depth = static_cast<float>(item.depth);
+        const std::uint32_t packet_index = static_cast<std::uint32_t>(result.packets.size());
+        result.packets.push_back(packet);
+        result.gpu_packets.push_back(render_pipeline::GpuDrawPacketRecord{
+            packet.index_offset,
+            packet.index_count,
+            packet.vertex_offset,
+            packet.vertex_count,
+            packet.material_index,
+            packet.layer_index,
+            packet.light_cluster_index,
+            packet.depth});
+
+        layer.packet_indices.push_back(packet_index);
+        if (layer.command_ranges.empty() ||
+            layer.command_ranges.back().material_index != material_index ||
+            layer.command_ranges.back().index_offset + layer.command_ranges.back().index_count != index_offset) {
+            layer.command_ranges.push_back(render_pipeline::DrawCommandRange{
+                material_index,
+                index_offset,
+                6,
+                packet_index,
+                1});
+        } else {
+            render_pipeline::DrawCommandRange& range = layer.command_ranges.back();
+            range.index_count += 6;
+            range.packet_count += 1;
+        }
 
         if (std::isfinite(item.depth)) {
             layer.depth_min = std::min(layer.depth_min, item.depth);
             layer.depth_max = std::max(layer.depth_max, item.depth);
         }
-        expand_layer_bounds(layer, copy.vertices);
+        expand_layer_bounds(layer, std::array<SDL_Vertex, 4>{
+            item.vertices[0], item.vertices[1], item.vertices[2], item.vertices[3]});
     });
 
     for (int i = 0; i < layer_count; ++i) {
         auto& layer = result.layers[static_cast<std::size_t>(i)];
-        if (layer.draws.empty()) {
+        if (layer.packet_indices.empty() && layer.draws.empty()) {
             continue;
         }
         if (!std::isfinite(layer.depth_min) || !std::isfinite(layer.depth_max)) {

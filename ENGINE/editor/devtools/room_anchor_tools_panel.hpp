@@ -54,7 +54,6 @@ public:
     using ApplyDetailsCallback = std::function<void(const DetailValues&)>;
     using ApplyLightDetailsCallback = std::function<void(const LightValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
-    using OnionSkinToggleCallback = std::function<void(bool)>;
     using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
 
     RoomAnchorToolsPanel();
@@ -75,9 +74,6 @@ public:
     void set_light_editor_mode(bool enabled);
     bool light_editor_mode() const { return light_editor_mode_; }
     void set_light_values(const LightValues& values);
-    void set_onion_skin_enabled(bool enabled);
-    bool onion_skin_enabled() const;
-
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
     void set_on_rename(RenameCallback callback);
@@ -85,7 +81,6 @@ public:
     void set_on_apply_details(ApplyDetailsCallback callback);
     void set_on_apply_light_details(ApplyLightDetailsCallback callback);
     void set_on_propagate(PropagateCallback callback);
-    void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
     void set_on_open_candidates(OpenCandidatesCallback callback);
 
     bool handle_event(const SDL_Event& event);
@@ -144,7 +139,6 @@ private:
     std::unique_ptr<DMSlider> light_falloff_slider_;
     std::unique_ptr<DMSlider> light_shadow_strength_slider_;
     std::unique_ptr<DMCheckbox> light_cast_shadows_checkbox_;
-    std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;
@@ -159,6 +153,5 @@ private:
     ApplyDetailsCallback on_apply_details_;
     ApplyLightDetailsCallback on_apply_light_details_;
     PropagateCallback on_propagate_;
-    OnionSkinToggleCallback on_onion_skin_toggle_;
     OpenCandidatesCallback on_open_candidates_;
 };

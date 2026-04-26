@@ -124,7 +124,6 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     light_falloff_slider_ = std::make_unique<DMSlider>("Falloff", 5, 800, 180);
     light_shadow_strength_slider_ = std::make_unique<DMSlider>("Shadow Strength", 0, 100, 82);
     light_cast_shadows_checkbox_ = std::make_unique<DMCheckbox>("Cast Shadows", true);
-    onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
     apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
     apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
@@ -275,16 +274,6 @@ void RoomAnchorToolsPanel::set_light_values(const LightValues& values) {
     }
 }
 
-void RoomAnchorToolsPanel::set_onion_skin_enabled(bool enabled) {
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_value(enabled);
-    }
-}
-
-bool RoomAnchorToolsPanel::onion_skin_enabled() const {
-    return onion_skin_checkbox_ ? onion_skin_checkbox_->value() : false;
-}
-
 void RoomAnchorToolsPanel::set_on_select(SelectCallback callback) {
     on_select_ = std::move(callback);
 }
@@ -311,10 +300,6 @@ void RoomAnchorToolsPanel::set_on_apply_light_details(ApplyLightDetailsCallback 
 
 void RoomAnchorToolsPanel::set_on_propagate(PropagateCallback callback) {
     on_propagate_ = std::move(callback);
-}
-
-void RoomAnchorToolsPanel::set_on_onion_skin_toggle(OnionSkinToggleCallback callback) {
-    on_onion_skin_toggle_ = std::move(callback);
 }
 
 void RoomAnchorToolsPanel::set_on_open_candidates(OpenCandidatesCallback callback) {
@@ -451,17 +436,6 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
             event.button.button == SDL_BUTTON_LEFT &&
             on_add_) {
             on_add_();
-        }
-    }
-
-    if (onion_skin_checkbox_) {
-        const bool before = onion_skin_checkbox_->value();
-        if (onion_skin_checkbox_->handle_event(event)) {
-            handled = true;
-            const bool after = onion_skin_checkbox_->value();
-            if (before != after && on_onion_skin_toggle_) {
-                on_onion_skin_toggle_(after);
-            }
         }
     }
 
@@ -687,9 +661,6 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
     if (add_button_) {
         add_button_->render(renderer);
     }
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->render(renderer);
-    }
     const bool has_selected_anchor = !selected_anchor_name_.empty();
     if (has_selected_anchor && rename_textbox_) {
         rename_textbox_->render(renderer);
@@ -882,8 +853,6 @@ void RoomAnchorToolsPanel::update_layout() const {
     int controls_height = 0;
     controls_height += DMButton::height();                          // add
     controls_height += kSectionGap;
-    controls_height += DMCheckbox::height();                        // onion skin
-    controls_height += kSectionGap;
     if (has_selected_anchor) {
         controls_height += rename_h;                                // rename text
         controls_height += kSectionGap;
@@ -933,10 +902,6 @@ void RoomAnchorToolsPanel::update_layout() const {
 
     if (add_button_) {
         add_button_->set_rect(SDL_Rect{controls_x, add_y, controls_width, DMButton::height()});
-    }
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, DMCheckbox::height()});
-        row_y += DMCheckbox::height() + kSectionGap;
     }
     if (rename_textbox_) {
         if (has_selected_anchor) {

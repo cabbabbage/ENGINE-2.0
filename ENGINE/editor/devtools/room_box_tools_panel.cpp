@@ -88,7 +88,6 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     }
     flatten_bottom_to_floor_checkbox_ = std::make_unique<DMCheckbox>("flatten_bottom_to_floor", false);
     system_enabled_checkbox_ = std::make_unique<DMCheckbox>(enabled_label, false);
-    onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
 }
 
 RoomBoxToolsPanel::~RoomBoxToolsPanel() = default;
@@ -179,16 +178,6 @@ void RoomBoxToolsPanel::set_detail_values(const DetailValues& values) {
     }
 }
 
-void RoomBoxToolsPanel::set_onion_skin_enabled(bool enabled) {
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_value(enabled);
-    }
-}
-
-bool RoomBoxToolsPanel::onion_skin_enabled() const {
-    return onion_skin_checkbox_ ? onion_skin_checkbox_->value() : false;
-}
-
 void RoomBoxToolsPanel::set_system_enabled(bool enabled) {
     if (system_enabled_checkbox_) {
         system_enabled_checkbox_->set_value(enabled);
@@ -238,10 +227,6 @@ void RoomBoxToolsPanel::set_on_apply(ApplyCallback callback) {
 
 void RoomBoxToolsPanel::set_on_propagate(PropagateCallback callback) {
     on_propagate_ = std::move(callback);
-}
-
-void RoomBoxToolsPanel::set_on_onion_skin_toggle(OnionSkinToggleCallback callback) {
-    on_onion_skin_toggle_ = std::move(callback);
 }
 
 void RoomBoxToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCallback callback) {
@@ -366,17 +351,6 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
             event.button.button == SDL_BUTTON_LEFT &&
             on_delete_) {
             on_delete_();
-        }
-    }
-
-    if (onion_skin_checkbox_) {
-        const bool before = onion_skin_checkbox_->value();
-        if (onion_skin_checkbox_->handle_event(event)) {
-            handled = true;
-            const bool after = onion_skin_checkbox_->value();
-            if (before != after && on_onion_skin_toggle_) {
-                on_onion_skin_toggle_(after);
-            }
         }
     }
 
@@ -538,9 +512,6 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
     }
     if (delete_button_) {
         delete_button_->render(renderer);
-    }
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->render(renderer);
     }
     const bool has_selected_box = selected_box_index_ >= 0 &&
                                   selected_box_index_ < static_cast<int>(box_names_.size());

@@ -39,7 +39,6 @@ public:
     using DeleteCallback = std::function<void()>;
     using ApplyCallback = std::function<void(const DetailValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
-    using OnionSkinToggleCallback = std::function<void(bool)>;
     using SystemEnabledToggleCallback = std::function<void(bool)>;
     using IncrementPointCountCallback = std::function<void()>;
     using DecrementPointCountCallback = std::function<void()>;
@@ -59,8 +58,6 @@ public:
     void clear_selection();
     void set_name_text(const std::string& value);
     void set_detail_values(const DetailValues& values);
-    void set_onion_skin_enabled(bool enabled);
-    bool onion_skin_enabled() const;
     void set_system_enabled(bool enabled);
     bool system_enabled() const;
     void set_propagation_visible(bool visible);
@@ -71,7 +68,6 @@ public:
     void set_on_delete(DeleteCallback callback);
     void set_on_apply(ApplyCallback callback);
     void set_on_propagate(PropagateCallback callback);
-    void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
     void set_on_system_enabled_toggle(SystemEnabledToggleCallback callback);
     void set_on_increment_point_count(IncrementPointCountCallback callback);
     void set_on_decrement_point_count(DecrementPointCountCallback callback);
@@ -126,8 +122,6 @@ private:
     std::unique_ptr<DMNumericStepper> point_count_stepper_;
     std::unique_ptr<DMCheckbox> flatten_bottom_to_floor_checkbox_;
     std::unique_ptr<DMCheckbox> system_enabled_checkbox_;
-    std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
-
     int point_count_ = 0;
 
     SelectCallback on_select_;
@@ -135,7 +129,6 @@ private:
     DeleteCallback on_delete_;
     ApplyCallback on_apply_;
     PropagateCallback on_propagate_;
-    OnionSkinToggleCallback on_onion_skin_toggle_;
     SystemEnabledToggleCallback on_system_enabled_toggle_;
     IncrementPointCountCallback on_increment_point_count_;
     DecrementPointCountCallback on_decrement_point_count_;

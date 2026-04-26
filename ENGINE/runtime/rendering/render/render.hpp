@@ -152,8 +152,7 @@ private:
 class SceneRenderer {
 public:
     enum class RuntimeRendererMode {
-        Gpu,
-        Legacy
+        Gpu
     };
 
     SceneRenderer(SDL_Renderer* renderer,

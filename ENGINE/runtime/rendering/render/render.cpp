@@ -77,15 +77,10 @@ SceneRenderer::RuntimeRendererMode parse_runtime_renderer_mode(std::string& out_
         out_used_default = false;
         return SceneRenderer::RuntimeRendererMode::Gpu;
     }
-    if (requested == "legacy") {
-        out_mode_name = "legacy";
-        out_used_default = false;
-        return SceneRenderer::RuntimeRendererMode::Legacy;
-    }
+
     out_mode_name = "gpu";
-    out_used_default = true;
     vibble::log::warn("[SceneRenderer] Unrecognized VIBBLE_RUNTIME_GAMEPLAY_RENDERER='" + requested +
-                      "'. Expected 'gpu' or 'legacy'; defaulting to gpu.");
+                      "'. Only 'gpu' is supported; forcing gpu.");
     return SceneRenderer::RuntimeRendererMode::Gpu;
 }
 
@@ -915,67 +910,52 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 
     bool used_default_mode = true;
     runtime_renderer_mode_ = parse_runtime_renderer_mode(runtime_renderer_mode_name_, used_default_mode);
-    if (runtime_renderer_mode_ == RuntimeRendererMode::Gpu) {
-        std::string gpu_error;
-        gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
-        if (!gpu_scene_renderer_) {
-            vibble::log::error("[SceneRenderer] GPU runtime renderer initialization failed: " + gpu_error);
-        } else {
-            const char* shader_manifest_env = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
-            const std::vector<std::filesystem::path> shader_manifest_candidates =
-                runtime_shader_manifest_candidates(shader_manifest_env);
-            std::string last_load_error;
-            std::filesystem::path selected_manifest;
-            bool loaded_manifest = false;
+    std::string gpu_error;
+    gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
+    if (!gpu_scene_renderer_) {
+        throw std::runtime_error("[SceneRenderer] GPU runtime renderer initialization failed: " + gpu_error);
+    }
+
+    const char* shader_manifest_env = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
+    const std::vector<std::filesystem::path> shader_manifest_candidates =
+        runtime_shader_manifest_candidates(shader_manifest_env);
+    std::string last_load_error;
+    std::filesystem::path selected_manifest;
+    bool loaded_manifest = false;
+    for (const std::filesystem::path& candidate : shader_manifest_candidates) {
+        if (!shader_manifest_env && !std::filesystem::exists(candidate)) {
+            continue;
+        }
+        if (gpu_scene_renderer_->load_shader_packages(candidate.string(), gpu_error)) {
+            selected_manifest = candidate;
+            loaded_manifest = true;
+            break;
+        }
+        last_load_error = gpu_error;
+    }
+
+    if (!loaded_manifest) {
+        std::ostringstream oss;
+        oss << "[SceneRenderer] GPU shader package load failed";
+        if (!last_load_error.empty()) {
+            oss << ": " << last_load_error;
+        }
+        if (!shader_manifest_candidates.empty()) {
+            oss << " (candidates:";
             for (const std::filesystem::path& candidate : shader_manifest_candidates) {
-                if (!shader_manifest_env && !std::filesystem::exists(candidate)) {
-                    continue;
-                }
-                if (gpu_scene_renderer_->load_shader_packages(candidate.string(), gpu_error)) {
-                    selected_manifest = candidate;
-                    loaded_manifest = true;
-                    break;
-                }
-                last_load_error = gpu_error;
+                oss << " " << candidate.string();
             }
-
-            if (!loaded_manifest) {
-                std::ostringstream oss;
-                oss << "[SceneRenderer] GPU shader package load failed";
-                if (!last_load_error.empty()) {
-                    oss << ": " << last_load_error;
-                }
-                if (!shader_manifest_candidates.empty()) {
-                    oss << " (candidates:";
-                    for (const std::filesystem::path& candidate : shader_manifest_candidates) {
-                        oss << " " << candidate.string();
-                    }
-                    oss << ")";
-                }
-                vibble::log::error(oss.str());
-                gpu_scene_renderer_.reset();
-            } else {
-                vibble::log::info("[SceneRenderer] Runtime gameplay renderer mode: gpu" +
-                                  std::string(used_default_mode ? " (default)" : " (from env)") +
-                                  " manifest=" + selected_manifest.string());
-            }
+            oss << ")";
         }
-
-        if (!gpu_scene_renderer_) {
-            runtime_renderer_mode_ = RuntimeRendererMode::Legacy;
-            runtime_renderer_mode_name_ = "legacy";
-            vibble::log::warn("[SceneRenderer] Falling back to legacy runtime renderer "
-                              "because GPU renderer prerequisites failed.");
-        }
+        throw std::runtime_error(oss.str());
     }
 
-    gpu_runtime_path_enabled_ = runtime_renderer_mode_ == RuntimeRendererMode::Gpu;
-    if (runtime_renderer_mode_ == RuntimeRendererMode::Legacy) {
-        gpu_scene_renderer_.reset();
-        vibble::log::warn("[SceneRenderer] Runtime gameplay renderer mode: legacy (temporary parity path).");
-    } else {
-        vibble::log::info("[SceneRenderer] GPU runtime renderer active.");
-    }
+    vibble::log::info("[SceneRenderer] Runtime gameplay renderer mode: gpu" +
+                      std::string(used_default_mode ? " (default)" : " (from env)") +
+                      " manifest=" + selected_manifest.string());
+
+    gpu_runtime_path_enabled_ = true;
+    vibble::log::info("[SceneRenderer] GPU runtime renderer active.");
 
     vibble::log::debug(std::string{"[SceneRenderer] מתחיל אתחול עבור מפה '"} + map_id +
                        "' עם מסך " + std::to_string(screen_width_) + "x" + std::to_string(screen_height_) + ".");
@@ -1986,11 +1966,7 @@ void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& 
 }
 
 void SceneRenderer::render() {
-    const bool gpu_mode_active = runtime_renderer_mode_ == RuntimeRendererMode::Gpu;
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
-        return;
-    }
-    if (!gpu_mode_active && !ensure_scene_target()) {
         return;
     }
 
@@ -2043,97 +2019,96 @@ void SceneRenderer::render() {
         render_diagnostics::add_draw_submission_ms(submission_ms);
     }
 
-    if (runtime_renderer_mode_ == RuntimeRendererMode::Gpu) {
-        if (!gpu_scene_renderer_) {
-            render_diagnostics::set_renderer_runtime_info("gpu", "unavailable", "unknown");
-            render_diagnostics::end_frame();
-            vibble::log::error("[SceneRenderer] GPU runtime renderer is unavailable during frame execution.");
-            return;
-        }
-        std::string gpu_begin_error;
-        if (!gpu_scene_renderer_->begin_frame(&gpu_begin_error)) {
-            render_diagnostics::end_frame();
-            vibble::log::error("[SceneRenderer] GPU frame begin failed: " + gpu_begin_error);
-            return;
-        }
-        render_diagnostics::set_renderer_runtime_info("gpu",
-                                                      gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->backend_name() : "unknown",
-                                                      gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->present_mode() : "unknown");
+    if (!gpu_scene_renderer_) {
+        render_diagnostics::set_renderer_runtime_info("gpu", "unavailable", "unknown");
+        render_diagnostics::end_frame();
+        vibble::log::error("[SceneRenderer] GPU runtime renderer is unavailable during frame execution.");
+        return;
+    }
+    std::string gpu_begin_error;
+    if (!gpu_scene_renderer_->begin_frame(&gpu_begin_error)) {
+        render_diagnostics::end_frame();
+        vibble::log::error("[SceneRenderer] GPU frame begin failed: " + gpu_begin_error);
+        return;
+    }
+    render_diagnostics::set_renderer_runtime_info("gpu",
+                                                  gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->backend_name() : "unknown",
+                                                  gpu_scene_renderer_->device() ? gpu_scene_renderer_->device()->present_mode() : "unknown");
 
-        const RuntimeGpuFormatPolicy format_policy = gpu_scene_renderer_->device()
-            ? gpu_scene_renderer_->device()->format_policy()
-            : RuntimeGpuFormatPolicy{};
-        const Uint32 logical_width = static_cast<Uint32>(std::max(1, screen_width_));
-        const Uint32 logical_height = static_cast<Uint32>(std::max(1, screen_height_));
-        const SDL_FColor clear_color{
-            static_cast<float>(map_clear_color_.r) / 255.0f,
-            static_cast<float>(map_clear_color_.g) / 255.0f,
-            static_cast<float>(map_clear_color_.b) / 255.0f,
-            static_cast<float>(map_clear_color_.a) / 255.0f};
-        std::string gpu_resource_error;
-        auto ensure_gpu_texture = [&](const std::string& logical_name,
-                                      SDL_GPUTextureFormat format,
-                                      SDL_GPUTextureUsageFlags usage) -> bool {
-            GpuSceneRenderer::TextureResourceSpec spec{};
-            spec.width = logical_width;
-            spec.height = logical_height;
-            spec.format = format;
-            spec.usage = usage;
-            spec.layer_count_or_depth = 1;
-            spec.num_levels = 1;
-            // Runtime scene textures are sampled in later passes; keep them single-sampled.
-            // Multisampled textures are not guaranteed to be sampler-readable across backends.
-            const bool sampled_texture =
-                (usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0;
-            spec.sample_count = sampled_texture
-                ? SDL_GPU_SAMPLECOUNT_1
-                : format_policy.sample_count;
-            if (!gpu_scene_renderer_->ensure_texture_resource(logical_name, spec, gpu_resource_error)) {
-                vibble::log::error("[SceneRenderer] GPU texture resource initialization failed for '" +
-                                   logical_name + "': " + gpu_resource_error);
-                return false;
-            }
-            return true;
-        };
-        const Uint32 tile_size_px = 16u;
-        const Uint32 tile_count_x = std::max<Uint32>(1u, (logical_width + tile_size_px - 1u) / tile_size_px);
-        const Uint32 tile_count_y = std::max<Uint32>(1u, (logical_height + tile_size_px - 1u) / tile_size_px);
-        const Uint32 light_bin_buffer_bytes = std::max<Uint32>(256u, tile_count_x * tile_count_y * 64u);
-        GpuSceneRenderer::BufferResourceSpec light_bin_spec{};
-        light_bin_spec.size_bytes = light_bin_buffer_bytes;
-        light_bin_spec.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
-                               SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                               SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-        if (!ensure_gpu_texture("scene_floor", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-            !ensure_gpu_texture("scene_geometry", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-            !ensure_gpu_texture("scene_light", format_policy.light_accumulation_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-            !ensure_gpu_texture("scene_blur_bg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-            !ensure_gpu_texture("scene_blur_fg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-            !ensure_gpu_texture("scene_output", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
-            !gpu_scene_renderer_->ensure_buffer_resource("light_bins", light_bin_spec, gpu_resource_error)) {
-            if (!gpu_resource_error.empty()) {
-                vibble::log::error("[SceneRenderer] GPU runtime resource initialization failed: " + gpu_resource_error);
-            }
-            render_diagnostics::end_frame();
-            return;
+    const RuntimeGpuFormatPolicy format_policy = gpu_scene_renderer_->device()
+        ? gpu_scene_renderer_->device()->format_policy()
+        : RuntimeGpuFormatPolicy{};
+    const Uint32 logical_width = static_cast<Uint32>(std::max(1, screen_width_));
+    const Uint32 logical_height = static_cast<Uint32>(std::max(1, screen_height_));
+    const SDL_FColor clear_color{
+        static_cast<float>(map_clear_color_.r) / 255.0f,
+        static_cast<float>(map_clear_color_.g) / 255.0f,
+        static_cast<float>(map_clear_color_.b) / 255.0f,
+        static_cast<float>(map_clear_color_.a) / 255.0f};
+    std::string gpu_resource_error;
+    auto ensure_gpu_texture = [&](const std::string& logical_name,
+                                  SDL_GPUTextureFormat format,
+                                  SDL_GPUTextureUsageFlags usage) -> bool {
+        GpuSceneRenderer::TextureResourceSpec spec{};
+        spec.width = logical_width;
+        spec.height = logical_height;
+        spec.format = format;
+        spec.usage = usage;
+        spec.layer_count_or_depth = 1;
+        spec.num_levels = 1;
+        // Runtime scene textures are sampled in later passes; keep them single-sampled.
+        // Multisampled textures are not guaranteed to be sampler-readable across backends.
+        const bool sampled_texture =
+            (usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0;
+        spec.sample_count = sampled_texture
+            ? SDL_GPU_SAMPLECOUNT_1
+            : format_policy.sample_count;
+        if (!gpu_scene_renderer_->ensure_texture_resource(logical_name, spec, gpu_resource_error)) {
+            vibble::log::error("[SceneRenderer] GPU texture resource initialization failed for '" +
+                               logical_name + "': " + gpu_resource_error);
+            return false;
         }
+        return true;
+    };
+    const Uint32 tile_size_px = 16u;
+    const Uint32 tile_count_x = std::max<Uint32>(1u, (logical_width + tile_size_px - 1u) / tile_size_px);
+    const Uint32 tile_count_y = std::max<Uint32>(1u, (logical_height + tile_size_px - 1u) / tile_size_px);
+    const Uint32 light_bin_buffer_bytes = std::max<Uint32>(256u, tile_count_x * tile_count_y * 64u);
+    GpuSceneRenderer::BufferResourceSpec light_bin_spec{};
+    light_bin_spec.size_bytes = light_bin_buffer_bytes;
+    light_bin_spec.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
+                           SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
+                           SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+    if (!ensure_gpu_texture("scene_floor", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+        !ensure_gpu_texture("scene_geometry", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+        !ensure_gpu_texture("scene_light", format_policy.light_accumulation_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+        !ensure_gpu_texture("scene_blur_bg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+        !ensure_gpu_texture("scene_blur_fg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+        !ensure_gpu_texture("scene_output", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
+        !gpu_scene_renderer_->ensure_buffer_resource("light_bins", light_bin_spec, gpu_resource_error)) {
+        if (!gpu_resource_error.empty()) {
+            vibble::log::error("[SceneRenderer] GPU runtime resource initialization failed: " + gpu_resource_error);
+        }
+        render_diagnostics::end_frame();
+        return;
+    }
 
-        {
-            GpuFrameGraph::PassDescriptor pass{};
-            pass.type = GpuFrameGraph::PassType::Render;
-            pass.name = "floor";
-            pass.resources = {GpuFrameGraph::ResourceDependency{"scene.floor.color", true}};
-            pass.render.pipeline_id = "floor_compose";
-            pass.render.render_state_key = 0x1001u;
-            pass.render.color_target = "scene_floor";
-            pass.render.use_swapchain_target = false;
-            pass.render.clear_color = clear_color;
-            pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-            pass.render.store_op = SDL_GPU_STOREOP_STORE;
-            pass.render.vertex_count = 3;
-            pass.render.instance_count = 1;
-            gpu_scene_renderer_->add_pass(std::move(pass));
-        }
+    {
+        GpuFrameGraph::PassDescriptor pass{};
+        pass.type = GpuFrameGraph::PassType::Render;
+        pass.name = "floor";
+        pass.resources = {GpuFrameGraph::ResourceDependency{"scene.floor.color", true}};
+        pass.render.pipeline_id = "floor_compose";
+        pass.render.render_state_key = 0x1001u;
+        pass.render.color_target = "scene_floor";
+        pass.render.use_swapchain_target = false;
+        pass.render.clear_color = clear_color;
+        pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+        pass.render.store_op = SDL_GPU_STOREOP_STORE;
+        pass.render.vertex_count = 3;
+        pass.render.instance_count = 1;
+        gpu_scene_renderer_->add_pass(std::move(pass));
+    }
         {
             GpuFrameGraph::PassDescriptor pass{};
             pass.type = GpuFrameGraph::PassType::Compute;
@@ -2240,134 +2215,27 @@ void SceneRenderer::render() {
             pass.render.instance_count = 1;
             gpu_scene_renderer_->add_pass(std::move(pass));
         }
-        std::string gpu_frame_error;
-        if (!gpu_scene_renderer_->end_frame(&gpu_frame_error)) {
-            render_diagnostics::end_frame();
-            vibble::log::error("[SceneRenderer] GPU frame execution failed: " + gpu_frame_error);
-            return;
-        }
-        const RenderFrameStats& gpu_frame_stats = render_diagnostics::current_frame_stats();
-        if (gpu_frame_stats.sdl_renderer_target_call_count != 0 ||
-            gpu_frame_stats.sdl_renderer_draw_call_count != 0) {
-            vibble::log::error("[SceneRenderer] GPU runtime path executed SDL_Renderer operations "
-                               "(target_calls=" + std::to_string(gpu_frame_stats.sdl_renderer_target_call_count) +
-                               ", draw_calls=" + std::to_string(gpu_frame_stats.sdl_renderer_draw_call_count) + ").");
-        }
-
-        const std::uint64_t render_end_counter = SDL_GetPerformanceCounter();
-        if (perf_freq > 0 && render_end_counter >= render_begin_counter) {
-            const double render_ms =
-                (static_cast<double>(render_end_counter - render_begin_counter) * 1000.0) /
-                static_cast<double>(perf_freq);
-            render_diagnostics::set_render_thread_cpu_ms(render_ms);
-        }
+    std::string gpu_frame_error;
+    if (!gpu_scene_renderer_->end_frame(&gpu_frame_error)) {
         render_diagnostics::end_frame();
-        return;
-    } else {
-        SDL_Texture* floor_texture = nullptr;
-        SDL_Texture* floor_dark_mask_texture = nullptr;
-        bool floor_dark_mask_drawn = false;
-        bool composed = false;
-        const float front_mult = std::clamp(realism.front_layer_light_strength_multiplier, 0.0f, 4.0f);
-        const float behind_mult = std::clamp(realism.behind_layer_light_strength_multiplier, 0.0f, 4.0f);
-        SDL_Point screen_center = cam.get_focus_override_point();
-        const SDL_FPoint optical_center{
-            std::clamp(static_cast<float>(screen_center.x), 0.0f, static_cast<float>(screen_width_)),
-            std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(screen_height_))};
-        render_pipeline::BlurCompositeResult blur_result{};
-
-        render_internal::clear_gameplay_target_to_color(renderer_, scene_composite_tex_, map_clear_color_);
-        render_diagnostics::set_renderer_runtime_info("legacy", "sdl_renderer", "unknown");
-        floor_texture = floor_composer_ ? floor_composer_->compose(cam,
-                                                                   grid,
-                                                                   runtime_lights,
-                                                                   runtime_lighting_enabled,
-                                                                   max_cull_depth,
-                                                                   map_clear_color_,
-                                                                   true)
-                                        : nullptr;
-        floor_dark_mask_texture = floor_composer_ ? floor_composer_->floor_dark_mask_texture() : nullptr;
-
-        render_pipeline::LayerRenderResult legacy_layer_result{};
-        if (layer_stack_renderer_ && layer_build.valid) {
-            legacy_layer_result = layer_stack_renderer_->render(layer_build,
-                                                                runtime_lights,
-                                                                runtime_lighting_enabled,
-                                                                front_mult,
-                                                                behind_mult);
-        }
-        if (blur_chain_renderer_ && legacy_layer_result.valid) {
-            blur_result = blur_chain_renderer_->compose(legacy_layer_result,
-                                                        floor_texture,
-                                                        floor_dark_mask_texture,
-                                                        realism.depth_of_field_enabled,
-                                                        realism.blur_px,
-                                                        realism.radial_blur_px,
-                                                        optical_center);
-        }
-        if (scene_composite_pass_) {
-            composed = scene_composite_pass_->compose_gpu(scene_composite_tex_,
-                                                          floor_texture,
-                                                          floor_dark_mask_texture,
-                                                          nullptr,
-                                                          blur_result);
-            if (!composed && legacy_layer_result.valid) {
-                composed = scene_composite_pass_->compose(scene_composite_tex_, legacy_layer_result, blur_result);
-            }
-        }
-
-        if (!composed) {
-            if (floor_dark_mask_texture && !floor_dark_mask_drawn) {
-                SDL_SetTextureBlendMode(floor_dark_mask_texture, SDL_BLENDMODE_MOD);
-                SDL_SetTextureAlphaMod(floor_dark_mask_texture, 255);
-                SDL_SetTextureColorMod(floor_dark_mask_texture, 255, 255, 255);
-                render_diagnostics::render_texture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
-                floor_dark_mask_drawn = true;
-            }
-            geometry_batcher_->flush();
-        }
-
-        render_diagnostics::set_render_target(renderer_, nullptr);
-        SDL_SetRenderViewport(renderer_, nullptr);
-        SDL_SetRenderClipRect(renderer_, nullptr);
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
-        SDL_RenderClear(renderer_);
-        render_texture_utils::draw_fullscreen_texture(renderer_, scene_composite_tex_);
-
-        if (debug_overlay_renderer_) {
-            if (realism.light_culling_debug_overlay) {
-                debug_overlay_renderer_->render_light_culling(runtime_light_debug_overlay_);
-            }
-            if (debug_auto_paths_ && movement_debug_visible_) {
-                refresh_movement_debug_snapshots(rendered_assets_for_debug);
-                debug_overlay_renderer_->render_movement_debug(cam,
-                                                               screen_width_,
-                                                               screen_height_,
-                                                               movement_debug_snapshots_,
-                                                               rendered_assets_for_debug);
-            }
-            if (anchor_point_debug_enabled_) {
-                debug_overlay_renderer_->render_anchor_debug(cam,
-                                                             screen_width_,
-                                                             screen_height_,
-                                                             rendered_assets_for_debug,
-                                                             assets_->is_dev_mode());
-            }
-        }
-
-        if (assets_->dev_grid_overlay_callback_) {
-            assets_->dev_grid_overlay_callback_();
-        }
-
-        const std::uint64_t render_end_counter = SDL_GetPerformanceCounter();
-        if (perf_freq > 0 && render_end_counter >= render_begin_counter) {
-            const double render_ms =
-                (static_cast<double>(render_end_counter - render_begin_counter) * 1000.0) /
-                static_cast<double>(perf_freq);
-            render_diagnostics::set_render_thread_cpu_ms(render_ms);
-        }
-        render_diagnostics::end_frame();
+        vibble::log::error("[SceneRenderer] GPU frame execution failed: " + gpu_frame_error);
         return;
     }
+    const RenderFrameStats& gpu_frame_stats = render_diagnostics::current_frame_stats();
+    if (gpu_frame_stats.sdl_renderer_target_call_count != 0 ||
+        gpu_frame_stats.sdl_renderer_draw_call_count != 0) {
+        vibble::log::error("[SceneRenderer] GPU runtime path executed SDL_Renderer operations "
+                           "(target_calls=" + std::to_string(gpu_frame_stats.sdl_renderer_target_call_count) +
+                           ", draw_calls=" + std::to_string(gpu_frame_stats.sdl_renderer_draw_call_count) + ").");
+    }
+
+    const std::uint64_t render_end_counter = SDL_GetPerformanceCounter();
+    if (perf_freq > 0 && render_end_counter >= render_begin_counter) {
+        const double render_ms =
+            (static_cast<double>(render_end_counter - render_begin_counter) * 1000.0) /
+            static_cast<double>(perf_freq);
+        render_diagnostics::set_render_thread_cpu_ms(render_ms);
+    }
+    render_diagnostics::end_frame();
+    return;
 }

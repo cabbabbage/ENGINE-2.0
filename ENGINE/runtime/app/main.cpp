@@ -124,6 +124,37 @@ int env_int_clamped(const char* name, int default_value, int min_value, int max_
         }
 }
 
+void show_gpu_required_dialog_and_wait(SDL_Window* window, const std::string& details) {
+        const SDL_MessageBoxButtonData buttons[] = {
+                {
+                        SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,
+                        0,
+                        "I understand"
+                }
+        };
+
+        std::string message =
+                "This game now requires a compatible GPU renderer.\n"
+                "No CPU/software fallback is available.";
+        if (!details.empty()) {
+                message += "\n\nDetails:\n" + details;
+        }
+
+        SDL_MessageBoxData data{};
+        data.flags = SDL_MESSAGEBOX_ERROR;
+        data.window = window;
+        data.title = "GPU Required";
+        data.message = message.c_str();
+        data.numbuttons = 1;
+        data.buttons = buttons;
+        data.colorScheme = nullptr;
+
+        int button_id = -1;
+        if (!SDL_ShowMessageBox(&data, &button_id)) {
+                vibble::log::warn(std::string("[Main] Failed to show GPU-required message box: ") + SDL_GetError());
+        }
+}
+
 bool is_resize_or_scale_event(Uint32 event_type) {
         switch (event_type) {
         case SDL_EVENT_WINDOW_RESIZED:
@@ -998,7 +1029,10 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<EngineRenderer> engine_renderer = EngineRenderer::Create(window, true);
         if (!engine_renderer) {
-                vibble::log::error("[Main] Failed to initialize renderer after all fallbacks.");
+                const std::string gpu_error = SDL_GetError();
+                vibble::log::error(std::string("[Main] Failed to initialize required GPU renderer: ") +
+                                   (gpu_error.empty() ? "unknown error" : gpu_error));
+                show_gpu_required_dialog_and_wait(window, gpu_error);
                 SDL_DestroyWindow(window);
                 TTF_Quit();
                 SDL_Quit();
@@ -1015,15 +1049,28 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
+        if (!engine_renderer->runtime_gpu_supported()) {
+                vibble::log::error("[Main] Renderer initialization did not produce a GPU backend.");
+                show_gpu_required_dialog_and_wait(window, "No compatible GPU backend was available.");
+                engine_renderer.reset();
+                SDL_DestroyWindow(window);
+                TTF_Quit();
+                SDL_Quit();
+                return 1;
+        }
+
         switch (engine_renderer->quality_tier()) {
         case RenderQualityTier::GPU:
                 vibble::log::info("[Main] Render quality tier: GPU (full effects).");
                 break;
-        case RenderQualityTier::Accelerated:
-                vibble::log::info("[Main] Render quality tier: Accelerated (reduced effects).");
-                break;
-        case RenderQualityTier::Software:
-                vibble::log::info("[Main] Render quality tier: Software (minimal effects).");
+        default:
+                vibble::log::error("[Main] Non-GPU render quality tier detected; exiting because GPU is required.");
+                show_gpu_required_dialog_and_wait(window, "This build only supports GPU rendering.");
+                engine_renderer.reset();
+                SDL_DestroyWindow(window);
+                TTF_Quit();
+                SDL_Quit();
+                return 1;
                 break;
         }
 

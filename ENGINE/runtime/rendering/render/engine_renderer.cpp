@@ -463,7 +463,7 @@ EngineRenderer::~EngineRenderer() {
 
 std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool prefer_vsync) {
     if (!window) {
-        vibble::log::error("[EngineRenderer] אי אפשר ליצור renderer: החלון הוא null.");
+        vibble::log::error("[EngineRenderer] Cannot create renderer: window is null.");
         return nullptr;
     }
 
@@ -487,10 +487,10 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
 
         const std::string selected_gpu_name = query_renderer_gpu_name(attempt.renderer);
         if (should_retry_for_dedicated_gpu(gpu_context, selected_gpu_name)) {
-            vibble::log::warn("[EngineRenderer] backend ה-GPU " + hint_label +
-                              " בחר '" + selected_gpu_name +
-                              "' במקום ה-GPU הייעודי המועדף '" + gpu_context.preferred_gpu_name +
-                              "'. מנסה backend הבא.");
+            vibble::log::warn("[EngineRenderer] GPU backend " + hint_label +
+                              " selected '" + selected_gpu_name +
+                              "' instead of preferred dedicated GPU '" + gpu_context.preferred_gpu_name +
+                              "'; trying next backend.");
             if (!has_deferred_gpu_attempt) {
                 deferred_gpu_attempt = attempt;
                 has_deferred_gpu_attempt = true;
@@ -506,7 +506,7 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
 
     if (!gpu_attempt.renderer && has_deferred_gpu_attempt) {
         gpu_attempt = deferred_gpu_attempt;
-        vibble::log::warn("[EngineRenderer] מעבר ל-renderer ה-GPU הזמין הטוב ביותר למרות העדפה לייעודי.");
+        vibble::log::warn("[EngineRenderer] Using best available GPU renderer despite dedicated preference.");
     }
 
     if (!gpu_attempt.renderer && !gpu_failures.empty()) {
@@ -524,63 +524,19 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
         std::unique_ptr<EngineRenderer> candidate(
             new EngineRenderer(gpu_attempt.renderer, gpu_attempt.caps, tier, window));
         if (!candidate->has_gpu_format_policy_) {
-            vibble::log::error("[EngineRenderer] GPU renderer failed strict startup format policy checks. Falling back.");
+            vibble::log::error("[EngineRenderer] GPU renderer failed strict startup format policy checks.");
             candidate.reset();
         } else {
             return candidate;
         }
     }
-    if (!gpu_attempt.failure_reason.empty()) {
-        vibble::log::warn("[EngineRenderer] renderer של GPU לא זמין, מעבר ל-2D מואץ. סיבה: " +
-                          gpu_attempt.failure_reason);
-    }
 
-    AttemptResult accel_attempt{};
-#ifdef _WIN32
-    if (gpu_context.has_dedicated_preference) {
-        AttemptResult d3d12_attempt = try_create_accelerated(window, prefer_vsync, "direct3d12");
-        if (d3d12_attempt.renderer) {
-            accel_attempt = d3d12_attempt;
-        } else if (!d3d12_attempt.failure_reason.empty()) {
-            accel_attempt.failure_reason = d3d12_attempt.failure_reason;
-        }
+    if (gpu_attempt.failure_reason.empty()) {
+        gpu_attempt.failure_reason = "GPU renderer initialization failed for all driver attempts.";
     }
-#endif
-    if (!accel_attempt.renderer) {
-        AttemptResult auto_attempt = try_create_accelerated(window, prefer_vsync, nullptr);
-        if (auto_attempt.renderer) {
-            accel_attempt = auto_attempt;
-        } else if (!auto_attempt.failure_reason.empty()) {
-            if (!accel_attempt.failure_reason.empty()) {
-                accel_attempt.failure_reason += " | ";
-            }
-            accel_attempt.failure_reason += auto_attempt.failure_reason;
-        }
-    }
-    if (accel_attempt.renderer) {
-        auto tier = choose_quality_tier(accel_attempt.caps);
-        log_caps(accel_attempt.caps);
-        return std::unique_ptr<EngineRenderer>(new EngineRenderer(accel_attempt.renderer, accel_attempt.caps, tier, window));
-    }
-    if (!accel_attempt.failure_reason.empty()) {
-        vibble::log::warn("[EngineRenderer] renderer מואץ לא זמין, מעבר לתוכנה. סיבה: " +
-                          accel_attempt.failure_reason);
-    }
-
-    AttemptResult software_attempt = try_create_software(window);
-    if (software_attempt.renderer) {
-        auto tier = choose_quality_tier(software_attempt.caps);
-        log_caps(software_attempt.caps);
-        return std::unique_ptr<EngineRenderer>(new EngineRenderer(software_attempt.renderer, software_attempt.caps, tier, window));
-    }
-
-    vibble::log::error("[EngineRenderer] יצירת כל renderer נכשלה. כשל GPU: " +
-                       gpu_attempt.failure_reason +
-                       " | כשל מואץ: " + accel_attempt.failure_reason +
-                       " | כשל תוכנה: " + software_attempt.failure_reason);
+    vibble::log::error("[EngineRenderer] GPU renderer required but unavailable: " + gpu_attempt.failure_reason);
     return nullptr;
 }
-
 void EngineRenderer::begin_frame(const SDL_Color& clear_color) {
     if (!renderer_) return;
     SDL_SetRenderTarget(renderer_, nullptr);
@@ -682,58 +638,6 @@ EngineRenderer::AttemptResult EngineRenderer::try_create_gpu(SDL_Window* window,
     return attempt;
 }
 
-EngineRenderer::AttemptResult EngineRenderer::try_create_accelerated(SDL_Window* window,
-                                                                     bool prefer_vsync,
-                                                                     const char* renderer_name_hint) {
-    AttemptResult attempt{};
-
-    // העדף בחירת vsync מפורשת דרך מאפיינים; אפשר ל-SDL לבחור את הדרייבר.
-    SDL_PropertiesID props = SDL_CreateProperties();
-    if (!props ||
-        !SDL_SetPointerProperty(props, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, window) ||
-        !SDL_SetNumberProperty(props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, prefer_vsync ? 1 : 0)) {
-        attempt.failure_reason = "Failed to configure accelerated renderer properties: " + safe_string(SDL_GetError());
-        if (props) SDL_DestroyProperties(props);
-        return attempt;
-    }
-
-    if (renderer_name_hint && renderer_name_hint[0] &&
-        !SDL_SetStringProperty(props, SDL_PROP_RENDERER_CREATE_NAME_STRING, renderer_name_hint)) {
-        attempt.failure_reason = "Failed to set accelerated renderer hint: " + safe_string(SDL_GetError());
-        SDL_DestroyProperties(props);
-        return attempt;
-    }
-
-    const std::string context_label = std::string("accelerated/") + driver_hint_label(renderer_name_hint);
-    attempt.renderer = create_renderer_with_properties(props, context_label.c_str());
-    if (!attempt.renderer) {
-        attempt.failure_reason = safe_string(SDL_GetError());
-        return attempt;
-    }
-
-    SDL_SetDefaultTextureScaleMode(attempt.renderer, SDL_SCALEMODE_LINEAR);
-    attempt.caps = build_caps(attempt.renderer, RenderBackendType::Render2D);
-    return attempt;
-}
-
-EngineRenderer::AttemptResult EngineRenderer::try_create_software(SDL_Window* window) {
-    AttemptResult attempt{};
-
-    SDL_Surface* window_surface = SDL_GetWindowSurface(window);
-    if (!window_surface) {
-        attempt.failure_reason = "[software] SDL_GetWindowSurface failed: " + safe_string(SDL_GetError());
-        return attempt;
-    }
-
-    attempt.renderer = SDL_CreateSoftwareRenderer(window_surface);
-    if (!attempt.renderer) {
-        attempt.failure_reason = safe_string(SDL_GetError());
-        return attempt;
-    }
-
-    attempt.caps = build_caps(attempt.renderer, RenderBackendType::Software);
-    return attempt;
-}
 
 RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, RenderBackendType backend_type) {
     RenderCaps caps{};

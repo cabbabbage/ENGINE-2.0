@@ -80,8 +80,6 @@ private:
     };
 
     static AttemptResult try_create_gpu(SDL_Window* window, bool prefer_vsync, const char* gpu_driver_hint);
-    static AttemptResult try_create_accelerated(SDL_Window* window, bool prefer_vsync, const char* renderer_name_hint);
-    static AttemptResult try_create_software(SDL_Window* window);
 
     static RenderCaps build_caps(SDL_Renderer* renderer, RenderBackendType backend_type);
     static RenderQualityTier choose_quality_tier(const RenderCaps& caps);
